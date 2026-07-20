@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agentmemory": {
+      "type": "stdio",
+      "command": "/home/ryan/hermes-agent/.hermes/runtime/agentmemory-nova-toll-budget-agent/bin/agentmemory-mcp-project-wrapper",
+      "args": [],
+      "env": {}
+    }
+  }
+}
