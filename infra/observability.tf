@@ -22,7 +22,9 @@ resource "aws_cloudwatch_log_metric_filter" "load_success" {
     dimensions = {
       feed = "$feed"
     }
-    default_value = "0"
+    # No default_value: CloudWatch rejects it alongside dimensions, and the
+    # freshness alarm is treat-missing-data=breaching — absence of a LOAD_OK
+    # datapoint IS the signal, so emitting 0 would defeat it.
   }
 }
 
