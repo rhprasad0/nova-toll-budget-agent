@@ -5,3 +5,10 @@ __pycache__/
 *.log
 .claude/settings.local.json
 .hermes/
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/build/
+infra/*.tfplan
