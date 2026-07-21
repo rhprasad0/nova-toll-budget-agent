@@ -149,8 +149,10 @@ GET (30 s timeout, single attempt, response read capped at 5 MB) →
 `put_object` → `put_metric_data` (`NovaToll/PollSuccess`, dimension `feed`).
 One feed failing must not prevent the other's PUT. Every error path scrubs
 the token from URLs before logging or raising — it rides in the query string
-and would otherwise land in CloudWatch. EventBridge async retry policy: max 1
-retry (a re-fetch a minute later is normal client behavior, not a storm).
+and would otherwise land in CloudWatch. Async retry: `MaximumRetryAttempts =
+1` on the function's event-invoke config — the retry knob lives on Lambda,
+not EventBridge (a re-fetch a minute later is normal client behavior, not a
+storm).
 
 **toll-loader** — VPC (default VPC subnets; S3 gateway endpoint added), SG
 egress to RDS SG only. Triggered per raw object. Routes on `feed=` prefix:
@@ -162,10 +164,11 @@ secret, no Secrets Manager API call, and therefore no VPC interface endpoint
 or NAT (an in-VPC Lambda has no internet; its only AWS API needs, S3, is the
 free gateway endpoint). `sslmode=verify-full` with the RDS CA bundle in the
 zip — `require` encrypts but doesn't authenticate the server, which would
-hand the 15-min IAM token to a MITM. After commit, logs `LOAD_OK feed=…`; a
-CloudWatch Logs metric filter turns these into `NovaToll/LoadSuccess{feed}`
-(in-VPC Lambda can't call `put_metric_data`; log-based metrics ride Lambda's
-own log pipeline for free). Reserved concurrency 5: a mass replay queues
+hand the 15-min IAM token to a MITM. After commit, logs the space-delimited
+line `LOAD_OK <feed>`; a CloudWatch Logs metric filter turns these into
+`NovaToll/LoadSuccess{feed}` — filter dimensions only work with JSON or
+space-delimited patterns, hence the plain format (in-VPC Lambda can't call
+`put_metric_data`; log-based metrics ride Lambda's own log pipeline for free). Reserved concurrency 5: a mass replay queues
 instead of stampeding t4g.micro's ~85 connections. On parse failure: log,
 alarm, exit nonzero — the raw object is safe and the exhausted event lands in
 the `OnFailure` SQS queue for replay after the fix. Dependency packaging:
@@ -183,8 +186,9 @@ Resources: raw bucket (+versioning, public-access block), state bucket (same
 hardening: versioning, public-access block, SSE; bootstrap manually or
 separate min-config), both Lambda functions + execution roles (least
 privilege: fetcher = put_object on `raw/*`, SSM read, metrics; loader =
-get_object, `rds-db:connect`, VPC ENI), loader `OnFailure` SQS queue,
-EventBridge rule + permission, S3 → Lambda notification (prefix `raw/` —
+get_object, `rds-db:connect`, VPC ENI), loader `OnFailure` SQS queue, both
+functions' event-invoke configs (fetcher `MaximumRetryAttempts = 1`; loader's
+OnFailure destination), EventBridge rule + permission, S3 → Lambda notification (prefix `raw/` —
 anything else landing in the bucket must not invoke the loader), log metric
 filters for `LoadSuccess`, S3 gateway endpoint in the default VPC,
 RDS instance + subnet group + SGs, SSM SecureString params for the two tokens

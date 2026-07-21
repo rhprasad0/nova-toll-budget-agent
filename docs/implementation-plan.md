@@ -70,7 +70,8 @@ WP1–3 run as parallel subagents. WP4–5 are sequential, orchestrator-driven.
 - **Scope:** port `normalize.py` and the upsert from
   `~/hermes-agent/tools/va_toll_ingest/va_toll_ingest/` (adapting to the
   zone-based upsert key), new ElementTree XML parser, IAM-auth +
-  `verify-full` connection, `LOAD_OK feed=…` post-commit log line.
+  `verify-full` connection, space-delimited `LOAD_OK <feed>` post-commit log
+  line (metric-filter dimensions require JSON or space-delimited patterns).
   `schema.sql` = spec DDL verbatim; `roles.sql` = `loader_writer` with
   `GRANT rds_iam` and no password.
 - **Done when:** `pytest` parses both files in `vdot_sample_data/` completely
