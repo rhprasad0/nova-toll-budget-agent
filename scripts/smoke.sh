@@ -42,8 +42,10 @@ done
 
 # 3. LOAD_OK in loader logs within the last 30 min (covers fetch+event+load)
 since=$(( ($(date +%s) - 1800) * 1000 ))
+# sum length() across pages — filter-log-events auto-paginates and prints one count per page
 hits=$("${AWS[@]}" logs filter-log-events --log-group-name /aws/lambda/toll-loader \
-        --start-time "$since" --filter-pattern '"LOAD_OK"' --query 'length(events)' --output text 2>/dev/null || echo 0)
+        --start-time "$since" --filter-pattern '"LOAD_OK"' --query 'length(events)' --output text 2>/dev/null \
+        | awk '{s+=$1} END{print s+0}')
 if [[ "$hits" -ge 1 ]]; then say "loader LOAD_OK" "$hits in last 30m"; else say "loader LOAD_OK" "NONE in last 30m"; fail=1; fi
 
 # 4. LoadSuccess metric present per feed
