@@ -134,7 +134,7 @@ S3 events and replays are therefore harmless.
 | Role | Grants | Used by |
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
-| `loader_writer` | SELECT/INSERT/UPDATE on `trip_pricing` | toll-loader Lambda |
+| `loader_writer` (IAM auth: `GRANT rds_iam`) | SELECT/INSERT/UPDATE on `trip_pricing` | toll-loader Lambda |
 
 (An `agent_readonly` role ships in the same PR as the agent, not before.)
 
@@ -150,8 +150,12 @@ minute later is normal client behavior, not a storm).
 **toll-loader** — VPC (default VPC subnets; S3 gateway endpoint added), SG
 egress to RDS SG only. Triggered per raw object. Routes on `feed=` prefix:
 CSV → ported `parse_trip_pricing_csv`; XML → new `parse_trip_pricing_xml`
-(ElementTree over `<opt>` attributes). DB creds from Secrets Manager
-(`loader_writer`). On parse failure: log, alarm, exit nonzero — the raw object
+(ElementTree over `<opt>` attributes). Connects as `loader_writer` via
+**RDS IAM auth**: the SDK signs the token locally — no secret, no Secrets
+Manager API call, and therefore no VPC interface endpoint or NAT (an in-VPC
+Lambda has no internet; its only AWS API need, S3, is the free gateway
+endpoint). Requires SSL (`sslmode=require`), which we want anyway.
+On parse failure: log, alarm, exit nonzero — the raw object
 is safe, replay after the fix. Dependency packaging: `psycopg[binary]` in the
 deployment zip.
 
@@ -165,7 +169,7 @@ S3 locking (`use_lockfile`, no DynamoDB). Provider: `profile = "nova-toll"`,
 Resources: raw bucket (+versioning, public-access block), state
 bucket (bootstrap manually or separate min-config), both Lambda functions +
 execution roles (least privilege: fetcher = put_object on `raw/*`, SSM read,
-metrics; loader = get_object, Secrets read, VPC ENI), EventBridge rule +
+metrics; loader = get_object, `rds-db:connect`, VPC ENI), EventBridge rule +
 permission, S3 → Lambda notification, S3 gateway endpoint in the default VPC,
 RDS instance + subnet group + SGs, SSM SecureString params for the two tokens
 (**values entered out-of-band via CLI, never in Terraform state**), SNS topic +
@@ -175,7 +179,9 @@ subscription + CloudWatch alarms, log groups (30-day retention).
 
 `db.t4g.micro`, Postgres 17, 20 GB gp3, single-AZ, 7-day automated snapshots,
 deletion protection **on**, `manage_master_user_password = true` (password
-lives only in Secrets Manager, never in state).
+lives only in Secrets Manager, never in state),
+`iam_database_authentication_enabled = true` (loader connects with locally
+signed tokens; no per-Lambda secret exists).
 
 **Network posture (accepted tradeoff):** `publicly_accessible = true`, with
 the security group allowing 5432 from (a) Ryan's home IP /32 and (b) the
