@@ -13,7 +13,11 @@ resource "aws_sns_topic_subscription" "alerts_email" {
 resource "aws_cloudwatch_log_metric_filter" "load_success" {
   name           = "LoadSuccess"
   log_group_name = aws_cloudwatch_log_group.loader.name
-  pattern        = "[event=\"LOAD_OK\", feed]"
+  # The loader's root logger prepends "[INFO]<tab>timestamp<tab>request_id<tab>"
+  # to the "LOAD_OK <feed>" line, so the match must skip those leading fields
+  # (...) before anchoring on LOAD_OK and capturing feed. A 2-field pattern
+  # never matches the real 5-field line and silently starves the freshness alarm.
+  pattern = "[..., event=\"LOAD_OK\", feed]"
 
   metric_transformation {
     namespace = "NovaToll"
