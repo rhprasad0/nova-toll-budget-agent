@@ -2,6 +2,9 @@
 name = "nova-toll-budget-agent"
 version = "0.1.0"
 requires-python = ">=3.13"
+dependencies = [
+    "boto3>=1.43.53",
+]
 
 [dependency-groups]
 dev = ["ruff", "pyright", "pytest"]
