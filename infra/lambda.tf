@@ -64,8 +64,10 @@ resource "aws_lambda_function" "loader" {
   role          = aws_iam_role.loader.arn
   runtime       = "python3.13"
   handler       = var.loader_handler
-  timeout       = 30
-  memory_size   = 128
+  # 90s: in-VPC cold starts (ENI attach + psycopg import + verify-full connect)
+  # can exceed 30s and time out async loads; retries then stampede. See Finding B.
+  timeout     = 90
+  memory_size = 128
 
   filename         = local.loader_zip_path
   source_code_hash = local.loader_zip_hash
