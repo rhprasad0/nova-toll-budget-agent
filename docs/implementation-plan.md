@@ -47,7 +47,9 @@ WP1–3 run as parallel subagents. WP4–5 are sequential, orchestrator-driven.
 - **Scope:** every resource in spec §Terraform, §RDS, §Observability, plus
   Lambda function definitions with placeholder zips. Home IP and tokens'
   parameter names as variables; token *values* never appear (entered
-  out-of-band per spec).
+  out-of-band per spec). Provider `default_tags` uses lowercase
+  `project = nova-toll-budget-agent` — matches the already-activated cost
+  allocation tag key (case-sensitive; see spec §Terraform).
 - **Done when:** `terraform fmt -check`, `terraform validate`, and
   `terraform plan` against an empty state produce a clean plan containing
   every spec resource. **No apply** — that is WP4's human gate.

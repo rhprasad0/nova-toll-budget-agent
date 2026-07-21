@@ -180,7 +180,10 @@ in the deployment zip.
 Lives in `infra/` in this repo. Terraform ≥ 1.10, AWS provider pinned.
 Backend: dedicated state bucket `nova-toll-tfstate-920534282028` with native
 S3 locking (`use_lockfile`, no DynamoDB). Provider: `profile = "nova-toll"`,
-`region = "us-east-1"`, default tags `Project = nova-toll-budget-agent`.
+`region = "us-east-1"`, default tags `project = nova-toll-budget-agent`
+(lowercase `project` — it must match the cost allocation tag key already
+activated in the org management account; tag keys are case-sensitive in
+billing).
 
 Resources: raw bucket (+versioning, public-access block), state bucket (same
 hardening: versioning, public-access block, SSE; bootstrap manually or
