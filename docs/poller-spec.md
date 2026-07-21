@@ -9,9 +9,10 @@ from this repo.
 
 ## Goals
 
-- **Never lose a poll.** The data cannot be re-acquired (no historical API
-  access — bulk downloads are WAF-blocked). Fetching is the only unrepeatable
-  step and must not depend on anything else working.
+- **Never lose a poll.** Recovering a missed sample is manual and painful (no
+  historical API access — bulk downloads are WAF-blocked), so treat fetching as
+  effectively unrepeatable: it is the one step that must not depend on anything
+  else working.
 - **Live-queryable store.** The future agent queries Postgres directly;
   freshness = last poll (≤10 min).
 - **Cost under $25/mo**, expected <$20/mo.
@@ -119,18 +120,28 @@ CREATE TABLE trip_pricing (
     link_status        text NOT NULL DEFAULT 'NOT_APPLICABLE',  -- i66 has none
     s3_key             text NOT NULL,            -- raw object provenance
     ingested_at        timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (feed, interval_end_at, start_zone_id, end_zone_id)  -- upsert key
+    -- upsert key; NULLS NOT DISTINCT so i66's NULL od_pair_id still dedups
+    UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );
 ```
+
+**Schema version: 2.0.0** (semver; bump *major* on an upsert-key or
+column-meaning change, *minor* on an additive column/index, *patch* on
+comments/formatting). Kept in sync with `db/schema.sql` and enforced by
+`lambdas/loader/tests/test_schema_contract.py`.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from `feed`. Secondary indexes wait until the
 agent exists and a query is measurably slow.
 
-Upsert: `ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id)
-DO UPDATE` — port of the existing `UPSERT_SQL` with the zone-based key (both
-feeds carry zone ids natively; no synthesized I-66 OD pair id). Re-delivered
-S3 events and replays are therefore harmless.
+Upsert: `ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id,
+od_pair_id) DO UPDATE` — port of the existing `UPSERT_SQL`. `od_pair_id` is part
+of the key because multiple I-95 OD pairs legitimately traverse the same
+start/end zone at different rates; a zone-only key silently collapses them and
+drops distinct prices. I-66 has no OD pairs (`od_pair_id` NULL, not
+synthesized), so the constraint is `NULLS NOT DISTINCT` — NULL od_pair_ids
+compare equal, keeping I-66 idempotent. Re-delivered S3 events and replays are
+therefore harmless.
 
 **Roles:**
 

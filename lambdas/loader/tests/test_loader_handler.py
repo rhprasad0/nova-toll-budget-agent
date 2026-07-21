@@ -13,7 +13,7 @@ def test_handler_module_imports_without_psycopg():
 
 def test_upsert_sql_conflict_key_matches_spec():
     assert (
-        "ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id) DO UPDATE"
+        "ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id) DO UPDATE"
         in handler.UPSERT_SQL
     )
 
@@ -27,6 +27,7 @@ def test_upsert_sql_does_not_update_key_columns():
         "interval_end_at = ",
         "start_zone_id = ",
         "end_zone_id = ",
+        "od_pair_id = ",
     ):
         assert key_column not in set_clause
 

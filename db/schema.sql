@@ -1,4 +1,6 @@
--- Verbatim from docs/poller-spec.md §Database schema. Do not diverge.
+-- Mirrors docs/poller-spec.md §Database schema. Keep in sync; the schema
+-- version below must match the spec and is enforced by test_schema_contract.py.
+-- schema version: 2.0.0
 
 CREATE TABLE trip_pricing (
     id                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -19,5 +21,8 @@ CREATE TABLE trip_pricing (
     link_status        text NOT NULL DEFAULT 'NOT_APPLICABLE',  -- i66 has none
     s3_key             text NOT NULL,            -- raw object provenance
     ingested_at        timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (feed, interval_end_at, start_zone_id, end_zone_id)  -- upsert key
+    -- Upsert key. od_pair_id is included because multiple i95 OD pairs can
+    -- traverse the same start/end zone at different rates; NULLS NOT DISTINCT
+    -- keeps i66 (od_pair_id always NULL) idempotent under re-delivery.
+    UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );

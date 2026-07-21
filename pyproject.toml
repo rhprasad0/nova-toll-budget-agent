@@ -8,3 +8,11 @@ dependencies = [
 
 [dependency-groups]
 dev = ["ruff", "pyright", "pytest"]
+
+[tool.pyright]
+# infra/build/ holds vendored deps (psycopg) assembled into the Lambda zip by
+# scripts/build_zips.sh — not our code, and gitignored. Don't type-check it.
+exclude = ["**/node_modules", "**/__pycache__", ".venv", "infra/build"]
+
+[tool.ruff]
+extend-exclude = ["infra/build"]

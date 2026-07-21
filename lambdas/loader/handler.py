@@ -62,14 +62,13 @@ INSERT INTO trip_pricing (
     %(link_status)s,
     %(s3_key)s
 )
-ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id) DO UPDATE
+ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id) DO UPDATE
 SET
     interval_start_at = EXCLUDED.interval_start_at,
     current_at = EXCLUDED.current_at,
     calculated_at = EXCLUDED.calculated_at,
     corridor_id = EXCLUDED.corridor_id,
     corridor_name = EXCLUDED.corridor_name,
-    od_pair_id = EXCLUDED.od_pair_id,
     od_pair_name = EXCLUDED.od_pair_name,
     start_zone_name = EXCLUDED.start_zone_name,
     end_zone_name = EXCLUDED.end_zone_name,
