@@ -11,7 +11,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$REPO/infra/build"
-CA_URL="https://truststore.s3.amazonaws.com/global-bundle.pem"
+CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 PY_VERSION="3.13"
 PY_PLATFORM="x86_64-manylinux2014"  # Lambda runtime arch
 EPOCH="2020-01-01 00:00:00Z"        # deterministic zip mtime
