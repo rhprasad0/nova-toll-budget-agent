@@ -74,6 +74,9 @@ Parser quirks the loader must handle (all observed in production data):
   live in `link_status`, never in `rate > 0`.
 - I-66 XML has no `ODPAIRID`/`ODPAIRNAME` and no `LINKSTATUS`; it does carry
   `IntervalDateTime` (interval start), which the CSV lacks.
+- DST fall-back: the CSV's America/New_York timestamps are ambiguous for one
+  hour each November; the parser resolves with `fold=0` (first occurrence).
+  Documented so overlap verification doesn't mystery-mismatch that hour.
 
 ## S3 layout
 
@@ -134,7 +137,7 @@ S3 events and replays are therefore harmless.
 | Role | Grants | Used by |
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
-| `loader_writer` (IAM auth: `GRANT rds_iam`) | SELECT/INSERT/UPDATE on `trip_pricing` | toll-loader Lambda |
+| `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing` | toll-loader Lambda |
 
 (An `agent_readonly` role ships in the same PR as the agent, not before.)
 
@@ -142,22 +145,32 @@ S3 events and replays are therefore harmless.
 
 **toll-fetcher** — no VPC. Env: SSM parameter names + bucket name. Reads both
 tokens from SSM (SecureString) at cold start. For each feed independently:
-GET (30 s timeout, single attempt) → `put_object` → `put_metric_data`
-(`NovaToll/PollSuccess`, dimension `feed`). One feed failing must not prevent
-the other's PUT. EventBridge async retry policy: max 1 retry (a re-fetch a
-minute later is normal client behavior, not a storm).
+GET (30 s timeout, single attempt, response read capped at 5 MB) →
+`put_object` → `put_metric_data` (`NovaToll/PollSuccess`, dimension `feed`).
+One feed failing must not prevent the other's PUT. Every error path scrubs
+the token from URLs before logging or raising — it rides in the query string
+and would otherwise land in CloudWatch. EventBridge async retry policy: max 1
+retry (a re-fetch a minute later is normal client behavior, not a storm).
 
 **toll-loader** — VPC (default VPC subnets; S3 gateway endpoint added), SG
 egress to RDS SG only. Triggered per raw object. Routes on `feed=` prefix:
 CSV → ported `parse_trip_pricing_csv`; XML → new `parse_trip_pricing_xml`
-(ElementTree over `<opt>` attributes). Connects as `loader_writer` via
-**RDS IAM auth**: the SDK signs the token locally — no secret, no Secrets
-Manager API call, and therefore no VPC interface endpoint or NAT (an in-VPC
-Lambda has no internet; its only AWS API need, S3, is the free gateway
-endpoint). Requires SSL (`sslmode=require`), which we want anyway.
-On parse failure: log, alarm, exit nonzero — the raw object
-is safe, replay after the fix. Dependency packaging: `psycopg[binary]` in the
-deployment zip.
+(ElementTree over `<opt>` attributes — XXE-safe on 3.13; entity-expansion DoS
+is accepted risk given HTTPS to VDOT, no defusedxml). Connects as
+`loader_writer` via **RDS IAM auth**: the SDK signs the token locally — no
+secret, no Secrets Manager API call, and therefore no VPC interface endpoint
+or NAT (an in-VPC Lambda has no internet; its only AWS API needs, S3, is the
+free gateway endpoint). `sslmode=verify-full` with the RDS CA bundle in the
+zip — `require` encrypts but doesn't authenticate the server, which would
+hand the 15-min IAM token to a MITM. After commit, logs `LOAD_OK feed=…`; a
+CloudWatch Logs metric filter turns these into `NovaToll/LoadSuccess{feed}`
+(in-VPC Lambda can't call `put_metric_data`; log-based metrics ride Lambda's
+own log pipeline for free). Reserved concurrency 5: a mass replay queues
+instead of stampeding t4g.micro's ~85 connections. On parse failure: log,
+alarm, exit nonzero — the raw object is safe and the exhausted event lands in
+the `OnFailure` SQS queue for replay after the fix. Dependency packaging:
+`psycopg[binary]` pinned and hash-verified (`pip install --require-hashes`)
+in the deployment zip.
 
 ## Terraform
 
@@ -166,22 +179,29 @@ Backend: dedicated state bucket `nova-toll-tfstate-920534282028` with native
 S3 locking (`use_lockfile`, no DynamoDB). Provider: `profile = "nova-toll"`,
 `region = "us-east-1"`, default tags `Project = nova-toll-budget-agent`.
 
-Resources: raw bucket (+versioning, public-access block), state
-bucket (bootstrap manually or separate min-config), both Lambda functions +
-execution roles (least privilege: fetcher = put_object on `raw/*`, SSM read,
-metrics; loader = get_object, `rds-db:connect`, VPC ENI), EventBridge rule +
-permission, S3 → Lambda notification, S3 gateway endpoint in the default VPC,
+Resources: raw bucket (+versioning, public-access block), state bucket (same
+hardening: versioning, public-access block, SSE; bootstrap manually or
+separate min-config), both Lambda functions + execution roles (least
+privilege: fetcher = put_object on `raw/*`, SSM read, metrics; loader =
+get_object, `rds-db:connect`, VPC ENI), loader `OnFailure` SQS queue,
+EventBridge rule + permission, S3 → Lambda notification (prefix `raw/` —
+anything else landing in the bucket must not invoke the loader), log metric
+filters for `LoadSuccess`, S3 gateway endpoint in the default VPC,
 RDS instance + subnet group + SGs, SSM SecureString params for the two tokens
 (**values entered out-of-band via CLI, never in Terraform state**), SNS topic +
 subscription + CloudWatch alarms, log groups (30-day retention).
 
 ## RDS
 
-`db.t4g.micro`, Postgres 17, 20 GB gp3, single-AZ, 7-day automated snapshots,
-deletion protection **on**, `manage_master_user_password = true` (password
-lives only in Secrets Manager, never in state),
+`db.t4g.micro`, Postgres 17, 20 GB gp3 with `max_allocated_storage = 40`
+(plus a `FreeStorageSpace` alarm — a full disk stops writes and the freshness
+alarm alone wouldn't say why), single-AZ, 7-day automated snapshots, deletion
+protection **on**, `storage_encrypted = true` (creation-time-only flag —
+retrofitting means a snapshot-copy-restore dance), `manage_master_user_password
+= true` (password lives only in Secrets Manager, never in state),
 `iam_database_authentication_enabled = true` (loader connects with locally
-signed tokens; no per-Lambda secret exists).
+signed tokens; no per-Lambda secret exists). All clients — loader and home
+psql alike — connect with `sslmode=verify-full` + the RDS CA bundle.
 
 **Network posture (accepted tradeoff):** `publicly_accessible = true`, with
 the security group allowing 5432 from (a) Ryan's home IP /32 and (b) the
@@ -192,17 +212,26 @@ Home IP is a Terraform variable — expect it to change occasionally.
 
 ## Observability
 
-SNS topic → email `rhprasad@outlook.com`. Alarms:
+SNS topic → email `rhprasad@outlook.com`. The account budget alarm points at
+the same topic. Alarms:
 
 1. `toll-fetcher` Errors ≥ 1 (5-min period).
 2. `toll-loader` Errors ≥ 1 (5-min period).
-3. **Freshness:** `NovaToll/PollSuccess` missing for 30 min per feed,
-   treat-missing-data-as-breaching. This is the "we are silently losing
-   irreplaceable data" alarm and the most important of the three.
+3. **Freshness:** `NovaToll/LoadSuccess` missing for 30 min per feed,
+   treat-missing-data-as-breaching. Derived from the loader's post-commit
+   `LOAD_OK` log lines via a metric filter, so it covers fetch, S3 event
+   delivery, and load end-to-end. This is the "we are silently losing
+   irreplaceable data" alarm and the most important one. `PollSuccess` stays
+   for diagnosis — it localizes a failure to fetch vs load.
+4. Loader `OnFailure` SQS queue visible messages ≥ 1 — async S3 events that
+   exhaust their retries land there for replay instead of vanishing silently.
+5. RDS `FreeStorageSpace` < 2 GB.
 
 ## Migration & cutover
 
-1. `terraform apply`; confirm both feeds landing in S3 and RDS.
+1. `terraform apply`; confirm both feeds landing in S3 and RDS, and send a
+   test SNS message — an unconfirmed email subscription silently mutes every
+   alarm.
 2. **Home poller keeps running in parallel** — do not touch the cron yet.
 3. One-time merge of the local archive (~1.02M rows, 2026-04-17 →) into RDS:
    `pg_dump` → transform (`feed='i95'`, `s3_key='backfill/local-archive'`,
