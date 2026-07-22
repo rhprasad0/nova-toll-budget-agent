@@ -7,7 +7,13 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff", "pyright", "pytest"]
+dev = ["ruff", "pyright", "pytest", "psycopg[binary]"]
+
+[tool.pytest.ini_options]
+# "live" tests hit the network and RDS directly (tests/test_expresslanes_crosscheck.py) --
+# excluded by default so CI's bare `pytest` never runs them. Run explicitly with -m live.
+markers = ["live: hits the network and RDS; run explicitly with -m live"]
+addopts = '-m "not live"'
 
 [tool.pyright]
 # infra/build/ holds vendored deps (psycopg) assembled into the Lambda zip by
