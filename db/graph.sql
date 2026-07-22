@@ -1,4 +1,4 @@
--- graph schema version: 1.0.0
+-- graph schema version: 1.0.1
 --
 -- Mirrors docs/toll-graph-spec.md. Keep in sync; the graph schema version
 -- below must match the spec and is enforced by tests/test_graph.py.
@@ -90,8 +90,8 @@ INSERT INTO graph_node (node_id, name, corridor) VALUES ('i66:leesburg-pike', 'L
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i66:spout-run', 'Spout Run Parkway', 'i66_itb');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i66:sycamore-st', 'Sycamore Street', 'i66_itb');
 
--- Edges (341): i95/i495 dynamic (317, keyed od_pair_id), i66 dynamic
--- (20, keyed start_zone_id/end_zone_id), junction connectors (4, feed NULL).
+-- Edges (342): i95/i495 dynamic (317, keyed od_pair_id), i66 dynamic
+-- (20, keyed start_zone_id/end_zone_id), junction connectors (5, feed NULL).
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:westpark-b', 'i495x:i495-n', 'i95', 1000, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-95-hov', 'i495x:i395-95-495', 'i95', 1001, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-95-hov', 'i495x:lee-hwy', 'i95', 1002, NULL, NULL);

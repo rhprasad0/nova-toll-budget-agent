@@ -1,6 +1,6 @@
 # NOVA Toll Road Graph — Spec
 
-Status: approved design, seed committed · Owner: Ryan Prasad · Last updated: 2026-07-21
+Status: approved design, seed committed · Owner: Ryan Prasad · Last updated: 2026-07-22
 
 A traversable model of the NOVA toll network, built on top of the poller's
 `trip_pricing` table (see `docs/poller-spec.md`). Answers "what does driving
@@ -99,7 +99,7 @@ physical facility it sits on; an edge's corridor, if ever needed, is
 not `i95x:garrisonville-rd-610`); the descriptive form — road name, VDOT exit
 number — lives in `name`, which is what a prompt or UI actually shows.
 
-**Graph schema version: 1.0.0** (semver, same pattern as the poller schema).
+**Graph schema version: 1.0.1** (semver, same pattern as the poller schema).
 Bump *major* on a DDL change or a change to what an edge key means, *minor*
 on additive columns/nodes/corridors (e.g. DTR graduating in), *patch* on seed
 corrections or comments. The version header in `db/graph.sql` and the version
@@ -182,6 +182,12 @@ Westpark Dr (C) · Jones Branch Dr · Jones Branch Dr / Rt 267 · Lee Hwy ·
 I-495 N · I-495 near MD (the 495 NEXT extension's northern end, opened Nov
 2025 — already present in the feed as TP9 zones; no special handling needed).
 
+`Westpark Dr`, `Westpark Dr (B)`, and `Westpark Dr (C)` are three distinct
+nodes for the **same physical Exit 46 Westpark Dr access** — they exist only to
+carry the distinct OD-pair endpoints the feed prices separately, not because
+there are three Westpark locations. A UI showing node names should not imply
+otherwise.
+
 ### Junction points (2, 5 edges)
 
 See §1 — Springfield (`i95x:i495-springfield` → `i495x:i395-95-hov`;
@@ -244,7 +250,7 @@ new `corridor` value (additive, minor version bump) — not a bespoke system.
 
 The LLM never traverses the graph itself. A deterministic `route(origin,
 destination, at_time)` tool loads the full graph in one query (trivially
-small — 60 nodes, 341 edges), runs plain-code BFS/Dijkstra, prices each edge
+small — 60 nodes, 342 edges), runs plain-code BFS/Dijkstra, prices each edge
 from `trip_pricing` per §3, and returns the complete priced path; the LLM
 only picks endpoints from the node list and narrates the result. Only the
 ~60-node name list ever needs to enter the model's context — never edge or
