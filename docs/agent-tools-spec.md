@@ -113,7 +113,10 @@ The deterministic router promised by toll-graph-spec's traversal contract.
 - **The price lookup is driven by the key set, not by scanning history.** The
   ~337 keys are already in hand from `graph_edge`, so each one is resolved by a
   `LATERAL … ORDER BY interval_end_at DESC LIMIT 1` — one index-only descent
-  per key against `trip_pricing_price_lookup_covering_idx`. The obvious
+  per key against the partial indexes `trip_pricing_od_latest_idx` /
+  `trip_pricing_zone_latest_idx` (schema 2.2.0; equality columns + time only —
+  the original covering index's zone columns sat between the equality and sort
+  columns and forced a per-key Sort). The obvious
   `DISTINCT ON` instead reads every row ever recorded (~1.16M and growing) to
   return ~337: Postgres has no loose index scan, so it walks the whole index
   and the `Unique` node discards the rest. (PG18's skip scan is a different
@@ -122,10 +125,28 @@ The deterministic router promised by toll-graph-spec's traversal contract.
 - i66 keys by `(start_zone_id, end_zone_id)` need their own query with an
   explicit `od_pair_id IS NULL`, which pins the index's leading column;
   `IS NOT DISTINCT FROM` would not index as equality.
-- Runs plain-code **Dijkstra** weighted by `zone_toll_rate_usd`; free
-  connector edges (`feed IS NULL`) weigh $0.00. A visited-set in code makes
-  looping routes structurally impossible — no recursive SQL exists to run
-  away.
+- Runs plain-code **DFS over legitimate journeys**, not Dijkstra over raw
+  edges. A journey is a sequence of whole priced trips joined only by free
+  connector edges (`feed IS NULL`, $0.00) — **a priced edge is never followed
+  directly by another priced edge**; a connector must sit between them
+  (connector-to-connector chaining stays legal). The cheapest journey by
+  total price wins; ties break on lexicographic `node_id` path. A
+  can't-revisit-nodes guard in code makes looping journeys structurally
+  impossible — no recursive SQL exists to run away.
+  - **This is what enforces toll-graph-spec's "trips, not segments."** Every
+    priced `graph_edge` is already a complete billed trip, so summing
+    same-corridor sub-trips to approximate one is never a legitimate
+    alternative — it's a different, wrong quote. Live regression: Quantico →
+    I-495 Springfield has a direct trip priced $21.50, but unconstrained
+    Dijkstra found three chained sub-trips summing to $17.25 and returned
+    that instead — a real defect (undercharges $4.25, describes exiting and
+    re-entering twice). The priced-can't-follow-priced rule makes that chain
+    illegal, so the direct $21.50 trip is the only journey considered.
+  - It also makes **overshoot-and-return structurally impossible**: 46 node
+    pairs have priced edges in both directions (reversible lanes), so
+    unconstrained traversal could overshoot an exit and come back cheaper.
+    Since the return leg would be a second priced edge with no connector
+    before it, the rule forbids it outright.
 - **Edges whose latest row is `CLOSED` are excluded** (availability per
   `link_status`, exactly as §3/§6 of toll-graph-spec demand — a $0.00 open
   edge is traversable, a CLOSED edge is not, regardless of rate).

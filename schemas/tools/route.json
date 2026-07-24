@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "route",
-  "version": "2.0.0",
-  "description": "Deterministic cheapest priced path between two graph nodes at a stated time (Dijkstra over graph_edge, latest trip_pricing rates at or before at_time, CLOSED edges excluded). Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
+  "version": "2.0.1",
+  "description": "Deterministic cheapest legitimate journey between two graph nodes at a stated time: DFS over graph_edge enumerates every sequence of whole priced trips joined by free connectors (a priced edge is never chained directly to another priced edge), using the latest trip_pricing rates at or before at_time, with CLOSED edges excluded. Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
   "input": {
     "type": "object",
     "properties": {

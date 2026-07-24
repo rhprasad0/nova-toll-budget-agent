@@ -250,20 +250,29 @@ new `corridor` value (additive, minor version bump) — not a bespoke system.
 
 The LLM never traverses the graph itself. A deterministic `route(origin,
 destination, at_time)` tool loads the full graph in one query (trivially
-small — 60 nodes, 342 edges), runs plain-code BFS/Dijkstra, prices each edge
-from `trip_pricing` per §3, and returns the complete priced path; the LLM
-only picks endpoints from the node list and narrates the result. Only the
-~60-node name list ever needs to enter the model's context — never edge or
-pricing data — which keeps a cheap model viable.
+small — 60 nodes, 342 edges), prices each edge from `trip_pricing` per §3,
+and runs plain-code DFS over **legitimate journeys**: a journey is a sequence
+of whole priced trips joined only by free connector edges, since a priced
+edge is already a complete billed trip and may never be followed directly by
+another priced edge (a connector must sit between them; connector-to-connector
+chaining stays legal). This is what makes the tool honor "Trips, not
+segments" above — summing same-corridor sub-trips is never a legitimate
+alternative to the real direct trip — and it makes overshoot-and-return via a
+reversible lane's opposite-direction edge structurally impossible. The
+cheapest journey by total price is returned; the LLM only picks endpoints
+from the node list and narrates the result. Only the ~60-node name list ever
+needs to enter the model's context — never edge or pricing data — which keeps
+a cheap model viable.
 
 `at_time` is **required**: prices are dynamic and the lanes are reversible, so
 a quote only means something against a stated instant. Edge prices are looked
 up per key with `LATERAL … ORDER BY interval_end_at DESC LIMIT 1` rather than a
 `DISTINCT ON` over history, so lookup cost is constant in table size.
 
-Of the 1557 reachable ordered node pairs, shortest paths run **1 to 6 hops**
-(measured over `db/graph.sql`); price-weighted Dijkstra may return something
-longer than the shortest path, since it optimizes cost rather than hops.
+Of the 1557 reachable ordered node pairs, legitimate journeys run **1 to 6
+hops**, with **at most 3 legitimate journeys per node pair** (measured over
+`db/graph.sql`) — exhaustive DFS is cheap at this size, no shortest-path
+algorithm is needed.
 
 ## I-66 sample data note
 

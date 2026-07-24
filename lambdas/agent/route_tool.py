@@ -1,4 +1,9 @@
-"""route tool: deterministic cheapest priced path between two graph nodes.
+"""route tool: cheapest legitimate journey between two graph nodes.
+
+A journey is the sequence of whole priced trips (each a complete graph_edge,
+never a summed sub-segment) joined only by free corridor-crossing connectors
+— a priced edge may never be followed directly by another priced edge. See
+docs/toll-graph-spec.md's "Trips, not segments" and Traversal contract.
 
 psycopg is only present in the deployed zip, not the dev/test venv, so the
 connection is built with a lazy import inside _connect() — everything else
@@ -8,7 +13,6 @@ docs/toll-graph-spec.md's traversal contract.
 
 from __future__ import annotations
 
-import heapq
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -71,6 +75,7 @@ class PricedEdge:
     price_usd: Decimal
     link_status: str | None
     priced_at: datetime | None
+    is_connector: bool
 
 
 def _connect(*, host: str, port: int, dbname: str):
@@ -141,7 +146,9 @@ def _load_graph(at_time: datetime) -> tuple[set[str], list[PricedEdge]]:
     edges: list[PricedEdge] = []
     for from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id in edge_rows:
         if feed is None:
-            edges.append(PricedEdge(from_node, to_node, Decimal("0.00"), None, None))
+            edges.append(
+                PricedEdge(from_node, to_node, Decimal("0.00"), None, None, True)
+            )
             continue
         price = (
             price_by_od.get(od_pair_id)
@@ -151,7 +158,9 @@ def _load_graph(at_time: datetime) -> tuple[set[str], list[PricedEdge]]:
         if price is None:
             continue  # no priced row at all -- drop conservatively, don't guess.
         rate, link_status, priced_at = price
-        edges.append(PricedEdge(from_node, to_node, rate, link_status, priced_at))
+        edges.append(
+            PricedEdge(from_node, to_node, rate, link_status, priced_at, False)
+        )
 
     return node_ids, edges
 
@@ -210,37 +219,61 @@ def _shortest_path(
     for e in open_edges:
         adjacency.setdefault(e.from_node, []).append(e.to_node)
 
-    # Heap entries (cost, path): tuple comparison on path gives the
-    # lexicographic node_id tie-break for equal-cost paths, deterministically.
-    heap: list[tuple[Decimal, tuple[str, ...]]] = [(Decimal("0.00"), (origin,))]
-    best: dict[str, Decimal] = {}
-    while heap:
-        cost, path = heapq.heappop(heap)
-        node = path[-1]
-        if node in best and best[node] <= cost:
-            continue
-        best[node] = cost
+    # Exhaustive DFS over legitimate journeys. A priced edge is a complete
+    # billed trip, never a road segment (toll-graph-spec "Trips, not
+    # segments"), so a priced edge may never be followed directly by another
+    # priced edge -- a free connector must sit between them. That single rule
+    # bans both within-corridor chaining (summing sub-trips to undercut the
+    # real direct trip's price) and overshoot-and-return through a reversible
+    # lane's opposite-direction edge. Connector-to-connector stays legal. The
+    # graph is tiny (60 nodes, 342 edges, measured <=3 legitimate journeys per
+    # node pair, 1-6 edges each) so plain exhaustive DFS is cheap -- no need
+    # for a shortest-path algorithm at all.
+    journeys: list[tuple[Decimal, tuple[str, ...]]] = []
+
+    def dfs(
+        node: str, path: tuple[str, ...], cost: Decimal, last_was_priced: bool
+    ) -> None:
         if node == destination:
-            return _build_result(origin, destination, path, by_key)
+            journeys.append((cost, path))
+            return
         for neighbor in adjacency.get(node, []):
             if neighbor in path:
                 continue  # loop prevention
             edge = by_key[(node, neighbor)]
-            heapq.heappush(heap, (cost + edge.price_usd, path + (neighbor,)))
+            if last_was_priced and not edge.is_connector:
+                continue  # priced edge can't follow priced edge without a connector
+            dfs(
+                neighbor,
+                path + (neighbor,),
+                cost + edge.price_usd,
+                not edge.is_connector,
+            )
 
-    return {
-        "error": f"no route from '{origin}' to '{destination}'",
-        "valid_nodes": sorted(node_ids),
-    }
+    dfs(origin, (origin,), Decimal("0.00"), False)
+
+    if not journeys:
+        return {
+            "error": f"no route from '{origin}' to '{destination}'",
+            "valid_nodes": sorted(node_ids),
+        }
+
+    # min over (cost, path): tuple comparison gives the lexicographic
+    # node_id tie-break for equal-cost journeys, deterministically.
+    _, best_path = min(journeys)
+    return _build_result(origin, destination, best_path, by_key)
 
 
 @tool
 def route(origin: str, destination: str, at_time: datetime) -> dict:
-    """Cheapest priced path between two toll graph nodes at a given time.
+    """Cheapest legitimate journey between two toll graph nodes at a given time.
 
     Loads the full toll graph (60 nodes, 342 edges) plus each dynamic edge's
-    latest trip_pricing row at or before at_time, and runs Dijkstra weighted
-    by zone_toll_rate_usd. Edges whose latest row is CLOSED are excluded
+    latest trip_pricing row at or before at_time, then enumerates every
+    legitimate journey by DFS: a sequence of whole priced trips joined only
+    by free connectors, since a priced edge is a complete billed trip and is
+    never chained directly to another priced edge within a corridor. The
+    cheapest journey wins. Edges whose latest row is CLOSED are excluded
     regardless of rate -- availability lives in link_status, never price.
     Equal-cost ties break on lexicographic node_id so identical inputs always
     return the identical path.

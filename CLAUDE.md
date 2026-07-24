@@ -5,3 +5,7 @@ Keep all responses concise, use bolding on important parts, and respond with a s
 # Aiding user comprehension
 
 Give 1-2 sentence explanations on more complex topics. Offer to make explanatory diagrams. Offer ideas for mini-apps that you think would aid in user comprehension.
+
+# Repo rules
+
+All commits must be done on the main branch unless in a worktree.

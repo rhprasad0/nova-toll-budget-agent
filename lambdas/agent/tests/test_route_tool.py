@@ -26,25 +26,29 @@ T2 = datetime(2026, 1, 2, tzinfo=timezone.utc)
 
 
 def test_cheapest_of_two_priced_paths_wins():
-    nodes = {"a", "b", "c", "d"}
+    # Two legal journeys a->d, each a priced trip through a free connector:
+    # a->b(5.00)->conn->d vs a->y(1.00)->conn->d. The cheaper one wins.
+    nodes = {"a", "b", "c", "d", "y"}
     edges = [
-        PricedEdge("a", "b", Decimal("5.00"), "OPEN", T1),
-        PricedEdge("b", "d", Decimal("5.00"), "OPEN", T1),
-        PricedEdge("a", "c", Decimal("1.00"), "OPEN", T1),
-        PricedEdge("c", "d", Decimal("1.00"), "OPEN", T1),
+        PricedEdge("a", "b", Decimal("5.00"), "OPEN", T1, False),
+        PricedEdge("b", "c", Decimal("0.00"), None, None, True),
+        PricedEdge("c", "d", Decimal("5.00"), "OPEN", T1, False),
+        PricedEdge("a", "y", Decimal("1.00"), "OPEN", T1, False),
+        PricedEdge("y", "d", Decimal("0.00"), None, None, True),
     ]
     result = _shortest_path("a", "d", nodes, edges)
     _validator.validate(result)
-    assert result["total_usd"] == "2.00"
-    assert [h["from"] for h in result["hops"]] == ["a", "c"]
+    assert result["total_usd"] == "1.00"
+    assert [h["from"] for h in result["hops"]] == ["a", "y"]
 
 
 def test_closed_edge_excluded_pricier_open_path_chosen():
-    nodes = {"a", "b", "d"}
+    nodes = {"a", "b", "c", "d"}
     edges = [
-        PricedEdge("a", "d", Decimal("1.00"), "CLOSED", T1),
-        PricedEdge("a", "b", Decimal("3.00"), "OPEN", T1),
-        PricedEdge("b", "d", Decimal("3.00"), "OPEN", T1),
+        PricedEdge("a", "d", Decimal("1.00"), "CLOSED", T1, False),
+        PricedEdge("a", "b", Decimal("3.00"), "OPEN", T1, False),
+        PricedEdge("b", "c", Decimal("0.00"), None, None, True),
+        PricedEdge("c", "d", Decimal("3.00"), "OPEN", T1, False),
     ]
     result = _shortest_path("a", "d", nodes, edges)
     _validator.validate(result)
@@ -53,7 +57,7 @@ def test_closed_edge_excluded_pricier_open_path_chosen():
 
 def test_only_path_closed_gives_no_route_error():
     nodes = {"a", "d"}
-    edges = [PricedEdge("a", "d", Decimal("1.00"), "CLOSED", T1)]
+    edges = [PricedEdge("a", "d", Decimal("1.00"), "CLOSED", T1, False)]
     result = _shortest_path("a", "d", nodes, edges)
     _validator.validate(result)
     assert "error" in result
@@ -63,8 +67,8 @@ def test_only_path_closed_gives_no_route_error():
 def test_free_connector_traversable_and_excluded_from_oldest_priced_at():
     nodes = {"a", "b", "c"}
     edges = [
-        PricedEdge("a", "b", Decimal("2.00"), "OPEN", T1),
-        PricedEdge("b", "c", Decimal("0.00"), None, None),
+        PricedEdge("a", "b", Decimal("2.00"), "OPEN", T1, False),
+        PricedEdge("b", "c", Decimal("0.00"), None, None, True),
     ]
     result = _shortest_path("a", "c", nodes, edges)
     _validator.validate(result)
@@ -80,17 +84,74 @@ def test_free_connector_traversable_and_excluded_from_oldest_priced_at():
 
 
 def test_equal_cost_paths_tie_break_lexicographic_and_deterministic():
-    nodes = {"o", "x", "y", "d"}
+    # Two equal-cost journeys, each a priced trip through a connector:
+    # o->x->xc->d vs o->y->yc->d. Lexicographic tie-break picks the "x" path.
+    nodes = {"o", "x", "xc", "y", "yc", "d"}
     edges = [
-        PricedEdge("o", "x", Decimal("1.00"), "OPEN", T1),
-        PricedEdge("x", "d", Decimal("1.00"), "OPEN", T1),
-        PricedEdge("o", "y", Decimal("1.00"), "OPEN", T1),
-        PricedEdge("y", "d", Decimal("1.00"), "OPEN", T1),
+        PricedEdge("o", "x", Decimal("1.00"), "OPEN", T1, False),
+        PricedEdge("x", "xc", Decimal("0.00"), None, None, True),
+        PricedEdge("xc", "d", Decimal("1.00"), "OPEN", T1, False),
+        PricedEdge("o", "y", Decimal("1.00"), "OPEN", T1, False),
+        PricedEdge("y", "yc", Decimal("0.00"), None, None, True),
+        PricedEdge("yc", "d", Decimal("1.00"), "OPEN", T1, False),
     ]
     first = _shortest_path("o", "d", nodes, edges)
     second = _shortest_path("o", "d", nodes, edges)
     assert first == second
-    assert [h["from"] for h in first["hops"]] == ["o", "x"]
+    assert [h["from"] for h in first["hops"]] == ["o", "x", "xc"]
+
+
+def test_quantico_regression_direct_trip_beats_chained_subtrips():
+    # Live production defect: q->s has a single priced trip at 21.50, and
+    # also a chain of three priced sub-trips summing to 17.25 (q->g->f->s).
+    # The chain must never win -- it's not a real journey, it's three
+    # separate billed trips glued together with no connector between them.
+    nodes = {"q", "g", "f", "s"}
+    edges = [
+        PricedEdge("q", "s", Decimal("21.50"), "OPEN", T1, False),
+        PricedEdge("q", "g", Decimal("4.85"), "OPEN", T1, False),
+        PricedEdge("g", "f", Decimal("7.25"), "OPEN", T1, False),
+        PricedEdge("f", "s", Decimal("5.15"), "OPEN", T1, False),
+    ]
+    result = _shortest_path("q", "s", nodes, edges)
+    _validator.validate(result)
+    assert result["total_usd"] == "21.50"
+    assert len(result["hops"]) == 1
+
+
+def test_priced_edge_cannot_chain_into_priced_edge_without_connector():
+    nodes = {"a", "b", "c"}
+    edges = [
+        PricedEdge("a", "b", Decimal("1.00"), "OPEN", T1, False),
+        PricedEdge("b", "c", Decimal("1.00"), "OPEN", T1, False),
+    ]
+    result = _shortest_path("a", "c", nodes, edges)
+    _validator.validate(result)
+    assert "error" in result
+
+    nodes_with_connector = {"a", "b", "x", "c"}
+    edges_with_connector = edges + [
+        PricedEdge("b", "x", Decimal("0.00"), None, None, True),
+        PricedEdge("x", "c", Decimal("1.00"), "OPEN", T1, False),
+    ]
+    result = _shortest_path("a", "c", nodes_with_connector, edges_with_connector)
+    _validator.validate(result)
+    assert len(result["hops"]) == 3
+    assert result["total_usd"] == "2.00"
+
+
+def test_connector_to_connector_chaining_stays_legal():
+    nodes = {"a", "b", "c", "d", "e"}
+    edges = [
+        PricedEdge("a", "b", Decimal("1.00"), "OPEN", T1, False),
+        PricedEdge("b", "c", Decimal("0.00"), None, None, True),
+        PricedEdge("c", "d", Decimal("0.00"), None, None, True),
+        PricedEdge("d", "e", Decimal("1.00"), "OPEN", T1, False),
+    ]
+    result = _shortest_path("a", "e", nodes, edges)
+    _validator.validate(result)
+    assert len(result["hops"]) == 4
+    assert result["total_usd"] == "2.00"
 
 
 def test_origin_equals_destination_is_error():
@@ -108,17 +169,18 @@ def test_unknown_node_error_has_sorted_valid_nodes():
 
 def test_unreachable_destination_is_no_route_error():
     nodes = {"a", "b", "z"}
-    edges = [PricedEdge("a", "b", Decimal("1.00"), "OPEN", T1)]
+    edges = [PricedEdge("a", "b", Decimal("1.00"), "OPEN", T1, False)]
     result = _shortest_path("a", "z", nodes, edges)
     _validator.validate(result)
     assert "error" in result
 
 
 def test_oldest_priced_at_with_mixed_priced_and_free_hops():
-    nodes = {"a", "b", "c"}
+    nodes = {"a", "b", "c", "x"}
     edges = [
-        PricedEdge("a", "b", Decimal("1.00"), "OPEN", T2),
-        PricedEdge("b", "c", Decimal("1.00"), "OPEN", T1),
+        PricedEdge("a", "b", Decimal("1.00"), "OPEN", T2, False),
+        PricedEdge("b", "x", Decimal("0.00"), None, None, True),
+        PricedEdge("x", "c", Decimal("1.00"), "OPEN", T1, False),
     ]
     result = _shortest_path("a", "c", nodes, edges)
     assert result["oldest_priced_at"] == T1.isoformat()

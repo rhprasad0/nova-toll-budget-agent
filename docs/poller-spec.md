@@ -124,17 +124,37 @@ CREATE TABLE trip_pricing (
     UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );
 
--- Covering index for latest-price lookups: equality on the three key columns,
--- then newest interval_end_at. Serves the route tool's LATERAL ... LIMIT 1
--- per key, and hand-written DISTINCT ON via execute_sql. INCLUDE avoids a heap
--- fetch per row (25s -> 1.4s at ~1.16M rows, vs. the agent_readonly 5s
--- statement_timeout).
+-- Kept for hand-written DISTINCT ON (od_pair_id, start_zone_id, end_zone_id)
+-- queries via execute_sql, whose ORDER BY matches this index's full column
+-- order. It no longer serves the route tool: its column order can't produce
+-- an index-ordered descent by interval_end_at within a single od_pair_id (the
+-- zone columns sit between the equality column and the sort column), so the
+-- route tool's LATERAL queries fell back to a Sort -- see the two indexes
+-- below for the fix.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_price_lookup_covering_idx
     ON trip_pricing (od_pair_id, start_zone_id, end_zone_id, interval_end_at DESC)
     INCLUDE (zone_toll_rate_usd, link_status);
+
+-- Per-key latest-row descent for the route tool's LATERAL queries. Each
+-- query's equality columns come first, then interval_end_at DESC alone, so
+-- the planner can walk straight to the newest row per key instead of
+-- sorting. The feed split (i95 has od_pair_id, i66 doesn't) is expressed as
+-- a partial-index predicate rather than an od_pair_id IS [NOT] NULL key
+-- column -- a NullTest on a key column can't establish index ordering, so it
+-- forced the same Sort these indexes exist to avoid. INCLUDE covers
+-- zone_toll_rate_usd/link_status for index-only scans.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_od_latest_idx
+    ON trip_pricing (od_pair_id, interval_end_at DESC)
+    INCLUDE (zone_toll_rate_usd, link_status)
+    WHERE od_pair_id IS NOT NULL;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_zone_latest_idx
+    ON trip_pricing (start_zone_id, end_zone_id, interval_end_at DESC)
+    INCLUDE (zone_toll_rate_usd, link_status)
+    WHERE od_pair_id IS NULL;
 ```
 
-**Schema version: 2.1.0** (semver; bump *major* on an upsert-key or
+**Schema version: 2.2.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`.
@@ -142,8 +162,10 @@ comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from `feed`. `trip_pricing_price_lookup_covering_idx`
 was added once the agent's route tool existed and its latest-price query
-measurably blew the 5s statement_timeout at production row counts — see
-`docs/agent-tools-spec.md`.
+measurably blew the 5s statement_timeout at production row counts, but its
+column order turned out not to support an index-ordered descent per
+od_pair_id; `trip_pricing_od_latest_idx` and `trip_pricing_zone_latest_idx`
+now serve that query instead — see `docs/agent-tools-spec.md`.
 
 Upsert: `ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id,
 od_pair_id) DO UPDATE` — port of the existing `UPSERT_SQL`. `od_pair_id` is part
