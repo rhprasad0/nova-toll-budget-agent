@@ -5,6 +5,7 @@ __pycache__/
 *.log
 .claude/settings.local.json
 .hermes/
+lambdas/agent/rds-ca-bundle.pem
 
 # Terraform
 infra/.terraform/

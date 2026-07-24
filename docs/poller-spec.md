@@ -123,16 +123,26 @@ CREATE TABLE trip_pricing (
     -- upsert key; NULLS NOT DISTINCT so i66's NULL od_pair_id still dedups
     UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );
+
+-- Covering index for the agent's route tool: DISTINCT ON (od_pair_id,
+-- start_zone_id, end_zone_id) ORDER BY ... interval_end_at DESC latest-price
+-- lookup. INCLUDE avoids a heap fetch per row (25s -> 1.4s at ~1.16M rows,
+-- vs. the agent_readonly 5s statement_timeout).
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_price_lookup_covering_idx
+    ON trip_pricing (od_pair_id, start_zone_id, end_zone_id, interval_end_at DESC)
+    INCLUDE (zone_toll_rate_usd, link_status);
 ```
 
-**Schema version: 2.0.0** (semver; bump *major* on an upsert-key or
+**Schema version: 2.1.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
-The source URL is derivable from `feed`. Secondary indexes wait until the
-agent exists and a query is measurably slow.
+The source URL is derivable from `feed`. `trip_pricing_price_lookup_covering_idx`
+was added once the agent's route tool existed and its latest-price query
+measurably blew the 5s statement_timeout at production row counts — see
+`docs/agent-tools-spec.md`.
 
 Upsert: `ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id,
 od_pair_id) DO UPDATE` — port of the existing `UPSERT_SQL`. `od_pair_id` is part

@@ -1,6 +1,6 @@
 -- Mirrors docs/poller-spec.md §Database schema. Keep in sync; the schema
 -- version below must match the spec and is enforced by test_schema_contract.py.
--- schema version: 2.0.0
+-- schema version: 2.1.0
 
 CREATE TABLE trip_pricing (
     id                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -26,3 +26,13 @@ CREATE TABLE trip_pricing (
     -- keeps i66 (od_pair_id always NULL) idempotent under re-delivery.
     UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );
+
+-- Supports the route tool's DISTINCT ON (od_pair_id, start_zone_id, end_zone_id)
+-- ORDER BY ... interval_end_at DESC latest-price lookup. INCLUDE covers
+-- zone_toll_rate_usd/link_status so it's an index-only scan -- a plain
+-- (non-covering) version of this index still needs a heap fetch per row
+-- (1.16M rows -> ~25s), which blows the agent_readonly 5s statement_timeout.
+-- Covering brings it to ~1.4s.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_price_lookup_covering_idx
+    ON trip_pricing (od_pair_id, start_zone_id, end_zone_id, interval_end_at DESC)
+    INCLUDE (zone_toll_rate_usd, link_status);
