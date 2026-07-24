@@ -98,13 +98,30 @@ One read-only SQL statement in, capped rows out.
 - **Versioning note**: raising the row cap is a *minor* schema bump;
   lowering it is *major* (the model's memory of the cap is contract).
 
-### `route(origin: str, destination: str, at_time: datetime | None = None) -> dict`
+### `route(origin: str, destination: str, at_time: datetime) -> dict`
 
 The deterministic router promised by toll-graph-spec's traversal contract.
 
 - Loads the **whole graph in one query** (60 nodes, 342 edges — trivially
-  small) plus latest prices for every dynamic edge (`DISTINCT ON` per key,
-  or the latest row at/before `at_time` when given).
+  small) plus each dynamic edge's latest price at or before `at_time`.
+- **`at_time` is required.** Prices are dynamic and the express lanes are
+  reversible, so a quote is only meaningful against a stated instant; "right
+  now" is the caller passing the current UTC time, not an implicit default.
+  The agent's system prompt must supply that clock reading — a model left to
+  infer it will answer from its training cutoff and return confidently stale
+  prices with no error.
+- **The price lookup is driven by the key set, not by scanning history.** The
+  ~337 keys are already in hand from `graph_edge`, so each one is resolved by a
+  `LATERAL … ORDER BY interval_end_at DESC LIMIT 1` — one index-only descent
+  per key against `trip_pricing_price_lookup_covering_idx`. The obvious
+  `DISTINCT ON` instead reads every row ever recorded (~1.16M and growing) to
+  return ~337: Postgres has no loose index scan, so it walks the whole index
+  and the `Unique` node discards the rest. (PG18's skip scan is a different
+  optimization and does not help — see the note in `db/schema.sql`.) The
+  rewrite makes the cost constant in table size rather than merely smaller.
+- i66 keys by `(start_zone_id, end_zone_id)` need their own query with an
+  explicit `od_pair_id IS NULL`, which pins the index's leading column;
+  `IS NOT DISTINCT FROM` would not index as equality.
 - Runs plain-code **Dijkstra** weighted by `zone_toll_rate_usd`; free
   connector edges (`feed IS NULL`) weigh $0.00. A visited-set in code makes
   looping routes structurally impossible — no recursive SQL exists to run
@@ -116,9 +133,12 @@ The deterministic router promised by toll-graph-spec's traversal contract.
   node list (it's ~60 short strings — cheaper to return than to make the
   model guess again).
 - **Output**: ordered path of `{from, to, price_usd, link_status, priced_at}`
-  hops, total price, and the oldest `interval_end_at` used (so the agent can
-  say how fresh the quote is). No path → explicit "no route" result, again
-  with the node list.
+  hops, total price, and the oldest `interval_end_at` used. No path → explicit
+  "no route" result, again with the node list. `oldest_priced_at` is the
+  **staleness signal**: the lookup has no lower bound, so a poller gap yields
+  an old row rather than a dropped edge, and a value far from `at_time` means
+  the quote is stale — not current. The agent should surface that gap rather
+  than quote the number bare.
 - **Determinism**: equal-cost ties break on lexicographic `node_id` so
   identical inputs return identical paths (traces stay comparable).
   `origin == destination` is an error, not a zero-hop path.

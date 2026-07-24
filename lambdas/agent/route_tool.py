@@ -22,13 +22,45 @@ CA_BUNDLE_PATH = os.path.join(os.path.dirname(__file__), "rds-ca-bundle.pem")
 
 CENTS = Decimal("0.01")
 
-_PRICE_SQL = """
-    SELECT DISTINCT ON (od_pair_id, start_zone_id, end_zone_id)
-        od_pair_id, start_zone_id, end_zone_id,
-        zone_toll_rate_usd, link_status, interval_end_at
-    FROM trip_pricing
-    {where}
-    ORDER BY od_pair_id, start_zone_id, end_zone_id, interval_end_at DESC
+# Latest priced row per key, driven by the key set rather than by scanning
+# history. The obvious DISTINCT ON over trip_pricing reads every row ever
+# recorded (~1.16M and growing) to return ~337; Postgres has no loose index
+# scan, so DISTINCT ON walks the whole index and the Unique node discards the
+# rest -- and PG18's skip scan is a different optimization that does not help
+# here. Feeding the known keys through LATERAL turns that into one index-only
+# descent per key, which is constant work no matter how much history piles up.
+# Keys come from graph_edge, already loaded a few lines above.
+_PRICE_SQL_OD = """
+    SELECT k.od_pair_id, p.zone_toll_rate_usd, p.link_status, p.interval_end_at
+    FROM unnest(%(od_pair_ids)s::int[]) AS k(od_pair_id)
+    CROSS JOIN LATERAL (
+        SELECT zone_toll_rate_usd, link_status, interval_end_at
+        FROM trip_pricing
+        WHERE od_pair_id = k.od_pair_id
+          AND interval_end_at <= %(at_time)s
+        ORDER BY interval_end_at DESC
+        LIMIT 1
+    ) p
+"""
+
+# i66 prices by zone pair and always has od_pair_id NULL. The IS NULL is not
+# redundant: it pins the index's leading column so the descent uses the full
+# (od_pair_id, start_zone_id, end_zone_id, interval_end_at) prefix.
+_PRICE_SQL_ZONE = """
+    SELECT k.start_zone_id, k.end_zone_id,
+           p.zone_toll_rate_usd, p.link_status, p.interval_end_at
+    FROM unnest(%(start_zone_ids)s::int[], %(end_zone_ids)s::int[])
+         AS k(start_zone_id, end_zone_id)
+    CROSS JOIN LATERAL (
+        SELECT zone_toll_rate_usd, link_status, interval_end_at
+        FROM trip_pricing
+        WHERE od_pair_id IS NULL
+          AND start_zone_id = k.start_zone_id
+          AND end_zone_id = k.end_zone_id
+          AND interval_end_at <= %(at_time)s
+        ORDER BY interval_end_at DESC
+        LIMIT 1
+    ) p
 """
 
 
@@ -58,7 +90,7 @@ def _connect(*, host: str, port: int, dbname: str):
     )
 
 
-def _load_graph(at_time: datetime | None) -> tuple[set[str], list[PricedEdge]]:
+def _load_graph(at_time: datetime) -> tuple[set[str], list[PricedEdge]]:
     conn = _connect(
         host=os.environ["DB_HOST"],
         port=int(os.environ["DB_PORT"]),
@@ -75,34 +107,36 @@ def _load_graph(at_time: datetime | None) -> tuple[set[str], list[PricedEdge]]:
             )
             edge_rows = cur.fetchall()
 
-            if at_time is not None:
-                cur.execute(
-                    _PRICE_SQL.format(where="WHERE interval_end_at <= %(at_time)s"),
-                    {"at_time": at_time},
-                )
-            else:
-                cur.execute(_PRICE_SQL.format(where=""))
-            price_rows = cur.fetchall()
+            # Sorted so the emitted SQL parameters are stable between calls.
+            od_ids = sorted({od for _, _, _, od, _, _ in edge_rows if od is not None})
+            zone_pairs = sorted(
+                {
+                    (sz, ez)
+                    for _, _, feed, od, sz, ez in edge_rows
+                    if od is None and feed is not None
+                }
+            )
+
+            cur.execute(_PRICE_SQL_OD, {"od_pair_ids": od_ids, "at_time": at_time})
+            price_by_od: dict[int, tuple[Decimal, str, datetime]] = {
+                od: (rate, link_status, priced_at)
+                for od, rate, link_status, priced_at in cur.fetchall()
+            }
+
+            cur.execute(
+                _PRICE_SQL_ZONE,
+                {
+                    "start_zone_ids": [sz for sz, _ in zone_pairs],
+                    "end_zone_ids": [ez for _, ez in zone_pairs],
+                    "at_time": at_time,
+                },
+            )
+            price_by_zone: dict[tuple[int, int], tuple[Decimal, str, datetime]] = {
+                (sz, ez): (rate, link_status, priced_at)
+                for sz, ez, rate, link_status, priced_at in cur.fetchall()
+            }
     finally:
         conn.close()
-
-    # DISTINCT ON (od_pair_id, start_zone_id, end_zone_id) groups i66 rows
-    # correctly too -- their od_pair_id is NULL for every row, so Postgres
-    # groups them by (NULL, start_zone_id, end_zone_id) i.e. the zone pair.
-    price_by_od: dict[int, tuple[Decimal, str, datetime]] = {}
-    price_by_zone: dict[tuple[int, int], tuple[Decimal, str, datetime]] = {}
-    for (
-        od_pair_id,
-        start_zone_id,
-        end_zone_id,
-        rate,
-        link_status,
-        priced_at,
-    ) in price_rows:
-        if od_pair_id is not None:
-            price_by_od[od_pair_id] = (rate, link_status, priced_at)
-        else:
-            price_by_zone[(start_zone_id, end_zone_id)] = (rate, link_status, priced_at)
 
     edges: list[PricedEdge] = []
     for from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id in edge_rows:
@@ -201,22 +235,25 @@ def _shortest_path(
 
 
 @tool
-def route(origin: str, destination: str, at_time: datetime | None = None) -> dict:
-    """Cheapest priced path between two toll graph nodes.
+def route(origin: str, destination: str, at_time: datetime) -> dict:
+    """Cheapest priced path between two toll graph nodes at a given time.
 
     Loads the full toll graph (60 nodes, 342 edges) plus each dynamic edge's
-    latest trip_pricing row, and runs Dijkstra weighted by zone_toll_rate_usd.
-    Edges whose latest row is CLOSED are excluded regardless of rate --
-    availability lives in link_status, never price. Equal-cost ties break on
-    lexicographic node_id so identical inputs always return the identical
-    path.
+    latest trip_pricing row at or before at_time, and runs Dijkstra weighted
+    by zone_toll_rate_usd. Edges whose latest row is CLOSED are excluded
+    regardless of rate -- availability lives in link_status, never price.
+    Equal-cost ties break on lexicographic node_id so identical inputs always
+    return the identical path.
 
     Args:
         origin: Origin node_id slug, e.g. 'i95x:garrisonville'. Must come
             from the graph_node list.
         destination: Destination node_id slug, e.g. 'i495x:westpark'.
-        at_time: Optional ISO-8601 instant; prices use the latest interval
-            at or before this time. Omit or None for current prices.
+        at_time: Required ISO-8601 instant; prices use the latest interval at
+            or before this time. Prices are dynamic and the express lanes are
+            reversible, so a quote is only meaningful against a stated time --
+            pass the current UTC time for a "right now" answer. Use the clock
+            reading you were given; never guess it.
 
     Returns:
         dict: on success, {"origin","destination","hops","total_usd",

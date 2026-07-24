@@ -254,9 +254,16 @@ small — 60 nodes, 342 edges), runs plain-code BFS/Dijkstra, prices each edge
 from `trip_pricing` per §3, and returns the complete priced path; the LLM
 only picks endpoints from the node list and narrates the result. Only the
 ~60-node name list ever needs to enter the model's context — never edge or
-pricing data — which keeps a cheap model viable. The longest realistic route
-is about 4 hops, since dynamic edges are already whole priced trips, not
-segments.
+pricing data — which keeps a cheap model viable.
+
+`at_time` is **required**: prices are dynamic and the lanes are reversible, so
+a quote only means something against a stated instant. Edge prices are looked
+up per key with `LATERAL … ORDER BY interval_end_at DESC LIMIT 1` rather than a
+`DISTINCT ON` over history, so lookup cost is constant in table size.
+
+Of the 1557 reachable ordered node pairs, shortest paths run **1 to 6 hops**
+(measured over `db/graph.sql`); price-weighted Dijkstra may return something
+longer than the shortest path, since it optimizes cost rather than hops.
 
 ## I-66 sample data note
 

@@ -124,10 +124,11 @@ CREATE TABLE trip_pricing (
     UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );
 
--- Covering index for the agent's route tool: DISTINCT ON (od_pair_id,
--- start_zone_id, end_zone_id) ORDER BY ... interval_end_at DESC latest-price
--- lookup. INCLUDE avoids a heap fetch per row (25s -> 1.4s at ~1.16M rows,
--- vs. the agent_readonly 5s statement_timeout).
+-- Covering index for latest-price lookups: equality on the three key columns,
+-- then newest interval_end_at. Serves the route tool's LATERAL ... LIMIT 1
+-- per key, and hand-written DISTINCT ON via execute_sql. INCLUDE avoids a heap
+-- fetch per row (25s -> 1.4s at ~1.16M rows, vs. the agent_readonly 5s
+-- statement_timeout).
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_price_lookup_covering_idx
     ON trip_pricing (od_pair_id, start_zone_id, end_zone_id, interval_end_at DESC)
     INCLUDE (zone_toll_rate_usd, link_status);

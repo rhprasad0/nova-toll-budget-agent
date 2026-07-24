@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "route",
-  "version": "1.0.0",
-  "description": "Deterministic cheapest priced path between two graph nodes (Dijkstra over graph_edge, latest trip_pricing rates, CLOSED edges excluded). Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
+  "version": "2.0.0",
+  "description": "Deterministic cheapest priced path between two graph nodes at a stated time (Dijkstra over graph_edge, latest trip_pricing rates at or before at_time, CLOSED edges excluded). Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
   "input": {
     "type": "object",
     "properties": {
@@ -15,15 +15,19 @@
         "description": "Destination node_id slug, e.g. 'i495x:westpark'."
       },
       "at_time": {
-        "type": ["string", "null"],
+        "type": "string",
         "format": "date-time",
-        "description": "Optional ISO-8601 instant; prices use the latest interval at or before this time. Omit or null for current prices."
+        "description": "Required ISO-8601 instant; prices use the latest interval at or before this time. Prices are dynamic and the express lanes are reversible, so a quote is only meaningful against a stated time — pass the current UTC time for a 'right now' answer. Use the clock reading you were given; never guess it."
       }
     },
-    "required": ["origin", "destination"],
+    "required": ["origin", "destination", "at_time"],
     "additionalProperties": false,
     "examples": [
-      { "origin": "i95x:garrisonville", "destination": "i495x:westpark" }
+      {
+        "origin": "i95x:garrisonville",
+        "destination": "i495x:westpark",
+        "at_time": "2026-07-24T14:30:00Z"
+      }
     ]
   },
   "output": {
@@ -64,7 +68,7 @@
           "oldest_priced_at": {
             "type": ["string", "null"],
             "format": "date-time",
-            "description": "Oldest interval_end_at used anywhere in the path — how stale the quote could be. Null only for all-free paths."
+            "description": "Oldest interval_end_at used anywhere in the path — how stale the quote could be. Null only for all-free paths. This is the staleness signal: prices are looked up at or before at_time with no lower bound, so a value far from at_time means the poller had a gap, not that the price is current."
           }
         },
         "required": [
