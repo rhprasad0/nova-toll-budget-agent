@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.43.53",
+    "strands-agents>=1.50.0",
 ]
 
 [dependency-groups]
@@ -35,7 +36,7 @@ exclude = ["**/node_modules", "**/__pycache__", ".venv", "infra/build"]
 # about).
 [[tool.pyright.executionEnvironments]]
 root = "tests"
-extraPaths = ["lambdas/loader"]
+extraPaths = ["lambdas/loader", "lambdas/agent"]
 
 [[tool.pyright.executionEnvironments]]
 root = "."
