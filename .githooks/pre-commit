@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Lints staged Python files with ruff before allowing a commit.
+# One-time setup per clone: git config core.hooksPath .githooks
+set -euo pipefail
+
+files=$(git diff --cached --name-only --diff-filter=ACM -- '*.py')
+[ -z "$files" ] && exit 0
+
+if ! uv run ruff check $files || ! uv run ruff format --check $files; then
+    echo "Lint failed. Run 'uv run ruff format' and 'uv run ruff check --fix' to clean up, then re-stage." >&2
+    exit 1
+fi
