@@ -18,6 +18,7 @@ graph.sql carries no coordinates, so the north->south ordering below is the
 same curated order used by the audit/overview docs. Keep it in sync if the
 seed's node set ever changes.
 """
+
 import re
 import sys
 from pathlib import Path
@@ -28,22 +29,59 @@ SQL = (REPO / "db" / "graph.sql").read_text()
 # North-first geographic order (index 0 = northernmost). Only i95/i495 need an
 # order; i66 is east-west and always-open so it isn't direction-split.
 I95_ORDER = [
-    "i95x:washington-dc", "i95x:dc-pentagon-washington-blvd", "i95x:pentagon",
-    "i95x:washington-blvd-pentagon", "i95x:shirlington-circle", "i95x:seminary-rd",
-    "i95x:i395-n", "i95x:i395-95", "i95x:telegraph-rd", "i95x:i495-springfield",
-    "i95x:i95-s-near-backlick-rd", "i95x:turkeycock", "i95x:franconia-rd",
-    "i95x:franconia-springfield-pkwy", "i95x:i95-s-ft-belvoir", "i95x:alban",
-    "i95x:lorton", "i95x:newington", "i95x:fairfax-county-pkwy", "i95x:us-1",
-    "i95x:prince-william-pkwy", "i95x:gordon-blvd", "i95x:opitz", "i95x:cardinal",
-    "i95x:i95-s-near-dale-blvd", "i95x:dale-blvd", "i95x:dumfries", "i95x:joplin-rd",
-    "i95x:russell-rd", "i95x:quantico", "i95x:old-courthouse-rd", "i95x:rt17-95-sb",
-    "i95x:rt17-95-nb", "i95x:garrisonville",
+    "i95x:washington-dc",
+    "i95x:dc-pentagon-washington-blvd",
+    "i95x:pentagon",
+    "i95x:washington-blvd-pentagon",
+    "i95x:shirlington-circle",
+    "i95x:seminary-rd",
+    "i95x:i395-n",
+    "i95x:i395-95",
+    "i95x:telegraph-rd",
+    "i95x:i495-springfield",
+    "i95x:i95-s-near-backlick-rd",
+    "i95x:turkeycock",
+    "i95x:franconia-rd",
+    "i95x:franconia-springfield-pkwy",
+    "i95x:i95-s-ft-belvoir",
+    "i95x:alban",
+    "i95x:lorton",
+    "i95x:newington",
+    "i95x:fairfax-county-pkwy",
+    "i95x:us-1",
+    "i95x:prince-william-pkwy",
+    "i95x:gordon-blvd",
+    "i95x:opitz",
+    "i95x:cardinal",
+    "i95x:i95-s-near-dale-blvd",
+    "i95x:dale-blvd",
+    "i95x:dumfries",
+    "i95x:joplin-rd",
+    "i95x:russell-rd",
+    "i95x:quantico",
+    "i95x:old-courthouse-rd",
+    "i95x:rt17-95-sb",
+    "i95x:rt17-95-nb",
+    "i95x:garrisonville",
 ]
 I495_ORDER = [
-    "i495x:i495-near-md", "i495x:i495-n", "i495x:lee-hwy", "i495x:jones-branch-rt267",
-    "i495x:jones-branch", "i495x:westpark-c", "i495x:westpark-b", "i495x:westpark",
-    "i495x:rt-267", "i495x:route-7", "i495x:i66-jct", "i495x:gallows", "i495x:braddock",
-    "i495x:i495-hov", "i495x:i395-495-hov", "i495x:i95-hov", "i495x:i395-95-hov",
+    "i495x:i495-near-md",
+    "i495x:i495-n",
+    "i495x:lee-hwy",
+    "i495x:jones-branch-rt267",
+    "i495x:jones-branch",
+    "i495x:westpark-c",
+    "i495x:westpark-b",
+    "i495x:westpark",
+    "i495x:rt-267",
+    "i495x:route-7",
+    "i495x:i66-jct",
+    "i495x:gallows",
+    "i495x:braddock",
+    "i495x:i495-hov",
+    "i495x:i395-495-hov",
+    "i495x:i95-hov",
+    "i495x:i395-95-hov",
     "i495x:i395-95-495",
 ]
 ORDER = {n: i for i, n in enumerate(I95_ORDER)}
@@ -74,15 +112,19 @@ def parse():
 
 
 def corr_of(nid):
-    return "i66" if nid.startswith("i66:") else ("i495" if nid.startswith("i495x:") else "i95")
+    return (
+        "i66"
+        if nid.startswith("i66:")
+        else ("i495" if nid.startswith("i495x:") else "i95")
+    )
 
 
 def direction(f, t):
     """'NB', 'SB', or 'both' (always-open i66 / cross-corridor connectors)."""
     cf, ct = corr_of(f), corr_of(t)
-    if cf != ct:          # free junction connector between corridors
+    if cf != ct:  # free junction connector between corridors
         return "both"
-    if cf == "i66":       # east-west, always open, not reversible
+    if cf == "i66":  # east-west, always open, not reversible
         return "both"
     return "NB" if ORDER[t] < ORDER[f] else "SB"
 
@@ -108,7 +150,7 @@ def emit(direction_tag, nodes, edges):
         f"(i95/i495 {full.lower()} + always-open i66 + connectors).",
         "digraph toll_" + direction_tag.lower() + " {",
         "  rankdir=TB;",
-        "  graph [splines=curved, nodesep=0.28, ranksep=0.7, fontname=\"Helvetica\", "
+        '  graph [splines=curved, nodesep=0.28, ranksep=0.7, fontname="Helvetica", '
         f'label="NOVA toll graph -- {full} traversal  (double border = no outgoing '
         'edge in this direction)", labelloc=t, fontsize=20];',
         '  node [shape=box, style="rounded,filled", fontname="Courier", fontsize=10];',
@@ -123,12 +165,14 @@ def emit(direction_tag, nodes, edges):
     for corr, ids in by_corr.items():
         border, fill, title = CORRIDOR_STYLE[corr]
         lines.append(f"  subgraph cluster_{corr} {{")
-        lines.append(f'    label="{title}"; color="{border}"; fontcolor="{border}"; '
-                     'style=rounded; fontname="Helvetica-Bold";')
+        lines.append(
+            f'    label="{title}"; color="{border}"; fontcolor="{border}"; '
+            'style=rounded; fontname="Helvetica-Bold";'
+        )
         for nid in ids:
             name = nodes[nid]["name"]
-            peris = 2 if outdeg[nid] == 0 else 1        # sink = no outgoing edge here
-            pen = 2.4 if indeg[nid] == 0 else 1.0        # source = no incoming edge here
+            peris = 2 if outdeg[nid] == 0 else 1  # sink = no outgoing edge here
+            pen = 2.4 if indeg[nid] == 0 else 1.0  # source = no incoming edge here
             lines.append(
                 f'    "{nid}" [label="{esc(nid)}\\n{esc(name)}", color="{border}", '
                 f'fillcolor="{fill}", peripheries={peris}, penwidth={pen}];'
@@ -139,8 +183,10 @@ def emit(direction_tag, nodes, edges):
     # edges, colored by the origin's corridor; connectors dashed
     for f, t, fd in active:
         if fd is None:
-            lines.append(f'  "{f}" -> "{t}" [style=dashed, color="#b0b8c2", '
-                         'label="free", fontsize=8, fontcolor="#8894a5"];')
+            lines.append(
+                f'  "{f}" -> "{t}" [style=dashed, color="#b0b8c2", '
+                'label="free", fontsize=8, fontcolor="#8894a5"];'
+            )
         else:
             border = CORRIDOR_STYLE[nodes[f]["corridor"]][0]
             lines.append(f'  "{f}" -> "{t}" [color="{border}99"];')

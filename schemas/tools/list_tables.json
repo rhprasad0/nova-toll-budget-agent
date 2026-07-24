@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list_tables",
+  "version": "1.0.0",
+  "description": "List the three queryable tables with a one-line purpose each. Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "tables": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "enum": ["trip_pricing", "graph_node", "graph_edge"]
+            },
+            "purpose": { "type": "string" }
+          },
+          "required": ["name", "purpose"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["tables"],
+    "additionalProperties": false,
+    "examples": [
+      {
+        "tables": [
+          {
+            "name": "trip_pricing",
+            "purpose": "Toll rates per 10-min poll (i95 history from 2026-04-17; i66 from cloud go-live)"
+          },
+          {
+            "name": "graph_node",
+            "purpose": "60 named toll-network access points (curated)"
+          },
+          {
+            "name": "graph_edge",
+            "purpose": "342 priced trips / free connectors linking nodes"
+          }
+        ]
+      }
+    ]
+  }
+}

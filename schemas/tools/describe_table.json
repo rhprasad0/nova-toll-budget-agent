@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "describe_table",
+  "version": "1.0.0",
+  "description": "Columns, types, and semantic footgun notes for one queryable table. Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {
+      "table": {
+        "type": "string",
+        "enum": ["trip_pricing", "graph_node", "graph_edge"],
+        "description": "One of the three queryable tables, exactly as returned by list_tables."
+      }
+    },
+    "required": ["table"],
+    "additionalProperties": false,
+    "examples": [{ "table": "trip_pricing" }]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "table": { "type": "string" },
+      "columns": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" },
+            "nullable": { "type": "boolean" },
+            "description": { "type": "string" }
+          },
+          "required": ["name", "type", "nullable", "description"],
+          "additionalProperties": false
+        }
+      },
+      "notes": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Semantic footguns the model must honor when writing SQL against this table (link_status semantics, numeric-key joins, latest-price pattern, trips-not-segments)."
+      }
+    },
+    "required": ["table", "columns", "notes"],
+    "additionalProperties": false,
+    "examples": [
+      {
+        "table": "graph_node",
+        "columns": [
+          {
+            "name": "node_id",
+            "type": "text",
+            "nullable": false,
+            "description": "Stable slug primary key, e.g. 'i95x:garrisonville'."
+          },
+          {
+            "name": "name",
+            "type": "text",
+            "nullable": false,
+            "description": "Canonical display name (hand-curated)."
+          },
+          {
+            "name": "corridor",
+            "type": "text",
+            "nullable": false,
+            "description": "One of i95_express, i495_express, i66_itb."
+          }
+        ],
+        "notes": [
+          "Join edges to nodes on node_id slugs; never re-parse display names."
+        ]
+      }
+    ]
+  }
+}

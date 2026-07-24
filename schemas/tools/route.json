@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "route",
+  "version": "1.0.0",
+  "description": "Deterministic cheapest priced path between two graph nodes (Dijkstra over graph_edge, latest trip_pricing rates, CLOSED edges excluded). Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {
+      "origin": {
+        "type": "string",
+        "description": "Origin node_id slug, e.g. 'i95x:garrisonville'. Must come from the graph_node list."
+      },
+      "destination": {
+        "type": "string",
+        "description": "Destination node_id slug, e.g. 'i495x:westpark'."
+      },
+      "at_time": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "description": "Optional ISO-8601 instant; prices use the latest interval at or before this time. Omit or null for current prices."
+      }
+    },
+    "required": ["origin", "destination"],
+    "additionalProperties": false,
+    "examples": [
+      { "origin": "i95x:garrisonville", "destination": "i495x:westpark" }
+    ]
+  },
+  "output": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "origin": { "type": "string" },
+          "destination": { "type": "string" },
+          "hops": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": { "type": "string" },
+                "to": { "type": "string" },
+                "price_usd": {
+                  "type": "string",
+                  "pattern": "^\\d+\\.\\d{2}$",
+                  "description": "Exact decimal as string; '0.00' for free junction connectors."
+                },
+                "link_status": {
+                  "type": ["string", "null"],
+                  "description": "link_status of the priced row; null for free connectors (no trip_pricing row exists)."
+                },
+                "priced_at": {
+                  "type": ["string", "null"],
+                  "format": "date-time",
+                  "description": "interval_end_at of the priced row; null for free connectors."
+                }
+              },
+              "required": ["from", "to", "price_usd", "link_status", "priced_at"],
+              "additionalProperties": false
+            }
+          },
+          "total_usd": { "type": "string", "pattern": "^\\d+\\.\\d{2}$" },
+          "oldest_priced_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Oldest interval_end_at used anywhere in the path — how stale the quote could be. Null only for all-free paths."
+          }
+        },
+        "required": [
+          "origin",
+          "destination",
+          "hops",
+          "total_usd",
+          "oldest_priced_at"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Unknown node, or no open path exists (CLOSED edges are not traversable)."
+          },
+          "valid_nodes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "The full node_id list, included so the model can correct the slug without another round trip."
+          }
+        },
+        "required": ["error"],
+        "additionalProperties": false
+      }
+    ],
+    "examples": [
+      {
+        "origin": "i495x:i95-hov",
+        "destination": "i95x:i495-springfield",
+        "hops": [
+          {
+            "from": "i495x:i95-hov",
+            "to": "i95x:i495-springfield",
+            "price_usd": "0.00",
+            "link_status": null,
+            "priced_at": null
+          }
+        ],
+        "total_usd": "0.00",
+        "oldest_priced_at": null
+      },
+      {
+        "error": "unknown origin node 'i95x:garrison'",
+        "valid_nodes": ["i95x:alban", "i95x:cardinal", "i95x:dale-blvd"]
+      }
+    ]
+  }
+}

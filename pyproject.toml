@@ -7,7 +7,13 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff", "pyright", "pytest", "psycopg[binary]"]
+dev = [
+    "ruff",
+    "pyright",
+    "pytest",
+    "psycopg[binary]",
+    "jsonschema>=4.26.0",
+]
 
 [tool.pytest.ini_options]
 # "live" tests hit the network and RDS directly (tests/test_expresslanes_crosscheck.py) --

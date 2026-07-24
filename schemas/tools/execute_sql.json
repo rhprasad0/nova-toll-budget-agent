@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "execute_sql",
+  "version": "1.0.0",
+  "description": "Run exactly one read-only SQL statement as agent_readonly; rows capped at 500. Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {
+      "sql": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Exactly one SQL SELECT (or WITH ... SELECT) statement. No semicolon-separated statement lists. Results are capped at 500 rows; use LIMIT and aggregates rather than pulling raw rows."
+      }
+    },
+    "required": ["sql"],
+    "additionalProperties": false,
+    "examples": [
+      {
+        "sql": "SELECT corridor, count(*) FROM graph_node GROUP BY corridor"
+      }
+    ]
+  },
+  "output": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string",
+            "description": "The statement exactly as executed; surface it alongside any answer derived from these rows."
+          },
+          "columns": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "array",
+              "items": {
+                "type": ["string", "number", "integer", "boolean", "null"],
+                "description": "JSON-safe scalar; numeric(10,2) money and timestamps arrive as strings (exact decimal / ISO-8601)."
+              }
+            }
+          },
+          "row_count": { "type": "integer", "minimum": 0, "maximum": 500 },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the query produced more than 500 rows and the rest were dropped."
+          }
+        },
+        "required": ["sql", "columns", "rows", "row_count", "truncated"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "sql": { "type": "string" },
+          "error": {
+            "type": "string",
+            "description": "Postgres or validation error message (truncated to ~500 chars). Read it, fix the statement, try again."
+          }
+        },
+        "required": ["sql", "error"],
+        "additionalProperties": false
+      }
+    ],
+    "examples": [
+      {
+        "sql": "SELECT corridor, count(*) FROM graph_node GROUP BY corridor",
+        "columns": ["corridor", "count"],
+        "rows": [
+          ["i95_express", 34],
+          ["i495_express", 18],
+          ["i66_itb", 8]
+        ],
+        "row_count": 3,
+        "truncated": false
+      },
+      {
+        "sql": "SELECT * FROM nope",
+        "error": "relation \"nope\" does not exist"
+      }
+    ]
+  }
+}
