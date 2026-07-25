@@ -12,7 +12,6 @@ dev = [
     "pyright",
     "pytest",
     "psycopg[binary]",
-    "jsonschema>=4.26.0",
 ]
 
 [tool.pytest.ini_options]
