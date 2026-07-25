@@ -16,7 +16,7 @@ SPEC_MD = (REPO_ROOT / "docs" / "poller-spec.md").read_text()
 
 SEMVER = r"\d+\.\d+\.\d+"
 
-EXPECTED_TABLES = {"trip_pricing_i95", "trip_pricing_i66"}
+EXPECTED_TABLES = {"trip_pricing_i95", "trip_pricing_i66", "trip_pricing_i95_live"}
 
 
 def _cols(paren_body: str) -> list[str]:
@@ -64,7 +64,11 @@ def _schema_columns_by_table() -> dict[str, dict[str, bool]]:
 def _upsert_sql_by_table() -> dict[str, str]:
     return {
         m.group(1): sql
-        for sql in (loader_handler.UPSERT_I95_SQL, loader_handler.UPSERT_I66_SQL)
+        for sql in (
+            loader_handler.UPSERT_I95_SQL,
+            loader_handler.UPSERT_I66_SQL,
+            loader_handler.UPSERT_I95_LIVE_SQL,
+        )
         for m in [re.search(r"INSERT INTO (\w+)", sql)]
         if m
     }

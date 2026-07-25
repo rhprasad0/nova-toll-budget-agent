@@ -3,4 +3,4 @@
 
 CREATE ROLE loader_writer WITH LOGIN;
 GRANT rds_iam TO loader_writer;
-GRANT SELECT, INSERT, UPDATE ON trip_pricing_i95, trip_pricing_i66 TO loader_writer;
+GRANT SELECT, INSERT, UPDATE ON trip_pricing_i95, trip_pricing_i66, trip_pricing_i95_live TO loader_writer;

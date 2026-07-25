@@ -39,8 +39,18 @@ Evidence: live RDS holds exactly 317 distinct i95 `od_pair_id`s across the
 entire backfill (2026-04-17 through 2026-07-25), spanning 1000–1352, and zero
 rows for 1374–1389. Transurban, meanwhile, prices all 16 at the time of
 checking (`od_1374` $3.45 on 495 N, `od_1388` $17.00 on 395 S). Roughly 19% of
-real express-lane trips simply cannot be priced from VDOT's public feed —
-nothing in this repo fixes that, because there is nothing upstream to read.
+real express-lane trips simply cannot be priced from VDOT's public feed.
+
+**Update, 2026-07-25:** a narrower fix now exists — `toll-express-fetcher`
+captures Transurban's own live snapshot into `trip_pricing_i95_live` (see
+`docs/poller-spec.md`'s "Secondary live source" section), so these 16 ids do
+get priced going forward. This does not close the gap described above: the
+live source has no history (current snapshot only, so 2026-04-17 through
+2026-07-25 for these ids stays permanently unpriced), no zone/corridor
+identity (can't feed `trip_pricing_i95` itself), and only prices an id
+reliably when its lane direction is actually open. The 19%-of-trips finding
+above remains true for anyone asking about the historical record; it's now
+false only for "can this be priced right now."
 
 The destination names invite a trap: 1378 → "Old Keene Mill Rd" lines up with
 VDOT's 1158 → "I-495 TO FRANCONIA RD (644)", the same road. Do not build an

@@ -141,13 +141,28 @@ CREATE TABLE trip_pricing_i66 (
     ingested_at        timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (interval_end_at, start_zone_id, end_zone_id)
 );
+
+CREATE TABLE trip_pricing_i95_live (
+    observed_at        timestamptz NOT NULL,
+    od_pair_id         integer NOT NULL,
+    price_usd          numeric(10,2) NOT NULL,
+    status             text,                      -- Transurban's own vocabulary; never mapped onto link_status
+    road               text,                      -- "395"/"495"/"95", or NULL
+    direction          text,                      -- "N"/"S", or NULL
+    s3_key             text NOT NULL,
+    ingested_at        timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (observed_at, od_pair_id)
+);
 ```
 
-**Schema version: 3.0.0** (semver; bump *major* on an upsert-key or
+**Schema version: 3.1.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`. Bumped from 2.3.0 → 3.0.0 for
-the table split: both tables' keys and column sets changed.
+the table split: both tables' keys and column sets changed. Bumped 3.0.0 →
+3.1.0 for the addition of `trip_pricing_i95_live` (see "Secondary live
+source" below) — purely additive, no existing table's keys or columns
+changed, so *minor*.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from the table itself, which is now the feed
@@ -174,10 +189,54 @@ and replays remain harmless either way.
 | Role | Grants | Used by |
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
-| `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66` | toll-loader Lambda |
+| `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | toll-loader Lambda |
 
 `loader_writer` is the only application role. The agent and its
 `agent_readonly` role were abandoned; see `docs/oracle-findings.md`.
+
+## Secondary live source: Transurban Express Lanes
+
+`trip_pricing_i95` has zero rows for 16 `od_pair_id`s (1374–1389) that
+Transurban's own Express Lanes network bills but VDOT's feed has never
+published (`docs/oracle-findings.md` section 2). Transurban publishes its own
+live, **unauthenticated** snapshot at
+`https://www.expresslanes.com/maps-api/infra-price-confirmed-all`, which
+`toll-express-fetcher`/`toll-loader` capture into the separate
+`trip_pricing_i95_live` table (see "Database schema" above) — not merged into
+`trip_pricing_i95`, since this source can't supply that table's
+`corridor_id`/`corridor_name`/`od_pair_name`/`start_zone_id`/`end_zone_id`/
+`*_name` columns at all, just an opaque `od_XXXX` id.
+
+**Hard limitations, by design, not bugs:**
+- **No history.** The endpoint is a live current-snapshot only (confirmed:
+  no pagination, no other history endpoint found). Ingesting it only
+  captures "price from now on" — it does **not** backfill the 16 gap ids'
+  past intervals, which are permanently unrecoverable.
+- **No zone/corridor identity.** Just `od_pair_id`, `price`, `status`,
+  `road`, `direction` — `status` is Transurban's own open/closed/null
+  vocabulary and is never mapped onto `link_status`, a different concept
+  from a different source.
+- **One shared timestamp per pull.** Confirmed empirically across three live
+  samples spanning two different hours (2026-07-25 18:xx and 19:xx ET,
+  including one during deploy verification): the `time` field is always
+  America/New_York, truncated to the hour, unchanged across each hour's
+  samples. **Not directly confirmed:** that the underlying price *data*
+  itself only refreshes once an hour — that's an inference from the
+  response's own `#cache.max-age: 3600` header, not a held-open observation
+  across a full hour boundary. Rather than tune a separate poll cadence
+  around an unconfirmed assumption, `toll-express-fetcher` shares
+  `toll-fetcher`'s own EventBridge rule (`rate(10 minutes)`, "EventBridge tick
+  → toll-fetcher" in `infra/triggers.tf`) as a second target — one schedule,
+  both fetchers fire together, nothing to keep in sync by hand. Whatever the
+  source's real refresh rate turns out to be, polling faster just means more
+  frequent free idempotent no-ops via `(observed_at, od_pair_id)` and
+  `ON CONFLICT` — never a correctness issue.
+- **Some ids are only priceable when their lane direction is actually
+  open.** At capture time, the 4 gap ids on the then-open direction (495 N)
+  had distinct, plausible prices; the 12 on the then-closed direction
+  (395 S) mostly shared one identical placeholder-looking price. Rows are
+  stored faithfully regardless of `status` — never inferred or dropped
+  based on a guess — so a consumer's query decides what to trust.
 
 ## Lambda details
 
@@ -213,6 +272,21 @@ the `OnFailure` SQS queue for replay after the fix. Dependency packaging:
 `psycopg[binary]` pinned and hash-verified (`pip install --require-hashes`)
 in the deployment zip.
 
+**toll-express-fetcher** — no VPC, same shape as toll-fetcher but simpler: a
+single unauthenticated URL, no SSM token lookup. GET (30 s timeout, single
+attempt, response capped at 5 MB) → `put_object` (`raw/feed=i95-live/...`) →
+`put_metric_data` (`NovaToll/PollSuccess`, dimension `feed=i95-live`). Same
+WAF-etiquette single-attempt policy as toll-fetcher even though this endpoint
+isn't known to be blocked — it sits behind the same CDN/WAF class. Triggered
+by the same `toll-poll-tick` EventBridge rule as toll-fetcher (`rate(10
+minutes)`) rather than its own schedule — see "Secondary live source" above
+for why. Async retry: `MaximumRetryAttempts = 0` — unlike VDOT's feeds, a
+missed poll here costs nothing (no history to lose; the next tick
+re-establishes "current"), so there's no reason to retry at all. Feeds into
+`toll-loader` via the same `_FEED_CONFIG` dispatch as the other two feeds
+(`parse_express_lanes.py` → `UPSERT_I95_LIVE_SQL`); no loader code needed a
+new Lambda or new RDS IAM role.
+
 ## Terraform
 
 Lives in `infra/` in this repo. Terraform ≥ 1.10, AWS provider pinned.
@@ -225,15 +299,21 @@ billing).
 
 Resources: raw bucket (+versioning, public-access block), state bucket (same
 hardening: versioning, public-access block, SSE; bootstrap manually or
-separate min-config), both Lambda functions + execution roles (least
+separate min-config), all three Lambda functions + execution roles (least
 privilege: fetcher = put_object on `raw/*`, SSM read, metrics; loader =
-get_object, `rds-db:connect`, VPC ENI), loader `OnFailure` SQS queue, both
-functions' event-invoke configs (fetcher `MaximumRetryAttempts = 1`; loader's
-OnFailure destination), EventBridge rule + permission, S3 → Lambda notification (prefix `raw/` —
-anything else landing in the bucket must not invoke the loader), log metric
+get_object, `rds-db:connect`, VPC ENI; express-fetcher = put_object scoped to
+`raw/feed=i95-live/*` only, metrics — no SSM statement, no token to read),
+loader `OnFailure` SQS queue, all three functions' event-invoke configs
+(fetcher `MaximumRetryAttempts = 1`; express-fetcher `MaximumRetryAttempts =
+0`; loader's OnFailure destination), one EventBridge rule (`rate(10
+minutes)`) with two targets (fetcher and express-fetcher both fire on the
+same tick — no second schedule to keep in sync) + permissions, S3 →
+Lambda notification (prefix `raw/` — bucket-wide, so it covers all three
+feeds including `i95-live` with no notification-config change), log metric
 filters for `LoadSuccess`, S3 gateway endpoint in the default VPC,
-RDS instance + subnet group + SGs, SSM SecureString params for the two tokens
-(**values entered out-of-band via CLI, never in Terraform state**), SNS topic +
+RDS instance + subnet group + SGs, SSM SecureString params for the two VDOT
+tokens (**values entered out-of-band via CLI, never in Terraform state** —
+express-fetcher needs none, its source is unauthenticated), SNS topic +
 subscription + CloudWatch alarms, log groups (30-day retention).
 
 ## RDS
@@ -262,6 +342,12 @@ the same topic. Alarms:
 
 1. `toll-fetcher` Errors ≥ 1 (5-min period).
 2. `toll-loader` Errors ≥ 1 (5-min period).
+2b. `toll-express-fetcher` Errors ≥ 1 (5-min period). **Deliberately no
+    freshness alarm for `i95-live`** (unlike #3 below, which is per-feed for
+    `i95`/`i66` only) — a missed poll of this source costs nothing to catch
+    up on next tick, so an Errors alarm alone is proportionate; a freshness
+    alarm would just be more moving parts for a source where staleness isn't
+    an incident.
 3. **Freshness:** `NovaToll/LoadSuccess` missing for 30 min per feed,
    treat-missing-data-as-breaching. Derived from the loader's post-commit
    `LOAD_OK` log lines via a metric filter, so it covers fetch, S3 event
@@ -312,12 +398,26 @@ two-pass backfill closed the gap instead. Sequence as run:
    `trip_pricing_legacy` after a soak period once the new tables are proven
    healthy; drop later still — both as separate one-shot files.
 
+### Express Lanes live-source rollout
+
+No backfill pass needed — `trip_pricing_i95_live` is a brand new table with
+no prior data to migrate. Sequence:
+
+1. Run `db/add_trip_pricing_i95_live.sql` against live RDS (creates the table
+   + grants `loader_writer` in one transaction).
+2. `./scripts/build_zips.sh`, then `terraform apply` with all three
+   `*_package_path`/`*_handler` vars set — deploys `toll-express-fetcher` and
+   the updated `toll-loader` zip (now including `parse_express_lanes.py`) together.
+3. Confirm `trip_pricing_i95_live` gets rows within the first couple of
+   10-minute poll cycles, and that at least one of the 16 known gap ids
+   (1374–1389) appears.
+
 ## Cost
 
 | Item | $/mo |
 |---|---|
 | RDS db.t4g.micro + 20 GB gp3 | ~15–17 |
 | S3 (raw + state + requests) | <0.50 |
-| Lambda (2 × ~4.4k invocations/mo) | <0.10 |
+| Lambda (3 × ~4.4k invocations/mo) | <0.10 |
 | SNS, CloudWatch, SSM | <0.50 |
 | **Total** | **<$20** (budget alarm $25) |

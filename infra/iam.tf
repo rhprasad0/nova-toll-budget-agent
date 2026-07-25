@@ -91,3 +91,42 @@ resource "aws_iam_role_policy" "loader" {
   role   = aws_iam_role.loader.id
   policy = data.aws_iam_policy_document.loader.json
 }
+
+# --- toll-express-fetcher ---------------------------------------------------
+
+resource "aws_iam_role" "express_fetcher" {
+  name               = "toll-express-fetcher"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "express_fetcher_basic" {
+  role       = aws_iam_role.express_fetcher.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+data "aws_iam_policy_document" "express_fetcher" {
+  statement {
+    sid = "PutExpressLiveObjects"
+    # Narrower than toll-fetcher's raw/* -- this function has no business
+    # writing any other feed's prefix.
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.raw.arn}/raw/feed=i95-live/*"]
+  }
+
+  statement {
+    sid     = "PutPollMetric"
+    actions = ["cloudwatch:PutMetricData"]
+    resources = ["*"] # CloudWatch metrics have no resource ARNs; scoped by namespace condition below.
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = ["NovaToll"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "express_fetcher" {
+  name   = "toll-express-fetcher"
+  role   = aws_iam_role.express_fetcher.id
+  policy = data.aws_iam_policy_document.express_fetcher.json
+}

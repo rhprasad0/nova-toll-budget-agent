@@ -5,13 +5,17 @@ published route maps needed to interpret them.
 
 **What runs.** A fetcher Lambda polls VDOT's two SmarterRoads tolling feeds
 every 10 minutes and lands the raw payloads in S3; a loader Lambda parses each
-object and upserts it into `trip_pricing_i95`/`trip_pricing_i66` in RDS
-(cutover from the old shared `trip_pricing` table pending — see
-`docs/poller-spec.md`).
+object and upserts it into `trip_pricing_i95`/`trip_pricing_i66` in RDS (the
+cutover from the old shared `trip_pricing` table completed 2026-07-25 — see
+`docs/poller-spec.md`). A second, separate fetcher shares the same 10-minute
+tick to poll Transurban's own live Express Lanes snapshot, filling
+`od_pair_id`s VDOT's feed never publishes into `trip_pricing_i95_live` (see
+`docs/poller-spec.md`'s "Secondary live source" section).
 
 | Path | What |
 |---|---|
-| `lambdas/fetcher`, `lambdas/loader` | the pipeline |
+| `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
+| `lambdas/express_fetcher` | secondary live-source poller (Transurban, no DB access itself — feeds the loader) |
 | `db/` | the per-feed schema and the `loader_writer` role |
 | `infra/` | Terraform for both Lambdas, S3, RDS and observability |
 | `oracles/` | operator-published route maps (see below) |

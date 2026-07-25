@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Build the two Lambda deployment zips into infra/build/.
+# Build the three Lambda deployment zips into infra/build/.
 #
-#   fetcher.zip  handler.py only — boto3 ships in the python3.13 runtime.
-#   loader.zip   handler.py + parsers + rds-ca-bundle.pem + hash-verified psycopg.
+#   fetcher.zip          handler.py only — boto3 ships in the python3.13 runtime.
+#   loader.zip           handler.py + parsers + rds-ca-bundle.pem + hash-verified psycopg.
+#   express-fetcher.zip  handler.py only — stdlib + boto3(runtime-provided), same as fetcher.
 #
 # Zips are reproducible: fixed mtimes + sorted entries, so an unchanged build
 # produces an identical hash and Terraform sees no diff. Requires network for
@@ -30,6 +31,7 @@ mkdir -p "$loader_stage"
 cp "$REPO/lambdas/loader/handler.py" \
    "$REPO/lambdas/loader/parse_csv.py" \
    "$REPO/lambdas/loader/parse_xml.py" \
+   "$REPO/lambdas/loader/parse_express_lanes.py" \
    "$loader_stage/"
 curl -fsSL "$CA_URL" -o "$loader_stage/rds-ca-bundle.pem"
 uv pip install \
@@ -40,7 +42,12 @@ uv pip install \
   --target "$loader_stage" \
   -r "$REPO/scripts/loader-requirements.txt"
 
-# --- zip both, deterministically ---
+# --- express-fetcher: single file, stdlib + boto3(runtime-provided) ---
+express_fetcher_stage="$BUILD/express-fetcher"
+mkdir -p "$express_fetcher_stage"
+cp "$REPO/lambdas/express_fetcher/handler.py" "$express_fetcher_stage/"
+
+# --- zip all three, deterministically ---
 zip_stage() {  # <stage_dir> <out.zip>
   local stage="$1" out="$2"
   find "$stage" -exec touch -d "$EPOCH" {} +
@@ -48,13 +55,16 @@ zip_stage() {  # <stage_dir> <out.zip>
 }
 zip_stage "$fetcher_stage" "$BUILD/fetcher.zip"
 zip_stage "$loader_stage" "$BUILD/loader.zip"
+zip_stage "$express_fetcher_stage" "$BUILD/express-fetcher.zip"
 
 echo "built:"
-echo "  $BUILD/fetcher.zip  ($(unzip -l "$BUILD/fetcher.zip" | tail -1 | awk '{print $2}') files)"
-echo "  $BUILD/loader.zip   ($(unzip -l "$BUILD/loader.zip"  | tail -1 | awk '{print $2}') files)"
+echo "  $BUILD/fetcher.zip          ($(unzip -l "$BUILD/fetcher.zip" | tail -1 | awk '{print $2}') files)"
+echo "  $BUILD/loader.zip           ($(unzip -l "$BUILD/loader.zip"  | tail -1 | awk '{print $2}') files)"
+echo "  $BUILD/express-fetcher.zip  ($(unzip -l "$BUILD/express-fetcher.zip" | tail -1 | awk '{print $2}') files)"
 echo
 echo "apply with (handler entrypoint is handler.handler, not the placeholder default):"
 echo "  cd infra && terraform apply \\"
-echo "    -var fetcher_package_path=build/fetcher.zip -var fetcher_handler=handler.handler \\"
-echo "    -var loader_package_path=build/loader.zip   -var loader_handler=handler.handler \\"
+echo "    -var fetcher_package_path=build/fetcher.zip                 -var fetcher_handler=handler.handler \\"
+echo "    -var loader_package_path=build/loader.zip                   -var loader_handler=handler.handler \\"
+echo "    -var express_fetcher_package_path=build/express-fetcher.zip -var express_fetcher_handler=handler.handler \\"
 echo "    -var home_ip=<your.ip>"

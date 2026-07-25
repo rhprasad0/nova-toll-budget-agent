@@ -38,3 +38,15 @@ variable "loader_handler" {
   type        = string
   default     = "lambda_function.lambda_handler"
 }
+
+variable "express_fetcher_package_path" {
+  description = "Path to the toll-express-fetcher deployment zip. Defaults to a placeholder stub so `plan` works before real code ships; overridden with the built artifact."
+  type        = string
+  default     = ""
+}
+
+variable "express_fetcher_handler" {
+  description = "Lambda handler entrypoint for toll-express-fetcher."
+  type        = string
+  default     = "lambda_function.lambda_handler"
+}

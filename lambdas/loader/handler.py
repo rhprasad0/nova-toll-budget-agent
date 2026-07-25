@@ -16,6 +16,7 @@ from typing import Any
 import boto3
 
 from parse_csv import I95Row, parse_trip_pricing_csv
+from parse_express_lanes import I95LiveRow, parse_express_lanes_live_json
 from parse_xml import I66Row, parse_trip_pricing_xml
 
 logger = logging.getLogger()
@@ -110,11 +111,39 @@ SET
     s3_key = EXCLUDED.s3_key -- gitleaks:allow (not a secret; Postgres EXCLUDED pseudo-table)
 """
 
+UPSERT_I95_LIVE_SQL = """
+INSERT INTO trip_pricing_i95_live (
+    observed_at,
+    od_pair_id,
+    price_usd,
+    status,
+    road,
+    direction,
+    s3_key
+) VALUES (
+    %(observed_at)s,
+    %(od_pair_id)s,
+    %(price_usd)s,
+    %(status)s,
+    %(road)s,
+    %(direction)s,
+    %(s3_key)s
+)
+ON CONFLICT (observed_at, od_pair_id) DO UPDATE
+SET
+    price_usd = EXCLUDED.price_usd,
+    status = EXCLUDED.status,
+    road = EXCLUDED.road,
+    direction = EXCLUDED.direction,
+    s3_key = EXCLUDED.s3_key -- gitleaks:allow (not a secret; Postgres EXCLUDED pseudo-table)
+"""
+
 # feed -> (parser, upsert SQL). Mirrors the fetcher's FEEDS dict -- one place
 # to look for how a feed is routed end to end.
 _FEED_CONFIG: dict[str, tuple[Any, str]] = {
     "i95": (parse_trip_pricing_csv, UPSERT_I95_SQL),
     "i66": (parse_trip_pricing_xml, UPSERT_I66_SQL),
+    "i95-live": (parse_express_lanes_live_json, UPSERT_I95_LIVE_SQL),
 }
 
 
@@ -126,14 +155,16 @@ def _feed_from_key(key: str) -> str:
     raise ValueError(f"cannot determine feed from S3 key: {key}")
 
 
-def _parse_payload(feed: str, body: str) -> list[I95Row] | list[I66Row]:
+def _parse_payload(
+    feed: str, body: str
+) -> list[I95Row] | list[I66Row] | list[I95LiveRow]:
     if feed not in _FEED_CONFIG:
         raise ValueError(f"unknown feed: {feed}")
     parse_fn, _ = _FEED_CONFIG[feed]
     return parse_fn(body)
 
 
-def _row_params(row: I95Row | I66Row, *, s3_key: str) -> dict[str, Any]:
+def _row_params(row: I95Row | I66Row | I95LiveRow, *, s3_key: str) -> dict[str, Any]:
     params = dataclasses.asdict(row)
     params["s3_key"] = s3_key
     return params
@@ -156,7 +187,9 @@ def _connect(*, host: str, port: int, dbname: str, user: str):
     )
 
 
-def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
+def _load(
+    feed: str, rows: list[I95Row] | list[I66Row] | list[I95LiveRow], *, s3_key: str
+) -> None:
     _, upsert_sql = _FEED_CONFIG[feed]
 
     conn = _connect(
