@@ -2,8 +2,8 @@
 
 Ported from ~/hermes-agent/tools/va_toll_ingest/va_toll_ingest/normalize.py,
 adapted to the zone-based row shape in docs/poller-spec.md (no source_url or
-raw_row columns; feed/interval_start_at added for the shared trip_pricing
-table).
+raw_row columns) and to trip_pricing_i95's own shape (no feed discriminator,
+no interval_start_at -- that's an I-66-only field).
 """
 
 from __future__ import annotations
@@ -40,16 +40,14 @@ UTC = ZoneInfo("UTC")
 
 
 @dataclass(frozen=True)
-class TripPricingRow:
-    feed: str
-    interval_start_at: datetime | None
+class I95Row:
     interval_end_at: datetime
-    current_at: datetime | None
+    current_at: datetime
     calculated_at: datetime
     corridor_id: int
     corridor_name: str
-    od_pair_id: int | None
-    od_pair_name: str | None
+    od_pair_id: int
+    od_pair_name: str
     start_zone_id: int
     start_zone_name: str | None
     end_zone_id: int
@@ -74,7 +72,7 @@ def _parse_timestamp(value: str) -> datetime:
     return local_time.replace(tzinfo=SOURCE_TZ, fold=0).astimezone(UTC)
 
 
-def parse_trip_pricing_csv(text: str) -> list[TripPricingRow]:
+def parse_trip_pricing_csv(text: str) -> list[I95Row]:
     reader = csv.reader(io.StringIO(text))
     rows = list(reader)
 
@@ -88,7 +86,7 @@ def parse_trip_pricing_csv(text: str) -> list[TripPricingRow]:
     if header != EXPECTED_SOURCE_HEADERS:
         raise ValueError(f"unexpected CSV header (source format drift): {header}")
 
-    parsed_rows: list[TripPricingRow] = []
+    parsed_rows: list[I95Row] = []
     for row in rows:
         if _is_blank_row(row) or _is_separator_row(row):
             continue
@@ -98,9 +96,7 @@ def parse_trip_pricing_csv(text: str) -> list[TripPricingRow]:
         raw = dict(zip(header, (cell.strip() for cell in row), strict=True))
 
         parsed_rows.append(
-            TripPricingRow(
-                feed="i95",
-                interval_start_at=None,
+            I95Row(
                 interval_end_at=_parse_timestamp(raw["INTERVALENDDATETI"]),
                 current_at=_parse_timestamp(raw["CURRENTDATETIME"]),
                 calculated_at=_parse_timestamp(raw["CALULCATEDDATETIM"]),

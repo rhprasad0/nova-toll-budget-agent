@@ -1,6 +1,6 @@
 # VDOT Toll Poller — Spec
 
-Status: approved design, pre-implementation · Owner: Ryan Prasad · Last updated: 2026-07-21
+Status: live in prod since 2026-07-21 · Owner: Ryan Prasad · Last updated: 2026-07-25
 
 Cloud poller for the two VDOT SmarterRoads toll pricing feeds, replacing the
 home cron (`hermes-agent/tools/va_toll_ingest`). Runs in the dedicated AWS
@@ -35,7 +35,7 @@ toll-fetcher Lambda        — no VPC (needs internet), Python 3.13, stdlib+boto
    │
    ▼  S3 ObjectCreated event
 toll-loader Lambda         — in VPC (default VPC subnets + S3 gateway endpoint),
-   parse → unified schema      Python 3.13 + psycopg
+   parse → per-feed schema     Python 3.13 + psycopg
    idempotent upsert → RDS Postgres
 ```
 
@@ -96,62 +96,85 @@ The most recent object per feed is the future agent's "current toll" read path.
 
 ## Database schema
 
-RDS Postgres 17, single table, evolved from the home poller's `trip_pricing`
-(`hermes-agent/tools/va_toll_ingest/va_toll_ingest/db.py` is the port source
-for the upsert; `normalize.py` for the CSV parser).
+RDS Postgres 17, **two tables, one per feed** — `trip_pricing_i95` and
+`trip_pricing_i66`. Originally this was a single shared `trip_pricing` table
+(ported from the home poller's `trip_pricing`,
+`hermes-agent/tools/va_toll_ingest/va_toll_ingest/db.py`/`normalize.py`) with
+a `feed` discriminator and a pile of per-feed-only nullable columns; that
+shape existed to serve a generic agent query/route-graph tool. That tool was
+deleted (see `docs/oracle-findings.md`), and with it gone the two
+structurally different feeds are better served by two purpose-built tables
+than one shared one.
 
 ```sql
-CREATE TABLE trip_pricing (
-    id                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    feed               text NOT NULL CHECK (feed IN ('i95', 'i66')),
-    interval_start_at  timestamptz,              -- i66 only
+CREATE TABLE trip_pricing_i95 (
     interval_end_at    timestamptz NOT NULL,
-    current_at         timestamptz,              -- i95 only
+    current_at         timestamptz NOT NULL,
     calculated_at      timestamptz NOT NULL,
     corridor_id        integer NOT NULL,
     corridor_name      text NOT NULL,
-    od_pair_id         integer,                  -- i95 only
-    od_pair_name       text,                     -- i95 only
+    od_pair_id         integer NOT NULL,
+    od_pair_name       text NOT NULL,
     start_zone_id      integer NOT NULL,
-    start_zone_name    text,
+    start_zone_name    text,                      -- blank for some Prince William OD pairs
     end_zone_id        integer NOT NULL,
     end_zone_name      text NOT NULL,
     zone_toll_rate_usd numeric(10,2) NOT NULL,
-    link_status        text NOT NULL DEFAULT 'NOT_APPLICABLE',  -- i66 has none
-    s3_key             text NOT NULL,            -- raw object provenance
+    link_status        text NOT NULL,
+    s3_key             text NOT NULL,              -- raw object provenance
     ingested_at        timestamptz NOT NULL DEFAULT now(),
-    -- upsert key; NULLS NOT DISTINCT so i66's NULL od_pair_id still dedups
-    UNIQUE NULLS NOT DISTINCT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id)
+    PRIMARY KEY (interval_end_at, start_zone_id, end_zone_id, od_pair_id)
 );
 
+CREATE TABLE trip_pricing_i66 (
+    interval_start_at  timestamptz NOT NULL,
+    interval_end_at    timestamptz NOT NULL,
+    calculated_at      timestamptz NOT NULL,
+    corridor_id        integer NOT NULL,
+    corridor_name      text NOT NULL,
+    start_zone_id      integer NOT NULL,
+    start_zone_name    text,                      -- nullable, same reason as i95
+    end_zone_id        integer NOT NULL,
+    end_zone_name      text NOT NULL,
+    zone_toll_rate_usd numeric(10,2) NOT NULL,
+    s3_key             text NOT NULL,
+    ingested_at        timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (interval_end_at, start_zone_id, end_zone_id)
+);
 ```
 
-**Schema version: 2.3.0** (semver; bump *major* on an upsert-key or
+**Schema version: 3.0.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
-`lambdas/loader/tests/test_schema_contract.py`.
+`lambdas/loader/tests/test_schema_contract.py`. Bumped from 2.3.0 → 3.0.0 for
+the table split: both tables' keys and column sets changed.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
-The source URL is derivable from `feed`. Three read-path indexes once existed
-here for the agent's query tools; they were dropped along with the agent (see
-`db/drop_agent_surface.sql`). The table now carries only its upsert key, which
-is all the loader needs — add an index when a real read pattern asks for one.
+The source URL is derivable from the table itself, which is now the feed
+discriminator (`feed` column and its CHECK are gone). Three read-path indexes
+once existed on the old shared table for the agent's query tools; they were
+dropped along with the agent (see `db/drop_agent_surface.sql`). Neither new
+table carries anything beyond its key — add an index when a real read pattern
+asks for one.
 
-Upsert: `ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id,
-od_pair_id) DO UPDATE` — port of the existing `UPSERT_SQL`. `od_pair_id` is part
-of the key because multiple I-95 OD pairs legitimately traverse the same
-start/end zone at different rates; a zone-only key silently collapses them and
-drops distinct prices. I-66 has no OD pairs (`od_pair_id` NULL, not
-synthesized), so the constraint is `NULLS NOT DISTINCT` — NULL od_pair_ids
-compare equal, keeping I-66 idempotent. Re-delivered S3 events and replays are
-therefore harmless.
+Upsert keys: `trip_pricing_i95` — `(interval_end_at, start_zone_id,
+end_zone_id, od_pair_id)`. `od_pair_id` is part of the key because multiple
+I-95 OD pairs legitimately traverse the same start/end zone at different
+rates; a zone-only key would silently collapse them and drop distinct prices.
+`trip_pricing_i66` — `(interval_end_at, start_zone_id, end_zone_id)`; I-66 has
+no OD pairs, and since every key column is now `NOT NULL`, no `NULLS NOT
+DISTINCT` is needed (unlike the old shared table, which needed it to make
+i66's always-NULL `od_pair_id` dedup correctly). Both keys are `PRIMARY KEY`
+now rather than a separate `UNIQUE` + surrogate `id` — nothing references the
+old surrogate `id` now that the agent surface is gone. Re-delivered S3 events
+and replays remain harmless either way.
 
 **Roles:**
 
 | Role | Grants | Used by |
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
-| `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing` | toll-loader Lambda |
+| `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66` | toll-loader Lambda |
 
 `loader_writer` is the only application role. The agent and its
 `agent_readonly` role were abandoned; see `docs/oracle-findings.md`.
@@ -234,7 +257,7 @@ Home IP is a Terraform variable — expect it to change occasionally.
 
 ## Observability
 
-SNS topic → email `rhprasad@outlook.com`. The account budget alarm points at
+SNS topic → email `bills@ryanprasad.ai`. The account budget alarm points at
 the same topic. Alarms:
 
 1. `toll-fetcher` Errors ≥ 1 (5-min period).
@@ -264,6 +287,29 @@ the same topic. Alarms:
 6. Follow-up: raise the account budget alarm from $10 to $25.
 
 I-66 history starts at cloud go-live — no earlier data exists anywhere.
+
+### Table-split cutover (`trip_pricing` → `trip_pricing_i95`/`trip_pricing_i66`)
+
+**Planned — not yet executed as of 2026-07-25.** RDS currently holds ~1.2M
+i95 rows + ~12.7k i66 rows in the shared `trip_pricing` table (live since
+2026-07-21). No maintenance window is needed for the cutover: the upsert is
+already idempotent, so a two-pass backfill closes the gap instead. See
+`db/split_trip_pricing.sql` for the exact SQL; sequence:
+
+1. Create both new tables + grant `loader_writer` on them, in one transaction
+   (tables without grants even briefly would 403 the next poll).
+2. Backfill pass 1 (`INSERT ... SELECT ... ON CONFLICT DO NOTHING` per feed),
+   run before the loader deploy — plain `SELECT` against `trip_pricing`, no
+   lock contention with the still-running old loader.
+3. Deploy the new loader zip (writes only to the two new tables from here).
+4. Backfill pass 2 — re-run the identical block to sweep up any rows the old
+   loader wrote between pass 1 and deploy.
+5. Verify: row counts match per feed, freshness alarm stays green through a
+   few poll cycles, spot-check rows.
+6. `trip_pricing` is intentionally left in place (not renamed/dropped) so
+   rollback is a plain redeploy of the old zip. Rename to
+   `trip_pricing_legacy` after a soak period once the new tables are proven
+   healthy; drop later still — both as separate one-shot files.
 
 ## Cost
 

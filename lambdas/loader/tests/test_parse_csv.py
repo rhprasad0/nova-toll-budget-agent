@@ -10,9 +10,9 @@ SAMPLE_CSV = (SAMPLE_DATA_DIR / "tollingTripPricing_I95.csv").read_text()
 def test_parses_sample_file_completely():
     rows = parse_trip_pricing_csv(SAMPLE_CSV)
     assert len(rows) == 317
-    assert all(row.feed == "i95" for row in rows)
-    # CSV has no interval start; that's an I-66-only field.
-    assert all(row.interval_start_at is None for row in rows)
+    # interval_start_at is an I-66-only field; I95Row has no such attribute.
+    assert not hasattr(rows[0], "interval_start_at")
+    assert not hasattr(rows[0], "feed")
 
 
 def test_blank_startzonename_is_nullable():

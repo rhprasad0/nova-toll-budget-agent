@@ -93,8 +93,7 @@ def rds_i95_rows() -> list[tuple[int, str, Decimal]]:
             cur.execute(
                 """
                 SELECT DISTINCT ON (od_pair_id) od_pair_id, link_status, zone_toll_rate_usd
-                FROM trip_pricing
-                WHERE feed = 'i95'
+                FROM trip_pricing_i95
                 ORDER BY od_pair_id, interval_end_at DESC
                 """
             )

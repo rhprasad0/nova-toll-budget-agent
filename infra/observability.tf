@@ -5,7 +5,7 @@ resource "aws_sns_topic" "alerts" {
 resource "aws_sns_topic_subscription" "alerts_email" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
-  endpoint  = "rhprasad@outlook.com"
+  endpoint  = "bills@ryanprasad.ai"
 }
 
 # Loader logs "LOAD_OK <feed>" (space-delimited, not JSON — see spec) after

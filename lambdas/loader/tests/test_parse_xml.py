@@ -13,16 +13,17 @@ def test_parses_sample_file_completely():
     # work order/spec table describe as typical for a poll. Asserting the
     # real, observed count — see final report for this as a flagged finding.
     assert len(rows) == 18
-    assert all(row.feed == "i66" for row in rows)
 
 
-def test_no_od_pair_or_link_status_but_has_interval_start():
-    rows = parse_trip_pricing_xml(SAMPLE_XML)
-    assert all(row.od_pair_id is None for row in rows)
-    assert all(row.od_pair_name is None for row in rows)
-    assert all(row.link_status == "NOT_APPLICABLE" for row in rows)
+def test_has_no_od_pair_or_link_status_fields_but_has_interval_start():
+    row = parse_trip_pricing_xml(SAMPLE_XML)[0]
+    # I-66 has no OD pairs/link_status; I66Row has no such attributes at all.
+    assert not hasattr(row, "od_pair_id")
+    assert not hasattr(row, "od_pair_name")
+    assert not hasattr(row, "link_status")
+    assert not hasattr(row, "feed")
     # IntervalDateTime (interval start) exists in XML but not CSV.
-    assert all(row.interval_start_at is not None for row in rows)
+    assert row.interval_start_at is not None
 
 
 def test_rate_and_zone_fields_parsed():

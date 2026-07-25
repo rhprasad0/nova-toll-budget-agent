@@ -2,7 +2,8 @@ import sys
 
 import pytest
 from conftest import loader_handler as handler
-from parse_csv import TripPricingRow
+from parse_csv import I95Row
+from parse_xml import I66Row
 
 
 def test_handler_module_imports_without_psycopg():
@@ -11,23 +12,37 @@ def test_handler_module_imports_without_psycopg():
     assert "psycopg" not in sys.modules
 
 
-def test_upsert_sql_conflict_key_matches_spec():
+def test_upsert_i95_sql_conflict_key_matches_spec():
     assert (
-        "ON CONFLICT (feed, interval_end_at, start_zone_id, end_zone_id, od_pair_id) DO UPDATE"
-        in handler.UPSERT_SQL
+        "ON CONFLICT (interval_end_at, start_zone_id, end_zone_id, od_pair_id) DO UPDATE"
+        in handler.UPSERT_I95_SQL
     )
 
 
-def test_upsert_sql_does_not_update_key_columns():
-    # feed/interval_end_at/start_zone_id/end_zone_id are the conflict key —
-    # they must not also appear on the left of a SET clause.
-    set_clause = handler.UPSERT_SQL.split("DO UPDATE")[1]
+def test_upsert_i95_sql_does_not_update_key_columns():
+    set_clause = handler.UPSERT_I95_SQL.split("DO UPDATE")[1]
     for key_column in (
-        "feed = ",
         "interval_end_at = ",
         "start_zone_id = ",
         "end_zone_id = ",
         "od_pair_id = ",
+    ):
+        assert key_column not in set_clause
+
+
+def test_upsert_i66_sql_conflict_key_matches_spec():
+    assert (
+        "ON CONFLICT (interval_end_at, start_zone_id, end_zone_id) DO UPDATE"
+        in handler.UPSERT_I66_SQL
+    )
+
+
+def test_upsert_i66_sql_does_not_update_key_columns():
+    set_clause = handler.UPSERT_I66_SQL.split("DO UPDATE")[1]
+    for key_column in (
+        "interval_end_at = ",
+        "start_zone_id = ",
+        "end_zone_id = ",
     ):
         assert key_column not in set_clause
 
@@ -48,12 +63,10 @@ def test_feed_from_key_raises_without_feed_segment():
         handler._feed_from_key("raw/date=2026-07-21/1440Z.csv")
 
 
-def test_row_params_includes_s3_key_and_all_row_fields():
-    row = TripPricingRow(
-        feed="i95",
-        interval_start_at=None,
+def test_row_params_includes_s3_key_and_all_row_fields_i95():
+    row = I95Row(
         interval_end_at=None,  # type: ignore[arg-type]
-        current_at=None,
+        current_at=None,  # type: ignore[arg-type]
         calculated_at=None,  # type: ignore[arg-type]
         corridor_id=951,
         corridor_name="I-95-NB",
@@ -68,5 +81,24 @@ def test_row_params_includes_s3_key_and_all_row_fields():
     )
     params = handler._row_params(row, s3_key="raw/feed=i95/date=2026-07-21/1440Z.csv")
     assert params["s3_key"] == "raw/feed=i95/date=2026-07-21/1440Z.csv"
-    assert params["feed"] == "i95"
     assert params["corridor_id"] == 951
+    assert "feed" not in params
+
+
+def test_row_params_includes_s3_key_and_all_row_fields_i66():
+    row = I66Row(
+        interval_start_at=None,  # type: ignore[arg-type]
+        interval_end_at=None,  # type: ignore[arg-type]
+        calculated_at=None,  # type: ignore[arg-type]
+        corridor_id=1100,
+        corridor_name="I-66 EB",
+        start_zone_id=100,
+        start_zone_name=None,
+        end_zone_id=200,
+        end_zone_name="B",
+        zone_toll_rate_usd=None,  # type: ignore[arg-type]
+    )
+    params = handler._row_params(row, s3_key="raw/feed=i66/date=2026-07-21/1440Z.xml")
+    assert params["s3_key"] == "raw/feed=i66/date=2026-07-21/1440Z.xml"
+    assert params["corridor_id"] == 1100
+    assert "feed" not in params

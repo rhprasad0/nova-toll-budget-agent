@@ -5,12 +5,14 @@ published route maps needed to interpret them.
 
 **What runs.** A fetcher Lambda polls VDOT's two SmarterRoads tolling feeds
 every 10 minutes and lands the raw payloads in S3; a loader Lambda parses each
-object and upserts it into `trip_pricing` in RDS. See `docs/poller-spec.md`.
+object and upserts it into `trip_pricing_i95`/`trip_pricing_i66` in RDS
+(cutover from the old shared `trip_pricing` table pending — see
+`docs/poller-spec.md`).
 
 | Path | What |
 |---|---|
 | `lambdas/fetcher`, `lambdas/loader` | the pipeline |
-| `db/` | `trip_pricing` schema and the `loader_writer` role |
+| `db/` | the per-feed schema and the `loader_writer` role |
 | `infra/` | Terraform for both Lambdas, S3, RDS and observability |
 | `oracles/` | operator-published route maps (see below) |
 | `vdot_sample_data/` | committed raw feed samples the parsers are tested against |
@@ -19,7 +21,7 @@ object and upserts it into `trip_pricing` in RDS. See `docs/poller-spec.md`.
 by the operators themselves — Transurban for the 95/395/495 Express Lanes, VDOT
 for I-66 Inside the Beltway. They say which trips exist and which price key
 each one bills against; they carry no prices, because prices live in
-`trip_pricing` where they have history. Refresh them with
+`trip_pricing_i95`/`trip_pricing_i66` where they have history. Refresh them with
 `scripts/fetch_i95_oracle.py` / `scripts/fetch_i66_oracle.py` — rarely, and
 never at runtime. `docs/oracle-findings.md` records what they told us.
 
