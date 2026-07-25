@@ -1,10 +1,10 @@
 """Static catalog tools: list_tables + describe_table.
 
-Hand-curated from db/schema.sql (trip_pricing) and db/graph.sql (graph_node,
-graph_edge) -- see docs/agent-tools-spec.md §2. No DB access: the schema is
-versioned and frozen, so a live introspection query buys nothing but
-latency. Drift protection is the existing schema-version tests, not a sync
-mechanism here.
+Hand-curated from db/schema.sql (trip_pricing) and db/graph.sql
+(public_graph_node, public_graph_edge) -- see docs/agent-tools-spec.md §2.
+No DB access: the schema is versioned and frozen, so a live introspection
+query buys nothing but latency. Drift protection is the existing
+schema-version tests, not a sync mechanism here.
 """
 
 from strands import tool
@@ -140,52 +140,67 @@ _TABLES = {
             "rows that cover the same pavement produces wrong numbers.",
         ],
     },
-    "graph_node": {
-        "purpose": "60 named toll-network access points (curated)",
+    "public_graph_node": {
+        "purpose": "46 real toll access points (simplified public graph)",
         "columns": [
             {
                 "name": "node_id",
                 "type": "text",
                 "nullable": False,
-                "description": "Stable slug primary key, e.g. 'i95x:garrisonville'.",
+                "description": "Stable public slug primary key, e.g. 'pub:garrisonville'.",
             },
             {
                 "name": "name",
                 "type": "text",
                 "nullable": False,
-                "description": "Canonical display name (hand-curated).",
+                "description": "Canonical display name for the physical place.",
             },
             {
                 "name": "corridor",
                 "type": "text",
                 "nullable": False,
-                "description": "One of i95_express, i495_express, i66_itb.",
+                "description": "One of i95_express, i495_express, i66_itb, junction.",
+            },
+            {
+                "name": "access",
+                "type": "text",
+                "nullable": False,
+                "description": (
+                    "How this place can be used: 'entry', 'exit', or 'both'. "
+                    "One-sided access is real (reversible-lane ramps), derived "
+                    "from edge directions, not an error."
+                ),
             },
         ],
         "notes": [
-            "Join edges to nodes on node_id slugs; never re-parse display names."
+            "Join edges to nodes on node_id slugs; never re-parse display names.",
+            "'junction' corridor nodes (pub:springfield, pub:i66-beltway) are "
+            "merged interchange complexes connecting corridors.",
         ],
     },
-    "graph_edge": {
-        "purpose": "342 priced trips / free connectors linking nodes",
+    "public_graph_edge": {
+        "purpose": "337 priced trips linking public nodes",
         "columns": [
             {
                 "name": "from_node",
                 "type": "text",
                 "nullable": False,
-                "description": "graph_node.node_id this edge starts at.",
+                "description": "public_graph_node.node_id this edge starts at.",
             },
             {
                 "name": "to_node",
                 "type": "text",
                 "nullable": False,
-                "description": "graph_node.node_id this edge ends at.",
+                "description": "public_graph_node.node_id this edge ends at.",
             },
             {
                 "name": "feed",
                 "type": "text",
-                "nullable": True,
-                "description": "'i95' or 'i66'; NULL means a free junction connector.",
+                "nullable": False,
+                "description": (
+                    "'i95' or 'i66' -- every public edge is a priced trip "
+                    "(free connectors were junction-internal and are gone)."
+                ),
             },
             {
                 "name": "od_pair_id",
@@ -207,10 +222,14 @@ _TABLES = {
             },
         ],
         "notes": [
-            "Join on node_id slugs; never re-parse display names.",
-            "feed IS NULL means a free connector -- $0.00, not missing data.",
-            "CLOSED link_status (in trip_pricing, at the edge's price key) "
-            "governs availability regardless of rate.",
+            "Several rows can share one (from_node, to_node) pair -- each is "
+            "a distinct real priced product (merged access ramps). Take MIN "
+            "over their current prices for the cheapest; never sum rows.",
+            "Self-loop rows (from_node = to_node) are real short-hop products "
+            "(i66 same-zone trips, Springfield-internal OD pairs), not bugs.",
+            "Availability lives in link_status on the trip_pricing row at the "
+            "edge's price key, never rate > 0.",
+            "Trips, not segments -- each row is a complete priced trip.",
         ],
     },
 }
@@ -222,7 +241,7 @@ def list_tables() -> dict:
 
     Returns:
         dict: {"tables": [{"name", "purpose"}, ...]} for trip_pricing,
-        graph_node, and graph_edge.
+        public_graph_node, and public_graph_edge.
     """
     return {
         "tables": [
@@ -236,8 +255,8 @@ def describe_table(table: str) -> dict:
     """Describe one queryable table's columns and semantic footguns.
 
     Args:
-        table: One of "trip_pricing", "graph_node", "graph_edge" -- exactly
-            as returned by list_tables.
+        table: One of "trip_pricing", "public_graph_node", "public_graph_edge"
+            -- exactly as returned by list_tables.
 
     Returns:
         dict: {"table", "columns": [{"name","type","nullable","description"}...],

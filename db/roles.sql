@@ -12,3 +12,6 @@ GRANT rds_iam TO agent_readonly;
 GRANT SELECT ON trip_pricing, graph_node, graph_edge TO agent_readonly;
 ALTER ROLE agent_readonly SET default_transaction_read_only = on;
 ALTER ROLE agent_readonly SET statement_timeout = '5s';
+
+-- graph.sql v1.1.0 added the public graph views; agent_readonly reads those too.
+GRANT SELECT ON public_graph_node, public_graph_edge TO agent_readonly;

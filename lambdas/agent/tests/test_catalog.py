@@ -6,7 +6,7 @@ from jsonschema import Draft202012Validator
 
 from catalog import describe_table, list_tables
 
-TABLES = ("trip_pricing", "graph_node", "graph_edge")
+TABLES = ("trip_pricing", "public_graph_node", "public_graph_edge")
 
 
 def _output_schema(tool: str) -> dict:
@@ -36,8 +36,10 @@ def _column(table: str, name: str) -> dict:
 
 def test_nullability_spot_checks():
     assert _column("trip_pricing", "od_pair_id")["nullable"] is True
-    assert _column("graph_node", "node_id")["nullable"] is False
-    assert _column("graph_edge", "feed")["nullable"] is True
+    assert _column("public_graph_node", "access")["nullable"] is False
+    # Every public edge is a priced trip -- feed lost its NULL (connector) case.
+    assert _column("public_graph_edge", "feed")["nullable"] is False
+    assert _column("public_graph_edge", "od_pair_id")["nullable"] is True
 
 
 def test_trip_pricing_notes_mention_link_status():

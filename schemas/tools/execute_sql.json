@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "execute_sql",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Run exactly one read-only SQL statement as agent_readonly; rows capped at 500. Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
   "input": {
     "type": "object",
@@ -16,7 +16,7 @@
     "additionalProperties": false,
     "examples": [
       {
-        "sql": "SELECT corridor, count(*) FROM graph_node GROUP BY corridor"
+        "sql": "SELECT corridor, count(*) FROM public_graph_node GROUP BY corridor"
       }
     ]
   },
@@ -68,14 +68,15 @@
     ],
     "examples": [
       {
-        "sql": "SELECT corridor, count(*) FROM graph_node GROUP BY corridor",
+        "sql": "SELECT corridor, count(*) FROM public_graph_node GROUP BY corridor",
         "columns": ["corridor", "count"],
         "rows": [
-          ["i95_express", 34],
-          ["i495_express", 18],
-          ["i66_itb", 8]
+          ["i95_express", 25],
+          ["i495_express", 13],
+          ["i66_itb", 6],
+          ["junction", 2]
         ],
-        "row_count": 3,
+        "row_count": 4,
         "truncated": false
       },
       {

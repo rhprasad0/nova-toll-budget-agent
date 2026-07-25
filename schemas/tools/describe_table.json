@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "describe_table",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Columns, types, and semantic footgun notes for one queryable table. Design: docs/agent-tools-spec.md §2; version enforced by tests/test_tool_schemas.py.",
   "input": {
     "type": "object",
     "properties": {
       "table": {
         "type": "string",
-        "enum": ["trip_pricing", "graph_node", "graph_edge"],
+        "enum": ["trip_pricing", "public_graph_node", "public_graph_edge"],
         "description": "One of the three queryable tables, exactly as returned by list_tables."
       }
     },
@@ -45,29 +45,36 @@
     "additionalProperties": false,
     "examples": [
       {
-        "table": "graph_node",
+        "table": "public_graph_node",
         "columns": [
           {
             "name": "node_id",
             "type": "text",
             "nullable": false,
-            "description": "Stable slug primary key, e.g. 'i95x:garrisonville'."
+            "description": "Stable public slug primary key, e.g. 'pub:garrisonville'."
           },
           {
             "name": "name",
             "type": "text",
             "nullable": false,
-            "description": "Canonical display name (hand-curated)."
+            "description": "Canonical display name for the physical place."
           },
           {
             "name": "corridor",
             "type": "text",
             "nullable": false,
-            "description": "One of i95_express, i495_express, i66_itb."
+            "description": "One of i95_express, i495_express, i66_itb, junction."
+          },
+          {
+            "name": "access",
+            "type": "text",
+            "nullable": false,
+            "description": "How this place can be used: 'entry', 'exit', or 'both'. One-sided access is real (reversible-lane ramps), derived from edge directions, not an error."
           }
         ],
         "notes": [
-          "Join edges to nodes on node_id slugs; never re-parse display names."
+          "Join edges to nodes on node_id slugs; never re-parse display names.",
+          "'junction' corridor nodes (pub:springfield, pub:i66-beltway) are merged interchange complexes connecting corridors."
         ]
       }
     ]

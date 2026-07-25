@@ -200,3 +200,88 @@ def test_node_and_edge_counts_match_documented_scale():
     # i95/i66 totals are already proven by the coverage tests' set-equality
     # checks against the feed files -- only the connector count needs a home.
     assert Counter(e["feed"] for e in EDGES)[None] == 5
+
+
+# --- Public graph (alias map + derived views) -------------------------------
+
+ALIAS_RE = re.compile(
+    r"INSERT INTO graph_node_alias \(node_id, public_node_id, public_name, "
+    r"public_corridor\) VALUES \('([^']+)', '([^']+)', '([^']*)', '([^']+)'\);"
+)
+ALIAS_FIELDS = ("node_id", "public_node_id", "public_name", "public_corridor")
+
+
+def _parse_aliases() -> list[dict]:
+    aliases = [
+        dict(zip(ALIAS_FIELDS, m, strict=True)) for m in ALIAS_RE.findall(GRAPH_SQL)
+    ]
+    assert aliases, "no graph_node_alias INSERTs parsed from db/graph.sql"
+    return aliases
+
+
+ALIASES = _parse_aliases()
+ALIAS_MAP: dict[str, str] = {a["node_id"]: a["public_node_id"] for a in ALIASES}
+PUBLIC_CORRIDOR: dict[str, str] = {
+    a["public_node_id"]: a["public_corridor"] for a in ALIASES
+}
+
+
+def test_every_raw_node_has_exactly_one_alias():
+    alias_node_ids = [a["node_id"] for a in ALIASES]
+    assert len(alias_node_ids) == len(set(alias_node_ids)), "duplicate alias node_id"
+    assert set(alias_node_ids) == set(NODES)
+
+
+def test_public_identity_is_consistent_per_public_node():
+    valid_corridors = {"i95_express", "i495_express", "i66_itb", "junction"}
+    identities: dict[str, tuple[str, str]] = {}
+    for a in ALIASES:
+        assert a["public_corridor"] in valid_corridors, a
+        identity = (a["public_name"], a["public_corridor"])
+        prior = identities.setdefault(a["public_node_id"], identity)
+        assert prior == identity, (
+            f"{a['public_node_id']} has inconsistent identity: {prior} vs {identity}"
+        )
+
+
+def test_public_corridor_counts():
+    assert Counter(PUBLIC_CORRIDOR.values()) == {
+        "i95_express": 29,
+        "i495_express": 9,
+        "i66_itb": 6,
+        "junction": 2,
+    }
+
+
+def test_connectors_collapse_inside_junctions():
+    connectors = [e for e in EDGES if e["feed"] is None]
+    assert len(connectors) == 5
+    for e in connectors:
+        pub_from = ALIAS_MAP[e["from_node"]]
+        pub_to = ALIAS_MAP[e["to_node"]]
+        assert pub_from == pub_to, e
+        assert PUBLIC_CORRIDOR[pub_from] == "junction", e
+
+
+def test_access_labels_spot_checks():
+    dynamic_edges = [e for e in EDGES if e["feed"] is not None]
+    assert len(dynamic_edges) == 337
+
+    out_nodes = {ALIAS_MAP[e["from_node"]] for e in dynamic_edges}
+    in_nodes = {ALIAS_MAP[e["to_node"]] for e in dynamic_edges}
+
+    def access(public_node_id: str) -> str | None:
+        has_out = public_node_id in out_nodes
+        has_in = public_node_id in in_nodes
+        if has_out and has_in:
+            return "both"
+        if has_out:
+            return "entry"
+        if has_in:
+            return "exit"
+        return None
+
+    assert access("pub:lorton") == "entry"
+    assert access("pub:washington-dc") == "exit"
+    assert access("pub:washington-blvd-pentagon") == "both"
+    assert access("pub:springfield") == "both"

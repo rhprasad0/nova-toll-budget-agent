@@ -99,7 +99,7 @@ physical facility it sits on; an edge's corridor, if ever needed, is
 not `i95x:garrisonville-rd-610`); the descriptive form — road name, VDOT exit
 number — lives in `name`, which is what a prompt or UI actually shows.
 
-**Graph schema version: 1.0.1** (semver, same pattern as the poller schema).
+**Graph schema version: 1.1.0** (semver, same pattern as the poller schema).
 Bump *major* on a DDL change or a change to what an edge key means, *minor*
 on additive columns/nodes/corridors (e.g. DTR graduating in), *patch* on seed
 corrections or comments. The version header in `db/graph.sql` and the version
@@ -245,6 +245,85 @@ new `corridor` value (additive, minor version bump) — not a bespoke system.
   BFS spot-checks confirm the graph is actually connected end-to-end; and
   the schema-version header in `db/graph.sql` matches the version declared
   in §2 of this doc.
+
+## 7. Public graph (v1.1.0)
+
+VDOT's internal OD-pair naming — directional twins, duplicate labels,
+junction pseudo-node clusters — is the right shape for `trip_pricing` joins
+but the wrong shape to hand an agent: nobody thinks in `i495x:i395-95-hov`.
+The public graph sits on top of the raw one so an agent reasons over real
+places instead. **The raw `graph_node`/`graph_edge` tables and `route()` are
+unchanged** — this is a purely additive read layer.
+
+`graph_node_alias` (seeded in `db/graph.sql`, one row per raw node) maps all
+60 raw nodes to 46 public ones. `public_graph_node` and `public_graph_edge`
+— the views an agent actually queries — are derived from it:
+
+```sql
+CREATE TABLE graph_node_alias (
+    node_id         text PRIMARY KEY REFERENCES graph_node,
+    public_node_id  text NOT NULL,
+    public_name     text NOT NULL,
+    public_corridor text NOT NULL CHECK (public_corridor IN ('i95_express','i495_express','i66_itb','junction'))
+);
+```
+
+**The merge map.** Seven public nodes each collapse several raw nodes that
+are the same real place; everything else is a 1:1 rename
+(`public_node_id = 'pub:' + <raw slug after the corridor prefix>`,
+`public_name`/`public_corridor` copied straight from `graph_node`).
+
+| Public node | Public name | Raw members |
+|---|---|---|
+| `pub:springfield` | Springfield Interchange | `i95x:i495-springfield`, `i95x:i395-95`, `i495x:i395-95-hov`, `i495x:i395-495-hov`, `i495x:i395-95-495`, `i495x:i95-hov`, `i495x:i495-hov` |
+| `pub:i66-beltway` | I-66 / Beltway Interchange | `i495x:i66-jct`, `i66:capital-beltway-begin`, `i66:capital-beltway-end` |
+| `pub:westpark` | Westpark Dr | `i495x:westpark`, `i495x:westpark-b`, `i495x:westpark-c` |
+| `pub:rt-267` | Rt 267 (Dulles Access) | `i495x:rt-267`, `i495x:jones-branch-rt267` |
+| `pub:rt-17` | Rt 17 (Stafford) | `i95x:rt17-95-nb`, `i95x:rt17-95-sb` |
+| `pub:dale-blvd` | Dale Blvd | `i95x:dale-blvd`, `i95x:i95-s-near-dale-blvd` |
+| `pub:washington-blvd-pentagon` | Washington Blvd / Pentagon | `i95x:dc-pentagon-washington-blvd`, `i95x:washington-blvd-pentagon` |
+
+The two junction interchanges become `corridor = 'junction'`; the other five
+merged nodes keep the corridor their raw members already shared.
+
+**`access` is derived, never hand-maintained.** `public_graph_node` computes
+`entry` / `exit` / `both` from whether a public node appears as
+`public_graph_edge.from_node`, `.to_node`, both, or neither, live off the
+same data every time — no separate table to drift out of sync. A one-sided
+node is reversible-lane reality, not a data gap: e.g. `pub:lorton` is
+entry-only, because the sample data only ever has traffic entering there in
+one direction.
+
+**Parallel edges are distinct products, never summed.** Merging nodes can
+put more than one priced edge on the same public `(from, to)` pair — e.g.
+`pub:westpark → pub:i495-n` carries two rows (od-pair 1000 and 1037) because
+Westpark Dr's three raw endpoints priced that movement separately. Each row
+is a real, separately-priced trip; a consumer picking "the" price for a pair
+takes `MIN(price)` for "cheapest," never a sum — same rule as the raw graph's
+"trips, not segments" (§1), just now visible across a merge instead of across
+a corridor.
+
+**Priced self-loops are real, not a bug.** Two kinds turn into a public
+`from = to` edge: the 8 i66 same-zone pairs (already self-loops in the raw
+graph, §4) and the 4 OD pairs internal to the Springfield HOV/395/495
+cluster (od-pairs 1001, 1083, 1084, 1085) — real priced movements between
+raw nodes that all happen to collapse into `pub:springfield`. Separately,
+the 5 free junction connectors (the Springfield ramps and the Beltway/66
+ramps) *also* land on two raw nodes that collapse into the same public node
+— but they priced nothing to begin with, so `public_graph_edge`'s
+`feed IS NOT NULL` filter drops them rather than surfacing them as
+zero-price self-loops.
+
+**Totals: 46 nodes, 337 priced edges.** Corridor split: i95_express 29,
+i495_express 9, i66_itb 6, junction 2.
+
+**Deliberate non-merges.** A few near-duplicates were left distinct on
+purpose, pending real-world confirmation rather than a guess: `newington`
+vs. `fairfax-county-pkwy` (both signed as Exit 166, but separately priced
+and it's unclear whether they're the same physical gantry), `us-1` vs.
+`i95-s-ft-belvoir`, and `pentagon` vs. the Washington Blvd complex above.
+Same principle each time — geographically close is not evidence of being
+the same access point.
 
 ## Traversal contract (for the future routing tool)
 

@@ -1,4 +1,4 @@
--- graph schema version: 1.0.1
+-- graph schema version: 1.1.0
 --
 -- Mirrors docs/toll-graph-spec.md. Keep in sync; the graph schema version
 -- below must match the spec and is enforced by tests/test_graph.py.
@@ -9,10 +9,16 @@
 -- connector edges (feed IS NULL) at Springfield and the Beltway/66
 -- interchange. Topology is static seed data; rebuild is the migration
 -- strategy -- this file is idempotent (safe to re-run).
+--
+-- Also seeds a public graph on top: graph_node_alias maps the 60 raw nodes
+-- to 46 real-world places (merging directional twins and junction pseudo-
+-- node clusters), and public_graph_node/public_graph_edge are the views an
+-- agent actually queries. See toll-graph-spec.md §7.
 
 BEGIN;
 
-DROP TABLE IF EXISTS graph_edge, graph_node;
+DROP VIEW IF EXISTS public_graph_node, public_graph_edge;
+DROP TABLE IF EXISTS graph_node_alias, graph_edge, graph_node;
 
 CREATE TABLE graph_node (
     node_id  text PRIMARY KEY,   -- stable slug: 'i95x:garrisonville', 'i66:fairfax-dr'
@@ -439,5 +445,120 @@ INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-495-hov', 'i95x:i495-springfield', NULL, NULL, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i66-jct', 'i66:capital-beltway-begin', NULL, NULL, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i66:capital-beltway-end', 'i495x:i66-jct', NULL, NULL, NULL, NULL);
+
+-- Public graph: maps the 60 VDOT-internal node slugs above to 46 real-world
+-- places an agent can reason about without OD-pair jargon. Merged groups
+-- collapse directional twins, junction pseudo-node clusters, and duplicate
+-- labels into one place; everything else is a 1:1 rename.
+CREATE TABLE graph_node_alias (
+    node_id         text PRIMARY KEY REFERENCES graph_node,
+    public_node_id  text NOT NULL,
+    public_name     text NOT NULL,
+    public_corridor text NOT NULL CHECK (public_corridor IN ('i95_express','i495_express','i66_itb','junction'))
+);
+
+-- Merged groups (21 raw nodes -> 7 public nodes).
+-- Springfield interchange: the express-to-express HOV/395/495 ramp cluster (see §1).
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i495-springfield', 'pub:springfield', 'Springfield Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i395-95', 'pub:springfield', 'Springfield Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i395-95-hov', 'pub:springfield', 'Springfield Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i395-495-hov', 'pub:springfield', 'Springfield Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i395-95-495', 'pub:springfield', 'Springfield Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i95-hov', 'pub:springfield', 'Springfield Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i495-hov', 'pub:springfield', 'Springfield Interchange', 'junction');
+-- I-66 / Beltway interchange: the Beltway<->I-66 ramp cluster (see §1).
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i66-jct', 'pub:i66-beltway', 'I-66 / Beltway Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:capital-beltway-begin', 'pub:i66-beltway', 'I-66 / Beltway Interchange', 'junction');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:capital-beltway-end', 'pub:i66-beltway', 'I-66 / Beltway Interchange', 'junction');
+-- Westpark Dr: one physical Exit 46 access, three OD-pair endpoints.
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:westpark', 'pub:westpark', 'Westpark Dr', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:westpark-b', 'pub:westpark', 'Westpark Dr', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:westpark-c', 'pub:westpark', 'Westpark Dr', 'i495_express');
+-- Rt 267 (Dulles Access): same interchange, two OD-pair endpoints.
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:rt-267', 'pub:rt-267', 'Rt 267 (Dulles Access)', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:jones-branch-rt267', 'pub:rt-267', 'Rt 267 (Dulles Access)', 'i495_express');
+-- Rt 17 (Stafford): directional twins, one interchange.
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:rt17-95-nb', 'pub:rt-17', 'Rt 17 (Stafford)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:rt17-95-sb', 'pub:rt-17', 'Rt 17 (Stafford)', 'i95_express');
+-- Dale Blvd: directional twins, one interchange.
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:dale-blvd', 'pub:dale-blvd', 'Dale Blvd', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i95-s-near-dale-blvd', 'pub:dale-blvd', 'Dale Blvd', 'i95_express');
+-- Washington Blvd / Pentagon: duplicate labels for the same complex.
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:dc-pentagon-washington-blvd', 'pub:washington-blvd-pentagon', 'Washington Blvd / Pentagon', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:washington-blvd-pentagon', 'pub:washington-blvd-pentagon', 'Washington Blvd / Pentagon', 'i95_express');
+
+-- 1:1 rows (39), ordered like the graph_node INSERTs above.
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:alban', 'pub:alban', 'Alban', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:cardinal', 'pub:cardinal', 'Cardinal', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:dumfries', 'pub:dumfries', 'Dumfries Rd (234)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:fairfax-county-pkwy', 'pub:fairfax-county-pkwy', 'Fairfax County Pkwy (286)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:franconia-rd', 'pub:franconia-rd', 'Franconia Rd (644)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:franconia-springfield-pkwy', 'pub:franconia-springfield-pkwy', 'Franconia-Springfield Pkwy (289)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:garrisonville', 'pub:garrisonville', 'Garrisonville Rd (610)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:gordon-blvd', 'pub:gordon-blvd', 'Gordon Blvd (123)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i395-n', 'pub:i395-n', 'I-395 N', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i95-s-ft-belvoir', 'pub:i95-s-ft-belvoir', 'I-95 S / Ft Belvoir', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i95-s-near-backlick-rd', 'pub:i95-s-near-backlick-rd', 'I-95 S near Backlick Rd', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:joplin-rd', 'pub:joplin-rd', 'Joplin Rd (619)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:lorton', 'pub:lorton', 'Lorton', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:newington', 'pub:newington', 'Newington', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:old-courthouse-rd', 'pub:old-courthouse-rd', 'Old Courthouse Rd', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:opitz', 'pub:opitz', 'Opitz', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:pentagon', 'pub:pentagon', 'Pentagon', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:prince-william-pkwy', 'pub:prince-william-pkwy', 'Prince William Pkwy (294)', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:quantico', 'pub:quantico', 'Quantico', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:russell-rd', 'pub:russell-rd', 'Russell Rd', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:seminary-rd', 'pub:seminary-rd', 'Seminary Rd', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:shirlington-circle', 'pub:shirlington-circle', 'Shirlington Circle', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:telegraph-rd', 'pub:telegraph-rd', 'Telegraph Rd', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:turkeycock', 'pub:turkeycock', 'Turkeycock', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:us-1', 'pub:us-1', 'US 1', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:washington-dc', 'pub:washington-dc', 'Washington DC', 'i95_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:braddock', 'pub:braddock', 'Braddock Rd', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:gallows', 'pub:gallows', 'Gallows Rd', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i495-n', 'pub:i495-n', 'I-495 N', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i495-near-md', 'pub:i495-near-md', 'I-495 near MD', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:jones-branch', 'pub:jones-branch', 'Jones Branch Dr', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:lee-hwy', 'pub:lee-hwy', 'Lee Hwy', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:route-7', 'pub:route-7', 'Route 7', 'i495_express');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:fairfax-dr', 'pub:fairfax-dr', 'Fairfax Drive', 'i66_itb');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:glebe-rd', 'pub:glebe-rd', 'Glebe Road', 'i66_itb');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:lee-highway', 'pub:lee-highway', 'Lee Highway', 'i66_itb');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:leesburg-pike', 'pub:leesburg-pike', 'Leesburg Pike', 'i66_itb');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:spout-run', 'pub:spout-run', 'Spout Run Parkway', 'i66_itb');
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:sycamore-st', 'pub:sycamore-st', 'Sycamore Street', 'i66_itb');
+
+-- Public views. The 5 free junction connectors (Springfield ramps + the
+-- Beltway/66 ramps) land on from_node/to_node that both collapse into the
+-- same junction public node -- they priced nothing to begin with, so
+-- `feed IS NOT NULL` drops them rather than surfacing them as odd
+-- self-loops. Parallel rows for one public (from, to) pair are distinct
+-- real priced products (different od_pair_id, different price) -- never
+-- sum or dedupe them, take MIN for "cheapest". The 8 i66 same-zone pairs,
+-- and 4 OD pairs internal to the Springfield HOV/395/495 cluster, are
+-- genuine priced trips between two points that happen to share a public
+-- node; they remain as priced self-loops here for the same reason.
+CREATE VIEW public_graph_edge AS
+SELECT fa.public_node_id AS from_node,
+       ta.public_node_id AS to_node,
+       e.feed, e.od_pair_id, e.start_zone_id, e.end_zone_id
+FROM graph_edge e
+JOIN graph_node_alias fa ON fa.node_id = e.from_node
+JOIN graph_node_alias ta ON ta.node_id = e.to_node
+WHERE e.feed IS NOT NULL;
+
+CREATE VIEW public_graph_node AS
+SELECT a.public_node_id  AS node_id,
+       a.public_name     AS name,
+       a.public_corridor AS corridor,
+       CASE
+         WHEN EXISTS (SELECT 1 FROM public_graph_edge pe WHERE pe.from_node = a.public_node_id)
+          AND EXISTS (SELECT 1 FROM public_graph_edge pe WHERE pe.to_node   = a.public_node_id)
+         THEN 'both'
+         WHEN EXISTS (SELECT 1 FROM public_graph_edge pe WHERE pe.from_node = a.public_node_id)
+         THEN 'entry'
+         ELSE 'exit'
+       END AS access
+FROM (SELECT DISTINCT public_node_id, public_name, public_corridor FROM graph_node_alias) a;
 
 COMMIT;

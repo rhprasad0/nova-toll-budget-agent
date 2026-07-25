@@ -9,7 +9,7 @@ replaces the earlier curated-views direction: instead of encoding our guesses
 about how users want the data shaped, the open beta lets users query however
 they like and we learn the real access patterns from traces. Companion specs:
 `docs/poller-spec.md` (data, schema v2.0.0, roles), `docs/toll-graph-spec.md`
-(topology, graph schema v1.0.1, traversal contract).
+(topology, graph schema v1.1.0, traversal contract).
 
 ## 1. Design ethos
 
@@ -48,12 +48,15 @@ Returns the three queryable tables with a one-line purpose each:
 | Table | Purpose |
 |---|---|
 | `trip_pricing` | Toll rates per 10-min poll (i95 history from 2026-04-17; i66 from cloud go-live) |
-| `graph_node` | 60 named toll-network access points (curated) |
-| `graph_edge` | 342 priced trips / free connectors linking nodes |
+| `public_graph_node` | 46 real toll access points (simplified public graph; access entry/exit/both) |
+| `public_graph_edge` | 337 priced trips between public nodes; parallel rows are distinct products |
 
 Static hand-written content. No `information_schema` query — the schema is
-versioned and frozen (2.0.0 / 1.0.1, both test-enforced), so a live
-introspection query buys nothing but latency.
+versioned and frozen (2.0.0 / 1.1.0, both test-enforced), so a live
+introspection query buys nothing but latency. The raw `graph_node`/`graph_edge`
+tables still exist for `route()` (see below) but left this catalog as of
+graph v1.1.0 — an agent writing free-form SQL gets the simplified public
+graph, not the VDOT-internal one.
 
 ### `describe_table(table: str) -> dict`
 
