@@ -120,6 +120,14 @@ def test_trips_the_graph_cannot_express():
     # (checked 2026-07-25: od_1374 $3.45 on 495 N, od_1388 $17.00 on 395 S).
     # So VDOT's public feed simply does not publish them and the poller can
     # never see them. Nothing in this repo fixes that.
+    #
+    # They are also NOT a renumbering of ids we already hold, however much the
+    # destination names line up (1378 "-> Old Keene Mill Rd" against VDOT 1158
+    # "I-495 TO FRANCONIA RD (644)" is the same road). Transurban bills *both*
+    # 1158 and 1378 to that destination, from different origins: 1158 as a sole
+    # toll entering at Springfield from the 95 side, 1378 as the second leg for
+    # someone already on the 495 Express Lanes. Distinct products, distinct
+    # prices. Don't build an alias table.
     assert sorted(TRANSURBAN_ODS - GRAPH_ODS) == list(range(1374, 1390))
     assert len(DATA_GAP) == 107
 
