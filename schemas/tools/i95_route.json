@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "i95_route",
+  "version": "1.0.0",
+  "description": "Flat lookup against oracles/i95.json, Transurban's own published 95/395/495 Express Lanes network: resolves origin/destination (label or node id) to the od_pair_id(s) a future pricing tool looks up in trip_pricing_i95. No DB access, no traversal — Transurban already enumerates every valid direction+entry+exit trip directly, including cross-corridor trips billed as two whole separate tolls. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {
+      "origin": {
+        "type": "string",
+        "description": "Ramp label (e.g. 'Route 267'), case-insensitive, or the oracle's raw node id (e.g. '182NO') as a fallback."
+      },
+      "destination": {
+        "type": "string",
+        "description": "Same rules as origin."
+      }
+    },
+    "required": ["origin", "destination"],
+    "additionalProperties": false,
+    "examples": [
+      {
+        "origin": "Route 267",
+        "destination": "495 Express Lanes End/George Wash. Mem. Pkwy."
+      }
+    ]
+  },
+  "$defs": {
+    "node_ref": {
+      "type": "object",
+      "properties": {
+        "node_id": { "type": "string" },
+        "label": { "type": "string" }
+      },
+      "required": ["node_id", "label"],
+      "additionalProperties": false
+    }
+  },
+  "output": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "origin": { "type": "string", "description": "Echoes the caller's raw input string." },
+          "destination": { "type": "string", "description": "Echoes the caller's raw input string." },
+          "direction": { "type": "string", "enum": ["Northbound", "Southbound"] },
+          "entry": { "$ref": "#/$defs/node_ref" },
+          "exit": { "$ref": "#/$defs/node_ref" },
+          "legs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "One entry for a within-corridor trip, two for a cross-corridor trip, in billed order (never chained or summed by this tool). Each is the exact od_pair_id lookup key into trip_pricing_i95. Some od_pair_ids (1374-1389) have never had a priced row in that table -- presence here means the trip is published, not that a price exists for it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "od_pair_id": { "type": "integer" }
+              },
+              "required": ["od_pair_id"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["origin", "destination", "direction", "entry", "exit", "legs"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Unknown origin/destination identifier, no direct trip between a known pair, or (unreachable today) an ambiguous match."
+          },
+          "valid_options": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "The full ramp label list on an unknown identifier, or the reachable destination labels from a known origin, so the caller can self-correct without another round trip."
+          }
+        },
+        "required": ["error", "valid_options"],
+        "additionalProperties": false
+      }
+    ],
+    "examples": [
+      {
+        "origin": "Route 267",
+        "destination": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+        "direction": "Northbound",
+        "entry": { "node_id": "182NO", "label": "Route 267" },
+        "exit": { "node_id": "181ND", "label": "495 Express Lanes End/George Wash. Mem. Pkwy." },
+        "legs": [{ "od_pair_id": 1038 }]
+      },
+      {
+        "origin": "I-495 Near Braddock Road",
+        "destination": "I-395 Near Edsall Road",
+        "direction": "Northbound",
+        "entry": { "node_id": "191NO", "label": "I-495 Near Braddock Road" },
+        "exit": { "node_id": "201ND", "label": "I-395 Near Edsall Road" },
+        "legs": [{ "od_pair_id": 1083 }, { "od_pair_id": 1374 }]
+      },
+      {
+        "error": "unknown origin 'Route 276': no matching label or node id in the i95 oracle",
+        "valid_options": ["Route 267", "Route 7 (Leesburg Pike)", "Westpark Drive"]
+      }
+    ]
+  }
+}

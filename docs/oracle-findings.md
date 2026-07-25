@@ -111,6 +111,35 @@ arguments as entry/exit and the pair comes out backwards.
 full-corridor trips (bumper-to-bumper each direction), so a reordering
 upstream fails loudly instead of silently swapping origin and destination.
 
+## 6. The gap runs both ways: od_pair_id 1316 is priced but not in the oracle
+
+*(2026-07-25, found while building `tests/test_route_tools_live_crosscheck.py`)*
+
+Section 2 is one direction of drift: ids the oracle publishes that VDOT never
+prices. This is the other direction — a trip VDOT actively prices that the
+oracle doesn't know about at all. `trip_pricing_i95` holds `od_pair_id` 1316,
+`od_pair_name` "TURKEYCOCK to Old Courthouse Rd", with ~1,972
+`SOUTHBOUND_OPEN` rows and ~1,830 `CLOSED` rows spanning the full backfill
+(2026-04-17 through today) — genuine, currently-active billing history, not a
+dead link. Neither "Turkeycock" nor "Old Courthouse" appears anywhere in
+`oracles/i95.json`'s node labels; no entry/exit pair produces this id under
+any lookup.
+
+Two other ids in the same "priced but unreachable via the oracle" set,
+`1000` ("WESTPARK (B) TO I-495 N") and `1093` ("I-495 NEAR MD TO WESTPARK
+(C)"), are not the same kind of gap — both are permanently
+`NO_DETERMINATION`/`UNKNOWN` with no real rate history, i.e. dead links VDOT
+carries but never actually bills. 1316 is the one that matters: a real,
+priced trip with no oracle-derivable route.
+
+Not yet root-caused (unclear whether Transurban's entry/exit feed has simply
+never listed this ramp pair, or whether `fetch_i95_oracle.py` is dropping it
+during capture) and not fixed here — flagging so it doesn't silently
+regress. `tests/test_route_tools_live_crosscheck.py` asserts the exact
+three-id set `{1000, 1093, 1316}` for "priced but unreachable," so a fourth
+id joining it, or 1316 dropping out of it, fails that test loudly instead of
+going unnoticed.
+
 ## What was deleted, and what remains
 
 Alongside this write-up: `db/graph.sql` (the curated toll graph), the four

@@ -15,6 +15,7 @@ object and upserts it into `trip_pricing_i95`/`trip_pricing_i66` in RDS
 | `db/` | the per-feed schema and the `loader_writer` role |
 | `infra/` | Terraform for both Lambdas, S3, RDS and observability |
 | `oracles/` | operator-published route maps (see below) |
+| `agent_tools/` | two Strands tools resolving a trip to its oracle price-lookup key — no DB access, no traversal (see `docs/oracle-tools-spec.md`) |
 | `vdot_sample_data/` | committed raw feed samples the parsers are tested against |
 
 **Oracles.** `oracles/i95.json` and `oracles/i66.json` are route maps published
@@ -29,4 +30,6 @@ never at runtime. `docs/oracle-findings.md` records what they told us.
 `list_tables`, `describe_table`) and a hand-curated toll graph once sat on top
 of this pipeline. We reversed course on letting an agent query the database
 directly, and both are gone. `db/drop_agent_surface.sql` tears down what they
-left behind in a live database.
+left behind in a live database. A narrower, DB-free replacement now exists —
+`agent_tools/` resolves a trip to its oracle price key only, see
+`docs/oracle-tools-spec.md`.

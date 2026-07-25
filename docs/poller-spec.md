@@ -290,11 +290,12 @@ I-66 history starts at cloud go-live — no earlier data exists anywhere.
 
 ### Table-split cutover (`trip_pricing` → `trip_pricing_i95`/`trip_pricing_i66`)
 
-**Planned — not yet executed as of 2026-07-25.** RDS currently holds ~1.2M
-i95 rows + ~12.7k i66 rows in the shared `trip_pricing` table (live since
-2026-07-21). No maintenance window is needed for the cutover: the upsert is
-already idempotent, so a two-pass backfill closes the gap instead. See
-`db/split_trip_pricing.sql` for the exact SQL; sequence:
+**Completed 2026-07-25** (commit `e90d981`). Migrated ~1.2M i95 rows + ~12.7k
+i66 rows out of the shared `trip_pricing` table via `db/split_trip_pricing.sql`,
+deployed the new loader, and verified it live. `trip_pricing` itself is
+intentionally left in place per step 6 below, pending the soak-period rename.
+No maintenance window was needed: the upsert was already idempotent, so a
+two-pass backfill closed the gap instead. Sequence as run:
 
 1. Create both new tables + grant `loader_writer` on them, in one transaction
    (tables without grants even briefly would 403 the next poll).

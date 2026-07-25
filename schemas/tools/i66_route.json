@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "i66_route",
+  "version": "1.0.0",
+  "description": "Flat lookup against oracles/i66.json, VDOT's own I-66 Inside-the-Beltway calculator: resolves origin/destination (label or node id) to the (start_zone_id, end_zone_id) key a future pricing tool looks up in trip_pricing_i66. No DB access, no traversal — VDOT already enumerates every valid direction+entry+exit trip directly. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {
+      "origin": {
+        "type": "string",
+        "description": "Interchange label (e.g. 'Fairfax Drive'), case-insensitive, or the oracle's raw node id (e.g. '4') as a fallback."
+      },
+      "destination": {
+        "type": "string",
+        "description": "Same rules as origin."
+      }
+    },
+    "required": ["origin", "destination"],
+    "additionalProperties": false,
+    "examples": [
+      {
+        "origin": "I-66 West",
+        "destination": "Westmoreland St"
+      }
+    ]
+  },
+  "$defs": {
+    "node_ref": {
+      "type": "object",
+      "properties": {
+        "node_id": { "type": "string" },
+        "label": { "type": "string" }
+      },
+      "required": ["node_id", "label"],
+      "additionalProperties": false
+    }
+  },
+  "output": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "origin": { "type": "string", "description": "Echoes the caller's raw input string." },
+          "destination": { "type": "string", "description": "Echoes the caller's raw input string." },
+          "direction": { "type": "string", "enum": ["EB", "WB"] },
+          "entry": { "$ref": "#/$defs/node_ref" },
+          "exit": { "$ref": "#/$defs/node_ref" },
+          "legs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Exactly one leg for i66 -- the exact (start_zone_id, end_zone_id) lookup key into trip_pricing_i66. Presence here means the trip is published, not that a priced row exists for it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start_zone_id": { "type": "integer" },
+                "end_zone_id": { "type": "integer" }
+              },
+              "required": ["start_zone_id", "end_zone_id"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["origin", "destination", "direction", "entry", "exit", "legs"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Unknown origin/destination identifier, no direct trip between a known pair, or (unreachable today) an ambiguous match."
+          },
+          "valid_options": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "The full interchange label list on an unknown identifier, or the reachable destination labels from a known origin, so the caller can self-correct without another round trip."
+          }
+        },
+        "required": ["error", "valid_options"],
+        "additionalProperties": false
+      }
+    ],
+    "examples": [
+      {
+        "origin": "I-66 West",
+        "destination": "Westmoreland St",
+        "direction": "EB",
+        "entry": { "node_id": "1", "label": "I-66 West" },
+        "exit": { "node_id": "10", "label": "Westmoreland St" },
+        "legs": [{ "start_zone_id": 3100, "end_zone_id": 3110 }]
+      },
+      {
+        "error": "unknown origin 'I-66 Wset': no matching label or node id in the i66 oracle",
+        "valid_options": ["Exit 73 - Rosslyn", "Fairfax Drive", "I-66 West", "Westmoreland St"]
+      }
+    ]
+  }
+}
