@@ -6,7 +6,7 @@ the 685 pairs list two, i.e. a cross-corridor trip is two whole tolls, never a
 summed sub-segment. That is precisely the composition route() performs across
 the free Springfield connectors, so Transurban's list is an oracle for the one
 thing the graph derives rather than looks up. Snapshot refreshed by
-scripts/extract_expresslanes_topology.py.
+scripts/fetch_i95_oracle.py.
 
 Deliberately compares on **OD pair ids only**. Their node ids are direction-
 suffixed ramp codes ("182NO") against our slugs ("i95x:garrisonville"); building
@@ -24,7 +24,7 @@ curation gap from 104 trips to 0 and halved the compositions Transurban never
 bills; what remains is 107 trips needing OD pairs VDOT does not publish, which
 no amount of curation fixes. See docs/toll-graph-spec.md §1.
 
-Run the breakdown as a report:  uv run python tests/test_expresslanes_topology.py
+Run the breakdown as a report:  uv run python tests/test_i95_oracle.py
 """
 
 import json
@@ -35,9 +35,7 @@ from conftest import REPO_ROOT
 # it beats maintaining a second copy of the same regexes.
 from test_graph import EDGES, NODES
 
-SNAPSHOT = json.loads(
-    (REPO_ROOT / "expresslanes_sample_data" / "entry_exits.json").read_text()
-)
+SNAPSHOT = json.loads((REPO_ROOT / "oracles" / "i95.json").read_text())
 
 TRANSURBAN_TRIPS: set[tuple[int, ...]] = {tuple(p["ods"]) for p in SNAPSHOT["pairs"]}
 TRANSURBAN_ODS: set[int] = {od for p in SNAPSHOT["pairs"] for od in p["ods"]}

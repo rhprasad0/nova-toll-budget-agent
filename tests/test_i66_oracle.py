@@ -2,8 +2,8 @@
 
 vai66tolls.com attributes every interchange pair to a toll-zone pair, which is
 the only independent source we have for the i66 half of the graph -- Transurban
-operates 95/395/495 only, so expresslanes_sample_data/entry_exits.json covers
-none of it. Snapshot refreshed by scripts/extract_i66_topology.py.
+operates 95/395/495 only, so oracles/i95.json covers none of it. Refreshed
+by scripts/fetch_i66_oracle.py.
 
 The extraction is not a straight read: the calculator's runChartMake arguments
 are geographic (western zone, then eastern) rather than entry/exit, so they get
@@ -21,12 +21,8 @@ from conftest import REPO_ROOT
 # Reuses the seed parse rather than re-deriving it. See test_graph.py.
 from test_graph import EDGES
 
-SNAPSHOT = json.loads(
-    (REPO_ROOT / "vai66tolls_sample_data" / "interchanges.json").read_text()
-)
-EXPRESS = json.loads(
-    (REPO_ROOT / "expresslanes_sample_data" / "entry_exits.json").read_text()
-)
+SNAPSHOT = json.loads((REPO_ROOT / "oracles" / "i66.json").read_text())
+EXPRESS = json.loads((REPO_ROOT / "oracles" / "i95.json").read_text())
 NODES: dict[str, dict] = SNAPSHOT["nodes"]
 PAIRS: list[dict] = SNAPSHOT["pairs"]
 

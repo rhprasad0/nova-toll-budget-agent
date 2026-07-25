@@ -3,7 +3,7 @@
 
 The i66 half of the toll graph (8 zone nodes, 20 zone-pair edges in
 db/graph.sql) has never had an independent source to check it against:
-Transurban operates only 95/395/495, so expresslanes_sample_data/entry_exits.json
+Transurban operates only 95/395/495, so oracles/i95.json
 covers none of it. VDOT's own toll calculator does.
 
 vai66tolls.com is an ASP.NET Razor app whose handlers are plain GETs on /Index:
@@ -16,7 +16,7 @@ The prize is inside jsToRun: it calls runChartMake(weekday, beginZone, endZone,
 ...), so for every interchange pair VDOT names the toll zone the trip starts
 and ends in -- the ramp-to-gantry mapping we have no other source for.
 
-Output mirrors expresslanes_sample_data/entry_exits.json: {source_url, nodes,
+Output mirrors oracles/i95.json: {source_url, nodes,
 pairs}, where each pair carries the price *key* into trip_pricing and no price.
 For the express lanes that key is a list of od_pair_ids; for I-66 ITB, which
 prices by zone pair, it is (start_zone, end_zone). Deliberately no toll
@@ -31,7 +31,7 @@ Its decToll is read and discarded.
 Nothing consumes this yet -- it is committed evidence, not a feed. Never fetch
 it at runtime.
 
-    uv run python scripts/extract_i66_topology.py
+    uv run python scripts/fetch_i66_oracle.py
 """
 
 import json
@@ -42,11 +42,7 @@ import urllib.request
 from pathlib import Path
 
 BASE = "https://vai66tolls.com/Index"
-OUT_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "vai66tolls_sample_data"
-    / "interchanges.json"
-)
+OUT_PATH = Path(__file__).resolve().parent.parent / "oracles" / "i66.json"
 
 # A Thursday, and a time inside each direction's tolling window. Fixed so the
 # archived prices -- and therefore this whole file -- are reproducible.

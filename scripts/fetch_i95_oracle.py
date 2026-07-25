@@ -13,7 +13,7 @@ tests/test_expresslanes_topology.py consumes, and re-running this script is the
 one-command refresh. Never fetch at runtime -- the URL carries a ?v= cache
 buster and the asset is third-party.
 
-    uv run python scripts/extract_expresslanes_topology.py
+    uv run python scripts/fetch_i95_oracle.py
 """
 
 import json
@@ -25,11 +25,7 @@ SOURCE_URL = (
     "https://www.expresslanes.com/themes/custom/transurbangroup/js/"
     "on-the-road/entry_exit.js?v=1.x"
 )
-OUT_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "expresslanes_sample_data"
-    / "entry_exits.json"
-)
+OUT_PATH = Path(__file__).resolve().parent.parent / "oracles" / "i95.json"
 
 NODE_FIELDS = ("label", "latitude", "longitude", "path", "index")
 
