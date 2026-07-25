@@ -32,18 +32,26 @@ DROP TABLE IF EXISTS graph_node;
 
 -- agent_readonly also held SELECT on trip_pricing, so dropping the role is
 -- what actually removes the agent's database access. Postgres refuses to drop
--- a role that still holds privileges, and the graph grants vanish with the
--- objects above but trip_pricing's does not. DROP OWNED BY revokes every
--- remaining grant held by the role in this database, which is the whole of
--- what agent_readonly has -- it owns no objects.
+-- a role that still holds privileges: the graph grants vanish with the objects
+-- above, but trip_pricing's does not, so it has to be revoked explicitly.
 --
--- Do NOT add `REVOKE rds_iam FROM agent_readonly` here. DROP ROLE clears role
--- *membership* on its own, and naming rds_iam explicitly makes the script
--- unrunnable anywhere that RDS-managed role doesn't exist -- which aborts the
--- transaction and silently leaves everything above undropped.
+-- Two things NOT to do here, both learned by them failing:
+--
+--   DROP OWNED BY agent_readonly -- the tidy idiom, and it works locally where
+--   you are superuser. On RDS the master user is not a superuser and is not a
+--   member of agent_readonly, so it gets "permission denied to drop objects".
+--   REVOKE works instead because the master OWNS every table being revoked on.
+--
+--   REVOKE rds_iam FROM agent_readonly -- unnecessary, since DROP ROLE clears
+--   role membership by itself, and it makes this file unrunnable anywhere that
+--   RDS-managed role is absent.
+--
+-- Either failure aborts the transaction and silently leaves every drop above
+-- rolled back, which looks a lot like success if you only read the exit code.
 DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'agent_readonly') THEN
-    DROP OWNED BY agent_readonly;
+    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM agent_readonly;
+    REVOKE ALL ON SCHEMA public FROM agent_readonly;
     DROP ROLE agent_readonly;
   END IF;
 END $$;
