@@ -150,6 +150,57 @@ three-id set `{1000, 1093, 1316}` for "priced but unreachable," so a fourth
 id joining it, or 1316 dropping out of it, fails that test loudly instead of
 going unnoticed.
 
+## 7. VDOT's price and Transurban's live price disagree -- but by lag, not by a bug
+
+*(2026-07-25, found manually testing `i95_route` against the newly-deployed
+`trip_pricing_i95_live`)*
+
+Querying "US-1 to Westpark Drive" turned up a composite trip (`od_pair_id`s
+1131 and 1089) priced at $10.40 + $9.95 = $20.35 in `trip_pricing_i95` (VDOT).
+The live `expresslanes.com` API, and the actual quote a driver sees on the
+Express Lanes site, showed $6.60 + $9.15 = $15.75 for the same two ids at
+essentially the same moment -- a $4.60 gap, not explained by the already-known
+16-id gap (section 2) or the reverse-drift ids (section 6): 1131 and 1089 are
+ordinary oracle ids, not on either list.
+
+This is not a documented issue anywhere -- not in VDOT's or Transurban's own
+FAQs, not in news coverage, not in this repo. `tests/test_expresslanes_crosscheck.py`
+has cross-checked these two sources since `fd11bf6`, but `test_overlap_price_sanity`
+only asserts the live price is `>= 0`; it has never compared the dollar value
+against what's stored in `trip_pricing_i95`, in either direction. This finding
+is the first time anyone (or anything) actually diffed the two.
+
+**Root cause, evidenced rather than assumed:** every `trip_pricing_i95` row
+carries `calculated_at`, and it consistently trails `interval_end_at` by
+~10 minutes (e.g. an `interval_end_at` 23:30 row's price was `calculated_at`
+23:20) -- on top of our own 10-minute poll cadence, "VDOT's latest row" is
+never truly "right now," it's a snapshot from 10-20 minutes ago. Combined with
+genuinely volatile dynamic pricing (VDOT's own row history for `od_pair_id`
+1131 alone swung $8.60 -> $7.80 -> $7.15 -> $10.40 -> $6.60 within 40 minutes;
+VDOT has publicly attributed exactly this kind of swing to demand-responsive
+pricing when explaining a driver's $18 I-64 toll complaint), a several-dollar
+gap between "VDOT's latest row" and Transurban's instantaneous quote is
+exactly what lag-plus-volatility predicts.
+
+Re-checked minutes later: VDOT's *next* poll for both 1131 and 1089 converged
+to within $0.10 of Transurban's live price. Checked four more random ids
+(1011, 1016, 1002, 1304) against the live feed at the same moment: gaps of
+$0.30-$1.30, in **both directions** (VDOT sometimes higher, sometimes lower)
+-- a directionless, moderate spread is consistent with lag-plus-volatility
+noise, not a systematic bias one source or the other would produce if this
+were a real data-quality defect.
+
+**Conclusion: probably not a "discrepancy" in the bug sense** -- a "how much
+does this cost right now" question needs Transurban's live feed (or
+`trip_pricing_i95_live`, section above), not `trip_pricing_i95`'s latest row,
+if the honest answer must be accurate to the minute. `trip_pricing_i95`
+remains the right source for history and for ids Transurban's live feed can't
+supply (zone/corridor identity); it just isn't a "right now" price. Not fixed
+here, and not proposing a fix -- `test_overlap_price_sanity` intentionally
+stays a `>= 0` sanity check rather than a value-equality assertion, since a
+tight tolerance would need more samples across more conditions (time of day,
+volatility regime) than this investigation gathered to set without guessing.
+
 ## What was deleted, and what remains
 
 Alongside this write-up: `db/graph.sql` (the curated toll graph), the four
