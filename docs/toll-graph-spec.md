@@ -294,25 +294,35 @@ node is reversible-lane reality, not a data gap: e.g. `pub:lorton` is
 entry-only, because the feed prices trips out of Lorton but none into it
 (live-verified, not a sample-data artifact).
 
-**Parallel edges are distinct products, never summed.** Merging nodes can
-put more than one priced edge on the same public `(from, to)` pair — e.g.
-`pub:westpark → pub:i495-n` carries two rows (od-pair 1000 and 1037) because
-Westpark Dr's three raw endpoints priced that movement separately. Each row
-is a real, separately-priced trip; a consumer picking "the" price for a pair
-takes `MIN(price)` for "cheapest," never a sum — same rule as the raw graph's
-"trips, not segments" (§1), just now visible across a merge instead of across
-a corridor.
+**Parallel edges are the norm wherever nodes merge, not a corner case.** Any
+public node formed by collapsing more than one raw node (the merge table
+above) can carry more than one priced edge on the same `(from, to)` pair —
+one raw edge per merged member that happened to price that movement. This is
+common, not rare: a full audit of the current seed counts 18 public
+`(from, to)` pairs carrying more than one row, concentrated around
+`pub:springfield` since it merges the most raw nodes (7 of them) — see
+`docs/graph-connectivity-audit.md` for the complete inventory.
+`pub:westpark → pub:i495-n` (od-pairs 1000, 1037) is one instance, not the
+only one, and the exact count will drift as VDOT adds or retires OD pairs.
+Code against the rule, not the tally: every row is a real, separately-priced
+trip; a consumer picking "the" price for a pair takes `MIN(price)` for
+"cheapest," never a sum — same rule as the raw graph's "trips, not segments"
+(§1), just now visible across a merge instead of across a corridor.
 
-**Priced self-loops are real, not a bug.** Two kinds turn into a public
-`from = to` edge: the 8 i66 same-zone pairs (already self-loops in the raw
-graph, §4) and the 4 OD pairs internal to the Springfield HOV/395/495
-cluster (od-pairs 1001, 1083, 1084, 1085) — real priced movements between
-raw nodes that all happen to collapse into `pub:springfield`. Separately,
-the 5 free junction connectors (the Springfield ramps and the Beltway/66
-ramps) *also* land on two raw nodes that collapse into the same public node
-— but they priced nothing to begin with, so `public_graph_edge`'s
-`feed IS NOT NULL` filter drops them rather than surfacing them as
-zero-price self-loops.
+**Priced self-loops are real, not a bug — and can be parallel too.** Two
+kinds turn into a public `from = to` edge: the 8 i66 same-zone pairs
+(already self-loops in the raw graph, §4) and the 4 OD pairs internal to the
+Springfield HOV/395/495 cluster (od-pairs 1001, 1083, 1084, 1085) — real
+priced movements between raw nodes that all happen to collapse into
+`pub:springfield`. A merged self-loop follows the same parallel-edge rule
+above: `pub:springfield`'s carries all 4 of its OD pairs, and
+`pub:i66-beltway` carries 2 (zone 3100→3100 from `i66:capital-beltway-begin`,
+3230→3230 from `i66:capital-beltway-end`) — `MIN(price)`, never a single
+assumed lookup. Separately, the 5 free junction connectors (the Springfield
+ramps and the Beltway/66 ramps) *also* land on two raw nodes that collapse
+into the same public node — but they priced nothing to begin with, so
+`public_graph_edge`'s `feed IS NOT NULL` filter drops them rather than
+surfacing them as zero-price self-loops.
 
 **Totals: 46 nodes, 337 priced edges.** Corridor split: i95_express 29,
 i495_express 9, i66_itb 6, junction 2.
