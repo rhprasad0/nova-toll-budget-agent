@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.43.53",
-    "strands-agents>=1.50.0",
 ]
 
 [dependency-groups]
@@ -26,17 +25,6 @@ addopts = '-m "not live"'
 # infra/build/ holds vendored deps (psycopg) assembled into the Lambda zip by
 # scripts/build_zips.sh — not our code, and gitignored. Don't type-check it.
 exclude = ["**/node_modules", "**/__pycache__", ".venv", "infra/build"]
-
-# tests/test_graph.py reuses the loader's parse_csv/parse_xml (flat modules,
-# no package __init__) via a sys.path insert in tests/conftest.py; pyright
-# can't see that at static-analysis time. Scoped to tests/ only -- adding
-# lambdas/loader globally would make bare `import handler` in
-# lambdas/fetcher/tests resolve against lambdas/loader/handler.py instead
-# (the exact collision lambdas/loader/tests/conftest.py's own comment warns
-# about).
-[[tool.pyright.executionEnvironments]]
-root = "tests"
-extraPaths = ["lambdas/loader", "lambdas/agent"]
 
 [[tool.pyright.executionEnvironments]]
 root = "."

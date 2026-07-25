@@ -1,9 +1,9 @@
-"""Guards the committed I-66 ITB route map from VDOT's own toll calculator.
+"""Guards the committed I-66 ITB route map published by VDOT.
 
 vai66tolls.com attributes every interchange pair to a toll-zone pair, which is
-the only independent source we have for the i66 half of the graph -- Transurban
-operates 95/395/495 only, so oracles/i95.json covers none of it. Refreshed
-by scripts/fetch_i66_oracle.py.
+the only independent source for the I-66 network -- Transurban operates
+95/395/495 only, so oracles/i95.json covers none of it. Refreshed by
+scripts/fetch_i66_oracle.py.
 
 The extraction is not a straight read: the calculator's runChartMake arguments
 are geographic (western zone, then eastern) rather than entry/exit, so they get
@@ -11,26 +11,26 @@ normalised to the feed's travel-order convention. These checks exist so a
 silent upstream change to that convention -- or to the interchange set -- fails
 loudly instead of quietly rewriting the snapshot.
 
-No network and no RDS. Nothing consumes this capture yet; it is evidence.
+The capture's 20 zone pairs matched the hand-curated i66 graph edges exactly
+before that graph was deleted; see docs/oracle-findings.md. The gantry ids
+below are inlined from the feed itself
+(vdot_sample_data/tollingTripPricing-I66-refreshed.xml).
+
+No network, no RDS.
 """
 
 import json
 
 from conftest import REPO_ROOT
 
-# Reuses the seed parse rather than re-deriving it. See test_graph.py.
-from test_graph import EDGES
-
 SNAPSHOT = json.loads((REPO_ROOT / "oracles" / "i66.json").read_text())
 EXPRESS = json.loads((REPO_ROOT / "oracles" / "i95.json").read_text())
 NODES: dict[str, dict] = SNAPSHOT["nodes"]
 PAIRS: list[dict] = SNAPSHOT["pairs"]
 
-SEEDED_ZONE_PAIRS = {
-    (e["start_zone_id"], e["end_zone_id"]) for e in EDGES if e["feed"] == "i66"
-}
-EB_ZONES = {z for pair in SEEDED_ZONE_PAIRS for z in pair if z < 3200}
-WB_ZONES = {z for pair in SEEDED_ZONE_PAIRS for z in pair if z >= 3200}
+# Travel order per direction: EB runs 3100 Capital Beltway Beginning -> 3130
+# Spout Run Pkwy, WB runs 3200 Glebe Rd -> 3230 Capital Beltway End.
+GANTRIES = {"EB": {3100, 3110, 3120, 3130}, "WB": {3200, 3210, 3220, 3230}}
 
 
 def test_shape_matches_the_express_oracle():
@@ -49,12 +49,16 @@ def test_shape_matches_the_express_oracle():
 def test_snapshot_matches_published_scale():
     assert len(NODES) == 17
     assert len(PAIRS) == 96
+    # Every ordered zone pair within a direction is billable, and no others.
+    assert {(p["start_zone"], p["end_zone"]) for p in PAIRS} == {
+        (a, b) for zones in GANTRIES.values() for a in zones for b in zones if a <= b
+    }
 
 
 def test_pairs_are_well_formed():
     for p in PAIRS:
         assert p["entry"] in NODES and p["exit"] in NODES, p
-        zones = EB_ZONES if p["direction"] == "EB" else WB_ZONES
+        zones = GANTRIES[p["direction"]]
         # A direction never references the other direction's gantries: the two
         # chains are disjoint in the feed and must stay disjoint here.
         assert p["start_zone"] in zones and p["end_zone"] in zones, p
@@ -62,16 +66,3 @@ def test_pairs_are_well_formed():
         # you drive them, so start <= end always -- EB 3100->3130 and, despite
         # running east to west, WB 3200->3230.
         assert p["start_zone"] <= p["end_zone"], p
-
-
-def test_zone_pairs_match_the_curated_graph():
-    """The point of the capture: VDOT's calculator vs our hand-curated i66 edges.
-
-    A failure here is a real finding, not a flaky assert -- it means the
-    calculator and db/graph.sql disagree about which zone pairs are billable.
-    """
-    captured = {(p["start_zone"], p["end_zone"]) for p in PAIRS}
-    assert captured == SEEDED_ZONE_PAIRS, {
-        "calculator_only": sorted(captured - SEEDED_ZONE_PAIRS),
-        "graph_only": sorted(SEEDED_ZONE_PAIRS - captured),
-    }

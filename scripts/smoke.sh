@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Post-apply end-to-end smoke test for the toll poller (spec §Migration step 1,
-# implementation-plan WP4 "Done when"). Read-only except for the SNS test
+# the deploy runbook). Read-only except for the SNS test
 # publish and an optional fetcher invoke. Traces one full tick:
 #   EventBridge/fetcher -> 2 objects in raw/ -> LOAD_OK in loader logs ->
 #   LoadSuccess metric -> all alarms OK -> SNS test delivered.
