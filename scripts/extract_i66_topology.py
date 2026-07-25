@@ -14,15 +14,19 @@ vai66tolls.com is an ASP.NET Razor app whose handlers are plain GETs on /Index:
 
 The prize is inside jsToRun: it calls runChartMake(weekday, beginZone, endZone,
 ...), so for every interchange pair VDOT names the toll zone the trip starts
-and ends in -- the ramp-to-gantry mapping we have no other source for. The
-landing page additionally ships a 4-week average toll table inline.
+and ends in -- the ramp-to-gantry mapping we have no other source for.
 
-Prices are requested at a FIXED past weekday/time inside each direction's
-tolled window (I-66 ITB tolls EB 5:30-9:30am, WB 3-7pm only), so the topology
-and ref_toll values reproduce exactly on a re-run. isCurrent=true errors on
-this handler. The `averages` block is the exception: it is a rolling 4-week
-mean VDOT recomputes, so it drifts with the calendar even though everything
-else here does not.
+Output mirrors expresslanes_sample_data/entry_exits.json: {source_url, nodes,
+pairs}, where each pair carries the price *key* into trip_pricing and no price.
+For the express lanes that key is a list of od_pair_ids; for I-66 ITB, which
+prices by zone pair, it is (start_zone, end_zone). Deliberately no toll
+amounts, no averages -- this is route-mapping data, and prices live in
+trip_pricing where they have history.
+
+TollCalcPartial is still the only handler that attributes zones, so it is
+called with a fixed past weekday/time inside each direction's tolled window
+(I-66 ITB tolls EB 5:30-9:30am, WB 3-7pm only; isCurrent=true errors here).
+Its decToll is read and discarded.
 
 Nothing consumes this yet -- it is committed evidence, not a feed. Never fetch
 it at runtime.
@@ -80,8 +84,6 @@ OPTION_RE = re.compile(r'<option[^>]*value="([^"]*)"[^>]*>([^<]*)')
 CHART_RE = re.compile(
     r'runChartMake\((\d+),\s*(\d+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)"'
 )
-PUSH_RE = re.compile(r"([ew])wdv\[(\d+)\]\[(\d+)\]\[(\d+)\]\.push\(([-\d.]+)\)")
-SLOT_RE = re.compile(r"([ew])tNames\.push\('([^']*)'\)")
 
 
 def _get(**params) -> str:
@@ -101,31 +103,6 @@ def _options(html: str) -> dict[str, str]:
     return {v: label.strip() for v, label in OPTION_RE.findall(html) if v}
 
 
-def fetch_landing() -> str:
-    time.sleep(DELAY_S)
-    with urllib.request.urlopen("https://vai66tolls.com", timeout=60) as resp:
-        return resp.read().decode("utf-8", "replace")
-
-
-def parse_averages(html: str) -> dict:
-    """The inline 4-week average table, built by .push() calls on one line.
-
-    ewdv[weekday][beginZone][endZone] holds eastbound series and wwdv the
-    westbound ones; etNames/wtNames label the 30-minute slots. Zone indices are
-    the same 0-3 / 4-7 space runChartMake uses, so they are translated to
-    gantry ids by the caller's derived mapping.
-    """
-    slots: dict[str, list[str]] = {"EB": [], "WB": []}
-    for kind, label in SLOT_RE.findall(html):
-        slots["EB" if kind == "e" else "WB"].append(label)
-
-    series: dict[tuple[str, int, int, int], list[float]] = {}
-    for kind, weekday, begin, end, value in PUSH_RE.findall(html):
-        key = ("EB" if kind == "e" else "WB", int(weekday), int(begin), int(end))
-        series.setdefault(key, []).append(float(value))
-    return {"slots": slots, "series": series}
-
-
 def zone_of(direction: str, index: int) -> int:
     return GANTRIES[direction][index - INDEX_BASE[direction]]
 
@@ -136,9 +113,6 @@ def trip_zones(direction: str, a: int, b: int) -> tuple[int, int]:
 
 
 def main() -> None:
-    landing = fetch_landing()
-    averages = parse_averages(landing)
-
     nodes: dict[str, dict] = {}
     pairs: list[dict] = []
     missing: list[tuple[str, str, str]] = []
@@ -186,7 +160,6 @@ def main() -> None:
                         "exit": exit_id,
                         "start_zone": start_zone,
                         "end_zone": end_zone,
-                        "ref_toll": payload["decToll"],
                     }
                 )
 
@@ -213,38 +186,16 @@ def main() -> None:
         }
         assert used <= set(GANTRIES[direction]), (direction, used)
 
+    # Every pair must get a zone. A miss means thinner data than it looks, so
+    # fail rather than commit a snapshot with silent holes in it.
+    assert not missing, f"no zone attribution for {len(missing)} pairs: {missing[:5]}"
+
     snapshot = {
         "source_url": BASE,
-        "reference_trip": {"date": REF_DATE, "times": REF_TIME},
-        "gantries": GANTRIES,
         "nodes": dict(sorted(nodes.items(), key=lambda kv: int(kv[0]))),
         "pairs": sorted(
             pairs, key=lambda p: (p["direction"], int(p["entry"]), int(p["exit"]))
         ),
-        "averages": {
-            "slots": averages["slots"],
-            # ewdv/wwdv use the same (west, east) index convention as
-            # runChartMake, so the same travel-order normalisation applies.
-            "series": sorted(
-                (
-                    {
-                        "direction": d,
-                        "weekday": w,
-                        "start_zone": trip_zones(d, b, e)[0],
-                        "end_zone": trip_zones(d, b, e)[1],
-                        "tolls": v,
-                    }
-                    for (d, w, b, e), v in averages["series"].items()
-                ),
-                key=lambda s: (
-                    s["direction"],
-                    s["weekday"],
-                    s["start_zone"],
-                    s["end_zone"],
-                ),
-            ),
-        },
-        "pairs_without_zone_attribution": sorted(missing),
     }
     OUT_PATH.parent.mkdir(exist_ok=True)
     OUT_PATH.write_text(json.dumps(snapshot, indent=1, sort_keys=True) + "\n")
@@ -252,9 +203,7 @@ def main() -> None:
     zone_pairs = {(p["start_zone"], p["end_zone"]) for p in pairs}
     print(
         f"{OUT_PATH.name}: {len(nodes)} interchanges, {len(pairs)} pairs, "
-        f"{len(zone_pairs)} distinct zone pairs, "
-        f"{len(snapshot['averages']['series'])} average series"
-        + (f", {len(missing)} pairs without zones" if missing else "")
+        f"{len(zone_pairs)} distinct zone pairs"
     )
 
 
