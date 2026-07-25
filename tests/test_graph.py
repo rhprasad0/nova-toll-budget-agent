@@ -285,3 +285,10 @@ def test_access_labels_spot_checks():
     assert access("pub:washington-dc") == "exit"
     assert access("pub:washington-blvd-pentagon") == "both"
     assert access("pub:springfield") == "both"
+
+    # Full distribution, so a merge-map typo can't silently flip one label.
+    assert Counter(access(p) for p in set(ALIAS_MAP.values())) == {
+        "both": 31,
+        "entry": 8,
+        "exit": 7,
+    }

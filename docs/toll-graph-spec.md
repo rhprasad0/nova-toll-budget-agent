@@ -99,7 +99,7 @@ physical facility it sits on; an edge's corridor, if ever needed, is
 not `i95x:garrisonville-rd-610`); the descriptive form — road name, VDOT exit
 number — lives in `name`, which is what a prompt or UI actually shows.
 
-**Graph schema version: 1.1.0** (semver, same pattern as the poller schema).
+**Graph schema version: 1.1.1** (semver, same pattern as the poller schema).
 Bump *major* on a DDL change or a change to what an edge key means, *minor*
 on additive columns/nodes/corridors (e.g. DTR graduating in), *patch* on seed
 corrections or comments. The version header in `db/graph.sql` and the version
@@ -291,8 +291,8 @@ merged nodes keep the corridor their raw members already shared.
 `public_graph_edge.from_node`, `.to_node`, both, or neither, live off the
 same data every time — no separate table to drift out of sync. A one-sided
 node is reversible-lane reality, not a data gap: e.g. `pub:lorton` is
-entry-only, because the sample data only ever has traffic entering there in
-one direction.
+entry-only, because the feed prices trips out of Lorton but none into it
+(live-verified, not a sample-data artifact).
 
 **Parallel edges are distinct products, never summed.** Merging nodes can
 put more than one priced edge on the same public `(from, to)` pair — e.g.

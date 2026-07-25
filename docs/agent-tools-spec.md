@@ -52,7 +52,7 @@ Returns the three queryable tables with a one-line purpose each:
 | `public_graph_edge` | 337 priced trips between public nodes; parallel rows are distinct products |
 
 Static hand-written content. No `information_schema` query — the schema is
-versioned and frozen (2.0.0 / 1.1.0, both test-enforced), so a live
+versioned and frozen (2.0.0 / 1.1.1, both test-enforced), so a live
 introspection query buys nothing but latency. The raw `graph_node`/`graph_edge`
 tables still exist for `route()` (see below) but left this catalog as of
 graph v1.1.0 — an agent writing free-form SQL gets the simplified public

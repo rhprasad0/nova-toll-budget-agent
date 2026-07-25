@@ -224,7 +224,10 @@ _TABLES = {
         "notes": [
             "Several rows can share one (from_node, to_node) pair -- each is "
             "a distinct real priced product (merged access ramps). Take MIN "
-            "over their current prices for the cheapest; never sum rows.",
+            "over their current prices for the cheapest; never sum rows. At "
+            "merged junctions the parallel products encode different physical "
+            "ramps, so which one a given approach can use varies -- MIN is "
+            "the cheapest product, not a guaranteed drivable price.",
             "Self-loop rows (from_node = to_node) are real short-hop products "
             "(i66 same-zone trips, Springfield-internal OD pairs), not bugs.",
             "Availability lives in link_status on the trip_pricing row at the "

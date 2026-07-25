@@ -1,4 +1,4 @@
--- graph schema version: 1.1.0
+-- graph schema version: 1.1.1
 --
 -- Mirrors docs/toll-graph-spec.md. Keep in sync; the graph schema version
 -- below must match the spec and is enforced by tests/test_graph.py.
@@ -560,5 +560,15 @@ SELECT a.public_node_id  AS node_id,
          ELSE 'exit'
        END AS access
 FROM (SELECT DISTINCT public_node_id, public_name, public_corridor FROM graph_node_alias) a;
+
+-- The DROPs above strip agent_readonly's SELECT grants with the objects, and
+-- roles.sql can't simply be re-run (CREATE ROLE isn't idempotent) -- so a
+-- rebuild re-grants here to stay self-contained. Guarded so the file still
+-- applies to scratch databases where the role doesn't exist.
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'agent_readonly') THEN
+    GRANT SELECT ON graph_node, graph_edge, public_graph_node, public_graph_edge TO agent_readonly;
+  END IF;
+END $$;
 
 COMMIT;
