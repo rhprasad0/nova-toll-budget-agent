@@ -1,4 +1,4 @@
--- graph schema version: 1.1.1
+-- graph schema version: 1.2.0
 --
 -- Mirrors docs/toll-graph-spec.md. Keep in sync; the graph schema version
 -- below must match the spec and is enforced by tests/test_graph.py.
@@ -10,7 +10,7 @@
 -- interchange. Topology is static seed data; rebuild is the migration
 -- strategy -- this file is idempotent (safe to re-run).
 --
--- Also seeds a public graph on top: graph_node_alias maps the 60 raw nodes
+-- Also seeds a public graph on top: graph_node_alias maps the 61 raw nodes
 -- to 46 real-world places (merging directional twins and junction pseudo-
 -- node clusters), and public_graph_node/public_graph_edge are the views an
 -- agent actually queries. See toll-graph-spec.md §7.
@@ -34,7 +34,7 @@ CREATE TABLE graph_edge (
     start_zone_id int, end_zone_id int                   -- i66 price key
 );
 
--- Nodes (60): i95_express (34), i495_express (18), i66_itb (8).
+-- Nodes (61): i95_express (35), i495_express (18), i66_itb (8).
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:alban', 'Alban', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:cardinal', 'Cardinal', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:dale-blvd', 'Dale Blvd', 'i95_express');
@@ -47,7 +47,8 @@ INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:garrisonville', '
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:gordon-blvd', 'Gordon Blvd (123)', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i395-95', 'I-395/95', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i395-n', 'I-395 N', 'i95_express');
-INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i495-springfield', 'I-495 (Springfield)', 'i95_express');
+INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i495-i395', 'I-495 (I-395 side)', 'i95_express');
+INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i495-springfield', 'I-495 (Springfield, I-95 side)', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i95-s-ft-belvoir', 'I-95 S / Ft Belvoir', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i95-s-near-backlick-rd', 'I-95 S near Backlick Rd', 'i95_express');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i95x:i95-s-near-dale-blvd', 'I-95 S near Dale Blvd', 'i95_express');
@@ -96,8 +97,8 @@ INSERT INTO graph_node (node_id, name, corridor) VALUES ('i66:leesburg-pike', 'L
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i66:spout-run', 'Spout Run Parkway', 'i66_itb');
 INSERT INTO graph_node (node_id, name, corridor) VALUES ('i66:sycamore-st', 'Sycamore Street', 'i66_itb');
 
--- Edges (342): i95/i495 dynamic (317, keyed od_pair_id), i66 dynamic
--- (20, keyed start_zone_id/end_zone_id), junction connectors (5, feed NULL).
+-- Edges (343): i95/i495 dynamic (317, keyed od_pair_id), i66 dynamic
+-- (20, keyed start_zone_id/end_zone_id), junction connectors (6, feed NULL).
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:westpark-b', 'i495x:i495-n', 'i95', 1000, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-95-hov', 'i495x:i395-95-495', 'i95', 1001, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-95-hov', 'i495x:lee-hwy', 'i95', 1002, NULL, NULL);
@@ -241,8 +242,8 @@ INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:fairfax-county-pkwy', 'i95x:i395-n', 'i95', 1143, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:franconia-rd', 'i95x:i495-springfield', 'i95', 1144, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:franconia-rd', 'i95x:i395-n', 'i95', 1145, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-springfield', 'i95x:i395-n', 'i95', 1146, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:turkeycock', 'i95x:i495-springfield', 'i95', 1147, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-i395', 'i95x:i395-n', 'i95', 1146, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:turkeycock', 'i95x:i495-i395', 'i95', 1147, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:turkeycock', 'i95x:franconia-rd', 'i95', 1148, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:turkeycock', 'i95x:i95-s-near-backlick-rd', 'i95', 1149, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:turkeycock', 'i95x:franconia-springfield-pkwy', 'i95', 1150, NULL, NULL);
@@ -299,7 +300,7 @@ INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:shirlington-circle', 'i95', 1201, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:seminary-rd', 'i95', 1202, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:i395-95', 'i95', 1203, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:i495-springfield', 'i95', 1204, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:i495-i395', 'i95', 1204, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:franconia-rd', 'i95', 1205, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:i95-s-near-backlick-rd', 'i95', 1206, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:franconia-springfield-pkwy', 'i95', 1207, NULL, NULL);
@@ -311,7 +312,7 @@ INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:joplin-rd', 'i95', 1213, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:dc-pentagon-washington-blvd', 'i95x:garrisonville', 'i95', 1214, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:seminary-rd', 'i95x:i395-95', 'i95', 1215, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:seminary-rd', 'i95x:i495-springfield', 'i95', 1216, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:seminary-rd', 'i95x:i495-i395', 'i95', 1216, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:seminary-rd', 'i95x:franconia-rd', 'i95', 1217, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:seminary-rd', 'i95x:i95-s-near-backlick-rd', 'i95', 1218, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:seminary-rd', 'i95x:franconia-springfield-pkwy', 'i95', 1219, NULL, NULL);
@@ -355,9 +356,9 @@ INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:franconia-rd', 'i95x:seminary-rd', 'i95', 1260, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:franconia-rd', 'i95x:washington-blvd-pentagon', 'i95', 1261, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:franconia-rd', 'i95x:washington-dc', 'i95', 1262, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-springfield', 'i95x:seminary-rd', 'i95', 1263, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-springfield', 'i95x:washington-blvd-pentagon', 'i95', 1264, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-springfield', 'i95x:washington-dc', 'i95', 1265, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-i395', 'i95x:seminary-rd', 'i95', 1263, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-i395', 'i95x:washington-blvd-pentagon', 'i95', 1264, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-i395', 'i95x:washington-dc', 'i95', 1265, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i395-n', 'i95x:seminary-rd', 'i95', 1266, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i395-n', 'i95x:washington-blvd-pentagon', 'i95', 1267, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i395-n', 'i95x:washington-dc', 'i95', 1268, NULL, NULL);
@@ -440,13 +441,14 @@ INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end
 -- the "I-395-95-495" family is GP entry at TP2NB, not this movement). SB: 495
 -- trips ending "TO I-95 HOV" (south) or "TO I-395-495 HOV" (north, reversible)
 -- both continue as i95-corridor trips from the bare "I-495" origin.
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-springfield', 'i495x:i395-95-hov', NULL, NULL, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-springfield', 'i495x:i495-hov', NULL, NULL, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i95x:i495-i395', 'i495x:i395-95-hov', NULL, NULL, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i95-hov', 'i95x:i495-springfield', NULL, NULL, NULL, NULL);
-INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-495-hov', 'i95x:i495-springfield', NULL, NULL, NULL, NULL);
+INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i395-495-hov', 'i95x:i495-i395', NULL, NULL, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i495x:i66-jct', 'i66:capital-beltway-begin', NULL, NULL, NULL, NULL);
 INSERT INTO graph_edge (from_node, to_node, feed, od_pair_id, start_zone_id, end_zone_id) VALUES ('i66:capital-beltway-end', 'i495x:i66-jct', NULL, NULL, NULL, NULL);
 
--- Public graph: maps the 60 VDOT-internal node slugs above to 46 real-world
+-- Public graph: maps the 61 VDOT-internal node slugs above to 46 real-world
 -- places an agent can reason about without OD-pair jargon. Merged groups
 -- collapse directional twins, junction pseudo-node clusters, and duplicate
 -- labels into one place; everything else is a 1:1 rename.
@@ -459,6 +461,7 @@ CREATE TABLE graph_node_alias (
 
 -- Merged groups (21 raw nodes -> 7 public nodes).
 -- Springfield interchange: the express-to-express HOV/395/495 ramp cluster (see §1).
+INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i495-i395', 'pub:springfield', 'Springfield Interchange', 'junction');
 INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i495-springfield', 'pub:springfield', 'Springfield Interchange', 'junction');
 INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i95x:i395-95', 'pub:springfield', 'Springfield Interchange', 'junction');
 INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i495x:i395-95-hov', 'pub:springfield', 'Springfield Interchange', 'junction');
@@ -528,7 +531,7 @@ INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corri
 INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:spout-run', 'pub:spout-run', 'Spout Run Parkway', 'i66_itb');
 INSERT INTO graph_node_alias (node_id, public_node_id, public_name, public_corridor) VALUES ('i66:sycamore-st', 'pub:sycamore-st', 'Sycamore Street', 'i66_itb');
 
--- Public views. The 5 free junction connectors (Springfield ramps + the
+-- Public views. The 6 free junction connectors (Springfield ramps + the
 -- Beltway/66 ramps) land on from_node/to_node that both collapse into the
 -- same junction public node -- they priced nothing to begin with, so
 -- `feed IS NOT NULL` drops them rather than surfacing them as odd

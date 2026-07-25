@@ -8,8 +8,8 @@ docs/:
   graph-connectivity-southbound.dot   -- every north->south express edge
 
 I-495 and I-66 are always-open (not reversible), so I-66's 20 zone edges and
-the 5 free junction connectors appear in BOTH files; only the reversible
-I-95/395 + I-495 express OD pairs split by direction. All 60 nodes appear in
+the 6 free junction connectors appear in BOTH files; only the reversible
+I-95/395 + I-495 express OD pairs split by direction. All 61 nodes appear in
 both files, including "no-exit" sinks (no outgoing edge in that direction).
 
 Render:  dot -Tsvg docs/graph-connectivity-northbound.dot -o nb.svg
@@ -38,6 +38,10 @@ I95_ORDER = [
     "i95x:i395-n",
     "i95x:i395-95",
     "i95x:telegraph-rd",
+    # The I-395 approach to the Springfield interchange (VDOT zones 4-1
+    # NB/SB), just north of the I-95 side it was split out of -- see
+    # docs/toll-graph-spec.md §1.
+    "i95x:i495-i395",
     "i95x:i495-springfield",
     "i95x:i95-s-near-backlick-rd",
     "i95x:turkeycock",

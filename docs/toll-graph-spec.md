@@ -36,24 +36,36 @@ connector edges — the express-lane ramps and interchange gores themselves
 carry no toll:
 
 - **Springfield**: the direct express-to-express ramps between the I-95/395
-  Express Lanes and the I-495 Express Lanes, wired to the OD families the feed
-  actually prices for through movements. Northbound:
-  `i95x:i495-springfield` → `i495x:i395-95-hov` (the "I-395-95 HOV TO …"
-  495-NB family starts at gantry TP1NB — the express entry; the similarly
-  named "I-395-95-495" family starts at TP2NB and is GP-lane entry, not this
-  movement). Southbound: `i495x:i95-hov` → `i95x:i495-springfield` (continue
-  south on 95 Express) and `i495x:i395-495-hov` → `i95x:i495-springfield`
-  (continue north on the reversible 395 lanes, availability per
-  `link_status`) — both continue as i95-corridor trips from the bare "I-495"
-  origin.
+  Express Lanes and the I-495 Express Lanes. The I-95 arrival and the I-395
+  arrival are **separate nodes**, because the feed prices their 495
+  continuations from different OD families and VDOT's own zone ids say they
+  are different places: `i95x:i495-springfield` carries zones 3N-6 NB/SB
+  (I-95 side) and `i95x:i495-i395` carries zones 4-1 SB/NB (I-395 side).
+  Merging them let a journey pick whichever family was cheaper regardless of
+  which road it arrived on. Four connectors, one per zone pairing:
+  - `i95x:i495-springfield` → `i495x:i495-hov` — I-95 NB continuing onto
+    495 NB, the "I-495 HOV TO …" family.
+  - `i95x:i495-i395` → `i495x:i395-95-hov` — I-395 SB continuing onto 495 NB,
+    the "I-395-95 HOV TO …" family (starts at gantry TP1NB, the express
+    entry; the similarly named "I-395-95-495" family starts at TP2NB and is
+    GP-lane entry, not this movement).
+  - `i495x:i95-hov` → `i95x:i495-springfield` — continue south on 95 Express.
+  - `i495x:i395-495-hov` → `i95x:i495-i395` — continue north on the
+    reversible 395 lanes, availability per `link_status`.
+
+  Both southbound continuations resume as i95-corridor trips from the bare
+  "I-495" origin. The split is corroborated by Transurban's published
+  entry/exit network, which chains all 13 I-95 arrivals into the `I-495 HOV`
+  family and all 3 I-395 arrivals into `I-395-95 HOV`, with no overlap — see
+  `tests/test_expresslanes_topology.py`.
 - **Beltway/66 interchange**: `i495x:i66-jct` → `i66:capital-beltway-begin`
   (entering I-66 EB from the Beltway) and `i66:capital-beltway-end` →
   `i495x:i66-jct` (exiting I-66 WB onto the Beltway) — one-way, matching the
   zone names themselves (there's no ramp from the *end* of EB or into the
   *start* of WB).
 
-That's the whole topology: **60 nodes, 342 edges** (317 i95/495 dynamic + 20
-i66 dynamic + 5 free junction).
+That's the whole topology: **61 nodes, 343 edges** (317 i95/495 dynamic + 20
+i66 dynamic + 6 free junction).
 
 ## 2. How it's stored in Postgres
 
@@ -99,7 +111,7 @@ physical facility it sits on; an edge's corridor, if ever needed, is
 not `i95x:garrisonville-rd-610`); the descriptive form — road name, VDOT exit
 number — lives in `name`, which is what a prompt or UI actually shows.
 
-**Graph schema version: 1.1.1** (semver, same pattern as the poller schema).
+**Graph schema version: 1.2.0** (semver, same pattern as the poller schema).
 Bump *major* on a DDL change or a change to what an edge key means, *minor*
 on additive columns/nodes/corridors (e.g. DTR graduating in), *patch* on seed
 corrections or comments. The version header in `db/graph.sql` and the version
@@ -171,7 +183,8 @@ Russell Rd · Telegraph Rd · Rt 17 / 95 NB · Rt 17 / 95 SB · Seminary Rd ·
 Shirlington Circle · Alban · I-95 S / Ft Belvoir · I-95 S near Dale Blvd ·
 I-95 S near Backlick Rd · I-395/95 · I-395 N · Washington Blvd / Pentagon ·
 DC/Pentagon/Washington Blvd · Pentagon · Washington DC ·
-I-495 (Springfield) — the Springfield junction node.
+I-495 (Springfield, I-95 side) · I-495 (I-395 side) — the two Springfield
+junction nodes, split by arrival road per §1.
 
 ### i495_express access nodes (18)
 
@@ -188,10 +201,11 @@ carry the distinct OD-pair endpoints the feed prices separately, not because
 there are three Westpark locations. A UI showing node names should not imply
 otherwise.
 
-### Junction points (2, 5 edges)
+### Junction points (2, 6 edges)
 
-See §1 — Springfield (`i95x:i495-springfield` → `i495x:i395-95-hov`;
-`i495x:i95-hov` / `i495x:i395-495-hov` → `i95x:i495-springfield`) and the
+See §1 — Springfield (`i95x:i495-springfield` → `i495x:i495-hov`;
+`i95x:i495-i395` → `i495x:i395-95-hov`; `i495x:i95-hov` →
+`i95x:i495-springfield`; `i495x:i395-495-hov` → `i95x:i495-i395`) and the
 Beltway/66 interchange (`i495x:i66-jct` → `i66:capital-beltway-begin`,
 `i66:capital-beltway-end` → `i495x:i66-jct`).
 
@@ -225,8 +239,8 @@ new `corridor` value (additive, minor version bump) — not a bespoke system.
   `FRAN-SPRINGFIELD (289)` / `…PKWY (289)` / `…PKWY (RT 289)`), stray
   whitespace, both `" TO "` and `" to "` as delimiters. Every raw spelling
   was hand-curated once into the ~50 canonical `i95x:`/`i495x:` node slugs
-  above (84 raw OD-pair endpoint tokens → 52 nodes, plus the 8 already-clean
-  i66 zones = 60). Nothing in this graph, or in any future consumer,
+  above (84 raw OD-pair endpoint tokens → 53 nodes, plus the 8 already-clean
+  i66 zones = 61). Nothing in this graph, or in any future consumer,
   re-parses a name at runtime — join on `od_pair_id` /
   `start_zone_id`+`end_zone_id`, never on `od_pair_name`/`start_zone_name`.
 - **Reversibility lives in `link_status`, not in the graph.** I-95/395 lane
@@ -256,7 +270,7 @@ places instead. **The raw `graph_node`/`graph_edge` tables and `route()` are
 unchanged** — this is a purely additive read layer.
 
 `graph_node_alias` (seeded in `db/graph.sql`, one row per raw node) maps all
-60 raw nodes to 46 public ones. `public_graph_node` and `public_graph_edge`
+61 raw nodes to 46 public ones. `public_graph_node` and `public_graph_edge`
 — the views an agent actually queries — are derived from it:
 
 ```sql
@@ -275,7 +289,7 @@ are the same real place; everything else is a 1:1 rename
 
 | Public node | Public name | Raw members |
 |---|---|---|
-| `pub:springfield` | Springfield Interchange | `i95x:i495-springfield`, `i95x:i395-95`, `i495x:i395-95-hov`, `i495x:i395-495-hov`, `i495x:i395-95-495`, `i495x:i95-hov`, `i495x:i495-hov` |
+| `pub:springfield` | Springfield Interchange | `i95x:i495-springfield`, `i95x:i495-i395`, `i95x:i395-95`, `i495x:i395-95-hov`, `i495x:i395-495-hov`, `i495x:i395-95-495`, `i495x:i95-hov`, `i495x:i495-hov` |
 | `pub:i66-beltway` | I-66 / Beltway Interchange | `i495x:i66-jct`, `i66:capital-beltway-begin`, `i66:capital-beltway-end` |
 | `pub:westpark` | Westpark Dr | `i495x:westpark`, `i495x:westpark-b`, `i495x:westpark-c` |
 | `pub:rt-267` | Rt 267 (Dulles Access) | `i495x:rt-267`, `i495x:jones-branch-rt267` |
@@ -318,7 +332,7 @@ priced movements between raw nodes that all happen to collapse into
 above: `pub:springfield`'s carries all 4 of its OD pairs, and
 `pub:i66-beltway` carries 2 (zone 3100→3100 from `i66:capital-beltway-begin`,
 3230→3230 from `i66:capital-beltway-end`) — `MIN(price)`, never a single
-assumed lookup. Separately, the 5 free junction connectors (the Springfield
+assumed lookup. Separately, the 6 free junction connectors (the Springfield
 ramps and the Beltway/66 ramps) *also* land on two raw nodes that collapse
 into the same public node — but they priced nothing to begin with, so
 `public_graph_edge`'s `feed IS NOT NULL` filter drops them rather than
@@ -339,7 +353,7 @@ the same access point.
 
 The LLM never traverses the graph itself. A deterministic `route(origin,
 destination, at_time)` tool loads the full graph in one query (trivially
-small — 60 nodes, 342 edges), prices each edge from `trip_pricing` per §3,
+small — 61 nodes, 343 edges), prices each edge from `trip_pricing` per §3,
 and runs plain-code DFS over **legitimate journeys**: a journey is a sequence
 of whole priced trips joined only by free connector edges, since a priced
 edge is already a complete billed trip and may never be followed directly by
@@ -349,7 +363,7 @@ segments" above — summing same-corridor sub-trips is never a legitimate
 alternative to the real direct trip — and it makes overshoot-and-return via a
 reversible lane's opposite-direction edge structurally impossible. The
 cheapest journey by total price is returned; the LLM only picks endpoints
-from the node list and narrates the result. Only the ~60-node name list ever
+from the node list and narrates the result. Only the ~61-node name list ever
 needs to enter the model's context — never edge or pricing data — which keeps
 a cheap model viable.
 

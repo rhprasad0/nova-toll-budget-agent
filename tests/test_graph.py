@@ -196,10 +196,10 @@ def test_node_and_edge_counts_match_documented_scale():
     # Not a strict requirement, but a cheap early warning if the seed and
     # the doc's stated inventory (§1/§4) drift apart.
     corridor_counts = Counter(NODES.values())
-    assert corridor_counts == {"i95_express": 34, "i495_express": 18, "i66_itb": 8}
+    assert corridor_counts == {"i95_express": 35, "i495_express": 18, "i66_itb": 8}
     # i95/i66 totals are already proven by the coverage tests' set-equality
     # checks against the feed files -- only the connector count needs a home.
-    assert Counter(e["feed"] for e in EDGES)[None] == 5
+    assert Counter(e["feed"] for e in EDGES)[None] == 6
 
 
 # --- Public graph (alias map + derived views) -------------------------------
@@ -255,7 +255,7 @@ def test_public_corridor_counts():
 
 def test_connectors_collapse_inside_junctions():
     connectors = [e for e in EDGES if e["feed"] is None]
-    assert len(connectors) == 5
+    assert len(connectors) == 6
     for e in connectors:
         pub_from = ALIAS_MAP[e["from_node"]]
         pub_to = ALIAS_MAP[e["to_node"]]

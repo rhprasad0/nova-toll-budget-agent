@@ -3,6 +3,11 @@
 **Generated:** 2026-07-25 · **Source of truth:** `db/graph.sql` (graph schema
 v1.1.1) · **Spec:** `docs/toll-graph-spec.md` §6–7
 
+> **Superseded snapshot.** This audited graph schema v1.1.1. v1.2.0 split the
+> Springfield node by arrival road (61 nodes / 343 edges / 6 connectors);
+> counts below are the pre-split figures. See `docs/toll-graph-spec.md` §1
+> and `tests/test_expresslanes_topology.py`.
+
 ## 1. Summary
 
 This report independently and exhaustively verifies two claims

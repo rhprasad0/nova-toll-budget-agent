@@ -214,7 +214,16 @@ def _shortest_path(
         }
 
     open_edges = [e for e in edges if e.link_status != "CLOSED"]
-    by_key = {(e.from_node, e.to_node): e for e in open_edges}
+    # Cheapest wins when a node pair carries more than one priced key -- the
+    # same rule catalog.py gives the model for free-form SQL over
+    # public_graph_edge. A plain dict comprehension would keep whichever edge
+    # came last in seed order instead, which was harmless only while the raw
+    # graph had zero parallel edges (docs/graph-connectivity-audit.md F4).
+    by_key: dict[tuple[str, str], PricedEdge] = {}
+    for e in open_edges:
+        key = (e.from_node, e.to_node)
+        if key not in by_key or e.price_usd < by_key[key].price_usd:
+            by_key[key] = e
     adjacency: dict[str, list[str]] = {}
     for e in open_edges:
         adjacency.setdefault(e.from_node, []).append(e.to_node)
@@ -226,7 +235,7 @@ def _shortest_path(
     # bans both within-corridor chaining (summing sub-trips to undercut the
     # real direct trip's price) and overshoot-and-return through a reversible
     # lane's opposite-direction edge. Connector-to-connector stays legal. The
-    # graph is tiny (60 nodes, 342 edges, measured <=3 legitimate journeys per
+    # graph is tiny (61 nodes, 343 edges, measured <=3 legitimate journeys per
     # node pair, 1-6 edges each) so plain exhaustive DFS is cheap -- no need
     # for a shortest-path algorithm at all.
     journeys: list[tuple[Decimal, tuple[str, ...]]] = []
@@ -268,7 +277,7 @@ def _shortest_path(
 def route(origin: str, destination: str, at_time: datetime) -> dict:
     """Cheapest legitimate journey between two toll graph nodes at a given time.
 
-    Loads the full toll graph (60 nodes, 342 edges) plus each dynamic edge's
+    Loads the full toll graph (61 nodes, 343 edges) plus each dynamic edge's
     latest trip_pricing row at or before at_time, then enumerates every
     legitimate journey by DFS: a sequence of whole priced trips joined only
     by free connectors, since a priced edge is a complete billed trip and is

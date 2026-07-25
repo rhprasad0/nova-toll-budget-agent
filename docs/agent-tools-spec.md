@@ -25,7 +25,7 @@ they like and we learn the real access patterns from traces. Companion specs:
   contain errors — never "verified accurate." Traces are collected and users
   are told so.
 - **The LLM never traverses the graph.** Routing is the deterministic
-  `route()` tool per toll-graph-spec's traversal contract; only the ~60-node
+  `route()` tool per toll-graph-spec's traversal contract; only the ~61-node
   name list ever enters model context, never bulk edge or pricing data.
 
 ## 2. Toolset
@@ -105,7 +105,7 @@ One read-only SQL statement in, capped rows out.
 
 The deterministic router promised by toll-graph-spec's traversal contract.
 
-- Loads the **whole graph in one query** (60 nodes, 342 edges — trivially
+- Loads the **whole graph in one query** (61 nodes, 343 edges — trivially
   small) plus each dynamic edge's latest price at or before `at_time`.
 - **`at_time` is required.** Prices are dynamic and the express lanes are
   reversible, so a quote is only meaningful against a stated instant; "right

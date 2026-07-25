@@ -3,6 +3,11 @@
 **Generated:** 2026-07-22 · **Source of truth:** `db/graph.sql` (graph schema
 v1.0.0) · **Spec:** `docs/toll-graph-spec.md`
 
+> **Superseded snapshot.** This audited graph schema v1.0.0. v1.2.0 split the
+> Springfield node by arrival road (61 nodes / 343 edges / 6 connectors);
+> counts below are the pre-split figures. See `docs/toll-graph-spec.md` §1
+> and `tests/test_expresslanes_topology.py`.
+
 ## 1. Summary
 
 This report audits the hand-curated toll-network graph the budget agent routes
