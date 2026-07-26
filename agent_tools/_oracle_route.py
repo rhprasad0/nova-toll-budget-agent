@@ -1,9 +1,5 @@
 """Shared route-resolution/RDS-connection scaffolding for the oracle-backed
-routing tools (i95_route.py, i495_route.py). Byte-identical across both --
-i66_route.py duplicates this same shape (a `ponytail:` comment there flags
-it as worth extracting once a third oracle-backed tool needs it; this pair
-is that third and fourth case) but is left untouched since it isn't part of
-this change and migrating it buys nothing beyond DRY-ness.
+routing tools (i66_route.py, i95_route.py, i495_route.py).
 
 Each tool still owns its own oracle file location, its own facility filter,
 and its own pricing SQL/gate logic -- only the parts that are truly

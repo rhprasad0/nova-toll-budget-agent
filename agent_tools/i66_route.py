@@ -22,14 +22,20 @@ from __future__ import annotations
 
 import json
 import logging
-import os
+import sys
 from datetime import datetime
-from decimal import Decimal
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-import boto3
 from strands import tool
+
+# agent_tools/ has no __init__.py (flat siblings) and this module is
+# imported both as a flat top-level module (agent_tools/tests/conftest.py's
+# sys.path insert) and as agent_tools.i66_route (dotted) -- neither form
+# puts agent_tools/ itself on sys.path, so a plain "import _oracle_route"
+# would fail under the dotted form. Ensuring our own directory is on
+# sys.path here works under both.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _oracle_route  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -42,124 +48,26 @@ _ORACLE = json.loads(_ORACLE_PATH.read_text())
 _NODES: dict = _ORACLE["nodes"]
 _PAIRS: list = _ORACLE["pairs"]
 
-_EASTERN = ZoneInfo("America/New_York")
+_LABEL_INDEX = _oracle_route.label_index(_NODES)
+
+# Local aliases so tests can monkeypatch these by name on this module (the
+# established convention here and in i95_route.py/i495_route.py), even
+# though the implementation now lives in the shared _oracle_route module.
+_resolve_at_time = _oracle_route.resolve_at_time
+_env_connect = _oracle_route.env_connect
 
 
-def _label_index(nodes: dict) -> dict[str, list[str]]:
-    idx: dict[str, list[str]] = {}
-    for node_id, node in nodes.items():
-        idx.setdefault(node["label"].casefold(), []).append(node_id)
-    return idx
-
-
-_LABEL_INDEX = _label_index(_NODES)
-
-
-def _resolve(query: str) -> list[str]:
-    """Candidate node ids for a caller-supplied label (case-insensitive) or raw node id."""
-    if query in _NODES:
-        return [query]
-    return _LABEL_INDEX.get(query.casefold(), [])
-
-
-# ponytail: resolution/matching logic duplicated with i95_route.py; extract
-# if a third oracle-backed tool needs the same shape.
 def _lookup(origin: str, destination: str) -> dict:
-    # Some interchanges are entry-only or exit-only (e.g. Westmoreland St can
-    # never be an origin), so the two suggestion lists are role-filtered --
-    # suggesting a label that can never fill the role being asked about would
-    # guarantee the caller's next call also fails.
-    origin_labels = sorted({_NODES[p["entry"]]["label"] for p in _PAIRS})
-    destination_labels = sorted({_NODES[p["exit"]]["label"] for p in _PAIRS})
-
-    origin_ids = _resolve(origin)
-    if not origin_ids:
-        return {
-            "error": f"unknown origin {origin!r}: no matching label or node id in the i66 oracle",
-            "valid_options": origin_labels,
-        }
-    destination_ids = _resolve(destination)
-    if not destination_ids:
-        return {
-            "error": f"unknown destination {destination!r}: no matching label or node id in the i66 oracle",
-            "valid_options": destination_labels,
-        }
-
-    matches = [
-        p for p in _PAIRS if p["entry"] in origin_ids and p["exit"] in destination_ids
-    ]
-
-    if not matches:
-        reachable = sorted(
-            {_NODES[p["exit"]]["label"] for p in _PAIRS if p["entry"] in origin_ids}
-        )
-        return {
-            "error": f"no direct trip from {origin!r} to {destination!r} in the i66 oracle",
-            "valid_options": reachable,
-        }
-
-    if len(matches) > 1:
-        # Unreachable today -- verified 96/96 pairs unique on (entry, exit).
-        # Guarded for when scripts/fetch_i66_oracle.py next refreshes
-        # oracles/i66.json and that invariant might not hold.
-        return {
-            "error": f"ambiguous trip: {origin!r} to {destination!r} matches {len(matches)} entry/exit combinations",
-            "valid_options": sorted(
-                {p["entry"] for p in matches} | {p["exit"] for p in matches}
-            ),
-        }
-
-    p = matches[0]
-    return {
-        "origin": origin,
-        "destination": destination,
-        "direction": p["direction"],
-        "entry": {"node_id": p["entry"], "label": _NODES[p["entry"]]["label"]},
-        "exit": {"node_id": p["exit"], "label": _NODES[p["exit"]]["label"]},
-        "legs": [{"start_zone_id": p["start_zone"], "end_zone_id": p["end_zone"]}],
-    }
-
-
-def _resolve_at_time(at_time: str | None, *, now=None) -> datetime:
-    """Parse the caller's at_time, defaulting to now (America/New_York).
-
-    A naive (no-offset) string is assumed America/New_York. Raises
-    ValueError on an unparseable string -- the caller turns that into an
-    error response before any DB connection opens. `now` is a zero-arg
-    callable injection point for tests; production callers never pass it.
-    """
-    if at_time is None:
-        return (now or (lambda: datetime.now(_EASTERN)))()
-    dt = datetime.fromisoformat(at_time)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=_EASTERN)
-    return dt
-
-
-def _env_connect():
-    """Connect to RDS as pricing_reader via IAM auth.
-
-    Lazy `import psycopg`: it isn't in the fast dev/test path (mirrors
-    infra/build/loader/handler.py's _connect(), which has the same
-    constraint for the deployed Lambda zip). boto3 stays a top-level import
-    -- it's already a main dependency and carries no such cost.
-    """
-    import psycopg  # type: ignore[import-not-found]
-
-    host = os.environ["DB_HOST"]
-    port = int(os.environ["DB_PORT"])
-    user = os.environ["DB_USER"]
-    token = boto3.client("rds").generate_db_auth_token(
-        DBHostname=host, Port=port, DBUsername=user
-    )
-    return psycopg.connect(
-        host=host,
-        port=port,
-        dbname=os.environ["DB_NAME"],
-        user=user,
-        password=token,
-        sslmode="verify-full",
-        sslrootcert=os.environ["DB_CA_BUNDLE_PATH"],
+    return _oracle_route.lookup(
+        origin,
+        destination,
+        nodes=_NODES,
+        pairs=_PAIRS,
+        label_idx=_LABEL_INDEX,
+        oracle_name="i66",
+        build_legs=lambda p: [
+            {"start_zone_id": p["start_zone"], "end_zone_id": p["end_zone"]}
+        ],
     )
 
 
@@ -200,16 +108,6 @@ def _price_i66_leg(
         "price_usd": str(rate),
         "corridor_name": corridor_name,
         "priced_as_of": interval_end_at.isoformat(),
-    }
-
-
-def _build_response(result: dict, priced_legs: list[dict], at_time: datetime) -> dict:
-    total = sum((Decimal(leg["price_usd"]) for leg in priced_legs), Decimal("0"))
-    return {
-        **result,
-        "at_time": at_time.isoformat(),
-        "legs": priced_legs,
-        "total_usd": str(total),
     }
 
 
@@ -304,7 +202,7 @@ def i66_route(origin: str, destination: str, at_time: str | None = None) -> dict
         )
         return error
 
-    response = _build_response(result, [priced_leg], resolved_at_time)
+    response = _oracle_route.build_response(result, [priced_leg], resolved_at_time)
     logger.info(
         "i66_route ok origin=%r destination=%r entry=%s exit=%s direction=%s "
         "at_time=%s total_usd=%s legs=%s",
