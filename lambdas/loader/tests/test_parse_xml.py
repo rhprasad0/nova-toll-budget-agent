@@ -46,3 +46,22 @@ def test_missing_required_attribute_fails_loudly():
 def test_no_opt_rows_raises():
     with pytest.raises(ValueError, match="no <opt> rows"):
         parse_trip_pricing_xml("<data></data>")
+
+
+def test_entity_expansion_is_rejected():
+    payload = """<!DOCTYPE data [<!ENTITY xxe 'boom'>]><data><opt /></data>"""
+    with pytest.raises(Exception):  # defusedxml raises a dedicated security exception
+        parse_trip_pricing_xml(payload)
+
+
+def test_excessive_rows_are_rejected():
+    first_opt = SAMPLE_XML.split("<opt", 1)[1].split("/>", 1)[0]
+    payload = "<data>" + "".join(f"<opt{first_opt}/>" for _ in range(1001)) + "</data>"
+    with pytest.raises(ValueError, match="row count"):
+        parse_trip_pricing_xml(payload)
+
+
+def test_out_of_range_toll_is_rejected():
+    payload = SAMPLE_XML.replace('ZoneTollRate="0.0000"', 'ZoneTollRate="9999.99"', 1)
+    with pytest.raises(ValueError, match="outside allowed range"):
+        parse_trip_pricing_xml(payload)

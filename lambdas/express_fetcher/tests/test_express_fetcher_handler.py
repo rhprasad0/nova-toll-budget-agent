@@ -13,6 +13,7 @@ def reset_module_state(monkeypatch):
     """handler.py caches clients as module globals; isolate tests."""
     monkeypatch.setattr(handler, "_clients", {})
     monkeypatch.setenv("RAW_BUCKET", "nova-toll-raw-test")
+    monkeypatch.setenv("RAW_KMS_KEY_ARN", "arn:aws:kms:us-east-1:123456789012:key/raw")
 
 
 @pytest.fixture
@@ -71,6 +72,8 @@ def test_success_path_puts_object_and_metric(monkeypatch, stub_aws, caplog):
     put_kwargs = stub_aws["s3"].put_object.call_args.kwargs
     assert put_kwargs["Key"] == handler._s3_key(datetime.now(UTC))
     assert put_kwargs["Bucket"] == "nova-toll-raw-test"
+    assert put_kwargs["ServerSideEncryption"] == "aws:kms"
+    assert put_kwargs["SSEKMSKeyId"].endswith("/raw")
 
     stub_aws["cloudwatch"].put_metric_data.assert_called_once()
     metric_call = stub_aws["cloudwatch"].put_metric_data.call_args.kwargs

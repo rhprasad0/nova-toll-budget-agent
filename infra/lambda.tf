@@ -48,6 +48,7 @@ resource "aws_lambda_function" "fetcher" {
       I95_TOKEN_PARAM = var.i95_token_param_name
       I66_TOKEN_PARAM = var.i66_token_param_name
       RAW_BUCKET      = aws_s3_bucket.raw.bucket
+      RAW_KMS_KEY_ARN = aws_kms_key.raw.arn
     }
   }
 
@@ -124,7 +125,8 @@ resource "aws_lambda_function" "express_fetcher" {
 
   environment {
     variables = {
-      RAW_BUCKET = aws_s3_bucket.raw.bucket
+      RAW_BUCKET      = aws_s3_bucket.raw.bucket
+      RAW_KMS_KEY_ARN = aws_kms_key.raw.arn
     }
   }
 

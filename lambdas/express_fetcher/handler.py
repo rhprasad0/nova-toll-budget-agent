@@ -71,7 +71,13 @@ def handler(event: dict[str, Any], _context: object) -> None:
     now = datetime.now(UTC)
     body = _fetch()
     key = _s3_key(now)
-    _client("s3").put_object(Bucket=os.environ["RAW_BUCKET"], Key=key, Body=body)
+    _client("s3").put_object(
+        Bucket=os.environ["RAW_BUCKET"],
+        Key=key,
+        Body=body,
+        ServerSideEncryption="aws:kms",
+        SSEKMSKeyId=os.environ["RAW_KMS_KEY_ARN"],
+    )
     _client("cloudwatch").put_metric_data(
         Namespace="NovaToll",
         MetricData=[

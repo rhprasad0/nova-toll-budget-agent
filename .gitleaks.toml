@@ -1,0 +1,7 @@
+title = "Nova Toll secret scanning configuration"
+
+[allowlist]
+description = "PostgreSQL EXCLUDED pseudo-table is not a credential"
+regexes = [
+  '''s3_key = EXCLUDED''',
+]

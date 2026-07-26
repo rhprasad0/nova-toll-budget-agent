@@ -59,8 +59,42 @@ def test_feed_from_key(key, feed):
 
 
 def test_feed_from_key_raises_without_feed_segment():
-    with pytest.raises(ValueError, match="cannot determine feed"):
+    with pytest.raises(ValueError, match="unsupported raw object key"):
         handler._feed_from_key("raw/date=2026-07-21/1440Z.csv")
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "raw/feed=i95-live/date=2026-07-21/1440Z.csv",
+        "raw/feed=i95/date=2026-07-21/not-a-time.csv",
+        "raw/feed=other/date=2026-07-21/1440Z.csv",
+        "raw/feed=i95/date=2026-07-21/1440Z.csv/extra",
+    ],
+)
+def test_feed_from_key_rejects_untrusted_shapes(key):
+    with pytest.raises(
+        ValueError, match="unsupported raw object key|unexpected extension"
+    ):
+        handler._feed_from_key(key)
+
+
+def test_validate_record_rejects_wrong_bucket(monkeypatch):
+    monkeypatch.setenv("RAW_BUCKET", "expected-bucket")
+    with pytest.raises(ValueError, match="unexpected source bucket"):
+        handler._validate_record(
+            "attacker-bucket", "raw/feed=i95/date=2026-07-21/1440Z.csv", 1
+        )
+
+
+def test_validate_record_rejects_oversized_event(monkeypatch):
+    monkeypatch.setenv("RAW_BUCKET", "expected-bucket")
+    with pytest.raises(ValueError, match="outside allowed range"):
+        handler._validate_record(
+            "expected-bucket",
+            "raw/feed=i95/date=2026-07-21/1440Z.csv",
+            handler.MAX_RAW_OBJECT_BYTES + 1,
+        )
 
 
 def test_row_params_includes_s3_key_and_all_row_fields_i95():

@@ -38,11 +38,12 @@ resource "aws_lambda_permission" "eventbridge_invoke_express_fetcher" {
 # --- S3 raw/ ObjectCreated → toll-loader ------------------------------------
 
 resource "aws_lambda_permission" "s3_invoke_loader" {
-  statement_id  = "AllowS3Invoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.loader.function_name
-  principal     = "s3.amazonaws.com"
-  source_arn    = aws_s3_bucket.raw.arn
+  statement_id   = "AllowS3Invoke"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.loader.function_name
+  principal      = "s3.amazonaws.com"
+  source_arn     = aws_s3_bucket.raw.arn
+  source_account = data.aws_caller_identity.current.account_id
 }
 
 resource "aws_s3_bucket_notification" "raw" {
