@@ -1,7 +1,12 @@
-# Nova Toll Budget Agent
+# TollChat
 
-Ingest pipeline for Northern Virginia express-lane toll prices, plus the
-published route maps needed to interpret them.
+`Status: pre-launch — tollchat.ai`
+
+TollChat answers one question: what will this trip cost on Northern
+Virginia's toll roads? Ask it in plain language — an origin, a destination —
+and `agent/toll_agent.py` (a Bedrock Claude Haiku agent) resolves it to a
+real interchange and a real price by calling the pricing tools below. No
+public product yet; this repo is the pipeline and tools that back it.
 
 **What runs.** A fetcher Lambda polls VDOT's two SmarterRoads tolling feeds
 every 10 minutes and lands the raw payloads in S3; a loader Lambda parses each
@@ -14,13 +19,15 @@ tick to poll Transurban's own live Express Lanes snapshot, filling
 
 | Path | What |
 |---|---|
+| `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the five tools below into an answer — never touches RDS or SQL directly |
+| `agent_tools/` | five Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`), `find_toll_locations` turns a vague human place name into the exact label the other four expect |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
 | `lambdas/express_fetcher` | secondary live-source poller (Transurban, no DB access itself — feeds the loader) |
 | `db/` | the per-feed schema and the `loader_writer` role |
-| `infra/` | Terraform for both Lambdas, S3, RDS and observability |
+| `infra/` | Terraform for both Lambdas, S3, RDS, observability, and the tollchat.ai coming-soon site (DNS records in Cloudflare, static page on CloudFront) |
 | `oracles/` | operator-published route maps (see below) |
-| `agent_tools/` | four Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`) |
 | `vdot_sample_data/` | committed raw feed samples the parsers are tested against |
+| `site/` | the static tollchat.ai coming-soon page served by CloudFront |
 
 **Oracles.** `oracles/i95.json` and `oracles/i66.json` are route maps published
 by the operators themselves — Transurban for the 95/395/495 Express Lanes, VDOT
