@@ -8,4 +8,4 @@ Give 1-2 sentence explanations on more complex topics. Offer to make explanatory
 
 # Repo rules
 
-All commits must be done on the main branch unless in a worktree.
+Perform work in new worktree branches instead of working in the main branch.
