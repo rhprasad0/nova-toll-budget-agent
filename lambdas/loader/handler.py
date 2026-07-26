@@ -11,7 +11,7 @@ import dataclasses
 import logging
 import os
 import urllib.parse
-from typing import Any
+from typing import Any, LiteralString, cast
 
 import boto3
 
@@ -202,7 +202,13 @@ def _load(
         with conn.transaction():
             with conn.cursor() as cur:
                 for row in rows:
-                    cur.execute(upsert_sql, _row_params(row, s3_key=s3_key))
+                    # upsert_sql is one of the module-level UPSERT_*_SQL literals,
+                    # but _FEED_CONFIG's dict[str, ...] widens it to plain str --
+                    # cast back since psycopg's execute() requires LiteralString.
+                    cur.execute(
+                        cast(LiteralString, upsert_sql),
+                        _row_params(row, s3_key=s3_key),
+                    )
     finally:
         conn.close()
 
