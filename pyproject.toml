@@ -26,8 +26,12 @@ addopts = '-m "not live"'
 # scripts/build_zips.sh — not our code, and gitignored. Don't type-check it.
 exclude = ["**/node_modules", "**/__pycache__", ".venv", "infra/build"]
 
+# agent/toll_agent.py and tests/* sys.path-insert their way to these flat
+# (no __init__.py) sibling dirs at runtime -- pyright can't see that, so it
+# needs the same dirs here to resolve the imports statically.
 [[tool.pyright.executionEnvironments]]
 root = "."
+extraPaths = ["agent_tools", "agent"]
 
 [tool.ruff]
 extend-exclude = ["infra/build"]
