@@ -368,12 +368,12 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "strands-agents" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "psycopg", extra = ["binary"] },
     { name = "pyright" },
     { name = "pytest" },
     { name = "ruff" },
@@ -382,12 +382,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.43.53" },
+    { name = "psycopg", extras = ["binary"] },
     { name = "strands-agents", specifier = ">=1.50.1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "psycopg", extras = ["binary"] },
     { name = "pyright" },
     { name = "pytest" },
     { name = "ruff" },

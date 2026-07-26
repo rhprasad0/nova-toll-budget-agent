@@ -153,24 +153,36 @@ CREATE TABLE trip_pricing_i95_live (
     ingested_at        timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (observed_at, od_pair_id)
 );
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i66_zone_lookup_idx
+    ON trip_pricing_i66 (start_zone_id, end_zone_id, interval_end_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
+    ON trip_pricing_i95 (od_pair_id, interval_end_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
+    ON trip_pricing_i95_live (od_pair_id, observed_at DESC);
 ```
 
-**Schema version: 3.1.0** (semver; bump *major* on an upsert-key or
+**Schema version: 3.2.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`. Bumped from 2.3.0 → 3.0.0 for
 the table split: both tables' keys and column sets changed. Bumped 3.0.0 →
 3.1.0 for the addition of `trip_pricing_i95_live` (see "Secondary live
 source" below) — purely additive, no existing table's keys or columns
-changed, so *minor*.
+changed, so *minor*. Bumped 3.1.0 → 3.2.0 for the three pricing-lookup
+indexes below (`db/add_pricing_read_indexes.sql`) — also purely additive.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from the table itself, which is now the feed
 discriminator (`feed` column and its CHECK are gone). Three read-path indexes
 once existed on the old shared table for the agent's query tools; they were
-dropped along with the agent (see `db/drop_agent_surface.sql`). Neither new
-table carries anything beyond its key — add an index when a real read pattern
-asks for one.
+dropped along with the agent (see `db/drop_agent_surface.sql`). The three
+indexes above are their replacement, added when `agent_tools/i66_route.py`/
+`i95_route.py` (`docs/oracle-tools-spec.md`) became a real read pattern:
+without them, a per-key price lookup was a full scan of that key's entire
+history, since neither table's primary key leads with the lookup column.
 
 Upsert keys: `trip_pricing_i95` — `(interval_end_at, start_zone_id,
 end_zone_id, od_pair_id)`. `od_pair_id` is part of the key because multiple
@@ -190,9 +202,12 @@ and replays remain harmless either way.
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
 | `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | toll-loader Lambda |
+| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py` (`docs/oracle-tools-spec.md`) |
 
-`loader_writer` is the only application role. The agent and its
-`agent_readonly` role were abandoned; see `docs/oracle-findings.md`.
+The original `agent_readonly` role was abandoned along with the free-form
+SQL agent surface it served; see `docs/oracle-findings.md`. `pricing_reader`
+is a new, narrower role for the two pricing-aware route tools — SELECT-only
+on the same three tables `loader_writer` writes, nothing else.
 
 ## Secondary live source: Transurban Express Lanes
 

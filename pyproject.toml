@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.43.53",
     "strands-agents>=1.50.1",
+    "psycopg[binary]",
 ]
 
 [dependency-groups]
@@ -12,7 +13,6 @@ dev = [
     "ruff",
     "pyright",
     "pytest",
-    "psycopg[binary]",
 ]
 
 [tool.pytest.ini_options]

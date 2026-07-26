@@ -40,3 +40,13 @@ def test_schema_has_input_and_output_shapes():
         assert "properties" in doc["input"]
         assert set(doc["input"]["required"]) == {"origin", "destination"}
         assert "oneOf" in doc["output"]
+
+
+def test_schema_input_includes_optional_at_time():
+    # at_time is optional (not in "required"), but must be a declared
+    # property -- otherwise the schema silently drifts from the tool's
+    # actual signature (agent_tools/i66_route.py, i95_route.py).
+    for tool in TOOLS:
+        doc = _schema(tool)
+        assert "at_time" in doc["input"]["properties"], tool
+        assert "at_time" not in doc["input"]["required"], tool

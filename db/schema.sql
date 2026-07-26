@@ -1,6 +1,6 @@
 -- Mirrors docs/poller-spec.md §Database schema. Keep in sync; the schema
 -- version below must match the spec and is enforced by test_schema_contract.py.
--- schema version: 3.1.0
+-- schema version: 3.2.0
 
 -- I-95/395/495: OD pairs exist and legitimately share start/end zones at
 -- different rates, so od_pair_id is part of the key. current_at/od_pair_id/
@@ -65,3 +65,15 @@ CREATE TABLE trip_pricing_i95_live (
     ingested_at        timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (observed_at, od_pair_id)
 );
+
+-- Pricing-lookup indexes for agent_tools/i66_route.py and i95_route.py
+-- (docs/oracle-tools-spec.md) -- see db/add_pricing_read_indexes.sql for the
+-- one-shot migration against an already-live database and the rationale.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i66_zone_lookup_idx
+    ON trip_pricing_i66 (start_zone_id, end_zone_id, interval_end_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
+    ON trip_pricing_i95 (od_pair_id, interval_end_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
+    ON trip_pricing_i95_live (od_pair_id, observed_at DESC);

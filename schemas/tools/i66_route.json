@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "i66_route",
-  "version": "1.0.0",
-  "description": "Flat lookup against oracles/i66.json, VDOT's own I-66 Inside-the-Beltway calculator: resolves origin/destination (label or node id) to the (start_zone_id, end_zone_id) key a future pricing tool looks up in trip_pricing_i66. No DB access, no traversal — VDOT already enumerates every valid direction+entry+exit trip directly. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
+  "version": "2.0.0",
+  "description": "Resolves origin/destination (label or node id) against oracles/i66.json, VDOT's own I-66 Inside-the-Beltway calculator, to the (start_zone_id, end_zone_id) key into trip_pricing_i66 — then prices that key over RDS as of at_time (default: now, America/New_York), returning the most recently published row at or before that time. VDOT already enumerates every valid direction+entry+exit trip directly, so route resolution is a flat lookup, never traversal. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
   "input": {
     "type": "object",
     "properties": {
@@ -13,6 +13,10 @@
       "destination": {
         "type": "string",
         "description": "Same rules as origin."
+      },
+      "at_time": {
+        "type": "string",
+        "description": "ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an explicit UTC offset); a value with no offset is assumed America/New_York. Defaults to now (America/New_York) if omitted. The price returned is the most recently published row at or before this time, never the price this instant -- VDOT's own feed trails real-time by roughly 10-20 minutes (docs/oracle-findings.md section 7); each leg's priced_as_of exposes exactly how stale."
       }
     },
     "required": ["origin", "destination"],
@@ -21,6 +25,11 @@
       {
         "origin": "I-66 West",
         "destination": "Westmoreland St"
+      },
+      {
+        "origin": "I-66 West",
+        "destination": "Westmoreland St",
+        "at_time": "2026-07-26T09:00:00-04:00"
       }
     ]
   },
@@ -45,23 +54,34 @@
           "direction": { "type": "string", "enum": ["EB", "WB"] },
           "entry": { "$ref": "#/$defs/node_ref" },
           "exit": { "$ref": "#/$defs/node_ref" },
+          "at_time": {
+            "type": "string",
+            "description": "The resolved, ISO-8601 time actually used for pricing (the caller's at_time, or now in America/New_York if omitted)."
+          },
           "legs": {
             "type": "array",
             "minItems": 1,
             "maxItems": 1,
-            "description": "Exactly one leg for i66 -- the exact (start_zone_id, end_zone_id) lookup key into trip_pricing_i66. Presence here means the trip is published, not that a priced row exists for it.",
+            "description": "Exactly one priced leg for i66.",
             "items": {
               "type": "object",
               "properties": {
                 "start_zone_id": { "type": "integer" },
-                "end_zone_id": { "type": "integer" }
+                "end_zone_id": { "type": "integer" },
+                "price_usd": { "type": "string", "description": "Decimal string, never a float." },
+                "corridor_name": { "type": "string" },
+                "priced_as_of": {
+                  "type": "string",
+                  "description": "ISO-8601 interval_end_at of the trip_pricing_i66 row actually used -- typically earlier than at_time, since that row is the most recent one published at or before it."
+                }
               },
-              "required": ["start_zone_id", "end_zone_id"],
+              "required": ["start_zone_id", "end_zone_id", "price_usd", "corridor_name", "priced_as_of"],
               "additionalProperties": false
             }
-          }
+          },
+          "total_usd": { "type": "string", "description": "Decimal string sum of legs[].price_usd." }
         },
-        "required": ["origin", "destination", "direction", "entry", "exit", "legs"],
+        "required": ["origin", "destination", "direction", "entry", "exit", "at_time", "legs", "total_usd"],
         "additionalProperties": false
       },
       {
@@ -69,12 +89,12 @@
         "properties": {
           "error": {
             "type": "string",
-            "description": "Unknown origin/destination identifier, no direct trip between a known pair, or (unreachable today) an ambiguous match."
+            "description": "Unknown origin/destination identifier, no direct trip between a known pair, an ambiguous match (unreachable today), a malformed at_time, or no priced row found in trip_pricing_i66 at or before at_time."
           },
           "valid_options": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "The full interchange label list on an unknown identifier, or the reachable destination labels from a known origin, so the caller can self-correct without another round trip."
+            "description": "Non-empty only for resolution errors, where it lists self-correction candidates (the full interchange label list on an unknown identifier, or the reachable destination labels from a known origin). Empty for a malformed at_time or a pricing miss, since retrying the same inputs won't fix either."
           }
         },
         "required": ["error", "valid_options"],
@@ -88,11 +108,25 @@
         "direction": "EB",
         "entry": { "node_id": "1", "label": "I-66 West" },
         "exit": { "node_id": "10", "label": "Westmoreland St" },
-        "legs": [{ "start_zone_id": 3100, "end_zone_id": 3110 }]
+        "at_time": "2026-07-26T14:32:00-04:00",
+        "legs": [
+          {
+            "start_zone_id": 3100,
+            "end_zone_id": 3110,
+            "price_usd": "4.50",
+            "corridor_name": "I-66-EB",
+            "priced_as_of": "2026-07-26T14:20:00-04:00"
+          }
+        ],
+        "total_usd": "4.50"
       },
       {
         "error": "unknown origin 'I-66 Wset': no matching label or node id in the i66 oracle",
         "valid_options": ["Exit 73 - Rosslyn", "Fairfax Drive", "I-66 West", "Westmoreland St"]
+      },
+      {
+        "error": "no price found for zone pair (3100, 3110) at or before 2026-07-26T14:32:00-04:00 in trip_pricing_i66",
+        "valid_options": []
       }
     ]
   }

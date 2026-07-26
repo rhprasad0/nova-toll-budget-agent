@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "i95_route",
-  "version": "1.0.0",
-  "description": "Flat lookup against oracles/i95.json, Transurban's own published 95/395/495 Express Lanes network: resolves origin/destination (label or node id) to the od_pair_id(s) a future pricing tool looks up in trip_pricing_i95. No DB access, no traversal — Transurban already enumerates every valid direction+entry+exit trip directly, including cross-corridor trips billed as two whole separate tolls. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
+  "version": "2.0.0",
+  "description": "Resolves origin/destination (label or node id) against oracles/i95.json, Transurban's own published 95/395/495 Express Lanes network, to the od_pair_id(s) into trip_pricing_i95 — then prices each key over RDS as of at_time (default: now, America/New_York), falling back to Transurban's own live snapshot (trip_pricing_i95_live) for the 16 od_pair_ids VDOT's feed has never published. Transurban already enumerates every valid direction+entry+exit trip directly, including cross-corridor trips billed as two whole separate tolls, so route resolution is a flat lookup, never traversal. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
   "input": {
     "type": "object",
     "properties": {
@@ -13,6 +13,10 @@
       "destination": {
         "type": "string",
         "description": "Same rules as origin."
+      },
+      "at_time": {
+        "type": "string",
+        "description": "ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an explicit UTC offset); a value with no offset is assumed America/New_York. Defaults to now (America/New_York) if omitted. The price returned is the most recently published row at or before this time, never the price this instant -- VDOT's own feed trails real-time by roughly 10-20 minutes (docs/oracle-findings.md section 7); each leg's priced_as_of exposes exactly how stale."
       }
     },
     "required": ["origin", "destination"],
@@ -21,6 +25,11 @@
       {
         "origin": "Route 267",
         "destination": "495 Express Lanes End/George Wash. Mem. Pkwy."
+      },
+      {
+        "origin": "Route 267",
+        "destination": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+        "at_time": "2026-07-26T09:00:00-04:00"
       }
     ]
   },
@@ -45,22 +54,56 @@
           "direction": { "type": "string", "enum": ["Northbound", "Southbound"] },
           "entry": { "$ref": "#/$defs/node_ref" },
           "exit": { "$ref": "#/$defs/node_ref" },
+          "at_time": {
+            "type": "string",
+            "description": "The resolved, ISO-8601 time actually used for pricing (the caller's at_time, or now in America/New_York if omitted)."
+          },
           "legs": {
             "type": "array",
             "minItems": 1,
             "maxItems": 2,
-            "description": "One entry for a within-corridor trip, two for a cross-corridor trip, in billed order (never chained or summed by this tool). Each is the exact od_pair_id lookup key into trip_pricing_i95. Some od_pair_ids (1374-1389) have never had a priced row in that table -- presence here means the trip is published, not that a price exists for it.",
+            "description": "One priced leg for a within-corridor trip, two for a cross-corridor trip, in billed order (never chained or summed by this tool).",
             "items": {
               "type": "object",
               "properties": {
-                "od_pair_id": { "type": "integer" }
+                "od_pair_id": { "type": "integer" },
+                "price_usd": { "type": "string", "description": "Decimal string, never a float." },
+                "source": {
+                  "type": "string",
+                  "enum": ["trip_pricing_i95", "trip_pricing_i95_live", "unpriced_gap"],
+                  "description": "Which source priced this leg. \"unpriced_gap\": one of the 16 known VDOT gap ids (1374-1389) with no row in either real source at at_time -- price_usd is a flagged \"0.00\" placeholder, never a confirmed fare."
+                },
+                "facility_group": {
+                  "type": "string",
+                  "enum": ["495", "95_395"],
+                  "description": "expresslanes.com markets the 495 Express Lanes as a separate facility from the 95/395 Express Lanes; this classifies the leg accordingly."
+                },
+                "corridor_name": {
+                  "type": ["string", "null"],
+                  "description": "VDOT's own corridor_name for this leg, or null for a trip_pricing_i95_live/unpriced_gap leg -- that source has no zone/corridor identity."
+                },
+                "priced_as_of": {
+                  "type": ["string", "null"],
+                  "description": "ISO-8601 timestamp of the row actually used (typically earlier than at_time), or null for an unpriced_gap leg, which has no row at all."
+                }
               },
-              "required": ["od_pair_id"],
+              "required": ["od_pair_id", "price_usd", "source", "facility_group", "corridor_name", "priced_as_of"],
               "additionalProperties": false
             }
-          }
+          },
+          "facility_totals": {
+            "type": "object",
+            "properties": {
+              "495": { "type": "string" },
+              "95_395": { "type": "string" }
+            },
+            "required": ["495", "95_395"],
+            "additionalProperties": false,
+            "description": "Always carries both keys (\"0.00\" if a group has no legs) -- a stable shape, no branching on key presence."
+          },
+          "total_usd": { "type": "string", "description": "Decimal string sum of legs[].price_usd." }
         },
-        "required": ["origin", "destination", "direction", "entry", "exit", "legs"],
+        "required": ["origin", "destination", "direction", "entry", "exit", "at_time", "legs", "facility_totals", "total_usd"],
         "additionalProperties": false
       },
       {
@@ -68,12 +111,12 @@
         "properties": {
           "error": {
             "type": "string",
-            "description": "Unknown origin/destination identifier, no direct trip between a known pair, or (unreachable today) an ambiguous match."
+            "description": "Unknown origin/destination identifier, no direct trip between a known pair, an ambiguous match (unreachable today), a malformed at_time, no priced row found for a non-gap od_pair_id in either trip_pricing_i95 or trip_pricing_i95_live at or before at_time, or an unrecognized corridor_name/road value (schema drift beyond the classification this tool knows about)."
           },
           "valid_options": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "The full ramp label list on an unknown identifier, or the reachable destination labels from a known origin, so the caller can self-correct without another round trip."
+            "description": "Non-empty only for resolution errors, where it lists self-correction candidates (the full ramp label list on an unknown identifier, or the reachable destination labels from a known origin). Empty for a malformed at_time, a pricing miss, or an unrecognized classification value, since retrying the same inputs won't fix any of those."
           }
         },
         "required": ["error", "valid_options"],
@@ -87,7 +130,19 @@
         "direction": "Northbound",
         "entry": { "node_id": "182NO", "label": "Route 267" },
         "exit": { "node_id": "181ND", "label": "495 Express Lanes End/George Wash. Mem. Pkwy." },
-        "legs": [{ "od_pair_id": 1038 }]
+        "at_time": "2026-07-26T14:32:00-04:00",
+        "legs": [
+          {
+            "od_pair_id": 1038,
+            "price_usd": "2.75",
+            "source": "trip_pricing_i95",
+            "facility_group": "495",
+            "corridor_name": "I-495-NB",
+            "priced_as_of": "2026-07-26T14:20:00-04:00"
+          }
+        ],
+        "facility_totals": { "495": "2.75", "95_395": "0.00" },
+        "total_usd": "2.75"
       },
       {
         "origin": "I-495 Near Braddock Road",
@@ -95,11 +150,35 @@
         "direction": "Northbound",
         "entry": { "node_id": "191NO", "label": "I-495 Near Braddock Road" },
         "exit": { "node_id": "201ND", "label": "I-395 Near Edsall Road" },
-        "legs": [{ "od_pair_id": 1083 }, { "od_pair_id": 1374 }]
+        "at_time": "2026-07-26T14:32:00-04:00",
+        "legs": [
+          {
+            "od_pair_id": 1083,
+            "price_usd": "6.60",
+            "source": "trip_pricing_i95",
+            "facility_group": "495",
+            "corridor_name": "I-495-NB",
+            "priced_as_of": "2026-07-26T14:20:00-04:00"
+          },
+          {
+            "od_pair_id": 1374,
+            "price_usd": "3.45",
+            "source": "trip_pricing_i95_live",
+            "facility_group": "495",
+            "corridor_name": null,
+            "priced_as_of": "2026-07-26T14:30:00-04:00"
+          }
+        ],
+        "facility_totals": { "495": "10.05", "95_395": "0.00" },
+        "total_usd": "10.05"
       },
       {
         "error": "unknown origin 'Route 276': no matching label or node id in the i95 oracle",
         "valid_options": ["Route 267", "Route 7 (Leesburg Pike)", "Westpark Drive"]
+      },
+      {
+        "error": "no price found for od_pair_id 1200 at or before 2026-07-26T14:32:00-04:00 in trip_pricing_i95 or trip_pricing_i95_live",
+        "valid_options": []
       }
     ]
   }
