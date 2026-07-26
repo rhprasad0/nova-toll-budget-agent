@@ -1,0 +1,28 @@
+{
+  "source_url": "https://ride66express.com/plan-your-trip/",
+  "source_note": "I-66 Express Lanes Outside the Beltway (I-495 to Rt. 29 in Gainesville) has no priced route-resolution tool in this repo -- unlike i66.json's Inside-the-Beltway data, sourced from VDOT's own toll calculator, no such per-trip zone-pricing source has been found for this facility. This file exists only so find_toll_locations can surface real interchange names for discovery.\n\nNodes below are read directly from the live page's gantry-start-west/gantry-start-east <select> markup (captured 2026-07-26) -- the entrance points for a westbound and an eastbound trip respectively. The corresponding gantry-end-* dropdowns populate via JavaScript only after a start point is chosen (cascading, segment-dependent) and were not captured, so this file covers verified entrances only. It is NOT claimed to be the complete facility list -- the operator's FAQ states 23 entrances and 20 exits total, more than the 22 entrances captured here. No pairs, no pricing, no exit role: unlike the other oracles, every node here has role \"entry\" only, deliberately, since exit-capability was never observed rather than assumed.",
+  "nodes": {
+    "417": { "label": "Eastern Entry", "direction": "WB", "role": "entry" },
+    "416": { "label": "I-495 NB GP", "direction": "WB", "role": "entry" },
+    "414": { "label": "I-495 SB EL", "direction": "WB", "role": "entry" },
+    "413": { "label": "I-495 SB GP", "direction": "WB", "role": "entry" },
+    "415": { "label": "I-495 NB EL", "direction": "WB", "role": "entry" },
+    "418": { "label": "Vaden Drive", "direction": "WB", "role": "entry" },
+    "419": { "label": "WB Chain Bridge", "direction": "WB", "role": "entry" },
+    "421": { "label": "WB Monument Drive", "direction": "WB", "role": "entry" },
+    "423": { "label": "WB Cont Rt 28", "direction": "WB", "role": "entry" },
+    "424": { "label": "Rt 28 SB/Braddock Road", "direction": "WB", "role": "entry" },
+    "401": { "label": "Western Entry", "direction": "EB", "role": "entry" },
+    "402": { "label": "University Boulevard", "direction": "EB", "role": "entry" },
+    "403": { "label": "Century Park/Balls Ford", "direction": "EB", "role": "entry" },
+    "404": { "label": "EB Slip Ramp Sudley Road", "direction": "EB", "role": "entry" },
+    "400": { "label": "Sudley Road", "direction": "EB", "role": "entry" },
+    "405": { "label": "EB Slip Ramp Rt 28", "direction": "EB", "role": "entry" },
+    "406": { "label": "Rt 28 SB", "direction": "EB", "role": "entry" },
+    "408": { "label": "Stringfellow Rd", "direction": "EB", "role": "entry" },
+    "409": { "label": "EB Monument Drive", "direction": "EB", "role": "entry" },
+    "410": { "label": "US-50 EB", "direction": "EB", "role": "entry" },
+    "411": { "label": "Chain Bridge Rd", "direction": "EB", "role": "entry" },
+    "412": { "label": "EB Braided Ramp", "direction": "EB", "role": "entry" }
+  }
+}

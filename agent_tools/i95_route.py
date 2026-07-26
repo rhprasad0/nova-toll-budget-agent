@@ -31,6 +31,10 @@ the 16 od_pair_ids that only ever appeared on a now-unsupported
 cross-corridor leg -- see i495_route.py and docs/oracle-findings.md
 section 8).
 
+Unsure of the exact interchange label? Call find_toll_locations first --
+it turns a vague location or a misspelling into the exact label string
+this tool expects, across all corridors, without a failing call here.
+
 See docs/oracle-tools-spec.md for the full contract and known limitations.
 """
 

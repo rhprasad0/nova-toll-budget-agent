@@ -4,7 +4,13 @@ Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-26
 
 Four Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`,
 `i495_route`, and `dulles_route`, that resolve a human trip ("from X to
-Y", at an optional time) to its route and its price. Companion docs:
+Y", at an optional time) to its route and its price. A fifth tool,
+`find_toll_locations`, is not route-shaped and prices nothing -- it's a
+progressive-disclosure label search over the same committed oracles, so a
+caller can turn a vague human location or a misspelled label into the exact
+string these four expect before calling one of them; see
+`agent_tools/find_toll_locations.py`'s own docstring for its matching
+algorithm. Companion docs:
 `docs/oracle-findings.md` (what the i66/i95/i495 oracles are and their
 known gaps, including §8 on why i95_route/i495_route don't resolve
 cross-corridor trips), `docs/poller-spec.md` (the pricing tables and the
@@ -239,20 +245,26 @@ mistaken for the final story.
 
 ## 5. Contracts and tests
 
-- `schemas/tools/i66_route.json` / `i95_route.json` / `i495_route.json`:
-  JSON Schema Draft 2020-12, `input`/`output` (`oneOf` success/error),
-  examples, semver'd. `i95_route.json` bumped `2.0.0` → `3.0.0` (another
-  breaking output-shape change) when cross-corridor support and its
-  facility_group/facility_totals/source/live-fallback machinery were
-  dropped in favor of a dedicated i495_route tool; `i495_route.json` is
-  new at `1.0.0`. Structural shape (file exists, has `input`/`output`,
-  semver'd version, `at_time` declared as an optional input property) is
-  guarded by `tests/test_tool_schemas.py`, whose hardcoded `TOOLS` tuple
-  now lists all three (it's not glob-discovered — a fourth tool needs a
-  one-line addition there, not just a new JSON file). No drift test
-  against the live Strands-generated tool spec — that was worthwhile for
-  the deleted 4-tool SQL surface; three fixed tools don't earn a second
-  CI-enforced contract layer. Each tool's own test file does assert
+- `schemas/tools/i66_route.json` / `i95_route.json` / `i495_route.json` /
+  `dulles_route.json` / `find_toll_locations.json`: JSON Schema Draft
+  2020-12, `input`/`output`, examples, semver'd. `i95_route.json` bumped
+  `2.0.0` → `3.0.0` (another breaking output-shape change) when
+  cross-corridor support and its facility_group/facility_totals/source/
+  live-fallback machinery were dropped in favor of a dedicated i495_route
+  tool; `i495_route.json` is new at `1.0.0`. Structural shape (file exists,
+  has `input`/`output`, semver'd version) is guarded by
+  `tests/test_tool_schemas.py`, whose hardcoded `ALL_TOOLS` tuple is not
+  glob-discovered — a new tool needs a one-line addition there, not just a
+  new JSON file. `find_toll_locations` is not route-shaped (no
+  `origin`/`destination`/`at_time`, `output` is a 3-way `oneOf` rather than
+  success/error) — the file splits the route tools' `origin`/`destination`/
+  `at_time` assertions (`ROUTE_TOOLS`) from `find_toll_locations`'s own
+  no-required-input assertion (`FINDER_TOOLS`); a fifth route-shaped tool
+  reuses `ROUTE_TOOLS`'s existing assertions, a second non-route tool needs
+  its own `FINDER_TOOLS`-style block. No drift test against the live
+  Strands-generated tool spec — that was worthwhile for the deleted 4-tool
+  SQL surface; this fixed tool set doesn't earn a second CI-enforced
+  contract layer. Each route tool's own test file does assert
   `tool_spec["name"]` and `tool_spec["inputSchema"]["json"]["required"]`
   once, as a cheap check that Strands actually parsed the docstring
   (required stays `{"origin", "destination"}` — `at_time` is optional).
