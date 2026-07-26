@@ -1,3 +1,4 @@
+import csv
 from decimal import Decimal
 
 import pytest
@@ -79,3 +80,23 @@ def test_dash_separator_and_blank_lines_are_skipped():
     rows = parse_trip_pricing_csv(csv_text)
     assert len(rows) == 1
     assert rows[0].zone_toll_rate_usd == Decimal("1.00")
+
+
+def test_out_of_range_toll_is_rejected():
+    header = ",".join(EXPECTED_SOURCE_HEADERS)
+    row = (
+        "9999.99,OD,1,,100,19/07/26 15:00:00,19/07/26 14:55:00,END,200,"
+        "I-95-NB,951,19/07/26 14:50:00,CLOSED"
+    )
+    with pytest.raises(ValueError, match="outside allowed range"):
+        parse_trip_pricing_csv(f"{header}\n{row}\n")
+
+
+def test_oversized_field_is_rejected():
+    header = ",".join(EXPECTED_SOURCE_HEADERS)
+    row = (
+        "1.00," + "x" * 257 + ",1,,100,19/07/26 15:00:00,19/07/26 14:55:00,"
+        "END,200,I-95-NB,951,19/07/26 14:50:00,CLOSED"
+    )
+    with pytest.raises(csv.Error):
+        parse_trip_pricing_csv(f"{header}\n{row}\n")

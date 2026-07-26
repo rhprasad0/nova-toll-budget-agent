@@ -269,9 +269,9 @@ storm).
 
 **toll-loader** — VPC (default VPC subnets; S3 gateway endpoint added), SG
 egress to RDS SG only. Triggered per raw object. Routes on `feed=` prefix:
-CSV → ported `parse_trip_pricing_csv`; XML → new `parse_trip_pricing_xml`
-(ElementTree over `<opt>` attributes — XXE-safe on 3.13; entity-expansion DoS
-is accepted risk given HTTPS to VDOT, no defusedxml). Connects as
+CSV → ported `parse_trip_pricing_csv`; XML → `parse_trip_pricing_xml`
+using `defusedxml`, with explicit row, field-length, identifier, and toll-rate
+limits across all three feed parsers. Connects as
 `loader_writer` via **RDS IAM auth**: the SDK signs the token locally — no
 secret, no Secrets Manager API call, and therefore no VPC interface endpoint
 or NAT (an in-VPC Lambda has no internet; its only AWS API needs, S3, is the

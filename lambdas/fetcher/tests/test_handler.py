@@ -20,6 +20,7 @@ def reset_module_state(monkeypatch):
     monkeypatch.setenv("I95_TOKEN_PARAM", "/nova-toll/i95-token")
     monkeypatch.setenv("I66_TOKEN_PARAM", "/nova-toll/i66-token")
     monkeypatch.setenv("RAW_BUCKET", "nova-toll-raw-test")
+    monkeypatch.setenv("RAW_KMS_KEY_ARN", "arn:aws:kms:us-east-1:123456789012:key/raw")
 
 
 @pytest.fixture
@@ -93,6 +94,8 @@ def test_one_feed_failing_does_not_block_the_other(monkeypatch, stub_aws, caplog
     stub_aws["s3"].put_object.assert_called_once()
     put_kwargs = stub_aws["s3"].put_object.call_args.kwargs
     assert put_kwargs["Key"] == handler._s3_key("i66", datetime.now(UTC), "xml")
+    assert put_kwargs["ServerSideEncryption"] == "aws:kms"
+    assert put_kwargs["SSEKMSKeyId"].endswith("/raw")
     stub_aws["cloudwatch"].put_metric_data.assert_called_once()
     metric_call = stub_aws["cloudwatch"].put_metric_data.call_args.kwargs
     assert metric_call["MetricData"][0]["Dimensions"] == [

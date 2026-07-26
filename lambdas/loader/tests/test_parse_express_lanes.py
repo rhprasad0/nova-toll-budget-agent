@@ -83,3 +83,17 @@ def test_shape_has_no_link_status_or_feed_field():
     rows = parse_express_lanes_live_json(SAMPLE_JSON)
     assert not hasattr(rows[0], "link_status")
     assert not hasattr(rows[0], "feed")
+
+
+def test_mixed_observation_times_are_rejected():
+    payload = json.loads(SAMPLE_JSON)
+    payload["response"][1]["time"] = "2026-07-25 19:00:00"
+    with pytest.raises(ValueError, match="mixed observation times"):
+        parse_express_lanes_live_json(json.dumps(payload))
+
+
+def test_out_of_range_price_is_rejected():
+    payload = json.loads(SAMPLE_JSON)
+    payload["response"][0]["price"] = "9999.99"
+    with pytest.raises(ValueError, match="outside allowed range"):
+        parse_express_lanes_live_json(json.dumps(payload))

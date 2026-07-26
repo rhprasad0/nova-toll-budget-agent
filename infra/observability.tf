@@ -122,3 +122,24 @@ resource "aws_cloudwatch_metric_alarm" "rds_free_storage" {
   comparison_operator = "LessThanThreshold"
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
+
+# Raw payload and Terraform-state history is intentionally retained forever.
+# BucketSizeBytes is emitted daily, so this is an early capacity/cost signal
+# rather than a real-time usage alert.
+resource "aws_cloudwatch_metric_alarm" "bucket_storage" {
+  for_each = {
+    raw     = aws_s3_bucket.raw.id
+    tfstate = aws_s3_bucket.tfstate.id
+  }
+
+  alarm_name          = "nova-toll-${each.key}-storage-10gb"
+  namespace           = "AWS/S3"
+  metric_name         = "BucketSizeBytes"
+  dimensions          = { BucketName = each.value, StorageType = "StandardStorage" }
+  period              = 86400
+  evaluation_periods  = 1
+  statistic           = "Average"
+  threshold           = 10 * 1024 * 1024 * 1024
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}

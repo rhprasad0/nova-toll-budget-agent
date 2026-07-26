@@ -13,6 +13,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$REPO/infra/build"
 CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
+CA_SHA256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
 PY_VERSION="3.13"
 PY_PLATFORM="x86_64-manylinux2014"  # Lambda runtime arch
 EPOCH="2020-01-01 00:00:00Z"        # deterministic zip mtime
@@ -33,7 +34,12 @@ cp "$REPO/lambdas/loader/handler.py" \
    "$REPO/lambdas/loader/parse_xml.py" \
    "$REPO/lambdas/loader/parse_express_lanes.py" \
    "$loader_stage/"
-curl -fsSL "$CA_URL" -o "$loader_stage/rds-ca-bundle.pem"
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+  "$CA_URL" -o "$loader_stage/rds-ca-bundle.pem"
+echo "$CA_SHA256  $loader_stage/rds-ca-bundle.pem" | sha256sum --check --status || {
+  echo "RDS CA bundle digest mismatch. Review AWS's CA rotation notice, update CA_SHA256, and commit the change." >&2
+  exit 1
+}
 uv pip install \
   --require-hashes \
   --python-platform "$PY_PLATFORM" \

@@ -107,7 +107,13 @@ def _fetch_feed(feed: str, url: str, token: str) -> bytes:
 def _poll_feed(feed: str, cfg: dict, token: str, now: datetime) -> None:
     body = _fetch_feed(feed, cfg["url"], token)
     key = _s3_key(feed, now, cfg["extension"])
-    _client("s3").put_object(Bucket=os.environ["RAW_BUCKET"], Key=key, Body=body)
+    _client("s3").put_object(
+        Bucket=os.environ["RAW_BUCKET"],
+        Key=key,
+        Body=body,
+        ServerSideEncryption="aws:kms",
+        SSEKMSKeyId=os.environ["RAW_KMS_KEY_ARN"],
+    )
     _client("cloudwatch").put_metric_data(
         Namespace="NovaToll",
         MetricData=[

@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
+import re
 import urllib.parse
 from typing import Any, LiteralString, cast
 
@@ -21,6 +22,11 @@ from parse_xml import I66Row, parse_trip_pricing_xml
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+MAX_RAW_OBJECT_BYTES = 5 * 1024 * 1024
+_RAW_KEY_PATTERN = re.compile(
+    r"raw/feed=(?P<feed>i95|i66|i95-live)/date=\d{4}-\d{2}-\d{2}/\d{4}Z\.(?:csv|xml|json)\Z"
+)
 
 # RDS CA bundle is dropped into the deployment zip next to this file by the
 # Terraform/build step (WP1) -- verify-full needs it to authenticate the
@@ -149,10 +155,30 @@ _FEED_CONFIG: dict[str, tuple[Any, str]] = {
 
 def _feed_from_key(key: str) -> str:
     """raw/feed=i95/date=2026-07-21/1440Z.csv -> "i95"."""
-    for part in key.split("/"):
-        if part.startswith("feed="):
-            return part.removeprefix("feed=")
-    raise ValueError(f"cannot determine feed from S3 key: {key}")
+    match = _RAW_KEY_PATTERN.fullmatch(key)
+    if not match:
+        raise ValueError(f"unsupported raw object key: {key}")
+    feed = match["feed"]
+    expected_extension = {"i95": "csv", "i66": "xml", "i95-live": "json"}[feed]
+    if not key.endswith(f".{expected_extension}"):
+        raise ValueError(f"unexpected extension for feed {feed}: {key}")
+    return feed
+
+
+def _validate_record(bucket: str, key: str, size: object) -> str:
+    """Fail closed before downloading an S3 event payload."""
+    if bucket != os.environ["RAW_BUCKET"]:
+        raise ValueError(f"unexpected source bucket: {bucket}")
+    feed = _feed_from_key(key)
+    if isinstance(size, bool) or not isinstance(size, (str, int)):
+        raise ValueError(f"invalid S3 object size for {key}")
+    try:
+        size_int = int(size)
+    except ValueError as exc:
+        raise ValueError(f"invalid S3 object size for {key}") from exc
+    if size_int < 0 or size_int > MAX_RAW_OBJECT_BYTES:
+        raise ValueError(f"raw object size outside allowed range for {key}: {size_int}")
+    return feed
 
 
 def _parse_payload(
@@ -223,11 +249,16 @@ def handler(event: dict[str, Any], _context: object) -> None:
     for record in event["Records"]:
         bucket = record["s3"]["bucket"]["name"]
         key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
-        feed = _feed_from_key(key)
+        feed = _validate_record(bucket, key, record["s3"]["object"].get("size"))
 
-        body = (
-            s3_client.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8")
-        )
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        content_length = response.get("ContentLength")
+        if content_length is not None and content_length > MAX_RAW_OBJECT_BYTES:
+            raise ValueError(f"raw object exceeds allowed size: {key}")
+        raw_body = response["Body"].read(MAX_RAW_OBJECT_BYTES + 1)
+        if len(raw_body) > MAX_RAW_OBJECT_BYTES:
+            raise ValueError(f"raw object exceeds allowed size: {key}")
+        body = raw_body.decode("utf-8")
 
         # On parse failure this raises: Lambda marks the invocation failed
         # (Errors alarm fires), the raw object in S3 is untouched, and the
