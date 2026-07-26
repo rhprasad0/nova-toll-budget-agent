@@ -39,6 +39,45 @@ money. Everything else is hygiene, tracked but not gating launch.
       alarm means quoting stale prices with no signal. Pick one address,
       confirm the subscription, make smoke.sh match.
 
+## Tier 1B — Legal & Compliance Blockers
+
+Free product, public chat box, traces-only collection (no accounts). These
+close before launch because exposure starts the moment the URL is public, not
+after traffic arrives.
+
+- [ ] **Terms of Service.** Mirror the pattern used by every comparable free
+      estimate tool (CostPrism, Construction Estimator, Estimation Pro AI,
+      Dozi): "estimates only, not quotes," "AS IS, no warranty of accuracy,"
+      liability capped at **$0** since the service is free. A $0 cap tied to
+      $0 paid is the enforceable version of this clause.
+- [ ] **In-product accuracy disclaimer, not just in the ToS.** The FTC's
+      July 2026 Section 5 policy statement on AI accuracy holds that a
+      disclaimer "could not be buried in terms of service" — it must be
+      prominent and persistent where the user actually is. Put a visible
+      line in the chat UI itself (e.g. "Estimates only — verify with the
+      toll operator before you drive"). This replaces and specifies where
+      the old Tier 2 "user-facing accuracy disclaimer" item lives — same
+      underlying gap (`oracle-findings.md` §2, §6, §7 — 107 historically
+      unpriceable trips, one unresolved od_pair_id), placement now decided.
+- [ ] **Privacy policy, even for traces-only collection.** IP address is
+      personal data under GDPR regardless of company size or revenue (GDPR
+      triggers on any EU visitor, not company scale), and origin/destination
+      text typed into chat functions as home/work location data — more
+      sensitive than generic analytics. State what's collected (chat
+      transcript + IP + timestamp via CloudFront/AgentCore logs), why, that
+      it's not sold, and the retention window (next item).
+- [ ] **Explicit retention window on stored traces** (e.g. 90 days).
+      "Traces, nothing else" needs a number attached or it's unbounded
+      liability by default — cheap to decide now, expensive to retrofit
+      after a deletion request.
+- [ ] **"I'm an AI assistant" label in the chat UI.** Not legally required —
+      CA's bot-disclosure law targets deceptive human-impersonation for
+      sales, SB 243 targets companion/relationship bots, TollChat fits
+      neither — but the label is free and closes the question outright.
+- [ ] **Form an LLC before the public URL goes live**, if not already done.
+      Separates personal liability from the business once anyone can hit a
+      public chat box.
+
 ## Tier 2 — Should-fix-before-launch
 
 - [ ] `agent_tools/_oracle_route.py:123` `env_connect()` has no
@@ -52,10 +91,6 @@ money. Everything else is hygiene, tracked but not gating launch.
       (`scripts/build_dulles_oracle.py`). Add `retrieved_at` to all five and
       write down a staleness policy (e.g. re-verify Dulles/Greenway
       quarterly) — no automation needed yet, just a stated commitment.
-- [ ] **User-facing accuracy disclaimer.** Fixed-toll oracles can go stale
-      and dynamic pricing has known gaps (`oracle-findings.md` §2, §6, §7 —
-      107 historically unpriceable trips, one unresolved od_pair_id). Chat
-      UI should say prices are estimates to verify with the operator.
 
 ## Tier 3 — Post-launch, not blocking
 
