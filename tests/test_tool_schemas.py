@@ -17,7 +17,7 @@ import re
 from conftest import REPO_ROOT
 
 SCHEMA_DIR = REPO_ROOT / "schemas" / "tools"
-TOOLS = ("i66_route", "i95_route")
+TOOLS = ("i66_route", "i95_route", "i495_route")
 
 
 def _schema(tool: str) -> dict:
