@@ -3,55 +3,190 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TollChat</title>
+<meta name="description" content="TollChat helps Northern Virginia drivers know their toll before they drive.">
+<title>TollChat — Know your toll before you drive</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark; --ink: #eaf1f7; --muted: #9cacbb; --panel: #111923; --line: #263545; --accent: #7dd3fc; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #0b0f14;
-    color: #e6e9ef;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    text-align: center;
-    padding: 1.5rem;
-  }
-  main { max-width: 32rem; }
-  h1 {
-    font-size: 2.25rem;
-    margin: 0 0 0.5rem;
-    letter-spacing: -0.02em;
-  }
-  p.tagline {
-    font-size: 1.1rem;
-    color: #9aa4b2;
-    margin: 0 0 2rem;
-  }
-  p.status {
-    font-size: 0.95rem;
-    color: #6b7686;
-    margin: 0 0 1.5rem;
-  }
-  p.links {
-    font-size: 0.95rem;
-    margin: 0;
-  }
-  a {
-    color: #7dd3fc;
-    text-decoration: none;
-  }
-  a:hover { text-decoration: underline; }
+  body { margin: 0; min-width: 320px; background: #080d13; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { width: min(1120px, 100%); margin: 0 auto; padding: clamp(1.25rem, 4vw, 3.5rem) clamp(1rem, 4vw, 2.5rem) 2rem; }
+  .hero { display: grid; gap: 1.8rem; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); align-items: center; }
+  .eyebrow { margin: 0 0 .75rem; color: var(--accent); font-size: .78rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+  h1 { max-width: 8ch; margin: 0; font-size: clamp(2.6rem, 6vw, 5rem); line-height: .94; letter-spacing: -.065em; }
+  .lede { max-width: 30rem; margin: 1.25rem 0 0; color: var(--muted); font-size: clamp(1rem, 1.8vw, 1.18rem); line-height: 1.55; }
+  .map-card { overflow: hidden; border: 1px solid var(--line); border-radius: 1.2rem; background: radial-gradient(circle at 68% 14%, #182d3d 0, #111a25 38%, #0c131c 100%); box-shadow: 0 24px 70px rgba(0,0,0,.24); }
+  .map-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem .25rem; }
+  .map-heading h2 { margin: 0; font-size: 1rem; letter-spacing: -.015em; }
+  .map-heading p { margin: 0; color: var(--muted); font-size: .78rem; text-align: right; }
+  #coverage-map { display: block; width: 100%; height: auto; min-height: 430px; }
+  .map-note { margin: 0; padding: .65rem 1.1rem 1rem; color: var(--muted); font-size: .78rem; line-height: 1.4; }
+  .legend { display: flex; flex-wrap: wrap; gap: .45rem .85rem; padding: .25rem 1.1rem .9rem; border-top: 1px solid rgba(151, 177, 199, .12); }
+  .legend-item { display: inline-flex; align-items: center; gap: .38rem; color: #c2d0dc; font-size: .72rem; white-space: nowrap; }
+  .legend-swatch { width: .55rem; height: .55rem; border-radius: 99px; background: var(--facility); box-shadow: 0 0 9px var(--facility); }
+  .map-detail { min-height: 4.5rem; padding: .8rem 1.1rem 1rem; border-top: 1px solid rgba(151, 177, 199, .12); background: rgba(5, 10, 16, .22); }
+  .map-detail strong { display: block; font-size: .88rem; }
+  .map-detail p { margin: .25rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
+  .status { margin: clamp(1.8rem, 4vw, 3.5rem) 0 0; padding-top: 1.4rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .95rem; }
+  .links { margin: .65rem 0 0; font-size: .95rem; }
+  a { color: var(--accent); text-decoration: none; } a:hover, a:focus-visible { text-decoration: underline; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .fallback { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+  @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } h1 { max-width: 11ch; } #coverage-map { min-height: 480px; } .map-heading { align-items: flex-start; flex-direction: column; gap: .25rem; } .map-heading p { text-align: left; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>TollChat</h1>
-  <p class="tagline">Ask what your trip costs on Northern Virginia's toll roads.</p>
+  <section class="hero" aria-labelledby="page-title">
+    <div>
+      <p class="eyebrow">Northern Virginia tolls</p>
+      <h1 id="page-title">Know your toll before you drive.</h1>
+      <p class="lede">TollChat turns a trip into a clear price across Northern Virginia’s toll roads—before you merge, not after.</p>
+    </div>
+    <section class="map-card" aria-labelledby="coverage-title">
+      <div class="map-heading">
+        <h2 id="coverage-title">Every covered entry &amp; exit, in one view.</h2>
+        <p>Tap a pin for the exact ramps we cover.</p>
+      </div>
+      <svg id="coverage-map" viewBox="0 0 1000 720" role="img" aria-labelledby="map-title map-description">
+        <title id="map-title">TollChat coverage across Northern Virginia</title>
+        <desc id="map-description">A geographic schematic showing covered interchanges on I-66, the 95/395 and 495 Express Lanes, the Dulles Toll Road, and the Dulles Greenway.</desc>
+      </svg>
+      <div class="legend" aria-label="Covered facilities">
+        <span class="legend-item" style="--facility:#7dd3fc"><i class="legend-swatch"></i>I-66</span>
+        <span class="legend-item" style="--facility:#fb7185"><i class="legend-swatch"></i>95/395 Express Lanes</span>
+        <span class="legend-item" style="--facility:#fbbf24"><i class="legend-swatch"></i>495 Express Lanes</span>
+        <span class="legend-item" style="--facility:#34d399"><i class="legend-swatch"></i>Dulles Toll Road</span>
+        <span class="legend-item" style="--facility:#c084fc"><i class="legend-swatch"></i>Dulles Greenway</span>
+      </div>
+      <div id="map-detail" class="map-detail" aria-live="polite"><strong>144 supported entry and exit nodes.</strong><p>Grouped by interchange so the map stays useful at a glance.</p></div>
+    </section>
+  </section>
   <p class="status">Coming soon.</p>
   <p class="links"><a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a> &middot; <a href="https://github.com/rhprasad0/nova-toll-budget-agent">GitHub</a></p>
+  <noscript><p class="fallback">Coverage includes I-66, the 95/395 and 495 Express Lanes, the Dulles Toll Road, and the Dulles Greenway. Enable JavaScript to explore every supported entry and exit.</p></noscript>
 </main>
+
+<script id="coverage-data" type="application/json">
+[
+  {"source":"i95","facility":"i495","label":"495 Express Lanes End/George Wash. Mem. Pkwy.","lat":38.963597,"lon":-77.183598,"nodeIds":["1819ND","181ND"]},
+  {"source":"i95","facility":"i495","label":"495 Express Lanes Start/Georg Wash. Mem. Pkwy.","lat":38.963814,"lon":-77.183571,"nodeIds":["180SO"]},
+  {"source":"i95","facility":"i495","label":"Braddock Road","lat":38.811183,"lon":-77.217748,"nodeIds":["190NO","190SD"]},
+  {"source":"i95","facility":"i95","label":"Courthouse Road/Route 630","lat":38.422051,"lon":-77.421985,"nodeIds":["232NO","233SD"]},
+  {"source":"i95","facility":"i95","label":"Fairfax County Parkway/Route 286","lat":38.739632,"lon":-77.190682,"nodeIds":["208ND","208SO"]},
+  {"source":"i95","facility":"i95","label":"Franconia-Springfield Parkway/Route 289","lat":38.769837,"lon":-77.182593,"nodeIds":["206ND","206NO","206SD","206SO"]},
+  {"source":"i95","facility":"i495","label":"Gallows Road","lat":38.853796,"lon":-77.220048,"nodeIds":["189NO","189SD"]},
+  {"source":"i95","facility":"i95","label":"Gordon Boulevard/Route 123","lat":38.670421,"lon":-77.252936,"nodeIds":["211NO","211SD"]},
+  {"source":"i95","facility":"i95","label":"Heller Road","lat":38.750067,"lon":-77.185092,"nodeIds":["207SO"]},
+  {"source":"i95","facility":"i95","label":"I-395 Near Edsall Road","lat":38.810914,"lon":-77.149552,"nodeIds":["200SO","201ND","201SD","221NO","227SD"]},
+  {"source":"i95","facility":"i95","label":"I-495 EB / I-95 NB","lat":38.791558,"lon":-77.174842,"nodeIds":["202ND","202NO","202SD","202SO"]},
+  {"source":"i95","facility":"i495","label":"I-495 Near Braddock Road","lat":38.799890,"lon":-77.205606,"nodeIds":["1919ND","191ND","191NO","191SD","191SO"]},
+  {"source":"i95","facility":"i95","label":"I-495/I-95 Near Van Dorn Street","lat":38.793474,"lon":-77.154132,"nodeIds":["192NO","192SD"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Backlick Road","lat":38.775424,"lon":-77.181128,"nodeIds":["205SD"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Cardinal Drive","lat":38.607967,"lon":-77.306693,"nodeIds":["217NO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Courthouse Road/Route 630","lat":38.452652,"lon":-77.408058,"nodeIds":["2192NO","2202SD"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Dale Boulevard","lat":38.637393,"lon":-77.289543,"nodeIds":["216SD","236SO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Dumfries Road/Route 234","lat":38.591835,"lon":-77.317220,"nodeIds":["217SD","218NO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Fairfax County Parkway","lat":38.728849,"lon":-77.199420,"nodeIds":["209NO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Franconia-Springfield Pkwy NB","lat":38.775442,"lon":-77.181055,"nodeIds":["212NO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Franconia-Springfield Pkwy SB","lat":38.756456,"lon":-77.183795,"nodeIds":["2072SO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Garrisonville Road/Route 610","lat":38.483107,"lon":-77.394272,"nodeIds":["219NO","220SD"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Gordon Boulevard/Route 123","lat":38.670421,"lon":-77.252936,"nodeIds":["211ND"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Joplin Road/Quantico","lat":38.556917,"lon":-77.340810,"nodeIds":["218SD"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Old Keene Mill Road/Route 644","lat":38.748603,"lon":-77.185510,"nodeIds":["204ND"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Quantico","lat":38.508889,"lon":-77.377633,"nodeIds":["228ND","229SO"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near Route 17","lat":38.344510,"lon":-77.487214,"nodeIds":["234NO","235SD"]},
+  {"source":"i95","facility":"i95","label":"I-95 Near US-1","lat":38.678475,"lon":-77.233758,"nodeIds":["209SO"]},
+  {"source":"i95","facility":"i495","label":"Interstate 66","lat":38.886083,"lon":-77.220807,"nodeIds":["1879ND","187ND","187NO","187SD","187SO"]},
+  {"source":"i95","facility":"i495","label":"Jones Branch Drive/Route 123","lat":38.927680,"lon":-77.212914,"nodeIds":["1839ND","183ND","183NO","183SO","184SD"]},
+  {"source":"i95","facility":"i495","label":"Lee Highway (Route 29)","lat":38.875828,"lon":-77.220528,"nodeIds":["1889ND","188ND","188SO"]},
+  {"source":"i95","facility":"i95","label":"Near Pentagon/Eads Street to DC","lat":38.865725,"lon":-77.052876,"nodeIds":["224NO"]},
+  {"source":"i95","facility":"i95","label":"Old Keene Mill Road/Route 644","lat":38.778644,"lon":-77.180398,"nodeIds":["203NO","203SD"]},
+  {"source":"i95","facility":"i95","label":"Opitz Boulevard","lat":38.635207,"lon":-77.290485,"nodeIds":["214NO","214SO","215ND"]},
+  {"source":"i95","facility":"i95","label":"Pentagon/Eads Street","lat":38.866390,"lon":-77.057466,"nodeIds":["2233SO","2239ND","223ND"]},
+  {"source":"i95","facility":"i95","label":"Prince William Parkway/Route 294","lat":38.656535,"lon":-77.279688,"nodeIds":["213NO","213SD"]},
+  {"source":"i95","facility":"i495","label":"Route 267","lat":38.931695,"lon":-77.211400,"nodeIds":["1829ND","182ND","182NO","182SD","182SO"]},
+  {"source":"i95","facility":"i495","label":"Route 7 (Leesburg Pike)","lat":38.910500,"lon":-77.217682,"nodeIds":["1869ND","186ND","186SO"]},
+  {"source":"i95","facility":"i95","label":"Seminary Road","lat":38.829900,"lon":-77.113143,"nodeIds":["2229ND","222ND","222NO","226SD","226SO"]},
+  {"source":"i95","facility":"i95","label":"Shirlington Circle","lat":38.841761,"lon":-77.083663,"nodeIds":["225NO","225SD"]},
+  {"source":"i95","facility":"i95","label":"US-1","lat":38.680996,"lon":-77.230499,"nodeIds":["210NO","210SD"]},
+  {"source":"i95","facility":"i95","label":"Washington Boulevard/Route 27","lat":38.866353,"lon":-77.065971,"nodeIds":["22329ND","2232ND","223SO"]},
+  {"source":"i95","facility":"i95","label":"Washington D.C.","lat":38.875765,"lon":-77.041700,"nodeIds":["2232SO","2249ND","224ND"]},
+  {"source":"i95","facility":"i495","label":"Westpark Drive","lat":38.919295,"lon":-77.216925,"nodeIds":["1859ND","185ND","185NO","185SD","185SO"]},
+
+  {"source":"i66","facility":"i66","label":"I-66 West","lat":38.878,"lon":-77.258,"nodeIds":["1"]},
+  {"source":"i66","facility":"i66","label":"I-495 N","lat":38.883,"lon":-77.230,"nodeIds":["2"]},
+  {"source":"i66","facility":"i66","label":"I-495 Express Lanes N","lat":38.890,"lon":-77.222,"nodeIds":["3"]},
+  {"source":"i66","facility":"i66","label":"Route 7 - Leesburg Pike","lat":38.903,"lon":-77.193,"nodeIds":["4"]},
+  {"source":"i66","facility":"i66","label":"I-495 S","lat":38.878,"lon":-77.226,"nodeIds":["5"]},
+  {"source":"i66","facility":"i66","label":"Route 267 - Dulles Toll Road","lat":38.882,"lon":-77.215,"nodeIds":["6"]},
+  {"source":"i66","facility":"i66","label":"Route 123 - Dolley Madison Blvd","lat":38.882,"lon":-77.180,"nodeIds":["7"]},
+  {"source":"i66","facility":"i66","label":"Sycamore St","lat":38.895,"lon":-77.175,"nodeIds":["8"]},
+  {"source":"i66","facility":"i66","label":"Glebe Road","lat":38.885,"lon":-77.120,"nodeIds":["9"]},
+  {"source":"i66","facility":"i66","label":"Westmoreland St","lat":38.902,"lon":-77.169,"nodeIds":["10"]},
+  {"source":"i66","facility":"i66","label":"Washington Blvd","lat":38.880,"lon":-77.160,"nodeIds":["11"]},
+  {"source":"i66","facility":"i66","label":"Fairfax Drive","lat":38.887,"lon":-77.094,"nodeIds":["12"]},
+  {"source":"i66","facility":"i66","label":"Lee Highway - Spout Run Parkway","lat":38.894,"lon":-77.080,"nodeIds":["13"]},
+  {"source":"i66","facility":"i66","label":"Exit 73 - Rosslyn","lat":38.897,"lon":-77.075,"nodeIds":["14"]},
+  {"source":"i66","facility":"i66","label":"Exit 75 - Pentagon/Alexandria","lat":38.872,"lon":-77.060,"nodeIds":["15"]},
+  {"source":"i66","facility":"i66","label":"Washington","lat":38.880,"lon":-77.040,"nodeIds":["16"]},
+  {"source":"i66","facility":"i66","label":"Lee Highway - Scott Street","lat":38.895,"lon":-77.088,"nodeIds":["17"]},
+
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 10 - SR 657","lat":38.928,"lon":-77.417,"nodeIds":["10"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 11 - SR 286 (Fairfax County Pkwy)","lat":38.922,"lon":-77.397,"nodeIds":["11"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 12 - SR 602 (Reston Pkwy)","lat":38.953,"lon":-77.360,"nodeIds":["12"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 13 - SR 828 (Wiehle Ave)","lat":38.950,"lon":-77.340,"nodeIds":["13"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 14 - SR 674 (Hunter Mill Rd)","lat":38.943,"lon":-77.315,"nodeIds":["14"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 15 - SR 676 (Wolf Trap)","lat":38.930,"lon":-77.278,"nodeIds":["15"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 16 - SR 7 (Leesburg Pike)","lat":38.927,"lon":-77.249,"nodeIds":["16"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 17 - SR 684 (Spring Hill Rd)","lat":38.928,"lon":-77.236,"nodeIds":["17"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Exit 18/19 - I-495 / SR 123 (Capital Beltway)","lat":38.930,"lon":-77.215,"nodeIds":["1819"]},
+  {"source":"dulles_toll_road","facility":"dulles","label":"Route 28 (Dulles Toll Road / Dulles Greenway)","lat":38.950,"lon":-77.445,"nodeIds":["28"]},
+
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 1 - US 15/SR 7 (Leesburg Bypass)","lat":39.107,"lon":-77.565,"nodeIds":["1"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Route 28 (Dulles Toll Road / Dulles Greenway)","lat":38.950,"lon":-77.445,"nodeIds":["28"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 2A - Battlefield Pkwy","lat":39.080,"lon":-77.575,"nodeIds":["2A"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 2B - Compass Creek Pkwy","lat":39.065,"lon":-77.563,"nodeIds":["2B"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 3 - SR 653 (Shreve Mill Rd)","lat":39.050,"lon":-77.548,"nodeIds":["3"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 4 - SR 659 (Belmont Ridge Rd)","lat":39.032,"lon":-77.535,"nodeIds":["4"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 5 - SR 901 (Claiborne Pkwy)","lat":39.015,"lon":-77.522,"nodeIds":["5"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 6 - SR 772 (Ryan Rd)","lat":38.998,"lon":-77.508,"nodeIds":["6"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 7 - SR 607 (Loudoun County Pkwy)","lat":38.980,"lon":-77.490,"nodeIds":["7"]},
+  {"source":"dulles_greenway","facility":"greenway","label":"Exit 8 - SR 606 (Ox Rd)","lat":38.962,"lon":-77.472,"nodeIds":["8"]}
+]
+</script>
+<script>
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const pins = JSON.parse(document.getElementById("coverage-data").textContent);
+  const svg = document.getElementById("coverage-map");
+  const detail = document.getElementById("map-detail");
+  const colors = { i66: "#7dd3fc", i95: "#fb7185", i495: "#fbbf24", dulles: "#34d399", greenway: "#c084fc" };
+  const names = { i66: "I-66", i95: "95/395 Express Lanes", i495: "495 Express Lanes", dulles: "Dulles Toll Road", greenway: "Dulles Greenway" };
+  const bounds = { west: -77.61, east: -77.01, north: 39.15, south: 38.28, pad: 58 };
+  const project = ({ lat, lon }) => ({ x: bounds.pad + ((lon - bounds.west) / (bounds.east - bounds.west)) * (1000 - bounds.pad * 2), y: bounds.pad + ((bounds.north - lat) / (bounds.north - bounds.south)) * (720 - bounds.pad * 2) });
+  const path = (points) => points.map((point, index) => { const p = project(point); return `${index ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`; }).join(" ");
+  const append = (tag, attributes, parent = svg) => { const element = document.createElementNS(NS, tag); Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value)); parent.append(element); return element; };
+  const corridors = {
+    i95: [{lat:38.875,lon:-77.04},{lat:38.865,lon:-77.07},{lat:38.79,lon:-77.16},{lat:38.67,lon:-77.25},{lat:38.56,lon:-77.34},{lat:38.45,lon:-77.41},{lat:38.34,lon:-77.49}],
+    i495: [{lat:38.964,lon:-77.184},{lat:38.93,lon:-77.213},{lat:38.88,lon:-77.221},{lat:38.81,lon:-77.218},{lat:38.79,lon:-77.175}],
+    i66: [{lat:38.878,lon:-77.258},{lat:38.882,lon:-77.215},{lat:38.895,lon:-77.17},{lat:38.89,lon:-77.10},{lat:38.88,lon:-77.04}],
+    dulles: [{lat:38.93,lon:-77.215},{lat:38.928,lon:-77.28},{lat:38.95,lon:-77.36},{lat:38.95,lon:-77.445}],
+    greenway: [{lat:38.95,lon:-77.445},{lat:38.98,lon:-77.49},{lat:39.02,lon:-77.53},{lat:39.07,lon:-77.57},{lat:39.107,lon:-77.565}]
+  };
+  append("rect", { x: 0, y: 0, width: 1000, height: 720, fill: "transparent" });
+  [[38.88,-77.04,"WASHINGTON, DC"],[38.91,-77.31,"TYSONS"],[38.95,-77.43,"DULLES"],[38.63,-77.28,"WOODBRIDGE"],[38.48,-77.40,"STAFFORD"]].forEach(([lat, lon, label]) => { const p = project({lat,lon}); const text = append("text", { x:p.x, y:p.y, fill:"#60758a", "font-size":"11", "font-weight":"700", "letter-spacing":"1.8", "text-anchor":"middle" }); text.textContent = label; });
+  Object.entries(corridors).forEach(([facility, points]) => { append("path", { d:path(points), fill:"none", stroke:colors[facility], "stroke-opacity":".18", "stroke-width":"13", "stroke-linecap":"round" }); append("path", { d:path(points), fill:"none", stroke:colors[facility], "stroke-opacity":".95", "stroke-width":"3.5", "stroke-linecap":"round", "stroke-linejoin":"round" }); });
+  pins.forEach((pin, index) => {
+    const p = project(pin); const group = append("g", { class:"map-pin", role:"button", tabindex:"0", "data-index":index, "aria-label":`${pin.label}: ${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "entry or exit" : "entries or exits"}` });
+    append("circle", { cx:p.x, cy:p.y, r:pin.nodeIds.length > 3 ? 8 : 6.5, fill:"#0c131c", stroke:colors[pin.facility], "stroke-width":"2.5" }, group);
+    if (pin.nodeIds.length > 1) { const text = append("text", { x:p.x, y:p.y + 3, fill:"#f8fafc", "font-size":"7", "font-weight":"800", "text-anchor":"middle", "pointer-events":"none" }, group); text.textContent = pin.nodeIds.length; }
+  });
+  const showDetail = (pin) => { detail.replaceChildren(); const title = document.createElement("strong"); title.textContent = pin.label; const description = document.createElement("p"); description.textContent = `${names[pin.facility]} · ${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "entry/exit" : "entries/exits"} (${pin.nodeIds.join(", ")})`; detail.append(title, description); };
+  const choose = (target) => { const marker = target.closest("[data-index]"); if (marker) showDetail(pins[Number(marker.dataset.index)]); };
+  svg.addEventListener("click", (event) => choose(event.target));
+  svg.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(event.target); } });
+})();
+</script>
 </body>
 </html>
