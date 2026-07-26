@@ -15,10 +15,19 @@ it over re-deriving it." A trip confined to one facility is a single-leg
 lookup exactly like i66. A trip crossing both facilities (Dulles Toll Road
 and Dulles Greenway are one continuous physical corridor, connected at
 Route 28) resolves as two legs -- origin to the Route 28 boundary on one
-facility, boundary to destination on the other -- summed into one total,
-mirroring i95_route's cross-corridor composite trips. Real-world billing
-matches this: "vehicles traversing both roads incur separate toll charges"
-(the two operators bill independently, never combined into one flat fare).
+facility, boundary to destination on the other -- summed into one total.
+(i95_route/i495_route dropped this same composite-and-sum shape for their
+own cross-corridor case, in favor of not resolving a cross-corridor trip
+at all -- see docs/oracle-findings.md section 8. Not synced here: Dulles's
+two facilities are few enough and stable enough (two operators, one
+crossing point) that the tradeoffs that motivated dropping it for
+i95/i495 -- 16 unpriced od_pair_ids, a live-fallback source, per-leg
+facility classification -- don't apply the same way.) Real-world billing
+matches the two-separate-tolls model this produces: "vehicles traversing
+both roads incur separate toll charges" (the two operators bill
+independently, never combined into one flat fare) -- summing them into a
+convenience total is this tool's own addition, not a claim Dulles bills
+one combined toll.
 
 `at_time` still exists here, unlike a first pass at this tool assumed it
 wouldn't -- the Dulles Toll Road has no time-of-day pricing, but the Dulles

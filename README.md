@@ -19,7 +19,7 @@ tick to poll Transurban's own live Express Lanes snapshot, filling
 | `db/` | the per-feed schema and the `loader_writer` role |
 | `infra/` | Terraform for both Lambdas, S3, RDS and observability |
 | `oracles/` | operator-published route maps (see below) |
-| `agent_tools/` | three Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route` query RDS for a dynamic price, `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`) |
+| `agent_tools/` | four Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`) |
 | `vdot_sample_data/` | committed raw feed samples the parsers are tested against |
 
 **Oracles.** `oracles/i95.json` and `oracles/i66.json` are route maps published
@@ -42,6 +42,9 @@ documented assumptions.
 `list_tables`, `describe_table`) and a hand-curated toll graph once sat on top
 of this pipeline. We reversed course on letting an agent query the database
 directly, and both are gone. `db/drop_agent_surface.sql` tears down what they
-left behind in a live database. A narrower, DB-free replacement now exists —
-`agent_tools/` resolves a trip to its oracle price key only, see
+left behind in a live database. A narrower replacement now exists —
+`agent_tools/` resolves a trip to its oracle route and prices it, no
+free-form SQL and no traversal: `i66_route`/`i95_route`/`i495_route` each
+run one fixed, parameterized RDS query; `dulles_route` prices entirely
+from its own committed oracles, no database at all. See
 `docs/oracle-tools-spec.md`.

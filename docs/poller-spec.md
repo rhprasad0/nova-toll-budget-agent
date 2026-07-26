@@ -180,7 +180,8 @@ discriminator (`feed` column and its CHECK are gone). Three read-path indexes
 once existed on the old shared table for the agent's query tools; they were
 dropped along with the agent (see `db/drop_agent_surface.sql`). The three
 indexes above are their replacement, added when `agent_tools/i66_route.py`/
-`i95_route.py` (`docs/oracle-tools-spec.md`) became a real read pattern:
+`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) became a real
+read pattern:
 without them, a per-key price lookup was a full scan of that key's entire
 history, since neither table's primary key leads with the lookup column.
 
@@ -202,11 +203,11 @@ and replays remain harmless either way.
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
 | `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | toll-loader Lambda |
-| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py` (`docs/oracle-tools-spec.md`) |
+| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) |
 
 The original `agent_readonly` role was abandoned along with the free-form
 SQL agent surface it served; see `docs/oracle-findings.md`. `pricing_reader`
-is a new, narrower role for the two pricing-aware route tools — SELECT-only
+is a new, narrower role for the pricing-aware route tools — SELECT-only
 on the same three tables `loader_writer` writes, nothing else.
 
 ## Secondary live source: Transurban Express Lanes

@@ -201,6 +201,83 @@ stays a `>= 0` sanity check rather than a value-equality assertion, since a
 tight tolerance would need more samples across more conditions (time of day,
 volatility regime) than this investigation gathered to set without guessing.
 
+## 8. Splitting i95_route into i95_route + i495_route: cross-corridor trips are out of scope
+
+*(2026-07-26)*
+
+`i95_route` originally covered both the 495 Express Lanes and the 95/395
+Express Lanes as one tool, joining a 495 leg and a 95/395 leg into a 2-leg
+"composite" trip for any origin/destination pair that crossed between the
+two. That joint was the exact source of the 16-id VDOT gap (section 2
+above): every one of the 107 oracle pairs touching those ids crosses the
+physical break between the two facilities at the Springfield interchange —
+confirmed by walking `oracles/i95.json`, there is no dedicated
+Express-to-Express ramp there, so a driver making that transition uses
+general-purpose lanes for a stretch. Two rounds of special-casing (a
+live-table fallback, then a `$0.00` gap placeholder) patched around that
+joint without removing it.
+
+A live bug report (a currently-`CLOSED` southbound leg still pricing
+normally) led to re-examining the joint itself rather than adding a third
+special case. expresslanes.com already treats the 495 Express Lanes and
+the 95/395 Express Lanes as separate products, billed as separate tolls
+with an untolled general-purpose gap between them — the code's own
+docstring said as much before this change. Splitting the *tools* to match
+that product split removes the joint entirely, rather than patching around
+it again:
+
+- Of the 685 published pairs, 78 are within-495 only, 307 are within-95/395
+  only, and 300 cross between the two facilities. Of those 300,
+  107 touch one of the 16 gap ids; the other 193 have a real,
+  already-VDOT-published second leg (e.g. `od_pair_id` 1263–1265) and
+  priced correctly even before this change — they're dropped anyway, since
+  a tool boundary drawn around "no gap ids" rather than "no cross-corridor
+  trips" would still need this same seam revisited the next time VDOT
+  drops coverage for some other cross-corridor leg.
+- Zero within-facility pair is ever multi-leg — every trip either split
+  tool resolves has exactly one leg. There is no composite-trip concept
+  left in either tool.
+- Zero node label is shared between the two facilities, so filtering the
+  one committed `oracles/i95.json` down to each tool's own facility at
+  import time introduces no new lookup ambiguity.
+- The "direction must come from the pair, never the node id suffix"
+  footgun (section basis for a standing code rule in both tools) turns out
+  to be exclusively a cross-corridor phenomenon — every real
+  suffix/direction mismatch checked against the full 685-pair oracle sits
+  on a cross-corridor pair. It cannot occur within either split facility.
+- `trip_pricing_i95` rows priced but unreachable via any oracle lookup
+  split cleanly by corridor: `od_pair_id` 1316 (`I-95-SB`) stays i95's
+  drift; 1000/1093 (`I-495-NB`/`I-495-SB`, both permanently
+  `NO_DETERMINATION`/`UNKNOWN` dead links) plus 16 more real, actively
+  priced `I-495` rows (1001–1008, and 1039/1047/1054/1061/1067/1073/1078/
+  1084) become i495's drift — that second group is real Transurban
+  billing for the *same* on-ramps as several within-495 ids, just under a
+  distinct `od_pair_id` reserved for continuing past the junction into a
+  cross-corridor trip (e.g. `od_pair_id` 1039 is "495 Express Lanes
+  Start"'s own id when its trip continues cross-corridor, distinct from
+  1040, the id the identical physical on-ramp gets for a trip that
+  terminates at the junction itself — a within-495 trip `i495_route` does
+  produce). Neither drift set was fully known before writing
+  `tests/test_route_tools_live_crosscheck.py`'s corridor-scoped version of
+  this check; both are asserted as exact sets there, not guessed.
+- The one previously-working case this drops silently affects is the
+  16-id gap's sole "trip terminates exactly at the junction" member,
+  `od_pair_id` 1374 (`I-495 Near Braddock Road` → `I-395 Near Edsall
+  Road`) — its destination *is* the first tollable point after the gap,
+  so there's no cross-corridor second leg to drop in the first place. It
+  keeps resolving, just now only via `i495_route` (not as a "cross-corridor
+  trip" at all — it was always a same-facility trip once you notice the
+  destination sits on the 495 side of the junction node).
+
+Net effect on `i95_route`: the availability gate added for the bug report
+(`link_status` must match the row's own `I-95-NB`/`I-95-SB` corridor's
+`"{DIRECTION}_OPEN"`) is unchanged and is now the *only* pricing-stage
+logic left in that tool — no live-table fallback, no gap placeholder, no
+facility classification. `i495_route` is new, and structurally the
+simplest of the three tools: single leg, no availability gate (verified
+live, `I-495-NB`/`I-495-SB` never report a real `link_status`), no
+live-fallback source.
+
 ## What was deleted, and what remains
 
 Alongside this write-up: `db/graph.sql` (the curated toll graph), the four

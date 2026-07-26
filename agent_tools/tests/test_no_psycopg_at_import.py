@@ -15,3 +15,9 @@ def test_i95_route_module_imports_without_psycopg():
     import i95_route  # noqa: F401
 
     assert "psycopg" not in sys.modules
+
+
+def test_i495_route_module_imports_without_psycopg():
+    import i495_route  # noqa: F401
+
+    assert "psycopg" not in sys.modules
