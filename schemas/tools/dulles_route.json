@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dulles_route",
+  "version": "1.0.0",
+  "description": "Resolves origin/destination (label or node id) against oracles/dulles_toll_road.json and oracles/dulles_greenway.json to a route and its price. Both facilities are fixed-toll roads with no price history, so pricing lives directly in the committed oracles -- no RDS lookup, unlike i66_route/i95_route. A trip confined to one facility resolves to one leg; a trip crossing both (they connect at Route 28) resolves to two legs, summed. at_time only affects Dulles Greenway legs (peak vs off-peak); the Dulles Toll Road has no time-of-day pricing. Design: docs/oracle-tools-spec.md; version enforced by tests/test_tool_schemas.py.",
+  "input": {
+    "type": "object",
+    "properties": {
+      "origin": {
+        "type": "string",
+        "description": "Interchange label (e.g. 'Exit 12 - SR 602 (Reston Pkwy)'), case-insensitive, or the oracle's raw node id (e.g. '12') as a fallback."
+      },
+      "destination": {
+        "type": "string",
+        "description": "Same rules as origin."
+      },
+      "at_time": {
+        "type": "string",
+        "description": "ISO-8601 timestamp; a value with no offset is assumed America/New_York. Defaults to now (America/New_York) if omitted. Only affects Dulles Greenway legs' peak/off-peak classification (peak: weekdays 6:30-9:00am eastbound, 4:00-6:30pm westbound) -- the Dulles Toll Road has no time-of-day pricing."
+      }
+    },
+    "required": ["origin", "destination"],
+    "additionalProperties": false,
+    "examples": [
+      {
+        "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+        "destination": "Exit 1 - US 15/SR 7 (Leesburg Bypass)"
+      },
+      {
+        "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+        "destination": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        "at_time": "2026-07-27T07:30:00-04:00"
+      }
+    ]
+  },
+  "$defs": {
+    "node_ref": {
+      "type": "object",
+      "properties": {
+        "node_id": { "type": "string" },
+        "label": { "type": "string" }
+      },
+      "required": ["node_id", "label"],
+      "additionalProperties": false
+    },
+    "leg": {
+      "type": "object",
+      "properties": {
+        "facility": { "type": "string", "enum": ["dulles_toll_road", "dulles_greenway"] },
+        "direction": { "type": "string", "enum": ["EB", "WB"] },
+        "entry": { "$ref": "#/$defs/node_ref" },
+        "exit": { "$ref": "#/$defs/node_ref" },
+        "price_usd": { "type": "string", "description": "Decimal string, never a float." },
+        "rate_period": {
+          "type": ["string", "null"],
+          "enum": ["peak", "off_peak", null],
+          "description": "null for a dulles_toll_road leg (no time-of-day pricing); 'peak' or 'off_peak' for a dulles_greenway leg."
+        }
+      },
+      "required": ["facility", "direction", "entry", "exit", "price_usd", "rate_period"],
+      "additionalProperties": false
+    }
+  },
+  "output": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "origin": { "type": "string", "description": "Echoes the caller's raw input string." },
+          "destination": { "type": "string", "description": "Echoes the caller's raw input string." },
+          "at_time": {
+            "type": "string",
+            "description": "The resolved, ISO-8601 time actually used for peak/off-peak classification (the caller's at_time, or now in America/New_York if omitted)."
+          },
+          "legs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "One leg for a single-facility trip, two for a trip crossing the Route 28 boundary between facilities.",
+            "items": { "$ref": "#/$defs/leg" }
+          },
+          "facility_totals": {
+            "type": "object",
+            "properties": {
+              "dulles_toll_road": { "type": "string" },
+              "dulles_greenway": { "type": "string" }
+            },
+            "required": ["dulles_toll_road", "dulles_greenway"],
+            "additionalProperties": false,
+            "description": "Both keys always present ('0.00' if a facility has no legs) -- a stable shape, no branching on key presence."
+          },
+          "total_usd": { "type": "string", "description": "Decimal string sum of legs[].price_usd." }
+        },
+        "required": ["origin", "destination", "at_time", "legs", "facility_totals", "total_usd"],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Unknown origin/destination identifier on either facility, no direct or connecting trip between a known pair, an ambiguous match, or a malformed at_time."
+          },
+          "valid_options": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Non-empty only for resolution errors, where it lists self-correction candidates. Empty for a malformed at_time, since retrying the same inputs won't fix it."
+          }
+        },
+        "required": ["error", "valid_options"],
+        "additionalProperties": false
+      }
+    ],
+    "examples": [
+      {
+        "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+        "destination": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        "at_time": "2026-07-27T07:30:00-04:00",
+        "legs": [
+          {
+            "facility": "dulles_toll_road",
+            "direction": "WB",
+            "entry": { "node_id": "12", "label": "Exit 12 - SR 602 (Reston Pkwy)" },
+            "exit": { "node_id": "28", "label": "Route 28 (Dulles Toll Road / Dulles Greenway)" },
+            "price_usd": "2.00",
+            "rate_period": null
+          },
+          {
+            "facility": "dulles_greenway",
+            "direction": "WB",
+            "entry": { "node_id": "28", "label": "Route 28 (Dulles Toll Road / Dulles Greenway)" },
+            "exit": { "node_id": "1", "label": "Exit 1 - US 15/SR 7 (Leesburg Bypass)" },
+            "price_usd": "5.80",
+            "rate_period": "peak"
+          }
+        ],
+        "facility_totals": { "dulles_toll_road": "2.00", "dulles_greenway": "5.80" },
+        "total_usd": "7.80"
+      },
+      {
+        "error": "unknown origin 'Exit 99': no matching label or node id on either facility",
+        "valid_options": ["Exit 1 - US 15/SR 7 (Leesburg Bypass)", "Exit 10 - SR 657", "Exit 11 - SR 286 (Fairfax County Pkwy)"]
+      }
+    ]
+  }
+}

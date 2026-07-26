@@ -1,5 +1,5 @@
 """Structural guard on schemas/tools/*.json -- the JSON Schema contract of
-record for i66_route/i95_route (docs/oracle-tools-spec.md).
+record for i66_route/i95_route/dulles_route (docs/oracle-tools-spec.md).
 
 Stdlib-only: no jsonschema validator here (deliberately dropped as an
 orphaned dependency, commit 44ef7c9) -- output-shape correctness is asserted
@@ -17,7 +17,7 @@ import re
 from conftest import REPO_ROOT
 
 SCHEMA_DIR = REPO_ROOT / "schemas" / "tools"
-TOOLS = ("i66_route", "i95_route")
+TOOLS = ("i66_route", "i95_route", "dulles_route")
 
 
 def _schema(tool: str) -> dict:

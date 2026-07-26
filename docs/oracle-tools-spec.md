@@ -2,11 +2,22 @@
 
 Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-26
 
-Two Strands Agents SDK `@tool` functions, `i66_route` and `i95_route`, that
-resolve a human trip ("from X to Y", at an optional time) to its route and
-its price. Companion docs: `docs/oracle-findings.md` (what the oracles are
-and their known gaps), `docs/poller-spec.md` (the pricing tables and the
-`pricing_reader` role these tools query).
+Three Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`, and
+`dulles_route`, that resolve a human trip ("from X to Y", at an optional
+time) to its route and its price. Companion docs: `docs/oracle-findings.md`
+(what the i66/i95 oracles are and their known gaps), `docs/poller-spec.md`
+(the pricing tables and the `pricing_reader` role i66_route/i95_route
+query), `scripts/build_dulles_oracle.py`'s docstring (sourcing and
+documented assumptions behind the Dulles oracles).
+
+`dulles_route` differs from the other two in one structural way worth
+stating up front: the Dulles Toll Road and Dulles Greenway are fixed-toll
+roads with no price history, so pricing lives directly in the committed
+oracles (`oracles/dulles_toll_road.json`, `oracles/dulles_greenway.json`)
+rather than RDS -- this tool never opens a database connection. Route
+resolution, error shapes, and the `at_time` parameter otherwise follow the
+same conventions as `i66_route`/`i95_route`, documented below alongside
+them; sections that are i66/i95-specific say so.
 
 ## 1. Scope
 
@@ -256,3 +267,71 @@ mistaken for the final story.
   actual, pricing-aware `i66_route()`/`i95_route()` end to end against live
   RDS for one ordinary pair each plus one gap-id pair, confirming a real
   connection succeeds and the gap id never errors.
+
+## 6. `dulles_route` specifics
+
+The Dulles Toll Road (MWAA) and Dulles Greenway (TRIP II) are fixed-toll
+roads, not dynamically priced — so `dulles_route` deliberately breaks from
+§1-§5 in one respect: **no RDS**. Pricing lives directly in the committed
+oracles (`oracles/dulles_toll_road.json`, `oracles/dulles_greenway.json`),
+hand-authored (not scraped — neither operator publishes a machine-readable
+feed) by `scripts/build_dulles_oracle.py`. Everything else — flat-lookup
+route resolution, `{"error", "valid_options"}` failure shape,
+`at_time` accepted as ISO-8601 defaulting to now (America/New_York) — follows
+§1-§2 as written.
+
+**Two operators, two real pricing designs — not unified into one model:**
+- **Dulles Toll Road: additive.** A $4.00 mainline-plaza toll (crossed
+  between Exit 16 and Exit 17) plus a $2.00 ramp toll at each tolled
+  interchange actually used, summed. No time-of-day variation. Exit 16's
+  ramp toll applies to the eastbound exit only (quoted from source) — the
+  westbound movement there is free.
+- **Dulles Greenway: alternative flat fare, never summed.** "The Greenway
+  does not offer a discount for partial usage" (its own published FAQ
+  language) — a trip crossing the mainline plaza (between Exit 8 and Route
+  28) pays the mainline rate ($5.80 peak / $5.25 off-peak); a trip confined
+  to Exits 1-8 pays the lower secondary rate ($5.10 peak / $4.55 off-peak).
+  Peak hours are 6:30-9:00am eastbound, 4:00-6:30pm westbound, **assumed
+  weekday-only** — "rush hour" framing and industry convention support this,
+  but no source explicitly excluded weekends; worth confirming before
+  relying on it for a weekend trip.
+
+Both oracles carry `price_peak_usd`/`price_off_peak_usd` on every pair (the
+Dulles Toll Road's two values are always equal) so the tool has one pricing
+code path instead of a per-facility branch. Every leg carries a
+`rate_period` field: `"peak"`/`"off_peak"` for a `dulles_greenway` leg,
+`null` for a `dulles_toll_road` leg (reporting `"off_peak"` there would
+imply a peak rate exists, which it doesn't).
+
+**Cross-facility trips.** The two roads are one continuous physical
+corridor, connected at Route 28 — a node with the identical label in both
+oracles. A trip confined to one facility resolves as a single leg, same as
+`i66_route`. A trip starting on one facility and ending on the other
+resolves as **two legs, split at Route 28 and summed** — origin→Route 28 on
+the first facility, Route 28→destination on the second — mirroring how
+`i95_route` handles a 495↔95/395 cross-corridor trip. This matches real
+billing: the two operators charge independently, never one combined fare.
+`facility_totals` always carries both `"dulles_toll_road"` and
+`"dulles_greenway"` keys (`"0.00"` if a facility has no legs), same
+stable-shape rule as i95's `facility_totals`.
+
+**Data provenance and known limitations** — recorded in full in
+`scripts/build_dulles_oracle.py`'s docstring and each oracle's `notes`
+field, not duplicated here: rates are 2-axle E-ZPass only (no pay-by-plate,
+no 3+ axle); the exit list and per-ramp toll amounts were cross-referenced
+across public sources (no official machine-readable rate table exists to
+verify against automatically) rather than confirmed against a single
+authoritative source; Exit 16's directional asymmetry and the weekday-only
+peak assumption are flagged explicitly as assumptions, not quoted facts.
+Refresh by re-running `python scripts/build_dulles_oracle.py` after
+updating its hand-transcribed rate constants — never at runtime.
+
+Tests: `tests/test_dulles_toll_road_oracle.py` / `test_dulles_greenway_oracle.py`
+(shape/scale guards mirroring `test_i66_oracle.py`, plus the
+additive-vs-alternative pricing invariants above) and
+`agent_tools/tests/test_dulles_route.py` (label lookup, case-insensitivity,
+node-id fallback, unknown-identifier errors, single-facility trips on each
+road, the cross-facility composite both directions, peak/off-peak/weekend
+classification, the synthetic ambiguous-match guard, logging assertions) —
+no RDS, so no `FakeConnection`/`monkeypatch` needed for the happy paths,
+unlike i66/i95's test files.
