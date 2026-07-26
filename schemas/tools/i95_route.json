@@ -111,7 +111,7 @@
         "properties": {
           "error": {
             "type": "string",
-            "description": "Unknown origin/destination identifier, no direct trip between a known pair, an ambiguous match (unreachable today), a malformed at_time, no priced row found for a non-gap od_pair_id in either trip_pricing_i95 or trip_pricing_i95_live at or before at_time, or an unrecognized corridor_name/road value (schema drift beyond the classification this tool knows about)."
+            "description": "Unknown origin/destination identifier, no direct trip between a known pair, an ambiguous match (unreachable today), a malformed at_time, no priced row found for a non-gap od_pair_id in either trip_pricing_i95 or trip_pricing_i95_live at or before at_time, a non-gap od_pair_id whose only known row(s) are closed/unavailable for that lane (link_status/status not open), or an unrecognized corridor_name/road value (schema drift beyond the classification this tool knows about)."
           },
           "valid_options": {
             "type": "array",
@@ -178,6 +178,10 @@
       },
       {
         "error": "no price found for od_pair_id 1200 at or before 2026-07-26T14:32:00-04:00 in trip_pricing_i95 or trip_pricing_i95_live",
+        "valid_options": []
+      },
+      {
+        "error": "od_pair_id 1151 is not currently available: trip_pricing_i95.link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN'), and no usable row in trip_pricing_i95_live at or before 2026-07-26T14:32:00-04:00",
         "valid_options": []
       }
     ]

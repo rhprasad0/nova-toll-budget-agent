@@ -19,10 +19,22 @@ the 16 od_pair_ids (1374-1389) VDOT's feed has never published
 (docs/oracle-findings.md section 2). Both sources answer "the most recently
 published price at or before at_time" (default: now, America/New_York),
 never "the price this instant" -- see the at_time Args entry below and
-docs/oracle-findings.md section 7. A leg still unpriced by either source is
-a hard error, UNLESS it's one of the 16 known gap ids, in which case it
-prices at $0.00 with source "unpriced_gap" rather than failing the whole
-call -- a documented placeholder, never a claim that the trip is free.
+docs/oracle-findings.md section 7. A trip_pricing_i95 row only counts as
+priceable if its lane is actually open: for the reversible I-95-NB/I-95-SB
+corridor, link_status must exactly match that row's own corridor's
+"{DIRECTION}_OPEN" (CLOSED/NO_DETERMINATION/*_CLOSING/*_OPENING all fail);
+I-495-NB/I-495-SB rows are exempt from this check, since VDOT never reports
+a meaningful link_status there (verified live: 100% NO_DETERMINATION/UNKNOWN,
+never *_OPEN, despite carrying real nonzero rates -- the 495 Express Lanes
+aren't reversible, so the check is a no-op for them by design, not an
+oversight). A trip_pricing_i95_live row is exempt from the corridor split
+but similarly fails if its status is (case-insensitively) "closed". A row
+that fails its check is treated exactly like a missing row -- same
+fallthrough as below, never a separate branch. A leg still unpriced by
+either source is a hard error, UNLESS it's one of the 16 known gap ids, in
+which case it prices at $0.00 with source "unpriced_gap" rather than
+failing the whole call -- a documented placeholder, never a claim that the
+trip is free.
 
 Each priced leg is also classified into a facility group -- "495" or
 "95_395" -- mirroring expresslanes.com's own split of the 495 Express Lanes
@@ -80,6 +92,19 @@ _ROAD_TO_FACILITY = {
     "495": "495",
     "95": "95_395",
     "395": "95_395",
+}
+
+# Only I-95-NB/I-95-SB carry a meaningful open/closed signal (the reversible
+# lane segment). I-495-NB/I-495-SB report NO_DETERMINATION/UNKNOWN on every
+# row, always -- verified live against RDS: 100% of ~365k I-495 rows, never a
+# single *_OPEN value, despite carrying real fluctuating nonzero rates. VDOT
+# simply never populates a real status there (the 495 Express Lanes aren't
+# reversible), so those corridors are deliberately left out of this map and
+# bypass the availability gate entirely -- gating them would hard-error every
+# 495 trip, not fix anything.
+_RESERVED_LANE_REQUIRED_STATUS = {
+    "I-95-NB": "NORTHBOUND_OPEN",
+    "I-95-SB": "SOUTHBOUND_OPEN",
 }
 
 
@@ -225,7 +250,7 @@ def _classify_facility_group(
 
 
 _I95_PRIMARY_SQL = """
-SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at, link_status
 FROM trip_pricing_i95
 WHERE od_pair_id = %(od_pair_id)s
   AND interval_end_at <= %(at_time)s
@@ -234,7 +259,7 @@ LIMIT 1
 """
 
 _I95_LIVE_SQL = """
-SELECT od_pair_id, price_usd, road, observed_at
+SELECT od_pair_id, price_usd, road, observed_at, status
 FROM trip_pricing_i95_live
 WHERE od_pair_id = %(od_pair_id)s
   AND observed_at <= %(at_time)s
@@ -246,47 +271,58 @@ LIMIT 1
 def _price_i95_leg(cur, *, od_pair_id: int, at_time: datetime) -> dict:
     """Price one od_pair_id: trip_pricing_i95 first, then trip_pricing_i95_live.
 
-    Raises _PricingError if neither source has a row and od_pair_id is not
-    one of the 16 known gap ids; those default to a flagged $0.00 instead
-    (docs/oracle-findings.md section 2 -- VDOT has never priced them, and
-    Transurban's live snapshot has no history before its own ingestion
-    start, so a miss there for a gap id is expected, not anomalous).
+    A row from either source only counts if its lane is open (see
+    _RESERVED_LANE_REQUIRED_STATUS and the module docstring) -- a row that
+    fails that check is treated exactly like a missing row and falls
+    through to the next tier, same as today.
+
+    Raises _PricingError if no *open* row exists in either source and
+    od_pair_id is not one of the 16 known gap ids; those default to a
+    flagged $0.00 instead (docs/oracle-findings.md section 2 -- VDOT has
+    never priced them, and Transurban's live snapshot has no history before
+    its own ingestion start, so a miss there for a gap id is expected, not
+    anomalous).
     """
     cur.execute(_I95_PRIMARY_SQL, {"od_pair_id": od_pair_id, "at_time": at_time})
     row = cur.fetchone()
+    unavailable: tuple[str, str, str] | None = None
     if row is not None:
-        _, corridor_name, rate, interval_end_at = row
-        return {
-            "od_pair_id": od_pair_id,
-            "price_usd": str(rate),
-            "source": "trip_pricing_i95",
-            "facility_group": _classify_facility_group(
-                corridor_name,
-                _CORRIDOR_TO_FACILITY,
-                od_pair_id=od_pair_id,
-                source="trip_pricing_i95.corridor_name",
-            ),
-            "corridor_name": corridor_name,
-            "priced_as_of": interval_end_at.isoformat(),
-        }
+        _, corridor_name, rate, interval_end_at, link_status = row
+        required_status = _RESERVED_LANE_REQUIRED_STATUS.get(corridor_name)
+        if required_status is None or link_status == required_status:
+            return {
+                "od_pair_id": od_pair_id,
+                "price_usd": str(rate),
+                "source": "trip_pricing_i95",
+                "facility_group": _classify_facility_group(
+                    corridor_name,
+                    _CORRIDOR_TO_FACILITY,
+                    od_pair_id=od_pair_id,
+                    source="trip_pricing_i95.corridor_name",
+                ),
+                "corridor_name": corridor_name,
+                "priced_as_of": interval_end_at.isoformat(),
+            }
+        unavailable = (corridor_name, link_status, required_status)
 
     cur.execute(_I95_LIVE_SQL, {"od_pair_id": od_pair_id, "at_time": at_time})
     row = cur.fetchone()
     if row is not None:
-        _, price, road, observed_at = row
-        return {
-            "od_pair_id": od_pair_id,
-            "price_usd": str(price),
-            "source": "trip_pricing_i95_live",
-            "facility_group": _classify_facility_group(
-                road,
-                _ROAD_TO_FACILITY,
-                od_pair_id=od_pair_id,
-                source="trip_pricing_i95_live.road",
-            ),
-            "corridor_name": None,
-            "priced_as_of": observed_at.isoformat(),
-        }
+        _, price, road, observed_at, status = row
+        if (status or "").strip().casefold() != "closed":
+            return {
+                "od_pair_id": od_pair_id,
+                "price_usd": str(price),
+                "source": "trip_pricing_i95_live",
+                "facility_group": _classify_facility_group(
+                    road,
+                    _ROAD_TO_FACILITY,
+                    od_pair_id=od_pair_id,
+                    source="trip_pricing_i95_live.road",
+                ),
+                "corridor_name": None,
+                "priced_as_of": observed_at.isoformat(),
+            }
 
     if od_pair_id in _GAP_OD_PAIR_IDS:
         return {
@@ -297,6 +333,16 @@ def _price_i95_leg(cur, *, od_pair_id: int, at_time: datetime) -> dict:
             "corridor_name": None,
             "priced_as_of": None,
         }
+
+    if unavailable is not None:
+        corridor_name, link_status, required_status = unavailable
+        raise _PricingError(
+            f"od_pair_id {od_pair_id} is not currently available: "
+            f"trip_pricing_i95.link_status={link_status!r} for corridor "
+            f"{corridor_name!r} (requires {required_status!r}), and no "
+            f"usable row in trip_pricing_i95_live at or before "
+            f"{at_time.isoformat()}"
+        )
 
     raise _PricingError(
         f"no price found for od_pair_id {od_pair_id} at or before "
@@ -328,7 +374,8 @@ def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict
     enumerated by Transurban itself, including cross-corridor trips billed as
     two whole separate tolls. Each resolved leg is then priced against
     trip_pricing_i95 (falling back to Transurban's own live snapshot for the
-    16 known VDOT gap ids) over RDS.
+    16 known VDOT gap ids) over RDS -- a row only counts if its lane is
+    actually open (link_status/status), never just because it has a rate.
 
     Args:
         origin: Ramp label (e.g. 'Route 267'), case-insensitive, or the
@@ -364,7 +411,11 @@ def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict
         origin with no direct trip to the given destination, or a
         pricing/at_time failure, so the caller can self-correct where
         possible; valid_options is empty for a pricing miss or a bad
-        at_time, since retrying the same inputs won't fix either.
+        at_time, since retrying the same inputs won't fix either. A
+        pricing failure includes a non-gap leg whose only known row(s) are
+        closed/unavailable for their lane -- the error message names the
+        corridor and link_status, distinguishing "found but closed" from a
+        true data miss.
     """
     result = _lookup(origin, destination)
     if "error" in result:

@@ -8,6 +8,11 @@ Real-data fixtures are verified directly against oracles/i95.json (see the
 inline values below); the ambiguous-match branch is exercised with synthetic
 data since the real oracle has no such case today (verified 685/685 pairs
 unique on (entry, exit) and on (entry_label, exit_label)).
+
+Primary-query row tuples carry a trailing link_status; live-query row tuples
+carry a trailing status. Both must be set consistently with the row's own
+corridor/road or the availability gate in _price_i95_leg will reject them --
+see _RESERVED_LANE_REQUIRED_STATUS in i95_route.py.
 """
 
 import logging
@@ -23,13 +28,42 @@ _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)
 _LIVE_OBSERVED_AT = datetime(2026, 7, 26, 14, 30, tzinfo=_EASTERN)
 
-# (od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at)
-_ROUTE267_TO_495END_ROW = (1038, "I-495-NB", Decimal("2.75"), _PRICED_AS_OF)
-_OLDKEENE_LEG1_ROW = (1144, "I-95-NB", Decimal("3.25"), _PRICED_AS_OF)
-_OLDKEENE_LEG2_ROW = (1092, "I-495-NB", Decimal("6.10"), _PRICED_AS_OF)
-_BRADDOCK_LEG1_ROW = (1083, "I-495-NB", Decimal("6.60"), _PRICED_AS_OF)
-# (od_pair_id, price_usd, road, observed_at) -- trip_pricing_i95_live shape
-_BRADDOCK_LEG2_LIVE_ROW = (1374, Decimal("3.45"), "495", _LIVE_OBSERVED_AT)
+# (od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at, link_status)
+# link_status must match the row's own corridor's required "{DIR}_OPEN" for
+# I-95-NB/I-95-SB rows to price -- see _RESERVED_LANE_REQUIRED_STATUS. I-495
+# rows are exempt from that check, so "NO_DETERMINATION" (their real-world
+# value) is used there to prove the exemption rather than coincidentally
+# passing a strict check.
+_ROUTE267_TO_495END_ROW = (
+    1038,
+    "I-495-NB",
+    Decimal("2.75"),
+    _PRICED_AS_OF,
+    "NO_DETERMINATION",
+)
+_OLDKEENE_LEG1_ROW = (
+    1144,
+    "I-95-NB",
+    Decimal("3.25"),
+    _PRICED_AS_OF,
+    "NORTHBOUND_OPEN",
+)
+_OLDKEENE_LEG2_ROW = (
+    1092,
+    "I-495-NB",
+    Decimal("6.10"),
+    _PRICED_AS_OF,
+    "NO_DETERMINATION",
+)
+_BRADDOCK_LEG1_ROW = (
+    1083,
+    "I-495-NB",
+    Decimal("6.60"),
+    _PRICED_AS_OF,
+    "NO_DETERMINATION",
+)
+# (od_pair_id, price_usd, road, observed_at, status) -- trip_pricing_i95_live shape
+_BRADDOCK_LEG2_LIVE_ROW = (1374, Decimal("3.45"), "495", _LIVE_OBSERVED_AT, "open")
 
 
 def test_single_leg_lookup(monkeypatch):
@@ -139,7 +173,13 @@ def test_non_gap_id_with_no_price_anywhere_is_a_hard_error_not_a_partial_result(
 
 
 def test_unrecognized_corridor_name_is_a_hard_error(monkeypatch):
-    bad_row = (1038, "I-395-NEW-EXTENSION", Decimal("2.75"), _PRICED_AS_OF)
+    bad_row = (
+        1038,
+        "I-395-NEW-EXTENSION",
+        Decimal("2.75"),
+        _PRICED_AS_OF,
+        "NO_DETERMINATION",
+    )
     monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(bad_row))
     result = i95_route("Route 267", "495 Express Lanes End/George Wash. Mem. Pkwy.")
     assert "error" in result
@@ -148,7 +188,7 @@ def test_unrecognized_corridor_name_is_a_hard_error(monkeypatch):
 
 
 def test_unrecognized_road_is_a_hard_error(monkeypatch):
-    bad_live_row = (1374, Decimal("3.45"), "895", _LIVE_OBSERVED_AT)
+    bad_live_row = (1374, Decimal("3.45"), "895", _LIVE_OBSERVED_AT, "open")
     monkeypatch.setattr(
         i95_mod,
         "_env_connect",
@@ -158,6 +198,74 @@ def test_unrecognized_road_is_a_hard_error(monkeypatch):
     assert "error" in result
     assert "895" in result["error"]
     assert "1374" in result["error"]
+
+
+def test_closed_primary_row_is_a_hard_error_not_priced(monkeypatch):
+    # Reproduces the reported bug live: od_pair_id 1151 ("TURKEYCOCK TO
+    # US-1", southbound, real corridor I-95-SB) is currently CLOSED in RDS,
+    # and used to still price at $6.75. No live-table row either.
+    closed_row = (1151, "I-95-SB", Decimal("6.75"), _PRICED_AS_OF, "CLOSED")
+    monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(closed_row, None))
+    result = i95_route("I-395 Near Edsall Road", "US-1")
+    assert "error" in result
+    assert result["valid_options"] == []
+    assert "1151" in result["error"]
+    assert "CLOSED" in result["error"]
+    assert "legs" not in result
+
+
+def test_495_corridor_row_ignores_no_determination_status(monkeypatch):
+    # I-495-NB/SB never report a real link_status (always NO_DETERMINATION/
+    # UNKNOWN in production), so those corridors must bypass the gate --
+    # otherwise every 495 trip would hard-error.
+    row = (1038, "I-495-NB", Decimal("2.75"), _PRICED_AS_OF, "NO_DETERMINATION")
+    monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(row))
+    result = i95_route("Route 267", "495 Express Lanes End/George Wash. Mem. Pkwy.")
+    assert result["legs"][0]["price_usd"] == "2.75"
+
+
+def test_wrong_direction_open_primary_row_is_a_hard_error(monkeypatch):
+    # A real, valid *_OPEN status, but for the wrong direction of this
+    # corridor -- pins the exact-match rule against a sloppy "OPEN in
+    # status" implementation.
+    wrong_direction_row = (
+        1151,
+        "I-95-SB",
+        Decimal("6.75"),
+        _PRICED_AS_OF,
+        "NORTHBOUND_OPEN",
+    )
+    monkeypatch.setattr(
+        i95_mod, "_env_connect", _connect_returning(wrong_direction_row, None)
+    )
+    result = i95_route("I-395 Near Edsall Road", "US-1")
+    assert "error" in result
+    assert "1151" in result["error"]
+
+
+def test_closed_primary_falls_through_to_open_live_row(monkeypatch):
+    closed_row = (1151, "I-95-SB", Decimal("6.75"), _PRICED_AS_OF, "CLOSED")
+    live_row = (1151, Decimal("6.50"), "95", _LIVE_OBSERVED_AT, "open")
+    monkeypatch.setattr(
+        i95_mod, "_env_connect", _connect_returning(closed_row, live_row)
+    )
+    result = i95_route("I-395 Near Edsall Road", "US-1")
+    leg = result["legs"][0]
+    assert leg["source"] == "trip_pricing_i95_live"
+    assert leg["price_usd"] == "6.50"
+
+
+def test_closed_live_status_falls_through_to_gap_placeholder(monkeypatch):
+    live_row = (1374, Decimal("3.45"), "495", _LIVE_OBSERVED_AT, "closed")
+    monkeypatch.setattr(
+        i95_mod,
+        "_env_connect",
+        _connect_returning(_BRADDOCK_LEG1_ROW, None, live_row),
+    )
+    result = i95_route("I-495 Near Braddock Road", "I-395 Near Edsall Road")
+    gap_leg = result["legs"][1]
+    assert gap_leg["source"] == "unpriced_gap"
+    assert gap_leg["price_usd"] == "0.00"
 
 
 def test_classify_facility_group_covers_all_known_corridor_and_road_values():
@@ -307,8 +415,8 @@ def test_direction_comes_from_the_pair_never_the_node_id_suffix(monkeypatch):
     # This is a two-leg composite trip in the real oracle: od_pair_id 1039
     # then 1263.
     rows = (
-        (1039, "I-95-SB", Decimal("2.00"), _PRICED_AS_OF),
-        (1263, "I-95-SB", Decimal("1.50"), _PRICED_AS_OF),
+        (1039, "I-95-SB", Decimal("2.00"), _PRICED_AS_OF, "SOUTHBOUND_OPEN"),
+        (1263, "I-95-SB", Decimal("1.50"), _PRICED_AS_OF, "SOUTHBOUND_OPEN"),
     )
     monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(*rows))
     result = i95_route(
@@ -321,7 +429,7 @@ def test_direction_comes_from_the_pair_never_the_node_id_suffix(monkeypatch):
 def test_label_shared_by_multiple_node_ids_still_resolves_unambiguously(monkeypatch):
     # "Westpark Drive" maps to 5 distinct node ids in the real oracle; the
     # (entry_label, exit_label) pair is still unique.
-    row = (1037, "I-495-NB", Decimal("2.00"), _PRICED_AS_OF)
+    row = (1037, "I-495-NB", Decimal("2.00"), _PRICED_AS_OF, "NO_DETERMINATION")
     monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(row))
     result = i95_route(
         "Westpark Drive", "495 Express Lanes End/George Wash. Mem. Pkwy."

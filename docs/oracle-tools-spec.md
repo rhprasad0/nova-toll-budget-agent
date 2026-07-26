@@ -162,20 +162,37 @@ a known-gap leg:
 - `facility_totals` always carries both keys (`"0.00"` if a group has no
   legs) — a stable shape, no branching on key presence.
 
+**A row is only usable if its lane is actually open, not just because it
+has a rate** (`docs/poller-spec.md`'s "Rate/status independence" warning —
+rows can be `CLOSED` with a stale nonzero rate). For `trip_pricing_i95`,
+this only gates the reversible `I-95-NB`/`I-95-SB` corridor: `link_status`
+must exactly match that row's own corridor's `"{DIRECTION}_OPEN"`
+(`CLOSED`/`NO_DETERMINATION`/any `*_CLOSING`/`*_OPENING` all fail).
+`I-495-NB`/`I-495-SB` rows are exempt — verified live, 100% of that
+corridor's history reports `NO_DETERMINATION`/`UNKNOWN`, never `*_OPEN`,
+because the 495 Express Lanes aren't reversible and VDOT never populates a
+meaningful status there; gating them would hard-error every 495 trip. For
+`trip_pricing_i95_live`, a row is gated uniformly: usable unless `status` is
+case-insensitively `"closed"`. A row that fails its gate is treated exactly
+like a missing row — same fallthrough as below, never a separate branch.
+
 **A leg means the trip is published, not that a real price was found for
 it.** 16 of i95's `od_pair_id`s (1374–1389, spanning roughly 107 of
 Transurban's 562 billed trips) have never appeared in VDOT's feed
 (`docs/oracle-findings.md` §2). For those, the tool falls back to
 Transurban's own live snapshot (`trip_pricing_i95_live`,
-`docs/poller-spec.md`'s "Secondary live source"); if even that has no row
-for the requested `at_time` (e.g. a time before the live table's own
-ingestion start, or a moment the relevant lane direction was closed with no
-stored row), the leg prices at `"0.00"` with `"source": "unpriced_gap"`
-instead of failing the whole call — a flagged placeholder, never a claim
-that the trip is actually free. Any other missing price — a non-gap
-`od_pair_id`, or any i66 zone pair, neither of which has a live-fallback
-source — is a hard error for the whole call, discarding any other leg's
-already-found price rather than returning a partial result. Evals for
+`docs/poller-spec.md`'s "Secondary live source"); if even that has no
+*usable* row for the requested `at_time` (e.g. a time before the live
+table's own ingestion start, a moment the relevant lane direction was
+closed with no stored row, or a stored row that fails the availability gate
+above), the leg prices at `"0.00"` with `"source": "unpriced_gap"` instead
+of failing the whole call — a flagged placeholder, never a claim that the
+trip is actually free. Any other missing or unavailable price — a non-gap
+`od_pair_id` whose only known row(s) are closed/unavailable, or any i66
+zone pair, neither of which has a live-fallback source — is a hard error
+for the whole call (the message names the corridor and `link_status`, so a
+caller can tell "closed" apart from "no data at all"), discarding any other
+leg's already-found price rather than returning a partial result. Evals for
 whether `$0.00` is the right stand-in for the gap case are future work; this
 is a v1 default.
 
@@ -235,8 +252,12 @@ mistaken for the final story.
   outcomes, and (new) the pricing stage's every branch — primary-table hit,
   i95's live-table fallback, the known-gap-id `$0.00` default, a non-gap
   price miss as a hard error, a two-leg partial failure, every facility
-  classification value plus the unrecognized-value hard error, and
-  `at_time` parsing/defaulting. Pricing tests use a duck-typed fake
+  classification value plus the unrecognized-value hard error, `at_time`
+  parsing/defaulting, and the availability gate's own branches (a closed
+  and a wrong-direction `I-95-NB`/`I-95-SB` primary row each hard-erroring,
+  an `I-495` row bypassing the gate under `NO_DETERMINATION`, a closed
+  primary row falling through to an open live row, and a closed live
+  `status` falling through to the gap placeholder). Pricing tests use a duck-typed fake
   connection/cursor (`agent_tools/tests/conftest.py`'s `FakeConnection`) via
   `monkeypatch`, not real RDS — no `live` marker.
   `agent_tools/tests/test_no_psycopg_at_import.py` guards that importing
