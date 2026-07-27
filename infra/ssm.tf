@@ -23,9 +23,10 @@ resource "aws_ssm_parameter" "i66_token" {
 }
 
 resource "aws_ssm_parameter" "cloudflare_api_token" {
-  name  = var.cloudflare_api_token_param_name
-  type  = "SecureString"
-  value = "REPLACE_OUT_OF_BAND"
+  name   = var.cloudflare_api_token_param_name
+  type   = "SecureString"
+  key_id = aws_kms_key.cloudflare_token.arn
+  value  = "REPLACE_OUT_OF_BAND"
 
   lifecycle {
     ignore_changes = [value]

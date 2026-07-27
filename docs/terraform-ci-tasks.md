@@ -14,7 +14,7 @@ original writeup if a "why" here needs more depth than the task note gives.
 
 ## Tasks
 
-- [ ] **Migrate the Cloudflare token to a dedicated KMS key.** Add
+- [x] **Migrate the Cloudflare token to a dedicated KMS key.** Add
       `aws_kms_key.cloudflare_token` (+ alias) to `infra/kms.tf`, following
       the existing `raw`/`tfstate`/`audit` per-resource key pattern. Add
       `key_id = aws_kms_key.cloudflare_token.arn` to
@@ -26,7 +26,10 @@ original writeup if a "why" here needs more depth than the task note gives.
       cached state value is the placeholder, and this update would otherwise
       silently push it back over the real value. Confirm with a follow-up
       `terraform plan` (no diff) and `aws ssm get-parameter
-      --with-decryption` (real value, not the placeholder).
+      --with-decryption` (real value, not the placeholder). Done: applied
+      targeted, real token captured before the update and restored
+      immediately after (verified byte-for-byte match); a full `terraform
+      plan` with the real deployment zips afterward reports no changes.
 - [ ] **Add the two Terraform CI OIDC roles** to `infra/iam.tf`:
       `nova-toll-terraform-plan` (trust scoped to the `pull_request` subject
       only; `ReadOnlyAccess` + inline `kms:Decrypt` on the `tfstate` and

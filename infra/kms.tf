@@ -23,6 +23,22 @@ resource "aws_kms_alias" "tfstate" {
   target_key_id = aws_kms_key.tfstate.key_id
 }
 
+# Dedicated key (not the shared default alias/aws/ssm) so the CI Terraform
+# plan role can be granted kms:Decrypt for just this one secret. With the
+# account default key, any principal holding ssm:GetParameter can decrypt
+# every SecureString in the account -- a separate key is the only way to
+# gate this one independently of the VDOT feed tokens and Tailscale authkey.
+resource "aws_kms_key" "cloudflare_token" {
+  description             = "Nova Toll Cloudflare API token (SSM SecureString)"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+}
+
+resource "aws_kms_alias" "cloudflare_token" {
+  name          = "alias/nova-toll-cloudflare-token"
+  target_key_id = aws_kms_key.cloudflare_token.key_id
+}
+
 data "aws_iam_policy_document" "audit_kms" {
   statement {
     sid       = "EnableAccountIamPolicies"
