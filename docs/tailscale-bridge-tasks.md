@@ -1,6 +1,8 @@
 # Tailscale bridge for RDS: CI, dev laptop, exit node
 
-Status: in progress
+Status: implemented — core path verified end-to-end in CI 2026-07-27
+(`https://github.com/rhprasad0/nova-toll-budget-agent/actions/runs/30294746855`).
+Optional follow-ups remain (see bottom).
 
 Replaces the `home_ip/32` public ingress rule on RDS with a Tailscale
 subnet-router EC2 instance in the default VPC. That one box gives
@@ -49,13 +51,28 @@ one mechanism).
       account — pinned the router to `us-east-1c` explicitly and re-applied
       just the instance. Everything else from the first apply succeeded
       clean.
-- [ ] **Manual Tailscale admin-console steps** (out of Terraform): approve
-      the advertised VPC-CIDR route once the instance shows up in the
-      tailnet; write ACL granting laptop + `tag:ci` access to the route
-      (not to each other, not to the exit node); create the CI OAuth client
-      (`TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET`) and add as GitHub repo
-      secrets. **Blocks verification and the CI integration job** until
-      done.
+- [x] **Manual Tailscale admin-console steps**: subnet route approved;
+      CI-join OAuth client (Auth Keys scope, `tag:ci`) created, added as
+      `TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET` GitHub secrets; ACL-pipeline
+      OAuth/trust credential created, added as `TS_ACL_OAUTH_CLIENT_ID`/
+      `TS_ACL_OAUTH_SECRET`. Exit-node approval not separately confirmed —
+      see follow-ups.
+- [x] **ACL managed via GitOps instead of the admin console**: switched
+      from the originally-planned `tailscale_acl` Terraform resource after
+      finding it does a blind overwrite with no ETag/If-Match concurrency
+      check (open upstream bug) — risky given we'd been hand-editing this
+      tailnet in the console all session. Used `tailscale/gitops-acl-action`
+      instead: `policy.hujson` at repo root,
+      `.github/workflows/tailscale-acl.yml` runs `tests`-only on PRs and
+      applies on push to `main`. Scopes `tag:ci` to just the RDS route,
+      keeps the owner's full access, adds `autoApprovers` for the router's
+      route + exit-node (so future re-creates skip the manual console
+      click), and drops an unrelated `tag:server`/`tag:k8s-operator` grant
+      from another project per go-ahead to consolidate. Two real syntax
+      fixes needed before it applied clean: `grants`' `dst` can't carry a
+      CIDR+port combo (port has to move to `ip`, e.g. `"ip": ["tcp:5432"]`);
+      `tests`' `accept`/`deny` can't target a CIDR at all, only a concrete
+      IP or hostname (aliased RDS's resolved private IP via `hosts`).
 - [x] **New CI integration test**: `tests/test_ci_rds_connectivity.py` —
       resolves the RDS endpoint via `describe_db_instances` (not hardcoded,
       per SECURITY.md), then calls `_oracle_route.env_connect()` (IAM auth
@@ -86,13 +103,32 @@ one mechanism).
       unset on first boot; confirmed via AWS docs that a private RDS
       endpoint's DNS resolves straight to the private IP from anywhere (no
       split-DNS/VPC-resolver step needed for the tailnet route to work).
-- [ ] **Verification**: `terraform plan`/`apply`; `tailscale up` from dev
-      box + psql over the tailnet; toggle exit-node on a non-home network;
-      trigger CI and confirm both jobs go green; confirm direct
-      (non-tailnet) psql to the RDS public hostname now fails. **Not done
-      yet** — deliberately held: `apply` flips a live RDS instance's public
-      accessibility and stands up billable EC2/IAM/OIDC resources, and the
-      subnet router won't actually function until the manual Tailscale step
-      above is done first (its user-data auth key is still the
-      `REPLACE_OUT_OF_BAND` placeholder). Say the word when you want me to
-      run `terraform plan` for a look before applying.
+- [x] **`terraform apply` + CI verification**: applied for real; confirmed
+      `check` and `integration` both green on a real push
+      (`tailscale/github-action` joins the tailnet → OIDC role assumed →
+      `env_connect()` connects as `pricing_reader` over the bridge →
+      `SELECT 1`); confirmed a direct (non-tailnet) connection attempt to
+      the RDS hostname now times out. Three real bugs found and fixed along
+      the way, not just config typos:
+      1. `data.aws_ssm_parameter` AMI lookup path was wrong (AWS's actual
+         public parameter is under `ami-amazon-linux-latest`, not the path
+         first guessed) — fixed by testing the parameter directly with the
+         `nova-toll` profile rather than trusting the assumed path.
+      2. The OIDC trust policy's `sub` condition assumed a plain
+         `repo:owner/repo:...` subject; GitHub actually issues
+         `repo:owner@<ownerID>/repo@<repoID>:...` (immutable IDs) for this
+         account. Diagnosed by adding a temporary workflow step to decode
+         and print the real token's claims, not by guessing — removed once
+         fixed. Kept the ID-qualified form since it's also rename/transfer
+         proof, rather than looking for a way to disable it.
+      3. `infra/build/` (holding the RDS CA bundle) is gitignored, so a
+         fresh CI checkout never had it — added a step fetching just that
+         file with the same URL + pinned SHA256 `scripts/build_zips.sh` uses.
+- [ ] **Follow-up (optional, not blocking)**: retag the already-running
+      router instance to `tag:nova-toll-router` (`tailscale set
+      --advertise-tags=...` over SSM) so the new `autoApprovers` policy
+      covers it retroactively, and add `--advertise-tags=tag:nova-toll-router`
+      to `infra/tailscale.tf`'s user-data so future re-creates auto-approve
+      without a console click. Also: exit-node approval was never
+      separately confirmed — verify from a non-home network before relying
+      on it.

@@ -41,6 +41,27 @@ The public chat agent is not deployed yet. Its release gate is documented in
 - The Lambda build verifies the downloaded RDS CA bundle SHA-256 before
   packaging it.
 
+## Implemented hardening (2026-07-27)
+
+- RDS is no longer publicly accessible. The only network paths to it are
+  the loader Lambda's security group and a Tailscale subnet router
+  (`infra/tailscale.tf`), replacing the prior static home-IP ingress rule.
+  Confirmed live: a direct public connection attempt now times out.
+- GitHub Actions authenticates to AWS via OIDC (`nova-toll-github-ci`,
+  `infra/iam.tf`) rather than long-lived credentials, scoped to
+  `rds-db:connect` as the read-only `pricing_reader` role and
+  `rds:DescribeDBInstances` only. The trust policy's `sub` condition is
+  scoped to this repo's actual subjects, not a trailing wildcard, and the
+  CI job independently guards against fork PRs (a fork PR produces the same
+  `pull_request` subject shape as a same-repo PR, so the trust condition
+  alone can't distinguish them).
+- The tailnet ACL (`policy.hujson`) is managed via GitOps
+  (`.github/workflows/tailscale-acl.yml`, `tailscale/gitops-acl-action`)
+  rather than hand-edited in the console: PRs run policy `tests` only, pushes
+  to `main` apply. The `tests` assert the owner's access and the RDS route
+  survive any future edit, and that `tag:ci` can never reach the general
+  internet through the subnet router's exit-node capability.
+
 ## Deployment verification
 
 After the 2026-07-26 deployment:
@@ -83,11 +104,6 @@ After the 2026-07-26 deployment:
 
 ## Remaining review items
 
-- RDS is still publicly reachable from the approved home-IP rule as of
-  2026-07-27. Terraform to close this (Tailscale subnet router,
-  `publicly_accessible = false`) is written but not applied — pending a
-  manual one-time Tailscale setup step and a plan review. See
-  `docs/tailscale-bridge-tasks.md`.
 - Before a public agent launch, implement every control in the public-agent
   launch gate, including WAF throttling, concurrency/spend limits, a kill
   switch, output validation, and a dedicated read-only runtime role.
