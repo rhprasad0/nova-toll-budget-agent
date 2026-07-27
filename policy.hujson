@@ -35,8 +35,8 @@
         // not the rest of the VPC, not the exit node, not other devices.
         {
             "src": ["tag:ci"],
-            "dst": ["172.31.0.0/16:5432"],
-            "ip":  ["tcp"],
+            "dst": ["172.31.0.0/16"],
+            "ip":  ["tcp:5432"],
         },
     ],
 
