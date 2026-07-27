@@ -42,15 +42,17 @@ multi-agent coverage rather than just human onboarding — not duplicated there.
 - [x] **`.gitignore` only covers the literal filename `.env`.** `.env.local`,
       `.envrc`, `*.tfvars` (root and `infra/`), and `.aws/` were all
       uncovered near-misses. Added and verified each with `git check-ignore -v`.
-- [ ] **The only local secrets gate is Claude-Code-specific.** `.claude/hooks/gitleaks-guard.sh`
+- [x] **The only local secrets gate is Claude-Code-specific.** `.claude/hooks/gitleaks-guard.sh`
       fires on a `PreToolUse` hook matching Claude's own `Bash` tool calls —
-      it does nothing for a terminal commit, a Codex session, or any future
-      agent. `.githooks/pre-commit` (what `core.hooksPath` actually points
-      git at) only runs lint/type/test. Move the gitleaks check there so it
-      applies regardless of what's committing. `core.hooksPath` itself is
-      local, uncommitted `.git/config` state — document `git config
-      core.hooksPath .githooks` as a required setup step, and say plainly
-      that CI (`gitleaks.yml`) remains the only gate nothing can bypass.
+      it did nothing for a terminal commit, a Codex session, or any future
+      agent. Added the same `gitleaks protect --staged --redact` check to
+      `.githooks/pre-commit`, so it applies regardless of what's
+      committing. Verified in an isolated scratch repo (not this one): a
+      staged secret is blocked, a clean commit goes through. Documented
+      `git config core.hooksPath .githooks` as a required per-clone setup
+      step in `SECURITY.md`, and stated plainly there that CI
+      (`gitleaks.yml`) remains the only gate nothing can bypass —
+      `core.hooksPath` is local, uncommitted `.git/config` state.
 - [ ] **`.env` holds two live-looking API keys nothing reads.** Grepped the
       full repo and the sibling `hermes-agent` tool: zero references to
       `I95_API_KEY`/`I66_API_KEY`/`dotenv` anywhere in source. Strip both

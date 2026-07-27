@@ -32,8 +32,12 @@ The public chat agent is not deployed yet. Its release gate is documented in
   data and Terraform state, with log-file validation in a dedicated audit
   bucket.
 - CI actions are pinned to immutable SHAs with read-only repository
-  permissions. Secret scanning is enabled; its single allowlist entry is the
-  PostgreSQL `EXCLUDED` pseudo-table false positive.
+  permissions. Secret scanning runs in CI (`gitleaks.yml`, full history on
+  every push/PR) and locally in `.githooks/pre-commit` (staged files, any
+  committer) once `core.hooksPath` is set per the operating rule below; its
+  single allowlist entry is the PostgreSQL `EXCLUDED` pseudo-table false
+  positive. CI is the gate nothing can bypass -- the local hook is a
+  fast-fail courtesy that only applies to clones that have opted in.
 - The Lambda build verifies the downloaded RDS CA bundle SHA-256 before
   packaging it.
 
@@ -49,6 +53,10 @@ After the 2026-07-26 deployment:
 
 ## Operating rules
 
+- Run `git config core.hooksPath .githooks` once per clone. Without it, git
+  uses no hooks at all -- neither the lint/type/test checks nor the local
+  gitleaks secret scan run before a commit, for any tool or person
+  committing from that clone.
 - Keep VDOT feed tokens in SSM Parameter Store. Do not place them in source,
   Terraform variables, shell history, or this document.
 - Keep the Cloudflare API token in a password manager or secret store. Supply

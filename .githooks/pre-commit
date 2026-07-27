@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
 # Mirrors .github/workflows/ci.yml's check job before allowing a commit.
 # One-time setup per clone: git config core.hooksPath .githooks
+#
+# This is the only secrets gate that applies regardless of what's
+# committing (terminal, an editor, any AI agent) -- .claude/hooks/gitleaks-guard.sh
+# only fires for Claude Code's own Bash tool calls. CI (.github/workflows/gitleaks.yml)
+# is still the only gate nothing can bypass, since core.hooksPath is local,
+# uncommitted git config -- a fresh clone has no hook until this is set.
 set -euo pipefail
+
+if command -v gitleaks >/dev/null 2>&1; then
+    if ! gitleaks protect --staged --redact -v; then
+        echo "BLOCKED: gitleaks found secrets in staged changes. Fix or unstage, then retry." >&2
+        exit 1
+    fi
+else
+    echo "gitleaks not installed locally; skipping (CI will still catch it)" >&2
+fi
 
 files=$(git diff --cached --name-only --diff-filter=ACM -- '*.py')
 [ -z "$files" ] && exit 0
