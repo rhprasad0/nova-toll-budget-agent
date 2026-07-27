@@ -39,9 +39,9 @@ multi-agent coverage rather than just human onboarding — not duplicated there.
       failure this item exists to fix. The real mitigation for this
       credential shape is the item below (don't leave it in a plaintext
       file at all), not a scanner rule.
-- [ ] **`.gitignore` only covers the literal filename `.env`.** `.env.local`,
-      `.envrc`, `*.tfvars` (root and `infra/`), and `.aws/` are all uncovered
-      near-misses. Add them.
+- [x] **`.gitignore` only covers the literal filename `.env`.** `.env.local`,
+      `.envrc`, `*.tfvars` (root and `infra/`), and `.aws/` were all
+      uncovered near-misses. Added and verified each with `git check-ignore -v`.
 - [ ] **The only local secrets gate is Claude-Code-specific.** `.claude/hooks/gitleaks-guard.sh`
       fires on a `PreToolUse` hook matching Claude's own `Bash` tool calls —
       it does nothing for a terminal commit, a Codex session, or any future
