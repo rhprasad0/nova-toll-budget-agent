@@ -1,0 +1,65 @@
+// nova-toll-budget-agent's Tailscale policy file, managed via GitOps
+// (.github/workflows/tailscale-acl.yml) rather than the admin console.
+// Pushes to main apply it; PRs only run the tests below. Manual console
+// edits get overwritten on the next push -- see docs/tailscale-bridge-tasks.md.
+{
+    "tagOwners": {
+        // The nova-toll RDS subnet router (infra/tailscale.tf).
+        "tag:nova-toll-router": ["rhprasad0@github"],
+        // Ephemeral GitHub Actions CI runners (tailscale/github-action in
+        // .github/workflows/ci.yml's `integration` job).
+        "tag:ci": ["rhprasad0@github"],
+    },
+
+    // Auto-approve the subnet route and exit-node use once the router is
+    // tagged tag:nova-toll-router, so re-creating the instance doesn't
+    // need a manual click in the console every time.
+    "autoApprovers": {
+        "routes": {
+            "172.31.0.0/16": ["tag:nova-toll-router"],
+        },
+        "exitNode": ["tag:nova-toll-router"],
+    },
+
+    "grants": [
+        // Owner keeps full access to everything on the tailnet (personal
+        // devices, etc.) -- service identities below get scoped-down
+        // grants instead of blanket access.
+        {
+            "src": ["rhprasad0@github"],
+            "dst": ["*"],
+            "ip":  ["*"],
+        },
+
+        // CI can reach RDS through the subnet router, and nothing else --
+        // not the rest of the VPC, not the exit node, not other devices.
+        {
+            "src": ["tag:ci"],
+            "dst": ["172.31.0.0/16:5432"],
+            "ip":  ["tcp"],
+        },
+    ],
+
+    "ssh": [
+        {
+            "action": "check",
+            "src":    ["autogroup:member"],
+            "dst":    ["autogroup:self"],
+            "users":  ["autogroup:nonroot", "root"],
+        },
+    ],
+
+    // Checked on every push; Tailscale rejects the update if any fail, so
+    // a bad edit can't silently lock out the owner or widen tag:ci's reach.
+    "tests": [
+        {
+            "src":    "rhprasad0@github",
+            "accept": ["172.31.0.0/16:5432"],
+        },
+        {
+            "src":    "tag:ci",
+            "accept": ["172.31.0.0/16:5432"],
+            "deny":   ["8.8.8.8:443"],
+        },
+    ],
+}
