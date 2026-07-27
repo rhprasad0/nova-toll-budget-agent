@@ -9,7 +9,7 @@
 # CLI" spirit as the SSM tokens in ssm.tf.
 
 data "aws_ssm_parameter" "al2023_arm64_ami" {
-  name = "/aws/service/al2023/ami/latest/arm64/hvm/ebs/gp3/image_id"
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -55,10 +55,21 @@ resource "aws_iam_instance_profile" "tailscale_router" {
   role = aws_iam_role.tailscale_router.name
 }
 
+# data.aws_subnets.default.ids[0] isn't safe to use directly here: it can
+# land on an AZ (observed: us-east-1e) that doesn't support t4g instances.
+# Pin to a specific AZ known to support it instead.
+data "aws_subnet" "tailscale_router" {
+  vpc_id = data.aws_vpc.default.id
+  filter {
+    name   = "availability-zone"
+    values = ["us-east-1c"]
+  }
+}
+
 resource "aws_instance" "tailscale_router" {
   ami                    = data.aws_ssm_parameter.al2023_arm64_ami.value
   instance_type          = "t4g.nano"
-  subnet_id              = data.aws_subnets.default.ids[0]
+  subnet_id              = data.aws_subnet.tailscale_router.id
   vpc_security_group_ids = [aws_security_group.tailscale_router.id]
   iam_instance_profile   = aws_iam_instance_profile.tailscale_router.name
 
