@@ -223,9 +223,16 @@ data "aws_iam_policy_document" "github_ci_assume" {
       # subjects this role has no reason to grant. Fork PRs also produce the
       # `pull_request` shape, so this alone doesn't stop them -- see the
       # `integration` job's `if:` guard in ci.yml for that.
+      #
+      # Subject includes GitHub's immutable owner/repo IDs (91573985 /
+      # 1306930324), not just names -- confirmed by decoding a real token
+      # from a live workflow run (a plain "repo:owner/repo:..." condition
+      # got "Not authorized", since that's not what GitHub actually issues
+      # for this repo). This form is also rename/transfer-proof, which a
+      # name-only condition isn't, so keep it rather than reverting to names.
       values = [
-        "repo:rhprasad0/nova-toll-budget-agent:ref:refs/heads/*",
-        "repo:rhprasad0/nova-toll-budget-agent:pull_request",
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/*",
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:pull_request",
       ]
     }
   }
