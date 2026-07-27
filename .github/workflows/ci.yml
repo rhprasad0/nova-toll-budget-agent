@@ -33,6 +33,16 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # infra/build/ is gitignored (scripts/build_zips.sh's output) -- fetch
+      # just the CA bundle piece of it here, same URL + pinned hash as that
+      # script uses for the loader Lambda zip.
+      - name: Fetch RDS CA bundle
+        run: |
+          mkdir -p infra/build/loader
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+            -o infra/build/loader/rds-ca-bundle.pem
+          echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  infra/build/loader/rds-ca-bundle.pem" | sha256sum --check --status
       - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
