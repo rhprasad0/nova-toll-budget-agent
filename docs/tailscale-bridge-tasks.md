@@ -37,13 +37,25 @@ one mechanism).
       job also skips fork PRs via an `if:` check, since fork PRs produce
       the same `pull_request` subject a same-repo PR does — the trust
       condition alone can't tell them apart.
-- [ ] **Manual one-time Tailscale setup** (out of Terraform, tracked here so
-      it isn't forgotten): create reusable authkey → SSM; approve the
-      advertised VPC-CIDR route in the admin console; write ACL granting
-      laptop + `tag:ci` access to the route (not to each other, not to the
-      exit node); create the CI OAuth client (`TS_OAUTH_CLIENT_ID`/
-      `TS_OAUTH_SECRET`) and add as GitHub repo secrets. **Blocks the two
-      items below** — nothing works until this is done.
+- [x] **Tailscale authkey → SSM**: real reusable key set via
+      `aws ssm put-parameter --overwrite`. Note: the key value ended up in
+      this chat's transcript despite trying to avoid it (running it via `!`
+      pipes the command and output back into the session, it doesn't stay
+      local) — Ryan chose to accept that rather than rotate.
+- [x] **`terraform apply`**: RDS flipped to `publicly_accessible = false`,
+      OIDC provider + `github_ci` role created, tailscale SG/IAM/instance
+      created. Hit one snag: `data.aws_subnets.default.ids[0]` landed on
+      `us-east-1e`, which doesn't support `t4g` instance types in this
+      account — pinned the router to `us-east-1c` explicitly and re-applied
+      just the instance. Everything else from the first apply succeeded
+      clean.
+- [ ] **Manual Tailscale admin-console steps** (out of Terraform): approve
+      the advertised VPC-CIDR route once the instance shows up in the
+      tailnet; write ACL granting laptop + `tag:ci` access to the route
+      (not to each other, not to the exit node); create the CI OAuth client
+      (`TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET`) and add as GitHub repo
+      secrets. **Blocks verification and the CI integration job** until
+      done.
 - [x] **New CI integration test**: `tests/test_ci_rds_connectivity.py` —
       resolves the RDS endpoint via `describe_db_instances` (not hardcoded,
       per SECURITY.md), then calls `_oracle_route.env_connect()` (IAM auth
