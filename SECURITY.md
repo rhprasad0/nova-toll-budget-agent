@@ -67,6 +67,10 @@ After the 2026-07-26 deployment:
   Requires the `nova-toll` profile identity to have `ssm:GetParameter` on
   that parameter path -- an account/SSO-level grant, not something this
   repo's Terraform manages.
+- If an AI coding agent is checking whether a value matches something,
+  compare hashes or lengths, not the raw value. See `AGENTS.md`'s Secrets
+  section -- it applies to any agent operating in this repo, not just
+  Claude Code.
 - Use `./scripts/build_zips.sh` before applying infrastructure changes. If AWS
   rotates the RDS CA, review the rotation notice and update the pinned digest
   in the script before rebuilding.

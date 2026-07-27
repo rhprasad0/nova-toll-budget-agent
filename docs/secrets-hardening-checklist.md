@@ -1,6 +1,6 @@
 # Secrets Hardening for a Multi-Agent Repo
 
-Status: in progress · Owner: Ryan Prasad · Last updated: 2026-07-27
+Status: all items landed on `worktree-secrets-hardening`, pending merge · two follow-ups open · Owner: Ryan Prasad · Last updated: 2026-07-27
 
 This repo's production infra already handles secrets well — SSM `SecureString`
 for feed tokens, RDS IAM auth with no static DB password, Secrets-Manager-managed
@@ -86,14 +86,21 @@ multi-agent coverage rather than just human onboarding — not duplicated there.
       `skipDangerousModePermissionPrompt: true`. The item above this one
       (no live secret left to read) is what actually matters; this is what's
       left over for whatever else touches the filesystem.
-- [ ] **No agent-facing secrets guidance anywhere.** Neither `AGENTS.md` nor
-      `SECURITY.md`'s operating rules say anything about how an agent should
-      handle a secret it encounters. Add short guidance, motivated by an
-      actual incident from this review: two investigation subagents hit
-      redaction bugs and briefly printed live key values into their own tool
-      transcripts while "just checking" `.env`'s contents. Guidance: compare
-      hashes/lengths, not raw values; never paste secret values into
-      commits/PRs/chat; SSM is the source of truth, not a local file. One
-      line on `.mcp.json` too — clean today (empty `env` block), should stay
-      that way (GitGuardian found 24k+ secrets in public MCP configs in
-      2026).
+- [x] **No agent-facing secrets guidance anywhere.** Neither `AGENTS.md` nor
+      `SECURITY.md`'s operating rules said anything about how an agent
+      should handle a secret it encounters. Added a Secrets section to
+      `AGENTS.md` (applies to any agent that reads it, not just Claude
+      Code), motivated by the actual incident from this review: two
+      investigation subagents hit redaction bugs and briefly printed live
+      key values into their own tool transcripts while "just checking"
+      `.env`'s contents. Guidance: compare hashes/lengths, not raw values;
+      never paste secret values into commits/PRs/chat; SSM is the source of
+      truth, not a local file; keep `.mcp.json`'s `env` block free of
+      literal secrets (confirmed still empty today). `SECURITY.md`'s
+      operating rules cross-reference it.
+
+## Follow-up (not this pass)
+
+- [ ] Confirm `.claude/settings.json` deny rules actually block a `.env`
+      read in a fresh session — see the caveat above.
+- [ ] Once comfortable, merge this branch and delete the worktree.
