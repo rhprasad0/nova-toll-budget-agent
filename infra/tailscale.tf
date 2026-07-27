@@ -100,6 +100,7 @@ resource "aws_instance" "tailscale_router" {
       --authkey="$AUTHKEY" \
       --advertise-routes=${data.aws_vpc.default.cidr_block} \
       --advertise-exit-node \
+      --advertise-tags=tag:nova-toll-router \
       --ssh
     set -x
   EOF

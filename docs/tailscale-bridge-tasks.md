@@ -124,11 +124,18 @@ one mechanism).
       3. `infra/build/` (holding the RDS CA bundle) is gitignored, so a
          fresh CI checkout never had it — added a step fetching just that
          file with the same URL + pinned SHA256 `scripts/build_zips.sh` uses.
-- [ ] **Follow-up (optional, not blocking)**: retag the already-running
-      router instance to `tag:nova-toll-router` (`tailscale set
-      --advertise-tags=...` over SSM) so the new `autoApprovers` policy
-      covers it retroactively, and add `--advertise-tags=tag:nova-toll-router`
-      to `infra/tailscale.tf`'s user-data so future re-creates auto-approve
-      without a console click. Also: exit-node approval was never
-      separately confirmed — verify from a non-home network before relying
-      on it.
+- [x] **Retag the router for `autoApprovers`**: added
+      `--advertise-tags=tag:nova-toll-router` to `infra/tailscale.tf`'s
+      user-data (`terraform apply` — only changed the stored `user_data`
+      hash, no instance replacement since `user_data_replace_on_change`
+      defaults false) so future re-creates auto-approve without a console
+      click. Retagged the already-running instance to match, over SSM:
+      `tailscale set --advertise-tags=...` doesn't exist (that flag is
+      `up`-only) — used `tailscale up` with the same route/exit-node/ssh
+      flags plus the tag and `--reset`, which re-applies cleanly on an
+      already-authed device without needing a fresh authkey. Confirmed via
+      `tailscale status --json`: tagged, online, route/exit-node intact;
+      confirmed RDS is still reachable on 5432 post-retag.
+- [ ] **Follow-up (optional, not blocking)**: exit-node approval/use was
+      never separately confirmed — verify from a non-home network before
+      relying on it.
