@@ -14,16 +14,31 @@ This closes [`pre-launch-checklist.md`](pre-launch-checklist.md)'s Tier 3 item
 on `core.hooksPath` being opt-in (item 4 below), under the sharper motivation of
 multi-agent coverage rather than just human onboarding — not duplicated there.
 
-- [ ] **`.gitleaks.toml` defines zero rules.** No `[[rules]]` or `[extend]`
+- [x] **`.gitleaks.toml` defines zero rules.** No `[[rules]]` or `[extend]`
       table — gitleaks treats a supplied config as the entire ruleset unless
       told to extend the default. Verified empirically: a planted secret is
-      caught with no config present, not caught with this repo's config. Add
-      `[extend]` / `useDefault = true`, plus a custom rule for bcrypt-shaped
-      tokens (`$2[aby]$NN$...`), which — separately verified — slip past the
-      *default* ruleset too, even when a control secret in the same file is
-      caught. Confirmed safe to flip: full history (68 commits) and the
-      working tree both come back clean under the real ruleset, so this
-      won't turn CI red with a backlog to triage.
+      caught with no config present, not caught with this repo's config.
+      Fixed with `[extend]` / `useDefault = true`. Confirmed safe: full
+      history (68 commits) and the working tree both come back clean under
+      the real ruleset, no backlog to triage.
+      A second, previously-invisible bug surfaced once real rules actually
+      ran: the existing `[allowlist]` regex (`s3_key = EXCLUDED`) checks
+      against gitleaks' *captured secret value* (the RHS, e.g.
+      `EXCLUDED.s3_key`), not the full matched line — so it never actually
+      matched anything; it only looked like it worked because the ruleset
+      was empty. Fixed to `EXCLUDED\.\w+`, which also generalizes it to any
+      `EXCLUDED.<column>` reference instead of just `s3_key`.
+      A custom rule for bcrypt-shaped tokens (`$2[aby]$NN$...` — separately
+      verified to slip past the *default* ruleset even when a control
+      secret in the same file is caught) was attempted and dropped: on the
+      installed gitleaks version (8.30.1), a local `[[rules]]` entry
+      silently fails to merge when `[extend].useDefault` is also set —
+      confirmed via isolated repro, matches a known class of upstream
+      extend-merge bugs (gitleaks/gitleaks#1844, #1742, #1523). Shipping a
+      rule that looks configured but doesn't fire would repeat the exact
+      failure this item exists to fix. The real mitigation for this
+      credential shape is the item below (don't leave it in a plaintext
+      file at all), not a scanner rule.
 - [ ] **`.gitignore` only covers the literal filename `.env`.** `.env.local`,
       `.envrc`, `*.tfvars` (root and `infra/`), and `.aws/` are all uncovered
       near-misses. Add them.

@@ -1,7 +1,35 @@
 title = "Nova Toll secret scanning configuration"
+minVersion = "8.30.1"
+
+# Without this, gitleaks treats this file as the *entire* ruleset instead of
+# additions to it -- verified empirically: a planted secret was caught with
+# no config present, and silently missed once this file existed without
+# this block.
+#
+# NOTE: a local [[rules]] entry was tried here to catch bcrypt-shaped
+# tokens ($2a/b/y$NN$...), which -- separately verified -- slip past the
+# default ruleset even when a control secret in the same file is caught.
+# Dropped: on this gitleaks version, [[rules]] added alongside
+# [extend].useDefault silently fail to merge (confirmed via isolated
+# repro -- the same rule works standalone, and fails the instant
+# useDefault is added, regardless of section order). This matches a class
+# of known extend-merge bugs upstream (gitleaks/gitleaks#1844, #1742,
+# #1523) -- not a config mistake here. A non-functional rule that looks
+# configured is the exact failure mode this file already had; not
+# repeating it. The actual mitigation for this credential shape is not
+# having it sit in a plaintext file at all (see secrets-hardening-checklist.md).
+[extend]
+useDefault = true
 
 [allowlist]
+# gitleaks checks a regex against the *captured secret value*, not the full
+# line -- for the generic-api-key rule that value is the RHS (e.g.
+# "EXCLUDED.s3_key"), not "s3_key = EXCLUDED...". The previous regex never
+# matched anything; it only looked like it worked because useDefault was
+# missing above, so no rule ever ran to test it against. Matches any
+# EXCLUDED.<column> reference, not just s3_key, since that's the actual
+# false-positive class (Postgres upsert syntax), not one specific column.
 description = "PostgreSQL EXCLUDED pseudo-table is not a credential"
 regexes = [
-  '''s3_key = EXCLUDED''',
+  '''EXCLUDED\.\w+''',
 ]
