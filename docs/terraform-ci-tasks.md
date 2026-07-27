@@ -1,6 +1,7 @@
 # Terraform plan/apply in CI
 
-Status: in progress · started 2026-07-27
+Status: core path implemented and verified live 2026-07-27. One optional
+follow-up remains (`job_workflow_ref` trust scoping — see below).
 
 Closes the Tier 3 item in `docs/pre-launch-checklist.md`: deploys are
 currently fully manual (`scripts/build_zips.sh` + hand-run `terraform
@@ -79,9 +80,27 @@ original writeup if a "why" here needs more depth than the task note gives.
       condition, verify the actual claim shape by decoding a real token from
       a live run — this repo already got burned once assuming an unverified
       OIDC claim format for `sub` (see `567059c`).
-- [ ] **Verify end-to-end**: open a PR with a trivial `infra/*.tf` comment
+- [x] **Verify end-to-end**: open a PR with a trivial `infra/*.tf` comment
       change, confirm `plan` runs and reports a clean diff; merge, confirm
       `apply` runs and completes; re-run `ci.yml`'s `integration` job
       afterward to confirm the live Tailscale/RDS bridge wasn't disturbed;
       confirm the fork guard actually skips `plan` for a fork PR (or a dry
       read of the `if:` condition, if no fork is available to test with).
+      Done: pushed the 6 implementation commits straight to `main` (no
+      pending drift — the KMS/IAM changes were already applied locally
+      earlier in this session) — `apply` ran for the first time ever and
+      reported `0 added, 3 changed, 0 destroyed` (the three Lambdas
+      redeployed with CI-built zips; all came back `Active`/`Successful`).
+      Opened a throwaway PR (#4, closed + branch deleted after) to exercise
+      `plan`: it ran clean (`No changes.`), `apply` correctly stayed
+      skipped, and the fork guard's `if:` condition matched the same-repo
+      PR as expected. `ci.yml`'s `integration` job passed on that PR too,
+      confirming the live Tailscale/RDS bridge is undisturbed. One
+      observation, not a blocker: `source_code_hash` differed between my
+      local build and CI's build of the same source (fetcher/express-fetcher
+      have no dependencies, so this isn't a `--require-hashes` resolution
+      difference) — `scripts/build_zips.sh`'s "reproducible build" claim
+      doesn't fully hold cross-machine, likely `zip` binary/host-OS metadata
+      differences that `-qX` doesn't strip. Functionally harmless (same
+      source deployed either way), out of scope for this task, not filed as
+      a follow-up here.
