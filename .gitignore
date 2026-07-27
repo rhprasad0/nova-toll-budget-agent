@@ -1,10 +1,13 @@
 .env
+.env.*
+.envrc
 .venv/
 __pycache__/
 .DS_Store
 *.log
 .claude/settings.local.json
 .hermes/
+.aws/
 
 # Terraform
 infra/.terraform/
@@ -12,3 +15,4 @@ infra/*.tfstate
 infra/*.tfstate.*
 infra/build/
 infra/*.tfplan
+*.tfvars
