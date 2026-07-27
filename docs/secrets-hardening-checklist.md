@@ -70,14 +70,22 @@ multi-agent coverage rather than just human onboarding — not duplicated there.
       clean single-resource add. `SECURITY.md`'s operating rule now points
       at SSM with the fetch-before-apply command instead of "password
       manager, env var."
-- [ ] **No `.claude/settings.json` deny rules for secret-shaped files.** Add
+- [x] **No `.claude/settings.json` deny rules for secret-shaped files.** Added
       `Read`/`Edit` deny for `./.env`, `./.env.*`, `*.pem`, `*.key`,
-      `~/.ssh/**`. Defense-in-depth only — known Claude Code enforcement
-      gaps exist (anthropics/claude-code#24846, #6699), it doesn't cover
+      `~/.ssh/**`, `~/.aws/**` (JSON syntax validated). **Enforcement not
+      verified** — known Claude Code deny-rule bugs exist
+      (anthropics/claude-code#24846, #6699), and testing this properly
+      needs a fresh session rooted at the updated settings file, which
+      isn't something this session could cleanly self-check (the active
+      settings for this running session are the main worktree's, not this
+      branch's copy, until merged). **Action for you**: after merging, open
+      a new Claude Code session in this repo and try to have it read
+      `.env` — confirm it's actually refused rather than assuming the
+      config works. Regardless of outcome, it doesn't cover
       subprocess/script reads, and the user-level settings already carry
-      `skipDangerousModePermissionPrompt: true`. The item above (no live
-      secret left to read) is what actually matters; this is what's left
-      over for whatever else touches the filesystem.
+      `skipDangerousModePermissionPrompt: true`. The item above this one
+      (no live secret left to read) is what actually matters; this is what's
+      left over for whatever else touches the filesystem.
 - [ ] **No agent-facing secrets guidance anywhere.** Neither `AGENTS.md` nor
       `SECURITY.md`'s operating rules say anything about how an agent should
       handle a secret it encounters. Add short guidance, motivated by an
