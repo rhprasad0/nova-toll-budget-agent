@@ -237,7 +237,7 @@ fully repeatable.
 
 First verify whether the installed eval package can substitute fixed tool
 results into this `strands.Agent`. If not, reuse the repository’s existing
-`FakeConnection` plus `_env_connect`/`_resolve_at_time` monkeypatch seams.
+`FakeConnection` plus the `_env_connect` monkeypatch seam.
 Do not add a second mock framework merely to make the diagram prettier.
 
 ### Tier C — Thin live smoke (`-m live`, pre-deploy)

@@ -8,8 +8,23 @@
 # Tailscale admin console -- same "seed a placeholder, real value set via
 # CLI" spirit as the SSM tokens in ssm.tf.
 
-data "aws_ssm_parameter" "al2023_arm64_ami" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+# Pinned deliberately, not read from the "latest AL2023 arm64" SSM alias
+# (/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64).
+# That alias moves whenever Amazon publishes a new image, and since `ami`
+# forces replacement, every unrelated infra change would plan a destroy +
+# recreate of this router -- taking the RDS bridge (CI, dev laptop, exit
+# node) down until the new node re-registers with the tailnet, in a PR that
+# had nothing to do with Tailscale. Caught exactly that way: the S3/lambda
+# cleanup in PR #5 planned a replacement it never asked for.
+#
+# This is the image the router has been running since the bridge was built:
+# al2023-ami-2023.12.20260724.0-kernel-6.1-arm64 (published 2026-07-24).
+# Tradeoff: pinning means OS-image security fixes no longer arrive by
+# surprise, so bump this deliberately -- change the id, apply, then confirm
+# the new node rejoined the tailnet and its subnet route is live before
+# assuming the bridge is back.
+locals {
+  tailscale_router_ami = "ami-03c42c6db44b3949a"
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -67,7 +82,7 @@ data "aws_subnet" "tailscale_router" {
 }
 
 resource "aws_instance" "tailscale_router" {
-  ami                    = data.aws_ssm_parameter.al2023_arm64_ami.value
+  ami                    = local.tailscale_router_ami
   instance_type          = "t4g.nano"
   subnet_id              = data.aws_subnet.tailscale_router.id
   vpc_security_group_ids = [aws_security_group.tailscale_router.id]

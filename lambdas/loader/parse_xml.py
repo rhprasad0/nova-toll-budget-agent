@@ -8,14 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from defusedxml import ElementTree as ET
 
-MAX_ROWS = 1_000
-MAX_FIELD_LENGTH = 256
-MAX_TOLL_USD = Decimal("500.00")
-MAX_IDENTIFIER = 1_000_000
+from _bounds import MAX_ROWS, bounded_int, bounded_text, bounded_toll
 
 # I-66 has no ODPAIRID/ODPAIRNAME or LINKSTATUS, but does carry
 # IntervalDateTime (interval start), which the CSV feed lacks.
@@ -47,33 +44,6 @@ class I66Row:
     zone_toll_rate_usd: Decimal
 
 
-def _parse_iso_utc(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-def _bounded_text(value: str, field: str) -> str:
-    if len(value) > MAX_FIELD_LENGTH:
-        raise ValueError(f"XML {field} exceeds {MAX_FIELD_LENGTH} characters")
-    return value
-
-
-def _bounded_int(value: str, field: str) -> int:
-    parsed = int(_bounded_text(value, field))
-    if not 0 < parsed <= MAX_IDENTIFIER:
-        raise ValueError(f"XML {field} outside allowed range")
-    return parsed
-
-
-def _bounded_toll(value: str) -> Decimal:
-    try:
-        parsed = Decimal(_bounded_text(value, "ZoneTollRate"))
-    except InvalidOperation as exc:
-        raise ValueError("invalid XML ZoneTollRate") from exc
-    if not parsed.is_finite() or not Decimal("0") <= parsed <= MAX_TOLL_USD:
-        raise ValueError("XML ZoneTollRate outside allowed range")
-    return parsed
-
-
 def parse_trip_pricing_xml(text: str) -> list[I66Row]:
     root = ET.fromstring(text)
     opts = root.findall("opt")
@@ -92,29 +62,37 @@ def parse_trip_pricing_xml(text: str) -> list[I66Row]:
 
         parsed_rows.append(
             I66Row(
-                interval_start_at=_parse_iso_utc(
-                    _bounded_text(opt.attrib["IntervalDateTime"], "IntervalDateTime")
+                # datetime.fromisoformat parses the feed's "Z" suffix natively
+                # (3.11+); this project requires 3.13.
+                interval_start_at=datetime.fromisoformat(
+                    bounded_text(opt.attrib["IntervalDateTime"], "XML IntervalDateTime")
                 ),
-                interval_end_at=_parse_iso_utc(
-                    _bounded_text(
-                        opt.attrib["IntervalEndDateTime"], "IntervalEndDateTime"
+                interval_end_at=datetime.fromisoformat(
+                    bounded_text(
+                        opt.attrib["IntervalEndDateTime"], "XML IntervalEndDateTime"
                     )
                 ),
-                calculated_at=_parse_iso_utc(
-                    _bounded_text(
-                        opt.attrib["CalculatedDateTime"], "CalculatedDateTime"
+                calculated_at=datetime.fromisoformat(
+                    bounded_text(
+                        opt.attrib["CalculatedDateTime"], "XML CalculatedDateTime"
                     )
                 ),
-                corridor_id=_bounded_int(opt.attrib["CorridorID"], "CorridorID"),
-                corridor_name=_bounded_text(opt.attrib["CorridorName"], "CorridorName"),
-                start_zone_id=_bounded_int(opt.attrib["StartZoneID"], "StartZoneID"),
-                start_zone_name=_bounded_text(
-                    opt.attrib["StartZoneName"], "StartZoneName"
+                corridor_id=bounded_int(opt.attrib["CorridorID"], "XML CorridorID"),
+                corridor_name=bounded_text(
+                    opt.attrib["CorridorName"], "XML CorridorName"
+                ),
+                start_zone_id=bounded_int(opt.attrib["StartZoneID"], "XML StartZoneID"),
+                start_zone_name=bounded_text(
+                    opt.attrib["StartZoneName"], "XML StartZoneName"
                 )
                 or None,
-                end_zone_id=_bounded_int(opt.attrib["EndZoneID"], "EndZoneID"),
-                end_zone_name=_bounded_text(opt.attrib["EndZoneName"], "EndZoneName"),
-                zone_toll_rate_usd=_bounded_toll(opt.attrib["ZoneTollRate"]),
+                end_zone_id=bounded_int(opt.attrib["EndZoneID"], "XML EndZoneID"),
+                end_zone_name=bounded_text(
+                    opt.attrib["EndZoneName"], "XML EndZoneName"
+                ),
+                zone_toll_rate_usd=bounded_toll(
+                    opt.attrib["ZoneTollRate"], "XML ZoneTollRate"
+                ),
             )
         )
 

@@ -245,42 +245,42 @@ mistaken for the final story.
 
 ## 5. Contracts and tests
 
-- `schemas/tools/i66_route.json` / `i95_route.json` / `i495_route.json` /
-  `dulles_route.json` / `find_toll_locations.json`: JSON Schema Draft
-  2020-12, `input`/`output`, examples, semver'd. `i95_route.json` bumped
-  `2.0.0` → `3.0.0` (another breaking output-shape change) when
-  cross-corridor support and its facility_group/facility_totals/source/
-  live-fallback machinery were dropped in favor of a dedicated i495_route
-  tool; `i495_route.json` is new at `1.0.0`. Structural shape (file exists,
-  has `input`/`output`, semver'd version) is guarded by
-  `tests/test_tool_schemas.py`, whose hardcoded `ALL_TOOLS` tuple is not
-  glob-discovered — a new tool needs a one-line addition there, not just a
-  new JSON file. `find_toll_locations` is not route-shaped (no
-  `origin`/`destination`/`at_time`, `output` is a 3-way `oneOf` rather than
-  success/error) — the file splits the route tools' `origin`/`destination`/
-  `at_time` assertions (`ROUTE_TOOLS`) from `find_toll_locations`'s own
-  no-required-input assertion (`FINDER_TOOLS`); a fifth route-shaped tool
-  reuses `ROUTE_TOOLS`'s existing assertions, a second non-route tool needs
-  its own `FINDER_TOOLS`-style block. No drift test against the live
-  Strands-generated tool spec — that was worthwhile for the deleted 4-tool
-  SQL surface; this fixed tool set doesn't earn a second CI-enforced
-  contract layer. Each route tool's own test file does assert
+- The contract of record is each tool's own docstring — that is literally
+  what Strands turns into the tool spec the model sees, so it cannot drift
+  from what ships. A parallel `schemas/tools/*.json` set used to exist
+  alongside it; it was deleted, along with `tests/test_tool_schemas.py`,
+  because nothing read those files at runtime and that test only asserted
+  the schema files' own shape (present, semver'd, has `input`/`output`) —
+  never a tool's actual output against a schema. A hand-maintained
+  duplicate guarded only by a test of itself is a closed loop: two things
+  to update, one source of truth, no check that they agree. If an
+  external consumer ever needs a published JSON Schema, generate it from
+  `tool_spec` rather than hand-writing a second copy. The tests do assert
   `tool_spec["name"]` and `tool_spec["inputSchema"]["json"]["required"]`
-  once, as a cheap check that Strands actually parsed the docstring
-  (required stays `{"origin", "destination"}` — `at_time` is optional).
-- `agent_tools/tests/test_i66_route.py` / `test_i95_route.py` /
-  `test_i495_route.py`: label lookup, case-insensitivity, node-id
-  fallback, unknown-identifier errors, known-but-unconnected-pair errors,
-  the synthetic ambiguous-match case, a label-shared-by-multiple-node-ids
-  case, logging assertions for both outcomes, `at_time` parsing/defaulting,
-  and a price-not-found hard error. i95's file additionally covers the
+  for every tool — parametrized over all three RDS-backed tools in
+  `test_route_tools.py`, and once each in `test_dulles_route.py` /
+  `test_find_toll_locations.py` — as a cheap check that Strands actually
+  parsed the docstring (required stays `{"origin", "destination"}` for the
+  route tools — `at_time` is optional).
+- `agent_tools/tests/test_route_tools.py`: the behaviour all three
+  RDS-backed tools share, table-driven over one `Case` per tool — label
+  lookup, case-insensitivity, node-id fallback, unknown-identifier errors,
+  known-but-unconnected-pair errors, the synthetic ambiguous-match case,
+  logging assertions for both outcomes, `at_time` pass-through, and a
+  price-not-found hard error. It replaced three near-identical per-tool
+  modules once the shared tool body moved into `_oracle_route.run()`;
+  adding a fourth RDS-backed tool means adding a `Case`, not a file.
+  `test_i95_route.py` keeps only what is genuinely i95-specific: the
   availability gate's branches (a closed and a wrong-direction
   `I-95-NB`/`I-95-SB` row each hard-erroring, an unrecognized
-  `corridor_name` hard-erroring). Pricing tests use a duck-typed fake
-  connection/cursor (`agent_tools/tests/conftest.py`'s `FakeConnection`)
-  via `monkeypatch`, not real RDS — no `live` marker. i95_route.py and
-  i495_route.py both alias `_oracle_route.env_connect`/`resolve_at_time`
-  to a local module-level name (`_env_connect`/`_resolve_at_time`)
+  `corridor_name` hard-erroring) and a label-shared-by-multiple-node-ids
+  case. `test_oracle_route.py` covers `resolve_at_time`'s
+  parsing/defaulting once, where the one implementation lives.
+  Pricing tests use a duck-typed fake connection/cursor
+  (`agent_tools/tests/conftest.py`'s `FakeConnection`) via `monkeypatch`,
+  not real RDS — no `live` marker. Each tool module still aliases
+  `_oracle_route.env_connect` to a local `_env_connect`, and
+  `_oracle_route.run()` takes that alias as its `connect` argument
   specifically so this monkeypatch convention keeps working even though
   the implementation lives in the shared module.
   `agent_tools/tests/test_no_psycopg_at_import.py` guards that importing

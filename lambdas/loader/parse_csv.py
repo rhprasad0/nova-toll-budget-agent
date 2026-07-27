@@ -12,8 +12,16 @@ import csv
 import io
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from zoneinfo import ZoneInfo
+
+from _bounds import (
+    MAX_FIELD_LENGTH,
+    MAX_ROWS,
+    bounded_int,
+    bounded_text,
+    bounded_toll,
+)
 
 # Source header as VDOT actually spells it — CALULCATEDDATETIM and
 # INTERVALENDDATETI are typos/truncations in the upstream feed, not ours.
@@ -37,10 +45,6 @@ EXPECTED_SOURCE_HEADERS = [
 
 SOURCE_TZ = ZoneInfo("America/New_York")
 UTC = ZoneInfo("UTC")
-MAX_ROWS = 1_000
-MAX_FIELD_LENGTH = 256
-MAX_TOLL_USD = Decimal("500.00")
-MAX_IDENTIFIER = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -76,29 +80,6 @@ def _parse_timestamp(value: str) -> datetime:
     return local_time.replace(tzinfo=SOURCE_TZ, fold=0).astimezone(UTC)
 
 
-def _bounded_text(value: str, field: str) -> str:
-    if len(value) > MAX_FIELD_LENGTH:
-        raise ValueError(f"CSV {field} exceeds {MAX_FIELD_LENGTH} characters")
-    return value
-
-
-def _bounded_int(value: str, field: str) -> int:
-    parsed = int(_bounded_text(value, field))
-    if not 0 < parsed <= MAX_IDENTIFIER:
-        raise ValueError(f"CSV {field} outside allowed range")
-    return parsed
-
-
-def _bounded_toll(value: str) -> Decimal:
-    try:
-        parsed = Decimal(_bounded_text(value, "ZONETOLLRATE"))
-    except InvalidOperation as exc:
-        raise ValueError("invalid CSV ZONETOLLRATE") from exc
-    if not parsed.is_finite() or not Decimal("0") <= parsed <= MAX_TOLL_USD:
-        raise ValueError("CSV ZONETOLLRATE outside allowed range")
-    return parsed
-
-
 def parse_trip_pricing_csv(text: str) -> list[I95Row]:
     csv.field_size_limit(MAX_FIELD_LENGTH)
     reader = csv.reader(io.StringIO(text))
@@ -125,7 +106,7 @@ def parse_trip_pricing_csv(text: str) -> list[I95Row]:
             raise ValueError(f"CSV row count exceeds {MAX_ROWS}")
 
         raw = {
-            field: _bounded_text(cell.strip(), field)
+            field: bounded_text(cell.strip(), f"CSV {field}")
             for field, cell in zip(header, row, strict=True)
         }
 
@@ -134,16 +115,18 @@ def parse_trip_pricing_csv(text: str) -> list[I95Row]:
                 interval_end_at=_parse_timestamp(raw["INTERVALENDDATETI"]),
                 current_at=_parse_timestamp(raw["CURRENTDATETIME"]),
                 calculated_at=_parse_timestamp(raw["CALULCATEDDATETIM"]),
-                corridor_id=_bounded_int(raw["CORRIDORID"], "CORRIDORID"),
+                corridor_id=bounded_int(raw["CORRIDORID"], "CSV CORRIDORID"),
                 corridor_name=raw["CORRIDORN"],
-                od_pair_id=_bounded_int(raw["ODPAIRID"], "ODPAIRID"),
+                od_pair_id=bounded_int(raw["ODPAIRID"], "CSV ODPAIRID"),
                 od_pair_name=raw["ODPAIRNAME"],
-                start_zone_id=_bounded_int(raw["STARTZONEID"], "STARTZONEID"),
+                start_zone_id=bounded_int(raw["STARTZONEID"], "CSV STARTZONEID"),
                 # Blank for some Prince William OD pairs — nullable, not "fixed".
                 start_zone_name=raw["STARTZONENAME"] or None,
-                end_zone_id=_bounded_int(raw["ENDZONEID"], "ENDZONEID"),
+                end_zone_id=bounded_int(raw["ENDZONEID"], "CSV ENDZONEID"),
                 end_zone_name=raw["ENDZONENAME"],
-                zone_toll_rate_usd=_bounded_toll(raw["ZONETOLLRATE"]),
+                zone_toll_rate_usd=bounded_toll(
+                    raw["ZONETOLLRATE"], "CSV ZONETOLLRATE"
+                ),
                 # Availability lives here, independent of rate: rows can be
                 # CLOSED with a stale nonzero rate, or open with $0.00.
                 link_status=raw["LINKSTATUS"],

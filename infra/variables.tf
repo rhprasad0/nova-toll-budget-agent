@@ -23,37 +23,19 @@ variable "cloudflare_api_token_param_name" {
 }
 
 variable "fetcher_package_path" {
-  description = "Path to the toll-fetcher deployment zip. Defaults to a placeholder stub so `plan` works before WP2 ships real code; WP4 overrides with the built artifact."
+  description = "Path to the toll-fetcher deployment zip. Empty falls back to the placeholder stub, which is what lets the credential-free `fmt-validate` CI job run `terraform validate` without building zips first (filebase64sha256 on a missing file is a hard error). Every real plan/apply passes the built artifact."
   type        = string
   default     = ""
 }
 
 variable "loader_package_path" {
-  description = "Path to the toll-loader deployment zip. Defaults to a placeholder stub so `plan` works before WP3 ships real code; WP4 overrides with the built artifact."
+  description = "Path to the toll-loader deployment zip. Empty falls back to the placeholder stub -- see fetcher_package_path for why that fallback exists."
   type        = string
   default     = ""
-}
-
-variable "fetcher_handler" {
-  description = "Lambda handler entrypoint for toll-fetcher."
-  type        = string
-  default     = "lambda_function.lambda_handler"
-}
-
-variable "loader_handler" {
-  description = "Lambda handler entrypoint for toll-loader."
-  type        = string
-  default     = "lambda_function.lambda_handler"
 }
 
 variable "express_fetcher_package_path" {
-  description = "Path to the toll-express-fetcher deployment zip. Defaults to a placeholder stub so `plan` works before real code ships; overridden with the built artifact."
+  description = "Path to the toll-express-fetcher deployment zip. Empty falls back to the placeholder stub -- see fetcher_package_path for why that fallback exists."
   type        = string
   default     = ""
-}
-
-variable "express_fetcher_handler" {
-  description = "Lambda handler entrypoint for toll-express-fetcher."
-  type        = string
-  default     = "lambda_function.lambda_handler"
 }

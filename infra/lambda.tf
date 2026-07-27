@@ -36,7 +36,7 @@ resource "aws_lambda_function" "fetcher" {
   function_name = "toll-fetcher"
   role          = aws_iam_role.fetcher.arn
   runtime       = "python3.13"
-  handler       = var.fetcher_handler
+  handler       = "handler.handler"
   timeout       = 90
   memory_size   = 128
 
@@ -72,7 +72,7 @@ resource "aws_lambda_function" "loader" {
   function_name = "toll-loader"
   role          = aws_iam_role.loader.arn
   runtime       = "python3.13"
-  handler       = var.loader_handler
+  handler       = "handler.handler"
   # 90s: in-VPC cold starts (ENI attach + psycopg import + verify-full connect)
   # can exceed 30s and time out async loads; retries then stampede. See Finding B.
   timeout     = 90
@@ -117,7 +117,7 @@ resource "aws_lambda_function" "express_fetcher" {
   function_name = "toll-express-fetcher"
   role          = aws_iam_role.express_fetcher.arn
   runtime       = "python3.13"
-  handler       = var.express_fetcher_handler
+  handler       = "handler.handler"
   timeout       = 90
   memory_size   = 128
 

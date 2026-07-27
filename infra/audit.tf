@@ -2,50 +2,9 @@ resource "aws_s3_bucket" "audit" {
   bucket = "nova-toll-audit-920534282028"
 }
 
-resource "aws_s3_bucket_public_access_block" "audit" {
-  bucket                  = aws_s3_bucket.audit.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_ownership_controls" "audit" {
-  bucket = aws_s3_bucket.audit.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-resource "aws_s3_bucket_versioning" "audit" {
-  bucket = aws_s3_bucket.audit.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "audit" {
-  bucket = aws_s3_bucket.audit.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.audit.arn
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "audit" {
-  bucket = aws_s3_bucket.audit.id
-
-  rule {
-    id     = "abort-incomplete-uploads"
-    status = "Enabled"
-    filter {}
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-}
+# Versioning, ownership, public-access block, SSE-KMS and the lifecycle rule
+# for this bucket live in s3.tf's local.hardened_buckets -- identical to raw
+# and tfstate, so all three are driven from one map there.
 
 data "aws_iam_policy_document" "audit_bucket" {
   statement {

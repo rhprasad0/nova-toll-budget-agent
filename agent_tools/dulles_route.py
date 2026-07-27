@@ -46,28 +46,34 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from datetime import datetime, time
 from decimal import Decimal
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from strands import tool
+
+# agent_tools/ has no __init__.py (flat siblings) and this module is imported
+# both as a flat top-level module and as agent_tools.dulles_route (dotted) --
+# neither form puts agent_tools/ itself on sys.path, so a plain
+# "import _oracle_route" would fail under the dotted form. Ensuring our own
+# directory is on sys.path here works under both.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _oracle_route  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 # ponytail: path assumes agent_tools/ sits one level under the repo root next
 # to oracles/, matching i66_route.py/i95_route.py's existing assumption.
 _ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles"
-_EASTERN = ZoneInfo("America/New_York")
+_EASTERN = _oracle_route.EASTERN
 _BOUNDARY_LABEL = "Route 28 (Dulles Toll Road / Dulles Greenway)"
 
 
 def _load_facility(filename: str) -> dict:
     oracle = json.loads((_ORACLE_DIR / filename).read_text())
     nodes = oracle["nodes"]
-    label_index: dict[str, list[str]] = {}
-    for node_id, node in nodes.items():
-        label_index.setdefault(node["label"].casefold(), []).append(node_id)
+    label_index = _oracle_route.label_index(nodes)
     boundary_id = next(
         node_id for node_id, node in nodes.items() if node["label"] == _BOUNDARY_LABEL
     )
@@ -199,22 +205,6 @@ def _composite_lookup(
     return None
 
 
-def _resolve_at_time(at_time: str | None, *, now=None) -> datetime:
-    """Parse the caller's at_time, defaulting to now (America/New_York).
-
-    Identical semantics to i66_route._resolve_at_time/i95_route._resolve_at_time
-    -- kept as a separate copy per this repo's existing duplication convention
-    for these small oracle-backed tools, not shared, since dulles_route uses
-    it only to classify Greenway peak/off-peak, never to pick a historical row.
-    """
-    if at_time is None:
-        return (now or (lambda: datetime.now(_EASTERN)))()
-    dt = datetime.fromisoformat(at_time)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=_EASTERN)
-    return dt
-
-
 def _is_greenway_peak(at_time: datetime, direction: str) -> bool:
     # Peak windows are Eastern wall-clock time; convert first so a caller
     # passing an explicit non-Eastern offset is classified correctly.
@@ -313,7 +303,7 @@ def dulles_route(origin: str, destination: str, at_time: str | None = None) -> d
         return result
 
     try:
-        resolved_at_time = _resolve_at_time(at_time)
+        resolved_at_time = _oracle_route.resolve_at_time(at_time)
     except ValueError as e:
         error = {"error": f"invalid at_time {at_time!r}: {e}", "valid_options": []}
         logger.info(
