@@ -30,7 +30,7 @@ original writeup if a "why" here needs more depth than the task note gives.
       targeted, real token captured before the update and restored
       immediately after (verified byte-for-byte match); a full `terraform
       plan` with the real deployment zips afterward reports no changes.
-- [ ] **Add the two Terraform CI OIDC roles** to `infra/iam.tf`:
+- [x] **Add the two Terraform CI OIDC roles** to `infra/iam.tf`:
       `nova-toll-terraform-plan` (trust scoped to the `pull_request` subject
       only; `ReadOnlyAccess` + inline `kms:Decrypt` on the `tfstate` and
       `cloudflare_token` keys) and `nova-toll-terraform-apply` (trust scoped
@@ -38,13 +38,18 @@ original writeup if a "why" here needs more depth than the task note gives.
       Terraform manages IAM, so the real boundary is the trust policy, not
       the permission policy). Reuse the ID-qualified `sub` pattern already
       in `github_ci_assume`.
-- [ ] **Drop the hardcoded `profile = "nova-toll"`** from
+- [x] **Drop the hardcoded `profile = "nova-toll"`** from
       `infra/providers.tf` and the `backend "s3"` block in
       `infra/versions.tf`. Local runs rely on `AWS_PROFILE=nova-toll` in the
-      shell instead; CI relies on the OIDC-assumed env-var credentials.
-- [ ] **Bootstrap**: apply the two new IAM roles locally (existing
+      shell instead; CI relies on the OIDC-assumed env-var credentials. Done:
+      `terraform init -reconfigure` with only `AWS_PROFILE` set (no
+      `--profile` flags) reconfigured the backend and a full plan showed no
+      unexpected drift.
+- [x] **Bootstrap**: apply the two new IAM roles locally (existing
       `nova-toll` profile flow, now via `AWS_PROFILE` per the item above).
-      The workflow can't create its own credentials on the first run.
+      The workflow can't create its own credentials on the first run. Done:
+      applied for real, 5 resources added (2 roles, 2 attachments, 1 inline
+      policy), 0 changed/destroyed elsewhere.
 - [ ] **Add `.github/workflows/terraform.yml`**: `fmt-validate` job
       (credential-free, runs for everyone including forks), `plan` job (PR,
       fork-guarded like `ci.yml`'s `integration` job, assumes

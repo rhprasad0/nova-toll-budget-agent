@@ -1,6 +1,10 @@
 provider "aws" {
-  profile = "nova-toll"
-  region  = "us-east-1"
+  # No explicit profile: local runs set AWS_PROFILE=nova-toll in the shell;
+  # CI relies on aws-actions/configure-aws-credentials's env-var creds from
+  # an assumed OIDC role. A hardcoded profile here would make Terraform look
+  # up that named profile regardless of ambient credentials, which fails in
+  # CI where no "nova-toll" profile exists.
+  region = "us-east-1"
 
   default_tags {
     tags = {

@@ -264,3 +264,95 @@ resource "aws_iam_role_policy" "github_ci" {
   role   = aws_iam_role.github_ci.id
   policy = data.aws_iam_policy_document.github_ci.json
 }
+
+# --- GitHub Actions CI (Terraform plan/apply) -------------------------------
+
+data "aws_iam_policy_document" "terraform_plan_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      # pull_request only -- this role is never assumable on a direct push.
+      # Fork PRs produce this same subject shape, so the workflow's `plan`
+      # job carries the same fork `if:` guard as `integration` in ci.yml --
+      # this trust condition alone can't distinguish a fork PR.
+      values = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:pull_request"]
+    }
+  }
+}
+
+resource "aws_iam_role" "terraform_plan" {
+  name               = "nova-toll-terraform-plan"
+  assume_role_policy = data.aws_iam_policy_document.terraform_plan_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "terraform_plan_readonly" {
+  role       = aws_iam_role.terraform_plan.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+data "aws_iam_policy_document" "terraform_plan" {
+  statement {
+    # ReadOnlyAccess excludes kms:Decrypt (a write-level action in AWS's own
+    # classification). Scoped to exactly the two keys `terraform plan` needs
+    # to read: encrypted state, and the Cloudflare token it must decrypt to
+    # initialize the cloudflare provider. Deliberately not the shared
+    # alias/aws/ssm default key -- see the cloudflare_token key comment in
+    # kms.tf for why that would leak decrypt access to every other
+    # SecureString in the account (VDOT feed tokens, Tailscale authkey).
+    sid       = "DecryptStateAndCloudflareToken"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.tfstate.arn, aws_kms_key.cloudflare_token.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "terraform_plan" {
+  name   = "nova-toll-terraform-plan"
+  role   = aws_iam_role.terraform_plan.id
+  policy = data.aws_iam_policy_document.terraform_plan.json
+}
+
+data "aws_iam_policy_document" "terraform_apply_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      # main-branch push only -- never pull_request, never other branches.
+      # This repo's own Terraform manages IAM (this role included), so any
+      # apply-capable identity is admin-equivalent no matter how the
+      # permission policy below is scoped -- this trust condition is the
+      # real boundary.
+      values = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"]
+    }
+  }
+}
+
+resource "aws_iam_role" "terraform_apply" {
+  name               = "nova-toll-terraform-apply"
+  assume_role_policy = data.aws_iam_policy_document.terraform_apply_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "terraform_apply_admin" {
+  role       = aws_iam_role.terraform_apply.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}

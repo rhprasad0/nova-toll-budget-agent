@@ -24,11 +24,12 @@ terraform {
   #      creates the bucket via the resource below.
   #   3. Re-run `terraform init` (backend config uncommented/active) to
   #      migrate local state into the now-existing bucket.
+  # No explicit profile: see providers.tf for why (AWS_PROFILE env var
+  # locally, OIDC-assumed env-var creds in CI).
   backend "s3" {
     bucket       = "nova-toll-tfstate-920534282028"
     key          = "nova-toll/terraform.tfstate"
     region       = "us-east-1"
-    profile      = "nova-toll"
     use_lockfile = true
   }
 }
