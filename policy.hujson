@@ -49,16 +49,24 @@
         },
     ],
 
+    // tests' accept/deny don't support CIDR ranges (confirmed: "unknown
+    // user or host" on the /16) -- they need a concrete IP, so this aliases
+    // RDS's current private IP (nova-toll-db, resolved via dig once RDS
+    // went private). Update if RDS's underlying host ever changes it.
+    "hosts": {
+        "nova-toll-rds": "172.31.83.200",
+    },
+
     // Checked on every push; Tailscale rejects the update if any fail, so
     // a bad edit can't silently lock out the owner or widen tag:ci's reach.
     "tests": [
         {
             "src":    "rhprasad0@github",
-            "accept": ["172.31.0.0/16:5432"],
+            "accept": ["nova-toll-rds:5432"],
         },
         {
             "src":    "tag:ci",
-            "accept": ["172.31.0.0/16:5432"],
+            "accept": ["nova-toll-rds:5432"],
             "deny":   ["8.8.8.8:443"],
         },
     ],
