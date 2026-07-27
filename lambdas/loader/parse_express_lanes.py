@@ -13,15 +13,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from zoneinfo import ZoneInfo
+
+from _bounds import MAX_IDENTIFIER, MAX_ROWS, bounded_text, bounded_toll
 
 SOURCE_TZ = ZoneInfo("America/New_York")
 UTC = ZoneInfo("UTC")
-MAX_ROWS = 1_000
-MAX_FIELD_LENGTH = 256
-MAX_TOLL_USD = Decimal("500.00")
-MAX_IDENTIFIER = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -45,24 +43,6 @@ def _or_none(value: str | None) -> str | None:
     return None if value is None or value == "null" else value
 
 
-def _bounded_text(value: object, field: str) -> str:
-    if not isinstance(value, str) or len(value) > MAX_FIELD_LENGTH:
-        raise ValueError(
-            f"JSON {field} is invalid or exceeds {MAX_FIELD_LENGTH} characters"
-        )
-    return value
-
-
-def _bounded_toll(value: object) -> Decimal:
-    try:
-        parsed = Decimal(_bounded_text(value, "price"))
-    except InvalidOperation as exc:
-        raise ValueError("invalid JSON price") from exc
-    if not parsed.is_finite() or not Decimal("0") <= parsed <= MAX_TOLL_USD:
-        raise ValueError("JSON price outside allowed range")
-    return parsed
-
-
 def parse_express_lanes_live_json(text: str) -> list[I95LiveRow]:
     payload = json.loads(text)
     if not isinstance(payload, dict):
@@ -75,13 +55,13 @@ def parse_express_lanes_live_json(text: str) -> list[I95LiveRow]:
 
     if not isinstance(rows[0], dict):
         raise ValueError("JSON row is not an object")
-    observed_at = _parse_time(_bounded_text(rows[0].get("time"), "time"))
+    observed_at = _parse_time(bounded_text(rows[0].get("time"), "JSON time"))
 
     parsed_rows: list[I95LiveRow] = []
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("JSON row is not an object")
-        if _bounded_text(row.get("time"), "time") != rows[0]["time"]:
+        if bounded_text(row.get("time"), "JSON time") != rows[0]["time"]:
             raise ValueError("JSON response contains mixed observation times")
         # A row with no price carries nothing priceable to store -- distinct
         # from status "closed", which does have a real price and must not be
@@ -93,10 +73,12 @@ def parse_express_lanes_live_json(text: str) -> list[I95LiveRow]:
             I95LiveRow(
                 observed_at=observed_at,
                 od_pair_id=_bounded_identifier(row.get("od")),
-                price_usd=_bounded_toll(row.get("price")),
-                status=_or_none(_bounded_text(row.get("status"), "status")),
-                road=_or_none(_bounded_text(row.get("road"), "road")),
-                direction=_or_none(_bounded_text(row.get("direction"), "direction")),
+                price_usd=bounded_toll(row.get("price"), "JSON price"),
+                status=_or_none(bounded_text(row.get("status"), "JSON status")),
+                road=_or_none(bounded_text(row.get("road"), "JSON road")),
+                direction=_or_none(
+                    bounded_text(row.get("direction"), "JSON direction")
+                ),
             )
         )
 
@@ -107,7 +89,7 @@ def parse_express_lanes_live_json(text: str) -> list[I95LiveRow]:
 
 
 def _bounded_identifier(value: object) -> int:
-    raw = _bounded_text(value, "od")
+    raw = bounded_text(value, "JSON od")
     if not raw.startswith("od_"):
         raise ValueError("JSON od must start with od_")
     parsed = int(raw.removeprefix("od_"))

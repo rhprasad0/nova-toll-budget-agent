@@ -9,8 +9,8 @@ ids against /maps-api/infra-price-confirmed-all (see
 tests/test_expresslanes_crosscheck.py), so the ids are VDOT's ODPAIRID verbatim.
 
 We commit the *derived* JSON rather than the 221KB of theme source: it's what
-tests/test_expresslanes_topology.py consumes, and re-running this script is the
-one-command refresh. Never fetch at runtime -- the URL carries a ?v= cache
+agent_tools/i95_route.py and i495_route.py read at import, and re-running this
+script is the one-command refresh. Never fetch at runtime -- the URL carries a ?v= cache
 buster and the asset is third-party.
 
     uv run python scripts/fetch_i95_oracle.py

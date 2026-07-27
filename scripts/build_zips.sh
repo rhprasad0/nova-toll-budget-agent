@@ -30,6 +30,7 @@ cp "$REPO/lambdas/fetcher/handler.py" "$fetcher_stage/"
 loader_stage="$BUILD/loader"
 mkdir -p "$loader_stage"
 cp "$REPO/lambdas/loader/handler.py" \
+   "$REPO/lambdas/loader/_bounds.py" \
    "$REPO/lambdas/loader/parse_csv.py" \
    "$REPO/lambdas/loader/parse_xml.py" \
    "$REPO/lambdas/loader/parse_express_lanes.py" \
@@ -68,8 +69,8 @@ echo "  $BUILD/fetcher.zip          ($(unzip -l "$BUILD/fetcher.zip" | tail -1 |
 echo "  $BUILD/loader.zip           ($(unzip -l "$BUILD/loader.zip"  | tail -1 | awk '{print $2}') files)"
 echo "  $BUILD/express-fetcher.zip  ($(unzip -l "$BUILD/express-fetcher.zip" | tail -1 | awk '{print $2}') files)"
 echo
-echo "apply with (handler entrypoint is handler.handler, not the placeholder default):"
+echo "apply with:"
 echo "  cd infra && terraform apply \\"
-echo "    -var fetcher_package_path=build/fetcher.zip                 -var fetcher_handler=handler.handler \\"
-echo "    -var loader_package_path=build/loader.zip                   -var loader_handler=handler.handler \\"
-echo "    -var express_fetcher_package_path=build/express-fetcher.zip -var express_fetcher_handler=handler.handler"
+echo "    -var fetcher_package_path=build/fetcher.zip \\"
+echo "    -var loader_package_path=build/loader.zip \\"
+echo "    -var express_fetcher_package_path=build/express-fetcher.zip"

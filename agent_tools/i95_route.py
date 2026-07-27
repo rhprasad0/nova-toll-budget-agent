@@ -41,7 +41,6 @@ See docs/oracle-tools-spec.md for the full contract and known limitations.
 from __future__ import annotations
 
 import json
-import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -56,8 +55,6 @@ from strands import tool
 # sys.path here works under both.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _oracle_route  # noqa: E402
-
-logger = logging.getLogger(__name__)
 
 # ponytail: path assumes agent_tools/ sits one level under the repo root next
 # to oracles/, matching its current committed location. If this ever ships in
@@ -80,10 +77,9 @@ _NODES = {nid: _ALL_NODES[nid] for p in _PAIRS for nid in (p["entry"], p["exit"]
 
 _LABEL_INDEX = _oracle_route.label_index(_NODES)
 
-# Local aliases so tests can monkeypatch these by name on this module (the
-# established convention here and in i66_route.py), even though the
-# implementation now lives in the shared _oracle_route module.
-_resolve_at_time = _oracle_route.resolve_at_time
+# Local alias so tests can monkeypatch the connection by name on this module
+# (the established convention here and in i66_route.py), even though the
+# implementation lives in the shared _oracle_route module.
 _env_connect = _oracle_route.env_connect
 
 
@@ -97,10 +93,6 @@ def _lookup(origin: str, destination: str) -> dict:
         oracle_name="i95",
         build_legs=lambda p: [{"od_pair_id": p["ods"][0]}],
     )
-
-
-class _PricingError(Exception):
-    """Any hard-error pricing condition; caught once at the tool boundary."""
 
 
 # Verified live against RDS (2026-07-26): these are the only corridor_name
@@ -121,17 +113,18 @@ LIMIT 1
 """
 
 
-def _price_i95_leg(cur, *, od_pair_id: int, at_time: datetime) -> dict:
+def _price_i95_leg(cur, leg_key: dict, at_time: datetime) -> dict:
     """Most recently published trip_pricing_i95 row at or before at_time.
 
-    Raises _PricingError if there's no row at all, if corridor_name isn't
+    Raises PricingError if there's no row at all, if corridor_name isn't
     one of the two this tool's oracle filter should ever produce (schema
     drift), or if the row's lane isn't open for its own corridor/direction.
     """
+    od_pair_id = leg_key["od_pair_id"]
     cur.execute(_I95_PRICE_SQL, {"od_pair_id": od_pair_id, "at_time": at_time})
     row = cur.fetchone()
     if row is None:
-        raise _PricingError(
+        raise _oracle_route.PricingError(
             f"no price found for od_pair_id {od_pair_id} at or before "
             f"{at_time.isoformat()} in trip_pricing_i95"
         )
@@ -139,11 +132,11 @@ def _price_i95_leg(cur, *, od_pair_id: int, at_time: datetime) -> dict:
     _, corridor_name, rate, interval_end_at, link_status = row
     required_status = _REQUIRED_LINK_STATUS.get(corridor_name)
     if required_status is None:
-        raise _PricingError(
+        raise _oracle_route.PricingError(
             f"unrecognized corridor_name {corridor_name!r} for od_pair_id {od_pair_id}"
         )
     if link_status != required_status:
-        raise _PricingError(
+        raise _oracle_route.PricingError(
             f"od_pair_id {od_pair_id} is not currently available: "
             f"link_status={link_status!r} for corridor {corridor_name!r} "
             f"(requires {required_status!r})"
@@ -202,58 +195,12 @@ def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict
         corridor and link_status, distinguishing "found but closed" from a
         true data miss.
     """
-    result = _lookup(origin, destination)
-    if "error" in result:
-        logger.info(
-            "i95_route miss origin=%r destination=%r error=%r",
-            origin,
-            destination,
-            result["error"],
-        )
-        return result
-
-    try:
-        resolved_at_time = _resolve_at_time(at_time)
-    except ValueError as e:
-        error = {"error": f"invalid at_time {at_time!r}: {e}", "valid_options": []}
-        logger.info(
-            "i95_route miss origin=%r destination=%r error=%r",
-            origin,
-            destination,
-            error["error"],
-        )
-        return error
-
-    leg_key = result["legs"][0]
-    conn = _env_connect()
-    try:
-        with conn.cursor() as cur:
-            priced_leg = _price_i95_leg(
-                cur, od_pair_id=leg_key["od_pair_id"], at_time=resolved_at_time
-            )
-    except _PricingError as e:
-        error = {"error": str(e), "valid_options": []}
-        logger.info(
-            "i95_route miss origin=%r destination=%r error=%r",
-            origin,
-            destination,
-            error["error"],
-        )
-        return error
-    finally:
-        conn.close()
-
-    response = _oracle_route.build_response(result, [priced_leg], resolved_at_time)
-    logger.info(
-        "i95_route ok origin=%r destination=%r entry=%s exit=%s direction=%s "
-        "at_time=%s total_usd=%s legs=%s",
+    return _oracle_route.run(
+        "i95_route",
         origin,
         destination,
-        result["entry"]["node_id"],
-        result["exit"]["node_id"],
-        result["direction"],
-        response["at_time"],
-        response["total_usd"],
-        response["legs"],
+        at_time,
+        lookup_fn=_lookup,
+        connect=_env_connect,
+        price_fn=_price_i95_leg,
     )
-    return response

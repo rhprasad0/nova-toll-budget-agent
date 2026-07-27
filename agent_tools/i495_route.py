@@ -37,7 +37,6 @@ See docs/oracle-tools-spec.md for the full contract and known limitations.
 from __future__ import annotations
 
 import json
-import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -53,8 +52,6 @@ from strands import tool
 # directory is on sys.path here works under both.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _oracle_route  # noqa: E402
-
-logger = logging.getLogger(__name__)
 
 # ponytail: path assumes agent_tools/ sits one level under the repo root next
 # to oracles/, matching its current committed location. If this ever ships in
@@ -77,10 +74,9 @@ _NODES = {nid: _ALL_NODES[nid] for p in _PAIRS for nid in (p["entry"], p["exit"]
 
 _LABEL_INDEX = _oracle_route.label_index(_NODES)
 
-# Local aliases so tests can monkeypatch these by name on this module (the
-# established convention here and in i66_route.py), even though the
-# implementation now lives in the shared _oracle_route module.
-_resolve_at_time = _oracle_route.resolve_at_time
+# Local alias so tests can monkeypatch the connection by name on this module
+# (the established convention here and in i66_route.py), even though the
+# implementation lives in the shared _oracle_route module.
 _env_connect = _oracle_route.env_connect
 
 
@@ -106,15 +102,21 @@ LIMIT 1
 """
 
 
-def _price_i495_leg(cur, *, od_pair_id: int, at_time: datetime) -> dict | None:
-    """Most recently published trip_pricing_i95 row at or before at_time, or
-    None if no such row exists. No availability gate -- see module
-    docstring for why I-495-NB/I-495-SB never need one.
+def _price_i495_leg(cur, leg_key: dict, at_time: datetime) -> dict:
+    """Most recently published trip_pricing_i95 row at or before at_time.
+
+    No availability gate -- see the module docstring for why I-495-NB/
+    I-495-SB never need one. A missing row is a hard error for the whole
+    call; there is no live-fallback source for this table.
     """
+    od_pair_id = leg_key["od_pair_id"]
     cur.execute(_I495_PRICE_SQL, {"od_pair_id": od_pair_id, "at_time": at_time})
     row = cur.fetchone()
     if row is None:
-        return None
+        raise _oracle_route.PricingError(
+            f"no price found for od_pair_id {od_pair_id} at or before "
+            f"{at_time.isoformat()} in trip_pricing_i95"
+        )
     _, corridor_name, rate, interval_end_at = row
     return {
         "od_pair_id": od_pair_id,
@@ -164,65 +166,12 @@ def i495_route(origin: str, destination: str, at_time: str | None = None) -> dic
         possible; valid_options is empty for a pricing miss or a bad
         at_time, since retrying the same inputs won't fix either.
     """
-    result = _lookup(origin, destination)
-    if "error" in result:
-        logger.info(
-            "i495_route miss origin=%r destination=%r error=%r",
-            origin,
-            destination,
-            result["error"],
-        )
-        return result
-
-    try:
-        resolved_at_time = _resolve_at_time(at_time)
-    except ValueError as e:
-        error = {"error": f"invalid at_time {at_time!r}: {e}", "valid_options": []}
-        logger.info(
-            "i495_route miss origin=%r destination=%r error=%r",
-            origin,
-            destination,
-            error["error"],
-        )
-        return error
-
-    leg_key = result["legs"][0]
-    conn = _env_connect()
-    try:
-        with conn.cursor() as cur:
-            priced_leg = _price_i495_leg(
-                cur, od_pair_id=leg_key["od_pair_id"], at_time=resolved_at_time
-            )
-    finally:
-        conn.close()
-
-    if priced_leg is None:
-        error = {
-            "error": (
-                f"no price found for od_pair_id {leg_key['od_pair_id']} at or "
-                f"before {resolved_at_time.isoformat()} in trip_pricing_i95"
-            ),
-            "valid_options": [],
-        }
-        logger.info(
-            "i495_route miss origin=%r destination=%r error=%r",
-            origin,
-            destination,
-            error["error"],
-        )
-        return error
-
-    response = _oracle_route.build_response(result, [priced_leg], resolved_at_time)
-    logger.info(
-        "i495_route ok origin=%r destination=%r entry=%s exit=%s direction=%s "
-        "at_time=%s total_usd=%s legs=%s",
+    return _oracle_route.run(
+        "i495_route",
         origin,
         destination,
-        result["entry"]["node_id"],
-        result["exit"]["node_id"],
-        result["direction"],
-        response["at_time"],
-        response["total_usd"],
-        response["legs"],
+        at_time,
+        lookup_fn=_lookup,
+        connect=_env_connect,
+        price_fn=_price_i495_leg,
     )
-    return response

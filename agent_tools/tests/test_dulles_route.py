@@ -10,7 +10,6 @@ reason).
 """
 
 import logging
-from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import dulles_route as dulles_mod
@@ -188,11 +187,6 @@ def test_ambiguous_match_is_guarded_with_synthetic_data(monkeypatch):
     result = dulles_mod._lookup("Origin", "Dest")
     assert "error" in result
     assert "ambiguous" in result["error"]
-
-
-def test_resolve_at_time_defaults_to_now_eastern():
-    sentinel = datetime(2026, 7, 26, 12, 0, tzinfo=_EASTERN)
-    assert dulles_mod._resolve_at_time(None, now=lambda: sentinel) == sentinel
 
 
 def test_tool_spec_matches_signature():

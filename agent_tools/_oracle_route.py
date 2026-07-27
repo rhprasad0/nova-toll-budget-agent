@@ -2,13 +2,15 @@
 routing tools (i66_route.py, i95_route.py, i495_route.py).
 
 Each tool still owns its own oracle file location, its own facility filter,
-and its own pricing SQL/gate logic -- only the parts that are truly
-identical (label lookup, at_time parsing, the DB connection, and the
-final response envelope) live here.
+and its own pricing SQL/gate logic. Everything identical across the three --
+label lookup, at_time parsing, the DB connection, the resolve/price/log
+sequence each @tool body runs, and the final response envelope -- lives
+here, in run().
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from datetime import datetime
@@ -17,7 +19,13 @@ from zoneinfo import ZoneInfo
 
 import boto3
 
+logger = logging.getLogger(__name__)
+
 EASTERN = ZoneInfo("America/New_York")
+
+
+class PricingError(Exception):
+    """Any hard-error pricing condition; caught once at the tool boundary."""
 
 
 def label_index(nodes: dict) -> dict[str, list[str]]:
@@ -124,9 +132,9 @@ def env_connect():
     """Connect to RDS as pricing_reader via IAM auth.
 
     Lazy `import psycopg`: it isn't in the fast dev/test path (mirrors
-    infra/build/loader/handler.py's _connect(), which has the same
-    constraint for the deployed Lambda zip). boto3 stays a top-level import
-    -- it's already a main dependency and carries no such cost.
+    lambdas/loader/handler.py's _connect(), which has the same constraint
+    for the deployed Lambda zip). boto3 stays a top-level import -- it's
+    already a main dependency and carries no such cost.
     """
     import psycopg  # type: ignore[import-not-found]
 
@@ -155,3 +163,83 @@ def build_response(result: dict, priced_legs: list[dict], at_time: datetime) -> 
         "legs": priced_legs,
         "total_usd": str(total),
     }
+
+
+def _miss(tool_name: str, origin: str, destination: str, error: dict) -> dict:
+    # valid_options is deliberately not logged: on an unknown label it's the
+    # whole ramp list, which is noise in an audit line, not signal.
+    logger.info(
+        "%s miss origin=%r destination=%r error=%r",
+        tool_name,
+        origin,
+        destination,
+        error["error"],
+    )
+    return error
+
+
+def run(
+    tool_name: str,
+    origin: str,
+    destination: str,
+    at_time: str | None,
+    *,
+    lookup_fn: Callable[[str, str], dict],
+    connect: Callable[[], object],
+    price_fn: Callable[..., dict],
+) -> dict:
+    """Resolve -> parse at_time -> connect -> price -> envelope, with the
+    audit logging each step needs. The single-leg body every RDS-backed
+    route tool runs; they differ only in lookup_fn/price_fn.
+
+    `connect` is passed in rather than called as env_connect() directly so
+    each tool module keeps its own patchable `_env_connect` seam (the
+    established test convention here).
+
+    price_fn(cur, leg_key, at_time) returns the priced leg, or raises
+    PricingError -- a missing row, an unrecognized corridor, and a closed
+    lane are all hard errors for the whole call, never a default price.
+    """
+    result = lookup_fn(origin, destination)
+    if "error" in result:
+        return _miss(tool_name, origin, destination, result)
+
+    try:
+        resolved_at_time = resolve_at_time(at_time)
+    except ValueError as e:
+        return _miss(
+            tool_name,
+            origin,
+            destination,
+            {"error": f"invalid at_time {at_time!r}: {e}", "valid_options": []},
+        )
+
+    conn = connect()
+    try:
+        with conn.cursor() as cur:  # type: ignore[attr-defined]
+            priced_leg = price_fn(cur, result["legs"][0], resolved_at_time)
+    except PricingError as e:
+        return _miss(
+            tool_name,
+            origin,
+            destination,
+            {"error": str(e), "valid_options": []},
+        )
+    finally:
+        conn.close()  # type: ignore[attr-defined]
+
+    response = build_response(result, [priced_leg], resolved_at_time)
+    logger.info(
+        "%s ok origin=%r destination=%r entry=%s exit=%s direction=%s "
+        "at_time=%s total_usd=%s legs=%s",
+        tool_name,
+        origin,
+        destination,
+        result["entry"]["node_id"],
+        result["exit"]["node_id"],
+        result["direction"],
+        response["at_time"],
+        response["total_usd"],
+        response["legs"],
+    )
+    return response
