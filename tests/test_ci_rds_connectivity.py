@@ -21,13 +21,15 @@ Run explicitly (with AWS credentials and DB_USER/DB_NAME/DB_CA_BUNDLE_PATH set):
     uv run pytest -m live tests/test_ci_rds_connectivity.py -v
 """
 
-import os
 import sys
+from pathlib import Path
 
-import boto3
 import pytest
 
-from conftest import REPO_ROOT
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from rds_ci_test_support import configure_pricing_reader_rds_env  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
 
@@ -35,16 +37,9 @@ from _oracle_route import env_connect  # noqa: E402
 
 pytestmark = pytest.mark.live
 
-AWS_REGION = "us-east-1"
-DB_IDENTIFIER = "nova-toll-db"  # infra/rds.tf identifier
-
 
 def test_can_select_1_over_the_tailscale_bridge():
-    instance = boto3.client("rds", region_name=AWS_REGION).describe_db_instances(
-        DBInstanceIdentifier=DB_IDENTIFIER
-    )["DBInstances"][0]
-    os.environ["DB_HOST"] = instance["Endpoint"]["Address"]
-    os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
+    configure_pricing_reader_rds_env()
 
     with env_connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1")

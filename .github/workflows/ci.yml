@@ -54,7 +54,7 @@ jobs:
           aws-region: us-east-1
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - run: uv sync
-      - run: uv run pytest -m live tests/test_ci_rds_connectivity.py
+      - run: uv run pytest -m live tests/test_ci_rds_connectivity.py tests/test_ci_rds_route_tools.py
         env:
           DB_USER: pricing_reader
           DB_NAME: nova_toll
