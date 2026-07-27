@@ -193,3 +193,58 @@ resource "aws_iam_role_policy" "replay" {
   role   = aws_iam_role.replay.id
   policy = data.aws_iam_policy_document.replay.json
 }
+
+# --- GitHub Actions CI (RDS integration test) ------------------------------
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+}
+
+data "aws_iam_policy_document" "github_ci_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0/nova-toll-budget-agent:*"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_ci" {
+  name               = "nova-toll-github-ci"
+  assume_role_policy = data.aws_iam_policy_document.github_ci_assume.json
+}
+
+data "aws_iam_policy_document" "github_ci" {
+  statement {
+    sid       = "ConnectRdsIam"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/pricing_reader"]
+  }
+
+  statement {
+    # Lets the integration test resolve the RDS endpoint at runtime instead
+    # of it being hardcoded into the public workflow file.
+    sid       = "DescribeRdsEndpoint"
+    actions   = ["rds:DescribeDBInstances"]
+    resources = [aws_db_instance.main.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "github_ci" {
+  name   = "nova-toll-github-ci"
+  role   = aws_iam_role.github_ci.id
+  policy = data.aws_iam_policy_document.github_ci.json
+}

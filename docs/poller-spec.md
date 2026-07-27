@@ -344,12 +344,16 @@ retrofitting means a snapshot-copy-restore dance), `manage_master_user_password
 signed tokens; no per-Lambda secret exists). All clients — loader and home
 psql alike — connect with `sslmode=verify-full` + the RDS CA bundle.
 
-**Network posture (accepted tradeoff):** `publicly_accessible = true`, with
-the security group allowing 5432 from (a) Ryan's home IP /32 and (b) the
-loader Lambda's SG only. Chosen for solo-dev ergonomics (direct psql,
-pg_restore migration) at zero extra cost. Upgrade path if posture needs to
-tighten: flip to private subnets + t4g.nano bastion with SSM port forwarding.
-Home IP is a Terraform variable — expect it to change occasionally.
+**Network posture:** `publicly_accessible = false`. The security group
+allows 5432 only from (a) the loader Lambda's SG and (b) a Tailscale subnet
+router SG (`infra/tailscale.tf`) — a `t4g.nano` in the same default VPC that
+bridges the tailnet to RDS. That one box gives GitHub Actions CI (via the
+`nova-toll-github-ci` OIDC role and the `tailscale/github-action`, see
+`.github/workflows/ci.yml`), the dev laptop, and Tailscale exit-node use on
+public wifi a path in, without RDS ever being publicly addressable. Auth
+key, ACL policy, and route approval are managed out-of-band in the
+Tailscale admin console, same "seed a placeholder, set via CLI" spirit as
+the SSM feed tokens above.
 
 ## Observability
 

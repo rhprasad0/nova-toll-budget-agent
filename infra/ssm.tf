@@ -31,3 +31,13 @@ resource "aws_ssm_parameter" "cloudflare_api_token" {
     ignore_changes = [value]
   }
 }
+
+resource "aws_ssm_parameter" "tailscale_authkey" {
+  name  = var.tailscale_authkey_param_name
+  type  = "SecureString"
+  value = "REPLACE_OUT_OF_BAND"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}

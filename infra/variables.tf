@@ -1,6 +1,7 @@
-variable "home_ip" {
-  description = "Ryan's home IP (bare, no /32) — allowed to reach RDS on 5432. Expect it to change occasionally."
+variable "tailscale_authkey_param_name" {
+  description = "SSM parameter name (SecureString) holding the Tailscale subnet-router auth key. Value is set out-of-band via CLI, never through Terraform."
   type        = string
+  default     = "/nova-toll/tailscale-authkey"
 }
 
 variable "i95_token_param_name" {

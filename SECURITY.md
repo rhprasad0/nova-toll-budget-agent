@@ -83,9 +83,6 @@ After the 2026-07-26 deployment:
 
 ## Remaining review items
 
-- RDS remains publicly reachable from the approved home-IP rule by explicit
-  product decision. Revisit private subnets and SSM/VPN administration before
-  wider production use.
 - Before a public agent launch, implement every control in the public-agent
   launch gate, including WAF throttling, concurrency/spend limits, a kill
   switch, output validation, and a dedicated read-only runtime role.

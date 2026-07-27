@@ -72,5 +72,4 @@ echo "apply with (handler entrypoint is handler.handler, not the placeholder def
 echo "  cd infra && terraform apply \\"
 echo "    -var fetcher_package_path=build/fetcher.zip                 -var fetcher_handler=handler.handler \\"
 echo "    -var loader_package_path=build/loader.zip                   -var loader_handler=handler.handler \\"
-echo "    -var express_fetcher_package_path=build/express-fetcher.zip -var express_fetcher_handler=handler.handler \\"
-echo "    -var home_ip=<your.ip>"
+echo "    -var express_fetcher_package_path=build/express-fetcher.zip -var express_fetcher_handler=handler.handler"

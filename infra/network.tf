@@ -30,13 +30,29 @@ resource "aws_security_group" "loader" {
   vpc_id      = data.aws_vpc.default.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "rds_from_home" {
-  security_group_id = aws_security_group.rds.id
-  description       = "home IP psql access"
-  cidr_ipv4         = "${var.home_ip}/32"
-  from_port         = 5432
-  to_port           = 5432
-  ip_protocol       = "tcp"
+resource "aws_security_group" "tailscale_router" {
+  name        = "nova-toll-tailscale-router"
+  description = "Tailscale subnet router -- bridges the tailnet (CI, dev laptop, exit-node traffic) to RDS"
+  vpc_id      = data.aws_vpc.default.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "rds_from_tailscale" {
+  security_group_id            = aws_security_group.rds.id
+  description                  = "Tailscale subnet router"
+  referenced_security_group_id = aws_security_group.tailscale_router.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+}
+
+# Allow-all, not scoped like the loader SG's egress: this box is also a
+# Tailscale exit node, so it must be able to forward its peer's traffic to
+# arbitrary internet destinations, not just RDS.
+resource "aws_vpc_security_group_egress_rule" "tailscale_router_egress" {
+  security_group_id = aws_security_group.tailscale_router.id
+  description       = "Exit-node + DERP/coordination + package installs"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_loader" {

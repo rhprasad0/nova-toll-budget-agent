@@ -14,13 +14,13 @@ money. Everything else is hygiene, tracked but not gating launch.
 
 ## Tier 1 — Blockers
 
-- [ ] **No network path from AgentCore to RDS.** `infra/network.tf:33-45`
-      only grants RDS ingress to `home_ip/32` and the loader Lambda's
-      security group. No security group, VPC config, or IAM role exists for
-      an AgentCore runtime (`infra/lambda-stub/handler.py` is an empty
-      placeholder; no `agent`/`bedrock`/`agentcore` reference anywhere in
-      `infra/iam.tf` or elsewhere). Scope as its own infra work item: IAM
-      execution role, runtime resource, network path to RDS.
+- [ ] **No network path from AgentCore to RDS.** `infra/network.tf:39-65`
+      only grants RDS ingress to the Tailscale subnet-router SG and the
+      loader Lambda's security group. No security group, VPC config, or IAM
+      role exists for an AgentCore runtime (`infra/lambda-stub/handler.py`
+      is an empty placeholder; no `agent`/`bedrock`/`agentcore` reference
+      anywhere in `infra/iam.tf` or elsewhere). Scope as its own infra work
+      item: IAM execution role, runtime resource, network path to RDS.
 - [ ] **Wrong-answer generator in routing logic.** `agent/toll_agent.py:104-113`,
       the `("dulles_greenway", "i495")` JUNCTIONS entry asserts both
       "NOT EVIDENCED" and "must route through dulles_toll_road" in the same
