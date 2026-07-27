@@ -1,43 +1,60 @@
-# --- raw payload bucket -----------------------------------------------
+# --- shared bucket hardening ------------------------------------------
+# raw, audit and tfstate each get the identical five-resource treatment;
+# only the KMS key differs, so they're driven from one map rather than
+# written out three times. The bucket *policies* genuinely differ per
+# bucket, so those stay written out individually below (and in audit.tf).
+#
+# The site bucket (site.tf) is deliberately not in here: it's a public
+# CDN origin with no versioning, no lifecycle rule and AES256 rather than
+# SSE-KMS, so folding it in would mean conditionals, not less code.
 
-resource "aws_s3_bucket" "raw" {
-  bucket = "nova-toll-raw-920534282028"
+locals {
+  hardened_buckets = {
+    raw     = { id = aws_s3_bucket.raw.id, kms_key_arn = aws_kms_key.raw.arn }
+    audit   = { id = aws_s3_bucket.audit.id, kms_key_arn = aws_kms_key.audit.arn }
+    tfstate = { id = aws_s3_bucket.tfstate.id, kms_key_arn = aws_kms_key.tfstate.arn }
+  }
 }
 
-resource "aws_s3_bucket_versioning" "raw" {
-  bucket = aws_s3_bucket.raw.id
+resource "aws_s3_bucket_versioning" "hardened" {
+  for_each = local.hardened_buckets
+  bucket   = each.value.id
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-resource "aws_s3_bucket_ownership_controls" "raw" {
-  bucket = aws_s3_bucket.raw.id
+resource "aws_s3_bucket_ownership_controls" "hardened" {
+  for_each = local.hardened_buckets
+  bucket   = each.value.id
   rule {
     object_ownership = "BucketOwnerEnforced"
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "raw" {
-  bucket                  = aws_s3_bucket.raw.id
+resource "aws_s3_bucket_public_access_block" "hardened" {
+  for_each                = local.hardened_buckets
+  bucket                  = each.value.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "raw" {
-  bucket = aws_s3_bucket.raw.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "hardened" {
+  for_each = local.hardened_buckets
+  bucket   = each.value.id
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.raw.arn
+      kms_master_key_id = each.value.kms_key_arn
     }
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "raw" {
-  bucket = aws_s3_bucket.raw.id
+resource "aws_s3_bucket_lifecycle_configuration" "hardened" {
+  for_each = local.hardened_buckets
+  bucket   = each.value.id
 
   rule {
     id     = "abort-incomplete-uploads"
@@ -47,6 +64,76 @@ resource "aws_s3_bucket_lifecycle_configuration" "raw" {
       days_after_initiation = 7
     }
   }
+}
+
+# State migration for the consolidation above -- these keep the existing
+# resources in place instead of destroying and recreating them. Safe to
+# delete once an apply has run on every workspace that has this state.
+moved {
+  from = aws_s3_bucket_versioning.raw
+  to   = aws_s3_bucket_versioning.hardened["raw"]
+}
+moved {
+  from = aws_s3_bucket_versioning.audit
+  to   = aws_s3_bucket_versioning.hardened["audit"]
+}
+moved {
+  from = aws_s3_bucket_versioning.tfstate
+  to   = aws_s3_bucket_versioning.hardened["tfstate"]
+}
+moved {
+  from = aws_s3_bucket_ownership_controls.raw
+  to   = aws_s3_bucket_ownership_controls.hardened["raw"]
+}
+moved {
+  from = aws_s3_bucket_ownership_controls.audit
+  to   = aws_s3_bucket_ownership_controls.hardened["audit"]
+}
+moved {
+  from = aws_s3_bucket_ownership_controls.tfstate
+  to   = aws_s3_bucket_ownership_controls.hardened["tfstate"]
+}
+moved {
+  from = aws_s3_bucket_public_access_block.raw
+  to   = aws_s3_bucket_public_access_block.hardened["raw"]
+}
+moved {
+  from = aws_s3_bucket_public_access_block.audit
+  to   = aws_s3_bucket_public_access_block.hardened["audit"]
+}
+moved {
+  from = aws_s3_bucket_public_access_block.tfstate
+  to   = aws_s3_bucket_public_access_block.hardened["tfstate"]
+}
+moved {
+  from = aws_s3_bucket_server_side_encryption_configuration.raw
+  to   = aws_s3_bucket_server_side_encryption_configuration.hardened["raw"]
+}
+moved {
+  from = aws_s3_bucket_server_side_encryption_configuration.audit
+  to   = aws_s3_bucket_server_side_encryption_configuration.hardened["audit"]
+}
+moved {
+  from = aws_s3_bucket_server_side_encryption_configuration.tfstate
+  to   = aws_s3_bucket_server_side_encryption_configuration.hardened["tfstate"]
+}
+moved {
+  from = aws_s3_bucket_lifecycle_configuration.raw
+  to   = aws_s3_bucket_lifecycle_configuration.hardened["raw"]
+}
+moved {
+  from = aws_s3_bucket_lifecycle_configuration.audit
+  to   = aws_s3_bucket_lifecycle_configuration.hardened["audit"]
+}
+moved {
+  from = aws_s3_bucket_lifecycle_configuration.tfstate
+  to   = aws_s3_bucket_lifecycle_configuration.hardened["tfstate"]
+}
+
+# --- raw payload bucket -----------------------------------------------
+
+resource "aws_s3_bucket" "raw" {
+  bucket = "nova-toll-raw-920534282028"
 }
 
 data "aws_iam_policy_document" "raw_bucket" {
@@ -149,51 +236,6 @@ resource "aws_s3_bucket_policy" "raw" {
 
 resource "aws_s3_bucket" "tfstate" {
   bucket = "nova-toll-tfstate-920534282028"
-}
-
-resource "aws_s3_bucket_versioning" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_ownership_controls" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "tfstate" {
-  bucket                  = aws_s3_bucket.tfstate.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.tfstate.arn
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-
-  rule {
-    id     = "abort-incomplete-uploads"
-    status = "Enabled"
-    filter {}
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
 }
 
 data "aws_iam_policy_document" "tfstate_bucket" {

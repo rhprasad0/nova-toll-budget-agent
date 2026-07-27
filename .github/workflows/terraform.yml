@@ -69,9 +69,9 @@ jobs:
         working-directory: infra
       - run: |
           terraform plan -lock=false \
-            -var fetcher_package_path=build/fetcher.zip                 -var fetcher_handler=handler.handler \
-            -var loader_package_path=build/loader.zip                   -var loader_handler=handler.handler \
-            -var express_fetcher_package_path=build/express-fetcher.zip -var express_fetcher_handler=handler.handler
+            -var fetcher_package_path=build/fetcher.zip \
+            -var loader_package_path=build/loader.zip \
+            -var express_fetcher_package_path=build/express-fetcher.zip
         working-directory: infra
 
   apply:
@@ -104,7 +104,7 @@ jobs:
         working-directory: infra
       - run: |
           terraform apply -auto-approve \
-            -var fetcher_package_path=build/fetcher.zip                 -var fetcher_handler=handler.handler \
-            -var loader_package_path=build/loader.zip                   -var loader_handler=handler.handler \
-            -var express_fetcher_package_path=build/express-fetcher.zip -var express_fetcher_handler=handler.handler
+            -var fetcher_package_path=build/fetcher.zip \
+            -var loader_package_path=build/loader.zip \
+            -var express_fetcher_package_path=build/express-fetcher.zip
         working-directory: infra
