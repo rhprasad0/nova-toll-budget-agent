@@ -90,10 +90,11 @@ resource "aws_lambda_function" "loader" {
 
   environment {
     variables = {
-      DB_HOST = aws_db_instance.main.address
-      DB_PORT = tostring(aws_db_instance.main.port)
-      DB_NAME = aws_db_instance.main.db_name
-      DB_USER = "loader_writer"
+      DB_HOST    = aws_db_instance.main.address
+      DB_PORT    = tostring(aws_db_instance.main.port)
+      DB_NAME    = aws_db_instance.main.db_name
+      DB_USER    = "loader_writer"
+      RAW_BUCKET = aws_s3_bucket.raw.bucket
     }
   }
 
