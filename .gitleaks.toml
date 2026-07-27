@@ -1,5 +1,4 @@
 title = "Nova Toll secret scanning configuration"
-minVersion = "8.30.1"
 
 # Without this, gitleaks treats this file as the *entire* ruleset instead of
 # additions to it -- verified empirically: a planted secret was caught with

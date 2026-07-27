@@ -14,13 +14,31 @@ This closes [`pre-launch-checklist.md`](pre-launch-checklist.md)'s Tier 3 item
 on `core.hooksPath` being opt-in (item 4 below), under the sharper motivation of
 multi-agent coverage rather than just human onboarding — not duplicated there.
 
+## Not optional: rotate the two VDOT feed tokens
+
+`.env`'s `I95_API_KEY`/`I66_API_KEY` values leaked into two subagent tool
+transcripts during this review (redaction bugs while inspecting the file, not
+this conversation). They were removed from `.env` in place via `sed`, with no
+backup kept — there is now no way to compare them against the live SSM values
+to decide if they were real. Don't try to verify first: rotate both at the
+feed provider and `ssm put-parameter --overwrite /nova-toll/i95-token` /
+`--overwrite /nova-toll/i66-token` regardless of what the old values looked
+like. The exposure already happened; rotation is the only thing that closes it.
+
 - [x] **`.gitleaks.toml` defines zero rules.** No `[[rules]]` or `[extend]`
       table — gitleaks treats a supplied config as the entire ruleset unless
       told to extend the default. Verified empirically: a planted secret is
       caught with no config present, not caught with this repo's config.
       Fixed with `[extend]` / `useDefault = true`. Confirmed safe: full
-      history (68 commits) and the working tree both come back clean under
-      the real ruleset, no backlog to triage.
+      history and the working tree both come back clean under the real
+      ruleset, no backlog to triage — checked both with an explicit
+      `--config` and via plain auto-discovery (no `--config` flag, how CI
+      and the pre-commit hook actually invoke it), so this isn't just
+      confirmed to work when told where to look. A `minVersion` line was
+      briefly added and then dropped: `gitleaks-action` pins its own
+      binary, so a version floor set higher than what that pinned binary
+      ships would fail CI outright over a purely decorative line — nothing
+      in this config needs a specific version.
       A second, previously-invisible bug surfaced once real rules actually
       ran: the existing `[allowlist]` regex (`s3_key = EXCLUDED`) checks
       against gitleaks' *captured secret value* (the RHS, e.g.
