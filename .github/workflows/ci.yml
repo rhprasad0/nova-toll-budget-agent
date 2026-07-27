@@ -38,6 +38,18 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
+      # TEMPORARY: diagnosing "Not authorized to perform sts:AssumeRoleWithWebIdentity"
+      # against a trust policy that looks correct on paper. Prints only the
+      # decoded claims (aud/sub/iss), never the token itself. Remove once fixed.
+      - name: Debug OIDC token claims
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+            console.log('aud:', JSON.stringify(payload.aud));
+            console.log('sub:', payload.sub);
+            console.log('iss:', payload.iss);
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-github-ci
