@@ -50,7 +50,7 @@ original writeup if a "why" here needs more depth than the task note gives.
       The workflow can't create its own credentials on the first run. Done:
       applied for real, 5 resources added (2 roles, 2 attachments, 1 inline
       policy), 0 changed/destroyed elsewhere.
-- [ ] **Add `.github/workflows/terraform.yml`**: `fmt-validate` job
+- [x] **Add `.github/workflows/terraform.yml`**: `fmt-validate` job
       (credential-free, runs for everyone including forks), `plan` job (PR,
       fork-guarded like `ci.yml`'s `integration` job, assumes
       `nova-toll-terraform-plan`, `terraform plan -lock=false`), `apply` job
@@ -62,10 +62,23 @@ original writeup if a "why" here needs more depth than the task note gives.
       `infra/**`, `scripts/build_zips.sh`, `scripts/loader-requirements.txt`,
       `lambdas/**`. Third-party actions pinned to a commit SHA per this
       repo's convention.
-- [ ] **Update docs**: `SECURITY.md` (new hardening bullet for the CI
+- [x] **Update docs**: `SECURITY.md` (new hardening bullet for the CI
       plan/apply automation + `AWS_PROFILE` guidance), `docs/poller-spec.md`
       (drop the hardcoded-profile line), `docs/pre-launch-checklist.md`
       (check off the Tier 3 item).
+- [ ] **Follow-up (not blocking): scope trust policy to `job_workflow_ref`.**
+      Automated security review flagged that `nova-toll-terraform-plan`'s
+      trust condition (`sub == repo:...:pull_request`) matches any
+      `pull_request`-triggered workflow in this repo, not specifically
+      `terraform.yml`'s `plan` job — same shape as the existing
+      `nova-toll-github-ci` precedent, but this role's permissions
+      (`ReadOnlyAccess` + Cloudflare token decrypt) are broader. Low risk
+      today (solo repo, only same-repo non-fork PRs can trigger it, and the
+      author already has local admin access), but worth tightening before a
+      second collaborator exists. Before adding a `job_workflow_ref`
+      condition, verify the actual claim shape by decoding a real token from
+      a live run — this repo already got burned once assuming an unverified
+      OIDC claim format for `sub` (see `567059c`).
 - [ ] **Verify end-to-end**: open a PR with a trivial `infra/*.tf` comment
       change, confirm `plan` runs and reports a clean diff; merge, confirm
       `apply` runs and completes; re-run `ci.yml`'s `integration` job

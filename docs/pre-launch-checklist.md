@@ -95,8 +95,9 @@ after traffic arrives.
 ## Tier 3 — Post-launch, not blocking
 
 - [ ] No CloudWatch dashboard (alarms exist, just no visualization)
-- [ ] No Terraform plan/apply step in CI — deploys are fully manual
-      (`scripts/build_zips.sh` + hand-run `terraform apply`)
+- [x] ~~No Terraform plan/apply step in CI~~ — `.github/workflows/terraform.yml`
+      now runs `plan` on PRs touching infra and `apply` automatically on
+      push to `main` (`docs/terraform-ci-tasks.md`)
 - [ ] No rollback artifact retention (`build_zips.sh` does `rm -rf` on the
       prior build dir before rebuilding)
 - [ ] `scripts/smoke.sh` omits the `toll-express-fetcher-errors` alarm from

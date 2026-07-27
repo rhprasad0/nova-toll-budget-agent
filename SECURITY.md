@@ -61,6 +61,22 @@ The public chat agent is not deployed yet. Its release gate is documented in
   to `main` apply. The `tests` assert the owner's access and the RDS route
   survive any future edit, and that `tag:ci` can never reach the general
   internet through the subnet router's exit-node capability.
+- Terraform plan/apply now runs in CI (`.github/workflows/terraform.yml`),
+  same pattern: PRs get a read-only `plan`, pushes to `main` `apply`
+  automatically. Two dedicated OIDC roles, separate from
+  `nova-toll-github-ci`: `nova-toll-terraform-plan` (trust scoped to the
+  `pull_request` subject only; `ReadOnlyAccess` plus `kms:Decrypt` scoped to
+  the Terraform-state and Cloudflare-token KMS keys) and
+  `nova-toll-terraform-apply` (trust scoped to `ref:refs/heads/main` only;
+  `AdministratorAccess`). The apply role is admin-equivalent because this
+  repo's own Terraform manages IAM, including these two roles — a curated
+  set of service-scoped policies would still need `IAMFullAccess` to manage
+  `infra/iam.tf`, at which point it could attach `AdministratorAccess` to
+  anything anyway. The real boundary is the trust policy's branch
+  restriction, not the permission policy. The Cloudflare API token was moved
+  off the shared default `alias/aws/ssm` key onto its own dedicated key
+  (`infra/kms.tf`) specifically so the plan role's decrypt grant doesn't
+  also cover the VDOT feed tokens or Tailscale authkey.
 
 ## Deployment verification
 
@@ -82,12 +98,19 @@ After the 2026-07-26 deployment:
   Terraform variables, shell history, or this document.
 - Keep the Cloudflare API token in SSM Parameter Store
   (`var.cloudflare_api_token_param_name`, `infra/ssm.tf`), same as the VDOT
-  feed tokens. Never in a file. Fetch it immediately before a Terraform
-  operation and let it die with the shell:
-  `export CLOUDFLARE_API_TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text --profile nova-toll)`
-  Requires the `nova-toll` profile identity to have `ssm:GetParameter` on
-  that parameter path -- an account/SSO-level grant, not something this
-  repo's Terraform manages.
+  feed tokens, but on its own dedicated KMS key rather than the shared
+  default -- see the hardening note above for why. Never in a file. Fetch it
+  immediately before a Terraform operation and let it die with the shell:
+  `export CLOUDFLARE_API_TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)`
+  Requires the identity running it to have `ssm:GetParameter` and
+  `kms:Decrypt` on that parameter's key -- an account/SSO-level grant for
+  local use (`AWS_PROFILE=nova-toll`), or `nova-toll-terraform-plan`'s /
+  `nova-toll-terraform-apply`'s scoped grant in CI.
+- Set `AWS_PROFILE=nova-toll` before running Terraform locally.
+  `infra/providers.tf` and the `infra/versions.tf` backend block no longer
+  hardcode a profile, so both local runs and CI rely on ambient credentials
+  (an exported env var locally, OIDC-assumed env-var credentials in CI)
+  rather than a named profile lookup.
 - If an AI coding agent is checking whether a value matches something,
   compare hashes or lengths, not the raw value. See `AGENTS.md`'s Secrets
   section -- it applies to any agent operating in this repo, not just

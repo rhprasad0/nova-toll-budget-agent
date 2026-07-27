@@ -307,8 +307,10 @@ new Lambda or new RDS IAM role.
 
 Lives in `infra/` in this repo. Terraform ≥ 1.10, AWS provider pinned.
 Backend: dedicated state bucket `nova-toll-tfstate-920534282028` with native
-S3 locking (`use_lockfile`, no DynamoDB). Provider: `profile = "nova-toll"`,
-`region = "us-east-1"`, default tags `project = nova-toll-budget-agent`
+S3 locking (`use_lockfile`, no DynamoDB). Provider: no hardcoded profile —
+local runs set `AWS_PROFILE=nova-toll`, CI uses OIDC-assumed credentials
+(`.github/workflows/terraform.yml`) — `region = "us-east-1"`, default tags
+`project = nova-toll-budget-agent`
 (lowercase `project` — it must match the cost allocation tag key already
 activated in the org management account; tag keys are case-sensitive in
 billing).
