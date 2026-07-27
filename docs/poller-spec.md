@@ -344,16 +344,20 @@ retrofitting means a snapshot-copy-restore dance), `manage_master_user_password
 signed tokens; no per-Lambda secret exists). All clients — loader and home
 psql alike — connect with `sslmode=verify-full` + the RDS CA bundle.
 
-**Network posture:** `publicly_accessible = false`. The security group
-allows 5432 only from (a) the loader Lambda's SG and (b) a Tailscale subnet
-router SG (`infra/tailscale.tf`) — a `t4g.nano` in the same default VPC that
-bridges the tailnet to RDS. That one box gives GitHub Actions CI (via the
-`nova-toll-github-ci` OIDC role and the `tailscale/github-action`, see
-`.github/workflows/ci.yml`), the dev laptop, and Tailscale exit-node use on
-public wifi a path in, without RDS ever being publicly addressable. Auth
-key, ACL policy, and route approval are managed out-of-band in the
-Tailscale admin console, same "seed a placeholder, set via CLI" spirit as
-the SSM feed tokens above.
+**Network posture:** Terraform is written (not yet applied, as of
+2026-07-27) for `publicly_accessible = false`, with the security group
+allowing 5432 only from (a) the loader Lambda's SG and (b) a Tailscale
+subnet router SG (`infra/tailscale.tf`) — a `t4g.nano` in the same default
+VPC that bridges the tailnet to RDS. That one box is meant to give GitHub
+Actions CI (via the `nova-toll-github-ci` OIDC role and the
+`tailscale/github-action`, see `.github/workflows/ci.yml`), the dev laptop,
+and Tailscale exit-node use on public wifi a path in, without RDS ever being
+publicly addressable. Auth key, ACL policy, and route approval are managed
+out-of-band in the Tailscale admin console, same "seed a placeholder, set
+via CLI" spirit as the SSM feed tokens above. **Until that manual Tailscale
+setup and `terraform apply` both happen, the live instance is still
+`publicly_accessible = true` with the old home-IP rule** — see
+`docs/tailscale-bridge-tasks.md` for what's left.
 
 ## Observability
 

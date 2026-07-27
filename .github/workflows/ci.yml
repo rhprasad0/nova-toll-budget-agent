@@ -21,6 +21,13 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    # Skip PRs from forks: they'd still get an OIDC token whose sub claim
+    # matches nova-toll-github-ci's trust policy (repo:OWNER/REPO:pull_request
+    # is the same shape regardless of fork), so this check -- not the trust
+    # policy -- is what actually keeps a random fork PR from touching prod
+    # RDS. github.event.pull_request.head.repo.full_name is event-payload
+    # data, not attacker-controlled string interpolation, so it's safe here.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       id-token: write
       contents: read

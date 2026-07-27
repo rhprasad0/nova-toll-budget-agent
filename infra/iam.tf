@@ -217,7 +217,16 @@ data "aws_iam_policy_document" "github_ci_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:rhprasad0/nova-toll-budget-agent:*"]
+      # Only these two subject shapes ever legitimately occur for this repo's
+      # triggers (push to any branch, pull_request) -- narrower than a
+      # trailing `:*`, which would also match environment/tag/workflow_call
+      # subjects this role has no reason to grant. Fork PRs also produce the
+      # `pull_request` shape, so this alone doesn't stop them -- see the
+      # `integration` job's `if:` guard in ci.yml for that.
+      values = [
+        "repo:rhprasad0/nova-toll-budget-agent:ref:refs/heads/*",
+        "repo:rhprasad0/nova-toll-budget-agent:pull_request",
+      ]
     }
   }
 }

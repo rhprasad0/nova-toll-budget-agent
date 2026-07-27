@@ -83,6 +83,11 @@ After the 2026-07-26 deployment:
 
 ## Remaining review items
 
+- RDS is still publicly reachable from the approved home-IP rule as of
+  2026-07-27. Terraform to close this (Tailscale subnet router,
+  `publicly_accessible = false`) is written but not applied — pending a
+  manual one-time Tailscale setup step and a plan review. See
+  `docs/tailscale-bridge-tasks.md`.
 - Before a public agent launch, implement every control in the public-agent
   launch gate, including WAF throttling, concurrency/spend limits, a kill
   switch, output validation, and a dedicated read-only runtime role.

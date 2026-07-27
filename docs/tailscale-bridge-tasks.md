@@ -28,11 +28,15 @@ one mechanism).
 - [x] **Close public RDS exposure**: `infra/rds.tf` `publicly_accessible`
       `true` → `false`.
 - [x] **GitHub OIDC role for CI**: `aws_iam_openid_connect_provider` +
-      `aws_iam_role.github_ci` trusting `token.actions.githubusercontent.com`
-      scoped to `repo:rhprasad0/nova-toll-budget-agent:*`, with
-      `rds-db:connect` as `pricing_reader` and `rds:DescribeDBInstances`
+      `aws_iam_role.github_ci` trusting `token.actions.githubusercontent.com`,
+      with `rds-db:connect` as `pricing_reader` and `rds:DescribeDBInstances`
       (so CI can resolve the endpoint at runtime instead of it being
-      hardcoded into the public workflow file).
+      hardcoded into the public workflow file). Trust condition scoped to
+      `ref:refs/heads/*`/`pull_request` subjects rather than a trailing
+      `:*` (an automated review flagged the wildcard); the `integration`
+      job also skips fork PRs via an `if:` check, since fork PRs produce
+      the same `pull_request` subject a same-repo PR does — the trust
+      condition alone can't tell them apart.
 - [ ] **Manual one-time Tailscale setup** (out of Terraform, tracked here so
       it isn't forgotten): create reusable authkey → SSM; approve the
       advertised VPC-CIDR route in the admin console; write ACL granting
@@ -54,11 +58,22 @@ one mechanism).
       pytest -m live tests/test_ci_rds_connectivity.py`. Third-party actions
       pinned to commit SHA per this repo's existing convention (verified
       against the actual current release tags, not guessed).
-- [x] **Docs**: rewrote `docs/poller-spec.md`'s network-posture paragraph;
-      removed the resolved public-RDS bullet from `SECURITY.md`'s
-      "Remaining review items"; fixed the drifted
-      `infra/network.tf:33-45` line reference in
-      `docs/pre-launch-checklist.md` (now `39-65`).
+- [x] **Docs**: rewrote `docs/poller-spec.md`'s network-posture paragraph
+      (marked "written, not yet applied" rather than claiming the new
+      posture is already live — it isn't); kept SECURITY.md's public-RDS
+      item, reworded to state it's still open pending apply, rather than
+      deleting it as resolved; fixed the drifted `infra/network.tf:33-45`
+      line reference in `docs/pre-launch-checklist.md` (now `39-65`).
+- [x] **Post-implementation review fixes** (advisor + automated security
+      scan caught these before anything was applied): verified
+      `pricing_reader` actually exists and works live (`SELECT 1` via IAM
+      token) rather than trusting a docstring; fixed `set -x` echoing the
+      decrypted Tailscale authkey into cloud-init's log in the instance
+      user-data; attached `AmazonSSMManagedInstanceCore` to the router's
+      instance role so it's recoverable if the authkey placeholder is still
+      unset on first boot; confirmed via AWS docs that a private RDS
+      endpoint's DNS resolves straight to the private IP from anywhere (no
+      split-DNS/VPC-resolver step needed for the tailnet route to work).
 - [ ] **Verification**: `terraform plan`/`apply`; `tailscale up` from dev
       box + psql over the tailnet; toggle exit-node on a non-home network;
       trigger CI and confirm both jobs go green; confirm direct

@@ -41,6 +41,15 @@ resource "aws_iam_role_policy" "tailscale_router" {
   policy = data.aws_iam_policy_document.tailscale_router.json
 }
 
+# The authkey SSM param is seeded with a placeholder (see ssm.tf) until it's
+# set out-of-band, so first boot's `tailscale up` will fail. Session Manager
+# is the recovery path in that window -- no key pair, no SSH ingress rule,
+# and Tailscale SSH is unavailable until tailscaled successfully joins.
+resource "aws_iam_role_policy_attachment" "tailscale_router_ssm" {
+  role       = aws_iam_role.tailscale_router.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "tailscale_router" {
   name = "nova-toll-tailscale-router"
   role = aws_iam_role.tailscale_router.name
@@ -66,6 +75,9 @@ resource "aws_instance" "tailscale_router" {
 
     systemctl enable --now tailscaled
 
+    # `set +x` around the key: `-x` would otherwise echo the decrypted
+    # authkey into cloud-init's log, readable via console-output.
+    set +x
     AUTHKEY=$(aws ssm get-parameter \
       --name '${var.tailscale_authkey_param_name}' \
       --with-decryption \
@@ -78,6 +90,7 @@ resource "aws_instance" "tailscale_router" {
       --advertise-routes=${data.aws_vpc.default.cidr_block} \
       --advertise-exit-node \
       --ssh
+    set -x
   EOF
 
   tags = {
