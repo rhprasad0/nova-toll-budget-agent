@@ -53,16 +53,23 @@ multi-agent coverage rather than just human onboarding — not duplicated there.
       step in `SECURITY.md`, and stated plainly there that CI
       (`gitleaks.yml`) remains the only gate nothing can bypass —
       `core.hooksPath` is local, uncommitted `.git/config` state.
-- [ ] **`.env` holds two live-looking API keys nothing reads.** Grepped the
+- [x] **`.env` holds two live-looking API keys nothing reads.** Grepped the
       full repo and the sibling `hermes-agent` tool: zero references to
-      `I95_API_KEY`/`I66_API_KEY`/`dotenv` anywhere in source. Strip both
-      lines, replace with a comment pointing at the SSM parameters
-      (`/nova-toll/i95-token`, `/nova-toll/i66-token`) that are the actual
-      source of truth for the running system. Also migrate
-      `CLOUDFLARE_API_TOKEN` — currently policy-documented in `SECURITY.md`
-      as "password manager, supply as env var," never actually in a file —
-      to the same SSM pattern (`aws_ssm_parameter` in `infra/ssm.tf`,
-      mirroring `i95_token`/`i66_token` exactly).
+      `I95_API_KEY`/`I66_API_KEY`/`dotenv` anywhere in source. Removed both
+      lines directly (via `sed` matching on key name only, never reading or
+      printing the values into any tool transcript) and replaced with a
+      comment pointing at the SSM parameters (`/nova-toll/i95-token`,
+      `/nova-toll/i66-token`) that are the actual source of truth. Re-ran
+      the consumer grep after — still zero hits.
+      Also migrated `CLOUDFLARE_API_TOKEN` — previously policy-documented
+      in `SECURITY.md` as "password manager, supply as env var," never
+      actually in a file — to the same SSM pattern: added
+      `aws_ssm_parameter.cloudflare_api_token` to `infra/ssm.tf` and
+      `cloudflare_api_token_param_name` to `infra/variables.tf`, mirroring
+      `i95_token`/`i66_token` exactly. `terraform plan -target=` confirms a
+      clean single-resource add. `SECURITY.md`'s operating rule now points
+      at SSM with the fetch-before-apply command instead of "password
+      manager, env var."
 - [ ] **No `.claude/settings.json` deny rules for secret-shaped files.** Add
       `Read`/`Edit` deny for `./.env`, `./.env.*`, `*.pem`, `*.key`,
       `~/.ssh/**`. Defense-in-depth only — known Claude Code enforcement

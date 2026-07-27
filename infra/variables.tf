@@ -15,6 +15,12 @@ variable "i66_token_param_name" {
   default     = "/nova-toll/i66-token"
 }
 
+variable "cloudflare_api_token_param_name" {
+  description = "SSM parameter name (SecureString) holding the Cloudflare API token used for Terraform operations. Value is set out-of-band via CLI, never through Terraform."
+  type        = string
+  default     = "/nova-toll/cloudflare-api-token"
+}
+
 variable "fetcher_package_path" {
   description = "Path to the toll-fetcher deployment zip. Defaults to a placeholder stub so `plan` works before WP2 ships real code; WP4 overrides with the built artifact."
   type        = string

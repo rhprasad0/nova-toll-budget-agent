@@ -21,3 +21,13 @@ resource "aws_ssm_parameter" "i66_token" {
     ignore_changes = [value]
   }
 }
+
+resource "aws_ssm_parameter" "cloudflare_api_token" {
+  name  = var.cloudflare_api_token_param_name
+  type  = "SecureString"
+  value = "REPLACE_OUT_OF_BAND"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}

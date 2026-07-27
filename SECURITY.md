@@ -59,8 +59,14 @@ After the 2026-07-26 deployment:
   committing from that clone.
 - Keep VDOT feed tokens in SSM Parameter Store. Do not place them in source,
   Terraform variables, shell history, or this document.
-- Keep the Cloudflare API token in a password manager or secret store. Supply
-  it only as `CLOUDFLARE_API_TOKEN` for Terraform operations.
+- Keep the Cloudflare API token in SSM Parameter Store
+  (`var.cloudflare_api_token_param_name`, `infra/ssm.tf`), same as the VDOT
+  feed tokens. Never in a file. Fetch it immediately before a Terraform
+  operation and let it die with the shell:
+  `export CLOUDFLARE_API_TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text --profile nova-toll)`
+  Requires the `nova-toll` profile identity to have `ssm:GetParameter` on
+  that parameter path -- an account/SSO-level grant, not something this
+  repo's Terraform manages.
 - Use `./scripts/build_zips.sh` before applying infrastructure changes. If AWS
   rotates the RDS CA, review the rotation notice and update the pinned digest
   in the script before rebuilding.
