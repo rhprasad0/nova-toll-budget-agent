@@ -131,11 +131,11 @@ the I-66 series, not the series.
       **Forward-only by decision** — the pre-migration period stays an hourly
       sample; the overwritten captures were not replayed, though their raw
       payloads remain in S3 if anyone ever wants them.
-      Rollout is three ordered steps (`db/add_captured_at_to_i95_live.sql` →
-      loader deploy → `db/drop_captured_at_default_i95_live.sql`); the temporary
-      column default exists purely because `ON CONFLICT` needs the constraint
-      before the new loader runs, while a bare `NOT NULL` would break the old
-      one. Sequence and reasoning in `docs/poller-spec.md`.
+      Rollout is two steps run back to back (`db/add_captured_at_to_i95_live.sql`
+      → loader deploy) with an unavoidable hard-failure window between them: the
+      deployed loader's `ON CONFLICT` names the old key, and no ordering
+      satisfies both loaders at once. Sequence and consequences in
+      `docs/poller-spec.md`.
 - [x] ~~Value-agreement test (VDOT stored vs Transurban live as pass/fail).~~
       **Dropped, not deferred**: task 1 showed the two sources are one series
       published twice, so a tolerance between them would assert the 10-minute

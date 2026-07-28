@@ -482,25 +482,32 @@ no prior data to migrate. Sequence:
 
 ### Re-keying `trip_pricing_i95_live` on `captured_at` (schema 4.0.0)
 
-Against a database that already has the pre-4.0.0 table. The two constraints
-pull opposite ways — `ON CONFLICT (captured_at, …)` needs the constraint to
-exist before the new loader runs, and a `NOT NULL` column with no default
-breaks the *old* loader's INSERT — so the column carries a temporary default
-that step 3 removes:
+Against a database that already has the pre-4.0.0 table. Two steps, run
+back to back:
 
 1. `psql "$NOVA_TOLL_URL" -f db/add_captured_at_to_i95_live.sql` — adds the
-   column with `DEFAULT now()`, backfills existing rows from each row's own
-   `s3_key`, asserts the new key is unique, then swaps the primary key and the
-   lookup index. Aborts without touching the table if the backfill would not
-   produce a unique key.
-2. Deploy the loader (merge → CI `terraform apply`).
-3. `psql "$NOVA_TOLL_URL" -f db/drop_captured_at_default_i95_live.sql`.
+   column, backfills existing rows from each row's own `s3_key`, asserts every
+   row got a value and that the new key is unique, then swaps the primary key
+   and the lookup index. Aborts without touching the table if either assertion
+   fails.
+2. Deploy the matching loader (`terraform apply`), immediately.
 
-Between 1 and 2 the old loader still inserts without `captured_at` and the
-default records load time instead of capture time. Those rows still land on
-distinct keys, so nothing overwrites even mid-rollout — but keep the window to
-minutes, and expect a handful of rows whose `captured_at` is seconds later than
-the tick it belongs to.
+**The window between them is a hard failure, not a soft one.** The deployed
+loader names `ON CONFLICT (observed_at, od_pair_id)`; once step 1 drops that
+key, Postgres rejects every i95-live insert with "no unique or exclusion
+constraint matching the ON CONFLICT specification". There is no ordering that
+avoids this — keeping the old key alive through the window would instead break
+the *new* loader, since six rows an hour violate uniqueness on
+`(observed_at, od_pair_id)`. So keep the window to a minute or two and expect:
+
+- `toll-loader-errors` to fire if it runs long
+- failed objects in the OnFailure queue, still in S3, replayable afterwards
+- i95 and i66 unaffected — they load as separate invocations
+
+An earlier draft gave `captured_at` a temporary `DEFAULT now()` to keep the old
+loader alive mid-rollout. That protects the INSERT column list but not the
+`ON CONFLICT` clause, so it bought nothing and was dropped, along with the
+second migration that would have removed it.
 
 ## Cost
 

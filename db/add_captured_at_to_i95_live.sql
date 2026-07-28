@@ -1,6 +1,5 @@
--- Migration A of two: re-key trip_pricing_i95_live on our own capture tick
--- instead of the source's hour-truncated label (see db/schema.sql, schema
--- version 4.0.0).
+-- Re-key trip_pricing_i95_live on our own capture tick instead of the source's
+-- hour-truncated label (see db/schema.sql, schema version 4.0.0).
 --
 -- Transurban's prices change on every 10-minute poll, but its shared "time"
 -- field is truncated to the hour and never advances mid-hour. With
@@ -11,17 +10,19 @@
 --
 --     psql "$NOVA_TOLL_URL" -f db/add_captured_at_to_i95_live.sql
 --
--- RUN ORDER (the two constraints below pull in opposite directions, which is
--- why captured_at carries a DEFAULT here that Migration B removes):
---   1. this file, against live RDS
---   2. deploy the loader that populates captured_at and conflicts on it
---      -- ON CONFLICT (captured_at, od_pair_id) needs the constraint this
---      file adds, so the deploy cannot come first
---   3. db/drop_captured_at_default_i95_live.sql
+-- RUN THIS IMMEDIATELY BEFORE DEPLOYING THE MATCHING LOADER. There is an
+-- unavoidable window and it is a hard failure, not a soft one: the currently
+-- deployed loader says ON CONFLICT (observed_at, od_pair_id), and the moment
+-- this file drops that primary key Postgres rejects every i95-live insert with
+-- "no unique or exclusion constraint matching the ON CONFLICT specification".
+-- The two constraints cannot be satisfied at once -- keeping the old key alive
+-- through the window would instead make the *new* loader fail, since six rows
+-- an hour violate uniqueness on (observed_at, od_pair_id). So:
 --
--- Between 1 and 2 the currently-deployed loader keeps inserting without
--- captured_at; the DEFAULT covers it, and those rows still land on distinct
--- keys, so nothing overwrites even mid-rollout. Keep that window short.
+--   * expect toll-loader-errors to fire if the window runs long
+--   * failed objects land in the OnFailure queue and stay in S3, so anything
+--     missed is replayable afterwards
+--   * i95 and i66 load as separate invocations and are unaffected
 --
 -- Safe to re-run: every statement is guarded.
 
@@ -31,8 +32,13 @@ BEGIN;
 -- is always UTC. Without this the backfill silently lands in local time.
 SET LOCAL TimeZone = 'UTC';
 
-ALTER TABLE trip_pricing_i95_live
-    ADD COLUMN IF NOT EXISTS captured_at timestamptz NOT NULL DEFAULT now();
+-- Added nullable, then set NOT NULL after the backfill. A NOT NULL column
+-- needs a DEFAULT to be added to a non-empty table, and an earlier draft used
+-- DEFAULT now() to keep the old loader alive mid-rollout -- pointless, since
+-- the ON CONFLICT clause breaks anyway (see header). No default means no
+-- second migration to remove it, and no risk of a future INSERT silently
+-- recording load time as capture time.
+ALTER TABLE trip_pricing_i95_live ADD COLUMN IF NOT EXISTS captured_at timestamptz;
 
 -- Each surviving row's s3_key is its hour's *last* capture -- which is exactly
 -- the capture whose price the row still holds, since DO UPDATE overwrote
@@ -46,13 +52,22 @@ SET captured_at = to_timestamp(
         substring(s3_key from '(\d{4})Z\.json$'),
         'YYYY-MM-DD HH24MI'
     )
-WHERE s3_key ~ 'date=\d{4}-\d{2}-\d{2}/\d{4}Z\.json$';
+WHERE captured_at IS NULL
+  AND s3_key ~ 'date=\d{4}-\d{2}-\d{2}/\d{4}Z\.json$';
 
--- Fails the transaction rather than the PK swap below, so a surprise leaves
--- the table untouched with a message naming the problem.
+-- Fail the whole transaction rather than the PK swap below, so a surprise
+-- leaves the table untouched with a message naming the problem.
 DO $$
-DECLARE dupes bigint;
+DECLARE unfilled bigint; dupes bigint;
 BEGIN
+    SELECT count(*) INTO unfilled
+        FROM trip_pricing_i95_live WHERE captured_at IS NULL;
+    IF unfilled > 0 THEN
+        RAISE EXCEPTION
+            '% row(s) have no captured_at -- their s3_key does not match the '
+            'expected raw-object key shape', unfilled;
+    END IF;
+
     SELECT count(*) INTO dupes FROM (
         SELECT 1 FROM trip_pricing_i95_live
         GROUP BY captured_at, od_pair_id HAVING count(*) > 1
@@ -63,6 +78,8 @@ BEGIN
             '-- backfill did not produce a usable key', dupes;
     END IF;
 END $$;
+
+ALTER TABLE trip_pricing_i95_live ALTER COLUMN captured_at SET NOT NULL;
 
 ALTER TABLE trip_pricing_i95_live
     DROP CONSTRAINT IF EXISTS trip_pricing_i95_live_pkey;
