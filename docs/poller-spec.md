@@ -232,21 +232,29 @@ live, **unauthenticated** snapshot at
   `road`, `direction` — `status` is Transurban's own open/closed/null
   vocabulary and is never mapped onto `link_status`, a different concept
   from a different source.
-- **One shared timestamp per pull.** Confirmed empirically across three live
-  samples spanning two different hours (2026-07-25 18:xx and 19:xx ET,
-  including one during deploy verification): the `time` field is always
-  America/New_York, truncated to the hour, unchanged across each hour's
-  samples. **Not directly confirmed:** that the underlying price *data*
-  itself only refreshes once an hour — that's an inference from the
-  response's own `#cache.max-age: 3600` header, not a held-open observation
-  across a full hour boundary. Rather than tune a separate poll cadence
-  around an unconfirmed assumption, `toll-express-fetcher` shares
-  `toll-fetcher`'s own EventBridge rule (`rate(10 minutes)`, "EventBridge tick
-  → toll-fetcher" in `infra/triggers.tf`) as a second target — one schedule,
-  both fetchers fire together, nothing to keep in sync by hand. Whatever the
-  source's real refresh rate turns out to be, polling faster just means more
-  frequent free idempotent no-ops via `(observed_at, od_pair_id)` and
-  `ON CONFLICT` — never a correctness issue.
+- **One shared timestamp per pull, and it lies about the refresh rate.** The
+  `time` field is always America/New_York truncated to the hour, unchanged
+  across every sample within an hour — confirmed over 273 consecutive captures
+  (2026-07-25 → 07-28), zero counterexamples. **The price data does not follow
+  it.** This spec previously inferred an hourly refresh from the response's own
+  `#cache.max-age: 3600`; that inference is now measured and **wrong**. Across
+  272 consecutive tick-to-tick comparisons spanning all 24 hours, **not one
+  tick was unchanged** — a median of 185 of 347 od pairs move every 10
+  minutes, around the clock, and the quietest hour (≈02:00 ET) still medians
+  92. `toll-express-fetcher` shares `toll-fetcher`'s EventBridge rule
+  ("EventBridge tick → toll-fetcher" in `infra/triggers.tf`) as a second
+  target — one schedule, both fetchers fire together, nothing to keep in sync
+  by hand.
+- **The hourly `observed_at` discards 5 of every 6 polls.** Because
+  `UPSERT_I95_LIVE_SQL` keys on `(observed_at, od_pair_id)` with
+  `DO UPDATE`, and `observed_at` carries the source's hour-truncated `time`,
+  each hour's six captures overwrite one another — last writer wins. This was
+  previously described here as a "free idempotent no-op"; that is only true of
+  unchanged data, and the data changes every tick. Confirmed in prod: 59
+  stored snapshots across ~59 hours of coverage. Nothing is permanently lost —
+  every raw payload is retained in S3 with no lifecycle expiry — but
+  `trip_pricing_i95_live` is an hourly sample of a 10-minute series, not the
+  full record. Fix tracked in `docs/feed-cadence-tasks.md`.
 - **Some ids are only priceable when their lane direction is actually
   open.** At capture time, the 4 gap ids on the then-open direction (495 N)
   had distinct, plausible prices; the 12 on the then-closed direction

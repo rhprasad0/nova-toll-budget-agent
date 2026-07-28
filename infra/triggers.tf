@@ -1,8 +1,21 @@
 # --- EventBridge tick → toll-fetcher ---------------------------------------
 
 resource "aws_cloudwatch_event_rule" "poll_tick" {
-  name                = "toll-poll-tick"
-  schedule_expression = "rate(10 minutes)"
+  name = "toll-poll-tick"
+  # Pinned to the wall clock rather than rate(10 minutes), which anchors to
+  # whenever the rule was last created and had drifted to a steady 212s
+  # (3m32s) past each 10-minute boundary. VDOT labels each interval with its
+  # own 10-minute mark and calculates it exactly 10 minutes earlier
+  # (docs/feed-cadence-tasks.md), so that offset was 3.5 minutes of pure
+  # added staleness on every captured price.
+  #
+  # Firing at :00 tests whether VDOT's interval-t payload is actually ready at
+  # the boundary. If it is, capture staleness drops from 13.5 to 10 minutes.
+  # If it isn't, each object carries interval t-10 instead -- no data is lost
+  # (the next tick picks up interval t) and `feed_cadence.py archive` reports
+  # it as an interval/tick mismatch, which is the measurement. Step to
+  # cron(1/10 ...), cron(2/10 ...) to find the boundary if so.
+  schedule_expression = "cron(0/10 * * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "fetcher" {

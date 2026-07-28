@@ -47,21 +47,40 @@ the follow-up section below, by decision, not oversight.
 
 ## Tasks
 
-- [ ] 1. `scripts/feed_cadence.py archive` — per-tick change counts by UTC hour,
-      VDOT interval-integrity check, and the convergence-lag search over the
-      shared od pairs. Reuses `lambdas/loader/parse_csv.py` and
+- [x] 1. `scripts/feed_cadence.py archive` — per-tick change counts by UTC hour,
+      fetch-offset-by-day, VDOT interval-integrity check, and the convergence-lag
+      search over the shared od pairs. Reuses `lambdas/loader/parse_csv.py` and
       `parse_express_lanes.py`; no reimplementation of either format.
-- [ ] 2. `scripts/feed_cadence.py watch` — bounded 60s poll of Transurban's
-      unauthenticated endpoint with `If-None-Match`, to resolve the sub-10-minute
-      cadence the archive's 10-min floor cannot see.
-- [ ] 3. Pin the EventBridge tick (`infra/triggers.tf`: `rate(10 minutes)` →
-      `cron(0/10 * * * ? *)`) and re-read the archive to find where inside the
-      3.5-minute window VDOT's publish actually lands. Step the offset up only if
-      the label lags. Leave it pinned at the winning offset — never back to
-      `rate()`.
-- [ ] 4. Write up: `docs/oracle-findings.md` §9, corrections to
+- [x] 2. `scripts/feed_cadence.py watch` — bounded 60s poll of Transurban's
+      unauthenticated endpoint, to resolve the sub-10-minute cadence the
+      archive's 10-min floor cannot see. **Still needs a long run**: a 4-minute
+      smoke run at 30s showed 8 identical responses, consistent with a
+      10-minute cadence but far short of proving it. Run
+      `feed_cadence.py watch --duration 360` and read the inter-change gaps.
+- [x] 3. Pinned the EventBridge tick (`infra/triggers.tf`: `rate(10 minutes)` →
+      `cron(0/10 * * * ? *)`). **Applies on merge to main**, then needs ≥24h
+      before re-reading. If `feed_cadence.py archive` then reports interval/tick
+      mismatches, VDOT's publish lands after the boundary — step to
+      `cron(1/10 ...)`, `cron(2/10 ...)` to find it. Leave it pinned at the
+      winning offset, never back to `rate()`.
+- [x] 4. Write up: `docs/oracle-findings.md` §9, corrections to
       `docs/poller-spec.md`, `lambdas/express_fetcher/handler.py` and
       `lambdas/loader/parse_express_lanes.py` docstrings.
+
+## The headline result
+
+**VDOT does not publish an independent price. It republishes Transurban's, ten
+minutes later.** Comparing VDOT's capture at tick *t* against Transurban's at
+*t-10min*, over 250 shared od pairs: **100.0% of 59,217 comparisons identical
+to the cent** (p90 |diff| $0.00). Every other offset sits at 30-36% exact match
+with a p90 of $1.15-$2.90. The same answer holds on two disjoint date
+sub-ranges, and was hand-checked through prod RDS.
+
+Consequence for `tests/test_expresslanes_crosscheck.py`: cross-checking these
+two sources validates transport, not pricing. Once aligned they agree by
+construction, so a value-agreement tolerance between *these two* would measure
+the delay and nothing else. That retires the follow-up below rather than
+unblocking it.
 
 ## Follow-up (not this task file's scope)
 
@@ -69,6 +88,9 @@ the follow-up section below, by decision, not oversight.
       `trip_pricing_i95_live`'s key so the six polls per hour stop overwriting
       each other, leaving the source's `time` field's meaning untouched.
       Backfill from the retained raw objects.
-- [ ] Value-agreement test (VDOT stored vs Transurban live as pass/fail). Blocked
-      on task 1's convergence-lag output — §7 explains why a tolerance set
-      without it would be a guess.
+- [x] ~~Value-agreement test (VDOT stored vs Transurban live as pass/fail).~~
+      **Dropped, not deferred**: task 1 showed the two sources are one series
+      published twice, so a tolerance between them would assert the 10-minute
+      delay, not price correctness. A genuine value check needs a third source
+      (a driver-facing quote or a billed statement), which this repo has no
+      access to. `test_overlap_price_sanity` correctly stays a `>= 0` check.
