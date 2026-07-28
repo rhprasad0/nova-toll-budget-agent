@@ -11,6 +11,7 @@ on:
         "scripts/build_zips.sh",
         "scripts/loader-requirements.txt",
         "lambdas/**",
+        "site/**",
       ]
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
         "scripts/build_zips.sh",
         "scripts/loader-requirements.txt",
         "lambdas/**",
+        "site/**",
       ]
 
 jobs:

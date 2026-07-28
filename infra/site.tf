@@ -27,6 +27,9 @@ resource "aws_s3_object" "index" {
   source       = "${path.module}/../site/index.html"
   etag         = filemd5("${path.module}/../site/index.html")
   content_type = "text/html"
+  # Revalidate on every hit so a site edit goes live with the apply, no
+  # CloudFront invalidation needed. One page, so the origin hits are free.
+  cache_control = "no-cache"
 }
 
 # --- CloudFront distribution (OAC-gated S3 origin) --------------------------
