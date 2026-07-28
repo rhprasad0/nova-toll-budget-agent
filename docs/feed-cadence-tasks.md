@@ -106,10 +106,16 @@ are 12 minutes, i.e. an interval published and missed. We are storing roughly
 a correctness bug in what is stored -- but `trip_pricing_i66` is a sample of
 the I-66 series, not the series.
 
-- [ ] Decide whether I-66 warrants its own faster tick, or whether a ~40%
-      sample is fine for the agent's "what does this trip cost" question.
-      Note the raw S3 payloads have the same gap here -- unlike the Transurban
-      case, there is no complete record to backfill from.
+- [x] **Fixed 2026-07-28**: I-66 now has its own `toll-poll-tick-i66` rule at
+      `cron(0/6 * * * ? *)`. Each rule names its feed in the target input, and
+      `FEEDS[feed]["tick_minutes"]` sets both the poll cadence and the S3 key's
+      bucket width so two polls of one feed can't overwrite each other. The
+      historical gap stays permanent -- the fetcher never fetched those
+      snapshots, so there is nothing to backfill from.
+      **Verify after merge**: `raw/feed=i66/` should show 10 objects per hour
+      on 6-minute keys (…0000Z, 0006Z, 0012Z), and consecutive
+      `interval_end_at` values in `trip_pricing_i66` should be 6 minutes apart
+      with no 12-minute gaps.
 
 ## Follow-up (not this task file's scope)
 

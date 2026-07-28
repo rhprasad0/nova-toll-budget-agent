@@ -25,12 +25,18 @@ itself, CI/CD (manual `terraform apply` for now).
 ## Architecture
 
 ```
-EventBridge rule (rate(10 minutes), 24/7)
-   │
-   ▼
+EventBridge toll-poll-tick      EventBridge toll-poll-tick-i66
+  cron(0/10 * * * ? *), 24/7      cron(0/6 * * * ? *), 24/7
+  input {"feeds":["i95"]}         input {"feeds":["i66"]}
+   │         │                     │
+   │         ▼                     │
+   │   toll-express-fetcher        │
+   │     (no input — see           │
+   │      "Secondary live source") │
+   ▼                               ▼
 toll-fetcher Lambda        — no VPC (needs internet), Python 3.13, stdlib+boto3
-   GET I-95 CSV, GET I-66 XML   (per-feed failure isolation)
-   PUT payloads → S3 raw/
+   GET I-95 CSV / GET I-66 XML  (per-feed failure isolation; polls the feeds
+   PUT payloads → S3 raw/        named in the event, or all of them if none)
    emit CloudWatch metric PollSuccess{feed}
    │
    ▼  S3 ObjectCreated event
@@ -38,6 +44,16 @@ toll-loader Lambda         — in VPC (default VPC subnets + S3 gateway endpoint
    parse → per-feed schema     Python 3.13 + psycopg
    idempotent upsert → RDS Postgres
 ```
+
+Why two rules, one fetcher: the two VDOT feeds publish on different cadences —
+I-95 a new interval every 10 minutes exactly, I-66 every 6 (both measured in
+prod, see `docs/feed-cadence-tasks.md`). One 10-minute tick under-sampled I-66,
+storing roughly 6 of every 10 intervals with no raw record to backfill from.
+Each feed now rides its own rule and names itself in the target input; the S3
+key's bucket width is that same per-feed cadence (`FEEDS[feed]["tick_minutes"]`),
+so two polls of one feed can never floor into one key and overwrite each other.
+Both cron expressions divide the hour evenly, so they stay phase-stable across
+hour boundaries the way `rate()` does not.
 
 Why two Lambdas: the loader must sit in the VPC to reach RDS, but an in-VPC
 Lambda has no internet without a NAT Gateway (~$32/mo). Splitting keeps the
