@@ -40,7 +40,7 @@ import sys
 from pathlib import Path
 
 from strands import Agent
-from strands.models import BedrockModel
+from strands.models import BedrockModel, CacheToolsConfig
 
 # agent_tools/ has no __init__.py (flat siblings, same as i95_route.py's own
 # sys.path comment) -- a dotted "from agent_tools.i95_route import ..."
@@ -199,11 +199,18 @@ def build_agent() -> Agent:
         temperature=0,  # deterministic tool routing, not creative prose
         streaming=False,
         max_tokens=2048,
+        # Keep the fixed tool schema prefix in Bedrock's 5-minute cache.
+        # The matching system-prompt cache point below extends that prefix.
+        cache_tools=CacheToolsConfig(type="default", ttl="5m"),
     )
     return Agent(
         model=model,
         tools=[find_toll_locations, i95_route, i495_route, i66_route, dulles_route],
-        system_prompt=build_system_prompt(),
+        system_prompt=[
+            {"text": build_system_prompt()},
+            # Cache the static instructions after the cached tool definitions.
+            {"cachePoint": {"type": "default", "ttl": "5m"}},
+        ],
     )
 
 
