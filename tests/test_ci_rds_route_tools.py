@@ -25,16 +25,16 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from rds_ci_test_support import (  # noqa: E402
+from rds_ci_test_support import (
     configure_pricing_reader_rds_env,
     connect_as_pricing_reader,
 )
 
 sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
 
-from i495_route import i495_route  # noqa: E402
-from i66_route import i66_route  # noqa: E402
-from i95_route import i95_route  # noqa: E402
+from i66_route import i66_route
+from i95_route import i95_route
+from i495_route import i495_route
 
 pytestmark = pytest.mark.live
 

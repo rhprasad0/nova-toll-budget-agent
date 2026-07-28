@@ -4,9 +4,8 @@ import urllib.error
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-import pytest
-
 import handler
+import pytest
 
 TOKEN_I95 = "super-secret-i95-token"
 TOKEN_I66 = "super-secret-i66-token"

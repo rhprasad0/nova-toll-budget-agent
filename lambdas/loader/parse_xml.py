@@ -10,9 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from defusedxml import ElementTree as ET
-
 from _bounds import MAX_ROWS, bounded_int, bounded_text, bounded_toll
+from defusedxml import ElementTree as ET
 
 # I-66 has no ODPAIRID/ODPAIRNAME or LINKSTATUS, but does carry
 # IntervalDateTime (interval start), which the CSV feed lacks.

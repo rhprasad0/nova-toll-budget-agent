@@ -18,7 +18,6 @@ from decimal import Decimal
 
 import boto3
 import pytest
-
 from conftest import REPO_ROOT
 
 pytestmark = pytest.mark.live

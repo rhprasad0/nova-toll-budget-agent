@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Extract Transurban's published entry/exit topology into a committed JSON snapshot.
 
 expresslanes.com's "Map your trip" page ships its whole entry/exit network as a

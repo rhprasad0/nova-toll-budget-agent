@@ -26,7 +26,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "agent"))
 
-from toll_agent import build_agent  # noqa: E402
+from toll_agent import build_agent
 
 pytestmark = pytest.mark.live
 

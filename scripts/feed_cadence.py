@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import re
 import statistics
@@ -35,8 +36,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # importing them as lambdas.loader.parse_csv would break that sibling import.
 sys.path.insert(0, str(REPO_ROOT / "lambdas" / "loader"))
 
-from parse_csv import parse_trip_pricing_csv  # noqa: E402
-from parse_express_lanes import parse_express_lanes_live_json  # noqa: E402
+from parse_csv import parse_trip_pricing_csv
+from parse_express_lanes import parse_express_lanes_live_json
 
 RAW_BUCKET = "nova-toll-raw-920534282028"
 AWS_PROFILE = "nova-toll"
@@ -146,7 +147,7 @@ def _changes(snapshots: list[Snapshot]) -> list[tuple[datetime, int]]:
     """(tick, how many od pairs changed price since the previous tick)."""
     return [
         (b.tick, sum(1 for od, price in b.prices.items() if a.prices.get(od) != price))
-        for a, b in zip(snapshots, snapshots[1:])
+        for a, b in itertools.pairwise(snapshots)
     ]
 
 
@@ -353,7 +354,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     print(f"\n{len(change_times)} content changes observed")
     if len(change_times) > 1:
         gaps = sorted(
-            (b - a).total_seconds() for a, b in zip(change_times, change_times[1:])
+            (b - a).total_seconds() for a, b in itertools.pairwise(change_times)
         )
         print(
             f"seconds between changes: min {gaps[0]:.0f}, "

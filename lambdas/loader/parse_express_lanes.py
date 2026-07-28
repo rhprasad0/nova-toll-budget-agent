@@ -37,7 +37,10 @@ class I95LiveRow:
 
 
 def _parse_time(value: str) -> datetime:
-    local_time = datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S")
+    # The source format has no offset; it is documented as America/New_York.
+    local_time = datetime.strptime(  # noqa: DTZ007
+        value.strip(), "%Y-%m-%d %H:%M:%S"
+    )
     # Same ambiguous-DST-hour convention as parse_csv.py's _parse_timestamp.
     return local_time.replace(tzinfo=SOURCE_TZ, fold=0).astimezone(UTC)
 
@@ -50,7 +53,7 @@ def _or_none(value: str | None) -> str | None:
 def parse_express_lanes_live_json(text: str) -> list[I95LiveRow]:
     payload = json.loads(text)
     if not isinstance(payload, dict):
-        raise ValueError("Express Lanes payload must be a JSON object")
+        raise TypeError("Express Lanes payload must be a JSON object")
     rows = payload.get("response")
     if not rows:
         raise ValueError("no 'response' rows in Express Lanes live snapshot")
@@ -58,13 +61,13 @@ def parse_express_lanes_live_json(text: str) -> list[I95LiveRow]:
         raise ValueError(f"JSON row count is invalid or exceeds {MAX_ROWS}")
 
     if not isinstance(rows[0], dict):
-        raise ValueError("JSON row is not an object")
+        raise TypeError("JSON row is not an object")
     observed_at = _parse_time(bounded_text(rows[0].get("time"), "JSON time"))
 
     parsed_rows: list[I95LiveRow] = []
     for row in rows:
         if not isinstance(row, dict):
-            raise ValueError("JSON row is not an object")
+            raise TypeError("JSON row is not an object")
         if bounded_text(row.get("time"), "JSON time") != rows[0]["time"]:
             raise ValueError("JSON response contains mixed observation times")
         # A row with no price carries nothing priceable to store -- distinct

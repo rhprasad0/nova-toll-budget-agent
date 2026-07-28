@@ -156,7 +156,7 @@ def env_connect():
 
 
 def build_response(result: dict, priced_legs: list[dict], at_time: datetime) -> dict:
-    total = sum((Decimal(leg["price_usd"]) for leg in priced_legs), Decimal("0"))
+    total = sum((Decimal(leg["price_usd"]) for leg in priced_legs), Decimal(0))
     return {
         **result,
         "at_time": at_time.isoformat(),

@@ -51,7 +51,7 @@ from strands import tool
 # "import _oracle_route" would fail under the dotted form. Ensuring our own
 # directory is on sys.path here works under both.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _oracle_route  # noqa: E402
+import _oracle_route
 
 # ponytail: path assumes agent_tools/ sits one level under the repo root next
 # to oracles/, matching its current committed location. If this ever ships in
