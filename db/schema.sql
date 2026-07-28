@@ -49,17 +49,13 @@ CREATE TABLE trip_pricing_i66 (
 -- docs/oracle-findings.md section 2 and docs/poller-spec.md's "Secondary
 -- live source" section.
 --
--- Keyed on captured_at, the tick from the raw object's own S3 key. observed_at
--- is the response's one shared "time" field (America/New_York, converted to
--- UTC) and the source truncates it to the hour, while the prices themselves
--- change every 10 minutes -- so keying on observed_at, as this table did until
--- schema 4.0.0, silently collapsed each hour's six captures onto one row.
--- captured_at comes from the key rather than the object's S3 LastModified
--- because the replay workflow re-touches objects, which moves LastModified but
--- never the key -- so a replay stays a no-op. status is Transurban's own
--- open/closed/null vocabulary -- a different concept from link_status, never
--- mapped onto it. status/road/direction are nullable because the source itself
--- emits the literal string "null" for dead links.
+-- Keyed on captured_at, the tick from the raw object's S3 key. observed_at is
+-- the response's shared "time" field, which the source truncates to the hour
+-- while prices change every 10 minutes -- keying on it, as this table did
+-- until 4.0.0, collapsed each hour's six captures onto one row. From the key
+-- rather than S3 LastModified so replays stay no-ops. status is Transurban's
+-- own open/closed/null vocabulary, never mapped onto link_status.
+-- status/road/direction are nullable: the source emits the string "null".
 CREATE TABLE trip_pricing_i95_live (
     captured_at        timestamptz NOT NULL,       -- our poll tick, from s3_key
     observed_at        timestamptz NOT NULL,       -- source's own label, hourly

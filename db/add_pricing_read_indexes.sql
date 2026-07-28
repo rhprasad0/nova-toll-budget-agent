@@ -7,9 +7,10 @@
 -- speculative one (docs/poller-spec.md: "add an index when a real read
 -- pattern asks for one").
 --
--- The three CREATE INDEX statements are duplicated from db/schema.sql (same
--- reason as db/add_trip_pricing_i95_live.sql -- runnable standalone against a
--- DB that hasn't had schema.sql re-applied yet).
+-- The three CREATE INDEX statements are duplicated from db/schema.sql so this
+-- file is runnable standalone against a DB that hasn't had schema.sql
+-- re-applied yet. Keep them in sync -- the i95-live index moved to captured_at
+-- in schema 4.0.0, and db/add_captured_at_to_i95_live.sql rebuilds it.
 --
 --     psql "$NOVA_TOLL_URL" -f db/add_pricing_read_indexes.sql
 --
@@ -26,4 +27,4 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
     ON trip_pricing_i95 (od_pair_id, interval_end_at DESC);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
-    ON trip_pricing_i95_live (od_pair_id, observed_at DESC);
+    ON trip_pricing_i95_live (od_pair_id, captured_at DESC);

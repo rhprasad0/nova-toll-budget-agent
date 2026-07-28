@@ -292,89 +292,54 @@ live-fallback source.
 *(2026-07-28, `scripts/feed_cadence.py`; see `docs/feed-cadence-tasks.md`)*
 
 Section 7 inferred lag from `calculated_at` alone. This measures it against the
-other source, over every raw payload the pipeline has retained -- 949 `i95`
-objects (2026-07-21 →) and 283 `i95-live` objects (2026-07-25 →) -- with no new
-requests to either operator.
+other source, over every retained raw payload -- 949 `i95` and 283 `i95-live`
+objects -- with no new requests to either operator.
 
-**Result: a 10-minute shift makes the two sources identical.** Comparing VDOT's
-capture at tick *t* against Transurban's capture at tick *t-10min*, over 250 od
-pairs present in both feeds:
+**A 10-minute shift makes the two sources identical.** VDOT's capture at tick
+*t* against Transurban's at *t+offset*, over the 250 od pairs in both feeds.
+"Movers only" keeps just the cases where Transurban's price changed at that
+tick -- the answer to "do prices simply not move?":
 
-| Transurban offset | paired samples | exact match | median abs diff | p90 abs diff |
-|---|---|---|---|---|
-| -20 min | 58,967 | 35.3% | $0.10 | $1.15 |
-| **-10 min** | **59,217** | **100.0%** | **$0.00** | **$0.00** |
-| +0 min | 59,467 | 35.0% | $0.10 | $1.15 |
-| +10 min | 59,467 | 33.4% | $0.10 | $1.85 |
+| Transurban offset | exact match | movers only | p90 abs diff |
+|---|---|---|---|
+| -20 min | 35.3% of 58,967 | 11.8% of 31,525 | $1.15 |
+| **-10 min** | **100.0% of 59,217** | **100.0% of 31,732** | **$0.00** |
+| +0 min | 35.0% of 59,467 | **0.0% of 31,939** | $1.15 |
+| +10 min | 33.4% of 59,467 | 9.1% of 31,939 | $1.85 |
 
-Not "close" -- every one of 59,217 price comparisons matches to the cent. The
-same -10 min result holds independently on two disjoint date sub-ranges.
-Hand-checked against prod RDS: `trip_pricing_i95` for `interval_end_at`
-2026-07-28 10:10Z holds 1020=$7.20, 1040=$9.20, 1062=$4.90; the raw Transurban
-payload captured at the 10:00Z tick holds exactly those three, and the 10:10Z
-capture holds $7.00/$8.80/$4.60.
+The `+0 min` row is the clincher: VDOT *never* matches Transurban's concurrent
+capture in the moment a price moves, and *always* matches the one from ten
+minutes earlier. No shared od pair is flat (median 84 distinct values each), so
+this is not a matching-everything artifact. Same result on two disjoint date
+sub-ranges, and hand-checked through prod RDS: `trip_pricing_i95` at
+`interval_end_at` 2026-07-28 10:10Z holds 1020=$7.20/1040=$9.20/1062=$4.90,
+exactly the 10:00Z Transurban capture; the 10:10Z capture holds $7.00/$8.80/$4.60.
 
-**A 100% match invites the obvious objection: is it just that prices rarely
-move, so everything matches everything?** No. Across the window not one of the
-250 shared od pairs is flat (median 84 distinct price values each), and
-restricting the comparison to only those `(od, tick)` cases where Transurban's
-price *actually changed at that tick* sharpens the result instead of blunting
-it:
+**These are not two independent sources** -- one price series published twice,
+ten minutes apart. Cross-checking them (e.g. `tests/test_expresslanes_crosscheck.py`)
+validates transport, not pricing: once aligned they agree by construction, and a
+"discrepancy" only ever measures the delay. That answers section 7 and removes
+the motivation for a value-agreement tolerance between these two.
 
-| offset | all comparisons | movers only |
-|---|---|---|
-| -20 min | 35.3% of 58,967 | 11.8% of 31,525 |
-| **-10 min** | **100.0% of 59,217** | **100.0% of 31,732** |
-| **+0 min** | 35.0% of 59,467 | **0.0% of 31,939** |
-| +10 min | 33.4% of 59,467 | 9.1% of 31,939 |
+Supporting measurements:
 
-The `+0 min` row is the clincher: VDOT's capture *never* matches Transurban's
-concurrent capture in the moment a price moves, and *always* matches the one
-from ten minutes earlier. An artifact of flat prices would collapse both
-columns together; instead they separate completely.
+- **VDOT's I-95 feed publishes every 10 minutes, on the mark, without fail** --
+  949 objects, zero carrying more than one interval, zero repeating the
+  previous one. (I-66 is a different animal: 6-minute intervals with a variable
+  1-4 min lag. It had its own tick added; see `docs/feed-cadence-tasks.md`.)
+- **Transurban changes every 10 minutes too, around the clock** -- 272
+  comparisons, zero unchanged, median 185 of 347 od pairs per tick. Its `time`
+  field is nonetheless hourly, which is why `trip_pricing_i95_live` was
+  re-keyed on `captured_at` in schema 4.0.0.
+- **Our own capture added 3.5 minutes of pure staleness, now removed.**
+  `rate(10 minutes)` had drifted to a steady 212s past each boundary;
+  `cron(0/10)` cut capture staleness to 10m40s, the rest being VDOT's own lag.
 
-**These are not two independent sources.** They are one price series published
-twice, ten minutes apart. Any cross-check between them (e.g.
-`tests/test_expresslanes_crosscheck.py`) validates transport, not pricing --
-agreement is guaranteed by construction once aligned, and a "discrepancy"
-between them only ever measures the delay. This is the strongest available
-answer to section 7's open question, and it removes the motivation for a
-value-agreement tolerance test between these two particular sources.
-
-Supporting cadence measurements:
-
-- **VDOT's I-95 feed publishes every 10 minutes, on the mark, without fail.**
-  (The I-66 feed is a different animal -- 6-minute intervals with a variable
-  1-4 min `calculated_at` lag, so our 10-minute poll under-samples it; see
-  `docs/feed-cadence-tasks.md`.) 949 objects:
-  zero carried more than one interval, zero repeated the previous interval, and
-  zero mismatched their capture tick outside the pipeline's first day.
-  `calculated_at` is exactly 10 minutes before `interval_end_at` -- min = max =
-  avg = 10.0 over 7 days in RDS. (`feed_cadence.py archive` does report 4
-  mismatches, all at `2026-07-21 21:30Z` -- the initial deploy wrote several
-  objects back to back and they all floor into that one bucket. Expected, not
-  drift.)
-- **Transurban changes every 10 minutes too, around the clock.** 272
-  tick-to-tick comparisons, **zero** unchanged; median 185 of 347 od pairs move
-  per tick; the quietest hour (≈02:00 ET) still medians 92. Its `time` field is
-  nonetheless hour-truncated and never advances mid-hour -- which is why
-  `trip_pricing_i95_live` keeps only one of every six captures (see
-  `docs/poller-spec.md`, and the fix tracked in `docs/feed-cadence-tasks.md`).
-- **Our own capture added 3.5 minutes of pure staleness -- now removed.**
-  `rate(10 minutes)` anchors to whenever the rule was created and had drifted
-  to a rock-steady 212s past each boundary, making a captured VDOT price 13.5
-  minutes old on arrival. `infra/triggers.tf` is now pinned to
-  `cron(0/10 * * * ? *)`, applied and verified live 2026-07-28: the fetch lands
-  at :00:40 and the payload still carries interval *t*, not *t-10*, so VDOT
-  publishes at or before its own boundary. Capture staleness is now 10m40s,
-  and the residual 10 minutes is VDOT's own `calculated_at` lag.
-
-One methodological trap worth recording: raw object *keys* are the fetcher's
-own clock floored by whatever `TICK_MINUTES` was compiled in at the time, and
-that has already changed once -- on 2026-07-26 the express fetcher ran a
-30-minute tick, so its `0000Z` key holds a payload actually fetched at
-00:23:31. Aligning the two feeds by key name manufactures a spurious 30-minute
-convergence lag. `feed_cadence.py` aligns on S3 `LastModified` instead.
+One trap worth recording: raw object *keys* are the fetcher's clock floored by
+whatever cadence it ran at, and that has already changed once -- on 2026-07-26
+the express fetcher ran a 30-minute tick, so its `0000Z` key holds a payload
+fetched at 00:23:31. Aligning the two feeds by key name manufactures a spurious
+30-minute lag. `feed_cadence.py` aligns on S3 `LastModified` instead.
 
 ## What was deleted, and what remains
 

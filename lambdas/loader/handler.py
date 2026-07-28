@@ -119,11 +119,9 @@ SET
     s3_key = EXCLUDED.s3_key -- gitleaks:allow (not a secret; Postgres EXCLUDED pseudo-table)
 """
 
-# Keyed on captured_at, NOT the source's observed_at: Transurban's "time" field
-# is truncated to the hour while its prices change every 10 minutes, so an
-# observed_at key collapsed each hour's six captures onto one row, last writer
-# wins. captured_at comes from the raw object's own key -- see
-# _captured_at_from_key and docs/feed-cadence-tasks.md.
+# Keyed on captured_at, not the source's observed_at: Transurban's "time" is
+# hourly while its prices change every 10 minutes, so an observed_at key
+# collapsed each hour's six captures onto one row (docs/feed-cadence-tasks.md).
 UPSERT_I95_LIVE_SQL = """
 INSERT INTO trip_pricing_i95_live (
     captured_at,
@@ -178,15 +176,9 @@ def _feed_from_key(key: str) -> str:
 def _captured_at_from_key(key: str) -> datetime:
     """raw/feed=i95-live/date=2026-07-28/1210Z.json -> 2026-07-28 12:10 UTC.
 
-    Deliberately the key's own tick rather than the object's S3 LastModified:
-    the replay workflow re-touches objects to regenerate ObjectCreated events,
-    which moves LastModified but never the key, so keying on this is what keeps
-    a re-load a true no-op instead of a duplicate row.
-
-    The tick is the fetcher's clock floored by whatever cadence that feed ran
-    at, so it is exact to the poll, not to the second -- and captures from the
-    2026-07-26 era, when the express fetcher ran a 30-minute tick, land on a
-    30-minute boundary. See docs/feed-cadence-tasks.md.
+    The key's tick, not the object's S3 LastModified: replays re-touch objects,
+    which moves LastModified but never the key, so this keeps a re-load a no-op
+    rather than a duplicate row. Exact to the poll, not the second.
     """
     match = _RAW_KEY_PATTERN.fullmatch(key)
     if not match:
@@ -223,12 +215,8 @@ def _parse_payload(
 
 def _row_params(row: I95Row | I66Row | I95LiveRow, *, s3_key: str) -> dict[str, Any]:
     """Dataclass fields plus the two values only the object's key can supply.
-
-    captured_at is injected for every feed rather than only i95-live: psycopg
-    ignores params the SQL never references, and each feed's params and SQL are
-    paired 1:1 through _FEED_CONFIG, so a feed-specific branch here would buy
-    nothing but a place to get the condition wrong.
-    """
+    captured_at goes in for every feed: psycopg ignores params the SQL never
+    references, so a feed-specific branch would only be somewhere to be wrong."""
     params = dataclasses.asdict(row)
     params["s3_key"] = s3_key
     params["captured_at"] = _captured_at_from_key(s3_key)

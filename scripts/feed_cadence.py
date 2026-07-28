@@ -1,23 +1,19 @@
-"""How often does each price source actually update, and how far behind is VDOT?
-
-Two subcommands, both read-only with respect to the pipeline:
+"""How often does each price source update, and how far behind is VDOT?
 
     feed_cadence.py archive [--sync]     analyse retained raw S3 objects
     feed_cadence.py watch [--duration]   bounded 60s poll of Transurban's feed
 
-`archive` answers cadence and convergence from data we already hold, making no
-request to either operator. Its resolution floor is the poller's own 10-minute
-tick; `watch` exists solely to see below that floor, and only Transurban's
-unauthenticated endpoint may be polled that way -- VDOT's token-authenticated
-feed keeps its one-attempt-per-tick etiquette (docs/poller-spec.md).
+`archive` makes no request to either operator; its floor is the poller's own
+10-minute tick. `watch` exists to see below that floor, and only Transurban's
+unauthenticated endpoint may be polled that way -- VDOT's keeps its
+one-attempt-per-tick etiquette (docs/poller-spec.md).
 
-See docs/feed-cadence-tasks.md for what this was built to establish.
+Findings: docs/feed-cadence-tasks.md.
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import re
@@ -61,27 +57,19 @@ class Snapshot:
 
 
 def _capture_time(path: Path) -> datetime:
-    """When the fetcher actually wrote this object.
+    """mtime (set from S3 LastModified by `aws s3 sync`), NOT the key's tick.
 
-    Deliberately mtime (which `aws s3 sync` sets from S3's LastModified), NOT
-    the tick in the key name. The key is the fetcher's own clock floored by
-    whatever TICK_MINUTES was compiled in at the time, and that has already
-    changed once: on 2026-07-26 the express fetcher ran on a 30-minute tick, so
-    its key "0000Z" holds a payload actually fetched at 00:23:31. Aligning the
-    two feeds by key name mislabels that era by ~23 minutes and manufactures a
-    spurious 30-minute convergence lag. It would break again the next time the
-    schedule is retuned.
+    The key is the fetcher's clock floored by whatever cadence it ran at, and
+    that has changed once: on 2026-07-26 the express fetcher ran a 30-minute
+    tick, so key "0000Z" holds a payload fetched at 00:23:31. Aligning the two
+    feeds by key name manufactures a spurious 30-minute convergence lag.
     """
     return datetime.fromtimestamp(path.stat().st_mtime, UTC)
 
 
 def _tick_of(path: Path) -> datetime:
-    """The 10-minute bucket a capture belongs to.
-
-    Floor, not round: a fetch at :03:31 belongs to the :00 tick whose data it
-    went to collect. Two objects only land in different buckets if the two
-    fetchers straddle a boundary, and they fire ~1s apart.
-    """
+    """The 10-minute bucket a capture belongs to. Floor, not round: a fetch at
+    :03:31 belongs to the :00 tick whose data it went to collect."""
     fetched = _capture_time(path)
     return fetched.replace(minute=fetched.minute // 10 * 10, second=0, microsecond=0)
 
@@ -107,12 +95,9 @@ def _sync(feed: str, cache: Path) -> None:
 def _load(
     feed: str, cache: Path, since: str | None = None, until: str | None = None
 ) -> list[Snapshot]:
-    """Every cached raw object for a feed, parsed, in tick order.
-
-    since/until are inclusive YYYY-MM-DD bounds, used to re-run the convergence
-    search over disjoint sub-ranges -- an offset that moves between them is
-    noise, not lag.
-    """
+    """Every cached raw object for a feed, parsed, in tick order. since/until
+    are inclusive YYYY-MM-DD bounds, for re-running the convergence search over
+    disjoint sub-ranges -- an offset that moves between them is noise, not lag."""
     snapshots = []
     for path in sorted((cache / feed).rglob("*")):
         match = _KEY_RE.search(path.as_posix()) if path.is_file() else None
@@ -139,11 +124,8 @@ def _load(
 
 
 def _offsets(label: str, snapshots: list[Snapshot]) -> None:
-    """Where inside its 10-minute tick each fetch actually landed, by day.
-
-    This is what identifies a schedule change after the fact, and what the
-    triggers.tf tick-pinning work reads to confirm the new offset took effect.
-    """
+    """Where inside its tick each fetch landed, by day -- identifies a schedule
+    change after the fact, and confirms a new offset took effect."""
     by_day: dict[str, list[float]] = defaultdict(list)
     for snapshot in snapshots:
         by_day[f"{snapshot.tick:%Y-%m-%d}"].append(
@@ -168,7 +150,7 @@ def _changes(snapshots: list[Snapshot]) -> list[tuple[datetime, int]]:
     ]
 
 
-def _cadence_table(label: str, snapshots: list[Snapshot]) -> list[tuple[datetime, int]]:
+def _cadence_table(label: str, snapshots: list[Snapshot]) -> None:
     changes = _changes(snapshots)
     by_hour: dict[int, list[int]] = defaultdict(list)
     for tick, count in changes:
@@ -193,16 +175,12 @@ def _cadence_table(label: str, snapshots: list[Snapshot]) -> list[tuple[datetime
         f"\n{len(counts)} tick-to-tick comparisons, **{zero} with zero change**, "
         f"median {statistics.median(counts):.0f} changed per tick."
     )
-    return changes
 
 
 def _interval_integrity(snapshots: list[Snapshot]) -> None:
     """VDOT should publish exactly one new interval per tick, labelled with it.
-
-    Two failures worth separating: an object whose interval_end_at doesn't match
-    the tick that captured it (publish lag), and consecutive objects repeating an
-    interval (a missed publish).
-    """
+    Separates publish lag (interval != capture tick) from a missed publish
+    (consecutive objects repeating an interval)."""
     mismatched, repeated, mixed = [], [], []
     previous = None
     for snapshot in snapshots:
@@ -229,19 +207,15 @@ def _interval_integrity(snapshots: list[Snapshot]) -> None:
 
 
 def _convergence(vdot: list[Snapshot], live: list[Snapshot]) -> None:
-    """Which Transurban moment does VDOT's published price actually reflect?
+    """Which Transurban moment does VDOT's published price reflect?
 
-    Both feeds are captured by the same EventBridge tick, so their snapshots
-    align on tick directly. Comparing VDOT(t) against Transurban(t + offset) and
-    taking the offset with the smallest median absolute difference measures how
-    far VDOT trails -- the thing docs/oracle-findings.md section 7 inferred from
-    calculated_at but never measured against the other source.
+    Both feeds share an EventBridge tick, so snapshots align on tick directly;
+    the offset with the best agreement is how far VDOT trails.
 
-    The "movers only" column exists to answer the obvious objection to a very
-    high exact-match share: that prices simply don't move, so everything matches
-    everything. It restricts the comparison to (od, tick) cases where
-    Transurban's price actually changed at that tick. An artifact would collapse
-    both columns together; a real republish separates them.
+    "Movers only" answers the obvious objection to a high exact-match share --
+    that prices barely move, so everything matches everything. It keeps only
+    (od, tick) cases where Transurban's price changed at that tick. An artifact
+    collapses both columns together; a real republish separates them.
     """
     live_by_tick = {s.tick: s.prices for s in live}
     shared = set(vdot[0].prices) & set(live[0].prices)
@@ -301,15 +275,8 @@ def _convergence(vdot: list[Snapshot], live: list[Snapshot]) -> None:
         )
 
 
-def _write_series(path: Path, feed: str, changes: list[tuple[datetime, int]]) -> None:
-    with path.open("w", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["tick_utc", "feed", "changed_ods"])
-        writer.writerows([tick.isoformat(), feed, count] for tick, count in changes)
-
-
 def cmd_archive(args: argparse.Namespace) -> int:
-    cache = Path(args.cache)
+    cache = DEFAULT_CACHE
     if args.sync:
         for feed in ("i95", "i95-live"):
             print(f"syncing {feed} ...", file=sys.stderr)
@@ -328,48 +295,26 @@ def cmd_archive(args: argparse.Namespace) -> int:
         f"{live[-1].tick:%m-%d %H:%M}Z ({len(live)} objects)"
     )
 
-    vdot_changes = _cadence_table("i95 (VDOT)", vdot)
-    live_changes = _cadence_table("i95-live (Transurban)", live)
+    _cadence_table("i95 (VDOT)", vdot)
+    _cadence_table("i95-live (Transurban)", live)
     _offsets("i95 (VDOT)", vdot)
     _offsets("i95-live (Transurban)", live)
     _interval_integrity(vdot)
     _convergence(vdot, live)
-
-    if args.series:
-        series = Path(args.series)
-        _write_series(series, "i95", vdot_changes)
-        _write_series(series.with_suffix(".live.csv"), "i95-live", live_changes)
-        print(f"\nPer-tick series: {series}, {series.with_suffix('.live.csv')}")
     return 0
 
 
-def _poll(etag: str | None) -> tuple[int, dict[str, str], bytes | None]:
-    """One conditional GET.
-
-    Measured 2026-07-28: this origin answers `Cache-Control: must-revalidate,
-    no-cache, private` with no `ETag` and no `Age`, so the conditional never
-    fires and every poll is a full response -- the `#cache.max-age: 3600` that
-    docs/poller-spec.md inferred an hourly refresh from is inside the payload,
-    not a header. The If-None-Match is kept because it is the polite way to ask
-    and costs nothing if they ever start sending a validator; change detection
-    relies on the price hash, not on a 304.
-    """
-    request = urllib.request.Request(LIVE_URL)
-    if etag:
-        request.add_header("If-None-Match", etag)
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status, dict(response.headers), response.read()
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304:
-            return 304, dict(exc.headers), None
-        raise
+def _poll() -> tuple[dict[str, str], bytes]:
+    """One GET. This origin sends no ETag and no Age, only `no-cache`, so a
+    conditional request would never save anything -- change detection is the
+    price hash."""
+    with urllib.request.urlopen(LIVE_URL, timeout=30) as response:
+        return dict(response.headers), response.read()
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
     out = Path(args.out)
     deadline = time.time() + args.duration * 60
-    etag = None
     previous: dict[int, str] | None = None
     change_times: list[datetime] = []
 
@@ -378,35 +323,28 @@ def cmd_watch(args: argparse.Namespace) -> int:
         while time.time() < deadline:
             fetched_at = datetime.now(UTC)
             try:
-                status, headers, body = _poll(etag)
+                headers, body = _poll()
             except (urllib.error.URLError, OSError) as exc:
                 # Single attempt, no retry -- same etiquette as the fetchers.
                 record = {"fetched_at": fetched_at.isoformat(), "error": str(exc)}
             else:
+                rows = parse_express_lanes_live_json(body.decode())
+                prices = {r.od_pair_id: str(r.price_usd) for r in rows}
                 record = {
                     "fetched_at": fetched_at.isoformat(),
-                    "status": status,
-                    "etag": headers.get("ETag"),
                     "age": headers.get("Age"),
-                    "cache_control": headers.get("Cache-Control"),
                     "date": headers.get("Date"),
-                }
-                if body is not None:
-                    etag = headers.get("ETag") or etag
-                    rows = parse_express_lanes_live_json(body.decode())
-                    prices = {r.od_pair_id: str(r.price_usd) for r in rows}
-                    record["time_field"] = rows[0].observed_at.isoformat()
-                    record["price_hash"] = hashlib.sha256(
+                    "time_field": rows[0].observed_at.isoformat(),
+                    "price_hash": hashlib.sha256(
                         json.dumps(prices, sort_keys=True).encode()
-                    ).hexdigest()[:16]
-                    if previous is not None:
-                        changed = sum(
-                            1 for k, v in prices.items() if previous.get(k) != v
-                        )
-                        record["changed_ods"] = changed
-                        if changed:
-                            change_times.append(fetched_at)
-                    previous = prices
+                    ).hexdigest()[:16],
+                }
+                if previous is not None:
+                    changed = sum(1 for k, v in prices.items() if previous.get(k) != v)
+                    record["changed_ods"] = changed
+                    if changed:
+                        change_times.append(fetched_at)
+                previous = prices
 
             handle.write(json.dumps(record) + "\n")
             handle.flush()
@@ -434,8 +372,6 @@ def main() -> int:
     archive.add_argument(
         "--sync", action="store_true", help="aws s3 sync before analysing"
     )
-    archive.add_argument("--cache", default=str(DEFAULT_CACHE))
-    archive.add_argument("--series", help="write per-tick change counts to this CSV")
     archive.add_argument("--since", help="inclusive YYYY-MM-DD lower bound")
     archive.add_argument("--until", help="inclusive YYYY-MM-DD upper bound")
     archive.set_defaults(func=cmd_archive)

@@ -3,18 +3,12 @@
 Polls Transurban's own live Express Lanes snapshot and lands the raw payload
 in S3, to fill od_pair_ids VDOT's feed never publishes (see
 docs/oracle-findings.md section 2 and docs/poller-spec.md's "Secondary live
-source" section). Unlike toll-fetcher there's a single unauthenticated URL
-and no SSM token lookup, but it shares the same EventBridge tick as
-toll-fetcher -- one schedule, both fetchers fire together, which also makes
+source" section). Unlike toll-fetcher there's a single unauthenticated URL and
+no SSM token lookup, but it shares I-95's EventBridge tick -- which also makes
 the two feeds' captures directly alignable.
 
-This source's refresh cadence is no longer an open question: measured 2026-07-28
-over 272 consecutive captures, the payload changes on *every* 10-minute tick,
-around the clock (docs/poller-spec.md's "Secondary live source"). An earlier
-version of this docstring called re-polling "a free idempotent no-op via
-trip_pricing_i95_live's primary key" -- it isn't. That key's observed_at is
-hour-truncated, so the six captures in an hour overwrite one another. The raw
-payloads landed here are the complete record; the table is not.
+The payload changes on every 10-minute tick, around the clock (measured
+2026-07-28 over 272 consecutive captures), so polling is never a no-op.
 
 Same single-attempt, no-retry etiquette as toll-fetcher: this endpoint sits
 behind the same WAF class as VDOT's, so it gets the same courtesy even though

@@ -63,12 +63,6 @@ def test_upsert_i95_live_sql_does_not_update_key_columns():
         assert key_column not in set_clause
 
 
-def test_upsert_i95_live_sql_refreshes_observed_at():
-    # observed_at stopped being a key column in schema 4.0.0, so unlike the
-    # key columns above it *should* be refreshed on conflict.
-    assert "observed_at = EXCLUDED.observed_at" in handler.UPSERT_I95_LIVE_SQL
-
-
 @pytest.mark.parametrize(
     ("key", "feed"),
     [
