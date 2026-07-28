@@ -162,6 +162,8 @@ def test_raw_node_id_is_an_exact_match_not_a_substring_match():
 
 def test_tool_spec_matches_signature():
     assert find_toll_locations.tool_spec["name"] == "find_toll_locations"
-    # Strands omits "required" entirely (rather than an empty list) when
-    # every parameter has a default -- both query and corridor do.
-    assert "required" not in find_toll_locations.tool_spec["inputSchema"]["json"]
+    # Both parameters have defaults. Strands versions supported by this repo
+    # represent that either by omitting ``required`` or by emitting ``[]``.
+    assert (
+        find_toll_locations.tool_spec["inputSchema"]["json"].get("required", []) == []
+    )
