@@ -35,6 +35,31 @@ def test_system_prompt_never_asserts_i66_otb_dulles_junction():
     assert "no pricing tool exists for I-66 OTB" in prompt
 
 
+def test_system_prompt_uses_structured_claude_prompt_sections():
+    prompt = build_system_prompt()
+    for section in (
+        "role",
+        "tool_rules",
+        "routing_context",
+        "junctions",
+        "response_format",
+        "examples",
+    ):
+        assert f"<{section}>" in prompt
+        assert f"</{section}>" in prompt
+    assert prompt.count("<example>") == 3
+
+
+def test_system_prompt_requires_auditable_price_reporting():
+    prompt = build_system_prompt()
+    assert "**Route and fares**" in prompt
+    assert "**Calculation**" in prompt
+    assert "**Final price**" in prompt
+    assert "VDOT observed at: <observed_at>" in prompt
+    assert "exact decimal addition" in prompt
+    assert "private reasoning or narrate tool-call deliberation" in prompt
+
+
 def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
     agent = build_agent()
     assert isinstance(agent.model, BedrockModel)

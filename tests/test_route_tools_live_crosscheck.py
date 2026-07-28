@@ -316,27 +316,20 @@ def test_i66_route_prices_a_known_pair_live(live_pricing_env):
     result = i66_mod.i66_route("I-66 West", "Westmoreland St")
     assert "error" not in result, result
     assert float(result["total_usd"]) >= 0
+    assert result["legs"][0]["observed_at"]
 
 
-def test_i95_route_prices_a_known_pair_live(live_pricing_env):
-    # Northbound: verified reliably open throughout this session, unlike
-    # the southbound direction (see test_i95_route_reports_closed_lane_
-    # clearly below, the direct live regression check for the original bug
-    # report).
+def test_i95_route_reports_the_current_lane_state_live(live_pricing_env):
+    # I-95 is reversible, so its northbound lane can be OPEN, CLOSING, or
+    # CLOSED at test time. A successful quote must expose observed_at; an
+    # unavailable lane must remain a named, non-priced error.
     result = i95_mod.i95_route("US-1", "I-395 Near Edsall Road")
-    assert "error" not in result, result
-    assert float(result["total_usd"]) >= 0
-
-
-def test_i95_route_reports_closed_lane_clearly(live_pricing_env):
-    # od_pair_id 1151 (I-395 Near Edsall Road -> US-1, southbound) is the
-    # exact live repro for the original bug report: this corridor's
-    # southbound direction has been consistently CLOSED throughout this
-    # session. A closed lane must be a clear, named error, never a priced
-    # result and never a bare KeyError/connection failure.
-    result = i95_mod.i95_route("I-395 Near Edsall Road", "US-1")
-    assert "error" in result, result
-    assert "1151" in result["error"]
+    if "error" in result:
+        assert "1132" in result["error"]
+        assert "link_status=" in result["error"]
+    else:
+        assert float(result["total_usd"]) >= 0
+        assert result["legs"][0]["observed_at"]
 
 
 def test_i495_route_prices_a_known_pair_live(live_pricing_env):
@@ -345,3 +338,4 @@ def test_i495_route_prices_a_known_pair_live(live_pricing_env):
     )
     assert "error" not in result, result
     assert float(result["total_usd"]) >= 0
+    assert result["legs"][0]["observed_at"]

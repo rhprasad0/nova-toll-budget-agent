@@ -32,6 +32,7 @@ from conftest import connect_returning as _connect_returning
 
 _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)
+_OBSERVED_AT = datetime(2026, 7, 26, 14, 10, tzinfo=_EASTERN)
 
 
 @dataclass(frozen=True)
@@ -81,14 +82,16 @@ CASES = [
         destination="Westmoreland St",
         origin_id="1",
         destination_id="10",
-        # (start_zone_id, end_zone_id, corridor_name, rate, interval_end_at)
-        row=(3100, 3110, "I-66-EB", Decimal("4.50"), _PRICED_AS_OF),
+        # (start_zone_id, end_zone_id, corridor_name, rate, interval_end_at,
+        # calculated_at)
+        row=(3100, 3110, "I-66-EB", Decimal("4.50"), _PRICED_AS_OF, _OBSERVED_AT),
         leg={
             "start_zone_id": 3100,
             "end_zone_id": 3110,
             "price_usd": "4.50",
             "corridor_name": "I-66-EB",
             "priced_as_of": _PRICED_AS_OF.isoformat(),
+            "observed_at": _OBSERVED_AT.isoformat(),
         },
         entry={"node_id": "1", "label": "I-66 West"},
         direction="EB",
@@ -116,13 +119,22 @@ CASES = [
         destination="I-395 Near Edsall Road",
         origin_id="210NO",
         destination_id="201ND",
-        # (od_pair_id, corridor_name, rate, interval_end_at, link_status)
-        row=(1132, "I-95-NB", Decimal("7.20"), _PRICED_AS_OF, "NORTHBOUND_OPEN"),
+        # (od_pair_id, corridor_name, rate, interval_end_at, calculated_at,
+        # link_status)
+        row=(
+            1132,
+            "I-95-NB",
+            Decimal("7.20"),
+            _PRICED_AS_OF,
+            _OBSERVED_AT,
+            "NORTHBOUND_OPEN",
+        ),
         leg={
             "od_pair_id": 1132,
             "price_usd": "7.20",
             "corridor_name": "I-95-NB",
             "priced_as_of": _PRICED_AS_OF.isoformat(),
+            "observed_at": _OBSERVED_AT.isoformat(),
         },
         entry={"node_id": "210NO", "label": "US-1"},
         direction="Northbound",
@@ -141,13 +153,14 @@ CASES = [
         destination="495 Express Lanes End/George Wash. Mem. Pkwy.",
         origin_id="182NO",
         destination_id="181ND",
-        # (od_pair_id, corridor_name, rate, interval_end_at)
-        row=(1038, "I-495-NB", Decimal("2.60"), _PRICED_AS_OF),
+        # (od_pair_id, corridor_name, rate, interval_end_at, calculated_at)
+        row=(1038, "I-495-NB", Decimal("2.60"), _PRICED_AS_OF, _OBSERVED_AT),
         leg={
             "od_pair_id": 1038,
             "price_usd": "2.60",
             "corridor_name": "I-495-NB",
             "priced_as_of": _PRICED_AS_OF.isoformat(),
+            "observed_at": _OBSERVED_AT.isoformat(),
         },
         entry={"node_id": "182NO", "label": "Route 267"},
         direction="Northbound",
@@ -188,6 +201,16 @@ def test_single_leg_lookup(monkeypatch, case: Case):
     assert result["legs"] == [case.leg]
     assert result["total_usd"] == case.leg["price_usd"]
     assert "at_time" in result
+    assert result["legs"][0]["observed_at"] == _OBSERVED_AT.isoformat()
+
+
+def test_price_query_selects_the_vdot_observation_timestamp(case: Case):
+    price_sql = {
+        "i66_route": i66_mod._I66_PRICE_SQL,
+        "i95_route": i95_mod._I95_PRICE_SQL,
+        "i495_route": i495_mod._I495_PRICE_SQL,
+    }[case.name]
+    assert "calculated_at" in price_sql
 
 
 def test_label_lookup_is_case_insensitive(monkeypatch, case: Case):

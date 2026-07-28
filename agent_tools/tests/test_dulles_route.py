@@ -36,6 +36,7 @@ def test_dtr_only_trip_is_a_single_leg():
         "dulles_toll_road": "8.00",
         "dulles_greenway": "0.00",
     }
+    assert "observed_at" not in leg
 
 
 def test_dtr_label_lookup_is_case_insensitive():

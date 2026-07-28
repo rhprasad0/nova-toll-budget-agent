@@ -93,7 +93,8 @@ def _lookup(origin: str, destination: str) -> dict:
 
 
 _I495_PRICE_SQL = """
-SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at,
+       calculated_at
 FROM trip_pricing_i95
 WHERE od_pair_id = %(od_pair_id)s
   AND interval_end_at <= %(at_time)s
@@ -117,12 +118,13 @@ def _price_i495_leg(cur, leg_key: dict, at_time: datetime) -> dict:
             f"no price found for od_pair_id {od_pair_id} at or before "
             f"{at_time.isoformat()} in trip_pricing_i95"
         )
-    _, corridor_name, rate, interval_end_at = row
+    _, corridor_name, rate, interval_end_at, calculated_at = row
     return {
         "od_pair_id": od_pair_id,
         "price_usd": str(rate),
         "corridor_name": corridor_name,
         "priced_as_of": interval_end_at.isoformat(),
+        "observed_at": calculated_at.isoformat(),
     }
 
 
@@ -148,16 +150,18 @@ def i495_route(origin: str, destination: str, at_time: str | None = None) -> dic
             before this time, never "the price this instant" -- VDOT's own
             feed trails real-time by roughly 10-20 minutes
             (docs/oracle-findings.md section 7), and this tool reports that
-            lag honestly via priced_as_of rather than papering over it.
+            lag honestly via priced_as_of and observed_at rather than
+            papering over it.
 
     Returns:
         dict: On success, {"origin", "destination",
         "direction": "Northbound"|"Southbound", "entry": {"node_id", "label"},
         "exit": {"node_id", "label"}, "at_time": str (the resolved,
         ISO-8601 time actually used), "legs": [{"od_pair_id", "price_usd":
-        str, "corridor_name", "priced_as_of": str}], "total_usd": str} --
+        str, "corridor_name", "priced_as_of": str, "observed_at": str}], "total_usd": str} --
         legs has exactly one entry. price_usd/total_usd are decimal strings
-        (never float). On failure, {"error": str, "valid_options":
+        (never float). observed_at is VDOT's source-calculated timestamp for
+        the returned fare. On failure, {"error": str, "valid_options":
         [str, ...]} -- the full ramp label list on an unknown identifier,
         the reachable destination labels on a known origin with no direct
         trip to the given destination (including a cross-corridor

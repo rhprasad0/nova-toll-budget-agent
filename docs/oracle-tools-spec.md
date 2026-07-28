@@ -1,6 +1,6 @@
 # Oracle Route Tools — Spec
 
-Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-26
+Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-28
 
 Four Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`,
 `i495_route`, and `dulles_route`, that resolve a human trip ("from X to
@@ -133,10 +133,11 @@ returned is **the most recently published row at or before `at_time`** —
 never "the price this instant." VDOT's own feed trails real-time by
 roughly 10–20 minutes (`docs/oracle-findings.md` §7), so even a default
 `at_time` of "now" answers "what did VDOT last publish," not "what is it
-right now" — `priced_as_of` exposes exactly how stale the number is,
-rather than papering over the lag.
+right now." `priced_as_of` is the selected pricing interval end and
+`observed_at` is VDOT's source `calculated_at` timestamp for that fare;
+the agent reports both rather than papering over the lag.
 
-i66 success (unchanged):
+i66 success:
 ```json
 {
   "origin": "I-66 West",
@@ -147,7 +148,8 @@ i66 success (unchanged):
   "at_time": "2026-07-26T14:32:00-04:00",
   "legs": [
     {"start_zone_id": 3100, "end_zone_id": 3110, "price_usd": "4.50",
-     "corridor_name": "I-66-EB", "priced_as_of": "2026-07-26T14:20:00-04:00"}
+     "corridor_name": "I-66-EB", "priced_as_of": "2026-07-26T14:20:00-04:00",
+     "observed_at": "2026-07-26T14:10:00-04:00"}
   ],
   "total_usd": "4.50"
 }
@@ -164,7 +166,8 @@ i95 success:
   "at_time": "2026-07-26T14:32:00-04:00",
   "legs": [
     {"od_pair_id": 1132, "price_usd": "7.20", "corridor_name": "I-95-NB",
-     "priced_as_of": "2026-07-26T14:20:00-04:00"}
+     "priced_as_of": "2026-07-26T14:20:00-04:00",
+     "observed_at": "2026-07-26T14:10:00-04:00"}
   ],
   "total_usd": "7.20"
 }
@@ -181,7 +184,8 @@ i495 success (same shape, `corridor_name` is `I-495-NB`/`I-495-SB` instead):
   "at_time": "2026-07-26T14:32:00-04:00",
   "legs": [
     {"od_pair_id": 1038, "price_usd": "2.60", "corridor_name": "I-495-NB",
-     "priced_as_of": "2026-07-26T14:20:00-04:00"}
+     "priced_as_of": "2026-07-26T14:20:00-04:00",
+     "observed_at": "2026-07-26T14:10:00-04:00"}
   ],
   "total_usd": "2.60"
 }
@@ -191,7 +195,9 @@ i495 success (same shape, `corridor_name` is `I-495-NB`/`I-495-SB` instead):
   clarity — what was asked, versus `entry`/`exit`, what actually matched).
 - `legs` has exactly one entry for every tool now — no composite/multi-leg
   shape anywhere. `price_usd`/`total_usd` values are decimal strings, never
-  `float`.
+  `float`. Every VDOT-backed leg additionally has `observed_at`, an
+  ISO-8601 timestamp sourced from the row's `calculated_at` column. Dulles
+  legs have no `observed_at` because they do not query VDOT data.
 - There is no `source` or `facility_group` field on any tool's leg — each
   tool only ever prices from one table/corridor pair now, so both would be
   constants. (Before the i495 split, i95_route carried both, plus
