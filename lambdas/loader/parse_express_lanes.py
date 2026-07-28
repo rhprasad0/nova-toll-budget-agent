@@ -4,8 +4,12 @@ has never published -- see docs/oracle-findings.md section 2 and
 docs/poller-spec.md's "Secondary live source" section.
 
 Unlike parse_csv.py/parse_xml.py this source has no per-row timestamp: one
-"time" value is shared across the whole response. Confirmed empirically
-(2026-07-25, live curl) to be America/New_York, truncated to the hour.
+"time" value is shared across the whole response, America/New_York truncated
+to the hour (confirmed over 273 consecutive captures, zero counterexamples).
+
+The truncation is a property of the label, not the data -- prices change every
+10 minutes. That is why trip_pricing_i95_live keys on captured_at rather than
+on the observed_at derived here (docs/poller-spec.md, "Secondary live source").
 """
 
 from __future__ import annotations

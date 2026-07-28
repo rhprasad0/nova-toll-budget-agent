@@ -25,12 +25,18 @@ itself, CI/CD (manual `terraform apply` for now).
 ## Architecture
 
 ```
-EventBridge rule (rate(10 minutes), 24/7)
-   │
-   ▼
+EventBridge toll-poll-tick      EventBridge toll-poll-tick-i66
+  cron(0/10 * * * ? *), 24/7      cron(0/6 * * * ? *), 24/7
+  input {"feeds":["i95"]}         input {"feeds":["i66"]}
+   │         │                     │
+   │         ▼                     │
+   │   toll-express-fetcher        │
+   │     (no input — see           │
+   │      "Secondary live source") │
+   ▼                               ▼
 toll-fetcher Lambda        — no VPC (needs internet), Python 3.13, stdlib+boto3
-   GET I-95 CSV, GET I-66 XML   (per-feed failure isolation)
-   PUT payloads → S3 raw/
+   GET I-95 CSV / GET I-66 XML  (per-feed failure isolation; polls the feeds
+   PUT payloads → S3 raw/        named in the event, or all of them if none)
    emit CloudWatch metric PollSuccess{feed}
    │
    ▼  S3 ObjectCreated event
@@ -38,6 +44,14 @@ toll-loader Lambda         — in VPC (default VPC subnets + S3 gateway endpoint
    parse → per-feed schema     Python 3.13 + psycopg
    idempotent upsert → RDS Postgres
 ```
+
+Why two rules, one fetcher: the VDOT feeds publish on different cadences — I-95
+every 10 minutes, I-66 every 6 (measured; `docs/feed-cadence-tasks.md`). One
+10-minute tick under-sampled I-66. Each feed now rides its own rule and names
+itself in the target input, and the S3 key's bucket width is that same per-feed
+cadence (`FEEDS[feed]["tick_minutes"]`) so two polls can never floor into one
+key. Both crons divide the hour evenly, staying phase-stable across hour
+boundaries the way `rate()` does not.
 
 Why two Lambdas: the loader must sit in the VPC to reach RDS, but an in-VPC
 Lambda has no internet without a NAT Gateway (~$32/mo). Splitting keeps the
@@ -143,7 +157,8 @@ CREATE TABLE trip_pricing_i66 (
 );
 
 CREATE TABLE trip_pricing_i95_live (
-    observed_at        timestamptz NOT NULL,
+    captured_at        timestamptz NOT NULL,      -- our poll tick, from s3_key
+    observed_at        timestamptz NOT NULL,      -- source's own label, hourly
     od_pair_id         integer NOT NULL,
     price_usd          numeric(10,2) NOT NULL,
     status             text,                      -- Transurban's own vocabulary; never mapped onto link_status
@@ -151,7 +166,7 @@ CREATE TABLE trip_pricing_i95_live (
     direction          text,                      -- "N"/"S", or NULL
     s3_key             text NOT NULL,
     ingested_at        timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (observed_at, od_pair_id)
+    PRIMARY KEY (captured_at, od_pair_id)
 );
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i66_zone_lookup_idx
@@ -161,10 +176,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
     ON trip_pricing_i95 (od_pair_id, interval_end_at DESC);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
-    ON trip_pricing_i95_live (od_pair_id, observed_at DESC);
+    ON trip_pricing_i95_live (od_pair_id, captured_at DESC);
 ```
 
-**Schema version: 3.2.0** (semver; bump *major* on an upsert-key or
+**Schema version: 4.0.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`. Bumped from 2.3.0 → 3.0.0 for
@@ -173,6 +188,9 @@ the table split: both tables' keys and column sets changed. Bumped 3.0.0 →
 source" below) — purely additive, no existing table's keys or columns
 changed, so *minor*. Bumped 3.1.0 → 3.2.0 for the three pricing-lookup
 indexes below (`db/add_pricing_read_indexes.sql`) — also purely additive.
+Bumped 3.2.0 → 4.0.0 for re-keying `trip_pricing_i95_live` on the new
+`captured_at` column (`db/add_captured_at_to_i95_live.sql`) — an upsert-key
+change, so *major*, and the index above moved with it.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from the table itself, which is now the feed
@@ -197,13 +215,20 @@ now rather than a separate `UNIQUE` + surrogate `id` — nothing references the
 old surrogate `id` now that the agent surface is gone. Re-delivered S3 events
 and replays remain harmless either way.
 
+`trip_pricing_i95_live` — `(captured_at, od_pair_id)`, the tick parsed from the
+raw object's S3 key, **not** the source's `observed_at`. Transurban truncates
+`time` to the hour while prices change every 10 minutes, so the original key
+made each hour's six captures overwrite one another. From the key rather than
+the object's `LastModified` because replays re-touch objects, moving
+`LastModified` but never the key — so a replay stays a no-op.
+
 **Roles:**
 
 | Role | Grants | Used by |
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
 | `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | toll-loader Lambda |
-| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) |
+| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) — these read `trip_pricing_i95`/`trip_pricing_i66` only; nothing reads `trip_pricing_i95_live`, which is write-only today (its live-fallback consumer was deleted in `d0d306b`). The grant is kept for the ad-hoc analysis that motivated it. |
 
 The original `agent_readonly` role was abandoned along with the free-form
 SQL agent surface it served; see `docs/oracle-findings.md`. `pricing_reader`
@@ -232,21 +257,23 @@ live, **unauthenticated** snapshot at
   `road`, `direction` — `status` is Transurban's own open/closed/null
   vocabulary and is never mapped onto `link_status`, a different concept
   from a different source.
-- **One shared timestamp per pull.** Confirmed empirically across three live
-  samples spanning two different hours (2026-07-25 18:xx and 19:xx ET,
-  including one during deploy verification): the `time` field is always
-  America/New_York, truncated to the hour, unchanged across each hour's
-  samples. **Not directly confirmed:** that the underlying price *data*
-  itself only refreshes once an hour — that's an inference from the
-  response's own `#cache.max-age: 3600` header, not a held-open observation
-  across a full hour boundary. Rather than tune a separate poll cadence
-  around an unconfirmed assumption, `toll-express-fetcher` shares
-  `toll-fetcher`'s own EventBridge rule (`rate(10 minutes)`, "EventBridge tick
-  → toll-fetcher" in `infra/triggers.tf`) as a second target — one schedule,
-  both fetchers fire together, nothing to keep in sync by hand. Whatever the
-  source's real refresh rate turns out to be, polling faster just means more
-  frequent free idempotent no-ops via `(observed_at, od_pair_id)` and
-  `ON CONFLICT` — never a correctness issue.
+- **One shared timestamp per pull, and it lies about the refresh rate.** The
+  `time` field is America/New_York truncated to the hour, unchanged within an
+  hour — 273 consecutive captures, zero counterexamples. **The price data does
+  not follow it.** This spec once inferred an hourly refresh from a
+  `#cache.max-age: 3600`; that is measured and **wrong** (and the header isn't
+  in the response — the origin sends `no-cache`). Across 272 tick-to-tick
+  comparisons spanning all 24 hours, **not one tick was unchanged**: median 185
+  of 347 od pairs move every 10 minutes, and the quietest hour still medians 92.
+  `toll-express-fetcher` shares I-95's EventBridge rule as a second target.
+- **The hourly `observed_at` used to discard 5 of every 6 polls — fixed in
+  schema 4.0.0.** `UPSERT_I95_LIVE_SQL` keyed on `(observed_at, od_pair_id)`
+  with `DO UPDATE`, so each hour's six captures overwrote one another. Once
+  described here as a "free idempotent no-op" — true only of unchanged data.
+  Prod at the time: 59 snapshots across ~59 hours. Now keyed on `captured_at`,
+  so every poll persists. **The pre-4.0.0 period is still an hourly sample**:
+  the migration was forward-only and the overwritten captures were not
+  replayed, though their raw payloads remain in S3.
 - **Some ids are only priceable when their lane direction is actually
   open.** At capture time, the 4 gap ids on the then-open direction (495 N)
   had distinct, plausible prices; the 12 on the then-closed direction
@@ -430,14 +457,35 @@ two-pass backfill closed the gap instead. Sequence as run:
 No backfill pass needed — `trip_pricing_i95_live` is a brand new table with
 no prior data to migrate. Sequence:
 
-1. Run `db/add_trip_pricing_i95_live.sql` against live RDS (creates the table
-   + grants `loader_writer` in one transaction).
+1. Run `db/schema.sql` (creates the table), then `db/roles.sql` for the
+   `loader_writer` grant. The one-shot `db/add_trip_pricing_i95_live.sql` is
+   gone: its `CREATE TABLE` would have recreated the pre-4.0.0 primary key, and
+   its grant already lived in `roles.sql`.
 2. `./scripts/build_zips.sh`, then `terraform apply` with all three
    `*_package_path`/`*_handler` vars set — deploys `toll-express-fetcher` and
    the updated `toll-loader` zip (now including `parse_express_lanes.py`) together.
 3. Confirm `trip_pricing_i95_live` gets rows within the first couple of
    10-minute poll cycles, and that at least one of the 16 known gap ids
    (1374–1389) appears.
+
+### Re-keying `trip_pricing_i95_live` on `captured_at` (schema 4.0.0)
+
+Against a database that already has the pre-4.0.0 table. Two steps, run
+back to back:
+
+1. `psql "$NOVA_TOLL_URL" -f db/add_captured_at_to_i95_live.sql` — adds the
+   column, backfills from each row's own `s3_key`, swaps the primary key and
+   the lookup index. Aborts without touching the table if the backfill would
+   not produce a valid key.
+2. Deploy the matching loader (`terraform apply`), immediately.
+
+**The window between them is a hard failure.** The deployed loader names
+`ON CONFLICT (observed_at, od_pair_id)`; once step 1 drops that key, Postgres
+rejects every i95-live insert. No ordering avoids it — keeping the old key
+alive would break the *new* loader instead, since six rows an hour violate
+uniqueness on `(observed_at, od_pair_id)`. Keep the window to a minute or two:
+`toll-loader-errors` fires if it runs long, failed objects land in the
+OnFailure queue and stay replayable from S3, and i95/i66 are unaffected.
 
 ## Cost
 

@@ -24,8 +24,13 @@ logger.setLevel(logging.INFO)
 
 TIMEOUT_SECONDS = 30
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024
-TICK_MINUTES = 10
 
+# tick_minutes is each feed's own publish cadence, measured against prod rather
+# than assumed (docs/feed-cadence-tasks.md): I-95 publishes a new interval every
+# 10 minutes exactly, I-66 every 6 with a real 6-minute interval window. They
+# ride separate EventBridge rules in infra/triggers.tf, and this is also the
+# S3 key's bucket size -- keep the two in step or two polls of the same feed
+# will floor into one key and overwrite each other.
 FEEDS = {
     "i95": {
         "url": (
@@ -34,6 +39,7 @@ FEEDS = {
         ),
         "token_param_env": "I95_TOKEN_PARAM",
         "extension": "csv",
+        "tick_minutes": 10,
     },
     "i66": {
         "url": (
@@ -42,6 +48,7 @@ FEEDS = {
         ),
         "token_param_env": "I66_TOKEN_PARAM",
         "extension": "xml",
+        "tick_minutes": 6,
     },
 }
 
@@ -76,9 +83,13 @@ def _scrub(text: str, token: str) -> str:
     return text.replace(token, "***")
 
 
-def _s3_key(feed: str, now: datetime, extension: str) -> str:
-    """raw/feed=<feed>/date=<YYYY-MM-DD>/<HHMM>Z.<ext>, tick-rounded per spec."""
-    tick_minute = (now.minute // TICK_MINUTES) * TICK_MINUTES
+def _s3_key(feed: str, now: datetime, extension: str, tick_minutes: int) -> str:
+    """raw/feed=<feed>/date=<YYYY-MM-DD>/<HHMM>Z.<ext>, tick-rounded per spec.
+
+    tick_minutes is the feed's own cadence, so I-66's buckets are 6 minutes
+    wide (…0000Z, 0006Z, 0012Z) and I-95's are 10.
+    """
+    tick_minute = (now.minute // tick_minutes) * tick_minutes
     tick = now.replace(minute=tick_minute, second=0, microsecond=0)
     date = tick.strftime("%Y-%m-%d")
     stamp = tick.strftime("%H%M") + "Z"
@@ -106,7 +117,7 @@ def _fetch_feed(feed: str, url: str, token: str) -> bytes:
 
 def _poll_feed(feed: str, cfg: dict, token: str, now: datetime) -> None:
     body = _fetch_feed(feed, cfg["url"], token)
-    key = _s3_key(feed, now, cfg["extension"])
+    key = _s3_key(feed, now, cfg["extension"], cfg["tick_minutes"])
     _client("s3").put_object(
         Bucket=os.environ["RAW_BUCKET"],
         Key=key,
@@ -129,10 +140,23 @@ def _poll_feed(feed: str, cfg: dict, token: str, now: datetime) -> None:
 
 
 def handler(event, context):
+    """Poll the feeds named in event["feeds"], or every feed if unspecified.
+
+    The two feeds publish on different cadences, so infra/triggers.tf gives
+    each its own EventBridge rule and names the feed in the target input. An
+    empty event still means "all feeds" -- that's what a manual invoke and
+    scripts/smoke.sh --fire send.
+    """
     tokens = _load_tokens()
     now = datetime.now(UTC)
+    requested = (event or {}).get("feeds") or list(FEEDS)
+    unknown = [feed for feed in requested if feed not in FEEDS]
+    if unknown:
+        raise RuntimeError(f"unknown feed(s) requested: {', '.join(unknown)}")
+
     failed_feeds = []
-    for feed, cfg in FEEDS.items():
+    for feed in requested:
+        cfg = FEEDS[feed]
         try:
             _poll_feed(feed, cfg, tokens[feed], now)
         except Exception as exc:

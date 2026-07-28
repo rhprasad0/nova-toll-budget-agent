@@ -1,13 +1,14 @@
 # Oracle Findings
 
-Status: findings record, graph/tools deleted · Owner: Ryan Prasad · Last updated: 2026-07-25
+Status: findings record, graph/tools deleted · Owner: Ryan Prasad · Last updated: 2026-07-28
 
 The curated toll graph, the four agent tools, and their specs and audits were
 removed from this repo in the same change that added this file (see closing
 section). Before that evidence disappeared, this document preserves what the
-graph work found by checking itself against the operators' own route maps. Everything below
-was true as of 2026-07-25; commit hashes are `git log --oneline` short forms
-on `main`.
+graph work found by checking itself against the operators' own route maps.
+Sections 1-8 were true as of 2026-07-25; section 9 was added 2026-07-28 and
+supersedes part of section 7. Each section carries its own date. Commit hashes
+are `git log --oneline` short forms on `main`.
 
 ## 1. What the oracles are
 
@@ -201,6 +202,14 @@ stays a `>= 0` sanity check rather than a value-equality assertion, since a
 tight tolerance would need more samples across more conditions (time of day,
 volatility regime) than this investigation gathered to set without guessing.
 
+**Superseded in part by section 9 (2026-07-28):** the "~10 minutes" and
+"10-20 minutes" figures above were read off `calculated_at` and the poll
+cadence. They are now measured directly against Transurban's own series, and
+the relationship is far tighter than "converges": VDOT's published price for
+interval *t* is *identical to the cent* to Transurban's live price from 10
+minutes earlier, in 100% of 59,217 comparisons. The conclusion here is
+unchanged and strengthened -- read section 9 for the numbers.
+
 ## 8. Splitting i95_route into i95_route + i495_route: cross-corridor trips are out of scope
 
 *(2026-07-26)*
@@ -277,6 +286,60 @@ facility classification. `i495_route` is new, and structurally the
 simplest of the three tools: single leg, no availability gate (verified
 live, `I-495-NB`/`I-495-SB` never report a real `link_status`), no
 live-fallback source.
+
+## 9. VDOT republishes Transurban's price on a 10-minute delay
+
+*(2026-07-28, `scripts/feed_cadence.py`; see `docs/feed-cadence-tasks.md`)*
+
+Section 7 inferred lag from `calculated_at` alone. This measures it against the
+other source, over every retained raw payload -- 949 `i95` and 283 `i95-live`
+objects -- with no new requests to either operator.
+
+**A 10-minute shift makes the two sources identical.** VDOT's capture at tick
+*t* against Transurban's at *t+offset*, over the 250 od pairs in both feeds.
+"Movers only" keeps just the cases where Transurban's price changed at that
+tick -- the answer to "do prices simply not move?":
+
+| Transurban offset | exact match | movers only | p90 abs diff |
+|---|---|---|---|
+| -20 min | 35.3% of 58,967 | 11.8% of 31,525 | $1.15 |
+| **-10 min** | **100.0% of 59,217** | **100.0% of 31,732** | **$0.00** |
+| +0 min | 35.0% of 59,467 | **0.0% of 31,939** | $1.15 |
+| +10 min | 33.4% of 59,467 | 9.1% of 31,939 | $1.85 |
+
+The `+0 min` row is the clincher: VDOT *never* matches Transurban's concurrent
+capture in the moment a price moves, and *always* matches the one from ten
+minutes earlier. No shared od pair is flat (median 84 distinct values each), so
+this is not a matching-everything artifact. Same result on two disjoint date
+sub-ranges, and hand-checked through prod RDS: `trip_pricing_i95` at
+`interval_end_at` 2026-07-28 10:10Z holds 1020=$7.20/1040=$9.20/1062=$4.90,
+exactly the 10:00Z Transurban capture; the 10:10Z capture holds $7.00/$8.80/$4.60.
+
+**These are not two independent sources** -- one price series published twice,
+ten minutes apart. Cross-checking them (e.g. `tests/test_expresslanes_crosscheck.py`)
+validates transport, not pricing: once aligned they agree by construction, and a
+"discrepancy" only ever measures the delay. That answers section 7 and removes
+the motivation for a value-agreement tolerance between these two.
+
+Supporting measurements:
+
+- **VDOT's I-95 feed publishes every 10 minutes, on the mark, without fail** --
+  949 objects, zero carrying more than one interval, zero repeating the
+  previous one. (I-66 is a different animal: 6-minute intervals with a variable
+  1-4 min lag. It had its own tick added; see `docs/feed-cadence-tasks.md`.)
+- **Transurban changes every 10 minutes too, around the clock** -- 272
+  comparisons, zero unchanged, median 185 of 347 od pairs per tick. Its `time`
+  field is nonetheless hourly, which is why `trip_pricing_i95_live` was
+  re-keyed on `captured_at` in schema 4.0.0.
+- **Our own capture added 3.5 minutes of pure staleness, now removed.**
+  `rate(10 minutes)` had drifted to a steady 212s past each boundary;
+  `cron(0/10)` cut capture staleness to 10m40s, the rest being VDOT's own lag.
+
+One trap worth recording: raw object *keys* are the fetcher's clock floored by
+whatever cadence it ran at, and that has already changed once -- on 2026-07-26
+the express fetcher ran a 30-minute tick, so its `0000Z` key holds a payload
+fetched at 00:23:31. Aligning the two feeds by key name manufactures a spurious
+30-minute lag. `feed_cadence.py` aligns on S3 `LastModified` instead.
 
 ## What was deleted, and what remains
 
