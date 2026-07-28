@@ -343,7 +343,10 @@ value-agreement tolerance test between these two particular sources.
 
 Supporting cadence measurements:
 
-- **VDOT publishes every 10 minutes, on the mark, without fail.** 949 objects:
+- **VDOT's I-95 feed publishes every 10 minutes, on the mark, without fail.**
+  (The I-66 feed is a different animal -- 6-minute intervals with a variable
+  1-4 min `calculated_at` lag, so our 10-minute poll under-samples it; see
+  `docs/feed-cadence-tasks.md`.) 949 objects:
   zero carried more than one interval, zero repeated the previous interval, and
   zero mismatched their capture tick outside the pipeline's first day.
   `calculated_at` is exactly 10 minutes before `interval_end_at` -- min = max =

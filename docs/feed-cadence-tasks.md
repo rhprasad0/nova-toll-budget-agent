@@ -89,6 +89,28 @@ construction, so a value-agreement tolerance between *these two* would measure
 the delay and nothing else. That retires the follow-up below rather than
 unblocking it.
 
+## Found 2026-07-28 while checking vai66tolls.com: we under-sample I-66
+
+`trip_pricing_i66` is not on the same cadence as `trip_pricing_i95` and never
+was. Measured over the last 2 days in prod:
+
+- `interval_end_at` spacing is **6 minutes** (345 gaps), not 10.
+- `interval_end_at - interval_start_at` is a real 6-minute window (I-95 carries
+  no `interval_start_at` at all).
+- `calculated_at` trails by a *variable* 1:52-3:47, not I-95's fixed 10:00.
+
+Our EventBridge tick polls every 10 minutes, so each poll captures whichever
+single snapshot is current and the rest are never seen: 53 of the observed gaps
+are 12 minutes, i.e. an interval published and missed. We are storing roughly
+6 of every 10 I-66 intervals. Not a loss of anything already captured, and not
+a correctness bug in what is stored -- but `trip_pricing_i66` is a sample of
+the I-66 series, not the series.
+
+- [ ] Decide whether I-66 warrants its own faster tick, or whether a ~40%
+      sample is fine for the agent's "what does this trip cost" question.
+      Note the raw S3 payloads have the same gap here -- unlike the Transurban
+      case, there is no complete record to backfill from.
+
 ## Follow-up (not this task file's scope)
 
 - [ ] Preserve every live poll: add the fetcher's own wall clock to
