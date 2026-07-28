@@ -76,6 +76,13 @@ to the cent** (p90 |diff| $0.00). Every other offset sits at 30-36% exact match
 with a p90 of $1.15-$2.90. The same answer holds on two disjoint date
 sub-ranges, and was hand-checked through prod RDS.
 
+Stress-tested against the "prices just don't move much" objection: no shared od
+pair is flat (median 84 distinct values each), and restricting to only the
+`(od, tick)` cases where Transurban's price changed at that tick keeps -10 min
+at **100.0% of 31,732** while +0 min falls to **0.0% of 31,939**. VDOT never
+matches the concurrent capture in the moment a price moves, and always matches
+the one ten minutes prior.
+
 Consequence for `tests/test_expresslanes_crosscheck.py`: cross-checking these
 two sources validates transport, not pricing. Once aligned they agree by
 construction, so a value-agreement tolerance between *these two* would measure

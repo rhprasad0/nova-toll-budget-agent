@@ -314,6 +314,25 @@ Hand-checked against prod RDS: `trip_pricing_i95` for `interval_end_at`
 payload captured at the 10:00Z tick holds exactly those three, and the 10:10Z
 capture holds $7.00/$8.80/$4.60.
 
+**A 100% match invites the obvious objection: is it just that prices rarely
+move, so everything matches everything?** No. Across the window not one of the
+250 shared od pairs is flat (median 84 distinct price values each), and
+restricting the comparison to only those `(od, tick)` cases where Transurban's
+price *actually changed at that tick* sharpens the result instead of blunting
+it:
+
+| offset | all comparisons | movers only |
+|---|---|---|
+| -20 min | 35.3% of 58,967 | 11.8% of 31,525 |
+| **-10 min** | **100.0% of 59,217** | **100.0% of 31,732** |
+| **+0 min** | 35.0% of 59,467 | **0.0% of 31,939** |
+| +10 min | 33.4% of 59,467 | 9.1% of 31,939 |
+
+The `+0 min` row is the clincher: VDOT's capture *never* matches Transurban's
+concurrent capture in the moment a price moves, and *always* matches the one
+from ten minutes earlier. An artifact of flat prices would collapse both
+columns together; instead they separate completely.
+
 **These are not two independent sources.** They are one price series published
 twice, ten minutes apart. Any cross-check between them (e.g.
 `tests/test_expresslanes_crosscheck.py`) validates transport, not pricing --
@@ -328,7 +347,10 @@ Supporting cadence measurements:
   zero carried more than one interval, zero repeated the previous interval, and
   zero mismatched their capture tick outside the pipeline's first day.
   `calculated_at` is exactly 10 minutes before `interval_end_at` -- min = max =
-  avg = 10.0 over 7 days in RDS.
+  avg = 10.0 over 7 days in RDS. (`feed_cadence.py archive` does report 4
+  mismatches, all at `2026-07-21 21:30Z` -- the initial deploy wrote several
+  objects back to back and they all floor into that one bucket. Expected, not
+  drift.)
 - **Transurban changes every 10 minutes too, around the clock.** 272
   tick-to-tick comparisons, **zero** unchanged; median 185 of 347 od pairs move
   per tick; the quietest hour (≈02:00 ET) still medians 92. Its `time` field is

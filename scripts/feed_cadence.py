@@ -236,30 +236,46 @@ def _convergence(vdot: list[Snapshot], live: list[Snapshot]) -> None:
     taking the offset with the smallest median absolute difference measures how
     far VDOT trails -- the thing docs/oracle-findings.md section 7 inferred from
     calculated_at but never measured against the other source.
+
+    The "movers only" column exists to answer the obvious objection to a very
+    high exact-match share: that prices simply don't move, so everything matches
+    everything. It restricts the comparison to (od, tick) cases where
+    Transurban's price actually changed at that tick. An artifact would collapse
+    both columns together; a real republish separates them.
     """
     live_by_tick = {s.tick: s.prices for s in live}
     shared = set(vdot[0].prices) & set(live[0].prices)
-    print(f"\n### Convergence lag ({len(shared)} od pairs present in both feeds)\n")
-    print(
-        "| Transurban offset | paired samples | exact match | median abs diff | p90 abs diff |"
+    moving = sum(
+        1 for od in shared if len({s.prices[od] for s in live if od in s.prices}) > 1
     )
-    print("|---|---|---|---|---|")
+    print(
+        f"\n### Convergence lag ({len(shared)} od pairs present in both feeds, "
+        f"{moving} of them non-flat across the window)\n"
+    )
+    print(
+        "| Transurban offset | paired samples | exact match | movers only | "
+        "median abs diff | p90 abs diff |"
+    )
+    print("|---|---|---|---|---|---|")
 
     # Ranked on exact-match share, not median: overnight hours barely move, so
     # the median ties at $0.00 across several offsets and whichever is checked
     # first wins by accident. Exact-match share separates them cleanly.
     best = None
     for steps in range(-3, 4):
-        diffs = []
+        diffs, mover_hits, mover_total = [], 0, 0
         for snapshot in vdot:
             other = live_by_tick.get(snapshot.tick + steps * TICK)
+            before = live_by_tick.get(snapshot.tick + steps * TICK - TICK)
             if other is None:
                 continue
-            diffs.extend(
-                abs(snapshot.prices[od] - other[od])
-                for od in shared
-                if od in snapshot.prices and od in other
-            )
+            for od in shared:
+                if od not in snapshot.prices or od not in other:
+                    continue
+                diffs.append(abs(snapshot.prices[od] - other[od]))
+                if before is not None and before.get(od) not in (None, other[od]):
+                    mover_total += 1
+                    mover_hits += snapshot.prices[od] == other[od]
         if not diffs:
             continue
         diffs.sort()
@@ -267,8 +283,11 @@ def _convergence(vdot: list[Snapshot], live: list[Snapshot]) -> None:
         median = statistics.median(diffs)
         p90 = diffs[int(len(diffs) * 0.9)]
         minutes = int(steps * TICK / timedelta(minutes=1))
+        movers = (
+            f"{mover_hits / mover_total:.1%} of {mover_total}" if mover_total else "n/a"
+        )
         print(
-            f"| {minutes:+d} min | {len(diffs)} | {exact:.1%} | "
+            f"| {minutes:+d} min | {len(diffs)} | {exact:.1%} | {movers} | "
             f"${median:.2f} | ${p90:.2f} |"
         )
         if best is None or exact > best[1]:
