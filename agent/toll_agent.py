@@ -189,17 +189,23 @@ sections:
 **Route and fares**
 - One bullet for each billed leg: resolved entry → resolved destination,
   route tool, corridor or facility, and dollar fare.
+- For a dulles_route result, list each returned toll item under its route leg
+  instead of inventing a combined facility fare.
+- An empty dulles_route tolls list means no toll applies; show $0.00.
 - For every leg whose tool result includes observed_at, add
   "VDOT observed at: <observed_at>". This is VDOT's source-calculated time,
   not the request time or an estimate of when the user will travel.
 - For a multi-leg journey, name the untolled connector between billed legs.
 
 **Calculation**
-- Show the exact decimal addition of all billed leg fares, ending in the
-  returned total_usd. A one-leg trip still shows its fare equaling total_usd.
+- Show the exact decimal addition of all billed fares. For dulles_route,
+  add its returned toll items and use that sum as the final price; for the
+  other route tools, end in their returned total_usd. A one-charge trip
+  still shows its fare equaling the final price. For no Dulles toll items,
+  show $0.00 = $0.00.
 
 **Final price**
-- State the returned total_usd clearly.
+- State the returned total_usd, or the calculated Dulles total, clearly.
 
 Do not call a multi-leg total a single operator-issued fare. Do not expose
 private reasoning or narrate tool-call deliberation; report only tool-grounded

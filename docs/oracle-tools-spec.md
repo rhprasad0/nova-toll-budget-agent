@@ -338,9 +338,10 @@ route resolution, `{"error", "valid_options"}` failure shape,
   but no source explicitly excluded weekends; worth confirming before
   relying on it for a weekend trip.
 
-Both oracles carry `price_peak_usd`/`price_off_peak_usd` on every pair (the
-Dulles Toll Road's two values are always equal) so the tool has one pricing
-code path instead of a per-facility branch. Every leg carries a
+Both oracles carry ordered nonzero `charges` on every pair, each with
+`price_peak_usd`/`price_off_peak_usd` (the Dulles Toll Road's two values are
+always equal). This preserves the individual charge facts instead of storing
+a pre-summed fare. Every leg carries a
 `rate_period` field: `"peak"`/`"off_peak"` for a `dulles_greenway` leg,
 `null` for a `dulles_toll_road` leg (reporting `"off_peak"` there would
 imply a peak rate exists, which it doesn't).
@@ -349,13 +350,14 @@ imply a peak rate exists, which it doesn't).
 corridor, connected at Route 28 — a node with the identical label in both
 oracles. A trip confined to one facility resolves as a single leg, same as
 `i66_route`. A trip starting on one facility and ending on the other
-resolves as **two legs, split at Route 28 and summed** — origin→Route 28 on
-the first facility, Route 28→destination on the second — mirroring how
-`i95_route` handles a 495↔95/395 cross-corridor trip. This matches real
-billing: the two operators charge independently, never one combined fare.
-`facility_totals` always carries both `"dulles_toll_road"` and
-`"dulles_greenway"` keys (`"0.00"` if a facility has no legs), same
-stable-shape rule as i95's `facility_totals`.
+resolves as **two legs, split at Route 28** — origin→Route 28 on the first
+facility, Route 28→destination on the second. The success response returns
+route `legs` plus a flat, travel-ordered `tolls` list; each item has
+`facility`, `label`, and decimal-string `price_usd`. It omits zero-dollar
+segments; an empty `tolls` list explicitly means no toll applies. It
+intentionally has no `total_usd` or `facility_totals`, so the calling agent
+can show the addition (or `$0.00 = $0.00`). This matches real billing: the two
+operators charge independently, never one combined fare.
 
 **Data provenance and known limitations** — recorded in full in
 `scripts/build_dulles_oracle.py`'s docstring and each oracle's `notes`

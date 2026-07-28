@@ -29,8 +29,7 @@ def test_shape():
             "direction",
             "entry",
             "exit",
-            "price_peak_usd",
-            "price_off_peak_usd",
+            "charges",
         }
 
 
@@ -39,14 +38,17 @@ def test_pairs_are_well_formed():
         assert p["entry"] in NODES and p["exit"] in NODES, p
         assert p["direction"] in ("EB", "WB"), p
         assert p["entry"] != p["exit"], p
-        assert Decimal(p["price_peak_usd"]) >= 0, p
+        for charge in p["charges"]:
+            assert set(charge) == {"label", "price_peak_usd", "price_off_peak_usd"}
+            assert Decimal(charge["price_peak_usd"]) > 0, charge
 
 
 def test_no_time_of_day_variation():
     # Confirmed: the Dulles Toll Road has no peak/off-peak pricing, unlike
     # the Dulles Greenway -- both price fields must always match here.
     for p in PAIRS:
-        assert p["price_peak_usd"] == p["price_off_peak_usd"], p
+        for charge in p["charges"]:
+            assert charge["price_peak_usd"] == charge["price_off_peak_usd"], charge
 
 
 def test_boundary_node_exists_for_the_greenway_connection():
@@ -65,7 +67,10 @@ def test_well_corroborated_mainline_plus_ramp_trip_totals_six_dollars():
         for p in PAIRS
         if p["entry"] == "12" and p["exit"] == "1819" and p["direction"] == "EB"
     ]
-    assert reston_to_beltway["price_peak_usd"] == "6.00"
+    assert [charge["price_peak_usd"] for charge in reston_to_beltway["charges"]] == [
+        "2.00",
+        "4.00",
+    ]
 
 
 def test_exit_16_ramp_toll_is_eastbound_only():
@@ -82,6 +87,6 @@ def test_exit_16_ramp_toll_is_eastbound_only():
     # EB pays the Exit 16 ramp toll on top of the mainline crossing; WB does
     # not -- both cross the same mainline plaza, so the $2.00 gap is exactly
     # the documented eastbound-only ramp toll.
-    assert Decimal(eb["price_peak_usd"]) - Decimal(wb["price_peak_usd"]) == Decimal(
-        "2.00"
-    )
+    assert sum(Decimal(c["price_peak_usd"]) for c in eb["charges"]) - sum(
+        Decimal(c["price_peak_usd"]) for c in wb["charges"]
+    ) == Decimal("2.00")

@@ -28,8 +28,7 @@ def test_shape():
             "direction",
             "entry",
             "exit",
-            "price_peak_usd",
-            "price_off_peak_usd",
+            "charges",
         }
 
 
@@ -38,8 +37,15 @@ def test_pairs_are_well_formed():
         assert p["entry"] in NODES and p["exit"] in NODES, p
         assert p["direction"] in ("EB", "WB"), p
         assert p["entry"] != p["exit"], p
+        assert len(p["charges"]) == 1
+        charge = p["charges"][0]
+        assert set(charge) == {"label", "price_peak_usd", "price_off_peak_usd"}
         # Peak is always the pricier rate -- never cheaper than off-peak.
-        assert Decimal(p["price_peak_usd"]) >= Decimal(p["price_off_peak_usd"]) >= 0, p
+        assert (
+            Decimal(charge["price_peak_usd"])
+            >= Decimal(charge["price_off_peak_usd"])
+            > 0
+        ), charge
 
 
 def test_boundary_node_exists_for_the_dulles_toll_road_connection():
@@ -65,7 +71,7 @@ def test_flat_fare_never_sums_mainline_and_secondary():
         for p in PAIRS
         if p["entry"] == "1" and p["exit"] == "8" and p["direction"] == "EB"
     ]
-    assert within_west_side["price_off_peak_usd"] == "4.55"
+    assert within_west_side["charges"][0]["price_off_peak_usd"] == "4.55"
     # ...while a trip crossing into Route 28 prices at the (higher) mainline
     # rate, the exact same trip length not being double-charged for both.
     [crossing_mainline] = [
@@ -73,11 +79,11 @@ def test_flat_fare_never_sums_mainline_and_secondary():
         for p in PAIRS
         if p["entry"] == "1" and p["exit"] == "28" and p["direction"] == "EB"
     ]
-    assert crossing_mainline["price_off_peak_usd"] == "5.25"
+    assert crossing_mainline["charges"][0]["price_off_peak_usd"] == "5.25"
 
 
 def test_peak_off_peak_values_match_published_figures():
-    mainline = {p["price_peak_usd"] for p in PAIRS if p["exit"] == "28"} | {
-        p["price_peak_usd"] for p in PAIRS if p["entry"] == "28"
-    }
+    mainline = {
+        p["charges"][0]["price_peak_usd"] for p in PAIRS if p["exit"] == "28"
+    } | {p["charges"][0]["price_peak_usd"] for p in PAIRS if p["entry"] == "28"}
     assert mainline == {"5.80"}

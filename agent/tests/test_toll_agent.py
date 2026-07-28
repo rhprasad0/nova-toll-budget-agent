@@ -57,6 +57,9 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "**Final price**" in prompt
     assert "VDOT observed at: <observed_at>" in prompt
     assert "exact decimal addition" in prompt
+    assert "returned toll items" in prompt
+    assert "calculated Dulles total" in prompt
+    assert "empty dulles_route tolls list means no toll applies" in prompt
     assert "private reasoning or narrate tool-call deliberation" in prompt
 
 

@@ -15,7 +15,7 @@ it over re-deriving it." A trip confined to one facility is a single-leg
 lookup exactly like i66. A trip crossing both facilities (Dulles Toll Road
 and Dulles Greenway are one continuous physical corridor, connected at
 Route 28) resolves as two legs -- origin to the Route 28 boundary on one
-facility, boundary to destination on the other -- summed into one total.
+facility, boundary to destination on the other.
 (i95_route/i495_route dropped this same composite-and-sum shape for their
 own cross-corridor case, in favor of not resolving a cross-corridor trip
 at all -- see docs/oracle-findings.md section 8. Not synced here: Dulles's
@@ -25,9 +25,9 @@ i95/i495 -- 16 unpriced od_pair_ids, a live-fallback source, per-leg
 facility classification -- don't apply the same way.) Real-world billing
 matches the two-separate-tolls model this produces: "vehicles traversing
 both roads incur separate toll charges" (the two operators bill
-independently, never combined into one flat fare) -- summing them into a
-convenience total is this tool's own addition, not a claim Dulles bills
-one combined toll.
+independently, never combined into one flat fare). The tool returns every
+charged component rather than a convenience total so the calling agent can
+show its arithmetic.
 
 `at_time` still exists here, unlike a first pass at this tool assumed it
 wouldn't -- the Dulles Toll Road has no time-of-day pricing, but the Dulles
@@ -48,7 +48,6 @@ import json
 import logging
 import sys
 from datetime import datetime, time
-from decimal import Decimal
 from pathlib import Path
 
 from strands import tool
@@ -223,33 +222,41 @@ def _price_leg(facility_name: str, pair: dict, at_time: datetime) -> dict:
         rate_period = "peak" if peak else "off_peak"
     else:
         rate_period = None  # Dulles Toll Road has no time-of-day pricing
-    price = (
-        pair["price_peak_usd"] if rate_period == "peak" else pair["price_off_peak_usd"]
-    )
     return {
         "facility": facility_name,
         "direction": pair["direction"],
         "entry": {"node_id": entry_id, "label": nodes[entry_id]["label"]},
         "exit": {"node_id": exit_id, "label": nodes[exit_id]["label"]},
-        "price_usd": price,
         "rate_period": rate_period,
     }
 
 
 def _build_response(
-    origin: str, destination: str, legs: list[dict], at_time: datetime
+    origin: str,
+    destination: str,
+    legs: list[dict],
+    pairs: list[tuple[str, dict]],
+    at_time: datetime,
 ) -> dict:
-    facility_totals = {name: Decimal("0.00") for name in _FACILITIES}
-    for leg in legs:
-        facility_totals[leg["facility"]] += Decimal(leg["price_usd"])
-    total = sum(facility_totals.values(), Decimal(0))
+    tolls = []
+    for (facility, pair), leg in zip(pairs, legs, strict=True):
+        price_key = (
+            "price_peak_usd" if leg["rate_period"] == "peak" else "price_off_peak_usd"
+        )
+        tolls.extend(
+            {
+                "facility": facility,
+                "label": charge["label"],
+                "price_usd": charge[price_key],
+            }
+            for charge in pair["charges"]
+        )
     return {
         "origin": origin,
         "destination": destination,
         "at_time": at_time.isoformat(),
         "legs": legs,
-        "facility_totals": {name: str(v) for name, v in facility_totals.items()},
-        "total_usd": str(total),
+        "tolls": tolls,
     }
 
 
@@ -261,8 +268,8 @@ def dulles_route(origin: str, destination: str, at_time: str | None = None) -> d
     (oracles/dulles_toll_road.json, oracles/dulles_greenway.json) -- a flat,
     direct lookup, never multi-hop routing. A trip confined to one facility
     resolves to one leg; a trip crossing both (they connect at Route 28)
-    resolves to two legs, split at that boundary and summed, since the two
-    operators bill independently.
+    resolves to two legs, split at that boundary. Every charged toll is
+    returned separately; the tool does not calculate a combined total.
 
     Args:
         origin: Interchange label (e.g. 'Exit 12 - SR 602 (Reston Pkwy)'),
@@ -280,11 +287,13 @@ def dulles_route(origin: str, destination: str, at_time: str | None = None) -> d
         dict: On success, {"origin", "destination", "at_time",
         "legs": [{"facility": "dulles_toll_road"|"dulles_greenway",
         "direction", "entry": {"node_id", "label"}, "exit": {"node_id",
-        "label"}, "price_usd": str, "rate_period": "peak"|"off_peak"|None},
-        ...], "facility_totals": {"dulles_toll_road": str,
-        "dulles_greenway": str}, "total_usd": str} -- one leg for a
-        single-facility trip, two for a trip crossing both. price_usd/
-        total_usd/facility_totals values are decimal strings, never float.
+        "label"}, "rate_period": "peak"|"off_peak"|None}, ...],
+        "tolls": [{"facility": "dulles_toll_road"|"dulles_greenway",
+        "label": str, "price_usd": str}, ...]} -- one leg for a
+        single-facility trip, two for a trip crossing both. tolls contains
+        every nonzero charge in travel order; price_usd values are decimal
+        strings, never floats. An empty tolls list means no toll applies.
+        The tool intentionally has no total_usd.
         rate_period is None for Dulles Toll Road legs (no time-of-day
         pricing there). On failure, {"error": str, "valid_options":
         [str, ...]} -- the combined entry/exit-capable label list across
@@ -314,14 +323,15 @@ def dulles_route(origin: str, destination: str, at_time: str | None = None) -> d
         )
         return error
 
-    legs = [_price_leg(name, pair, resolved_at_time) for name, pair in result["legs"]]
-    response = _build_response(origin, destination, legs, resolved_at_time)
+    pairs = result["legs"]
+    legs = [_price_leg(name, pair, resolved_at_time) for name, pair in pairs]
+    response = _build_response(origin, destination, legs, pairs, resolved_at_time)
     logger.info(
-        "dulles_route ok origin=%r destination=%r at_time=%s total_usd=%s legs=%s",
+        "dulles_route ok origin=%r destination=%r at_time=%s tolls=%s legs=%s",
         origin,
         destination,
         response["at_time"],
-        response["total_usd"],
+        response["tolls"],
         response["legs"],
     )
     return response

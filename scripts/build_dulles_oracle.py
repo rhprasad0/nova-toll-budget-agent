@@ -33,9 +33,10 @@ unified into one model):
     Exit 8 and Exit 9) pays the mainline rate; a trip confined to Exits 1-8
     pays the lower secondary rate. Peak/off-peak varies both rates.
 
-Both oracles carry `price_peak_usd`/`price_off_peak_usd` on every pair (DTR's
-two values are always equal) so agent_tools/dulles_route.py has one pricing
-code path instead of a per-facility branch.
+Both oracles carry ordered nonzero charge components on every pair, with
+`price_peak_usd`/`price_off_peak_usd` on each component (DTR's values are
+always equal). agent_tools/dulles_route.py returns those components directly
+instead of a combined price.
 """
 
 from __future__ import annotations
@@ -97,19 +98,41 @@ def _dtr_pairs() -> list[dict]:
             crosses_mainline = (i <= DTR_MAINLINE_AFTER_INDEX) != (
                 j <= DTR_MAINLINE_AFTER_INDEX
             )
-            mainline_usd = DTR_MAINLINE_USD if crosses_mainline else DTR_FREE_USD
             if direction == "EB":
-                ramp_usd = float(entry_eb_toll) + float(exit_eb_toll)
+                entry_ramp_usd, exit_ramp_usd = entry_eb_toll, exit_eb_toll
             else:
-                ramp_usd = float(entry_wb_toll) + float(exit_wb_toll)
-            total = f"{float(mainline_usd) + ramp_usd:.2f}"
+                entry_ramp_usd, exit_ramp_usd = entry_wb_toll, exit_wb_toll
+            charges = []
+            if entry_ramp_usd != DTR_FREE_USD:
+                charges.append(
+                    {
+                        "label": f"Entrance ramp at {_entry_label}",
+                        "price_peak_usd": entry_ramp_usd,
+                        "price_off_peak_usd": entry_ramp_usd,
+                    }
+                )
+            if crosses_mainline:
+                charges.append(
+                    {
+                        "label": "Mainline plaza",
+                        "price_peak_usd": DTR_MAINLINE_USD,
+                        "price_off_peak_usd": DTR_MAINLINE_USD,
+                    }
+                )
+            if exit_ramp_usd != DTR_FREE_USD:
+                charges.append(
+                    {
+                        "label": f"Exit ramp at {_exit_label}",
+                        "price_peak_usd": exit_ramp_usd,
+                        "price_off_peak_usd": exit_ramp_usd,
+                    }
+                )
             pairs.append(
                 {
                     "direction": direction,
                     "entry": entry_id,
                     "exit": exit_id,
-                    "price_peak_usd": total,
-                    "price_off_peak_usd": total,
+                    "charges": charges,
                 }
             )
     return pairs
@@ -193,8 +216,15 @@ def _gw_pairs() -> list[dict]:
                     "direction": direction,
                     "entry": entry_id,
                     "exit": exit_id,
-                    "price_peak_usd": peak,
-                    "price_off_peak_usd": off_peak,
+                    "charges": [
+                        {
+                            "label": "Mainline plaza"
+                            if crosses_mainline
+                            else "Secondary plaza",
+                            "price_peak_usd": peak,
+                            "price_off_peak_usd": off_peak,
+                        }
+                    ],
                 }
             )
     return pairs

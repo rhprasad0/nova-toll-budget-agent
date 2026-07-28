@@ -29,13 +29,25 @@ def test_dtr_only_trip_is_a_single_leg():
     leg = result["legs"][0]
     assert leg["facility"] == "dulles_toll_road"
     assert leg["direction"] == "EB"
-    assert leg["price_usd"] == "8.00"
     assert leg["rate_period"] is None
-    assert result["total_usd"] == "8.00"
-    assert result["facility_totals"] == {
-        "dulles_toll_road": "8.00",
-        "dulles_greenway": "0.00",
-    }
+    assert result["tolls"] == [
+        {
+            "facility": "dulles_toll_road",
+            "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+            "price_usd": "2.00",
+        },
+        {
+            "facility": "dulles_toll_road",
+            "label": "Mainline plaza",
+            "price_usd": "4.00",
+        },
+        {
+            "facility": "dulles_toll_road",
+            "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+            "price_usd": "2.00",
+        },
+    ]
+    assert "total_usd" not in result
     assert "observed_at" not in leg
 
 
@@ -67,7 +79,8 @@ def test_greenway_only_trip_prices_peak():
     leg = result["legs"][0]
     assert leg["facility"] == "dulles_greenway"
     assert leg["rate_period"] == "peak"
-    assert leg["price_usd"] == "5.10"
+    assert leg["rate_period"] == "peak"
+    assert result["tolls"][0]["price_usd"] == "5.10"
 
 
 def test_greenway_only_trip_prices_off_peak():
@@ -78,7 +91,7 @@ def test_greenway_only_trip_prices_off_peak():
     )
     leg = result["legs"][0]
     assert leg["rate_period"] == "off_peak"
-    assert leg["price_usd"] == "4.55"
+    assert result["tolls"][0]["price_usd"] == "4.55"
 
 
 def test_greenway_weekend_rush_hour_is_still_off_peak():
@@ -92,7 +105,7 @@ def test_greenway_weekend_rush_hour_is_still_off_peak():
     assert result["legs"][0]["rate_period"] == "off_peak"
 
 
-def test_composite_trip_splits_at_route_28_and_sums():
+def test_composite_trip_splits_at_route_28_and_returns_each_charge():
     result = dulles_route(
         "Exit 12 - SR 602 (Reston Pkwy)",
         "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
@@ -106,11 +119,14 @@ def test_composite_trip_splits_at_route_28_and_sums():
     assert gw_leg["entry"]["label"] == "Route 28 (Dulles Toll Road / Dulles Greenway)"
     # The Greenway leg starts at Route 28, so it crosses that facility's own
     # mainline plaza too -- it prices at the mainline rate, not secondary.
-    assert result["facility_totals"] == {
-        "dulles_toll_road": "2.00",
-        "dulles_greenway": "5.25",
-    }
-    assert result["total_usd"] == "7.25"
+    assert result["tolls"] == [
+        {
+            "facility": "dulles_toll_road",
+            "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+            "price_usd": "2.00",
+        },
+        {"facility": "dulles_greenway", "label": "Mainline plaza", "price_usd": "5.25"},
+    ]
 
 
 def test_composite_trip_reverse_direction():
@@ -123,7 +139,34 @@ def test_composite_trip_reverse_direction():
         "dulles_greenway",
         "dulles_toll_road",
     ]
-    assert result["total_usd"] == "11.25"
+    assert [toll["price_usd"] for toll in result["tolls"]] == ["5.25", "4.00", "2.00"]
+
+
+def test_dtr_ramp_only_trip_omits_the_free_mainline():
+    result = dulles_route(
+        "Exit 12 - SR 602 (Reston Pkwy)", "Exit 13 - SR 828 (Wiehle Ave)"
+    )
+    assert [toll["price_usd"] for toll in result["tolls"]] == ["2.00", "2.00"]
+    assert all(toll["label"] != "Mainline plaza" for toll in result["tolls"])
+
+
+def test_dtr_mainline_only_trip_omits_free_ramps():
+    result = dulles_route(
+        "Exit 15 - SR 676 (Wolf Trap)",
+        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+    )
+    assert result["tolls"] == [
+        {"facility": "dulles_toll_road", "label": "Mainline plaza", "price_usd": "4.00"}
+    ]
+
+
+def test_dtr_toll_free_trip_returns_an_empty_charge_list():
+    result = dulles_route(
+        "Route 28 (Dulles Toll Road / Dulles Greenway)",
+        "Exit 15 - SR 676 (Wolf Trap)",
+    )
+    assert result["tolls"] == []
+    assert "total_usd" not in result
 
 
 def test_unknown_origin_returns_combined_valid_options():
@@ -202,7 +245,7 @@ def test_logs_successful_lookup(caplog):
     caplog.set_level(logging.INFO)
     dulles_route("Exit 12 - SR 602 (Reston Pkwy)", "Exit 17 - SR 684 (Spring Hill Rd)")
     assert "dulles_route ok" in caplog.text
-    assert "8.00" in caplog.text
+    assert "4.00" in caplog.text
 
 
 def test_failure_log_omits_the_option_list(caplog):

@@ -141,3 +141,20 @@ def test_i66_price_answer_shows_work_and_vdot_observed_time(live_pricing_env):
     leg = tool_result["legs"][0]
     assert leg["observed_at"] in answer
     assert f"${leg['price_usd']} = ${tool_result['total_usd']}" in answer
+
+
+def test_dulles_answer_itemizes_each_charge_and_shows_the_sum():
+    agent = build_agent()
+    response = agent(
+        "Price a trip from Exit 12 - SR 602 (Reston Pkwy) to "
+        "Exit 17 - SR 684 (Spring Hill Rd)"
+    )
+
+    answer = str(response)
+    [tool_result] = _tool_results(agent, "dulles_route")
+    assert [toll["price_usd"] for toll in tool_result["tolls"]] == [
+        "2.00",
+        "4.00",
+        "2.00",
+    ]
+    assert "$2.00 + $4.00 + $2.00 = $8.00" in answer

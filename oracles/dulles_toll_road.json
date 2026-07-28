@@ -114,634 +114,1426 @@
  "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Mainline toll ($4.00) crosses between Exit 16 and Exit 17; ramp toll ($2.00) applies per tolled interchange used, additive with the mainline toll -- two independently confirmed sources agree on a $6.00 total for a typical mainline-crossing single-ramp trip. Exit 16's ramp toll applies to the eastbound exit only (quoted from source); the westbound movement there is free. No time-of-day variation on this facility.",
  "pairs": [
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "10",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "11",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "12",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "13",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "14",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "14"
   },
   {
+   "charges": [],
    "direction": "EB",
    "entry": "28",
-   "exit": "15",
-   "price_off_peak_usd": "0.00",
-   "price_peak_usd": "0.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "16",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "17",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "28",
-   "exit": "1819",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "10",
-   "exit": "28",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "11",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "12",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "13",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "14",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "15",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "16",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "17",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "10",
-   "exit": "1819",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "11",
-   "exit": "28",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "11",
-   "exit": "10",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "12",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "13",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "14",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "15",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "16",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "17",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "11",
-   "exit": "1819",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "12",
-   "exit": "28",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "12",
-   "exit": "10",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "12",
-   "exit": "11",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "12",
-   "exit": "13",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "12",
-   "exit": "14",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "12",
-   "exit": "15",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "12",
-   "exit": "16",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "12",
-   "exit": "17",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "12",
-   "exit": "1819",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "13",
-   "exit": "28",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "13",
-   "exit": "10",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "13",
-   "exit": "11",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "13",
-   "exit": "12",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "13",
-   "exit": "14",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "13",
-   "exit": "15",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "13",
-   "exit": "16",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "13",
-   "exit": "17",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "13",
-   "exit": "1819",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "14",
-   "exit": "28",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "14",
-   "exit": "10",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "14",
-   "exit": "11",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "14",
-   "exit": "12",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "14",
-   "exit": "13",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "14",
-   "exit": "15",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "14",
-   "exit": "16",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "14",
-   "exit": "17",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "14",
-   "exit": "1819",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "1819"
   },
   {
+   "charges": [],
    "direction": "WB",
    "entry": "15",
-   "exit": "28",
-   "price_off_peak_usd": "0.00",
-   "price_peak_usd": "0.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "15",
-   "exit": "10",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "15",
-   "exit": "11",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "15",
-   "exit": "12",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "15",
-   "exit": "13",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "15",
-   "exit": "14",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "15",
-   "exit": "16",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "15",
-   "exit": "17",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "EB",
    "entry": "15",
-   "exit": "1819",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "28",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "10",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "11",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "12",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "13",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "14",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "16",
-   "exit": "15",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "16",
-   "exit": "17",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "17"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "16",
-   "exit": "1819",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "28",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "10",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "11",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "12",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "13",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "14",
-   "price_off_peak_usd": "8.00",
-   "price_peak_usd": "8.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "15",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "15"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "17",
-   "exit": "16",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "EB",
    "entry": "17",
-   "exit": "1819",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "1819"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "28",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "28"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "10",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "10"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "11",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "11"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "12",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "12"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "13",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "13"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "14",
-   "price_off_peak_usd": "6.00",
-   "price_peak_usd": "6.00"
+   "exit": "14"
   },
   {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "15",
-   "price_off_peak_usd": "4.00",
-   "price_peak_usd": "4.00"
+   "exit": "15"
   },
   {
+   "charges": [],
    "direction": "WB",
    "entry": "1819",
-   "exit": "16",
-   "price_off_peak_usd": "0.00",
-   "price_peak_usd": "0.00"
+   "exit": "16"
   },
   {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
-   "exit": "17",
-   "price_off_peak_usd": "2.00",
-   "price_peak_usd": "2.00"
+   "exit": "17"
   }
  ],
  "retrieved_at": "2026-07-26",
