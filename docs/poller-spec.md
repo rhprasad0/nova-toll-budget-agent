@@ -110,8 +110,9 @@ The most recent object per feed is the future agent's "current toll" read path.
 
 ## Database schema
 
-RDS Postgres 17, **two tables, one per feed** — `trip_pricing_i95` and
-`trip_pricing_i66`. Originally this was a single shared `trip_pricing` table
+RDS Postgres 17, **two VDOT tables, one per feed** — `trip_pricing_i95` and
+`trip_pricing_i66` — plus the separate internal-only Transurban reference
+table `trip_pricing_i95_live`. Originally this was a single shared `trip_pricing` table
 (ported from the home poller's `trip_pricing`,
 `hermes-agent/tools/va_toll_ingest/va_toll_ingest/db.py`/`normalize.py`) with
 a `feed` discriminator and a pile of per-feed-only nullable columns; that
@@ -177,9 +178,29 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
     ON trip_pricing_i95_live (od_pair_id, captured_at DESC);
+
+CREATE VIEW current_trip_pricing_i95 AS
+SELECT DISTINCT ON (od_pair_id) ...
+FROM trip_pricing_i95
+ORDER BY od_pair_id, interval_end_at DESC;
+
+CREATE VIEW current_trip_pricing_i66 AS
+SELECT DISTINCT ON (start_zone_id, end_zone_id) ...
+FROM trip_pricing_i66
+ORDER BY start_zone_id, end_zone_id, interval_end_at DESC;
 ```
 
-**Schema version: 4.0.0** (semver; bump *major* on an upsert-key or
+All source timestamps are parsed as timezone-aware instants and retained as
+UTC-backed `timestamptz`; this avoids corrupting them across daylight-saving
+transitions. `pricing_reader` renders agent-facing timestamps as
+`America/New_York` (EDT in summer, EST in winter).
+
+The two `current_*` relations are normal VDOT-only views, not materialized
+views: each read selects the latest official row with no refresh lag. The
+agent uses them only when `at_time` is omitted; an explicit `at_time` reads
+VDOT history from the base table.
+
+**Schema version: 4.1.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`. Bumped from 2.3.0 → 3.0.0 for
@@ -191,6 +212,20 @@ indexes below (`db/add_pricing_read_indexes.sql`) — also purely additive.
 Bumped 3.2.0 → 4.0.0 for re-keying `trip_pricing_i95_live` on the new
 `captured_at` column (`db/add_captured_at_to_i95_live.sql`) — an upsert-key
 change, so *major*, and the index above moved with it.
+Bumped 4.0.0 → 4.1.0 for the additive current-price views and reader time-zone
+setting.
+
+### Current-price view rollout (schema 4.1.0)
+
+1. Run `psql -v ON_ERROR_STOP=1 "$NOVA_TOLL_URL" -f db/add_current_pricing_views.sql`
+   as the RDS master. The script is one transaction, so a failure leaves no
+   partial views, grants, revokes, or role setting.
+2. Before deploying the route-tool code, use a fresh `pricing_reader` IAM
+   connection to run `uv run pytest -m live tests/test_ci_current_pricing_views.py -v`.
+   It verifies both views, `America/New_York` output, and that the role cannot
+   read the internal Transurban table.
+3. Deploy the route tools only after that verification passes. Older tools
+   remain compatible with the migration, so this ordering has no request gap.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from the table itself, which is now the feed
@@ -228,7 +263,7 @@ the object's `LastModified` because replays re-touch objects, moving
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
 | `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | toll-loader Lambda |
-| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) — these read `trip_pricing_i95`/`trip_pricing_i66` only; nothing reads `trip_pricing_i95_live`, which is write-only today (its live-fallback consumer was deleted in `d0d306b`). The grant is kept for the ad-hoc analysis that motivated it. |
+| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, and the two VDOT `current_*` views; session timezone `America/New_York` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) — current requests use the VDOT views and explicit historical requests use the VDOT base tables. It has no access to the internal `trip_pricing_i95_live` table. |
 
 The original `agent_readonly` role was abandoned along with the free-form
 SQL agent surface it served; see `docs/oracle-findings.md`. `pricing_reader`

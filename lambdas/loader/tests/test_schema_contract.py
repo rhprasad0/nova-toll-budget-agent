@@ -13,6 +13,8 @@ from conftest import REPO_ROOT, loader_handler
 
 SCHEMA_SQL = (REPO_ROOT / "db" / "schema.sql").read_text()
 SPEC_MD = (REPO_ROOT / "docs" / "poller-spec.md").read_text()
+ROLES_SQL = (REPO_ROOT / "db" / "roles.sql").read_text()
+CURRENT_VIEWS_SQL = (REPO_ROOT / "db" / "add_current_pricing_views.sql").read_text()
 
 SEMVER = r"\d+\.\d+\.\d+"
 
@@ -135,3 +137,35 @@ def test_schema_version_is_semver_and_matches_spec():
     assert schema_v.group(1) == spec_v.group(1), (
         f"schema.sql version {schema_v.group(1)} != spec version {spec_v.group(1)}"
     )
+
+
+def test_current_price_views_are_vdot_only_and_reader_uses_eastern_time():
+    for view, table, key in (
+        ("current_trip_pricing_i95", "trip_pricing_i95", "od_pair_id"),
+        (
+            "current_trip_pricing_i66",
+            "trip_pricing_i66",
+            "start_zone_id, end_zone_id",
+        ),
+    ):
+        match = re.search(rf"CREATE VIEW {view} AS\n(.*?);", SCHEMA_SQL, re.DOTALL)
+        assert match, f"{view} missing from db/schema.sql"
+        body = match.group(1)
+        assert f"FROM {table}" in body
+        assert f"DISTINCT ON ({key})" in body
+        assert "trip_pricing_i95_live" not in body
+
+    assert (
+        "GRANT SELECT ON current_trip_pricing_i95, current_trip_pricing_i66"
+        in ROLES_SQL
+    )
+    assert "trip_pricing_i95_live TO pricing_reader" not in ROLES_SQL
+    assert "ALTER ROLE pricing_reader SET TimeZone TO 'America/New_York'" in ROLES_SQL
+    assert "CREATE OR REPLACE VIEW current_trip_pricing_i95" in CURRENT_VIEWS_SQL
+    assert (
+        "REVOKE SELECT ON trip_pricing_i95_live FROM pricing_reader"
+        in CURRENT_VIEWS_SQL
+    )
+    assert "\\set ON_ERROR_STOP on" in CURRENT_VIEWS_SQL
+    assert "BEGIN;" in CURRENT_VIEWS_SQL
+    assert "COMMIT;" in CURRENT_VIEWS_SQL

@@ -197,8 +197,8 @@ def run(
     established test convention here).
 
     price_fn(cur, leg_key, at_time) returns the priced leg, or raises
-    PricingError -- a missing row, an unrecognized corridor, and a closed
-    lane are all hard errors for the whole call, never a default price.
+    PricingError. `at_time` is None for a current-price request, which uses
+    its VDOT current-price view; an explicit time reads VDOT history.
     """
     result = lookup_fn(origin, destination)
     if "error" in result:
@@ -217,7 +217,11 @@ def run(
     conn = connect()
     try:
         with conn.cursor() as cur:  # type: ignore[attr-defined]
-            priced_leg = price_fn(cur, result["legs"][0], resolved_at_time)
+            priced_leg = price_fn(
+                cur,
+                result["legs"][0],
+                resolved_at_time if at_time is not None else None,
+            )
     except PricingError as e:
         return _miss(
             tool_name,

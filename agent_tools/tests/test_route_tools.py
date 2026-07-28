@@ -51,6 +51,7 @@ class Case:
     entry: dict
     direction: str
     price_table: str
+    current_price_view: str
     # Substrings that must appear in a "no price found" error -- the leg key
     # the tool looked up, so the message names what actually missed.
     price_key_fragments: tuple[str, ...]
@@ -96,6 +97,7 @@ CASES = [
         entry={"node_id": "1", "label": "I-66 West"},
         direction="EB",
         price_table="trip_pricing_i66",
+        current_price_view="current_trip_pricing_i66",
         price_key_fragments=("3100", "3110"),
         entry_only="I-495 N",
         exit_only="Westmoreland St",
@@ -139,6 +141,7 @@ CASES = [
         entry={"node_id": "210NO", "label": "US-1"},
         direction="Northbound",
         price_table="trip_pricing_i95",
+        current_price_view="current_trip_pricing_i95",
         price_key_fragments=("1132",),
         entry_only="Heller Road",
         exit_only="I-95 Near Backlick Road",
@@ -165,6 +168,7 @@ CASES = [
         entry={"node_id": "182NO", "label": "Route 267"},
         direction="Northbound",
         price_table="trip_pricing_i95",
+        current_price_view="current_trip_pricing_i95",
         price_key_fragments=("1038",),
         entry_only="495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
         exit_only="495 Express Lanes End/George Wash. Mem. Pkwy.",
@@ -204,13 +208,24 @@ def test_single_leg_lookup(monkeypatch, case: Case):
     assert result["legs"][0]["observed_at"] == _OBSERVED_AT.isoformat()
 
 
-def test_price_query_selects_the_vdot_observation_timestamp(case: Case):
-    price_sql = {
-        "i66_route": i66_mod._I66_PRICE_SQL,
-        "i95_route": i95_mod._I95_PRICE_SQL,
-        "i495_route": i495_mod._I495_PRICE_SQL,
+def test_price_queries_select_the_vdot_observation_timestamp(case: Case):
+    price_sqls = {
+        "i66_route": (i66_mod._CURRENT_I66_PRICE_SQL, i66_mod._I66_PRICE_SQL),
+        "i95_route": (i95_mod._CURRENT_I95_PRICE_SQL, i95_mod._I95_PRICE_SQL),
+        "i495_route": (i495_mod._CURRENT_I495_PRICE_SQL, i495_mod._I495_PRICE_SQL),
     }[case.name]
-    assert "calculated_at" in price_sql
+    assert all("calculated_at" in price_sql for price_sql in price_sqls)
+
+
+def test_current_price_uses_the_vdot_view(monkeypatch, case: Case):
+    conn = FakeConnection([case.row])
+    monkeypatch.setattr(case.module, "_env_connect", lambda: conn)
+    case.tool(case.origin, case.destination)
+    price_sql, params = conn.cur.queries[0]
+    assert case.current_price_view in price_sql
+    assert "trip_pricing_i95_live" not in price_sql
+    assert params is not None
+    assert "at_time" not in params
 
 
 def test_label_lookup_is_case_insensitive(monkeypatch, case: Case):
@@ -234,18 +249,23 @@ def test_price_not_found_is_a_hard_error(monkeypatch, case: Case):
     result = case.tool(case.origin, case.destination)
     assert "error" in result
     assert result["valid_options"] == []
-    assert case.price_table in result["error"]
+    assert case.current_price_view in result["error"]
     for fragment in case.price_key_fragments:
         assert fragment in result["error"]
     assert "legs" not in result
 
 
 def test_at_time_is_passed_through_and_echoed(monkeypatch, case: Case):
-    _priced(monkeypatch, case)
+    conn = FakeConnection([case.row])
+    monkeypatch.setattr(case.module, "_env_connect", lambda: conn)
     result = case.tool(
         case.origin, case.destination, at_time="2026-01-15T09:00:00-05:00"
     )
     assert result["at_time"] == "2026-01-15T09:00:00-05:00"
+    price_sql, params = conn.cur.queries[0]
+    assert case.price_table in price_sql
+    assert params is not None
+    assert params["at_time"].isoformat() == "2026-01-15T09:00:00-05:00"
 
 
 def test_invalid_at_time_is_a_hard_error_before_any_db_call(monkeypatch, case: Case):

@@ -37,8 +37,9 @@ directly. These tools reopen DB access, but narrowly and deliberately, not
 a return to that surface:
 
 - **DB access is one fixed, parameterized SELECT query per tool against a
-  known table** (`trip_pricing_i66` for i66, `trip_pricing_i95` for both
-  i95 and i495), via a SELECT-only role (`pricing_reader`, `db/roles.sql`)
+  known VDOT relation** (`current_trip_pricing_i66`/`trip_pricing_i66` for
+  i66, `current_trip_pricing_i95`/`trip_pricing_i95` for both i95 and i495),
+  via a SELECT-only role (`pricing_reader`, `db/roles.sql`)
   with no INSERT/UPDATE and no access to anything else in the database —
   never free-form SQL, never a schema the caller can explore.
 - **No multi-hop routing, and no cross-corridor trips.** All three oracles
@@ -56,8 +57,8 @@ a return to that surface:
   trip either tool ever resolves has exactly one leg: there is no
   composite/multi-leg concept left in either tool.
 - **Pricing is a second stage, run only after a successful route
-  resolution.** Each resolved key is looked up in Postgres as of `at_time`;
-  see §3.
+  resolution.** An omitted `at_time` reads the current VDOT view; an explicit
+  time reads VDOT history. See §3.
 - **`at_time` is optional, defaulting to now (America/New_York).** Neither
   oracle encodes time-of-day, so it plays no role in route resolution — it
   only selects which published price row to use.
@@ -128,14 +129,15 @@ another round trip where that's possible:
 ## 3. Pricing and output shape
 
 Once a route resolves, the leg's key is looked up in Postgres, connecting
-as `pricing_reader` (`db/roles.sql`, `docs/poller-spec.md`). The price
-returned is **the most recently published row at or before `at_time`** —
-never "the price this instant." VDOT's own feed trails real-time by
+as `pricing_reader` (`db/roles.sql`, `docs/poller-spec.md`). With no
+`at_time`, the price comes from the VDOT current-price view; with an explicit
+`at_time`, it is **the most recently published row at or before that time**.
+Neither is "the price this instant." VDOT's own feed trails real-time by
 roughly 10–20 minutes (`docs/oracle-findings.md` §7), so even a default
-`at_time` of "now" answers "what did VDOT last publish," not "what is it
-right now." `priced_as_of` is the selected pricing interval end and
+request answers "what did VDOT last publish," not "what is it right now."
+`priced_as_of` is the selected pricing interval end and
 `observed_at` is VDOT's source `calculated_at` timestamp for that fare;
-the agent reports both rather than papering over the lag.
+the agent reports both in `America/New_York` rather than papering over the lag.
 
 i66 success:
 ```json
