@@ -25,9 +25,15 @@ jobs:
     # matches nova-toll-github-ci's trust policy (repo:OWNER/REPO:pull_request
     # is the same shape regardless of fork), so this check -- not the trust
     # policy -- is what actually keeps a random fork PR from touching prod
-    # RDS. github.event.pull_request.head.repo.full_name is event-payload
-    # data, not attacker-controlled string interpolation, so it's safe here.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # RDS. Dependabot has its own GitHub secret store, so it cannot receive
+    # the Tailscale OAuth credentials this job requires; regular CI still
+    # validates its dependency updates without exposing deployment access.
+    # github.event.pull_request fields are event-payload data, not
+    # attacker-controlled string interpolation, so they are safe here.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]')
     permissions:
       id-token: write
       contents: read
