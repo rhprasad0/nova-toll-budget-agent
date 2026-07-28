@@ -58,11 +58,14 @@ the follow-up section below, by decision, not oversight.
       10-minute cadence but far short of proving it. Run
       `feed_cadence.py watch --duration 360` and read the inter-change gaps.
 - [x] 3. Pinned the EventBridge tick (`infra/triggers.tf`: `rate(10 minutes)` →
-      `cron(0/10 * * * ? *)`). **Applies on merge to main**, then needs ≥24h
-      before re-reading. If `feed_cadence.py archive` then reports interval/tick
-      mismatches, VDOT's publish lands after the boundary — step to
-      `cron(1/10 ...)`, `cron(2/10 ...)` to find it. Leave it pinned at the
-      winning offset, never back to `rate()`.
+      `cron(0/10 * * * ? *)`). **Applied and verified live 2026-07-28 11:43Z.**
+      No stepping needed: VDOT's interval-*t* payload is already available at
+      the boundary. Objects `1150Z`/`1200Z`/`1210Z` each carry
+      `interval_end_at` equal to their own tick, so firing at `:00` captures
+      the current interval rather than the previous one. Fetch now lands at
+      **:00:40** instead of :03:32, cutting capture staleness from 13m32s to
+      **10m40s** — the residual 10 minutes is VDOT's own `calculated_at` lag
+      and is not ours to remove.
 - [x] 4. Write up: `docs/oracle-findings.md` §9, corrections to
       `docs/poller-spec.md`, `lambdas/express_fetcher/handler.py` and
       `lambdas/loader/parse_express_lanes.py` docstrings.
@@ -112,10 +115,13 @@ the I-66 series, not the series.
       bucket width so two polls of one feed can't overwrite each other. The
       historical gap stays permanent -- the fetcher never fetched those
       snapshots, so there is nothing to backfill from.
-      **Verify after merge**: `raw/feed=i66/` should show 10 objects per hour
-      on 6-minute keys (…0000Z, 0006Z, 0012Z), and consecutive
-      `interval_end_at` values in `trip_pricing_i66` should be 6 minutes apart
-      with no 12-minute gaps.
+      **Applied and verified live 2026-07-28 11:43Z.** First five fires:
+      11:48:36, 11:54:32, 12:00:37, 12:06:36, 12:12:32 — 6 minutes apart, on
+      6-minute keys (`1148Z`, `1154Z`, `1200Z`, …), phase-stable across the
+      12:00 hour boundary. `trip_pricing_i66` now shows five consecutive
+      intervals at a uniform 6-minute spacing with zero misses; the same
+      wall-clock window the previous day (old 10-minute tick) contains a
+      12-minute gap where interval 12:06 was published and never captured.
 
 ## Follow-up (not this task file's scope)
 

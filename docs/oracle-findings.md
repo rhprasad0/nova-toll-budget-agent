@@ -360,11 +360,14 @@ Supporting cadence measurements:
   nonetheless hour-truncated and never advances mid-hour -- which is why
   `trip_pricing_i95_live` keeps only one of every six captures (see
   `docs/poller-spec.md`, and the fix tracked in `docs/feed-cadence-tasks.md`).
-- **Our own capture added 3.5 minutes of pure staleness.** `rate(10 minutes)`
-  anchors to whenever the rule was created and had drifted to a rock-steady
-  212s past each boundary, making a captured VDOT price 13.5 minutes old on
-  arrival and 23.5 by the end of its tick. `infra/triggers.tf` is now pinned to
-  `cron(0/10 * * * ? *)`.
+- **Our own capture added 3.5 minutes of pure staleness -- now removed.**
+  `rate(10 minutes)` anchors to whenever the rule was created and had drifted
+  to a rock-steady 212s past each boundary, making a captured VDOT price 13.5
+  minutes old on arrival. `infra/triggers.tf` is now pinned to
+  `cron(0/10 * * * ? *)`, applied and verified live 2026-07-28: the fetch lands
+  at :00:40 and the payload still carries interval *t*, not *t-10*, so VDOT
+  publishes at or before its own boundary. Capture staleness is now 10m40s,
+  and the residual 10 minutes is VDOT's own `calculated_at` lag.
 
 One methodological trap worth recording: raw object *keys* are the fetcher's
 own clock floored by whatever `TICK_MINUTES` was compiled in at the time, and
