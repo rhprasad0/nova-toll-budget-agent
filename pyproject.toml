@@ -27,6 +27,16 @@ addopts = '-m "not live"'
 # scripts/build_zips.sh — not our code, and gitignored. Don't type-check it.
 exclude = ["**/node_modules", "**/__pycache__", ".venv", "infra/build"]
 
+# Most specific root first -- pyright uses the first environment whose root
+# matches, so a "." entry above these would swallow every file.
+#
+# scripts/feed_cadence.py sys.path-inserts lambdas/loader to reuse the feed
+# parsers. That dir must NOT go on the root path below: it holds a handler.py,
+# and lambdas/fetcher/tests imports its own `handler` module by that bare name.
+[[tool.pyright.executionEnvironments]]
+root = "scripts"
+extraPaths = ["lambdas/loader"]
+
 # agent/toll_agent.py and tests/* sys.path-insert their way to these flat
 # (no __init__.py) sibling dirs at runtime -- pyright can't see that, so it
 # needs the same dirs here to resolve the imports statically.
