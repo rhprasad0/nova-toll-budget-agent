@@ -1,5 +1,5 @@
 -- loader_writer: RDS IAM auth only (GRANT rds_iam), no password ever set.
--- Run after schema.sql has created trip_pricing_i95 and trip_pricing_i66.
+-- Run after schema.sql has created the tables and current-price views.
 
 CREATE ROLE loader_writer WITH LOGIN;
 GRANT rds_iam TO loader_writer;
@@ -11,4 +11,8 @@ GRANT SELECT, INSERT, UPDATE ON trip_pricing_i95, trip_pricing_i66, trip_pricing
 -- also holds INSERT/UPDATE it has no reason to carry into an agent process.
 CREATE ROLE pricing_reader WITH LOGIN;
 GRANT rds_iam TO pricing_reader;
-GRANT SELECT ON trip_pricing_i95, trip_pricing_i66, trip_pricing_i95_live TO pricing_reader;
+GRANT SELECT ON trip_pricing_i95, trip_pricing_i66 TO pricing_reader;
+GRANT SELECT ON current_trip_pricing_i95, current_trip_pricing_i66 TO pricing_reader;
+-- Keep instants UTC-backed in Postgres, but make every agent-facing timestamp
+-- use Northern Virginia's DST-aware local time (EST in winter, EDT in summer).
+ALTER ROLE pricing_reader SET TimeZone TO 'America/New_York';

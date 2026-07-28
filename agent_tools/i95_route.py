@@ -15,11 +15,10 @@ billed as genuinely separate tolled facilities with an untolled
 general-purpose-lanes gap between them, so a caller wanting a full
 cross-corridor journey makes two calls, one to each tool.
 
-Pricing is a second stage, run only after a successful route resolution:
-the resolved od_pair_id is looked up in trip_pricing_i95 over RDS, as the
-most recently published row at or before the caller's at_time (default:
-now, America/New_York) -- never "the price this instant"; see the at_time
-Args entry below and docs/oracle-findings.md section 7 for why. A row only
+Pricing is a second stage, run only after a successful route resolution: an
+omitted at_time reads the current VDOT view, while an explicit at_time reads
+trip_pricing_i95 history. Neither is "the price this instant"; see the
+at_time Args entry below and docs/oracle-findings.md section 7 for why. A row only
 counts as priceable if its lane is actually open: link_status must exactly
 match its own corridor's "{DIRECTION}_OPEN" (CLOSED/NO_DETERMINATION/
 *_CLOSING/*_OPENING all fail) -- docs/poller-spec.md's "Rate/status
@@ -103,6 +102,13 @@ _REQUIRED_LINK_STATUS = {
     "I-95-SB": "SOUTHBOUND_OPEN",
 }
 
+_CURRENT_I95_PRICE_SQL = """
+SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at,
+       calculated_at, link_status
+FROM current_trip_pricing_i95
+WHERE od_pair_id = %(od_pair_id)s
+"""
+
 _I95_PRICE_SQL = """
 SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at,
        calculated_at, link_status
@@ -114,20 +120,30 @@ LIMIT 1
 """
 
 
-def _price_i95_leg(cur, leg_key: dict, at_time: datetime) -> dict:
-    """Most recently published trip_pricing_i95 row at or before at_time.
+def _price_i95_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
+    """Current VDOT price, or VDOT history at an explicit time.
 
     Raises PricingError if there's no row at all, if corridor_name isn't
     one of the two this tool's oracle filter should ever produce (schema
     drift), or if the row's lane isn't open for its own corridor/direction.
     """
     od_pair_id = leg_key["od_pair_id"]
-    cur.execute(_I95_PRICE_SQL, {"od_pair_id": od_pair_id, "at_time": at_time})
+    cur.execute(
+        _I95_PRICE_SQL if at_time is not None else _CURRENT_I95_PRICE_SQL,
+        {
+            "od_pair_id": od_pair_id,
+            **({"at_time": at_time} if at_time is not None else {}),
+        },
+    )
     row = cur.fetchone()
     if row is None:
+        source = (
+            f"at or before {at_time.isoformat()} in trip_pricing_i95"
+            if at_time is not None
+            else "in current_trip_pricing_i95"
+        )
         raise _oracle_route.PricingError(
-            f"no price found for od_pair_id {od_pair_id} at or before "
-            f"{at_time.isoformat()} in trip_pricing_i95"
+            f"no price found for od_pair_id {od_pair_id} {source}"
         )
 
     _, corridor_name, rate, interval_end_at, calculated_at, link_status = row
@@ -161,7 +177,7 @@ def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict
     routing. A trip that crosses into the 495 Express Lanes is out of scope
     for this tool (see i495_route for that facility); this tool never
     synthesizes a cross-corridor combined price. The resolved leg is then
-    priced against trip_pricing_i95 over RDS -- a row only counts if its
+    priced against VDOT data over RDS -- a row only counts if its
     lane is actually open (link_status), never just because it has a rate.
 
     Args:
@@ -171,8 +187,9 @@ def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict
         at_time: ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an
             explicit UTC offset); a value with no offset is assumed
             America/New_York. Defaults to now (America/New_York) if omitted.
-            The price returned is the most recently *published* row at or
-            before this time, never "the price this instant" -- VDOT's own
+            If omitted, the current VDOT view is used; if supplied, the price
+            is the most recently *published* row at or before this time.
+            Neither is "the price this instant" -- VDOT's own
             feed trails real-time by roughly 10-20 minutes
             (docs/oracle-findings.md section 7), and this tool reports that
             lag honestly via priced_as_of and observed_at rather than

@@ -8,12 +8,11 @@ directly (96 pairs over 17 interchanges), so this is a single flat lookup,
 never pathfinding: "where an oracle exists, prefer reading it over
 re-deriving it" (docs/oracle-findings.md section 3).
 
-Pricing is a second stage, run only after a successful route resolution: the
-resolved (start_zone_id, end_zone_id) key is looked up in trip_pricing_i66
-over RDS, as the most recently published row at or before the caller's
-at_time (default: now, America/New_York) -- never "the price this instant";
-see the at_time Args entry below and docs/oracle-findings.md section 7 for
-why. A missing price is a hard error for the whole call.
+Pricing is a second stage, run only after a successful route resolution: an
+omitted at_time reads the current VDOT view, while an explicit at_time reads
+trip_pricing_i66 history. Neither is "the price this instant"; see the
+at_time Args entry below and docs/oracle-findings.md section 7 for why. A
+missing price is a hard error for the whole call.
 
 Unsure of the exact interchange label? Call find_toll_locations first --
 it turns a vague location or a misspelling into the exact label string
@@ -71,6 +70,14 @@ def _lookup(origin: str, destination: str) -> dict:
     )
 
 
+_CURRENT_I66_PRICE_SQL = """
+SELECT start_zone_id, end_zone_id, corridor_name, zone_toll_rate_usd,
+       interval_end_at, calculated_at
+FROM current_trip_pricing_i66
+WHERE start_zone_id = %(start_zone_id)s
+  AND end_zone_id = %(end_zone_id)s
+"""
+
 _I66_PRICE_SQL = """
 SELECT start_zone_id, end_zone_id, corridor_name, zone_toll_rate_usd,
        interval_end_at, calculated_at
@@ -83,26 +90,30 @@ LIMIT 1
 """
 
 
-def _price_i66_leg(cur, leg_key: dict, at_time: datetime) -> dict:
-    """Most recently published trip_pricing_i66 row at or before at_time.
+def _price_i66_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
+    """Current VDOT price, or VDOT history at an explicit time.
 
     i66 has no live-fallback source (unlike i95's trip_pricing_i95_live),
     so a miss here is always a hard error, never a default.
     """
     start_zone_id, end_zone_id = leg_key["start_zone_id"], leg_key["end_zone_id"]
     cur.execute(
-        _I66_PRICE_SQL,
+        _I66_PRICE_SQL if at_time is not None else _CURRENT_I66_PRICE_SQL,
         {
             "start_zone_id": start_zone_id,
             "end_zone_id": end_zone_id,
-            "at_time": at_time,
+            **({"at_time": at_time} if at_time is not None else {}),
         },
     )
     row = cur.fetchone()
     if row is None:
-        raise _oracle_route.PricingError(
-            f"no price found for zone pair ({start_zone_id}, {end_zone_id}) "
+        source = (
             f"at or before {at_time.isoformat()} in trip_pricing_i66"
+            if at_time is not None
+            else "in current_trip_pricing_i66"
+        )
+        raise _oracle_route.PricingError(
+            f"no price found for zone pair ({start_zone_id}, {end_zone_id}) {source}"
         )
     _, _, corridor_name, rate, interval_end_at, calculated_at = row
     return {
@@ -123,7 +134,7 @@ def i66_route(origin: str, destination: str, at_time: str | None = None) -> dict
     entry/exit trips (17 interchanges) -- a flat, direct lookup, never
     multi-hop routing. Every valid direction+entry+exit combination is
     already enumerated by VDOT itself. The resolved leg is then priced
-    against trip_pricing_i66 over RDS.
+    against VDOT pricing over RDS.
 
     Args:
         origin: Interchange label (e.g. 'Fairfax Drive'), case-insensitive,
@@ -132,8 +143,9 @@ def i66_route(origin: str, destination: str, at_time: str | None = None) -> dict
         at_time: ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an
             explicit UTC offset); a value with no offset is assumed
             America/New_York. Defaults to now (America/New_York) if omitted.
-            The price returned is the most recently *published* row at or
-            before this time, never "the price this instant" -- VDOT's own
+            If omitted, the current VDOT view is used; if supplied, the price
+            is the most recently *published* row at or before this time.
+            Neither is "the price this instant" -- VDOT's own
             feed trails real-time by roughly 10-20 minutes
             (docs/oracle-findings.md section 7), and this tool reports that
             lag honestly via each leg's priced_as_of and observed_at rather
