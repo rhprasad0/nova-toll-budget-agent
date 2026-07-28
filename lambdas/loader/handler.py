@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import urllib.parse
+from datetime import UTC, datetime
 from typing import Any, LiteralString, cast
 
 import boto3
@@ -25,7 +26,8 @@ logger.setLevel(logging.INFO)
 
 MAX_RAW_OBJECT_BYTES = 5 * 1024 * 1024
 _RAW_KEY_PATTERN = re.compile(
-    r"raw/feed=(?P<feed>i95|i66|i95-live)/date=\d{4}-\d{2}-\d{2}/\d{4}Z\.(?:csv|xml|json)\Z"
+    r"raw/feed=(?P<feed>i95|i66|i95-live)/date=(?P<date>\d{4}-\d{2}-\d{2})"
+    r"/(?P<tick>\d{4})Z\.(?:csv|xml|json)\Z"
 )
 
 # RDS CA bundle is dropped into the deployment zip next to this file by the
@@ -117,8 +119,14 @@ SET
     s3_key = EXCLUDED.s3_key -- gitleaks:allow (not a secret; Postgres EXCLUDED pseudo-table)
 """
 
+# Keyed on captured_at, NOT the source's observed_at: Transurban's "time" field
+# is truncated to the hour while its prices change every 10 minutes, so an
+# observed_at key collapsed each hour's six captures onto one row, last writer
+# wins. captured_at comes from the raw object's own key -- see
+# _captured_at_from_key and docs/feed-cadence-tasks.md.
 UPSERT_I95_LIVE_SQL = """
 INSERT INTO trip_pricing_i95_live (
+    captured_at,
     observed_at,
     od_pair_id,
     price_usd,
@@ -127,6 +135,7 @@ INSERT INTO trip_pricing_i95_live (
     direction,
     s3_key
 ) VALUES (
+    %(captured_at)s,
     %(observed_at)s,
     %(od_pair_id)s,
     %(price_usd)s,
@@ -135,8 +144,9 @@ INSERT INTO trip_pricing_i95_live (
     %(direction)s,
     %(s3_key)s
 )
-ON CONFLICT (observed_at, od_pair_id) DO UPDATE
+ON CONFLICT (captured_at, od_pair_id) DO UPDATE
 SET
+    observed_at = EXCLUDED.observed_at,
     price_usd = EXCLUDED.price_usd,
     status = EXCLUDED.status,
     road = EXCLUDED.road,
@@ -165,6 +175,27 @@ def _feed_from_key(key: str) -> str:
     return feed
 
 
+def _captured_at_from_key(key: str) -> datetime:
+    """raw/feed=i95-live/date=2026-07-28/1210Z.json -> 2026-07-28 12:10 UTC.
+
+    Deliberately the key's own tick rather than the object's S3 LastModified:
+    the replay workflow re-touches objects to regenerate ObjectCreated events,
+    which moves LastModified but never the key, so keying on this is what keeps
+    a re-load a true no-op instead of a duplicate row.
+
+    The tick is the fetcher's clock floored by whatever cadence that feed ran
+    at, so it is exact to the poll, not to the second -- and captures from the
+    2026-07-26 era, when the express fetcher ran a 30-minute tick, land on a
+    30-minute boundary. See docs/feed-cadence-tasks.md.
+    """
+    match = _RAW_KEY_PATTERN.fullmatch(key)
+    if not match:
+        raise ValueError(f"unsupported raw object key: {key}")
+    return datetime.strptime(
+        f"{match['date']} {match['tick']}", "%Y-%m-%d %H%M"
+    ).replace(tzinfo=UTC)
+
+
 def _validate_record(bucket: str, key: str, size: object) -> str:
     """Fail closed before downloading an S3 event payload."""
     if bucket != os.environ["RAW_BUCKET"]:
@@ -191,8 +222,16 @@ def _parse_payload(
 
 
 def _row_params(row: I95Row | I66Row | I95LiveRow, *, s3_key: str) -> dict[str, Any]:
+    """Dataclass fields plus the two values only the object's key can supply.
+
+    captured_at is injected for every feed rather than only i95-live: psycopg
+    ignores params the SQL never references, and each feed's params and SQL are
+    paired 1:1 through _FEED_CONFIG, so a feed-specific branch here would buy
+    nothing but a place to get the condition wrong.
+    """
     params = dataclasses.asdict(row)
     params["s3_key"] = s3_key
+    params["captured_at"] = _captured_at_from_key(s3_key)
     return params
 
 

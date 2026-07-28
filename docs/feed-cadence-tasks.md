@@ -125,10 +125,17 @@ the I-66 series, not the series.
 
 ## Follow-up (not this task file's scope)
 
-- [ ] Preserve every live poll: add the fetcher's own wall clock to
-      `trip_pricing_i95_live`'s key so the six polls per hour stop overwriting
-      each other, leaving the source's `time` field's meaning untouched.
-      Backfill from the retained raw objects.
+- [x] Preserve every live poll: `trip_pricing_i95_live` is re-keyed on a new
+      `captured_at` column (the tick parsed from the raw object's own S3 key)
+      instead of the source's hour-truncated `observed_at`. Schema 4.0.0.
+      **Forward-only by decision** — the pre-migration period stays an hourly
+      sample; the overwritten captures were not replayed, though their raw
+      payloads remain in S3 if anyone ever wants them.
+      Rollout is three ordered steps (`db/add_captured_at_to_i95_live.sql` →
+      loader deploy → `db/drop_captured_at_default_i95_live.sql`); the temporary
+      column default exists purely because `ON CONFLICT` needs the constraint
+      before the new loader runs, while a bare `NOT NULL` would break the old
+      one. Sequence and reasoning in `docs/poller-spec.md`.
 - [x] ~~Value-agreement test (VDOT stored vs Transurban live as pass/fail).~~
       **Dropped, not deferred**: task 1 showed the two sources are one series
       published twice, so a tolerance between them would assert the 10-minute

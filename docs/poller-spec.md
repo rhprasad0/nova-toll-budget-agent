@@ -159,7 +159,8 @@ CREATE TABLE trip_pricing_i66 (
 );
 
 CREATE TABLE trip_pricing_i95_live (
-    observed_at        timestamptz NOT NULL,
+    captured_at        timestamptz NOT NULL,      -- our poll tick, from s3_key
+    observed_at        timestamptz NOT NULL,      -- source's own label, hourly
     od_pair_id         integer NOT NULL,
     price_usd          numeric(10,2) NOT NULL,
     status             text,                      -- Transurban's own vocabulary; never mapped onto link_status
@@ -167,7 +168,7 @@ CREATE TABLE trip_pricing_i95_live (
     direction          text,                      -- "N"/"S", or NULL
     s3_key             text NOT NULL,
     ingested_at        timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (observed_at, od_pair_id)
+    PRIMARY KEY (captured_at, od_pair_id)
 );
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i66_zone_lookup_idx
@@ -177,10 +178,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
     ON trip_pricing_i95 (od_pair_id, interval_end_at DESC);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
-    ON trip_pricing_i95_live (od_pair_id, observed_at DESC);
+    ON trip_pricing_i95_live (od_pair_id, captured_at DESC);
 ```
 
-**Schema version: 3.2.0** (semver; bump *major* on an upsert-key or
+**Schema version: 4.0.0** (semver; bump *major* on an upsert-key or
 column-meaning change, *minor* on an additive column/index, *patch* on
 comments/formatting). Kept in sync with `db/schema.sql` and enforced by
 `lambdas/loader/tests/test_schema_contract.py`. Bumped from 2.3.0 → 3.0.0 for
@@ -189,6 +190,9 @@ the table split: both tables' keys and column sets changed. Bumped 3.0.0 →
 source" below) — purely additive, no existing table's keys or columns
 changed, so *minor*. Bumped 3.1.0 → 3.2.0 for the three pricing-lookup
 indexes below (`db/add_pricing_read_indexes.sql`) — also purely additive.
+Bumped 3.2.0 → 4.0.0 for re-keying `trip_pricing_i95_live` on the new
+`captured_at` column (`db/add_captured_at_to_i95_live.sql`) — an upsert-key
+change, so *major*, and the index above moved with it.
 
 Raw payloads live in S3 (`s3_key` is the provenance); no raw copy in the row.
 The source URL is derivable from the table itself, which is now the feed
@@ -213,13 +217,22 @@ now rather than a separate `UNIQUE` + surrogate `id` — nothing references the
 old surrogate `id` now that the agent surface is gone. Re-delivered S3 events
 and replays remain harmless either way.
 
+`trip_pricing_i95_live` — `(captured_at, od_pair_id)`, where `captured_at` is
+the tick parsed out of the raw object's own S3 key, **not** the source's
+`observed_at`. Transurban truncates its shared `time` field to the hour while
+its prices change every 10 minutes, so the original `(observed_at, od_pair_id)`
+key made each hour's six captures overwrite one another. Deriving the key
+component from the S3 key rather than the object's `LastModified` is what keeps
+a replay a no-op: the replay workflow re-touches objects, which moves
+`LastModified` but never the key.
+
 **Roles:**
 
 | Role | Grants | Used by |
 |---|---|---|
 | master (RDS-managed, Secrets Manager) | superuser-ish | schema migrations, admin |
 | `loader_writer` (IAM auth: `GRANT rds_iam`, no password set) | SELECT/INSERT/UPDATE on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | toll-loader Lambda |
-| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) |
+| `pricing_reader` (IAM auth: `GRANT rds_iam`, no password set) | SELECT only on `trip_pricing_i95`, `trip_pricing_i66`, `trip_pricing_i95_live` | `agent_tools/i66_route.py`/`i95_route.py`/`i495_route.py` (`docs/oracle-tools-spec.md`) — these read `trip_pricing_i95`/`trip_pricing_i66` only; nothing reads `trip_pricing_i95_live`, which is write-only today (its live-fallback consumer was deleted in `d0d306b`). The grant is kept for the ad-hoc analysis that motivated it. |
 
 The original `agent_readonly` role was abandoned along with the free-form
 SQL agent surface it served; see `docs/oracle-findings.md`. `pricing_reader`
@@ -261,16 +274,18 @@ live, **unauthenticated** snapshot at
   ("EventBridge tick → toll-fetcher" in `infra/triggers.tf`) as a second
   target — one schedule, both fetchers fire together, nothing to keep in sync
   by hand.
-- **The hourly `observed_at` discards 5 of every 6 polls.** Because
-  `UPSERT_I95_LIVE_SQL` keys on `(observed_at, od_pair_id)` with
-  `DO UPDATE`, and `observed_at` carries the source's hour-truncated `time`,
-  each hour's six captures overwrite one another — last writer wins. This was
-  previously described here as a "free idempotent no-op"; that is only true of
-  unchanged data, and the data changes every tick. Confirmed in prod: 59
-  stored snapshots across ~59 hours of coverage. Nothing is permanently lost —
-  every raw payload is retained in S3 with no lifecycle expiry — but
-  `trip_pricing_i95_live` is an hourly sample of a 10-minute series, not the
-  full record. Fix tracked in `docs/feed-cadence-tasks.md`.
+- **The hourly `observed_at` used to discard 5 of every 6 polls — fixed in
+  schema 4.0.0.** `UPSERT_I95_LIVE_SQL` keyed on `(observed_at, od_pair_id)`
+  with `DO UPDATE`, and `observed_at` carries the source's hour-truncated
+  `time`, so each hour's six captures overwrote one another — last writer wins.
+  This was once described here as a "free idempotent no-op"; that is only true
+  of unchanged data, and the data changes every tick. Confirmed in prod at the
+  time: 59 stored snapshots across ~59 hours of coverage. The table is now
+  keyed on `captured_at` (see "Upsert keys" above), so every poll persists.
+  **The pre-4.0.0 period is still an hourly sample** — the migration was
+  deliberately forward-only, and the overwritten captures were not replayed,
+  though their raw payloads do remain in S3 with no lifecycle expiry if anyone
+  ever wants them back.
 - **Some ids are only priceable when their lane direction is actually
   open.** At capture time, the 4 gap ids on the then-open direction (495 N)
   had distinct, plausible prices; the 12 on the then-closed direction
@@ -454,14 +469,38 @@ two-pass backfill closed the gap instead. Sequence as run:
 No backfill pass needed — `trip_pricing_i95_live` is a brand new table with
 no prior data to migrate. Sequence:
 
-1. Run `db/add_trip_pricing_i95_live.sql` against live RDS (creates the table
-   + grants `loader_writer` in one transaction).
+1. Run `db/schema.sql` (creates the table), then
+   `db/add_trip_pricing_i95_live.sql` for the `loader_writer` grant. That file
+   no longer carries its own `CREATE TABLE` — a stale duplicate would have
+   recreated the pre-4.0.0 primary key.
 2. `./scripts/build_zips.sh`, then `terraform apply` with all three
    `*_package_path`/`*_handler` vars set — deploys `toll-express-fetcher` and
    the updated `toll-loader` zip (now including `parse_express_lanes.py`) together.
 3. Confirm `trip_pricing_i95_live` gets rows within the first couple of
    10-minute poll cycles, and that at least one of the 16 known gap ids
    (1374–1389) appears.
+
+### Re-keying `trip_pricing_i95_live` on `captured_at` (schema 4.0.0)
+
+Against a database that already has the pre-4.0.0 table. The two constraints
+pull opposite ways — `ON CONFLICT (captured_at, …)` needs the constraint to
+exist before the new loader runs, and a `NOT NULL` column with no default
+breaks the *old* loader's INSERT — so the column carries a temporary default
+that step 3 removes:
+
+1. `psql "$NOVA_TOLL_URL" -f db/add_captured_at_to_i95_live.sql` — adds the
+   column with `DEFAULT now()`, backfills existing rows from each row's own
+   `s3_key`, asserts the new key is unique, then swaps the primary key and the
+   lookup index. Aborts without touching the table if the backfill would not
+   produce a unique key.
+2. Deploy the loader (merge → CI `terraform apply`).
+3. `psql "$NOVA_TOLL_URL" -f db/drop_captured_at_default_i95_live.sql`.
+
+Between 1 and 2 the old loader still inserts without `captured_at` and the
+default records load time instead of capture time. Those rows still land on
+distinct keys, so nothing overwrites even mid-rollout — but keep the window to
+minutes, and expect a handful of rows whose `captured_at` is seconds later than
+the tick it belongs to.
 
 ## Cost
 
