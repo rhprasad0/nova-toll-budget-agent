@@ -38,14 +38,13 @@ import sys
 
 import boto3
 import pytest
-
 from conftest import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
 
-import i66_route as i66_mod  # noqa: E402
-import i95_route as i95_mod  # noqa: E402
-import i495_route as i495_mod  # noqa: E402
+import i66_route as i66_mod
+import i95_route as i95_mod
+import i495_route as i495_mod
 
 pytestmark = pytest.mark.live
 

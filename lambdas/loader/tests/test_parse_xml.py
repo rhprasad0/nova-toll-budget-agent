@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 from conftest import SAMPLE_DATA_DIR
+from defusedxml.common import DefusedXmlException
 from parse_xml import parse_trip_pricing_xml
 
 SAMPLE_XML = (SAMPLE_DATA_DIR / "tollingTripPricing-I66.xml").read_text()
@@ -50,7 +51,7 @@ def test_no_opt_rows_raises():
 
 def test_entity_expansion_is_rejected():
     payload = """<!DOCTYPE data [<!ENTITY xxe 'boom'>]><data><opt /></data>"""
-    with pytest.raises(Exception):  # defusedxml raises a dedicated security exception
+    with pytest.raises(DefusedXmlException):
         parse_trip_pricing_xml(payload)
 
 

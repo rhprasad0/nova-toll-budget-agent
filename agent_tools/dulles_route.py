@@ -59,7 +59,7 @@ from strands import tool
 # "import _oracle_route" would fail under the dotted form. Ensuring our own
 # directory is on sys.path here works under both.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _oracle_route  # noqa: E402
+import _oracle_route
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ def _build_response(
     facility_totals = {name: Decimal("0.00") for name in _FACILITIES}
     for leg in legs:
         facility_totals[leg["facility"]] += Decimal(leg["price_usd"])
-    total = sum(facility_totals.values(), Decimal("0"))
+    total = sum(facility_totals.values(), Decimal(0))
     return {
         "origin": origin,
         "destination": destination,

@@ -159,7 +159,7 @@ def handler(event, context):
         cfg = FEEDS[feed]
         try:
             _poll_feed(feed, cfg, tokens[feed], now)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- each feed must be isolated
             logger.error(
                 "feed=%s poll failed: %s", feed, _scrub(str(exc), tokens[feed])
             )

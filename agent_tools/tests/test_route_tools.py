@@ -27,7 +27,8 @@ import i66_route as i66_mod
 import i95_route as i95_mod
 import i495_route as i495_mod
 import pytest
-from conftest import FakeConnection, connect_returning as _connect_returning
+from conftest import FakeConnection
+from conftest import connect_returning as _connect_returning
 
 _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)

@@ -91,8 +91,8 @@ def _dtr_pairs() -> list[dict]:
         for j in range(n):
             if i == j:
                 continue
-            entry_id, entry_label, entry_wb_toll, entry_eb_toll = DTR_NODES[i]
-            exit_id, exit_label, exit_wb_toll, exit_eb_toll = DTR_NODES[j]
+            entry_id, _entry_label, entry_wb_toll, entry_eb_toll = DTR_NODES[i]
+            exit_id, _exit_label, exit_wb_toll, exit_eb_toll = DTR_NODES[j]
             direction = "EB" if i < j else "WB"
             crosses_mainline = (i <= DTR_MAINLINE_AFTER_INDEX) != (
                 j <= DTR_MAINLINE_AFTER_INDEX

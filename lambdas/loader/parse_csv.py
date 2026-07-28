@@ -74,7 +74,10 @@ def _is_separator_row(row: list[str]) -> bool:
 
 
 def _parse_timestamp(value: str) -> datetime:
-    local_time = datetime.strptime(value.strip(), "%d/%m/%y %H:%M:%S")
+    # The source format has no offset; it is documented as America/New_York.
+    local_time = datetime.strptime(  # noqa: DTZ007
+        value.strip(), "%d/%m/%y %H:%M:%S"
+    )
     # America/New_York's fall-back DST transition makes one hour ambiguous
     # each November; fold=0 resolves to the first (pre-transition) offset.
     return local_time.replace(tzinfo=SOURCE_TZ, fold=0).astimezone(UTC)

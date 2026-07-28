@@ -39,6 +39,6 @@ def bounded_toll(value: object, field: str) -> Decimal:
         parsed = Decimal(bounded_text(value, field))
     except InvalidOperation as exc:
         raise ValueError(f"invalid {field}") from exc
-    if not parsed.is_finite() or not Decimal("0") <= parsed <= MAX_TOLL_USD:
+    if not parsed.is_finite() or not Decimal(0) <= parsed <= MAX_TOLL_USD:
         raise ValueError(f"{field} outside allowed range")
     return parsed

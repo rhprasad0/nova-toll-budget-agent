@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Capture VDOT's published I-66 Inside-the-Beltway interchange/toll-zone map.
 
 The i66 half of the toll graph (8 zone nodes, 20 zone-pair edges in

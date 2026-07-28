@@ -8,7 +8,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TypedDict, cast
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site" / "index.html"
 ORACLES = ROOT / "oracles"

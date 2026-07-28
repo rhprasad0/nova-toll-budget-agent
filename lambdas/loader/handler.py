@@ -16,7 +16,6 @@ from datetime import UTC, datetime
 from typing import Any, LiteralString, cast
 
 import boto3
-
 from parse_csv import I95Row, parse_trip_pricing_csv
 from parse_express_lanes import I95LiveRow, parse_express_lanes_live_json
 from parse_xml import I66Row, parse_trip_pricing_xml
@@ -194,7 +193,7 @@ def _validate_record(bucket: str, key: str, size: object) -> str:
         raise ValueError(f"unexpected source bucket: {bucket}")
     feed = _feed_from_key(key)
     if isinstance(size, bool) or not isinstance(size, (str, int)):
-        raise ValueError(f"invalid S3 object size for {key}")
+        raise TypeError(f"invalid S3 object size for {key}")
     try:
         size_int = int(size)
     except ValueError as exc:
@@ -252,16 +251,15 @@ def _load(
         user=os.environ["DB_USER"],
     )
     try:
-        with conn.transaction():
-            with conn.cursor() as cur:
-                for row in rows:
-                    # upsert_sql is one of the module-level UPSERT_*_SQL literals,
-                    # but _FEED_CONFIG's dict[str, ...] widens it to plain str --
-                    # cast back since psycopg's execute() requires LiteralString.
-                    cur.execute(
-                        cast(LiteralString, upsert_sql),
-                        _row_params(row, s3_key=s3_key),
-                    )
+        with conn.transaction(), conn.cursor() as cur:
+            for row in rows:
+                # upsert_sql is one of the module-level UPSERT_*_SQL literals,
+                # but _FEED_CONFIG's dict[str, ...] widens it to plain str --
+                # cast back since psycopg's execute() requires LiteralString.
+                cur.execute(
+                    cast(LiteralString, upsert_sql),
+                    _row_params(row, s3_key=s3_key),
+                )
     finally:
         conn.close()
 
