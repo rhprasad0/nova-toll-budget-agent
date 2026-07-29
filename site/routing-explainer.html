@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A visual guide to TollChat's directed toll-route planner.">
+<title>Inside TollChat's route planner</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07100f;
+    --panel: #0d1917;
+    --panel-2: #12211e;
+    --ink: #f2f5ed;
+    --muted: #9aaca6;
+    --line: #263a35;
+    --lime: #d7ff5f;
+    --mint: #63e6be;
+    --blue: #76c7ff;
+    --gold: #ffc857;
+    --coral: #ff7a70;
+    --purple: #c69cff;
+    --road: #152723;
+    --shadow: 0 28px 80px rgba(0, 0, 0, .3);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    min-width: 320px;
+    background:
+      radial-gradient(circle at 78% -10%, rgba(99, 230, 190, .13), transparent 34rem),
+      linear-gradient(180deg, #07100f 0, #081311 55%, #050b0a 100%);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  body::before {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+    background-size: 42px 42px;
+    content: "";
+    mask-image: linear-gradient(to bottom, black, transparent 75%);
+  }
+
+  a { color: inherit; }
+  button { font: inherit; }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .wrap { width: min(1180px, calc(100% - 2rem)); margin-inline: auto; }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    background: rgba(7, 16, 15, .82);
+    backdrop-filter: blur(18px);
+  }
+
+  .topbar .wrap {
+    display: flex;
+    min-height: 4rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .brand { display: flex; align-items: center; gap: .65rem; font-weight: 760; letter-spacing: -.02em; }
+  .brand-mark { width: .8rem; height: .8rem; border-radius: 50%; background: var(--lime); box-shadow: 0 0 20px rgba(215,255,95,.65); }
+  .topbar nav { display: flex; gap: 1rem; }
+  .topbar a { color: var(--muted); font-size: .82rem; text-decoration: none; }
+  .topbar a:hover, .topbar a:focus-visible { color: var(--ink); }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(18rem, .75fr);
+    gap: clamp(2rem, 7vw, 6rem);
+    align-items: end;
+    padding-block: clamp(5rem, 10vw, 9rem) clamp(4rem, 8vw, 7rem);
+  }
+
+  .eyebrow {
+    margin: 0 0 1rem;
+    color: var(--lime);
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  h1, h2, h3, p { margin-top: 0; }
+  h1 {
+    max-width: 12ch;
+    margin-bottom: 1.35rem;
+    font-size: clamp(3.2rem, 8vw, 7.3rem);
+    line-height: .88;
+    letter-spacing: -.075em;
+  }
+
+  h1 span { color: var(--lime); }
+  .lede { max-width: 42rem; margin-bottom: 0; color: var(--muted); font-size: clamp(1.05rem, 2vw, 1.35rem); line-height: 1.55; }
+  .hero-note { padding: 1.5rem; border: 1px solid var(--line); border-radius: 1.2rem; background: rgba(13,25,23,.72); box-shadow: var(--shadow); }
+  .hero-note p { margin: 0; color: var(--muted); line-height: 1.55; }
+  .hero-note strong { display: block; margin-bottom: .7rem; color: var(--ink); font-size: 1.05rem; }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    overflow: hidden;
+    margin-bottom: clamp(5rem, 9vw, 8rem);
+    border: 1px solid var(--line);
+    border-radius: 1.2rem;
+    background: var(--line);
+  }
+
+  .metric { padding: clamp(1.2rem, 3vw, 2rem); background: var(--panel); }
+  .metric strong { display: block; margin-bottom: .35rem; color: var(--lime); font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1; }
+  .metric span { color: var(--muted); font-size: .86rem; }
+
+  section { scroll-margin-top: 5.5rem; }
+  .section-head { display: grid; grid-template-columns: minmax(0, .7fr) minmax(18rem, 1.3fr); gap: 2rem; margin-bottom: 2.2rem; align-items: end; }
+  .section-number { color: var(--lime); font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+  h2 { margin-bottom: 0; font-size: clamp(2.2rem, 5vw, 4.2rem); line-height: .96; letter-spacing: -.055em; }
+  .section-copy { margin-bottom: .15rem; color: var(--muted); font-size: 1.05rem; line-height: 1.65; }
+
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: .8rem;
+    margin-bottom: clamp(5rem, 9vw, 8rem);
+  }
+
+  .flow-card {
+    position: relative;
+    min-height: 13rem;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: linear-gradient(145deg, rgba(18,33,30,.9), rgba(10,20,18,.9));
+  }
+
+  .flow-card:not(:last-child)::after {
+    position: absolute;
+    top: 2rem;
+    right: -.72rem;
+    z-index: 2;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-top: 1px solid var(--lime);
+    border-right: 1px solid var(--lime);
+    background: var(--panel);
+    content: "";
+    transform: rotate(45deg);
+  }
+
+  .flow-card b { display: inline-grid; width: 1.8rem; height: 1.8rem; margin-bottom: 2rem; place-items: center; border-radius: 50%; background: var(--lime); color: #10150b; font-size: .8rem; }
+  .flow-card h3 { margin-bottom: .5rem; font-size: 1rem; }
+  .flow-card p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.5; }
+
+  .network-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(17rem, .45fr);
+    overflow: hidden;
+    margin-bottom: clamp(5rem, 9vw, 8rem);
+    border: 1px solid var(--line);
+    border-radius: 1.35rem;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+
+  .network-canvas { min-width: 0; padding: 1rem; background: radial-gradient(circle at 50% 50%, rgba(99,230,190,.065), transparent 65%); }
+  #network-map { display: block; width: 100%; height: auto; min-height: 530px; }
+  .map-road { fill: none; stroke: #345048; stroke-width: 8; stroke-linecap: round; }
+  .map-road.internal { stroke: var(--mint); stroke-width: 4; stroke-dasharray: 8 9; }
+  .map-road.transfer { marker-start: url(#arrow-muted); marker-end: url(#arrow-muted); }
+  .map-label { fill: #71877f; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-anchor: middle; text-transform: uppercase; }
+  .road-label { fill: #9db0aa; font-size: 12px; text-anchor: middle; }
+  .network-node { cursor: pointer; outline: none; }
+  .network-node .halo { fill: transparent; stroke: transparent; stroke-width: 10; }
+  .network-node .body { fill: #10201c; stroke: var(--node-color); stroke-width: 2.5; transition: fill .18s ease, filter .18s ease, transform .18s ease; transform-box: fill-box; transform-origin: center; }
+  .network-node .node-title { fill: var(--ink); font-size: 16px; font-weight: 760; text-anchor: middle; pointer-events: none; }
+  .network-node .node-tool { fill: #8fa39d; font-family: ui-monospace, monospace; font-size: 10px; text-anchor: middle; pointer-events: none; }
+  .network-node:hover .body, .network-node:focus-visible .body, .network-node.active .body { fill: #1a302a; filter: drop-shadow(0 0 13px var(--node-color)); transform: scale(1.025); }
+  .network-node:focus-visible .halo { stroke: var(--lime); }
+
+  .network-detail { display: flex; min-height: 100%; flex-direction: column; justify-content: space-between; padding: clamp(1.4rem, 3vw, 2rem); border-left: 1px solid var(--line); background: #0a1513; }
+  .detail-tag { display: inline-flex; width: fit-content; margin-bottom: 1.2rem; padding: .35rem .55rem; border: 1px solid #355148; border-radius: 999px; color: var(--mint); font: 700 .68rem ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+  .network-detail h3 { margin-bottom: .65rem; font-size: 1.45rem; letter-spacing: -.03em; }
+  .network-detail p { color: var(--muted); line-height: 1.6; }
+  .detail-list { display: grid; gap: .7rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+  .detail-list li { padding-top: .7rem; border-top: 1px solid var(--line); color: #c6d0cc; font-size: .82rem; line-height: 1.45; }
+  .detail-hint { margin: 2rem 0 0 !important; color: #6f857e !important; font-size: .75rem; }
+
+  .walkthrough {
+    overflow: hidden;
+    margin-bottom: clamp(5rem, 9vw, 8rem);
+    border: 1px solid var(--line);
+    border-radius: 1.35rem;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+
+  .trip-title { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; padding: 1.25rem 1.4rem; border-bottom: 1px solid var(--line); }
+  .trip-title strong { font-size: .9rem; }
+  .trip-title span { color: var(--muted); font-size: .8rem; }
+  .trip-title .trip-arrow { color: var(--lime); }
+  .stepper { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+  .step-button { padding: 1rem; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
+  .step-button:last-child { border-right: 0; }
+  .step-button span { display: block; margin-bottom: .35rem; color: #71877f; font: 700 .66rem ui-monospace, monospace; text-transform: uppercase; }
+  .step-button:hover, .step-button:focus-visible { background: #12241f; color: var(--ink); outline: none; }
+  .step-button[aria-current="step"] { background: var(--lime); color: #10150b; }
+  .step-button[aria-current="step"] span { color: #405019; }
+
+  .walk-body { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(20rem, .95fr); }
+  .walk-visual { padding: clamp(1.4rem, 4vw, 3rem); }
+  .route-line { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .8rem; min-height: 9rem; }
+  .route-leg { position: relative; padding-top: 1.35rem; border-top: 5px solid var(--leg-color); opacity: .18; transition: opacity .2s ease, filter .2s ease; }
+  .route-leg::before { position: absolute; top: -.65rem; left: 0; width: .9rem; height: .9rem; border: 3px solid var(--panel); border-radius: 50%; background: var(--leg-color); content: ""; }
+  .route-leg::after { position: absolute; top: -.65rem; right: 0; width: .9rem; height: .9rem; border: 3px solid var(--panel); border-radius: 50%; background: var(--leg-color); content: ""; }
+  .route-leg b { display: block; margin-bottom: .3rem; font-size: .82rem; }
+  .route-leg small { color: var(--muted); line-height: 1.45; }
+  .connector { display: grid; width: 6rem; height: 6rem; place-items: center; border: 1px dashed var(--gold); border-radius: 50%; color: var(--gold); font: 800 .68rem ui-monospace, monospace; text-align: center; opacity: .18; transition: opacity .2s ease, box-shadow .2s ease; }
+  .route-piece.on { opacity: 1; filter: saturate(1.1); }
+  .connector.on { box-shadow: 0 0 28px rgba(255,200,87,.14); }
+  .queue { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.4rem; }
+  .queue-item { padding: .5rem .65rem; border: 1px solid var(--line); border-radius: .5rem; color: #779087; font: .72rem ui-monospace, monospace; }
+  .queue-item.on { border-color: #678a7e; background: #132820; color: var(--mint); }
+
+  .walk-copy { padding: clamp(1.4rem, 4vw, 3rem); border-left: 1px solid var(--line); background: #091311; }
+  .walk-copy .counter { margin-bottom: 1rem; color: var(--lime); font: 700 .72rem ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+  .walk-copy h3 { margin-bottom: .65rem; font-size: 1.55rem; letter-spacing: -.035em; }
+  .walk-copy p { color: var(--muted); line-height: 1.65; }
+  .walk-copy pre { overflow: auto; min-height: 12rem; margin: 1.4rem 0 0; padding: 1rem; border: 1px solid #1e332d; border-radius: .75rem; background: #050b0a; color: #c9dad4; font-size: .75rem; line-height: 1.55; white-space: pre-wrap; }
+
+  .guardrails { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; margin-bottom: 3rem; }
+  .guardrail { padding: 1.35rem; border: 1px solid var(--line); border-radius: 1rem; background: rgba(13,25,23,.74); }
+  .guardrail .icon { display: grid; width: 2rem; height: 2rem; margin-bottom: 1.4rem; place-items: center; border-radius: .55rem; background: #1c302a; color: var(--lime); font-weight: 900; }
+  .guardrail h3 { margin-bottom: .55rem; font-size: 1rem; }
+  .guardrail p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+
+  details { margin-bottom: clamp(5rem, 9vw, 8rem); border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); }
+  summary { padding: 1.2rem 1.4rem; cursor: pointer; font-weight: 720; }
+  details > div { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding: 0 1.4rem 1.4rem; border-top: 1px solid var(--line); }
+  details p { margin: 1.2rem 0 0; color: var(--muted); line-height: 1.6; }
+  details pre { overflow: auto; margin: 1.2rem 0 0; padding: 1rem; border-radius: .75rem; background: #050b0a; color: #c9dad4; font-size: .75rem; line-height: 1.55; }
+
+  footer { display: flex; justify-content: space-between; gap: 1rem; padding-block: 2rem 3rem; border-top: 1px solid var(--line); color: #698078; font-size: .75rem; }
+
+  @media (max-width: 900px) {
+    .hero, .section-head, .walk-body { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr 1fr; }
+    .flow-card:nth-child(2)::after { display: none; }
+    .network-shell { grid-template-columns: 1fr; }
+    .network-detail, .walk-copy { border-top: 1px solid var(--line); border-left: 0; }
+    .guardrails { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 620px) {
+    .topbar nav { display: none; }
+    .hero { padding-top: 4rem; }
+    .metrics, .flow, .guardrails, details > div { grid-template-columns: 1fr; }
+    .flow-card::after { display: none !important; }
+    .stepper { grid-template-columns: 1fr 1fr; }
+    .step-button:nth-child(2) { border-right: 0; }
+    .step-button:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    .route-line { grid-template-columns: 1fr; }
+    .connector { width: 4.6rem; height: 4.6rem; margin: auto; }
+    #network-map { min-height: 420px; }
+    footer { flex-direction: column; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><i class="brand-mark" aria-hidden="true"></i>TollChat route planner</div>
+    <nav aria-label="Page sections">
+      <a href="#idea">Core idea</a>
+      <a href="#network">Network</a>
+      <a href="#walkthrough">Walkthrough</a>
+      <a href="#guardrails">Guardrails</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero" aria-labelledby="page-title">
+    <div>
+      <p class="eyebrow">Visual system guide · July 2026</p>
+      <h1 id="page-title">It plans the calls. <span>It doesn’t price the trip.</span></h1>
+      <p class="lede">The new routing tool turns two exact road locations into the only oracle-supported sequence of pricing-tool calls and untolled handoffs. Think of it as air traffic control for four specialists.</p>
+    </div>
+    <aside class="hero-note">
+      <strong>The one-sentence mental model</strong>
+      <p>A small directed graph sits above the corridor tools, stops them at verified interchange boundaries, and refuses any journey the committed evidence cannot connect.</p>
+    </aside>
+  </section>
+
+  <div class="metrics" aria-label="Routing network summary">
+    <div class="metric"><strong>5</strong><span>priced corridor graphs</span></div>
+    <div class="metric"><strong>8</strong><span>directed handoffs</span></div>
+    <div class="metric"><strong>$0</strong><span>prices calculated by the planner</span></div>
+  </div>
+
+  <section id="idea" aria-labelledby="idea-title">
+    <div class="section-head">
+      <div><span class="section-number">01 · Core idea</span><h2 id="idea-title">One route, four responsibilities.</h2></div>
+      <p class="section-copy">The agent resolves human language first. The planner then proves a route exists. Only after that may the specialized tools fetch or calculate prices.</p>
+    </div>
+    <div class="flow" role="list" aria-label="Routing pipeline">
+      <article class="flow-card" role="listitem"><b>1</b><h3>Resolve exact labels</h3><p>The agent maps “Dumfries” or “Tysons” to a priced corridor and an exact oracle label.</p></article>
+      <article class="flow-card" role="listitem"><b>2</b><h3>Validate direction</h3><p>The origin must be entry-capable and the destination exit-capable. Similar names are not interchangeable.</p></article>
+      <article class="flow-card" role="listitem"><b>3</b><h3>Search proven edges</h3><p>Breadth-first search considers only direct oracle pairs and the eight committed one-way handoffs.</p></article>
+      <article class="flow-card" role="listitem"><b>4</b><h3>Return a call plan</h3><p>Priced legs name the allowed tool. Connector steps describe a $0 boundary and are never priced.</p></article>
+    </div>
+  </section>
+
+  <section id="network" aria-labelledby="network-title">
+    <div class="section-head">
+      <div><span class="section-number">02 · The graph</span><h2 id="network-title">A deliberately small road network.</h2></div>
+      <p class="section-copy">Corridors contain hundreds of valid origin–destination pairs. The planner treats those dense internal maps as a simple “can this tool price this leg?” check, then searches a tiny handoff graph between them.</p>
+    </div>
+
+    <div class="network-shell">
+      <div class="network-canvas">
+        <svg id="network-map" viewBox="0 0 900 570" role="img" aria-labelledby="network-map-title network-map-desc">
+          <title id="network-map-title">The TollChat directed routing network</title>
+          <desc id="network-map-desc">Five priced corridors connected by four bidirectional interchange relationships, represented as eight directed handoffs.</desc>
+          <defs>
+            <marker id="arrow-muted" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#789087"/>
+            </marker>
+          </defs>
+
+          <text x="450" y="35" class="map-label">priced internally</text>
+          <path class="map-road internal" d="M190 135 C250 75 320 75 380 135"/>
+          <text x="285" y="88" class="road-label">one dulles_route call</text>
+
+          <path class="map-road transfer" d="M430 150 C515 140 570 170 620 235"/>
+          <text x="548" y="162" class="road-label">Route 267</text>
+          <path class="map-road transfer" d="M660 290 C720 325 750 360 770 408"/>
+          <text x="752" y="340" class="road-label">Springfield</text>
+          <path class="map-road transfer" d="M430 415 C520 405 575 360 620 290"/>
+          <text x="545" y="395" class="road-label">I-66 / I-495</text>
+          <path class="map-road transfer" d="M395 185 C420 255 420 335 395 400"/>
+          <text x="454" y="290" class="road-label">Access Highway</text>
+
+          <g class="network-node" tabindex="0" role="button" aria-label="Dulles Greenway details" data-node="greenway" style="--node-color:var(--purple)" transform="translate(55 105)">
+            <rect class="halo" x="0" y="0" width="170" height="80" rx="18"/>
+            <rect class="body" x="5" y="5" width="160" height="70" rx="14"/>
+            <text class="node-title" x="85" y="34">Greenway</text>
+            <text class="node-tool" x="85" y="54">dulles_route</text>
+          </g>
+          <g class="network-node" tabindex="0" role="button" aria-label="Dulles Toll Road details" data-node="dulles" style="--node-color:var(--mint)" transform="translate(340 105)">
+            <rect class="halo" x="0" y="0" width="180" height="80" rx="18"/>
+            <rect class="body" x="5" y="5" width="170" height="70" rx="14"/>
+            <text class="node-title" x="90" y="34">Toll Road</text>
+            <text class="node-tool" x="90" y="54">dulles_route</text>
+          </g>
+          <g class="network-node active" tabindex="0" role="button" aria-label="I-495 Express Lanes details" data-node="i495" style="--node-color:var(--gold)" transform="translate(585 225)">
+            <rect class="halo" x="0" y="0" width="180" height="80" rx="18"/>
+            <rect class="body" x="5" y="5" width="170" height="70" rx="14"/>
+            <text class="node-title" x="90" y="34">I-495</text>
+            <text class="node-tool" x="90" y="54">i495_route</text>
+          </g>
+          <g class="network-node" tabindex="0" role="button" aria-label="I-66 Inside the Beltway details" data-node="i66" style="--node-color:var(--blue)" transform="translate(340 385)">
+            <rect class="halo" x="0" y="0" width="180" height="80" rx="18"/>
+            <rect class="body" x="5" y="5" width="170" height="70" rx="14"/>
+            <text class="node-title" x="90" y="34">I-66 ITB</text>
+            <text class="node-tool" x="90" y="54">i66_route</text>
+          </g>
+          <g class="network-node" tabindex="0" role="button" aria-label="I-95 and I-395 Express Lanes details" data-node="i95" style="--node-color:var(--coral)" transform="translate(710 400)">
+            <rect class="halo" x="0" y="0" width="180" height="80" rx="18"/>
+            <rect class="body" x="5" y="5" width="170" height="70" rx="14"/>
+            <text class="node-title" x="90" y="34">I-95 / 395</text>
+            <text class="node-tool" x="90" y="54">i95_route</text>
+          </g>
+
+          <g transform="translate(80 520)">
+            <line x1="0" y1="0" x2="55" y2="0" class="map-road internal"/>
+            <text x="70" y="4" class="road-label" text-anchor="start">priced inside one tool</text>
+            <line x1="260" y1="0" x2="315" y2="0" class="map-road transfer"/>
+            <text x="330" y="4" class="road-label" text-anchor="start">two one-way $0 handoffs</text>
+          </g>
+        </svg>
+      </div>
+      <aside class="network-detail" aria-live="polite">
+        <div>
+          <span class="detail-tag" id="detail-tag">Selected corridor</span>
+          <h3 id="detail-title">I‑495 Express Lanes</h3>
+          <p id="detail-copy">The network’s central bridge. Its own oracle proves which entry can reach which exit; separate handoffs connect it to I‑95, I‑66, and the Dulles Toll Road.</p>
+          <ul class="detail-list" id="detail-list">
+            <li><strong>Pricing tool:</strong> i495_route</li>
+            <li><strong>Handoffs:</strong> Springfield, I‑66/I‑495, Route 267</li>
+            <li><strong>Direction:</strong> encoded by distinct oracle node IDs</li>
+          </ul>
+        </div>
+        <p class="detail-hint">Select a corridor in the diagram. Keyboard: Tab, then Enter or Space.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section id="walkthrough" aria-labelledby="walkthrough-title">
+    <div class="section-head">
+      <div><span class="section-number">03 · Guided trace</span><h2 id="walkthrough-title">Dumfries to Westpark, without overshooting.</h2></div>
+      <p class="section-copy">This is the failure mode that justified the planner: I‑95 can return a valid price beyond the correct turn. A successful price is not proof that the road boundary is right.</p>
+    </div>
+
+    <div class="walkthrough">
+      <div class="trip-title">
+        <strong>Courthouse Road / Route 630</strong>
+        <span>on I‑95</span><span class="trip-arrow">→</span>
+        <strong>Westpark Drive</strong><span>on I‑495</span>
+      </div>
+      <div class="stepper" role="group" aria-label="Walkthrough steps">
+        <button class="step-button" data-step="0" aria-current="step"><span>Step 1</span>Resolve</button>
+        <button class="step-button" data-step="1"><span>Step 2</span>Validate</button>
+        <button class="step-button" data-step="2"><span>Step 3</span>Search</button>
+        <button class="step-button" data-step="3"><span>Step 4</span>Emit plan</button>
+      </div>
+      <div class="walk-body">
+        <div class="walk-visual">
+          <div class="route-line" aria-label="Planned route diagram">
+            <div class="route-leg route-piece" data-on="2" style="--leg-color:var(--coral)">
+              <b>I‑95 priced leg</b>
+              <small>Courthouse Road → node 206ND</small>
+            </div>
+            <div class="connector route-piece" data-on="2">SPRINGFIELD<br>$0</div>
+            <div class="route-leg route-piece" data-on="3" style="--leg-color:var(--gold)">
+              <b>I‑495 priced leg</b>
+              <small>node 192NO → Westpark Drive</small>
+            </div>
+          </div>
+          <div class="queue" aria-label="Search frontier">
+            <span class="queue-item" data-on="0">user phrase</span>
+            <span class="queue-item" data-on="1">(i95, Courthouse)</span>
+            <span class="queue-item" data-on="2">(i495, 192NO)</span>
+            <span class="queue-item" data-on="3">destination found</span>
+          </div>
+        </div>
+        <div class="walk-copy" aria-live="polite">
+          <div class="counter" id="walk-counter">Step 1 of 4</div>
+          <h3 id="walk-title">Resolve human language</h3>
+          <p id="walk-copy">Before the planner runs, the agent maps the request to exact priced-oracle labels and corridor IDs. The planning tool intentionally does no fuzzy matching.</p>
+          <pre id="walk-code">"Dumfries" → {
+  corridor: "i95",
+  label: "Courthouse Road/Route 630"
+}
+
+"Westpark" → {
+  corridor: "i495",
+  label: "Westpark Drive"
+}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="guardrails" aria-labelledby="guardrails-title">
+    <div class="section-head">
+      <div><span class="section-number">04 · Guardrails</span><h2 id="guardrails-title">The refusal is a feature.</h2></div>
+      <p class="section-copy">The planner is conservative by design. Missing evidence produces an error, not an imaginative detour or a suspiciously convenient fare.</p>
+    </div>
+    <div class="guardrails">
+      <article class="guardrail"><span class="icon">↔</span><h3>Direction survives duplicate names</h3><p>Connector boundaries use node IDs such as 206ND and 192NO, preserving entry and exit roles even when labels repeat.</p></article>
+      <article class="guardrail"><span class="icon">×</span><h3>No unsupported edge</h3><p>If neither a direct oracle pair nor a committed transfer reaches the destination, the result is an explicit “no supported directed route” error.</p></article>
+      <article class="guardrail"><span class="icon">$</span><h3>No invented price</h3><p>The planner returns instructions only. RDS-backed tools fetch dynamic tolls; dulles_route uses committed fare oracles. Connector steps stay $0.</p></article>
+    </div>
+
+    <details>
+      <summary>Under the hood: the entire search strategy</summary>
+      <div>
+        <p>The frontier begins with the exact origin. For each state, the planner first checks whether the destination is directly priceable. If not, it tries every outgoing transfer whose source is reachable from the current point. A visited set prevents cycles; breadth-first order returns the first supported sequence.</p>
+        <pre>frontier = [(origin_corridor, origin)]
+visited = {origin}
+
+while frontier:
+    state = frontier.pop(0)
+    if destination_is_directly_priceable(state):
+        return priced_step
+
+    for transfer in NETWORK_TRANSFERS:
+        if transfer_source_is_priceable(state):
+            frontier.append(
+                priced_leg
+                + zero_dollar_connector
+                + transfer_target
+            )
+
+return "no oracle-supported directed route"</pre>
+      </div>
+    </details>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>Local explainer · based on <span class="mono">plan_toll_route</span></span>
+  <span>The planner proves the route. The corridor tools prove the price.</span>
+</footer>
+
+<script>
+(() => {
+  const corridorDetails = {
+    greenway: {
+      title: "Dulles Greenway",
+      copy: "A committed fare-oracle corridor. Its junction with the Dulles Toll Road is handled inside dulles_route, so crossing that boundary does not create a separate $0 connector step.",
+      items: ["Pricing tool: dulles_route", "Internal neighbor: Dulles Toll Road", "Price source: committed fare oracle"]
+    },
+    dulles: {
+      title: "Dulles Toll Road",
+      copy: "The western hub. It can be priced together with the Greenway and has explicit two-way handoffs to I‑495 and I‑66 via different physical connectors.",
+      items: ["Pricing tool: dulles_route", "Handoffs: Route 267 and Access Highway", "Price source: committed fare oracle"]
+    },
+    i495: {
+      title: "I‑495 Express Lanes",
+      copy: "The network’s central bridge. Its own oracle proves which entry can reach which exit; separate handoffs connect it to I‑95, I‑66, and the Dulles Toll Road.",
+      items: ["Pricing tool: i495_route", "Handoffs: Springfield, I‑66/I‑495, Route 267", "Direction: encoded by distinct oracle node IDs"]
+    },
+    i66: {
+      title: "I‑66 Inside the Beltway",
+      copy: "A directed, dynamically priced corridor. The graph can enter or leave it at I‑495 and at the Dulles Airport Access Highway, but only through role-valid endpoints.",
+      items: ["Pricing tool: i66_route", "Handoffs: I‑66/I‑495 and Access Highway", "Price source: current RDS row"]
+    },
+    i95: {
+      title: "I‑95 / 395 Express Lanes",
+      copy: "A dynamically priced corridor with reversible availability. The planner handles topology; the pricing tool still decides whether the requested direction is currently open.",
+      items: ["Pricing tool: i95_route", "Handoff: Springfield interchange", "Availability: checked by the pricing tool"]
+    }
+  };
+
+  const nodes = [...document.querySelectorAll(".network-node")];
+  const detailTitle = document.getElementById("detail-title");
+  const detailCopy = document.getElementById("detail-copy");
+  const detailList = document.getElementById("detail-list");
+
+  const selectNode = node => {
+    nodes.forEach(candidate => candidate.classList.toggle("active", candidate === node));
+    const detail = corridorDetails[node.dataset.node];
+    detailTitle.textContent = detail.title;
+    detailCopy.textContent = detail.copy;
+    detailList.replaceChildren(...detail.items.map(text => {
+      const item = document.createElement("li");
+      const [label, value] = text.split(": ");
+      const strong = document.createElement("strong");
+      strong.textContent = `${label}: `;
+      item.append(strong, value);
+      return item;
+    }));
+  };
+
+  nodes.forEach(node => {
+    node.addEventListener("click", () => selectNode(node));
+    node.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectNode(node);
+      }
+    });
+  });
+
+  const walkthrough = [
+    {
+      title: "Resolve human language",
+      copy: "Before the planner runs, the agent maps the request to exact priced-oracle labels and corridor IDs. The planning tool intentionally does no fuzzy matching.",
+      code: `"Dumfries" → {\n  corridor: "i95",\n  label: "Courthouse Road/Route 630"\n}\n\n"Westpark" → {\n  corridor: "i495",\n  label: "Westpark Drive"\n}`
+    },
+    {
+      title: "Validate entry and exit roles",
+      copy: "The origin must be an entry on I‑95 and the destination must be an exit on I‑495. This check rejects unknown corridors, unknown labels, and directionally invalid endpoints before search begins.",
+      code: `validate(origin, role="entry")  → valid\nvalidate(destination, role="exit") → valid\n\nstate = ("i95", "Courthouse Road/Route 630")`
+    },
+    {
+      title: "Search only supported edges",
+      copy: "I‑95 cannot price an I‑495 destination directly. Breadth-first search finds a priceable I‑95 leg to node 206ND, then crosses the committed Springfield handoff to I‑495 node 192NO.",
+      code: `frontier:\n  ("i95", "Courthouse Road/Route 630")\n\nreachable transfer:\n  206ND → Springfield → 192NO\n\nnext frontier:\n  ("i495", "192NO")`
+    },
+    {
+      title: "Emit the only allowed call sequence",
+      copy: "The agent may now call exactly two pricing tools, in order. The connector is reported to the user at $0.00 and must never be sent to a pricing tool.",
+      code: `{\n  "steps": [\n    {"tool":"i95_route", "origin":"Courthouse Road/Route 630", "destination":"206ND"},\n    {"kind":"connector", "label":"Springfield interchange", "price_usd":"0.00"},\n    {"tool":"i495_route", "origin":"192NO", "destination":"Westpark Drive"}\n  ]\n}`
+    }
+  ];
+
+  const buttons = [...document.querySelectorAll(".step-button")];
+  const pieces = [...document.querySelectorAll(".route-piece, .queue-item")];
+  const counter = document.getElementById("walk-counter");
+  const title = document.getElementById("walk-title");
+  const copy = document.getElementById("walk-copy");
+  const code = document.getElementById("walk-code");
+
+  const showStep = index => {
+    buttons.forEach((button, position) => {
+      if (position === index) button.setAttribute("aria-current", "step");
+      else button.removeAttribute("aria-current");
+    });
+    pieces.forEach(piece => piece.classList.toggle("on", Number(piece.dataset.on) <= index));
+    counter.textContent = `Step ${index + 1} of ${walkthrough.length}`;
+    title.textContent = walkthrough[index].title;
+    copy.textContent = walkthrough[index].copy;
+    code.textContent = walkthrough[index].code;
+  };
+
+  buttons.forEach(button => button.addEventListener("click", () => showStep(Number(button.dataset.step))));
+  showStep(0);
+})();
+</script>
+</body>
+</html>

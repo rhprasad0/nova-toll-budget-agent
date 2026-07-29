@@ -3,14 +3,11 @@
 Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-28
 
 Four Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`,
-`i495_route`, and `dulles_route`, that resolve a human trip ("from X to
-Y", at an optional time) to its route and its price. A fifth tool,
-`find_toll_locations`, is not route-shaped and prices nothing -- it's a
-progressive-disclosure label search over the same committed oracles, so a
-caller can turn a vague human location or a misspelled label into the exact
-string these four expect before calling one of them; see
-`agent_tools/find_toll_locations.py`'s own docstring for its matching
-algorithm. Companion docs:
+`i495_route`, and `dulles_route`, resolve a human trip ("from X to Y", at an
+optional time) to its route and its price. `agent/toll_agent.py` embeds the
+priceable labels from the same committed route oracles in its system prompt,
+so it can match vague or misspelled user locations before calling one of the
+four tools. Companion docs:
 `docs/oracle-findings.md` (what the i66/i95/i495 oracles are and their
 known gaps, including §8 on why i95_route/i495_route don't resolve
 cross-corridor trips), `docs/poller-spec.md` (the pricing tables and the
@@ -267,9 +264,9 @@ mistaken for the final story.
   `tool_spec["name"]` and `tool_spec["inputSchema"]["json"]["required"]`
   for every tool — parametrized over all three RDS-backed tools in
   `test_route_tools.py`, and once each in `test_dulles_route.py` /
-  `test_find_toll_locations.py` — as a cheap check that Strands actually
-  parsed the docstring (required stays `{"origin", "destination"}` for the
-  route tools — `at_time` is optional).
+  `test_dulles_route.py` — as a cheap check that Strands actually parsed the
+  docstring (required stays `{"origin", "destination"}` for the route tools
+  — `at_time` is optional).
 - `agent_tools/tests/test_route_tools.py`: the behaviour all three
   RDS-backed tools share, table-driven over one `Case` per tool — label
   lookup, case-insensitivity, node-id fallback, unknown-identifier errors,

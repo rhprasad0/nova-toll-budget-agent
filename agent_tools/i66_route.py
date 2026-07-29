@@ -14,9 +14,8 @@ trip_pricing_i66 history. Neither is "the price this instant"; see the
 at_time Args entry below and docs/oracle-findings.md section 7 for why. A
 missing price is a hard error for the whole call.
 
-Unsure of the exact interchange label? Call find_toll_locations first --
-it turns a vague location or a misspelling into the exact label string
-this tool expects, across all corridors, without a failing call here.
+The calling agent matches vague locations to this tool's committed oracle
+labels before calling it.
 
 See docs/oracle-tools-spec.md for the full contract and known limitations.
 """

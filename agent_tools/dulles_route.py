@@ -35,9 +35,8 @@ Greenway does (peak vs off-peak, weekdays only), so at_time is needed to
 classify Greenway legs. It plays no role in route resolution, same as
 i66/i95's at_time.
 
-Unsure of the exact interchange label? Call find_toll_locations first --
-it turns a vague location or a misspelling into the exact label string
-this tool expects, across all corridors, without a failing call here.
+The calling agent matches vague locations to this tool's committed oracle
+labels before calling it.
 
 See docs/oracle-tools-spec.md for the full contract.
 """

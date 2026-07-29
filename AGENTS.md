@@ -8,7 +8,7 @@ Give 1-2 sentence explanations on more complex topics. Offer to make explanatory
 
 # Repo rules
 
-Perform work in new worktree branches instead of working in the main branch.
+Perform work in new worktree branches instead of working in the main branch. The main branch is protected, so new changes need to be in a PR and pass CI - but do not open a new PR or push without user authorization.
 
 # Secrets
 

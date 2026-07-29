@@ -19,8 +19,8 @@ tick to poll Transurban's own live Express Lanes snapshot, filling
 
 | Path | What |
 |---|---|
-| `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the five tools below into an answer — never touches RDS or SQL directly |
-| `agent_tools/` | five Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`), `find_toll_locations` turns a vague human place name into the exact label the other four expect |
+| `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the four pricing tools below into an answer — never touches RDS or SQL directly |
+| `agent_tools/` | four Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`). The agent embeds the priced route labels in its system prompt for fuzzy location matching. |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
 | `lambdas/express_fetcher` | secondary live-source poller (Transurban, no DB access itself — feeds the loader) |
 | `db/` | the per-feed schema and the `loader_writer` role |
@@ -55,3 +55,28 @@ free-form SQL and no traversal: `i66_route`/`i95_route`/`i495_route` each
 run one fixed, parameterized RDS query; `dulles_route` prices entirely
 from its own committed oracles, no database at all. See
 `docs/oracle-tools-spec.md`.
+
+## Local chat console
+
+For SSH-only agent testing, start the loopback console with:
+
+```sh
+uv run python agent/dev_chat.py
+```
+
+Startup discovers `DB_HOST`/`DB_PORT` from RDS and configures the read-only
+`pricing_reader` connection automatically. It requires the `nova-toll` AWS
+profile, Tailscale access, and a CA bundle built by `scripts/build_zips.sh`.
+
+From your workstation, tunnel it before opening `http://127.0.0.1:8000`:
+
+```sh
+ssh -L 8000:127.0.0.1:8000 <host>
+```
+
+The console keeps one conversation until **Reset chat** or server shutdown.
+Raw prompts, answers, tool messages, and metrics append to the ignored
+`.tollchat/telemetry.jsonl`; Strands trace spans also print to the server console.
+Inspect the JSONL with `tail -f .tollchat/telemetry.jsonl`.
+It uses the same read-only AWS/RDS environment as the live agent tests and is
+not a public preview.

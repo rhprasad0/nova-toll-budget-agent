@@ -85,10 +85,9 @@ after traffic arrives.
       raises uncaught — fine in tests, a raw crash in a live chat UI. Do
       alongside the Tier-1 network item since it touches the same
       connection path.
-- [ ] **Oracle freshness has no stated policy.** `i66.json`, `i95.json`,
-      `i66_otb.json` carry no `retrieved_at`; `i66_otb.json` has no
-      generator script at all; Dulles files are hand-transcribed
-      (`scripts/build_dulles_oracle.py`). Add `retrieved_at` to all five and
+- [ ] **Oracle freshness has no stated policy.** `i66.json` and `i95.json`
+      carry no `retrieved_at`; Dulles files are hand-transcribed
+      (`scripts/build_dulles_oracle.py`). Add `retrieved_at` to all four and
       write down a staleness policy (e.g. re-verify Dulles/Greenway
       quarterly) — no automation needed yet, just a stated commitment.
 

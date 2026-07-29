@@ -26,9 +26,8 @@ signal for the 495 Express Lanes (they aren't reversible, unlike the
 95/395 segment i95_route gates). A missing price is a hard error for the
 whole call; there is no live-fallback source for this table.
 
-Unsure of the exact interchange label? Call find_toll_locations first --
-it turns a vague location or a misspelling into the exact label string
-this tool expects, across all corridors, without a failing call here.
+The calling agent matches vague locations to this tool's committed oracle
+labels before calling it.
 
 See docs/oracle-tools-spec.md for the full contract and known limitations.
 """

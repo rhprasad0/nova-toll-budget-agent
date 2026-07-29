@@ -8,6 +8,7 @@ __pycache__/
 .claude/settings.local.json
 .hermes/
 .aws/
+.tollchat/
 
 # Terraform
 infra/.terraform/

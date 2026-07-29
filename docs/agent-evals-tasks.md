@@ -28,7 +28,7 @@ In scope:
 
 Out of scope:
 
-- correctness inside the five tools, already covered by `agent_tools/tests/`;
+- correctness inside the four tools, already covered by `agent_tools/tests/`;
 - whether the committed oracle topology matches physical roads;
 - production traffic, latency/SLOs, staging, shadowing, A/B rollout, and
   AgentCore trace sampling;
@@ -205,8 +205,7 @@ one-direction example is not evidence that entry/exit handling is symmetric.
 | I-66 ITB↔I-495 | both directions | use the documented I-495/Interstate 66 boundary with correct direction |
 | I-495↔Dulles Toll Road | both directions | split between I-495 and Dulles tools; mark lower-confidence evidence in results |
 | Toll Road↔Greenway | both directions | one `dulles_route` call; do not manually split an internally composite tool |
-| I-66 OTB | standalone and paired with a nearby priceable corridor | locatable is not priceable; no I-66 ITB substitution |
-| Unevidenced pair | I-66 OTB↔Dulles Toll Road, both directions | refuse without pricing or guessed junction |
+| Uncovered road | I-66 OTB, both directions | refuse; never substitute I-66 ITB or a nearby listed ramp |
 | Greenway↔I-495 | both directions after §3.1 is resolved | enforce the chosen policy and its negative control |
 | Disambiguation | vague, misspelled, shared-label, and unknown locations | resolve before pricing; refuse if resolution remains ambiguous |
 | Tool error | closed I-95 lane, missing rate, malformed result, and tool exception | preserve error meaning; never fabricate a fallback |
