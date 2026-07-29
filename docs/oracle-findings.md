@@ -230,7 +230,7 @@ A live bug report (a currently-`CLOSED` southbound leg still pricing
 normally) led to re-examining the joint itself rather than adding a third
 special case. expresslanes.com already treats the 495 Express Lanes and
 the 95/395 Express Lanes as separate products, billed as separate tolls
-with an untolled general-purpose gap between them — the code's own
+with a general-purpose gap whose junction price is unavailable — the code's own
 docstring said as much before this change. Splitting the *tools* to match
 that product split removes the joint entirely, rather than patching around
 it again:
@@ -286,6 +286,17 @@ facility classification. `i495_route` is new, and structurally the
 simplest of the three tools: single leg, no availability gate (verified
 live, `I-495-NB`/`I-495-SB` never report a real `link_status`), no
 live-fallback source.
+
+### Direction-aware junction pricing boundary (2026-07-29)
+
+The split remains, but the agent no longer treats Springfield/Van Dorn as a
+free connector or adds the two ordinary boundary fares. A dedicated
+`i95_junction_leg` reads both VDOT reversible-lane states at one requested
+time. Southbound 95 pricing ends or begins at Edsall; northbound pricing ends
+or begins at Franconia-Springfield. I-495 pricing independently begins or
+ends at I-495 Near Braddock Road. The road between those boundaries is
+unpriced, so cross-junction answers list known segment prices without a
+subtotal or complete total.
 
 ## 9. VDOT republishes Transurban's price on a 10-minute delay
 

@@ -34,7 +34,7 @@ sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
 
 from dulles_route import dulles_route
 from i66_route import i66_route
-from i95_route import i95_route
+from i95_route import i95_junction_leg, i95_route
 from i495_route import i495_route
 
 pytestmark = pytest.mark.live
@@ -216,104 +216,106 @@ def test_i95_route_refuses_historical_both_lanes_closure():
 
 
 @pytest.mark.parametrize(
-    "i95_origin, i95_destination, i95_od_pair_id, i95_status, i495_origin, i495_destination, i495_od_pair_id",
+    "location,movement,at_time,direction,boundary_node_id,od_pair_id,statuses",
     [
         (
             "US-1",
-            "Franconia-Springfield Parkway/Route 289",
+            "i95_to_i495",
+            "2026-07-29T10:10:00-04:00",
+            "Northbound",
+            "206ND",
             1130,
-            "NORTHBOUND_OPEN",
-            "I-495/I-95 Near Van Dorn Street",
-            "Westpark Drive",
-            1089,
+            ("NORTHBOUND_OPEN", "CLOSED"),
         ),
         (
-            "Franconia-Springfield Parkway/Route 289",
+            "Pentagon/Eads Street",
+            "i95_to_i495",
+            "2026-07-29T18:50:00-04:00",
+            "Southbound",
+            "227SD",
+            1203,
+            ("CLOSED", "SOUTHBOUND_OPEN"),
+        ),
+        (
+            "Pentagon/Eads Street",
+            "i495_to_i95",
+            "2026-07-29T10:10:00-04:00",
+            "Northbound",
+            "206NO",
+            1255,
+            ("NORTHBOUND_OPEN", "CLOSED"),
+        ),
+        (
             "US-1",
-            1168,
-            "SOUTHBOUND_OPEN",
-            "Westpark Drive",
-            "I-495/I-95 Near Van Dorn Street",
-            1062,
+            "i495_to_i95",
+            "2026-07-29T18:50:00-04:00",
+            "Southbound",
+            "200SO",
+            1151,
+            ("CLOSED", "SOUTHBOUND_OPEN"),
         ),
     ],
 )
-def test_i95_i495_junction_tools_match_shared_requested_time(
-    i95_origin,
-    i95_destination,
-    i95_od_pair_id,
-    i95_status,
-    i495_origin,
-    i495_destination,
-    i495_od_pair_id,
+def test_i95_junction_leg_selects_the_vdot_open_direction(
+    location,
+    movement,
+    at_time,
+    direction,
+    boundary_node_id,
+    od_pair_id,
+    statuses,
 ):
     row = _fetchone(
         """
-        WITH requested AS (
-            SELECT LEAST(
-                (SELECT interval_end_at FROM trip_pricing_i95
-                 WHERE od_pair_id = %s AND link_status = %s
-                   AND interval_end_at <= CURRENT_TIMESTAMP
-                 ORDER BY interval_end_at DESC LIMIT 1),
-                (SELECT interval_end_at FROM trip_pricing_i95
-                 WHERE od_pair_id = %s AND interval_end_at <= CURRENT_TIMESTAMP
-                 ORDER BY interval_end_at DESC LIMIT 1)
-            ) AS at_time
-        )
         SELECT
-            requested.at_time,
-            i95.od_pair_id, i95.corridor_name, i95.zone_toll_rate_usd, i95.interval_end_at,
-            i495.od_pair_id, i495.corridor_name, i495.zone_toll_rate_usd, i495.interval_end_at
-        FROM requested
-        CROSS JOIN LATERAL (
-            SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
-            FROM trip_pricing_i95
-            WHERE od_pair_id = %s AND link_status = %s
-              AND interval_end_at <= requested.at_time
-            ORDER BY interval_end_at DESC LIMIT 1
-        ) AS i95
-        CROSS JOIN LATERAL (
-            SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
-            FROM trip_pricing_i95
-            WHERE od_pair_id = %s AND interval_end_at <= requested.at_time
-            ORDER BY interval_end_at DESC LIMIT 1
-        ) AS i495
+            leg.zone_toll_rate_usd,
+            leg.interval_end_at,
+            nb.link_status,
+            sb.link_status
+        FROM trip_pricing_i95 AS leg
+        JOIN trip_pricing_i95 AS nb USING (interval_end_at)
+        JOIN trip_pricing_i95 AS sb USING (interval_end_at)
+        WHERE leg.od_pair_id = %s
+          AND nb.od_pair_id = 1132
+          AND sb.od_pair_id = 1151
+          AND leg.interval_end_at = %s
         """,
-        (
-            i95_od_pair_id,
-            i95_status,
-            i495_od_pair_id,
-            i95_od_pair_id,
-            i95_status,
-            i495_od_pair_id,
-        ),
+        (od_pair_id, at_time),
     )
-    (
-        at_time,
-        i95_od,
-        i95_corridor,
-        i95_rate,
-        i95_as_of,
-        i495_od,
-        i495_corridor,
-        i495_rate,
-        i495_as_of,
-    ) = row
+    rate, interval_end_at, northbound_status, southbound_status = row
+    assert (northbound_status, southbound_status) == statuses
 
-    i95_result = i95_route(i95_origin, i95_destination, at_time=at_time.isoformat())
-    i495_result = i495_route(i495_origin, i495_destination, at_time=at_time.isoformat())
+    result = i95_junction_leg(location, movement, at_time=at_time)
 
-    _assert_price_at(i95_result, i95_rate, i95_as_of, at_time)
-    assert i95_result["legs"][0]["od_pair_id"] == i95_od
-    assert i95_result["legs"][0]["corridor_name"] == i95_corridor
-    assert i95_result["entry"]["label"] == i95_origin
-    assert i95_result["exit"]["label"] == i95_destination
+    assert result["pricing_status"] == "priced"
+    assert result["direction"] == direction
+    assert result["legs"][0]["od_pair_id"] == od_pair_id
+    assert result["legs"][0]["price_usd"] == str(rate)
+    assert result["legs"][0]["priced_as_of"] == interval_end_at.isoformat()
+    boundary_role = "exit" if movement == "i95_to_i495" else "entry"
+    assert result[boundary_role]["node_id"] == boundary_node_id
+    assert result["lane_statuses"] == {
+        "Northbound": northbound_status,
+        "Southbound": southbound_status,
+    }
 
-    _assert_price_at(i495_result, i495_rate, i495_as_of, at_time)
-    assert i495_result["legs"][0]["od_pair_id"] == i495_od
-    assert i495_result["legs"][0]["corridor_name"] == i495_corridor
-    assert i495_result["entry"]["label"] == i495_origin
-    assert i495_result["exit"]["label"] == i495_destination
+
+@pytest.mark.parametrize(
+    ("at_time", "statuses"),
+    [
+        ("2026-07-29T10:50:00-04:00", ("CLOSED", "CLOSED")),
+        ("2026-07-29T10:20:00-04:00", ("NORTHBOUND_CLOSING", "CLOSED")),
+    ],
+)
+def test_i95_junction_leg_fails_safe_when_no_direction_is_fully_open(at_time, statuses):
+    result = i95_junction_leg("US-1", "i95_to_i495", at_time=at_time)
+
+    assert result["pricing_status"] == "unavailable"
+    assert result["lane_statuses"] == {
+        "Northbound": statuses[0],
+        "Southbound": statuses[1],
+    }
+    assert "total_usd" not in result
 
 
 @pytest.mark.parametrize(

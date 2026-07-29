@@ -55,6 +55,14 @@ def _reference_reachable(origin_corridor, origin, destination_corridor, destinat
             and _same_location(corridor, destination, point)
         ) or _can_price(corridor, point, destination_corridor, destination):
             return True
+        if corridor == "i95" and destination_corridor != "i95":
+            state = ("i495", "191NO")
+            if state not in visited:
+                visited.add(state)
+                frontier.append(state)
+            continue
+        if corridor == "i495" and destination_corridor == "i95":
+            return True
         for transfer in NETWORK_TRANSFERS:
             source = transfer["from"]
             if not (
@@ -89,6 +97,16 @@ def _assert_plan_is_continuous(
                 result = _LOOKUPS[corridor](step["origin"], step["destination"])
                 assert "error" not in result
                 point = result["exit"]["node_id"]
+        elif step["kind"] == "junction":
+            if step["movement"] == "i95_to_i495":
+                assert corridor == "i95"
+                assert step["location"] == point
+                corridor, point = "i495", "191NO"
+            else:
+                assert corridor == "i495"
+                corridor, point = "i95", destination
+        elif step["kind"] == "unpriced":
+            continue
         else:
             transfers = [
                 transfer
@@ -100,6 +118,13 @@ def _assert_plan_is_continuous(
             assert len(transfers) == 1
             target = transfers[0]["to"]
             corridor, point = target["corridor"], target["node_id"]
+    if (
+        destination_corridor == "i495"
+        and plan["steps"]
+        and any(step.get("kind") == "junction" for step in plan["steps"])
+        and plan["steps"][-1].get("kind") == "unpriced"
+    ):
+        return
     assert corridor == destination_corridor or (
         {corridor, destination_corridor} <= _DULLES_CORRIDORS
         and _same_location(corridor, destination, point)
@@ -109,11 +134,10 @@ def _assert_plan_is_continuous(
 
 def test_system_prompt_contains_i95_i495_junction():
     prompt = build_system_prompt()
-    assert "206ND" in prompt
+    assert "Edsall" in prompt
     assert "Franconia-Springfield Parkway" in prompt
-    assert "192NO" in prompt
-    assert "Van Dorn Street" in prompt
-    assert "Springfield interchange" in prompt
+    assert "I-495 Near Braddock Road" in prompt
+    assert "unpriced junction" in prompt.casefold()
 
 
 def test_system_prompt_describes_curated_network_transfers():
@@ -174,6 +198,58 @@ def test_planner_uses_only_oracle_supported_i66_i495_steps():
     ]
 
 
+def test_planner_uses_unpriced_directional_i95_i495_junction_both_ways():
+    outbound = plan_toll_route("i95", "US-1", "i495", "Westpark Drive")
+    assert outbound["steps"] == [
+        {
+            "kind": "junction",
+            "tool": "i95_junction_leg",
+            "movement": "i95_to_i495",
+            "location": "US-1",
+            "i495_boundary": {
+                "label": "I-495 Near Braddock Road",
+                "node_id": "191NO",
+            },
+            "pricing": "unpriced between the selected 95 boundary and Braddock",
+        },
+        {
+            "kind": "priced",
+            "corridor": "i495",
+            "tool": "i495_route",
+            "origin": "191NO",
+            "destination": "Westpark Drive",
+        },
+    ]
+
+    inbound = plan_toll_route("i495", "Westpark Drive", "i95", "US-1")
+    assert inbound["steps"] == [
+        {
+            "kind": "priced",
+            "corridor": "i495",
+            "tool": "i495_route",
+            "origin": "Westpark Drive",
+            "destination": "191SD",
+        },
+        {
+            "kind": "junction",
+            "tool": "i95_junction_leg",
+            "movement": "i495_to_i95",
+            "location": "US-1",
+            "i495_boundary": {
+                "label": "I-495 Near Braddock Road",
+                "node_id": "191SD",
+            },
+            "pricing": "unpriced between the selected 95 boundary and Braddock",
+        },
+    ]
+
+
+def test_planner_omits_495_price_for_an_endpoint_inside_the_gap():
+    plan = plan_toll_route("i95", "US-1", "i495", "I-495/I-95 Near Van Dorn Street")
+    assert [step["kind"] for step in plan["steps"]] == ["junction", "unpriced"]
+    assert "do not call i495_route" in plan["steps"][-1]["reason"]
+
+
 def test_planner_uses_the_curated_i66_dulles_handoff():
     plan = plan_toll_route(
         "i66_itb",
@@ -229,19 +305,18 @@ def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
             "corridor": "i495",
             "tool": "i495_route",
             "origin": "182SO",
-            "destination": "192SD",
+            "destination": "191SD",
         },
         {
-            "kind": "connector",
-            "label": "Springfield interchange",
-            "price_usd": "0.00",
-        },
-        {
-            "kind": "priced",
-            "corridor": "i95",
-            "tool": "i95_route",
-            "origin": "206NO",
-            "destination": "Pentagon/Eads Street",
+            "kind": "junction",
+            "tool": "i95_junction_leg",
+            "movement": "i495_to_i95",
+            "location": "Pentagon/Eads Street",
+            "i495_boundary": {
+                "label": "I-495 Near Braddock Road",
+                "node_id": "191SD",
+            },
+            "pricing": "unpriced between the selected 95 boundary and Braddock",
         },
     ]
 
@@ -289,10 +364,10 @@ def test_planner_uses_an_alternate_handoff_when_the_short_path_is_unpriceable():
         "Fairfax Drive",
     )
     assert [step["label"] for step in plan["steps"] if step["kind"] == "connector"] == [
-        "Springfield interchange",
         "I-495/Route 267 interchange",
         "Dulles Airport Access Highway",
     ]
+    assert plan["steps"][0]["kind"] == "junction"
 
 
 def test_planner_matches_exhaustive_directed_oracle_reachability():
@@ -349,8 +424,15 @@ def test_planner_matches_exhaustive_directed_oracle_reachability():
 def test_system_prompt_states_the_overshoot_anti_example():
     prompt = build_system_prompt()
     assert "Washington D.C." in prompt
-    assert "Springfield interchange" in prompt
+    assert "I-495 Near Braddock Road" in prompt
     assert "NOT evidence the leg boundary is correct" in prompt
+    assert "assign it $0.00" in prompt
+    assert "**Known segment prices**" in prompt
+    assert "**Unpriced junction**" in prompt
+    assert "**Complete price unavailable**" in prompt
+    assert "Never calculate a subtotal or complete total" in prompt
+    assert "requires exactly one" in prompt
+    assert "Never skip it" in prompt
 
 
 def test_system_prompt_embeds_only_priced_location_labels():
@@ -442,6 +524,7 @@ def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
         tool["toolSpec"]["name"] for tool in request["toolConfig"]["tools"][:-1]
     ] == [
         "plan_toll_route",
+        "i95_junction_leg",
         "i95_route",
         "i495_route",
         "i66_route",

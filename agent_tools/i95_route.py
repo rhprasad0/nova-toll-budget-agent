@@ -10,10 +10,10 @@ matching expresslanes.com's own "95 Express Lanes" facility bundling 395
 too. "Where an oracle exists, prefer reading it over re-deriving it"
 (docs/oracle-findings.md section 3), and this tool never chains a 95/395
 leg onto a 495 leg to synthesize a cross-corridor trip -- see i495_route's
-module docstring and docs/oracle-findings.md section 8 for why: they're
-billed as genuinely separate tolled facilities with an untolled
-general-purpose-lanes gap between them, so a caller wanting a full
-cross-corridor journey makes two calls, one to each tool.
+module docstring and docs/oracle-findings.md section 8 for why.
+``i95_junction_leg`` handles the direction-aware 95 side of a
+cross-corridor trip and explicitly leaves the road to the Braddock I-495
+boundary unpriced.
 
 Pricing is a second stage, run only after a successful route resolution: an
 omitted at_time reads the current VDOT view, while an explicit at_time reads
@@ -39,6 +39,7 @@ See docs/oracle-tools-spec.md for the full contract and known limitations.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +54,8 @@ from strands import tool
 # sys.path here works under both.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _oracle_route
+
+logger = logging.getLogger(__name__)
 
 # ponytail: path assumes agent_tools/ sits one level under the repo root next
 # to oracles/, matching its current committed location. If this ever ships in
@@ -101,6 +104,18 @@ _REQUIRED_LINK_STATUS = {
     "I-95-SB": "SOUTHBOUND_OPEN",
 }
 
+_JUNCTION_BOUNDARIES = {
+    "Northbound": "Franconia-Springfield Parkway/Route 289",
+    "Southbound": "I-395 Near Edsall Road",
+}
+_JUNCTION_MOVEMENTS = {"i95_to_i495", "i495_to_i95"}
+_STATUS_OD_PAIR_IDS = {"Northbound": 1132, "Southbound": 1151}
+_I495_BOUNDARY = {
+    "label": "I-495 Near Braddock Road",
+    "entry_node_id": "191NO",
+    "exit_node_id": "191SD",
+}
+
 _CURRENT_I95_PRICE_SQL = """
 SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at,
        calculated_at, link_status
@@ -119,6 +134,17 @@ LIMIT 1
 """
 
 
+def _fetch_i95_row(cur, od_pair_id: int, at_time: datetime | None):
+    cur.execute(
+        _I95_PRICE_SQL if at_time is not None else _CURRENT_I95_PRICE_SQL,
+        {
+            "od_pair_id": od_pair_id,
+            **({"at_time": at_time} if at_time is not None else {}),
+        },
+    )
+    return cur.fetchone()
+
+
 def _price_i95_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
     """Current VDOT price, or VDOT history at an explicit time.
 
@@ -127,14 +153,7 @@ def _price_i95_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
     drift), or if the row's lane isn't open for its own corridor/direction.
     """
     od_pair_id = leg_key["od_pair_id"]
-    cur.execute(
-        _I95_PRICE_SQL if at_time is not None else _CURRENT_I95_PRICE_SQL,
-        {
-            "od_pair_id": od_pair_id,
-            **({"at_time": at_time} if at_time is not None else {}),
-        },
-    )
-    row = cur.fetchone()
+    row = _fetch_i95_row(cur, od_pair_id, at_time)
     if row is None:
         source = (
             f"at or before {at_time.isoformat()} in trip_pricing_i95"
@@ -165,6 +184,184 @@ def _price_i95_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
         "priced_as_of": interval_end_at.isoformat(),
         "observed_at": calculated_at.isoformat(),
     }
+
+
+def _junction_lookup(location: str, movement: str, direction: str) -> dict | None:
+    boundary = _JUNCTION_BOUNDARIES[direction]
+    origin, destination = (
+        (location, boundary) if movement == "i95_to_i495" else (boundary, location)
+    )
+    result = _lookup(origin, destination)
+    if "error" in result or result["direction"] != direction:
+        return None
+    return result
+
+
+def _lane_status(row, direction: str) -> str:
+    if row is None:
+        return "UNAVAILABLE"
+    expected_corridor = "I-95-NB" if direction == "Northbound" else "I-95-SB"
+    return row[5] if row[1] == expected_corridor else "UNAVAILABLE"
+
+
+@tool
+def i95_junction_leg(location: str, movement: str, at_time: str | None = None) -> dict:
+    """Price the usable 95/395 segment beside the unpriced 95/495 junction.
+
+    This tool is only for a trip crossing between the 95/395 and 495
+    Express Lanes. It checks both reversible I-95 directions from VDOT at
+    one requested time. Exactly one direction must be fully open:
+    northbound uses Franconia-Springfield as the 95 boundary and southbound
+    uses Edsall. I-495 pricing separately begins or ends at I-495 Near
+    Braddock Road; the road between those boundaries is explicitly unpriced.
+
+    Args:
+        location: The trip's non-junction 95/395 ramp label or raw node id.
+        movement: ``i95_to_i495`` when leaving 95/395, or
+            ``i495_to_i95`` when entering 95/395.
+        at_time: Same ISO-8601 rules as ``i95_route``. Omit for VDOT's
+            current view or provide a time for VDOT history.
+
+    Returns:
+        dict: ``pricing_status`` is ``priced`` with the ordinary i95 route
+        and price fields when exactly one direction is open and the
+        location has a matching leg. Otherwise it is ``unavailable`` with
+        no monetary fields. Invalid inputs return the usual ``error`` and
+        ``valid_options`` envelope. This tool never prices the junction and
+        never reads Transurban live pricing.
+    """
+    if movement not in _JUNCTION_MOVEMENTS:
+        return {
+            "error": f"unknown junction movement {movement!r}",
+            "valid_options": sorted(_JUNCTION_MOVEMENTS),
+        }
+
+    role = "origin" if movement == "i95_to_i495" else "destination"
+    location_ids = _oracle_route.resolve(location, nodes=_NODES, label_idx=_LABEL_INDEX)
+    role_key = "entry" if role == "origin" else "exit"
+    role_ids = {p[role_key] for p in _PAIRS}
+    if not set(location_ids) & role_ids:
+        return {
+            "error": f"{location!r} is not a valid {role} on i95",
+            "valid_options": sorted(
+                {
+                    _NODES[p["entry" if role == "origin" else "exit"]]["label"]
+                    for p in _PAIRS
+                }
+            ),
+        }
+
+    try:
+        resolved_at_time = _oracle_route.resolve_at_time(at_time)
+    except ValueError as e:
+        return {
+            "error": f"invalid at_time {at_time!r}: {e}",
+            "valid_options": [],
+        }
+
+    conn = _env_connect()
+    try:
+        with conn.cursor() as cur:
+            rows = {
+                direction: _fetch_i95_row(
+                    cur,
+                    od_pair_id,
+                    resolved_at_time if at_time is not None else None,
+                )
+                for direction, od_pair_id in _STATUS_OD_PAIR_IDS.items()
+            }
+            statuses = {
+                direction: _lane_status(row, direction)
+                for direction, row in rows.items()
+            }
+            intervals = {row[3] for row in rows.values() if row is not None}
+            open_directions = [
+                direction
+                for direction, status in statuses.items()
+                if status
+                == (
+                    "NORTHBOUND_OPEN"
+                    if direction == "Northbound"
+                    else "SOUTHBOUND_OPEN"
+                )
+            ]
+
+            reason = None
+            if any(status == "UNAVAILABLE" for status in statuses.values()):
+                reason = "VDOT lane status is unavailable for one or both directions"
+            elif len(intervals) != 1:
+                reason = "VDOT lane statuses are not from one common interval"
+            elif len(open_directions) != 1:
+                reason = "I-95 does not have exactly one fully open direction"
+
+            route = (
+                None
+                if reason
+                else _junction_lookup(location, movement, open_directions[0])
+            )
+            if reason is None and route is None:
+                reason = (
+                    f"{location!r} has no {open_directions[0].lower()} "
+                    "95/395 segment to the junction boundary"
+                )
+
+            priced_leg = None
+            if reason is None:
+                assert route is not None
+                try:
+                    priced_leg = _price_i95_leg(
+                        cur,
+                        route["legs"][0],
+                        resolved_at_time if at_time is not None else None,
+                    )
+                    status_interval = next(iter(intervals)).isoformat()
+                    if priced_leg["priced_as_of"] != status_interval:
+                        reason = (
+                            "VDOT lane status and junction-leg price are not "
+                            "from one common interval"
+                        )
+                except _oracle_route.PricingError as e:
+                    reason = str(e)
+    finally:
+        conn.close()
+
+    common = {
+        "pricing_status": "unavailable" if reason else "priced",
+        "movement": movement,
+        "location": location,
+        "at_time": resolved_at_time.isoformat(),
+        "lane_statuses": statuses,
+        "i495_boundary": _I495_BOUNDARY,
+    }
+    if reason:
+        response = {**common, "reason": reason}
+        logger.info(
+            "i95_junction_leg unavailable location=%r movement=%s reason=%r",
+            location,
+            movement,
+            reason,
+        )
+        return response
+
+    assert route is not None and priced_leg is not None
+    response = {
+        **route,
+        **common,
+        "junction_boundary": {
+            "label": _JUNCTION_BOUNDARIES[open_directions[0]],
+            "direction": open_directions[0],
+        },
+        "legs": [priced_leg],
+        "total_usd": priced_leg["price_usd"],
+    }
+    logger.info(
+        "i95_junction_leg priced location=%r movement=%s direction=%s leg=%s",
+        location,
+        movement,
+        open_directions[0],
+        priced_leg,
+    )
+    return response
 
 
 @tool

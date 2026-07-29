@@ -19,7 +19,7 @@ import i95_route as i95_mod
 import pytest
 from conftest import FakeConnection
 from conftest import connect_returning as _connect_returning
-from i95_route import i95_route
+from i95_route import i95_junction_leg, i95_route
 
 _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)
@@ -32,6 +32,17 @@ _EDSALL_TO_SEMINARY_ROW = (
     _OBSERVED_AT,
     "NORTHBOUND_OPEN",
 )
+
+
+def _row(od_pair_id, corridor, status, rate="6.75", at=_PRICED_AS_OF):
+    return (
+        od_pair_id,
+        corridor,
+        Decimal(rate),
+        at,
+        _OBSERVED_AT,
+        status,
+    )
 
 
 def test_unrecognized_corridor_name_is_a_hard_error(monkeypatch):
@@ -217,3 +228,164 @@ def test_label_shared_by_multiple_node_ids_still_resolves_unambiguously(monkeypa
     result = i95_route("I-395 Near Edsall Road", "Seminary Road")
     assert result["entry"]["node_id"] == "221NO"
     assert result["legs"][0]["od_pair_id"] == 1266
+
+
+def test_junction_leg_selects_northbound_franconia(monkeypatch):
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", "NORTHBOUND_OPEN"),
+            _row(1151, "I-95-SB", "CLOSED"),
+            _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70"),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i95_to_i495")
+
+    assert result["pricing_status"] == "priced"
+    assert result["direction"] == "Northbound"
+    assert result["exit"]["node_id"] == "206ND"
+    assert result["junction_boundary"] == {
+        "label": "Franconia-Springfield Parkway/Route 289",
+        "direction": "Northbound",
+    }
+    assert result["i495_boundary"]["entry_node_id"] == "191NO"
+    assert result["total_usd"] == "2.70"
+    assert all("trip_pricing_i95_live" not in sql for sql, _ in conn.cur.queries)
+
+
+def test_junction_leg_selects_southbound_edsall_in_reverse(monkeypatch):
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", "CLOSED"),
+            _row(1151, "I-95-SB", "SOUTHBOUND_OPEN"),
+            _row(1151, "I-95-SB", "SOUTHBOUND_OPEN", "9.05"),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i495_to_i95")
+
+    assert result["pricing_status"] == "priced"
+    assert result["direction"] == "Southbound"
+    assert result["entry"]["node_id"] == "200SO"
+    assert result["junction_boundary"] == {
+        "label": "I-395 Near Edsall Road",
+        "direction": "Southbound",
+    }
+    assert result["i495_boundary"]["exit_node_id"] == "191SD"
+    assert result["total_usd"] == "9.05"
+
+
+@pytest.mark.parametrize(
+    ("northbound_status", "southbound_status"),
+    [
+        ("CLOSED", "CLOSED"),
+        ("NORTHBOUND_CLOSING", "CLOSED"),
+        ("NORTHBOUND_OPENING", "CLOSED"),
+        ("NORTHBOUND_OPEN", "SOUTHBOUND_OPEN"),
+    ],
+)
+def test_junction_leg_fails_safe_without_money(
+    monkeypatch, northbound_status, southbound_status
+):
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", northbound_status),
+            _row(1151, "I-95-SB", southbound_status),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i95_to_i495")
+
+    assert result["pricing_status"] == "unavailable"
+    assert result["lane_statuses"] == {
+        "Northbound": northbound_status,
+        "Southbound": southbound_status,
+    }
+    assert "price_usd" not in result
+    assert "total_usd" not in result
+    assert len(conn.cur.queries) == 2
+
+
+def test_junction_leg_fails_safe_when_open_direction_cannot_reach_boundary(
+    monkeypatch,
+):
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", "CLOSED"),
+            _row(1151, "I-95-SB", "SOUTHBOUND_OPEN"),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i95_to_i495")
+
+    assert result["pricing_status"] == "unavailable"
+    assert "no southbound" in result["reason"]
+    assert "total_usd" not in result
+
+
+def test_junction_leg_requires_common_status_interval(monkeypatch):
+    later = _PRICED_AS_OF.replace(minute=30)
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", "NORTHBOUND_OPEN"),
+            _row(1151, "I-95-SB", "CLOSED", at=later),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i95_to_i495")
+
+    assert result["pricing_status"] == "unavailable"
+    assert "common interval" in result["reason"]
+
+
+def test_junction_leg_requires_price_and_status_from_one_interval(monkeypatch):
+    older = _PRICED_AS_OF.replace(minute=10)
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", "NORTHBOUND_OPEN"),
+            _row(1151, "I-95-SB", "CLOSED"),
+            _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70", older),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i95_to_i495")
+
+    assert result["pricing_status"] == "unavailable"
+    assert "common interval" in result["reason"]
+    assert "total_usd" not in result
+
+
+def test_junction_leg_historical_queries_share_at_time(monkeypatch):
+    at_time = "2026-07-29T10:10:00-04:00"
+    at = datetime.fromisoformat(at_time)
+    conn = FakeConnection(
+        [
+            _row(1132, "I-95-NB", "NORTHBOUND_OPEN", at=at),
+            _row(1151, "I-95-SB", "CLOSED", at=at),
+            _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70", at),
+        ]
+    )
+    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+
+    result = i95_junction_leg("US-1", "i95_to_i495", at_time=at_time)
+
+    assert result["pricing_status"] == "priced"
+    assert all("FROM trip_pricing_i95" in sql for sql, _ in conn.cur.queries)
+    assert all(
+        params is not None and params["at_time"].isoformat() == at_time
+        for _, params in conn.cur.queries
+    )
+
+
+def test_junction_tool_spec_matches_signature():
+    assert i95_junction_leg.tool_spec["name"] == "i95_junction_leg"
+    assert set(i95_junction_leg.tool_spec["inputSchema"]["json"]["required"]) == {
+        "location",
+        "movement",
+    }

@@ -7,12 +7,10 @@ here to the 78 of 685 published pairs that start and end on the 495
 Express Lanes (a node's own "path" field starts with "495"). "Where an
 oracle exists, prefer reading it over re-deriving it" (docs/oracle-findings.md
 section 3), and this tool never chains a 495 leg onto a 95/395 leg to
-synthesize a cross-corridor trip -- expresslanes.com itself markets the 495
-Express Lanes as a separate product from the 95/395 Express Lanes, billed
-as a separate toll with an untolled general-purpose-lanes gap between them
-(docs/oracle-findings.md section 8). A caller wanting a full cross-corridor
-journey makes two calls, one to this tool and one to i95_route -- neither
-tool computes or claims a combined price.
+synthesize a cross-corridor trip. Cross-junction planning prices this tool
+from or to I-495 Near Braddock Road and uses ``i95_junction_leg`` for the
+95/395 portion. The road between those boundaries is unpriced: neither tool
+computes or claims a combined price.
 
 Pricing is a second stage, run only after a successful route resolution: an
 omitted at_time reads the current VDOT view, while an explicit at_time reads

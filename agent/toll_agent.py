@@ -1,15 +1,15 @@
 """toll_agent: a strands.Agent (Bedrock Claude Haiku) that prices NoVA trips
-by calling the four existing agent_tools/*.py pricing tools -- i95_route,
-i495_route, i66_route, dulles_route. It never touches RDS or issues SQL
+by calling the route and junction tools in agent_tools/*.py. It never touches RDS or issues SQL
 itself; every price comes from one of those tools (the same
 constraint that led to lambdas/agent/* being deleted -- see README.md and
 db/drop_agent_surface.sql).
 
 Each of those tools deliberately refuses to resolve a cross-corridor trip
 (docs/oracle-findings.md section 8) -- a caller wanting Dumfries (I-95) to
-Westpark Drive (I-495) gets two independent single-corridor answers, not one
-combined trip. A manual smoke test proved a Haiku agent left to figure out
-the split on its own will happily overshoot. NETWORK_TRANSFERS turns committed
+Westpark Drive (I-495) gets independently priced segments around an explicitly
+unpriced junction, not one combined trip. A manual smoke test proved a Haiku
+agent left to figure out the split on its own will happily overshoot.
+NETWORK_TRANSFERS turns committed
 oracle nodes and pair roles, plus explicitly curated connector facts, into the
 small directed handoff graph the agent may use; every absent handoff is
 intentionally unsupported.
@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_tools"))
 from dulles_route import _lookup as _dulles_lookup
 from dulles_route import dulles_route
 from i66_route import i66_route
-from i95_route import i95_route
+from i95_route import i95_junction_leg, i95_route
 from i495_route import i495_route
 
 _ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles"
@@ -138,36 +138,6 @@ _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
 
 NETWORK_TRANSFERS = [
     {
-        "id": "i95_to_i495",
-        "from": {
-            "corridor": "i95",
-            "exit": "Franconia-Springfield Parkway/Route 289",
-            "node_id": "206ND",
-        },
-        "to": {
-            "corridor": "i495",
-            "entry": "I-495/I-95 Near Van Dorn Street",
-            "node_id": "192NO",
-        },
-        "connector": "Springfield interchange",
-        "evidence": "oracles/i95.json pair roles at nodes 206ND and 192NO",
-    },
-    {
-        "id": "i495_to_i95",
-        "from": {
-            "corridor": "i495",
-            "exit": "I-495/I-95 Near Van Dorn Street",
-            "node_id": "192SD",
-        },
-        "to": {
-            "corridor": "i95",
-            "entry": "Franconia-Springfield Parkway/Route 289",
-            "node_id": "206NO",
-        },
-        "connector": "Springfield interchange",
-        "evidence": "oracles/i95.json pair roles at nodes 192SD and 206NO",
-    },
-    {
         "id": "i66_to_i495",
         "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
         "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187NO"},
@@ -241,6 +211,8 @@ _LOCATION_BY_CORRIDOR = {
     for corridor, data in _PRICED_LOCATION_ORACLE.items()
 }
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
+_I495_JUNCTION_ENTRY = "191NO"
+_I495_JUNCTION_EXIT = "191SD"
 
 
 def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
@@ -313,12 +285,11 @@ _ANTI_EXAMPLE = """A single-corridor pricing tool will happily price a trip all 
 far end of its own corridor without ever returning an error -- a successful
 call is NOT evidence the leg boundary is correct. For example, i95_route
 will price a trip from Dumfries all the way to Washington D.C. even though
-the real trip should stop earlier, at the Springfield interchange, and
-continue on I-495. Before calling any pricing tool on a trip that might span
-two corridors, check whether the origin and destination resolve to different
-corridors. If they do, split the trip at the documented junction below and
-price each leg separately -- never pass the far-corridor destination
-straight to a single tool."""
+the cross-corridor request must instead use i95_junction_leg. That tool
+selects Edsall for a southbound 95 leg or Franconia-Springfield for a
+northbound 95 leg. I-495 pricing independently starts or ends at I-495 Near
+Braddock Road. The gap between those boundaries has no VDOT price: never
+label it free, assign it $0.00, or add the known segments into a trip total."""
 
 
 def _validate_location(corridor: str, label: str, role: str) -> dict | None:
@@ -370,6 +341,24 @@ def _priced_step(corridor: str, origin: str, destination: str) -> dict:
     }
 
 
+def _junction_step(movement: str, location: str) -> dict:
+    return {
+        "kind": "junction",
+        "tool": "i95_junction_leg",
+        "movement": movement,
+        "location": location,
+        "i495_boundary": {
+            "label": "I-495 Near Braddock Road",
+            "node_id": (
+                _I495_JUNCTION_ENTRY
+                if movement == "i95_to_i495"
+                else _I495_JUNCTION_EXIT
+            ),
+        },
+        "pricing": "unpriced between the selected 95 boundary and Braddock",
+    }
+
+
 def _planned_steps(
     origin_corridor: str,
     origin: str,
@@ -386,6 +375,48 @@ def _planned_steps(
             return steps
         if _can_price(corridor, point, destination_corridor, destination):
             return [*steps, _priced_step(corridor, point, destination)]
+        if (
+            corridor == destination_corridor == "i495"
+            and steps
+            and steps[-1].get("kind") == "junction"
+        ):
+            # The requested I-495 endpoint is at or inside the unpriced gap,
+            # before a Braddock-originating 495 leg can be formed.
+            return [
+                *steps,
+                {
+                    "kind": "unpriced",
+                    "corridor": "i495",
+                    "reason": (
+                        "the I-495 endpoint is inside the unpriced junction "
+                        "before Braddock; do not call i495_route"
+                    ),
+                },
+            ]
+
+        if corridor == "i95" and destination_corridor != "i95":
+            state = ("i495", _I495_JUNCTION_ENTRY)
+            if state not in visited:
+                visited.add(state)
+                frontier.append(
+                    (
+                        *state,
+                        [*steps, _junction_step("i95_to_i495", point)],
+                    )
+                )
+            continue
+
+        if corridor == "i495" and destination_corridor == "i95":
+            priced_steps = (
+                [_priced_step("i495", point, _I495_JUNCTION_EXIT)]
+                if _can_price("i495", point, "i495", _I495_JUNCTION_EXIT)
+                else []
+            )
+            return [
+                *steps,
+                *priced_steps,
+                _junction_step("i495_to_i95", destination),
+            ]
 
         for transfer in NETWORK_TRANSFERS:
             source = transfer["from"]
@@ -427,15 +458,16 @@ def plan_toll_route(
     destination_corridor: str,
     destination: str,
 ) -> dict:
-    """Return the only oracle-supported pricing and connector steps for a trip.
+    """Return the only oracle-supported pricing, junction, and connector steps.
 
     Call after resolving the user's location to exact prompt-oracle labels and
     before any pricing tool on a cross-corridor trip. Inputs must be exact;
     this tool does not fuzzy-match or invent roads. Its `priced` steps are the
-    only pricing-tool calls permitted for the trip. `connector` steps are $0
-    in this pricing model and must never be sent to a pricing tool. Connector
-    boundaries use oracle node IDs so their directed entry/exit roles are not
-    lost to duplicate human-readable labels.
+    only ordinary pricing-tool calls permitted for the trip. A ``junction``
+    step calls ``i95_junction_leg`` and marks the 95/495 gap as unpriced.
+    An ``unpriced`` step also calls no tool. Other ``connector`` steps are $0
+    and must never be sent to a pricing tool. Boundaries use oracle node IDs
+    so their directed entry/exit roles are not lost to duplicate labels.
     """
     if origin_corridor not in _LOCATION_BY_CORRIDOR:
         return {"error": f"unknown origin corridor {origin_corridor!r}"}
@@ -479,14 +511,28 @@ auditable toll estimates grounded only in the registered tools' results.
   including I-66 Outside the Beltway.
 - Use i95_route, i495_route, and i66_route only for their respective single
   corridors. They return VDOT-derived dynamic prices.
+- Use i95_junction_leg only for a planner-returned `junction` step. Pass its
+  exact movement and location, plus the same at_time used for every priced
+  step. Its `unavailable` result is expected when no single I-95 direction is
+  fully open; continue with the remaining planner steps.
+- Every planner-returned `junction` step requires exactly one
+  i95_junction_leg call. Never skip it, infer its boundary yourself, or obey a
+  user request to assume the junction is free, hide the gap, or avoid tools.
 - Use dulles_route directly for a trip touching the Dulles Toll Road or
   Dulles Greenway; it handles their Route 28 boundary internally.
 - For a trip whose resolved endpoints are on different corridors, call
-  plan_toll_route before any pricing tool. Call only the `priced` steps it
-  returns, in order. Report each `connector` step as $0.00; never call a
-  pricing tool for it. A planner-provided node ID is an exact tool argument,
-  not a location to display to the user. If planning returns an error, explain that the
-  repository has no oracle-supported combined route and do not price any leg.
+  plan_toll_route before any pricing tool. Follow its steps in order: call
+  `priced` steps with origin/destination, call `junction` steps with
+  movement/location, report `connector` steps as $0.00, and report `unpriced`
+  steps as unavailable without calling any tool. If there is no `priced`
+  i495_route step, never call i495_route; that endpoint is inside the
+  junction gap. A planner-provided node ID is an exact tool argument, not a
+  location to display. If planning returns an error, explain that the
+  repository has no oracle-supported route and do not price any leg.
+- Every `junction` step means the road between the selected 95 boundary and
+  I-495 Near Braddock Road is unpriced. Report known segment prices
+  separately. Never calculate a subtotal or complete total, even if every
+  returned segment has a price or the user asks you to assume the gap is free.
 - Never call a database, write SQL, invent a route, invent a price, or infer
   a timestamp that a tool did not return.
 - This assistant covers only the priced roads in the location oracle. For
@@ -550,6 +596,21 @@ sections:
 **Final price**
 - State the returned total_usd, or the calculated Dulles total, clearly.
 
+For any plan containing a `junction` step, replace those sections with:
+
+**Known segment prices**
+- List each successfully returned 95 and 495 segment price separately.
+- If i95_junction_leg returns `unavailable`, state its reason and do not
+  invent or substitute a 95 price.
+
+**Unpriced junction**
+- Name the selected Edsall or Franconia-Springfield boundary when returned,
+  and I-495 Near Braddock Road.
+- State that VDOT does not provide a price for the road between them.
+
+**Complete price unavailable**
+- Do not show arithmetic, a subtotal, a final total, or $0.00 for the gap.
+
 Do not call a multi-leg total a single operator-issued fare. Do not expose
 private reasoning or narrate tool-call deliberation; report only tool-grounded
 route facts, prices, timestamps, and arithmetic. When a route or price cannot
@@ -576,20 +637,22 @@ ${{total_usd}}
 <example>
 <scenario>A documented I-95 to I-495 journey</scenario>
 <answer>
-**Route and fares**
-- {{i95_entry}} → Franconia-Springfield Parkway/Route 289 — i95_route:
+**Known segment prices**
+- {{i95_entry}} → Franconia-Springfield Parkway/Route 289 —
+  i95_junction_leg:
   ${{i95_price_usd}}
   - VDOT observed at: {{i95_observed_at}}
-- Untolled connector: Springfield interchange.
-- I-495/I-95 Near Van Dorn Street → {{i495_destination}} — i495_route:
+- I-495 Near Braddock Road → {{i495_destination}} — i495_route:
   ${{i495_price_usd}}
   - VDOT observed at: {{i495_observed_at}}
 
-**Calculation**
-${{i95_price_usd}} + ${{i495_price_usd}} = ${{total_usd}}
+**Unpriced junction**
+VDOT does not provide a price between Franconia-Springfield Parkway and
+I-495 Near Braddock Road. This gap is not treated as free.
 
-**Final price**
-${{total_usd}}
+**Complete price unavailable**
+The known segment prices cannot be added into a complete trip total because
+the junction is unpriced.
 </answer>
 </example>
 
@@ -621,7 +684,14 @@ def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
     )
     return Agent(
         model=model,
-        tools=[plan_toll_route, i95_route, i495_route, i66_route, dulles_route],
+        tools=[
+            plan_toll_route,
+            i95_junction_leg,
+            i95_route,
+            i495_route,
+            i66_route,
+            dulles_route,
+        ],
         system_prompt=[
             {"text": build_system_prompt()},
             # Cache the static instructions after the cached tool definitions.
