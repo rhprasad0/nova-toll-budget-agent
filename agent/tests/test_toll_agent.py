@@ -104,8 +104,9 @@ def test_system_prompt_requires_auditable_price_reporting():
 
 
 def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
-    agent = build_agent()
+    agent = build_agent(trace_attributes={"tollchat.session_id": "test"})
     assert isinstance(agent.model, BedrockModel)
+    assert agent.trace_attributes == {"tollchat.session_id": "test"}
     request = agent.model.format_request(
         messages=[
             {"role": "user", "content": [{"text": "Price Dumfries to Westpark"}]}

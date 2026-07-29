@@ -55,3 +55,24 @@ free-form SQL and no traversal: `i66_route`/`i95_route`/`i495_route` each
 run one fixed, parameterized RDS query; `dulles_route` prices entirely
 from its own committed oracles, no database at all. See
 `docs/oracle-tools-spec.md`.
+
+## Local chat console
+
+For SSH-only agent testing, start the loopback console with:
+
+```sh
+uv run python agent/dev_chat.py
+```
+
+From your workstation, tunnel it before opening `http://127.0.0.1:8000`:
+
+```sh
+ssh -L 8000:127.0.0.1:8000 <host>
+```
+
+The console keeps one conversation until **Reset chat** or server shutdown.
+Raw prompts, answers, tool messages, and metrics append to the ignored
+`.tollchat/telemetry.jsonl`; Strands trace spans also print to the server console.
+Inspect the JSONL with `tail -f .tollchat/telemetry.jsonl`.
+It uses the same read-only AWS/RDS environment as the live agent tests and is
+not a public preview.

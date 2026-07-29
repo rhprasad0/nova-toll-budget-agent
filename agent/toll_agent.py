@@ -366,7 +366,7 @@ cannot provide a combined trip total.
 </examples>"""
 
 
-def build_agent() -> Agent:
+def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
     model = BedrockModel(
         # Bedrock rejects the plain model id for on-demand throughput
         # (verified empirically: ValidationException, "Retry your request
@@ -389,6 +389,7 @@ def build_agent() -> Agent:
             # Cache the static instructions after the cached tool definitions.
             {"cachePoint": {"type": "default", "ttl": "5m"}},
         ],
+        trace_attributes=trace_attributes,
     )
 
 
