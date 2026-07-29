@@ -1,0 +1,26 @@
+name: security-review
+permissions:
+  contents: read
+  pull-requests: write # needed for leaving PR comments
+
+on:
+  pull_request:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    # This action executes arbitrary Claude tool calls against PR content and
+    # isn't hardened against prompt injection -- skip fork PRs so an attacker
+    # can't get it to leak the API key or spam malicious PR comments.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+
+      - uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda # main @ 2026-07-29
+        with:
+          comment-pr: true
+          claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
+          claude-model: claude-sonnet-5
