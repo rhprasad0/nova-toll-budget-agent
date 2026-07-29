@@ -5,8 +5,15 @@ Bedrock, so these tests can verify cache-point placement locally. See
 tests/test_toll_agent_live.py for the real end-to-end check.
 """
 
+import json
+
 from strands.models import BedrockModel
-from toll_agent import build_agent, build_system_prompt
+from toll_agent import (
+    _LOCATION_ALIASES,
+    _PRICED_LOCATION_ORACLE_JSON,
+    build_agent,
+    build_system_prompt,
+)
 
 
 def test_system_prompt_contains_i95_i495_junction():
@@ -40,11 +47,30 @@ def test_system_prompt_embeds_only_priced_location_labels():
     assert "Vaden Drive" not in prompt
 
 
-def test_system_prompt_instructs_fuzzy_matching_and_topic_boundaries():
+def test_system_prompt_refuses_unmatched_or_uncovered_locations():
     prompt = build_system_prompt()
     assert "Match vague, partial, or misspelled locations" in prompt
     assert "ask a concise clarifying question instead of guessing" in prompt
-    assert "non-toll-pricing, unrelated, or uncovered-road requests" in prompt
+    assert "no clear match in the priced location oracle" in prompt
+    assert "Never substitute a nearby listed road or ramp" in prompt
+    assert "I-66 Outside the Beltway" in prompt
+
+
+def test_location_aliases_only_point_to_priced_labels():
+    prompt = build_system_prompt()
+    priced_labels = {
+        location["label"]
+        for corridor in json.loads(_PRICED_LOCATION_ORACLE_JSON).values()
+        for location in corridor["locations"]
+    }
+    assert "Tysons" in prompt
+    assert "Gainesville" not in _LOCATION_ALIASES
+    assert _LOCATION_ALIASES["Dulles Airport"] == [
+        "Route 28 (Dulles Toll Road / Dulles Greenway)"
+    ]
+    assert {
+        label for labels in _LOCATION_ALIASES.values() for label in labels
+    } <= priced_labels
 
 
 def test_system_prompt_uses_structured_claude_prompt_sections():
@@ -53,6 +79,7 @@ def test_system_prompt_uses_structured_claude_prompt_sections():
         "role",
         "tool_rules",
         "priced_location_oracle",
+        "location_aliases",
         "routing_context",
         "junctions",
         "response_format",

@@ -114,6 +114,37 @@ def _load_priced_location_oracle() -> dict[str, dict]:
 
 _PRICED_LOCATION_ORACLE_JSON = json.dumps(_load_priced_location_oracle(), indent=2)
 
+# User-facing locality hints retained from the deleted discovery tool. Every
+# candidate is an exact label in the priced oracle; unpriced I-66 OTB hints
+# deliberately stay out.
+_LOCATION_ALIASES = {
+    "Tysons": [
+        "Jones Branch Drive/Route 123",
+        "Route 123 - Dolley Madison Blvd",
+        "I-495 Express Lanes N",
+        "Westpark Drive",
+    ],
+    "McLean": ["Route 123 - Dolley Madison Blvd", "Jones Branch Drive/Route 123"],
+    "Arlington": [
+        "Exit 73 - Rosslyn",
+        "Exit 75 - Pentagon/Alexandria",
+        "Fairfax Drive",
+        "Glebe Road",
+        "Washington Blvd",
+        "Shirlington Circle",
+    ],
+    "Ballston": ["Fairfax Drive", "Glebe Road"],
+    "Vienna": ["Route 123 - Dolley Madison Blvd", "Fairfax Drive"],
+    "Herndon": [
+        "Exit 14 - SR 674 (Hunter Mill Rd)",
+        "Exit 15 - SR 676 (Wolf Trap)",
+    ],
+    "National Airport": ["Pentagon/Eads Street"],
+    "Reagan Airport": ["Pentagon/Eads Street"],
+    "Dulles Airport": ["Route 28 (Dulles Toll Road / Dulles Greenway)"],
+}
+_LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
+
 JUNCTIONS = {
     ("i95", "i495"): {
         "evidence": "verbatim label, same physical Springfield interchange",
@@ -210,6 +241,10 @@ auditable toll estimates grounded only in the registered tools' results.
   exact label in the priced location oracle below. Use that exact label in a
   pricing-tool call. If more than one listed label could reasonably mean the
   user's location, ask a concise clarifying question instead of guessing.
+- If a location has no clear match in the priced location oracle, or is on an
+  unlisted road, explain that it is outside coverage and do not call a pricing
+  tool. Never substitute a nearby listed road or ramp for an uncovered one,
+  including I-66 Outside the Beltway.
 - Use i95_route, i495_route, and i66_route only for their respective single
   corridors. They return VDOT-derived dynamic prices.
 - Use dulles_route directly for a trip touching the Dulles Toll Road or
@@ -229,6 +264,13 @@ or destination. This oracle is for fuzzy location matching only; tools remain
 the source of truth for a valid route and its price.
 {_PRICED_LOCATION_ORACLE_JSON}
 </priced_location_oracle>
+
+<location_aliases>
+These user-facing locality hints map only to exact labels in the priced
+location oracle. They are not route claims: if an alias leaves more than one
+plausible label, ask the user to choose the interchange.
+{_LOCATION_ALIASES_JSON}
+</location_aliases>
 
 <routing_context>
 {_ANTI_EXAMPLE}
