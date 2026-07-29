@@ -8,13 +8,11 @@ tests/test_toll_agent_live.py for the real end-to-end check.
 import json
 from pathlib import Path
 
-from i66_route import _lookup as i66_lookup
-from i495_route import _lookup as i495_lookup
 from strands.models import BedrockModel
 from toll_agent import (
     _LOCATION_ALIASES,
     _PRICED_LOCATION_ORACLE_JSON,
-    ORACLE_TRANSFERS,
+    NETWORK_TRANSFERS,
     build_agent,
     build_system_prompt,
     plan_toll_route,
@@ -30,18 +28,24 @@ def test_system_prompt_contains_i95_i495_junction():
     assert "Springfield interchange" in prompt
 
 
-def test_system_prompt_describes_oracle_only_transfers():
+def test_system_prompt_describes_curated_network_transfers():
     prompt = build_system_prompt()
     assert '"connector": "I-66/I-495 interchange"' in prompt
-    assert "unsupported even if a physical connection may exist" in prompt
+    assert '"connector": "Dulles Airport Access Highway"' in prompt
+    assert "explicitly labeled curated connector" in prompt
     assert "Do not infer a reverse edge" in prompt
     assert "Dulles Connector Road" not in prompt
 
 
-def test_oracle_transfers_have_directed_entry_and_exit_roles():
+def test_network_transfers_have_directed_entry_and_exit_roles():
     oracle_dir = Path(__file__).resolve().parents[2] / "oracles"
-    filenames = {"i95": "i95.json", "i495": "i95.json", "i66_itb": "i66.json"}
-    for transfer in ORACLE_TRANSFERS:
+    filenames = {
+        "i95": "i95.json",
+        "i495": "i95.json",
+        "i66_itb": "i66.json",
+        "dulles_toll_road": "dulles_toll_road.json",
+    }
+    for transfer in NETWORK_TRANSFERS:
         source = transfer["from"]
         target = transfer["to"]
         source_oracle = json.loads(
@@ -79,20 +83,36 @@ def test_planner_uses_only_oracle_supported_i66_i495_steps():
             "destination": "Route 7 (Leesburg Pike)",
         },
     ]
-    assert "error" not in i66_lookup("Lee Highway - Scott Street", "5")
-    assert "error" not in i495_lookup("187NO", "Route 7 (Leesburg Pike)")
 
 
-def test_planner_refuses_the_unsupported_i66_dulles_handoff():
+def test_planner_uses_the_curated_i66_dulles_handoff():
     plan = plan_toll_route(
         "i66_itb",
         "Fairfax Drive",
         "dulles_toll_road",
         "Exit 12 - SR 602 (Reston Pkwy)",
     )
-    assert plan == {
-        "error": "no oracle-supported directed transfer connects i66_itb to dulles_toll_road"
-    }
+    assert plan["steps"] == [
+        {
+            "kind": "priced",
+            "corridor": "i66_itb",
+            "tool": "i66_route",
+            "origin": "Fairfax Drive",
+            "destination": "6",
+        },
+        {
+            "kind": "connector",
+            "label": "Dulles Airport Access Highway",
+            "price_usd": "0.00",
+        },
+        {
+            "kind": "priced",
+            "corridor": "dulles_toll_road",
+            "tool": "dulles_route",
+            "origin": "1819",
+            "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+        },
+    ]
 
 
 def test_system_prompt_states_the_overshoot_anti_example():
@@ -146,7 +166,7 @@ def test_system_prompt_uses_structured_claude_prompt_sections():
         "priced_location_oracle",
         "location_aliases",
         "routing_context",
-        "oracle_transfers",
+        "network_transfers",
         "response_format",
         "examples",
     ):

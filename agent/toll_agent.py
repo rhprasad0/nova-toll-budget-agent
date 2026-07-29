@@ -9,14 +9,15 @@ Each of those tools deliberately refuses to resolve a cross-corridor trip
 (docs/oracle-findings.md section 8) -- a caller wanting Dumfries (I-95) to
 Westpark Drive (I-495) gets two independent single-corridor answers, not one
 combined trip. A manual smoke test proved a Haiku agent left to figure out
-the split on its own will happily overshoot. ORACLE_TRANSFERS turns the
-committed oracle nodes and pair roles into the small directed handoff graph
-the agent may use; every absent handoff is intentionally unsupported.
+the split on its own will happily overshoot. NETWORK_TRANSFERS turns committed
+oracle nodes and pair roles, plus explicitly curated connector facts, into the
+small directed handoff graph the agent may use; every absent handoff is
+intentionally unsupported.
 
 strands.Agent's system_prompt accepts str | list[SystemContentBlock], and
 SystemContentBlock only has text/cachePoint keys (strands/types/content.py)
 -- there's no structured-knowledge field. The priced location oracle and
-ORACLE_TRANSFERS therefore go in as literal json.dumps(...) text inside the prompt
+NETWORK_TRANSFERS therefore go in as literal json.dumps(...) text inside the prompt
 string, not any special mechanism.
 
 See docs/oracle-tools-spec.md for the tool contract this builds on.
@@ -134,7 +135,7 @@ _LOCATION_ALIASES = {
 }
 _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
 
-ORACLE_TRANSFERS = [
+NETWORK_TRANSFERS = [
     {
         "id": "i95_to_i495",
         "from": {
@@ -179,9 +180,39 @@ ORACLE_TRANSFERS = [
         "connector": "I-66/I-495 interchange",
         "evidence": "oracles/i95.json node 187SD and oracles/i66.json node 2 pair roles",
     },
+    {
+        "id": "i66_to_dulles_toll_road",
+        "from": {
+            "corridor": "i66_itb",
+            "exit": "Route 267 - Dulles Toll Road",
+            "node_id": "6",
+        },
+        "to": {
+            "corridor": "dulles_toll_road",
+            "entry": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "connector": "Dulles Airport Access Highway",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 6 and 1819",
+    },
+    {
+        "id": "dulles_toll_road_to_i66",
+        "from": {
+            "corridor": "dulles_toll_road",
+            "exit": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "to": {
+            "corridor": "i66_itb",
+            "entry": "Route 267 - Dulles Toll Road",
+            "node_id": "6",
+        },
+        "connector": "Dulles Airport Access Highway",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 6",
+    },
 ]
 
-_ORACLE_TRANSFERS_JSON = json.dumps(ORACLE_TRANSFERS, indent=2)
+_NETWORK_TRANSFERS_JSON = json.dumps(NETWORK_TRANSFERS, indent=2)
 _LOCATION_BY_CORRIDOR = {
     corridor: {location["label"]: location for location in data["locations"]}
     for corridor, data in _PRICED_LOCATION_ORACLE.items()
@@ -226,7 +257,7 @@ def _transfer_path(origin: str, destination: str) -> list[dict] | None:
         corridor, path = frontier.pop(0)
         if corridor == destination:
             return path
-        for transfer in ORACLE_TRANSFERS:
+        for transfer in NETWORK_TRANSFERS:
             next_corridor = transfer["to"]["corridor"]
             if (
                 transfer["from"]["corridor"] == corridor
@@ -374,12 +405,13 @@ plausible label, ask the user to choose the interchange.
 <routing_context>
 {_ANTI_EXAMPLE}
 
-The following directed transfer graph is derived only from committed oracle
-node IDs and their entry/exit pair roles. It is not a road map: an absent edge
-is unsupported even if a physical connection may exist.
-<oracle_transfers>
-{_ORACLE_TRANSFERS_JSON}
-</oracle_transfers>
+The following directed transfer graph uses committed oracle node IDs and their
+entry/exit pair roles. It also includes explicitly labeled curated connector
+facts. It is not a general road map: an absent edge is unsupported even if a
+physical connection may exist.
+<network_transfers>
+{_NETWORK_TRANSFERS_JSON}
+</network_transfers>
 
 The planner is authoritative for this graph. Do not infer a reverse edge,
 combine route-number labels, or describe a connector absent from its result.
