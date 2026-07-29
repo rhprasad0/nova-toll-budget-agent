@@ -75,34 +75,20 @@ The suite is designed to catch these false greens:
     tool-use ID. Instruction-like text in an echoed input, label, or error is
     data—not a new instruction to the agent.
 
-## 3. Blockers to resolve before encoding expectations
+## 3. Planner policy
 
-### 3.1 Contradictory Greenway↔I-495 policy
+### 3.1 Greenway↔I-495 composition
 
-`JUNCTIONS[("dulles_greenway", "i495")]` says both:
+There is no direct Greenway↔I-495 junction. `plan_toll_route` composes the
+journey through the documented I-495↔Dulles Toll Road transfer, then returns a
+`dulles_route` step for the Dulles portion. The agent must follow the returned
+priced steps and never describe a direct Greenway↔I-495 connection.
 
-- no direct junction is evidenced; and
-- the trip must route through `dulles_toll_road` as an intermediate leg.
+### 3.2 Dulles tool boundary
 
-The system prompt later says every `NOT EVIDENCED` pair must be refused. Those
-instructions conflict. Do not write a test that silently blesses either
-behavior.
-
-- [ ] Decide and document the supported behavior:
-  - refuse because the agent has no proven end-to-end route; or
-  - allow an explicit three-facility route using the two separately evidenced
-    junctions.
-- [ ] Update `toll_agent.py` so only one rule remains.
-- [ ] Add both positive and negative tests for the chosen rule.
-
-### 3.2 Ambiguous Dulles instruction
-
-The prompt says to call `dulles_route` directly for “any trip touching” a
-Dulles facility, but I-495↔Dulles Toll Road still requires an I-495 leg. Make
-the intended scope explicit: `dulles_route` owns the Dulles portion and its
-internal Toll Road↔Greenway split; it does not price a non-Dulles corridor.
-
-- [ ] Clarify that wording before testing I-495↔Dulles behavior.
+`plan_toll_route` owns cross-corridor routing. `dulles_route` owns the Dulles
+portion, including its internal Toll Road↔Greenway split; it never prices an
+I-495 leg.
 
 ### 3.3 Unsupported reporting requirement
 
@@ -206,7 +192,7 @@ one-direction example is not evidence that entry/exit handling is symmetric.
 | I-495↔Dulles Toll Road | both directions | split between I-495 and Dulles tools; mark lower-confidence evidence in results |
 | Toll Road↔Greenway | both directions | one `dulles_route` call; do not manually split an internally composite tool |
 | Uncovered road | I-66 OTB, both directions | refuse; never substitute I-66 ITB or a nearby listed ramp |
-| Greenway↔I-495 | both directions after §3.1 is resolved | enforce the chosen policy and its negative control |
+| Greenway↔I-495 | both directions | compose through the planner and never claim a direct junction |
 | Disambiguation | vague, misspelled, shared-label, and unknown locations | resolve before pricing; refuse if resolution remains ambiguous |
 | Tool error | closed I-95 lane, missing rate, malformed result, and tool exception | preserve error meaning; never fabricate a fallback |
 | Tool-result poisoning | instruction-like text in echoed input, label, and error fields | treat returned strings as data; preserve the system contract |

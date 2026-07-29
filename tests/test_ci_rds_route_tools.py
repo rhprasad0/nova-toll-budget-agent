@@ -13,6 +13,7 @@ Run explicitly (with the same environment as the CI integration job):
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -31,10 +32,18 @@ from rds_ci_test_support import (
 
 sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
 
+from dulles_route import dulles_route
 from i66_route import i66_route
+from i95_route import i95_route
 from i495_route import i495_route
 
 pytestmark = pytest.mark.live
+
+_I95_ORACLE = json.loads((REPO_ROOT / "oracles" / "i95.json").read_text())
+_I95_REQUIRED_STATUS = {
+    "I-95-NB": "NORTHBOUND_OPEN",
+    "I-95-SB": "SOUTHBOUND_OPEN",
+}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -60,6 +69,21 @@ def _assert_common_price_fields(
     assert result["legs"][0]["priced_as_of"] == expected_at.isoformat()
     assert result["total_usd"] == str(expected_rate)
     assert result["at_time"] == expected_at.isoformat()
+
+
+def _assert_price_at(
+    result: dict,
+    expected_rate: Decimal,
+    expected_as_of: datetime,
+    requested_at: datetime,
+):
+    """Assert a tool's source row and this test's shared requested time."""
+    assert "error" not in result, result
+    assert len(result["legs"]) == 1
+    assert result["legs"][0]["price_usd"] == str(expected_rate)
+    assert result["legs"][0]["priced_as_of"] == expected_as_of.isoformat()
+    assert result["total_usd"] == str(expected_rate)
+    assert result["at_time"] == requested_at.isoformat()
 
 
 def _current_open_i95_case() -> tuple[dict, tuple]:
@@ -192,10 +216,257 @@ def test_i95_route_refuses_historical_both_lanes_closure():
 
 
 @pytest.mark.parametrize(
+    "i95_origin, i95_destination, i95_od_pair_id, i95_status, i495_origin, i495_destination, i495_od_pair_id",
+    [
+        (
+            "US-1",
+            "Franconia-Springfield Parkway/Route 289",
+            1130,
+            "NORTHBOUND_OPEN",
+            "I-495/I-95 Near Van Dorn Street",
+            "Westpark Drive",
+            1089,
+        ),
+        (
+            "Franconia-Springfield Parkway/Route 289",
+            "US-1",
+            1168,
+            "SOUTHBOUND_OPEN",
+            "Westpark Drive",
+            "I-495/I-95 Near Van Dorn Street",
+            1062,
+        ),
+    ],
+)
+def test_i95_i495_junction_tools_match_shared_requested_time(
+    i95_origin,
+    i95_destination,
+    i95_od_pair_id,
+    i95_status,
+    i495_origin,
+    i495_destination,
+    i495_od_pair_id,
+):
+    row = _fetchone(
+        """
+        WITH requested AS (
+            SELECT LEAST(
+                (SELECT interval_end_at FROM trip_pricing_i95
+                 WHERE od_pair_id = %s AND link_status = %s
+                   AND interval_end_at <= CURRENT_TIMESTAMP
+                 ORDER BY interval_end_at DESC LIMIT 1),
+                (SELECT interval_end_at FROM trip_pricing_i95
+                 WHERE od_pair_id = %s AND interval_end_at <= CURRENT_TIMESTAMP
+                 ORDER BY interval_end_at DESC LIMIT 1)
+            ) AS at_time
+        )
+        SELECT
+            requested.at_time,
+            i95.od_pair_id, i95.corridor_name, i95.zone_toll_rate_usd, i95.interval_end_at,
+            i495.od_pair_id, i495.corridor_name, i495.zone_toll_rate_usd, i495.interval_end_at
+        FROM requested
+        CROSS JOIN LATERAL (
+            SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+            FROM trip_pricing_i95
+            WHERE od_pair_id = %s AND link_status = %s
+              AND interval_end_at <= requested.at_time
+            ORDER BY interval_end_at DESC LIMIT 1
+        ) AS i95
+        CROSS JOIN LATERAL (
+            SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+            FROM trip_pricing_i95
+            WHERE od_pair_id = %s AND interval_end_at <= requested.at_time
+            ORDER BY interval_end_at DESC LIMIT 1
+        ) AS i495
+        """,
+        (
+            i95_od_pair_id,
+            i95_status,
+            i495_od_pair_id,
+            i95_od_pair_id,
+            i95_status,
+            i495_od_pair_id,
+        ),
+    )
+    (
+        at_time,
+        i95_od,
+        i95_corridor,
+        i95_rate,
+        i95_as_of,
+        i495_od,
+        i495_corridor,
+        i495_rate,
+        i495_as_of,
+    ) = row
+
+    i95_result = i95_route(i95_origin, i95_destination, at_time=at_time.isoformat())
+    i495_result = i495_route(i495_origin, i495_destination, at_time=at_time.isoformat())
+
+    _assert_price_at(i95_result, i95_rate, i95_as_of, at_time)
+    assert i95_result["legs"][0]["od_pair_id"] == i95_od
+    assert i95_result["legs"][0]["corridor_name"] == i95_corridor
+    assert i95_result["entry"]["label"] == i95_origin
+    assert i95_result["exit"]["label"] == i95_destination
+
+    _assert_price_at(i495_result, i495_rate, i495_as_of, at_time)
+    assert i495_result["legs"][0]["od_pair_id"] == i495_od
+    assert i495_result["legs"][0]["corridor_name"] == i495_corridor
+    assert i495_result["entry"]["label"] == i495_origin
+    assert i495_result["exit"]["label"] == i495_destination
+
+
+@pytest.mark.parametrize(
+    "i66_origin, i66_destination, i66_start_zone, i66_end_zone, i495_origin, i495_destination, i495_od_pair_id",
+    [
+        ("I-495 N", "Washington", 3100, 3130, "Route 267", "Interstate 66", 1052),
+        ("Washington", "I-495 S", 3200, 3230, "Interstate 66", "Route 267", 1033),
+    ],
+)
+def test_i66_i495_junction_tools_match_shared_requested_time(
+    i66_origin,
+    i66_destination,
+    i66_start_zone,
+    i66_end_zone,
+    i495_origin,
+    i495_destination,
+    i495_od_pair_id,
+):
+    row = _fetchone(
+        """
+        WITH requested AS (
+            SELECT LEAST(
+                (SELECT interval_end_at FROM trip_pricing_i66
+                 WHERE start_zone_id = %s AND end_zone_id = %s
+                   AND interval_end_at <= CURRENT_TIMESTAMP
+                 ORDER BY interval_end_at DESC LIMIT 1),
+                (SELECT interval_end_at FROM trip_pricing_i95
+                 WHERE od_pair_id = %s AND interval_end_at <= CURRENT_TIMESTAMP
+                 ORDER BY interval_end_at DESC LIMIT 1)
+            ) AS at_time
+        )
+        SELECT
+            requested.at_time,
+            i66.start_zone_id, i66.end_zone_id, i66.corridor_name, i66.zone_toll_rate_usd,
+            i66.interval_end_at,
+            i495.od_pair_id, i495.corridor_name, i495.zone_toll_rate_usd, i495.interval_end_at
+        FROM requested
+        CROSS JOIN LATERAL (
+            SELECT start_zone_id, end_zone_id, corridor_name, zone_toll_rate_usd, interval_end_at
+            FROM trip_pricing_i66
+            WHERE start_zone_id = %s AND end_zone_id = %s
+              AND interval_end_at <= requested.at_time
+            ORDER BY interval_end_at DESC LIMIT 1
+        ) AS i66
+        CROSS JOIN LATERAL (
+            SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+            FROM trip_pricing_i95
+            WHERE od_pair_id = %s AND interval_end_at <= requested.at_time
+            ORDER BY interval_end_at DESC LIMIT 1
+        ) AS i495
+        """,
+        (
+            i66_start_zone,
+            i66_end_zone,
+            i495_od_pair_id,
+            i66_start_zone,
+            i66_end_zone,
+            i495_od_pair_id,
+        ),
+    )
+    (
+        at_time,
+        i66_start,
+        i66_end,
+        i66_corridor,
+        i66_rate,
+        i66_as_of,
+        i495_od,
+        i495_corridor,
+        i495_rate,
+        i495_as_of,
+    ) = row
+
+    i66_result = i66_route(i66_origin, i66_destination, at_time=at_time.isoformat())
+    i495_result = i495_route(i495_origin, i495_destination, at_time=at_time.isoformat())
+
+    _assert_price_at(i66_result, i66_rate, i66_as_of, at_time)
+    assert i66_result["legs"][0]["start_zone_id"] == i66_start
+    assert i66_result["legs"][0]["end_zone_id"] == i66_end
+    assert i66_result["legs"][0]["corridor_name"] == i66_corridor
+    assert i66_result["entry"]["label"] == i66_origin
+    assert i66_result["exit"]["label"] == i66_destination
+
+    _assert_price_at(i495_result, i495_rate, i495_as_of, at_time)
+    assert i495_result["legs"][0]["od_pair_id"] == i495_od
+    assert i495_result["legs"][0]["corridor_name"] == i495_corridor
+    assert i495_result["entry"]["label"] == i495_origin
+    assert i495_result["exit"]["label"] == i495_destination
+
+
+@pytest.mark.parametrize(
+    "i495_origin, i495_destination, od_pair_id, dulles_origin, dulles_destination",
+    [
+        (
+            "Westpark Drive",
+            "Route 267",
+            1036,
+            "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "Exit 12 - SR 602 (Reston Pkwy)",
+        ),
+        (
+            "Route 267",
+            "Westpark Drive",
+            1053,
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        ),
+    ],
+)
+def test_i495_dulles_toll_road_junction_tools_match_shared_requested_time(
+    i495_origin,
+    i495_destination,
+    od_pair_id,
+    dulles_origin,
+    dulles_destination,
+):
+    row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at <= CURRENT_TIMESTAMP
+        ORDER BY interval_end_at DESC
+        LIMIT 1
+        """,
+        (od_pair_id,),
+    )
+    resolved_od_pair_id, corridor_name, rate, at_time = row
+
+    i495_result = i495_route(i495_origin, i495_destination, at_time=at_time.isoformat())
+    dulles_result = dulles_route(
+        dulles_origin, dulles_destination, at_time=at_time.isoformat()
+    )
+
+    _assert_price_at(i495_result, rate, at_time, at_time)
+    assert i495_result["legs"][0]["od_pair_id"] == resolved_od_pair_id
+    assert i495_result["legs"][0]["corridor_name"] == corridor_name
+    assert i495_result["entry"]["label"] == i495_origin
+    assert i495_result["exit"]["label"] == i495_destination
+    [dulles_leg] = dulles_result["legs"]
+    assert dulles_leg["facility"] == "dulles_toll_road"
+    assert dulles_leg["entry"]["label"] == dulles_origin
+    assert dulles_leg["exit"]["label"] == dulles_destination
+
+
+@pytest.mark.parametrize(
     ("od_pair_id", "origin", "destination"),
     [
         (1038, "Route 267", "495 Express Lanes End/George Wash. Mem. Pkwy."),
-        (1040, "495 Express Lanes Start/Georg Wash. Mem. Pkwy.", "I-495/I-95 Near Van Dorn Street"),
+        (
+            1040,
+            "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+            "I-495/I-95 Near Van Dorn Street",
+        ),
     ],
     ids=("northbound", "southbound"),
 )
