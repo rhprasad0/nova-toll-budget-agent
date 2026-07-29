@@ -161,10 +161,10 @@ NETWORK_TRANSFERS = [
         "to": {
             "corridor": "i95",
             "entry": "Franconia-Springfield Parkway/Route 289",
-            "node_id": "206SO",
+            "node_id": "206NO",
         },
         "connector": "Springfield interchange",
-        "evidence": "oracles/i95.json pair roles at nodes 192SD and 206SO",
+        "evidence": "oracles/i95.json pair roles at nodes 192SD and 206NO",
     },
     {
         "id": "i66_to_i495",
@@ -179,6 +179,28 @@ NETWORK_TRANSFERS = [
         "to": {"corridor": "i66_itb", "entry": "I-495 N", "node_id": "2"},
         "connector": "I-66/I-495 interchange",
         "evidence": "oracles/i95.json node 187SD and oracles/i66.json node 2 pair roles",
+    },
+    {
+        "id": "dulles_toll_road_to_i495",
+        "from": {
+            "corridor": "dulles_toll_road",
+            "exit": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "to": {"corridor": "i495", "entry": "Route 267", "node_id": "182SO"},
+        "connector": "I-495/Route 267 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 182SO",
+    },
+    {
+        "id": "i495_to_dulles_toll_road",
+        "from": {"corridor": "i495", "exit": "Route 267", "node_id": "182ND"},
+        "to": {
+            "corridor": "dulles_toll_road",
+            "entry": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "connector": "I-495/Route 267 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 182ND and 1819",
     },
     {
         "id": "i66_to_dulles_toll_road",
@@ -218,6 +240,67 @@ _LOCATION_BY_CORRIDOR = {
     for corridor, data in _PRICED_LOCATION_ORACLE.items()
 }
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
+_DULLES_GATEWAY = "Exit 18/19 - I-495 / SR 123 (Capital Beltway)"
+
+
+def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
+    """The three single-corridor tools accept only a published direct pair."""
+    i95 = json.loads((_ORACLE_DIR / "i95.json").read_text())
+    i66 = json.loads((_ORACLE_DIR / "i66.json").read_text())
+
+    def is_495(node_id: str) -> bool:
+        return i95["nodes"][node_id]["path"].startswith("495")
+
+    return {
+        "i95": (
+            i95["nodes"],
+            [
+                pair
+                for pair in i95["pairs"]
+                if not is_495(pair["entry"]) and not is_495(pair["exit"])
+            ],
+        ),
+        "i495": (
+            i95["nodes"],
+            [
+                pair
+                for pair in i95["pairs"]
+                if is_495(pair["entry"]) and is_495(pair["exit"])
+            ],
+        ),
+        "i66_itb": (i66["nodes"], i66["pairs"]),
+    }
+
+
+_DIRECT_PAIR_ORACLES = _load_direct_pair_oracles()
+
+
+def _has_direct_pair(corridor: str, origin: str, destination: str) -> bool:
+    """Match the lookup rule of the VDOT tools without querying for a price."""
+    nodes, pairs = _DIRECT_PAIR_ORACLES[corridor]
+    origin_ids = (
+        [origin]
+        if origin in nodes
+        else [
+            node_id
+            for node_id, node in nodes.items()
+            if node["label"].casefold() == origin.casefold()
+        ]
+    )
+    destination_ids = (
+        [destination]
+        if destination in nodes
+        else [
+            node_id
+            for node_id, node in nodes.items()
+            if node["label"].casefold() == destination.casefold()
+        ]
+    )
+    return any(
+        pair["entry"] in origin_ids and pair["exit"] in destination_ids
+        for pair in pairs
+    )
+
 
 _ANTI_EXAMPLE = """A single-corridor pricing tool will happily price a trip all the way to the
 far end of its own corridor without ever returning an error -- a successful
@@ -312,7 +395,22 @@ def plan_toll_route(
         }
         <= _DULLES_CORRIDORS
     ):
+        if origin_corridor not in _DULLES_CORRIDORS and not _has_direct_pair(
+            origin_corridor, origin, destination
+        ):
+            return {
+                "error": (
+                    "planner produced no oracle-supported direct trip from "
+                    f"{origin!r} to {destination!r} on {origin_corridor}"
+                )
+            }
         return {"steps": [_priced_step(origin_corridor, origin, destination)]}
+
+    steps: list[dict] = []
+    if origin_corridor == "dulles_greenway":
+        # dulles_route owns its Route 28 boundary and returns both tolls.
+        steps.append(_priced_step(origin_corridor, origin, _DULLES_GATEWAY))
+        origin_corridor, origin = "dulles_toll_road", _DULLES_GATEWAY
 
     transfers = _transfer_path(origin_corridor, destination_corridor)
     if transfers is None:
@@ -323,7 +421,6 @@ def plan_toll_route(
             )
         }
 
-    steps: list[dict] = []
     current_corridor, current_point, current_label = origin_corridor, origin, origin
     for transfer in transfers:
         exit_label = transfer["from"]["exit"]
@@ -347,6 +444,22 @@ def plan_toll_route(
         )
     if current_label != destination:
         steps.append(_priced_step(current_corridor, current_point, destination))
+
+    for step in steps:
+        if (
+            step["kind"] == "priced"
+            and step["corridor"] not in _DULLES_CORRIDORS
+            and not _has_direct_pair(
+                step["corridor"], step["origin"], step["destination"]
+            )
+        ):
+            return {
+                "error": (
+                    "planner produced no oracle-supported direct trip from "
+                    f"{step['origin']!r} to {step['destination']!r} on "
+                    f"{step['corridor']}"
+                )
+            }
     return {"steps": steps}
 
 

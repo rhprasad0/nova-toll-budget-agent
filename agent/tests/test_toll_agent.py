@@ -32,6 +32,7 @@ def test_system_prompt_describes_curated_network_transfers():
     prompt = build_system_prompt()
     assert '"connector": "I-66/I-495 interchange"' in prompt
     assert '"connector": "Dulles Airport Access Highway"' in prompt
+    assert '"connector": "I-495/Route 267 interchange"' in prompt
     assert "explicitly labeled curated connector" in prompt
     assert "Do not infer a reverse edge" in prompt
     assert "Dulles Connector Road" not in prompt
@@ -113,6 +114,61 @@ def test_planner_uses_the_curated_i66_dulles_handoff():
             "destination": "Exit 12 - SR 602 (Reston Pkwy)",
         },
     ]
+
+
+def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
+    plan = plan_toll_route(
+        "dulles_greenway",
+        "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        "i95",
+        "Pentagon/Eads Street",
+    )
+    assert plan["steps"] == [
+        {
+            "kind": "priced",
+            "corridor": "dulles_greenway",
+            "tool": "dulles_route",
+            "origin": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+            "destination": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        },
+        {
+            "kind": "connector",
+            "label": "I-495/Route 267 interchange",
+            "price_usd": "0.00",
+        },
+        {
+            "kind": "priced",
+            "corridor": "i495",
+            "tool": "i495_route",
+            "origin": "182SO",
+            "destination": "192SD",
+        },
+        {
+            "kind": "connector",
+            "label": "Springfield interchange",
+            "price_usd": "0.00",
+        },
+        {
+            "kind": "priced",
+            "corridor": "i95",
+            "tool": "i95_route",
+            "origin": "206NO",
+            "destination": "Pentagon/Eads Street",
+        },
+    ]
+
+
+def test_planner_refuses_an_unsupported_interchange_leg():
+    plan = plan_toll_route(
+        "dulles_toll_road",
+        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        "i66_itb",
+        "I-495 S",
+    )
+    assert plan == {
+        "error": "planner produced no oracle-supported direct trip from '6' to "
+        "'I-495 S' on i66_itb"
+    }
 
 
 def test_system_prompt_states_the_overshoot_anti_example():
