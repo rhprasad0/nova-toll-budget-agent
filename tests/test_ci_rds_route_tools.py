@@ -13,6 +13,7 @@ Run explicitly (with the same environment as the CI integration job):
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -31,10 +32,18 @@ from rds_ci_test_support import (
 
 sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
 
+from dulles_route import dulles_route
 from i66_route import i66_route
+from i95_route import i95_junction_leg, i95_route
 from i495_route import i495_route
 
 pytestmark = pytest.mark.live
+
+_I95_ORACLE = json.loads((REPO_ROOT / "oracles" / "i95.json").read_text())
+_I95_REQUIRED_STATUS = {
+    "I-95-NB": "NORTHBOUND_OPEN",
+    "I-95-SB": "SOUTHBOUND_OPEN",
+}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -62,14 +71,399 @@ def _assert_common_price_fields(
     assert result["at_time"] == expected_at.isoformat()
 
 
+def _assert_price_at(
+    result: dict,
+    expected_rate: Decimal,
+    expected_as_of: datetime,
+    requested_at: datetime,
+):
+    """Assert a tool's source row and this test's shared requested time."""
+    assert "error" not in result, result
+    assert len(result["legs"]) == 1
+    assert result["legs"][0]["price_usd"] == str(expected_rate)
+    assert result["legs"][0]["priced_as_of"] == expected_as_of.isoformat()
+    assert result["total_usd"] == str(expected_rate)
+    assert result["at_time"] == requested_at.isoformat()
+
+
+def _current_open_i95_case() -> tuple[dict, tuple]:
+    """Return an oracle pair and its newest directionally-open RDS row.
+
+    I-95's lanes reverse, so a fixed northbound or southbound example would
+    make CI fail during the other direction's operating window. The route map
+    is read directly here rather than through i95_route, keeping discovery
+    independent from the tool under test.
+    """
+    nodes = _I95_ORACLE["nodes"]
+    pairs = [
+        pair
+        for pair in _I95_ORACLE["pairs"]
+        if not nodes[pair["entry"]]["path"].startswith("495")
+        and not nodes[pair["exit"]]["path"].startswith("495")
+    ]
+    pairs_by_od = {pair["ods"][0]: pair for pair in pairs if len(pair["ods"]) == 1}
+    # Fetch every candidate's newest row once. The status test stays in Python
+    # because the expected open value depends on the row's corridor_name.
+    now = datetime.now(UTC)
+    with connect_as_pricing_reader() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (od_pair_id)
+                od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at, link_status
+            FROM trip_pricing_i95
+            WHERE od_pair_id = ANY(%s) AND interval_end_at <= %s
+            ORDER BY od_pair_id, interval_end_at DESC
+            """,
+            (list(pairs_by_od), now),
+        )
+        candidates = cur.fetchall()
+
+    for row in candidates:
+        od_pair_id, corridor_name, _, _, link_status = row
+        if link_status == _I95_REQUIRED_STATUS.get(corridor_name):
+            return pairs_by_od[od_pair_id], row
+    pytest.fail("RDS has no current, directionally-open oracle-supported I-95 toll row")
+
+
+def test_i95_route_matches_independently_read_open_rds_price():
+    pair, row = _current_open_i95_case()
+    od_pair_id, corridor_name, rate, interval_end_at, _ = row
+    nodes = _I95_ORACLE["nodes"]
+
+    result = i95_route(
+        nodes[pair["entry"]]["label"],
+        nodes[pair["exit"]]["label"],
+        at_time=interval_end_at.isoformat(),
+    )
+
+    _assert_common_price_fields(result, rate, interval_end_at)
+    assert result["legs"][0]["od_pair_id"] == od_pair_id
+    assert result["legs"][0]["corridor_name"] == corridor_name
+
+
+def test_i95_route_refuses_historical_northbound_closure():
+    at_time = "2026-07-29T15:40:00-04:00"
+    row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1132, at_time),
+    )
+    assert row == (1132, "I-95-NB", "CLOSED")
+
+    result = i95_route("US-1", "I-395 Near Edsall Road", at_time=at_time)
+
+    assert "error" in result
+    assert result["valid_options"] == []
+    assert "1132" in result["error"]
+    assert "CLOSED" in result["error"]
+    assert "legs" not in result
+
+
+def test_i95_route_refuses_historical_southbound_closure():
+    at_time = "2026-07-29T10:10:00-04:00"
+    row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1151, at_time),
+    )
+    assert row == (1151, "I-95-SB", "CLOSED")
+
+    result = i95_route("I-395 Near Edsall Road", "US-1", at_time=at_time)
+
+    assert "error" in result
+    assert result["valid_options"] == []
+    assert "1151" in result["error"]
+    assert "CLOSED" in result["error"]
+    assert "legs" not in result
+
+
+def test_i95_route_refuses_historical_both_lanes_closure():
+    at_time = "2026-07-29T10:50:00-04:00"
+    northbound_row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1132, at_time),
+    )
+    southbound_row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1151, at_time),
+    )
+    assert northbound_row == (1132, "I-95-NB", "CLOSED")
+    assert southbound_row == (1151, "I-95-SB", "CLOSED")
+
+    northbound = i95_route("US-1", "I-395 Near Edsall Road", at_time=at_time)
+    southbound = i95_route("I-395 Near Edsall Road", "US-1", at_time=at_time)
+
+    for result, od_pair_id in ((northbound, 1132), (southbound, 1151)):
+        assert "error" in result
+        assert result["valid_options"] == []
+        assert str(od_pair_id) in result["error"]
+        assert "CLOSED" in result["error"]
+        assert "legs" not in result
+
+
+@pytest.mark.parametrize(
+    "location,movement,at_time,direction,boundary_node_id,od_pair_id,statuses",
+    [
+        (
+            "US-1",
+            "i95_to_i495",
+            "2026-07-29T10:10:00-04:00",
+            "Northbound",
+            "206ND",
+            1130,
+            ("NORTHBOUND_OPEN", "CLOSED"),
+        ),
+        (
+            "Pentagon/Eads Street",
+            "i95_to_i495",
+            "2026-07-29T18:50:00-04:00",
+            "Southbound",
+            "227SD",
+            1203,
+            ("CLOSED", "SOUTHBOUND_OPEN"),
+        ),
+        (
+            "Pentagon/Eads Street",
+            "i495_to_i95",
+            "2026-07-29T10:10:00-04:00",
+            "Northbound",
+            "206NO",
+            1255,
+            ("NORTHBOUND_OPEN", "CLOSED"),
+        ),
+        (
+            "US-1",
+            "i495_to_i95",
+            "2026-07-29T18:50:00-04:00",
+            "Southbound",
+            "200SO",
+            1151,
+            ("CLOSED", "SOUTHBOUND_OPEN"),
+        ),
+    ],
+)
+def test_i95_junction_leg_selects_the_vdot_open_direction(
+    location,
+    movement,
+    at_time,
+    direction,
+    boundary_node_id,
+    od_pair_id,
+    statuses,
+):
+    row = _fetchone(
+        """
+        SELECT
+            leg.zone_toll_rate_usd,
+            leg.interval_end_at,
+            nb.link_status,
+            sb.link_status
+        FROM trip_pricing_i95 AS leg
+        JOIN trip_pricing_i95 AS nb USING (interval_end_at)
+        JOIN trip_pricing_i95 AS sb USING (interval_end_at)
+        WHERE leg.od_pair_id = %s
+          AND nb.od_pair_id = 1132
+          AND sb.od_pair_id = 1151
+          AND leg.interval_end_at = %s
+        """,
+        (od_pair_id, at_time),
+    )
+    rate, interval_end_at, northbound_status, southbound_status = row
+    assert (northbound_status, southbound_status) == statuses
+
+    result = i95_junction_leg(location, movement, at_time=at_time)
+
+    assert result["pricing_status"] == "priced"
+    assert result["direction"] == direction
+    assert result["legs"][0]["od_pair_id"] == od_pair_id
+    assert result["legs"][0]["price_usd"] == str(rate)
+    assert result["legs"][0]["priced_as_of"] == interval_end_at.isoformat()
+    boundary_role = "exit" if movement == "i95_to_i495" else "entry"
+    assert result[boundary_role]["node_id"] == boundary_node_id
+    assert result["lane_statuses"] == {
+        "Northbound": northbound_status,
+        "Southbound": southbound_status,
+    }
+
+
+@pytest.mark.parametrize(
+    ("at_time", "statuses"),
+    [
+        ("2026-07-29T10:50:00-04:00", ("CLOSED", "CLOSED")),
+        ("2026-07-29T10:20:00-04:00", ("NORTHBOUND_CLOSING", "CLOSED")),
+    ],
+)
+def test_i95_junction_leg_fails_safe_when_no_direction_is_fully_open(at_time, statuses):
+    result = i95_junction_leg("US-1", "i95_to_i495", at_time=at_time)
+
+    assert result["pricing_status"] == "unavailable"
+    assert result["lane_statuses"] == {
+        "Northbound": statuses[0],
+        "Southbound": statuses[1],
+    }
+    assert "total_usd" not in result
+
+
+@pytest.mark.parametrize(
+    "i66_origin, i66_destination, i66_start_zone, i66_end_zone, i495_origin, i495_destination, i495_od_pair_id",
+    [
+        ("I-495 N", "Washington", 3100, 3130, "Route 267", "Interstate 66", 1052),
+        ("Washington", "I-495 S", 3200, 3230, "Interstate 66", "Route 267", 1033),
+    ],
+)
+def test_i66_i495_junction_tools_match_shared_requested_time(
+    i66_origin,
+    i66_destination,
+    i66_start_zone,
+    i66_end_zone,
+    i495_origin,
+    i495_destination,
+    i495_od_pair_id,
+):
+    row = _fetchone(
+        """
+        WITH requested AS (
+            SELECT LEAST(
+                (SELECT interval_end_at FROM trip_pricing_i66
+                 WHERE start_zone_id = %s AND end_zone_id = %s
+                   AND interval_end_at <= CURRENT_TIMESTAMP
+                 ORDER BY interval_end_at DESC LIMIT 1),
+                (SELECT interval_end_at FROM trip_pricing_i95
+                 WHERE od_pair_id = %s AND interval_end_at <= CURRENT_TIMESTAMP
+                 ORDER BY interval_end_at DESC LIMIT 1)
+            ) AS at_time
+        )
+        SELECT
+            requested.at_time,
+            i66.start_zone_id, i66.end_zone_id, i66.corridor_name, i66.zone_toll_rate_usd,
+            i66.interval_end_at,
+            i495.od_pair_id, i495.corridor_name, i495.zone_toll_rate_usd, i495.interval_end_at
+        FROM requested
+        CROSS JOIN LATERAL (
+            SELECT start_zone_id, end_zone_id, corridor_name, zone_toll_rate_usd, interval_end_at
+            FROM trip_pricing_i66
+            WHERE start_zone_id = %s AND end_zone_id = %s
+              AND interval_end_at <= requested.at_time
+            ORDER BY interval_end_at DESC LIMIT 1
+        ) AS i66
+        CROSS JOIN LATERAL (
+            SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+            FROM trip_pricing_i95
+            WHERE od_pair_id = %s AND interval_end_at <= requested.at_time
+            ORDER BY interval_end_at DESC LIMIT 1
+        ) AS i495
+        """,
+        (
+            i66_start_zone,
+            i66_end_zone,
+            i495_od_pair_id,
+            i66_start_zone,
+            i66_end_zone,
+            i495_od_pair_id,
+        ),
+    )
+    (
+        at_time,
+        i66_start,
+        i66_end,
+        i66_corridor,
+        i66_rate,
+        i66_as_of,
+        i495_od,
+        i495_corridor,
+        i495_rate,
+        i495_as_of,
+    ) = row
+
+    i66_result = i66_route(i66_origin, i66_destination, at_time=at_time.isoformat())
+    i495_result = i495_route(i495_origin, i495_destination, at_time=at_time.isoformat())
+
+    _assert_price_at(i66_result, i66_rate, i66_as_of, at_time)
+    assert i66_result["legs"][0]["start_zone_id"] == i66_start
+    assert i66_result["legs"][0]["end_zone_id"] == i66_end
+    assert i66_result["legs"][0]["corridor_name"] == i66_corridor
+    assert i66_result["entry"]["label"] == i66_origin
+    assert i66_result["exit"]["label"] == i66_destination
+
+    _assert_price_at(i495_result, i495_rate, i495_as_of, at_time)
+    assert i495_result["legs"][0]["od_pair_id"] == i495_od
+    assert i495_result["legs"][0]["corridor_name"] == i495_corridor
+    assert i495_result["entry"]["label"] == i495_origin
+    assert i495_result["exit"]["label"] == i495_destination
+
+
+@pytest.mark.parametrize(
+    "i495_origin, i495_destination, od_pair_id, dulles_origin, dulles_destination",
+    [
+        (
+            "Westpark Drive",
+            "Route 267",
+            1036,
+            "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "Exit 12 - SR 602 (Reston Pkwy)",
+        ),
+        (
+            "Route 267",
+            "Westpark Drive",
+            1053,
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        ),
+    ],
+)
+def test_i495_dulles_toll_road_junction_tools_match_shared_requested_time(
+    i495_origin,
+    i495_destination,
+    od_pair_id,
+    dulles_origin,
+    dulles_destination,
+):
+    row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at <= CURRENT_TIMESTAMP
+        ORDER BY interval_end_at DESC
+        LIMIT 1
+        """,
+        (od_pair_id,),
+    )
+    resolved_od_pair_id, corridor_name, rate, at_time = row
+
+    i495_result = i495_route(i495_origin, i495_destination, at_time=at_time.isoformat())
+    dulles_result = dulles_route(
+        dulles_origin, dulles_destination, at_time=at_time.isoformat()
+    )
+
+    _assert_price_at(i495_result, rate, at_time, at_time)
+    assert i495_result["legs"][0]["od_pair_id"] == resolved_od_pair_id
+    assert i495_result["legs"][0]["corridor_name"] == corridor_name
+    assert i495_result["entry"]["label"] == i495_origin
+    assert i495_result["exit"]["label"] == i495_destination
+    [dulles_leg] = dulles_result["legs"]
+    assert dulles_leg["facility"] == "dulles_toll_road"
+    assert dulles_leg["entry"]["label"] == dulles_origin
+    assert dulles_leg["exit"]["label"] == dulles_destination
+
+
 @pytest.mark.parametrize(
     ("od_pair_id", "origin", "destination"),
     [
-        (
-            1038,
-            "Route 267",
-            "495 Express Lanes End/George Wash. Mem. Pkwy.",
-        ),
+        (1038, "Route 267", "495 Express Lanes End/George Wash. Mem. Pkwy."),
         (
             1040,
             "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",

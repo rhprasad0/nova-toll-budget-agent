@@ -21,11 +21,6 @@ money. Everything else is hygiene, tracked but not gating launch.
       is an empty placeholder; no `agent`/`bedrock`/`agentcore` reference
       anywhere in `infra/iam.tf` or elsewhere). Scope as its own infra work
       item: IAM execution role, runtime resource, network path to RDS.
-- [ ] **Wrong-answer generator in routing logic.** `agent/toll_agent.py:104-113`,
-      the `("dulles_greenway", "i495")` JUNCTIONS entry asserts both
-      "NOT EVIDENCED" and "must route through dulles_toll_road" in the same
-      entry. Live contradiction in code, also flagged in
-      `agent-evals-tasks.md` §3.1. Resolve before traffic hits this path.
 - [ ] **No cost/abuse controls on a public Bedrock endpoint.** Need a
       request rate limit, a budget alarm on Bedrock spend, and a cap on
       turns/tokens per session. Prompt-injection blast radius is small (5

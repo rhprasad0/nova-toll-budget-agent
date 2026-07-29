@@ -1,13 +1,13 @@
 # Oracle Route Tools — Spec
 
-Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-28
+Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-29
 
-Four Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`,
-`i495_route`, and `dulles_route`, resolve a human trip ("from X to Y", at an
+Five Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`,
+`i95_junction_leg`, `i495_route`, and `dulles_route`, resolve a human trip ("from X to Y", at an
 optional time) to its route and its price. `agent/toll_agent.py` embeds the
 priceable labels from the same committed route oracles in its system prompt,
 so it can match vague or misspelled user locations before calling one of the
-four tools. Companion docs:
+tools. Companion docs:
 `docs/oracle-findings.md` (what the i66/i95/i495 oracles are and their
 known gaps, including §8 on why i95_route/i495_route don't resolve
 cross-corridor trips), `docs/poller-spec.md` (the pricing tables and the
@@ -33,8 +33,8 @@ removed because the team reversed course on letting an agent query Postgres
 directly. These tools reopen DB access, but narrowly and deliberately, not
 a return to that surface:
 
-- **DB access is one fixed, parameterized SELECT query per tool against a
-  known VDOT relation** (`current_trip_pricing_i66`/`trip_pricing_i66` for
+- **DB access uses fixed, parameterized SELECT queries against known VDOT
+  relations** (`current_trip_pricing_i66`/`trip_pricing_i66` for
   i66, `current_trip_pricing_i95`/`trip_pricing_i95` for both i95 and i495),
   via a SELECT-only role (`pricing_reader`, `db/roles.sql`)
   with no INSERT/UPDATE and no access to anything else in the database —
@@ -47,8 +47,10 @@ a return to that surface:
   the 307 pairs that start and end on the 95/395 Express Lanes, i495_route.py
   keeps the 78 that start and end on the 495 Express Lanes. The other 300
   pairs — trips that cross between the two facilities — are resolvable by
-  **neither** tool; a caller wanting a full cross-corridor journey makes two
-  calls, one to each tool, and combines the results itself. This was a
+  **neither** ordinary route tool. `i95_junction_leg` selects the usable
+  direction-specific 95 segment; `i495_route` prices independently from or
+  to I-495 Near Braddock Road. The caller must not combine those prices
+  because the junction between them is unpriced. This was a
   deliberate split (not the original design — see
   `docs/oracle-findings.md` §8 for why), and it means every within-facility
   trip either tool ever resolves has exactly one leg: there is no
@@ -262,9 +264,9 @@ mistaken for the final story.
   external consumer ever needs a published JSON Schema, generate it from
   `tool_spec` rather than hand-writing a second copy. The tests do assert
   `tool_spec["name"]` and `tool_spec["inputSchema"]["json"]["required"]`
-  for every tool — parametrized over all three RDS-backed tools in
-  `test_route_tools.py`, and once each in `test_dulles_route.py` /
-  `test_dulles_route.py` — as a cheap check that Strands actually parsed the
+  for every tool — parametrized over the three ordinary RDS-backed route
+  tools in `test_route_tools.py`, plus focused junction and Dulles assertions
+  in their own test modules — as a cheap check that Strands actually parsed the
   docstring (required stays `{"origin", "destination"}` for the route tools
   — `at_time` is optional).
 - `agent_tools/tests/test_route_tools.py`: the behaviour all three
@@ -279,7 +281,9 @@ mistaken for the final story.
   availability gate's branches (a closed and a wrong-direction
   `I-95-NB`/`I-95-SB` row each hard-erroring, an unrecognized
   `corridor_name` hard-erroring) and a label-shared-by-multiple-node-ids
-  case. `test_oracle_route.py` covers `resolve_at_time`'s
+  case. It also covers `i95_junction_leg` selecting Edsall or
+  Franconia-Springfield, and failing safe for closed, transitional,
+  ambiguous, missing, or misaligned status rows. `test_oracle_route.py` covers `resolve_at_time`'s
   parsing/defaulting once, where the one implementation lives.
   Pricing tests use a duck-typed fake connection/cursor
   (`agent_tools/tests/conftest.py`'s `FakeConnection`) via `monkeypatch`,
@@ -289,7 +293,7 @@ mistaken for the final story.
   specifically so this monkeypatch convention keeps working even though
   the implementation lives in the shared module.
   `agent_tools/tests/test_no_psycopg_at_import.py` guards that importing
-  any of the three tool modules never pulls in `psycopg` (it's a real
+  any RDS tool module never pulls in `psycopg` (it's a real
   dependency now, but `_oracle_route.env_connect()` imports it lazily).
 - Existing `tests/test_i66_oracle.py`/`test_i95_oracle.py` (shape/scale
   guards on the oracle files themselves) are unchanged and relied upon, not

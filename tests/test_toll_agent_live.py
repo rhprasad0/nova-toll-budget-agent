@@ -1,7 +1,4 @@
-"""End-to-end check that agent/toll_agent.py's Haiku agent doesn't overshoot
-a cross-corridor trip -- the exact regression a manual smoke test caught
-(Dumfries -> Westpark priced the I-95 leg all the way to Washington D.C.
-before the agent was told to stop at the Springfield interchange).
+"""End-to-end checks for direction-aware I-95/I-495 junction pricing.
 
 Hits live Bedrock (and, via the tools it calls, live RDS) -- deliberately
 marked `live` and excluded from the default `pytest` run (see
@@ -37,12 +34,8 @@ AWS_REGION = "us-east-1"
 DB_IDENTIFIER = "nova-toll-db"
 CA_BUNDLE_PATH = REPO_ROOT / "infra" / "build" / "loader" / "rds-ca-bundle.pem"
 
-# The i95-side junction labels a correctly-bounded leg 1 must end at, and
-# the i495-side junction labels a correctly-bounded leg 2 must start at --
-# see agent/toll_agent.py's JUNCTIONS[("i95", "i495")].
-_I95_JUNCTION_NODE_IDS = {"206ND", "206NO", "206SO", "206SD"}
-_I495_JUNCTION_NODE_IDS = {"192NO", "192SD"}
 _PRICING_TOOLS = {"i95_route", "i495_route", "i66_route", "dulles_route"}
+_AGENT_TOOLS = _PRICING_TOOLS | {"i95_junction_leg"}
 
 _BOUNDARY_CASES = [
     (
@@ -51,7 +44,7 @@ _BOUNDARY_CASES = [
             "Price Courthouse Road/Route 630 on the I-95 Express Lanes to "
             "Westpark Drive on the I-495 Express Lanes."
         ),
-        ["Springfield interchange"],
+        [],
     ),
     (
         "i495-to-i95",
@@ -59,7 +52,7 @@ _BOUNDARY_CASES = [
             "Price Westpark Drive on the I-495 Express Lanes to Pentagon/Eads "
             "Street on the I-95/395 Express Lanes."
         ),
-        ["Springfield interchange"],
+        [],
     ),
     (
         "i66-to-i495",
@@ -139,7 +132,7 @@ _BOUNDARY_CASES = [
             "Price Courthouse Road/Route 630 on the I-95 Express Lanes to Exit 3 "
             "- SR 653 (Shreve Mill Rd) on the Dulles Greenway."
         ),
-        ["Springfield interchange", "I-495/Route 267 interchange"],
+        ["I-495/Route 267 interchange"],
     ),
     (
         "alternate-i95-to-i66",
@@ -148,7 +141,6 @@ _BOUNDARY_CASES = [
             "Drive on I-66 Inside the Beltway."
         ),
         [
-            "Springfield interchange",
             "I-495/Route 267 interchange",
             "Dulles Airport Access Highway",
         ],
@@ -189,6 +181,15 @@ def _pricing_tool_uses(agent) -> list[dict]:
         for message in agent.messages
         for block in message.get("content", [])
         if (tool_use := block.get("toolUse")) and tool_use.get("name") in _PRICING_TOOLS
+    ]
+
+
+def _route_tool_uses(agent) -> list[dict]:
+    return [
+        tool_use
+        for message in agent.messages
+        for block in message.get("content", [])
+        if (tool_use := block.get("toolUse")) and tool_use.get("name") in _AGENT_TOOLS
     ]
 
 
@@ -236,37 +237,20 @@ def live_pricing_env(monkeypatch):
     monkeypatch.setenv("DB_CA_BUNDLE_PATH", str(CA_BUNDLE_PATH))
 
 
-def test_dumfries_to_westpark_splits_at_springfield_not_dc(live_pricing_env):
+def test_dumfries_to_westpark_uses_the_unpriced_braddock_junction(
+    live_pricing_env,
+):
     agent = build_agent()
     agent("Price a trip from Dumfries to Westpark")
 
-    i95_calls = _tool_uses(agent, "i95_route")
+    junction_calls = _tool_uses(agent, "i95_junction_leg")
     i495_calls = _tool_uses(agent, "i495_route")
 
-    assert i95_calls, "expected the agent to call i95_route for the Dumfries leg"
+    assert len(junction_calls) == 1
     assert i495_calls, "expected the agent to call i495_route for the Westpark leg"
-
-    # Every i95_route call in this trip must stop at the junction -- none may
-    # overshoot to Washington D.C. or any other far-corridor destination.
-    i95_junction_markers = _I95_JUNCTION_NODE_IDS | {"Franconia", "Springfield"}
-    for call in i95_calls:
-        destination = call["input"].get("destination", "")
-        assert any(marker in destination for marker in i95_junction_markers), (
-            f"i95_route destination {destination!r} does not resolve to the Springfield junction"
-        )
-        assert "Washington" not in destination
-
-    # At least one i495_route call must start from the junction.
-    i495_junction_markers = _I495_JUNCTION_NODE_IDS | {"Van Dorn"}
-    assert any(
-        marker in call["input"].get("origin", "")
-        for call in i495_calls
-        for marker in i495_junction_markers
-    ), "expected an i495_route call originating at the Van Dorn Street junction"
-
-    # The I-95 direction can legitimately be unavailable at test time. This
-    # regression is about correctly splitting the route before pricing, not
-    # requiring a price from a lane that VDOT currently marks closing/closed.
+    assert junction_calls[0]["input"]["movement"] == "i95_to_i495"
+    assert i495_calls[0]["input"]["origin"] == "191NO"
+    assert not _tool_uses(agent, "i95_route")
 
 
 def test_i66_price_answer_shows_work_and_vdot_observed_time(live_pricing_env):
@@ -314,7 +298,7 @@ def test_agent_follows_every_network_boundary(
     response = agent(prompt)
 
     plans = _tool_results(agent, "plan_toll_route")
-    actual_calls = _pricing_tool_uses(agent)
+    actual_calls = _route_tool_uses(agent)
     assert actual_calls
     if not plans:
         assert expected_connectors == []
@@ -329,24 +313,34 @@ def test_agent_follows_every_network_boundary(
     ] == expected_connectors
 
     expected_calls = [
-        (step["tool"], step["origin"], step["destination"])
+        (
+            step["tool"],
+            (
+                {
+                    "origin": step["origin"],
+                    "destination": step["destination"],
+                }
+                if step["kind"] == "priced"
+                else {
+                    "location": step["location"],
+                    "movement": step["movement"],
+                }
+            ),
+        )
         for step in plan["steps"]
-        if step["kind"] == "priced"
+        if step["kind"] in {"priced", "junction"}
     ]
     assert [
         (
             call["name"],
-            _resolved_boundaries(
-                call["name"],
-                call["input"]["origin"],
-                call["input"]["destination"],
-            ),
+            {
+                key: value
+                for key, value in call["input"].items()
+                if key in {"origin", "destination", "location", "movement"}
+            },
         )
         for call in actual_calls
-    ] == [
-        (tool_name, _resolved_boundaries(tool_name, origin, destination))
-        for tool_name, origin, destination in expected_calls[: len(actual_calls)]
-    ]
+    ] == expected_calls[: len(actual_calls)]
     assert len(actual_calls) <= len(expected_calls)
 
     if len(actual_calls) < len(expected_calls):

@@ -431,19 +431,19 @@
         <div class="walk-visual">
           <div class="route-line" aria-label="Planned route diagram">
             <div class="route-leg route-piece" data-on="2" style="--leg-color:var(--coral)">
-              <b>I‑95 priced leg</b>
-              <small>Courthouse Road → node 206ND</small>
+              <b>Direction-selected I‑95 leg</b>
+              <small>Courthouse Road → Edsall or Franconia</small>
             </div>
-            <div class="connector route-piece" data-on="2">SPRINGFIELD<br>$0</div>
+            <div class="connector route-piece" data-on="2">JUNCTION<br>UNPRICED</div>
             <div class="route-leg route-piece" data-on="3" style="--leg-color:var(--gold)">
               <b>I‑495 priced leg</b>
-              <small>node 192NO → Westpark Drive</small>
+              <small>node 191NO → Westpark Drive</small>
             </div>
           </div>
           <div class="queue" aria-label="Search frontier">
             <span class="queue-item" data-on="0">user phrase</span>
             <span class="queue-item" data-on="1">(i95, Courthouse)</span>
-            <span class="queue-item" data-on="2">(i495, 192NO)</span>
+            <span class="queue-item" data-on="2">(i495, 191NO)</span>
             <span class="queue-item" data-on="3">destination found</span>
           </div>
         </div>
@@ -471,9 +471,9 @@
       <p class="section-copy">The planner is conservative by design. Missing evidence produces an error, not an imaginative detour or a suspiciously convenient fare.</p>
     </div>
     <div class="guardrails">
-      <article class="guardrail"><span class="icon">↔</span><h3>Direction survives duplicate names</h3><p>Connector boundaries use node IDs such as 206ND and 192NO, preserving entry and exit roles even when labels repeat.</p></article>
+      <article class="guardrail"><span class="icon">↔</span><h3>Direction selects the boundary</h3><p>VDOT lane status selects Edsall southbound or Franconia-Springfield northbound; I‑495 pricing resumes at Braddock node 191NO.</p></article>
       <article class="guardrail"><span class="icon">×</span><h3>No unsupported edge</h3><p>If neither a direct oracle pair nor a committed transfer reaches the destination, the result is an explicit “no supported directed route” error.</p></article>
-      <article class="guardrail"><span class="icon">$</span><h3>No invented price</h3><p>The planner returns instructions only. RDS-backed tools fetch dynamic tolls; dulles_route uses committed fare oracles. Connector steps stay $0.</p></article>
+      <article class="guardrail"><span class="icon">$</span><h3>No invented price</h3><p>The junction is unpriced, never $0. Known segment fares remain separate and never become a complete trip total.</p></article>
     </div>
 
     <details>
@@ -522,8 +522,8 @@ return "no oracle-supported directed route"</pre>
     },
     i495: {
       title: "I‑495 Express Lanes",
-      copy: "The network’s central bridge. Its own oracle proves which entry can reach which exit; separate handoffs connect it to I‑95, I‑66, and the Dulles Toll Road.",
-      items: ["Pricing tool: i495_route", "Handoffs: Springfield, I‑66/I‑495, Route 267", "Direction: encoded by distinct oracle node IDs"]
+      copy: "The network’s central bridge. Its own oracle proves which entry can reach which exit; pricing beside I‑95 begins or ends at Braddock.",
+      items: ["Pricing tool: i495_route", "Junction boundary: I‑495 Near Braddock Road", "Other handoffs: I‑66/I‑495 and Route 267"]
     },
     i66: {
       title: "I‑66 Inside the Beltway",
@@ -532,8 +532,8 @@ return "no oracle-supported directed route"</pre>
     },
     i95: {
       title: "I‑95 / 395 Express Lanes",
-      copy: "A dynamically priced corridor with reversible availability. The planner handles topology; the pricing tool still decides whether the requested direction is currently open.",
-      items: ["Pricing tool: i95_route", "Handoff: Springfield interchange", "Availability: checked by the pricing tool"]
+      copy: "A dynamically priced corridor with reversible availability. A dedicated junction tool selects Edsall southbound or Franconia-Springfield northbound.",
+      items: ["Pricing tools: i95_route and i95_junction_leg", "Junction: explicitly unpriced", "Availability: checked from VDOT"]
     }
   };
 
@@ -580,13 +580,13 @@ return "no oracle-supported directed route"</pre>
     },
     {
       title: "Search only supported edges",
-      copy: "I‑95 cannot price an I‑495 destination directly. Breadth-first search finds a priceable I‑95 leg to node 206ND, then crosses the committed Springfield handoff to I‑495 node 192NO.",
-      code: `frontier:\n  ("i95", "Courthouse Road/Route 630")\n\nreachable transfer:\n  206ND → Springfield → 192NO\n\nnext frontier:\n  ("i495", "192NO")`
+      copy: "I‑95 cannot price an I‑495 destination directly. The junction tool checks both VDOT directions, chooses Edsall or Franconia-Springfield, and leaves the road to Braddock unpriced.",
+      code: `junction step:\n  i95_junction_leg(location="Courthouse Road/Route 630")\n\nselected 95 boundary:\n  Edsall or Franconia-Springfield\n\nnext frontier:\n  ("i495", "191NO")`
     },
     {
       title: "Emit the only allowed call sequence",
-      copy: "The agent may now call exactly two pricing tools, in order. The connector is reported to the user at $0.00 and must never be sent to a pricing tool.",
-      code: `{\n  "steps": [\n    {"tool":"i95_route", "origin":"Courthouse Road/Route 630", "destination":"206ND"},\n    {"kind":"connector", "label":"Springfield interchange", "price_usd":"0.00"},\n    {"tool":"i495_route", "origin":"192NO", "destination":"Westpark Drive"}\n  ]\n}`
+      copy: "The agent calls the direction-aware junction tool, then prices I‑495 from Braddock. It reports both known fares separately and withholds a complete total.",
+      code: `{\n  "steps": [\n    {"kind":"junction", "tool":"i95_junction_leg", "location":"Courthouse Road/Route 630"},\n    {"kind":"priced", "tool":"i495_route", "origin":"191NO", "destination":"Westpark Drive"}\n  ]\n}`
     }
   ];
 

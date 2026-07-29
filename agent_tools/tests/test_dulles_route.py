@@ -142,6 +142,36 @@ def test_composite_trip_reverse_direction():
     assert [toll["price_usd"] for toll in result["tolls"]] == ["5.25", "4.00", "2.00"]
 
 
+def test_composite_trip_uses_route_28_from_the_i495_side_in_both_directions():
+    to_greenway = dulles_route(
+        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        at_time=_WEEKDAY_OFF_PEAK,
+    )
+    to_beltway = dulles_route(
+        "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        at_time=_WEEKDAY_OFF_PEAK,
+    )
+
+    dtr_leg, greenway_leg = to_greenway["legs"]
+    assert dtr_leg["facility"] == "dulles_toll_road"
+    assert dtr_leg["exit"]["label"] == "Route 28 (Dulles Toll Road / Dulles Greenway)"
+    assert greenway_leg["facility"] == "dulles_greenway"
+    assert (
+        greenway_leg["entry"]["label"]
+        == "Route 28 (Dulles Toll Road / Dulles Greenway)"
+    )
+
+    greenway_leg, dtr_leg = to_beltway["legs"]
+    assert greenway_leg["facility"] == "dulles_greenway"
+    assert (
+        greenway_leg["exit"]["label"] == "Route 28 (Dulles Toll Road / Dulles Greenway)"
+    )
+    assert dtr_leg["facility"] == "dulles_toll_road"
+    assert dtr_leg["entry"]["label"] == "Route 28 (Dulles Toll Road / Dulles Greenway)"
+
+
 def test_dtr_ramp_only_trip_omits_the_free_mainline():
     result = dulles_route(
         "Exit 12 - SR 602 (Reston Pkwy)", "Exit 13 - SR 828 (Wiehle Ave)"
