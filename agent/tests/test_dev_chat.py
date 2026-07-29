@@ -5,8 +5,9 @@ import os
 import threading
 import urllib.request
 
+import dev_chat
 import pytest
-from dev_chat import DevChat, create_server
+from dev_chat import DevChat, configure_local_pricing_env, create_server
 
 
 class _Metrics:
@@ -54,6 +55,37 @@ class _Factory:
         agent = _Agent(len(self.agents) + 1, trace_attributes)
         self.agents.append(agent)
         return agent
+
+
+def test_local_server_discovers_its_read_only_database_environment(
+    monkeypatch, tmp_path
+):
+    ca_bundle = tmp_path / "rds-ca-bundle.pem"
+    ca_bundle.touch()
+    monkeypatch.setattr(dev_chat, "_CA_BUNDLE_PATH", ca_bundle)
+    discovered = []
+    monkeypatch.setattr(
+        dev_chat,
+        "configure_pricing_reader_rds_env",
+        lambda: discovered.append(True),
+    )
+    for name in (
+        "AWS_PROFILE",
+        "AWS_DEFAULT_REGION",
+        "DB_NAME",
+        "DB_USER",
+        "DB_CA_BUNDLE_PATH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    configure_local_pricing_env()
+
+    assert discovered == [True]
+    assert os.environ["AWS_PROFILE"] == "nova-toll"
+    assert os.environ["AWS_DEFAULT_REGION"] == "us-east-1"
+    assert os.environ["DB_NAME"] == "nova_toll"
+    assert os.environ["DB_USER"] == "pricing_reader"
+    assert os.environ["DB_CA_BUNDLE_PATH"] == str(ca_bundle)
 
 
 def test_chat_reuses_sessions_writes_raw_telemetry_and_resets(tmp_path):

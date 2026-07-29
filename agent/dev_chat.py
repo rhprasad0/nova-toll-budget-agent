@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import re
+import sys
 import threading
 import time
 import uuid
@@ -19,9 +20,28 @@ from typing import Any
 from strands.telemetry import StrandsTelemetry
 from toll_agent import build_agent
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+from rds_ci_test_support import configure_pricing_reader_rds_env
+
 _HTML_PATH = Path(__file__).with_suffix(".html")
+_CA_BUNDLE_PATH = _REPO_ROOT / "infra/build/loader/rds-ca-bundle.pem"
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _MAX_MESSAGE_CHARS = 8_000
+
+
+def configure_local_pricing_env() -> None:
+    """Discover read-only RDS settings needed by the local console."""
+    if not _CA_BUNDLE_PATH.exists():
+        raise FileNotFoundError(
+            f"{_CA_BUNDLE_PATH} missing -- run scripts/build_zips.sh first"
+        )
+    os.environ.setdefault("AWS_PROFILE", "nova-toll")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+    os.environ.setdefault("DB_NAME", "nova_toll")
+    os.environ.setdefault("DB_USER", "pricing_reader")
+    os.environ.setdefault("DB_CA_BUNDLE_PATH", str(_CA_BUNDLE_PATH))
+    configure_pricing_reader_rds_env()
 
 
 class DevChat:
@@ -184,6 +204,7 @@ def create_server(
 
 
 def main() -> None:
+    configure_local_pricing_env()
     os.environ.setdefault("OTEL_SERVICE_NAME", "tollchat-dev")
     StrandsTelemetry().setup_console_exporter()
     server = create_server(DevChat())

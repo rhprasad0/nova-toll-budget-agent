@@ -64,6 +64,10 @@ For SSH-only agent testing, start the loopback console with:
 uv run python agent/dev_chat.py
 ```
 
+Startup discovers `DB_HOST`/`DB_PORT` from RDS and configures the read-only
+`pricing_reader` connection automatically. It requires the `nova-toll` AWS
+profile, Tailscale access, and a CA bundle built by `scripts/build_zips.sh`.
+
 From your workstation, tunnel it before opening `http://127.0.0.1:8000`:
 
 ```sh

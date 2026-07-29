@@ -6,10 +6,13 @@ tests/test_toll_agent_live.py for the real end-to-end check.
 """
 
 import json
+import sys
+from collections import deque
 from pathlib import Path
 
 from strands.models import BedrockModel
 from toll_agent import (
+    _DIRECT_PAIR_ORACLES,
     _LOCATION_ALIASES,
     _PRICED_LOCATION_ORACLE_JSON,
     NETWORK_TRANSFERS,
@@ -17,6 +20,91 @@ from toll_agent import (
     build_system_prompt,
     plan_toll_route,
 )
+
+_DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
+_dulles_lookup = sys.modules["dulles_route"]._lookup
+_LOOKUPS = {
+    "i95": sys.modules["i95_route"]._lookup,
+    "i495": sys.modules["i495_route"]._lookup,
+    "i66_itb": sys.modules["i66_route"]._lookup,
+}
+
+
+def _same_location(corridor, query, node_id):
+    nodes, _ = _DIRECT_PAIR_ORACLES[corridor]
+    return query == node_id or (
+        node_id in nodes and nodes[node_id]["label"].casefold() == query.casefold()
+    )
+
+
+def _can_price(origin_corridor, origin, destination_corridor, destination):
+    if {origin_corridor, destination_corridor} <= _DULLES_CORRIDORS:
+        return "error" not in _dulles_lookup(origin, destination)
+    return origin_corridor == destination_corridor and "error" not in _LOOKUPS[
+        origin_corridor
+    ](origin, destination)
+
+
+def _reference_reachable(origin_corridor, origin, destination_corridor, destination):
+    frontier = deque([(origin_corridor, origin)])
+    visited = {(origin_corridor, origin)}
+    while frontier:
+        corridor, point = frontier.popleft()
+        if (
+            corridor == destination_corridor
+            and _same_location(corridor, destination, point)
+        ) or _can_price(corridor, point, destination_corridor, destination):
+            return True
+        for transfer in NETWORK_TRANSFERS:
+            source = transfer["from"]
+            if not (
+                (
+                    corridor == source["corridor"]
+                    and _same_location(corridor, point, source["node_id"])
+                )
+                or _can_price(corridor, point, source["corridor"], source["node_id"])
+            ):
+                continue
+            target = transfer["to"]
+            state = (target["corridor"], target["node_id"])
+            if state not in visited:
+                visited.add(state)
+                frontier.append(state)
+    return False
+
+
+def _assert_plan_is_continuous(
+    origin_corridor, origin, destination_corridor, destination, plan
+):
+    corridor, point = origin_corridor, origin
+    for step in plan["steps"]:
+        if step["kind"] == "priced":
+            assert (step["corridor"], step["origin"]) == (corridor, point)
+            if corridor in _DULLES_CORRIDORS:
+                result = _dulles_lookup(step["origin"], step["destination"])
+                assert "error" not in result
+                corridor, pair = result["legs"][-1]
+                point = pair["exit"]
+            else:
+                result = _LOOKUPS[corridor](step["origin"], step["destination"])
+                assert "error" not in result
+                point = result["exit"]["node_id"]
+        else:
+            transfers = [
+                transfer
+                for transfer in NETWORK_TRANSFERS
+                if transfer["connector"] == step["label"]
+                and transfer["from"]["corridor"] == corridor
+                and _same_location(corridor, point, transfer["from"]["node_id"])
+            ]
+            assert len(transfers) == 1
+            target = transfers[0]["to"]
+            corridor, point = target["corridor"], target["node_id"]
+    assert corridor == destination_corridor or (
+        {corridor, destination_corridor} <= _DULLES_CORRIDORS
+        and _same_location(corridor, destination, point)
+    )
+    assert _same_location(corridor, destination, point)
 
 
 def test_system_prompt_contains_i95_i495_junction():
@@ -129,7 +217,7 @@ def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
             "corridor": "dulles_greenway",
             "tool": "dulles_route",
             "origin": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
-            "destination": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "destination": "1819",
         },
         {
             "kind": "connector",
@@ -166,9 +254,96 @@ def test_planner_refuses_an_unsupported_interchange_leg():
         "I-495 S",
     )
     assert plan == {
-        "error": "planner produced no oracle-supported direct trip from '6' to "
-        "'I-495 S' on i66_itb"
+        "error": "no oracle-supported directed route connects "
+        "'Exit 18/19 - I-495 / SR 123 (Capital Beltway)' on "
+        "dulles_toll_road to 'I-495 S' on i66_itb"
     }
+
+
+def test_planner_reaches_the_greenway_from_i495():
+    plan = plan_toll_route(
+        "i495",
+        "Westpark Drive",
+        "dulles_greenway",
+        "Exit 3 - SR 653 (Shreve Mill Rd)",
+    )
+    assert [step["kind"] for step in plan["steps"]] == [
+        "priced",
+        "connector",
+        "priced",
+    ]
+    assert plan["steps"][-1] == {
+        "kind": "priced",
+        "corridor": "dulles_toll_road",
+        "tool": "dulles_route",
+        "origin": "1819",
+        "destination": "Exit 3 - SR 653 (Shreve Mill Rd)",
+    }
+
+
+def test_planner_uses_an_alternate_handoff_when_the_short_path_is_unpriceable():
+    plan = plan_toll_route(
+        "i95",
+        "Courthouse Road/Route 630",
+        "i66_itb",
+        "Fairfax Drive",
+    )
+    assert [step["label"] for step in plan["steps"] if step["kind"] == "connector"] == [
+        "Springfield interchange",
+        "I-495/Route 267 interchange",
+        "Dulles Airport Access Highway",
+    ]
+
+
+def test_planner_matches_exhaustive_directed_oracle_reachability():
+    oracle = json.loads(_PRICED_LOCATION_ORACLE_JSON)
+    checked = 0
+    for origin_corridor, origin_data in oracle.items():
+        for origin in (
+            location["label"]
+            for location in origin_data["locations"]
+            if location["entry"]
+        ):
+            for destination_corridor, destination_data in oracle.items():
+                for destination in (
+                    location["label"]
+                    for location in destination_data["locations"]
+                    if location["exit"]
+                ):
+                    if (
+                        origin_corridor == destination_corridor
+                        and origin == destination
+                    ):
+                        continue
+                    expected = _reference_reachable(
+                        origin_corridor,
+                        origin,
+                        destination_corridor,
+                        destination,
+                    )
+                    plan = plan_toll_route(
+                        origin_corridor,
+                        origin,
+                        destination_corridor,
+                        destination,
+                    )
+                    assert ("error" not in plan) is expected, (
+                        origin_corridor,
+                        origin,
+                        destination_corridor,
+                        destination,
+                        plan,
+                    )
+                    if expected:
+                        _assert_plan_is_continuous(
+                            origin_corridor,
+                            origin,
+                            destination_corridor,
+                            destination,
+                            plan,
+                        )
+                    checked += 1
+    assert checked > 0
 
 
 def test_system_prompt_states_the_overshoot_anti_example():

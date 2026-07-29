@@ -36,6 +36,7 @@ from strands.models import BedrockModel, CacheToolsConfig
 # sys.path comment) -- a dotted "from agent_tools.i95_route import ..."
 # doesn't work, so it must be on sys.path directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_tools"))
+from dulles_route import _lookup as _dulles_lookup
 from dulles_route import dulles_route
 from i66_route import i66_route
 from i95_route import i95_route
@@ -240,13 +241,14 @@ _LOCATION_BY_CORRIDOR = {
     for corridor, data in _PRICED_LOCATION_ORACLE.items()
 }
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
-_DULLES_GATEWAY = "Exit 18/19 - I-495 / SR 123 (Capital Beltway)"
 
 
 def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
-    """The three single-corridor tools accept only a published direct pair."""
+    """Committed pair data used to prove each planned priced step exists."""
     i95 = json.loads((_ORACLE_DIR / "i95.json").read_text())
     i66 = json.loads((_ORACLE_DIR / "i66.json").read_text())
+    dulles_toll_road = json.loads((_ORACLE_DIR / "dulles_toll_road.json").read_text())
+    dulles_greenway = json.loads((_ORACLE_DIR / "dulles_greenway.json").read_text())
 
     def is_495(node_id: str) -> bool:
         return i95["nodes"][node_id]["path"].startswith("495")
@@ -269,6 +271,11 @@ def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
             ],
         ),
         "i66_itb": (i66["nodes"], i66["pairs"]),
+        "dulles_toll_road": (
+            dulles_toll_road["nodes"],
+            dulles_toll_road["pairs"],
+        ),
+        "dulles_greenway": (dulles_greenway["nodes"], dulles_greenway["pairs"]),
     }
 
 
@@ -333,22 +340,24 @@ def _validate_location(corridor: str, label: str, role: str) -> dict | None:
     return None
 
 
-def _transfer_path(origin: str, destination: str) -> list[dict] | None:
-    frontier = [(origin, [])]
-    visited = {origin}
-    while frontier:
-        corridor, path = frontier.pop(0)
-        if corridor == destination:
-            return path
-        for transfer in NETWORK_TRANSFERS:
-            next_corridor = transfer["to"]["corridor"]
-            if (
-                transfer["from"]["corridor"] == corridor
-                and next_corridor not in visited
-            ):
-                visited.add(next_corridor)
-                frontier.append((next_corridor, [*path, transfer]))
-    return None
+def _same_location(corridor: str, query: str, node_id: str) -> bool:
+    nodes, _ = _DIRECT_PAIR_ORACLES[corridor]
+    return query == node_id or (
+        node_id in nodes and nodes[node_id]["label"].casefold() == query.casefold()
+    )
+
+
+def _can_price(
+    origin_corridor: str,
+    origin: str,
+    destination_corridor: str,
+    destination: str,
+) -> bool:
+    if {origin_corridor, destination_corridor} <= _DULLES_CORRIDORS:
+        return "error" not in _dulles_lookup(origin, destination)
+    return origin_corridor == destination_corridor and _has_direct_pair(
+        origin_corridor, origin, destination
+    )
 
 
 def _priced_step(corridor: str, origin: str, destination: str) -> dict:
@@ -359,6 +368,56 @@ def _priced_step(corridor: str, origin: str, destination: str) -> dict:
         "origin": origin,
         "destination": destination,
     }
+
+
+def _planned_steps(
+    origin_corridor: str,
+    origin: str,
+    destination_corridor: str,
+    destination: str,
+) -> list[dict] | None:
+    frontier = [(origin_corridor, origin, [])]
+    visited = {(origin_corridor, origin)}
+    while frontier:
+        corridor, point, steps = frontier.pop(0)
+        if corridor == destination_corridor and _same_location(
+            corridor, destination, point
+        ):
+            return steps
+        if _can_price(corridor, point, destination_corridor, destination):
+            return [*steps, _priced_step(corridor, point, destination)]
+
+        for transfer in NETWORK_TRANSFERS:
+            source = transfer["from"]
+            if corridor == source["corridor"] and _same_location(
+                corridor, point, source["node_id"]
+            ):
+                priced_steps = []
+            elif _can_price(corridor, point, source["corridor"], source["node_id"]):
+                priced_steps = [_priced_step(corridor, point, source["node_id"])]
+            else:
+                continue
+
+            target = transfer["to"]
+            state = (target["corridor"], target["node_id"])
+            if state in visited:
+                continue
+            visited.add(state)
+            frontier.append(
+                (
+                    *state,
+                    [
+                        *steps,
+                        *priced_steps,
+                        {
+                            "kind": "connector",
+                            "label": transfer["connector"],
+                            "price_usd": "0.00",
+                        },
+                    ],
+                )
+            )
+    return None
 
 
 @tool
@@ -387,79 +446,15 @@ def plan_toll_route(
     if error := _validate_location(destination_corridor, destination, "exit"):
         return error
 
-    if (
-        origin_corridor == destination_corridor
-        or {
-            origin_corridor,
-            destination_corridor,
-        }
-        <= _DULLES_CORRIDORS
-    ):
-        if origin_corridor not in _DULLES_CORRIDORS and not _has_direct_pair(
-            origin_corridor, origin, destination
-        ):
-            return {
-                "error": (
-                    "planner produced no oracle-supported direct trip from "
-                    f"{origin!r} to {destination!r} on {origin_corridor}"
-                )
-            }
-        return {"steps": [_priced_step(origin_corridor, origin, destination)]}
-
-    steps: list[dict] = []
-    if origin_corridor == "dulles_greenway":
-        # dulles_route owns its Route 28 boundary and returns both tolls.
-        steps.append(_priced_step(origin_corridor, origin, _DULLES_GATEWAY))
-        origin_corridor, origin = "dulles_toll_road", _DULLES_GATEWAY
-
-    transfers = _transfer_path(origin_corridor, destination_corridor)
-    if transfers is None:
+    steps = _planned_steps(origin_corridor, origin, destination_corridor, destination)
+    if steps is None:
         return {
             "error": (
-                "no oracle-supported directed transfer connects "
-                f"{origin_corridor} to {destination_corridor}"
+                "no oracle-supported directed route connects "
+                f"{origin!r} on {origin_corridor} to "
+                f"{destination!r} on {destination_corridor}"
             )
         }
-
-    current_corridor, current_point, current_label = origin_corridor, origin, origin
-    for transfer in transfers:
-        exit_label = transfer["from"]["exit"]
-        if current_label != exit_label:
-            steps.append(
-                _priced_step(
-                    current_corridor, current_point, transfer["from"]["node_id"]
-                )
-            )
-        steps.append(
-            {
-                "kind": "connector",
-                "label": transfer["connector"],
-                "price_usd": "0.00",
-            }
-        )
-        current_corridor, current_point, current_label = (
-            transfer["to"]["corridor"],
-            transfer["to"]["node_id"],
-            transfer["to"]["entry"],
-        )
-    if current_label != destination:
-        steps.append(_priced_step(current_corridor, current_point, destination))
-
-    for step in steps:
-        if (
-            step["kind"] == "priced"
-            and step["corridor"] not in _DULLES_CORRIDORS
-            and not _has_direct_pair(
-                step["corridor"], step["origin"], step["destination"]
-            )
-        ):
-            return {
-                "error": (
-                    "planner produced no oracle-supported direct trip from "
-                    f"{step['origin']!r} to {step['destination']!r} on "
-                    f"{step['corridor']}"
-                )
-            }
     return {"steps": steps}
 
 
