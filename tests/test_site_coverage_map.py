@@ -59,3 +59,14 @@ def test_map_stays_self_contained_and_accessible() -> None:
     assert "leaflet" not in page.lower()
     assert "maplibre" not in page.lower()
     assert not re.search(r"<script[^>]+\bsrc=", page, re.IGNORECASE)
+
+
+def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
+    page = SITE.read_text()
+    assert "Coverage, with one honest gap." in page
+    assert "95/495 junction price unavailable" in page
+    assert 'data-junction":"true"' in page
+    assert 'aria-label":"I-95 to I-495 junction: price unavailable"' in page
+    assert "Edsall or Franconia-Springfield" in page
+    assert "I-495 pricing begins or ends at Braddock" in page
+    assert "no complete trip total is available" in page

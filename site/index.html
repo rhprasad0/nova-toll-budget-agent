@@ -6,7 +6,7 @@
 <meta name="description" content="TollChat helps Northern Virginia drivers know their toll before they drive.">
 <title>TollChat: Know your toll before you drive</title>
 <style>
-  :root { color-scheme: dark; --ink: #eaf1f7; --muted: #9cacbb; --panel: #111923; --line: #263545; --accent: #7dd3fc; }
+  :root { color-scheme: dark; --ink: #eaf1f7; --muted: #9cacbb; --panel: #111923; --line: #263545; --accent: #7dd3fc; --gap: #f59e0b; }
   * { box-sizing: border-box; }
   body { margin: 0; min-width: 320px; background: #080d13; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   main { width: min(1120px, 100%); margin: 0 auto; padding: clamp(1.25rem, 4vw, 3.5rem) clamp(1rem, 4vw, 2.5rem) 2rem; }
@@ -23,9 +23,20 @@
   .legend { display: flex; flex-wrap: wrap; gap: .45rem .85rem; padding: .25rem 1.1rem .9rem; border-top: 1px solid rgba(151, 177, 199, .12); }
   .legend-item { display: inline-flex; align-items: center; gap: .38rem; color: #c2d0dc; font-size: .72rem; white-space: nowrap; }
   .legend-swatch { width: .55rem; height: .55rem; border-radius: 99px; background: var(--facility); box-shadow: 0 0 9px var(--facility); }
+  .legend-swatch.gap { width: .9rem; height: 0; border-top: 2px dashed var(--gap); border-radius: 0; background: none; box-shadow: none; }
   .map-detail { min-height: 4.5rem; padding: .8rem 1.1rem 1rem; border-top: 1px solid rgba(151, 177, 199, .12); background: rgba(5, 10, 16, .22); }
   .map-detail strong { display: block; font-size: .88rem; }
   .map-detail p { margin: .25rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
+  .junction-gap { cursor: pointer; outline: none; }
+  .junction-gap .zone { fill: rgba(245, 158, 11, .13); stroke: var(--gap); stroke-width: 3; stroke-dasharray: 8 7; transition: fill .18s ease, filter .18s ease; }
+  .junction-gap .badge { fill: #291a05; stroke: var(--gap); stroke-width: 2.5; }
+  .junction-gap .bang { fill: #fef3c7; font-size: 16px; font-weight: 900; text-anchor: middle; pointer-events: none; }
+  .junction-gap .leader { stroke: var(--gap); stroke-width: 2; stroke-dasharray: 5 5; pointer-events: none; }
+  .junction-gap .callout { fill: #211707; stroke: rgba(245, 158, 11, .7); stroke-width: 1.5; pointer-events: none; }
+  .junction-gap .callout-title { fill: #fde68a; font-size: 15px; font-weight: 800; letter-spacing: .7px; pointer-events: none; }
+  .junction-gap .callout-copy { fill: #fbbf24; font-size: 13px; font-weight: 700; pointer-events: none; }
+  .junction-gap:hover .zone, .junction-gap:focus-visible .zone { fill: rgba(245, 158, 11, .25); filter: drop-shadow(0 0 10px rgba(245, 158, 11, .8)); }
+  .junction-gap:focus-visible .callout { stroke: #fef3c7; stroke-width: 3; }
   .status { margin: clamp(1.8rem, 4vw, 3.5rem) 0 0; padding-top: 1.4rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .95rem; }
   .links { margin: .65rem 0 0; font-size: .95rem; }
   .legal { margin: .5rem 0 0; color: var(--muted); font-size: .78rem; }
@@ -46,12 +57,12 @@
     </div>
     <section class="map-card" aria-labelledby="coverage-title">
       <div class="map-heading">
-        <h2 id="coverage-title">Every covered entry &amp; exit, in one view.</h2>
-        <p>Tap a pin for the exact ramps we cover.</p>
+        <h2 id="coverage-title">Coverage, with one honest gap.</h2>
+        <p>Solid routes are priced. The dashed junction is not.</p>
       </div>
       <svg id="coverage-map" viewBox="0 0 1000 720" role="img" aria-labelledby="map-title map-description">
         <title id="map-title">TollChat coverage across Northern Virginia</title>
-        <desc id="map-description">A geographic schematic showing covered interchanges on I-66, the 95/395 and 495 Express Lanes, the Dulles Toll Road, and the Dulles Greenway.</desc>
+        <desc id="map-description">A geographic schematic showing priced corridors and entry and exit coverage on I-66, the 95/395 and 495 Express Lanes, the Dulles Toll Road, and the Dulles Greenway. The connection between the 95 and 495 Express Lanes is marked as an unpriced junction.</desc>
       </svg>
       <div class="legend" aria-label="Covered facilities">
         <span class="legend-item" style="--facility:#7dd3fc"><i class="legend-swatch"></i>I-66</span>
@@ -59,15 +70,17 @@
         <span class="legend-item" style="--facility:#fbbf24"><i class="legend-swatch"></i>495 Express Lanes</span>
         <span class="legend-item" style="--facility:#34d399"><i class="legend-swatch"></i>Dulles Toll Road</span>
         <span class="legend-item" style="--facility:#c084fc"><i class="legend-swatch"></i>Dulles Greenway</span>
+        <span class="legend-item"><i class="legend-swatch gap"></i>95/495 junction price unavailable</span>
       </div>
-      <div id="map-detail" class="map-detail" aria-live="polite"><strong>144 supported entry and exit nodes.</strong><p>Grouped by interchange so the map stays useful at a glance.</p></div>
+      <p class="map-note"><strong>144 supported entry and exit nodes.</strong> Tap a pin for its exact ramps.</p>
+      <div id="map-detail" class="map-detail" aria-live="polite"><strong>I-95 ↔ I-495 junction price unavailable.</strong><p>We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available.</p></div>
     </section>
   </section>
   <p class="status">Coming soon.</p>
   <p class="links"><a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a> &middot; <a href="https://github.com/rhprasad0/nova-toll-budget-agent">GitHub</a></p>
   <p class="legal">&copy; 2026 Benevolent Clankers LLC. All rights reserved.</p>
   <p class="legal">We support US AI innovation <span role="img" aria-label="United States flag">&#127482;&#127480;</span></p>
-  <noscript><p class="fallback">Coverage includes I-66, the 95/395 and 495 Express Lanes, the Dulles Toll Road, and the Dulles Greenway. Enable JavaScript to explore every supported entry and exit.</p></noscript>
+  <noscript><p class="fallback">Coverage includes I-66, the 95/395 and 495 Express Lanes, the Dulles Toll Road, and the Dulles Greenway. Pricing is unavailable for the junction between I-95 and I-495; known corridor fares remain separate. Enable JavaScript to explore every supported entry and exit.</p></noscript>
 </main>
 
 <script id="coverage-data" type="application/json">
@@ -167,6 +180,11 @@
   const colors = { i66: "#7dd3fc", i95: "#fb7185", i495: "#fbbf24", dulles: "#34d399", greenway: "#c084fc" };
   const names = { i66: "I-66", i95: "95/395 Express Lanes", i495: "495 Express Lanes", dulles: "Dulles Toll Road", greenway: "Dulles Greenway" };
   const bounds = { west: -77.61, east: -77.01, north: 39.15, south: 38.28, pad: 58 };
+  const junction = {
+    braddock: { lat: 38.799890, lon: -77.205606 },
+    edsall: { lat: 38.810914, lon: -77.149552 },
+    franconia: { lat: 38.769837, lon: -77.182593 }
+  };
   const project = ({ lat, lon }) => ({ x: bounds.pad + ((lon - bounds.west) / (bounds.east - bounds.west)) * (1000 - bounds.pad * 2), y: bounds.pad + ((bounds.north - lat) / (bounds.north - bounds.south)) * (720 - bounds.pad * 2) });
   const path = (points) => points.map((point, index) => { const p = project(point); return `${index ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`; }).join(" ");
   const append = (tag, attributes, parent = svg) => { const element = document.createElementNS(NS, tag); Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value)); parent.append(element); return element; };
@@ -180,13 +198,24 @@
   append("rect", { x: 0, y: 0, width: 1000, height: 720, fill: "transparent" });
   [[38.88,-77.04,"WASHINGTON, DC"],[38.91,-77.31,"TYSONS"],[38.95,-77.43,"DULLES"],[38.63,-77.28,"WOODBRIDGE"],[38.48,-77.40,"STAFFORD"]].forEach(([lat, lon, label]) => { const p = project({lat,lon}); const text = append("text", { x:p.x, y:p.y, fill:"#60758a", "font-size":"11", "font-weight":"700", "letter-spacing":"1.8", "text-anchor":"middle" }); text.textContent = label; });
   Object.entries(corridors).forEach(([facility, points]) => { append("path", { d:path(points), fill:"none", stroke:colors[facility], "stroke-opacity":".18", "stroke-width":"13", "stroke-linecap":"round" }); append("path", { d:path(points), fill:"none", stroke:colors[facility], "stroke-opacity":".95", "stroke-width":"3.5", "stroke-linecap":"round", "stroke-linejoin":"round" }); });
+  const boundaryPoints = Object.values(junction).map(project);
+  const junctionCenter = { x: boundaryPoints.reduce((sum, point) => sum + point.x, 0) / boundaryPoints.length, y: boundaryPoints.reduce((sum, point) => sum + point.y, 0) / boundaryPoints.length };
+  const gap = append("g", { class:"junction-gap", role:"button", tabindex:"0", "data-junction":"true", "aria-label":"I-95 to I-495 junction: price unavailable" });
+  append("polygon", { class:"zone", points:boundaryPoints.map(({x,y}) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ") }, gap);
+  append("circle", { class:"badge", cx:junctionCenter.x, cy:junctionCenter.y, r:11 }, gap);
+  const bang = append("text", { class:"bang", x:junctionCenter.x, y:junctionCenter.y + 5 }, gap); bang.textContent = "!";
+  append("line", { class:"leader", x1:junctionCenter.x - 8, y1:junctionCenter.y + 8, x2:645, y2:342 }, gap);
+  append("rect", { class:"callout", x:427, y:326, width:220, height:50, rx:8 }, gap);
+  const calloutTitle = append("text", { class:"callout-title", x:441, y:347 }, gap); calloutTitle.textContent = "95/495 JUNCTION";
+  const calloutCopy = append("text", { class:"callout-copy", x:441, y:366 }, gap); calloutCopy.textContent = "PRICE UNAVAILABLE";
   pins.forEach((pin, index) => {
     const p = project(pin); const group = append("g", { class:"map-pin", role:"button", tabindex:"0", "data-index":index, "aria-label":`${pin.label}: ${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "entry or exit" : "entries or exits"}` });
     append("circle", { cx:p.x, cy:p.y, r:pin.nodeIds.length > 3 ? 8 : 6.5, fill:"#0c131c", stroke:colors[pin.facility], "stroke-width":"2.5" }, group);
     if (pin.nodeIds.length > 1) { const text = append("text", { x:p.x, y:p.y + 3, fill:"#f8fafc", "font-size":"7", "font-weight":"800", "text-anchor":"middle", "pointer-events":"none" }, group); text.textContent = pin.nodeIds.length; }
   });
   const showDetail = (pin) => { detail.replaceChildren(); const title = document.createElement("strong"); title.textContent = pin.label; const description = document.createElement("p"); description.textContent = `${names[pin.facility]} · ${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "entry/exit" : "entries/exits"} (${pin.nodeIds.join(", ")})`; detail.append(title, description); };
-  const choose = (target) => { const marker = target.closest("[data-index]"); if (marker) showDetail(pins[Number(marker.dataset.index)]); };
+  const showJunction = () => { detail.replaceChildren(); const title = document.createElement("strong"); title.textContent = "I-95 ↔ I-495 junction price unavailable."; const description = document.createElement("p"); description.textContent = "We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available."; detail.append(title, description); };
+  const choose = (target) => { const junctionMarker = target.closest("[data-junction]"); if (junctionMarker) { showJunction(); return; } const marker = target.closest("[data-index]"); if (marker) showDetail(pins[Number(marker.dataset.index)]); };
   svg.addEventListener("click", (event) => choose(event.target));
   svg.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(event.target); } });
 })();
