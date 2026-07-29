@@ -60,6 +60,7 @@ class _Factory:
 def test_local_server_discovers_its_read_only_database_environment(
     monkeypatch, tmp_path
 ):
+    monkeypatch.setattr(os, "environ", os.environ.copy())
     ca_bundle = tmp_path / "rds-ca-bundle.pem"
     ca_bundle.touch()
     monkeypatch.setattr(dev_chat, "_CA_BUNDLE_PATH", ca_bundle)
