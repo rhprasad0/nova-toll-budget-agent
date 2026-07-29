@@ -9,26 +9,14 @@ Each of those tools deliberately refuses to resolve a cross-corridor trip
 (docs/oracle-findings.md section 8) -- a caller wanting Dumfries (I-95) to
 Westpark Drive (I-495) gets two independent single-corridor answers, not one
 combined trip. A manual smoke test proved a Haiku agent left to figure out
-the split on its own will happily overshoot: asked to price that exact trip,
-it first ran the I-95 leg all the way to "Washington D.C." (past the real
-junction) before being told to stop at the Springfield interchange. JUNCTIONS
-below bakes that correction in up front instead of requiring it interactively
-every time.
-
-JUNCTIONS was hand-derived by reading the committed oracle node/label fields
-directly (oracles/i95.json, i66.json, dulles_toll_road.json, and
-dulles_greenway.json) -- not general geography knowledge, not published by
-any operator. Evidence strength varies per entry: "verbatim" (identical
-label/shared key on both sides) is strongest, "route-number" (a route-number
-correlation, not a verbatim match) is weaker but still directional. A negative
-entry is included deliberately (dulles_greenway <-> i495) so the agent says
-"not enough data" instead of guessing when a pair was checked and found
-unevidenced.
+the split on its own will happily overshoot. ORACLE_TRANSFERS turns the
+committed oracle nodes and pair roles into the small directed handoff graph
+the agent may use; every absent handoff is intentionally unsupported.
 
 strands.Agent's system_prompt accepts str | list[SystemContentBlock], and
 SystemContentBlock only has text/cachePoint keys (strands/types/content.py)
 -- there's no structured-knowledge field. The priced location oracle and
-JUNCTIONS therefore go in as literal json.dumps(...) text inside the prompt
+ORACLE_TRANSFERS therefore go in as literal json.dumps(...) text inside the prompt
 string, not any special mechanism.
 
 See docs/oracle-tools-spec.md for the tool contract this builds on.
@@ -40,7 +28,7 @@ import json
 import sys
 from pathlib import Path
 
-from strands import Agent
+from strands import Agent, tool
 from strands.models import BedrockModel, CacheToolsConfig
 
 # agent_tools/ has no __init__.py (flat siblings, same as i95_route.py's own
@@ -112,7 +100,8 @@ def _load_priced_location_oracle() -> dict[str, dict]:
     }
 
 
-_PRICED_LOCATION_ORACLE_JSON = json.dumps(_load_priced_location_oracle(), indent=2)
+_PRICED_LOCATION_ORACLE = _load_priced_location_oracle()
+_PRICED_LOCATION_ORACLE_JSON = json.dumps(_PRICED_LOCATION_ORACLE, indent=2)
 
 # User-facing locality hints retained from the deleted discovery tool. Every
 # candidate is an exact label in the priced oracle; unpriced I-66 OTB hints
@@ -145,77 +134,59 @@ _LOCATION_ALIASES = {
 }
 _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
 
-JUNCTIONS = {
-    ("i95", "i495"): {
-        "evidence": "verbatim label, same physical Springfield interchange",
-        "source": "oracles/i95.json",
-        "unpriced_connector": "Springfield interchange",
-        "i95_side": {
-            "node_ids": ["206ND", "206NO", "206SO", "206SD"],
-            "label": "Franconia-Springfield Parkway/Route 289",
+ORACLE_TRANSFERS = [
+    {
+        "id": "i95_to_i495",
+        "from": {
+            "corridor": "i95",
+            "exit": "Franconia-Springfield Parkway/Route 289",
+            "node_id": "206ND",
         },
-        "i495_side": {
-            "node_ids": ["192NO", "192SD"],
-            "label": "I-495/I-95 Near Van Dorn Street",
+        "to": {
+            "corridor": "i495",
+            "entry": "I-495/I-95 Near Van Dorn Street",
+            "node_id": "192NO",
         },
+        "connector": "Springfield interchange",
+        "evidence": "oracles/i95.json pair roles at nodes 206ND and 192NO",
     },
-    ("i66_itb", "i495"): {
-        "evidence": (
-            "label cross-reference (i66.json labels I-495 directly; "
-            "i95.json's 495-path nodes are labeled Interstate 66)"
-        ),
-        "source": "oracles/i66.json, oracles/i95.json",
-        "unpriced_connector": "I-66/I-495 interchange",
-        "i66_itb_side": {
-            "node_ids": ["2", "3", "5"],
-            "label": "I-495 N / I-495 Express Lanes N / I-495 S",
+    {
+        "id": "i495_to_i95",
+        "from": {
+            "corridor": "i495",
+            "exit": "I-495/I-95 Near Van Dorn Street",
+            "node_id": "192SD",
         },
-        "i495_side": {"node_ids": ["187NO", "187SD"], "label": "Interstate 66"},
-    },
-    ("i495", "dulles_toll_road"): {
-        "evidence": (
-            "route-number correlation (weaker), corroborated independently "
-            "by oracles/i66.json node 6"
-        ),
-        "source": "oracles/i95.json, oracles/dulles_toll_road.json, oracles/i66.json",
-        "unpriced_connector": "I-495/Route 267 (Capital Beltway) interchange",
-        "i495_side": {"node_ids": ["182NO", "182SD"], "label": "Route 267"},
-        "dulles_toll_road_side": {
-            "node_ids": ["1819"],
-            "label": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        "to": {
+            "corridor": "i95",
+            "entry": "Franconia-Springfield Parkway/Route 289",
+            "node_id": "206SO",
         },
+        "connector": "Springfield interchange",
+        "evidence": "oracles/i95.json pair roles at nodes 192SD and 206SO",
     },
-    ("dulles_toll_road", "dulles_greenway"): {
-        "evidence": "verbatim label + shared node key '28' in both files -- strongest match",
-        "source": "oracles/dulles_toll_road.json, oracles/dulles_greenway.json",
-        "note": (
-            "Do NOT split this pair manually -- dulles_route.py already "
-            "resolves it as one composite two-leg call internally (see that "
-            "module's own docstring). Call dulles_route(origin, destination) "
-            "directly."
-        ),
-        "node_ids": ["28"],
-        "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+    {
+        "id": "i66_to_i495",
+        "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
+        "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187NO"},
+        "connector": "I-66/I-495 interchange",
+        "evidence": "oracles/i66.json node 5 and oracles/i95.json node 187NO pair roles",
     },
-    # Negative results -- checked-and-absent, not just unmentioned.
-    ("dulles_greenway", "i495"): {
-        "evidence": (
-            "NOT EVIDENCED -- no 495/Beltway label anywhere in "
-            "oracles/dulles_greenway.json"
-        ),
-        "note": (
-            "A Greenway<->495 trip has no direct junction; it must route "
-            "through dulles_toll_road as an intermediate leg via the "
-            "dulles_toll_road<->dulles_greenway junction above."
-        ),
+    {
+        "id": "i495_to_i66",
+        "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187SD"},
+        "to": {"corridor": "i66_itb", "entry": "I-495 N", "node_id": "2"},
+        "connector": "I-66/I-495 interchange",
+        "evidence": "oracles/i95.json node 187SD and oracles/i66.json node 2 pair roles",
     },
-}
+]
 
-# json.dumps requires string dict keys; JUNCTIONS' tuple keys are the
-# ergonomic form to read/maintain above, converted once here for the prompt.
-_JUNCTIONS_JSON = json.dumps(
-    {" <-> ".join(pair): data for pair, data in JUNCTIONS.items()}, indent=2
-)
+_ORACLE_TRANSFERS_JSON = json.dumps(ORACLE_TRANSFERS, indent=2)
+_LOCATION_BY_CORRIDOR = {
+    corridor: {location["label"]: location for location in data["locations"]}
+    for corridor, data in _PRICED_LOCATION_ORACLE.items()
+}
+_DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
 
 _ANTI_EXAMPLE = """A single-corridor pricing tool will happily price a trip all the way to the
 far end of its own corridor without ever returning an error -- a successful
@@ -227,6 +198,125 @@ two corridors, check whether the origin and destination resolve to different
 corridors. If they do, split the trip at the documented junction below and
 price each leg separately -- never pass the far-corridor destination
 straight to a single tool."""
+
+
+def _validate_location(corridor: str, label: str, role: str) -> dict | None:
+    location = _LOCATION_BY_CORRIDOR.get(corridor, {}).get(label)
+    if location is None:
+        return {
+            "error": f"unknown {role} {label!r} on {corridor}",
+            "valid_options": sorted(_LOCATION_BY_CORRIDOR.get(corridor, {})),
+        }
+    if not location[role]:
+        return {
+            "error": f"{label!r} is not a valid {role} on {corridor}",
+            "valid_options": sorted(
+                name
+                for name, candidate in _LOCATION_BY_CORRIDOR[corridor].items()
+                if candidate[role]
+            ),
+        }
+    return None
+
+
+def _transfer_path(origin: str, destination: str) -> list[dict] | None:
+    frontier = [(origin, [])]
+    visited = {origin}
+    while frontier:
+        corridor, path = frontier.pop(0)
+        if corridor == destination:
+            return path
+        for transfer in ORACLE_TRANSFERS:
+            next_corridor = transfer["to"]["corridor"]
+            if (
+                transfer["from"]["corridor"] == corridor
+                and next_corridor not in visited
+            ):
+                visited.add(next_corridor)
+                frontier.append((next_corridor, [*path, transfer]))
+    return None
+
+
+def _priced_step(corridor: str, origin: str, destination: str) -> dict:
+    return {
+        "kind": "priced",
+        "corridor": corridor,
+        "tool": _PRICED_LOCATION_ORACLE[corridor]["tool"],
+        "origin": origin,
+        "destination": destination,
+    }
+
+
+@tool
+def plan_toll_route(
+    origin_corridor: str,
+    origin: str,
+    destination_corridor: str,
+    destination: str,
+) -> dict:
+    """Return the only oracle-supported pricing and connector steps for a trip.
+
+    Call after resolving the user's location to exact prompt-oracle labels and
+    before any pricing tool on a cross-corridor trip. Inputs must be exact;
+    this tool does not fuzzy-match or invent roads. Its `priced` steps are the
+    only pricing-tool calls permitted for the trip. `connector` steps are $0
+    in this pricing model and must never be sent to a pricing tool. Connector
+    boundaries use oracle node IDs so their directed entry/exit roles are not
+    lost to duplicate human-readable labels.
+    """
+    if origin_corridor not in _LOCATION_BY_CORRIDOR:
+        return {"error": f"unknown origin corridor {origin_corridor!r}"}
+    if destination_corridor not in _LOCATION_BY_CORRIDOR:
+        return {"error": f"unknown destination corridor {destination_corridor!r}"}
+    if error := _validate_location(origin_corridor, origin, "entry"):
+        return error
+    if error := _validate_location(destination_corridor, destination, "exit"):
+        return error
+
+    if (
+        origin_corridor == destination_corridor
+        or {
+            origin_corridor,
+            destination_corridor,
+        }
+        <= _DULLES_CORRIDORS
+    ):
+        return {"steps": [_priced_step(origin_corridor, origin, destination)]}
+
+    transfers = _transfer_path(origin_corridor, destination_corridor)
+    if transfers is None:
+        return {
+            "error": (
+                "no oracle-supported directed transfer connects "
+                f"{origin_corridor} to {destination_corridor}"
+            )
+        }
+
+    steps: list[dict] = []
+    current_corridor, current_point, current_label = origin_corridor, origin, origin
+    for transfer in transfers:
+        exit_label = transfer["from"]["exit"]
+        if current_label != exit_label:
+            steps.append(
+                _priced_step(
+                    current_corridor, current_point, transfer["from"]["node_id"]
+                )
+            )
+        steps.append(
+            {
+                "kind": "connector",
+                "label": transfer["connector"],
+                "price_usd": "0.00",
+            }
+        )
+        current_corridor, current_point, current_label = (
+            transfer["to"]["corridor"],
+            transfer["to"]["node_id"],
+            transfer["to"]["entry"],
+        )
+    if current_label != destination:
+        steps.append(_priced_step(current_corridor, current_point, destination))
+    return {"steps": steps}
 
 
 def build_system_prompt() -> str:
@@ -252,6 +342,12 @@ auditable toll estimates grounded only in the registered tools' results.
   corridors. They return VDOT-derived dynamic prices.
 - Use dulles_route directly for a trip touching the Dulles Toll Road or
   Dulles Greenway; it handles their Route 28 boundary internally.
+- For a trip whose resolved endpoints are on different corridors, call
+  plan_toll_route before any pricing tool. Call only the `priced` steps it
+  returns, in order. Report each `connector` step as $0.00; never call a
+  pricing tool for it. A planner-provided node ID is an exact tool argument,
+  not a location to display to the user. If planning returns an error, explain that the
+  repository has no oracle-supported combined route and do not price any leg.
 - Never call a database, write SQL, invent a route, invent a price, or infer
   a timestamp that a tool did not return.
 - This assistant covers only the priced roads in the location oracle. For
@@ -278,25 +374,15 @@ plausible label, ask the user to choose the interchange.
 <routing_context>
 {_ANTI_EXAMPLE}
 
-The following corridor-pair junctions were derived from committed route-map
-data, not general geographic knowledge. Keys use "corridor_a <-> corridor_b".
-<junctions>
-{_JUNCTIONS_JSON}
-</junctions>
+The following directed transfer graph is derived only from committed oracle
+node IDs and their entry/exit pair roles. It is not a road map: an absent edge
+is unsupported even if a physical connection may exist.
+<oracle_transfers>
+{_ORACLE_TRANSFERS_JSON}
+</oracle_transfers>
 
-Each `unpriced_connector` is a $0 handoff in this pricing model: end one
-priced leg at its first-side label, state that connector, then begin the next
-priced leg at its second-side label. Do not call a pricing tool for a
-connector or add a fare for it. The two labels may differ even though they
-describe the handoff.
-
-Follow every documented edge between the origin and destination corridors.
-For example, an I-66 Inside-the-Beltway to Dulles Toll Road trip requires
-`i66_itb -> i495 -> dulles_toll_road`: price all three corridor legs and show
-both unpriced connectors. Do not skip I-495 by calling i66_route directly to
-a Dulles-side endpoint. If no junction is listed, or its evidence says
-"NOT EVIDENCED", explain that there is not enough documented data to route
-the trip. Do not guess.
+The planner is authoritative for this graph. Do not infer a reverse edge,
+combine route-number labels, or describe a connector absent from its result.
 </routing_context>
 
 <response_format>
@@ -395,7 +481,7 @@ def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
     )
     return Agent(
         model=model,
-        tools=[i95_route, i495_route, i66_route, dulles_route],
+        tools=[plan_toll_route, i95_route, i495_route, i66_route, dulles_route],
         system_prompt=[
             {"text": build_system_prompt()},
             # Cache the static instructions after the cached tool definitions.

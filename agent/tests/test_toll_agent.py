@@ -6,13 +6,18 @@ tests/test_toll_agent_live.py for the real end-to-end check.
 """
 
 import json
+from pathlib import Path
 
+from i66_route import _lookup as i66_lookup
+from i495_route import _lookup as i495_lookup
 from strands.models import BedrockModel
 from toll_agent import (
     _LOCATION_ALIASES,
     _PRICED_LOCATION_ORACLE_JSON,
+    ORACLE_TRANSFERS,
     build_agent,
     build_system_prompt,
+    plan_toll_route,
 )
 
 
@@ -25,18 +30,69 @@ def test_system_prompt_contains_i95_i495_junction():
     assert "Springfield interchange" in prompt
 
 
-def test_system_prompt_describes_unpriced_connectors_and_multi_hop_routes():
+def test_system_prompt_describes_oracle_only_transfers():
     prompt = build_system_prompt()
-    assert '"unpriced_connector": "I-66/I-495 interchange"' in prompt
-    assert "I-66 Inside-the-Beltway to Dulles Toll Road" in prompt
-    assert "i66_itb -> i495 -> dulles_toll_road" in prompt
-    assert "Do not skip I-495" in prompt
+    assert '"connector": "I-66/I-495 interchange"' in prompt
+    assert "unsupported even if a physical connection may exist" in prompt
+    assert "Do not infer a reverse edge" in prompt
+    assert "Dulles Connector Road" not in prompt
 
 
-def test_system_prompt_flags_unevidenced_junctions():
-    prompt = build_system_prompt()
-    # One JUNCTIONS entry carries the marker, plus the refusal rule names it.
-    assert prompt.count("NOT EVIDENCED") == 2
+def test_oracle_transfers_have_directed_entry_and_exit_roles():
+    oracle_dir = Path(__file__).resolve().parents[2] / "oracles"
+    filenames = {"i95": "i95.json", "i495": "i95.json", "i66_itb": "i66.json"}
+    for transfer in ORACLE_TRANSFERS:
+        source = transfer["from"]
+        target = transfer["to"]
+        source_oracle = json.loads(
+            (oracle_dir / filenames[source["corridor"]]).read_text()
+        )
+        target_oracle = json.loads(
+            (oracle_dir / filenames[target["corridor"]]).read_text()
+        )
+        assert source_oracle["nodes"][source["node_id"]]["label"] == source["exit"]
+        assert target_oracle["nodes"][target["node_id"]]["label"] == target["entry"]
+        assert any(pair["exit"] == source["node_id"] for pair in source_oracle["pairs"])
+        assert any(
+            pair["entry"] == target["node_id"] for pair in target_oracle["pairs"]
+        )
+
+
+def test_planner_uses_only_oracle_supported_i66_i495_steps():
+    plan = plan_toll_route(
+        "i66_itb", "Lee Highway - Scott Street", "i495", "Route 7 (Leesburg Pike)"
+    )
+    assert plan["steps"] == [
+        {
+            "kind": "priced",
+            "corridor": "i66_itb",
+            "tool": "i66_route",
+            "origin": "Lee Highway - Scott Street",
+            "destination": "5",
+        },
+        {"kind": "connector", "label": "I-66/I-495 interchange", "price_usd": "0.00"},
+        {
+            "kind": "priced",
+            "corridor": "i495",
+            "tool": "i495_route",
+            "origin": "187NO",
+            "destination": "Route 7 (Leesburg Pike)",
+        },
+    ]
+    assert "error" not in i66_lookup("Lee Highway - Scott Street", "5")
+    assert "error" not in i495_lookup("187NO", "Route 7 (Leesburg Pike)")
+
+
+def test_planner_refuses_the_unsupported_i66_dulles_handoff():
+    plan = plan_toll_route(
+        "i66_itb",
+        "Fairfax Drive",
+        "dulles_toll_road",
+        "Exit 12 - SR 602 (Reston Pkwy)",
+    )
+    assert plan == {
+        "error": "no oracle-supported directed transfer connects i66_itb to dulles_toll_road"
+    }
 
 
 def test_system_prompt_states_the_overshoot_anti_example():
@@ -90,7 +146,7 @@ def test_system_prompt_uses_structured_claude_prompt_sections():
         "priced_location_oracle",
         "location_aliases",
         "routing_context",
-        "junctions",
+        "oracle_transfers",
         "response_format",
         "examples",
     ):
@@ -134,6 +190,7 @@ def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
     assert [
         tool["toolSpec"]["name"] for tool in request["toolConfig"]["tools"][:-1]
     ] == [
+        "plan_toll_route",
         "i95_route",
         "i495_route",
         "i66_route",
