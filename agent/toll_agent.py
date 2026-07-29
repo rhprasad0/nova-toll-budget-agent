@@ -149,6 +149,7 @@ JUNCTIONS = {
     ("i95", "i495"): {
         "evidence": "verbatim label, same physical Springfield interchange",
         "source": "oracles/i95.json",
+        "unpriced_connector": "Springfield interchange",
         "i95_side": {
             "node_ids": ["206ND", "206NO", "206SO", "206SD"],
             "label": "Franconia-Springfield Parkway/Route 289",
@@ -164,6 +165,7 @@ JUNCTIONS = {
             "i95.json's 495-path nodes are labeled Interstate 66)"
         ),
         "source": "oracles/i66.json, oracles/i95.json",
+        "unpriced_connector": "I-66/I-495 interchange",
         "i66_itb_side": {
             "node_ids": ["2", "3", "5"],
             "label": "I-495 N / I-495 Express Lanes N / I-495 S",
@@ -176,6 +178,7 @@ JUNCTIONS = {
             "by oracles/i66.json node 6"
         ),
         "source": "oracles/i95.json, oracles/dulles_toll_road.json, oracles/i66.json",
+        "unpriced_connector": "I-495/Route 267 (Capital Beltway) interchange",
         "i495_side": {"node_ids": ["182NO", "182SD"], "label": "Route 267"},
         "dulles_toll_road_side": {
             "node_ids": ["1819"],
@@ -281,10 +284,19 @@ data, not general geographic knowledge. Keys use "corridor_a <-> corridor_b".
 {_JUNCTIONS_JSON}
 </junctions>
 
-For a trip crossing two corridors, end leg 1 at the origin corridor's
-junction label and begin leg 2 at the destination corridor's junction label.
-If no junction is listed, or its evidence says "NOT EVIDENCED", explain that
-there is not enough documented data to route the trip. Do not guess.
+Each `unpriced_connector` is a $0 handoff in this pricing model: end one
+priced leg at its first-side label, state that connector, then begin the next
+priced leg at its second-side label. Do not call a pricing tool for a
+connector or add a fare for it. The two labels may differ even though they
+describe the handoff.
+
+Follow every documented edge between the origin and destination corridors.
+For example, an I-66 Inside-the-Beltway to Dulles Toll Road trip requires
+`i66_itb -> i495 -> dulles_toll_road`: price all three corridor legs and show
+both unpriced connectors. Do not skip I-495 by calling i66_route directly to
+a Dulles-side endpoint. If no junction is listed, or its evidence says
+"NOT EVIDENCED", explain that there is not enough documented data to route
+the trip. Do not guess.
 </routing_context>
 
 <response_format>

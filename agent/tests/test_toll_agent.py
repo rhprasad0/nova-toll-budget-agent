@@ -22,6 +22,15 @@ def test_system_prompt_contains_i95_i495_junction():
     assert "Franconia-Springfield Parkway" in prompt
     assert "192NO" in prompt
     assert "Van Dorn Street" in prompt
+    assert "Springfield interchange" in prompt
+
+
+def test_system_prompt_describes_unpriced_connectors_and_multi_hop_routes():
+    prompt = build_system_prompt()
+    assert '"unpriced_connector": "I-66/I-495 interchange"' in prompt
+    assert "I-66 Inside-the-Beltway to Dulles Toll Road" in prompt
+    assert "i66_itb -> i495 -> dulles_toll_road" in prompt
+    assert "Do not skip I-495" in prompt
 
 
 def test_system_prompt_flags_unevidenced_junctions():
