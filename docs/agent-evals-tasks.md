@@ -28,7 +28,7 @@ In scope:
 
 Out of scope:
 
-- correctness inside the five tools, already covered by `agent_tools/tests/`;
+- correctness inside the four tools, already covered by `agent_tools/tests/`;
 - whether the committed oracle topology matches physical roads;
 - production traffic, latency/SLOs, staging, shadowing, A/B rollout, and
   AgentCore trace sampling;

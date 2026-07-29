@@ -1,7 +1,7 @@
 """toll_agent: a strands.Agent (Bedrock Claude Haiku) that prices NoVA trips
-by calling the five existing agent_tools/*.py tools -- find_toll_locations,
-i95_route, i495_route, i66_route, dulles_route. It never touches RDS or
-issues SQL itself; every price comes from one of those tools (the same
+by calling the four existing agent_tools/*.py pricing tools -- i95_route,
+i495_route, i66_route, dulles_route. It never touches RDS or issues SQL
+itself; every price comes from one of those tools (the same
 constraint that led to lambdas/agent/* being deleted -- see README.md and
 db/drop_agent_surface.sql).
 
@@ -16,19 +16,20 @@ below bakes that correction in up front instead of requiring it interactively
 every time.
 
 JUNCTIONS was hand-derived by reading the committed oracle node/label fields
-directly (oracles/i95.json, i66.json, dulles_toll_road.json,
-dulles_greenway.json, i66_otb.json) -- not general geography knowledge, not
-published by any operator. Evidence strength varies per entry: "verbatim"
-(identical label/shared key on both sides) is strongest, "route-number"
-(a route-number correlation, not a verbatim match) is weaker but still
-directional. Two negative entries are included deliberately (dulles_greenway
-<-> i495, i66_otb <-> dulles_toll_road) so the agent says "not enough data"
-instead of guessing when a pair was checked and found unevidenced.
+directly (oracles/i95.json, i66.json, dulles_toll_road.json, and
+dulles_greenway.json) -- not general geography knowledge, not published by
+any operator. Evidence strength varies per entry: "verbatim" (identical
+label/shared key on both sides) is strongest, "route-number" (a route-number
+correlation, not a verbatim match) is weaker but still directional. A negative
+entry is included deliberately (dulles_greenway <-> i495) so the agent says
+"not enough data" instead of guessing when a pair was checked and found
+unevidenced.
 
 strands.Agent's system_prompt accepts str | list[SystemContentBlock], and
 SystemContentBlock only has text/cachePoint keys (strands/types/content.py)
--- there's no structured-knowledge field, so JUNCTIONS goes in as literal
-json.dumps(...) text inside the prompt string, not any special mechanism.
+-- there's no structured-knowledge field. The priced location oracle and
+JUNCTIONS therefore go in as literal json.dumps(...) text inside the prompt
+string, not any special mechanism.
 
 See docs/oracle-tools-spec.md for the tool contract this builds on.
 """
@@ -47,10 +48,71 @@ from strands.models import BedrockModel, CacheToolsConfig
 # doesn't work, so it must be on sys.path directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_tools"))
 from dulles_route import dulles_route
-from find_toll_locations import find_toll_locations
 from i66_route import i66_route
 from i95_route import i95_route
 from i495_route import i495_route
+
+_ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles"
+
+
+def _locations(nodes: dict, pairs: list) -> list[dict[str, str | bool]]:
+    """Return the labels and roles a route tool can actually resolve."""
+    entry_ids = {pair["entry"] for pair in pairs}
+    exit_ids = {pair["exit"] for pair in pairs}
+    return [
+        {
+            "label": label,
+            "entry": any(nodes[node_id]["label"] == label for node_id in entry_ids),
+            "exit": any(nodes[node_id]["label"] == label for node_id in exit_ids),
+        }
+        for label in sorted(
+            {nodes[node_id]["label"] for node_id in entry_ids | exit_ids}
+        )
+    ]
+
+
+def _load_priced_location_oracle() -> dict[str, dict]:
+    """Prompt knowledge only; route tools remain the pricing source of truth."""
+    i95 = json.loads((_ORACLE_DIR / "i95.json").read_text())
+    i66 = json.loads((_ORACLE_DIR / "i66.json").read_text())
+
+    def is_495(node_id: str) -> bool:
+        return i95["nodes"][node_id]["path"].startswith("495")
+
+    i95_pairs = [
+        pair
+        for pair in i95["pairs"]
+        if not is_495(pair["entry"]) and not is_495(pair["exit"])
+    ]
+    i495_pairs = [
+        pair for pair in i95["pairs"] if is_495(pair["entry"]) and is_495(pair["exit"])
+    ]
+    dulles_toll_road = json.loads((_ORACLE_DIR / "dulles_toll_road.json").read_text())
+    dulles_greenway = json.loads((_ORACLE_DIR / "dulles_greenway.json").read_text())
+    return {
+        "i95": {"tool": "i95_route", "locations": _locations(i95["nodes"], i95_pairs)},
+        "i495": {
+            "tool": "i495_route",
+            "locations": _locations(i95["nodes"], i495_pairs),
+        },
+        "i66_itb": {
+            "tool": "i66_route",
+            "locations": _locations(i66["nodes"], i66["pairs"]),
+        },
+        "dulles_toll_road": {
+            "tool": "dulles_route",
+            "locations": _locations(
+                dulles_toll_road["nodes"], dulles_toll_road["pairs"]
+            ),
+        },
+        "dulles_greenway": {
+            "tool": "dulles_route",
+            "locations": _locations(dulles_greenway["nodes"], dulles_greenway["pairs"]),
+        },
+    }
+
+
+_PRICED_LOCATION_ORACLE_JSON = json.dumps(_load_priced_location_oracle(), indent=2)
 
 JUNCTIONS = {
     ("i95", "i495"): {
@@ -113,18 +175,6 @@ JUNCTIONS = {
             "dulles_toll_road<->dulles_greenway junction above."
         ),
     },
-    ("i66_otb", "dulles_toll_road"): {
-        "evidence": (
-            "NOT EVIDENCED -- no shared node id/label between "
-            "oracles/i66_otb.json and the Dulles oracles despite geographic "
-            "proximity"
-        ),
-        "note": (
-            "Do not guess a junction here. Also: no pricing tool exists for "
-            "I-66 OTB at all -- find_toll_locations can resolve a label on "
-            "it, but no route tool can price it."
-        ),
-    },
 }
 
 # json.dumps requires string dict keys; JUNCTIONS' tuple keys are the
@@ -156,16 +206,29 @@ auditable toll estimates grounded only in the registered tools' results.
 </role>
 
 <tool_rules>
-- Use find_toll_locations before pricing an origin or destination that is not
-  already a known exact corridor label. It resolves vague or misspelled
-  locations and identifies their corridor.
+- Match vague, partial, or misspelled locations to the closest appropriate
+  exact label in the priced location oracle below. Use that exact label in a
+  pricing-tool call. If more than one listed label could reasonably mean the
+  user's location, ask a concise clarifying question instead of guessing.
 - Use i95_route, i495_route, and i66_route only for their respective single
   corridors. They return VDOT-derived dynamic prices.
 - Use dulles_route directly for a trip touching the Dulles Toll Road or
   Dulles Greenway; it handles their Route 28 boundary internally.
 - Never call a database, write SQL, invent a route, invent a price, or infer
   a timestamp that a tool did not return.
+- This assistant covers only the priced roads in the location oracle. For
+  non-toll-pricing, unrelated, or uncovered-road requests, briefly say that
+  you can price trips on the listed Northern Virginia roads and invite a
+  covered origin and destination.
 </tool_rules>
+
+<priced_location_oracle>
+The only supported locations are listed below. Each location has `entry` and
+`exit` booleans showing whether its route tool can use that label as an origin
+or destination. This oracle is for fuzzy location matching only; tools remain
+the source of truth for a valid route and its price.
+{_PRICED_LOCATION_ORACLE_JSON}
+</priced_location_oracle>
 
 <routing_context>
 {_ANTI_EXAMPLE}
@@ -278,7 +341,7 @@ def build_agent() -> Agent:
     )
     return Agent(
         model=model,
-        tools=[find_toll_locations, i95_route, i495_route, i66_route, dulles_route],
+        tools=[i95_route, i495_route, i66_route, dulles_route],
         system_prompt=[
             {"text": build_system_prompt()},
             # Cache the static instructions after the cached tool definitions.

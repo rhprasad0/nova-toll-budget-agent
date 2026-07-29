@@ -19,8 +19,8 @@ tick to poll Transurban's own live Express Lanes snapshot, filling
 
 | Path | What |
 |---|---|
-| `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the five tools below into an answer — never touches RDS or SQL directly |
-| `agent_tools/` | five Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`), `find_toll_locations` turns a vague human place name into the exact label the other four expect |
+| `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the four pricing tools below into an answer — never touches RDS or SQL directly |
+| `agent_tools/` | four Strands tools resolving a trip to its route and price — no traversal; `i66_route`/`i95_route`/`i495_route` query RDS for a dynamic price (i95_route/i495_route each cover one facility only, no cross-corridor trips), `dulles_route` prices entirely from its committed oracles (see `docs/oracle-tools-spec.md`). The agent embeds the priced route labels in its system prompt for fuzzy location matching. |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
 | `lambdas/express_fetcher` | secondary live-source poller (Transurban, no DB access itself — feeds the loader) |
 | `db/` | the per-feed schema and the `loader_writer` role |

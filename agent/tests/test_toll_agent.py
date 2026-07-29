@@ -19,8 +19,8 @@ def test_system_prompt_contains_i95_i495_junction():
 
 def test_system_prompt_flags_unevidenced_junctions():
     prompt = build_system_prompt()
-    # 2 JUNCTIONS entries carry the marker, plus the refusal rule names it.
-    assert prompt.count("NOT EVIDENCED") == 3
+    # One JUNCTIONS entry carries the marker, plus the refusal rule names it.
+    assert prompt.count("NOT EVIDENCED") == 2
 
 
 def test_system_prompt_states_the_overshoot_anti_example():
@@ -30,9 +30,21 @@ def test_system_prompt_states_the_overshoot_anti_example():
     assert "NOT evidence the leg boundary is correct" in prompt
 
 
-def test_system_prompt_never_asserts_i66_otb_dulles_junction():
+def test_system_prompt_embeds_only_priced_location_labels():
     prompt = build_system_prompt()
-    assert "no pricing tool exists for I-66 OTB" in prompt
+    assert '"i95"' in prompt
+    assert '"i495"' in prompt
+    assert '"i66_itb"' in prompt
+    assert '"dulles_toll_road"' in prompt
+    assert '"dulles_greenway"' in prompt
+    assert "Vaden Drive" not in prompt
+
+
+def test_system_prompt_instructs_fuzzy_matching_and_topic_boundaries():
+    prompt = build_system_prompt()
+    assert "Match vague, partial, or misspelled locations" in prompt
+    assert "ask a concise clarifying question instead of guessing" in prompt
+    assert "non-toll-pricing, unrelated, or uncovered-road requests" in prompt
 
 
 def test_system_prompt_uses_structured_claude_prompt_sections():
@@ -40,6 +52,7 @@ def test_system_prompt_uses_structured_claude_prompt_sections():
     for section in (
         "role",
         "tool_rules",
+        "priced_location_oracle",
         "routing_context",
         "junctions",
         "response_format",
@@ -84,7 +97,6 @@ def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
     assert [
         tool["toolSpec"]["name"] for tool in request["toolConfig"]["tools"][:-1]
     ] == [
-        "find_toll_locations",
         "i95_route",
         "i495_route",
         "i66_route",
