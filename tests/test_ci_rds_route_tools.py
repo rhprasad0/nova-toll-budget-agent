@@ -62,19 +62,140 @@ def _assert_common_price_fields(
     assert result["at_time"] == expected_at.isoformat()
 
 
+def _current_open_i95_case() -> tuple[dict, tuple]:
+    """Return an oracle pair and its newest directionally-open RDS row.
+
+    I-95's lanes reverse, so a fixed northbound or southbound example would
+    make CI fail during the other direction's operating window. The route map
+    is read directly here rather than through i95_route, keeping discovery
+    independent from the tool under test.
+    """
+    nodes = _I95_ORACLE["nodes"]
+    pairs = [
+        pair
+        for pair in _I95_ORACLE["pairs"]
+        if not nodes[pair["entry"]]["path"].startswith("495")
+        and not nodes[pair["exit"]]["path"].startswith("495")
+    ]
+    pairs_by_od = {pair["ods"][0]: pair for pair in pairs if len(pair["ods"]) == 1}
+    # Fetch every candidate's newest row once. The status test stays in Python
+    # because the expected open value depends on the row's corridor_name.
+    now = datetime.now(UTC)
+    with connect_as_pricing_reader() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (od_pair_id)
+                od_pair_id, corridor_name, zone_toll_rate_usd, interval_end_at, link_status
+            FROM trip_pricing_i95
+            WHERE od_pair_id = ANY(%s) AND interval_end_at <= %s
+            ORDER BY od_pair_id, interval_end_at DESC
+            """,
+            (list(pairs_by_od), now),
+        )
+        candidates = cur.fetchall()
+
+    for row in candidates:
+        od_pair_id, corridor_name, _, _, link_status = row
+        if link_status == _I95_REQUIRED_STATUS.get(corridor_name):
+            return pairs_by_od[od_pair_id], row
+    pytest.fail("RDS has no current, directionally-open oracle-supported I-95 toll row")
+
+
+def test_i95_route_matches_independently_read_open_rds_price():
+    pair, row = _current_open_i95_case()
+    od_pair_id, corridor_name, rate, interval_end_at, _ = row
+    nodes = _I95_ORACLE["nodes"]
+
+    result = i95_route(
+        nodes[pair["entry"]]["label"],
+        nodes[pair["exit"]]["label"],
+        at_time=interval_end_at.isoformat(),
+    )
+
+    _assert_common_price_fields(result, rate, interval_end_at)
+    assert result["legs"][0]["od_pair_id"] == od_pair_id
+    assert result["legs"][0]["corridor_name"] == corridor_name
+
+
+def test_i95_route_refuses_historical_northbound_closure():
+    at_time = "2026-07-29T15:40:00-04:00"
+    row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1132, at_time),
+    )
+    assert row == (1132, "I-95-NB", "CLOSED")
+
+    result = i95_route("US-1", "I-395 Near Edsall Road", at_time=at_time)
+
+    assert "error" in result
+    assert result["valid_options"] == []
+    assert "1132" in result["error"]
+    assert "CLOSED" in result["error"]
+    assert "legs" not in result
+
+
+def test_i95_route_refuses_historical_southbound_closure():
+    at_time = "2026-07-29T10:10:00-04:00"
+    row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1151, at_time),
+    )
+    assert row == (1151, "I-95-SB", "CLOSED")
+
+    result = i95_route("I-395 Near Edsall Road", "US-1", at_time=at_time)
+
+    assert "error" in result
+    assert result["valid_options"] == []
+    assert "1151" in result["error"]
+    assert "CLOSED" in result["error"]
+    assert "legs" not in result
+
+
+def test_i95_route_refuses_historical_both_lanes_closure():
+    at_time = "2026-07-29T10:50:00-04:00"
+    northbound_row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1132, at_time),
+    )
+    southbound_row = _fetchone(
+        """
+        SELECT od_pair_id, corridor_name, link_status
+        FROM trip_pricing_i95
+        WHERE od_pair_id = %s AND interval_end_at = %s
+        """,
+        (1151, at_time),
+    )
+    assert northbound_row == (1132, "I-95-NB", "CLOSED")
+    assert southbound_row == (1151, "I-95-SB", "CLOSED")
+
+    northbound = i95_route("US-1", "I-395 Near Edsall Road", at_time=at_time)
+    southbound = i95_route("I-395 Near Edsall Road", "US-1", at_time=at_time)
+
+    for result, od_pair_id in ((northbound, 1132), (southbound, 1151)):
+        assert "error" in result
+        assert result["valid_options"] == []
+        assert str(od_pair_id) in result["error"]
+        assert "CLOSED" in result["error"]
+        assert "legs" not in result
+
+
 @pytest.mark.parametrize(
     ("od_pair_id", "origin", "destination"),
     [
-        (
-            1038,
-            "Route 267",
-            "495 Express Lanes End/George Wash. Mem. Pkwy.",
-        ),
-        (
-            1040,
-            "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
-            "I-495/I-95 Near Van Dorn Street",
-        ),
+        (1038, "Route 267", "495 Express Lanes End/George Wash. Mem. Pkwy."),
+        (1040, "495 Express Lanes Start/Georg Wash. Mem. Pkwy.", "I-495/I-95 Near Van Dorn Street"),
     ],
     ids=("northbound", "southbound"),
 )
