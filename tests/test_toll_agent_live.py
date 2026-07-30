@@ -125,6 +125,76 @@ _BOUNDARY_CASES = [
         ["I-495/Route 267 interchange"],
     ),
     (
+        "i66-west-to-i495-south-direct-paraphrase",
+        (
+            "How much is westbound I-66 from Lee Highway/Scott Street, then "
+            "southbound 495 Express to Braddock Road?"
+        ),
+        ["I-66/I-495 interchange"],
+    ),
+    (
+        "i495-north-to-i66-east-direct-paraphrase",
+        (
+            "What is the toll from Braddock Road northbound on 495 Express to "
+            "Washington via eastbound I-66 Inside the Beltway?"
+        ),
+        ["I-66/I-495 interchange"],
+    ),
+    (
+        "i66-west-to-i495-north-detour-paraphrase",
+        (
+            "Price Lee Highway/Scott Street westbound on I-66 to the north end "
+            "of the 495 Express Lanes at George Washington Memorial Parkway."
+        ),
+        [
+            "Dulles Airport Access Highway",
+            "I-495/Route 267 interchange",
+        ],
+    ),
+    (
+        "i495-south-to-i66-east-detour-paraphrase",
+        (
+            "How much from the George Washington Parkway start of southbound "
+            "495 Express to Washington on eastbound I-66?"
+        ),
+        [
+            "I-495/Route 267 interchange",
+            "Dulles Airport Access Highway",
+        ],
+    ),
+    (
+        "dulles-east-to-i495-south-paraphrase",
+        (
+            "Price Reston Parkway eastbound on the Dulles Toll Road to Braddock "
+            "Road southbound on 495 Express."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "dulles-east-to-i495-north-paraphrase",
+        (
+            "How much from Reston Parkway eastbound on the Dulles Toll Road to "
+            "the north end of 495 Express at GW Parkway?"
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i495-north-to-dulles-west-paraphrase",
+        (
+            "Price Braddock Road northbound on 495 Express to Reston Parkway "
+            "westbound on the Dulles Toll Road."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i495-south-to-dulles-west-paraphrase",
+        (
+            "What is the toll from the GW Parkway start of southbound 495 "
+            "Express to Reston Parkway on the Dulles Toll Road?"
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
         "i66-to-dulles",
         (
             "Price Fairfax Drive on I-66 Inside the Beltway to Exit 12 - SR 602 "
@@ -382,6 +452,14 @@ def test_agent_follows_every_network_boundary(
 
     [plan] = plans
     assert "error" not in plan, plan
+    matrix_case = next(
+        (
+            case
+            for case in _JUNCTION_MATRIX_CASES
+            if _case in {case, f"{case}-paraphrase"}
+        ),
+        None,
+    )
     assert [
         step["label"] for step in plan["steps"] if step["kind"] == "connector"
     ] == expected_connectors
@@ -408,24 +486,31 @@ def test_agent_follows_every_network_boundary(
         for step in plan["steps"]
         if step["kind"] in {"priced", "junction"}
     ]
-    assert [_semantic_call(call) for call in actual_calls] == expected_calls[
-        : len(actual_calls)
-    ]
-    assert len(actual_calls) <= len(expected_calls)
-
-    if len(actual_calls) < len(expected_calls):
-        last_result = _tool_result(agent, actual_calls[-1]["toolUseId"])
-        assert "error" in last_result, str(response)
-    elif _case in _JUNCTION_MATRIX_CASES:
+    if matrix_case:
+        assert len(actual_calls) == len(expected_calls), str(response)
+        assert [_semantic_call(call) for call in actual_calls] == expected_calls
         assert all(
             "error" not in _tool_result(agent, call["toolUseId"])
             for call in actual_calls
         ), str(response)
+    else:
+        assert [_semantic_call(call) for call in actual_calls] == expected_calls[
+            : len(actual_calls)
+        ]
+        assert len(actual_calls) <= len(expected_calls)
 
-    if _case.endswith("-detour"):
-        answer = str(response).casefold()
-        assert "detour" in answer
-        assert "route 267" in answer
+    for call in actual_calls:
+        result = _tool_result(agent, call["toolUseId"])
+        assert call["input"].get("at_time") == plan["at_time"]
+        if "error" not in result:
+            assert result["at_time"] == plan["at_time"]
+
+    if not matrix_case and len(actual_calls) < len(expected_calls):
+        last_result = _tool_result(agent, actual_calls[-1]["toolUseId"])
+        assert "error" in last_result, str(response)
+
+    if matrix_case and matrix_case.endswith("-detour"):
+        assert plan["routing_note"] in str(response)
         assert all(
             step.get("label") != "I-66/I-495 interchange" for step in plan["steps"]
         )

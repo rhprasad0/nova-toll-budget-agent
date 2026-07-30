@@ -36,6 +36,7 @@ from strands.models import BedrockModel, CacheToolsConfig
 # sys.path comment) -- a dotted "from agent_tools.i95_route import ..."
 # doesn't work, so it must be on sys.path directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_tools"))
+from _oracle_route import resolve_at_time
 from dulles_route import _lookup as _dulles_lookup
 from dulles_route import dulles_route
 from i66_route import i66_route
@@ -487,6 +488,7 @@ def plan_toll_route(
     origin: str,
     destination_corridor: str,
     destination: str,
+    at_time: str | None = None,
 ) -> dict:
     """Return the only oracle-supported pricing, junction, and connector steps.
 
@@ -498,7 +500,13 @@ def plan_toll_route(
     An ``unpriced`` step also calls no tool. Other ``connector`` steps are $0
     and must never be sent to a pricing tool. Boundaries use oracle node IDs
     so their directed entry/exit roles are not lost to duplicate labels.
+    ``at_time`` is normalized once for every tool call in the returned plan.
     """
+    try:
+        planned_at_time = resolve_at_time(at_time).isoformat()
+    except (TypeError, ValueError) as e:
+        return {"error": f"invalid at_time {at_time!r}: {e}"}
+
     if origin_corridor not in _LOCATION_BY_CORRIDOR:
         return {"error": f"unknown origin corridor {origin_corridor!r}"}
     if destination_corridor not in _LOCATION_BY_CORRIDOR:
@@ -520,10 +528,11 @@ def plan_toll_route(
     connector_labels = {step["label"] for step in steps if step["kind"] == "connector"}
     if _ROUTE_267_DETOUR_CONNECTORS <= connector_labels:
         return {
+            "at_time": planned_at_time,
             "steps": steps,
             "routing_note": "Route 267 detour; not a direct I-66/I-495 connection",
         }
-    return {"steps": steps}
+    return {"at_time": planned_at_time, "steps": steps}
 
 
 def build_system_prompt() -> str:
@@ -541,13 +550,23 @@ auditable toll estimates grounded only in the registered tools' results.
   pricing either endpoint. Do not reject an entry-only or exit-only endpoint
   yourself; the planner is authoritative about whether it can be an origin or
   destination.
+- Pass the user's requested `at_time` to plan_toll_route. Otherwise omit it.
+  Copy the planner result's `at_time` unchanged into every `priced` and
+  `junction` tool call, including the first one; never omit or recalculate it.
 - Match vague, partial, or misspelled locations to the closest appropriate
   exact label in the priced location oracle below. Use that exact label in a
   pricing-tool call. If more than one listed label could reasonably mean the
   user's location, ask a concise clarifying question instead of guessing.
+  An exact listed label, matched case-insensitively, is unambiguous; use it
+  without asking the user to confirm it.
 - In the oracle, `entry: true` means a location is a valid trip origin and
   `exit: true` means it is a valid trip destination. An exit-only location is
   therefore valid as a destination; do not reject it for lacking entry access.
+- On I-495, northbound travel **to** George Washington Memorial Parkway maps
+  to `495 Express Lanes End/George Wash. Mem. Pkwy.`; southbound travel
+  **from** the parkway maps to `495 Express Lanes Start/Georg Wash. Mem.
+  Pkwy.`. Resolve from travel direction and endpoint role, not "north end" or
+  "south end" wording.
 - If a location has no clear match in the priced location oracle, or is on an
   unlisted road, explain that it is outside coverage and do not call a pricing
   tool. Never substitute a nearby listed road or ramp for an uncovered one,
@@ -567,11 +586,13 @@ auditable toll estimates grounded only in the registered tools' results.
   plan_toll_route before any pricing tool. Follow its steps in order: call
   `priced` steps with origin/destination, call `junction` steps with
   movement/location, report `connector` steps as $0.00, and report `unpriced`
-  steps as unavailable without calling any tool. If there is no `priced`
-  i495_route step, never call i495_route; that endpoint is inside the
-  junction gap. A planner-provided node ID is an exact tool argument, not a
-  location to display. If planning returns an error, explain that the
-  repository has no oracle-supported route and do not price any leg.
+  steps as unavailable without calling any tool. Copy every planner-provided
+  tool argument verbatim, call each step exactly once, and never retry with a
+  substituted label. If there is no `priced` i495_route step, never call
+  i495_route; that endpoint is inside the junction gap. A planner-provided
+  node ID is an exact tool argument, not a location to display. If planning
+  returns an error, explain that the repository has no oracle-supported route
+  and do not price any leg.
 - Every `junction` step means the road between the selected 95 boundary and
   I-495 Near Braddock Road is unpriced. Report known segment prices
   separately. Never calculate a subtotal or complete total, even if every

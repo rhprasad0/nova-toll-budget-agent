@@ -8,6 +8,7 @@ tests/test_toll_agent_live.py for the real end-to-end check.
 import json
 import sys
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -171,6 +172,10 @@ def test_system_prompt_describes_curated_network_transfers():
     assert "explicitly call it a Route 267 detour" in prompt
     assert "never describe it as a direct I-66/I-495 connection" in prompt
     assert "Route 267 detour; not a direct I-66/I-495" in prompt
+    assert "Copy the planner result's `at_time` unchanged" in prompt
+    assert "Resolve from travel direction and endpoint role" in prompt
+    assert "call each step exactly once" in prompt
+    assert "without asking the user to confirm it" in prompt
 
 
 def test_network_transfers_have_directed_entry_and_exit_roles():
@@ -199,7 +204,14 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
 
 
 @pytest.mark.parametrize(
-    ("origin_corridor", "origin", "destination_corridor", "destination", "expected"),
+    (
+        "origin_corridor",
+        "origin",
+        "destination_corridor",
+        "destination",
+        "expected",
+        "routing_note",
+    ),
     [
         (
             "i66_itb",
@@ -211,6 +223,7 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
                 ("connector", "I-66/I-495 interchange"),
                 ("priced", "i495", "187SO", "Braddock Road"),
             ],
+            None,
         ),
         (
             "i495",
@@ -222,6 +235,7 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
                 ("connector", "I-66/I-495 interchange"),
                 ("priced", "i66_itb", "3", "Westmoreland St"),
             ],
+            None,
         ),
         (
             "i66_itb",
@@ -239,6 +253,7 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
                     "495 Express Lanes End/George Wash. Mem. Pkwy.",
                 ),
             ],
+            "Route 267 detour; not a direct I-66/I-495 connection",
         ),
         (
             "i495",
@@ -256,6 +271,7 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
                 ("connector", "Dulles Airport Access Highway"),
                 ("priced", "i66_itb", "6", "Westmoreland St"),
             ],
+            "Route 267 detour; not a direct I-66/I-495 connection",
         ),
     ],
     ids=(
@@ -266,7 +282,12 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
     ),
 )
 def test_planner_covers_every_i66_i495_direction(
-    origin_corridor, origin, destination_corridor, destination, expected
+    origin_corridor,
+    origin,
+    destination_corridor,
+    destination,
+    expected,
+    routing_note,
 ):
     plan = plan_toll_route(origin_corridor, origin, destination_corridor, destination)
 
@@ -284,6 +305,42 @@ def test_planner_covers_every_i66_i495_direction(
         else:
             actual.append((step["kind"], step["label"]))
     assert actual == expected
+    assert plan.get("routing_note") == routing_note
+
+
+def test_planner_defaults_to_one_timezone_aware_timestamp():
+    plan = plan_toll_route(
+        "i66_itb", "Lee Highway - Scott Street", "i495", "Braddock Road"
+    )
+
+    assert datetime.fromisoformat(plan["at_time"]).tzinfo is not None
+
+
+def test_planner_preserves_an_explicit_historical_timestamp():
+    at_time = "2026-07-30T12:34:56-04:00"
+
+    plan = plan_toll_route(
+        "i66_itb",
+        "Lee Highway - Scott Street",
+        "i495",
+        "Braddock Road",
+        at_time,
+    )
+
+    assert plan["at_time"] == at_time
+
+
+def test_planner_rejects_a_malformed_timestamp_before_planning():
+    plan = plan_toll_route(
+        "i66_itb",
+        "Lee Highway - Scott Street",
+        "i495",
+        "Braddock Road",
+        "not-a-time",
+    )
+
+    assert plan.keys() == {"error"}
+    assert plan["error"].startswith("invalid at_time 'not-a-time':")
 
 
 @pytest.mark.parametrize(
