@@ -321,9 +321,49 @@ def test_i95_junction_leg_fails_safe_when_no_direction_is_fully_open(at_time, st
 @pytest.mark.parametrize(
     "i66_origin, i66_destination, i66_start_zone, i66_end_zone, i495_origin, i495_destination, i495_od_pair_id",
     [
-        ("I-495 N", "Washington", 3100, 3130, "Route 267", "Interstate 66", 1052),
-        ("Washington", "I-495 S", 3200, 3230, "Interstate 66", "Route 267", 1033),
+        (
+            "Washington",
+            "I-495 S",
+            3200,
+            3230,
+            "Interstate 66",
+            "Braddock Road",
+            1076,
+        ),
+        (
+            "I-495 Express Lanes N",
+            "Washington",
+            3100,
+            3130,
+            "Braddock Road",
+            "Interstate 66",
+            1017,
+        ),
+        (
+            "Washington",
+            "Route 267 - Dulles Toll Road",
+            3200,
+            3220,
+            "Route 267",
+            "495 Express Lanes End/George Wash. Mem. Pkwy.",
+            1038,
+        ),
+        (
+            "Route 267 - Dulles Toll Road",
+            "Washington",
+            3110,
+            3130,
+            "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+            "Route 267",
+            1046,
+        ),
     ],
+    ids=(
+        "i66-west-to-i495-south-direct",
+        "i495-north-to-i66-east-direct",
+        "i66-west-to-i495-north-route-267-detour",
+        "i495-south-to-i66-east-route-267-detour",
+    ),
 )
 def test_i66_i495_junction_tools_match_shared_requested_time(
     i66_origin,
@@ -410,20 +450,40 @@ def test_i66_i495_junction_tools_match_shared_requested_time(
     "i495_origin, i495_destination, od_pair_id, dulles_origin, dulles_destination",
     [
         (
-            "Westpark Drive",
             "Route 267",
-            1036,
+            "Braddock Road",
+            1050,
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        ),
+        (
+            "Route 267",
+            "495 Express Lanes End/George Wash. Mem. Pkwy.",
+            1038,
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        ),
+        (
+            "Braddock Road",
+            "Route 267",
+            1021,
             "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
             "Exit 12 - SR 602 (Reston Pkwy)",
         ),
         (
+            "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
             "Route 267",
-            "Westpark Drive",
-            1053,
-            "Exit 12 - SR 602 (Reston Pkwy)",
+            1046,
             "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "Exit 12 - SR 602 (Reston Pkwy)",
         ),
     ],
+    ids=(
+        "dulles-east-to-i495-south",
+        "dulles-east-to-i495-north",
+        "i495-north-to-dulles-west",
+        "i495-south-to-dulles-west",
+    ),
 )
 def test_i495_dulles_toll_road_junction_tools_match_shared_requested_time(
     i495_origin,

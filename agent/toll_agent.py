@@ -36,6 +36,7 @@ from strands.models import BedrockModel, CacheToolsConfig
 # sys.path comment) -- a dotted "from agent_tools.i95_route import ..."
 # doesn't work, so it must be on sys.path directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_tools"))
+from _oracle_route import resolve_at_time
 from dulles_route import _lookup as _dulles_lookup
 from dulles_route import dulles_route
 from i66_route import i66_route
@@ -140,16 +141,20 @@ NETWORK_TRANSFERS = [
     {
         "id": "i66_to_i495",
         "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
-        "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187NO"},
+        "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187SO"},
         "connector": "I-66/I-495 interchange",
-        "evidence": "oracles/i66.json node 5 and oracles/i95.json node 187NO pair roles",
+        "evidence": "oracles/i66.json node 5 and oracles/i95.json node 187SO pair roles",
     },
     {
         "id": "i495_to_i66",
-        "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187SD"},
-        "to": {"corridor": "i66_itb", "entry": "I-495 N", "node_id": "2"},
+        "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187ND"},
+        "to": {
+            "corridor": "i66_itb",
+            "entry": "I-495 Express Lanes N",
+            "node_id": "3",
+        },
         "connector": "I-66/I-495 interchange",
-        "evidence": "oracles/i95.json node 187SD and oracles/i66.json node 2 pair roles",
+        "evidence": "oracles/i95.json node 187ND and oracles/i66.json node 3 pair roles",
     },
     {
         "id": "dulles_toll_road_to_i495",
@@ -163,6 +168,17 @@ NETWORK_TRANSFERS = [
         "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 182SO",
     },
     {
+        "id": "dulles_toll_road_to_i495_north",
+        "from": {
+            "corridor": "dulles_toll_road",
+            "exit": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "to": {"corridor": "i495", "entry": "Route 267", "node_id": "182NO"},
+        "connector": "I-495/Route 267 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 182NO",
+    },
+    {
         "id": "i495_to_dulles_toll_road",
         "from": {"corridor": "i495", "exit": "Route 267", "node_id": "182ND"},
         "to": {
@@ -172,6 +188,17 @@ NETWORK_TRANSFERS = [
         },
         "connector": "I-495/Route 267 interchange",
         "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 182ND and 1819",
+    },
+    {
+        "id": "i495_south_to_dulles_toll_road",
+        "from": {"corridor": "i495", "exit": "Route 267", "node_id": "182SD"},
+        "to": {
+            "corridor": "dulles_toll_road",
+            "entry": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "connector": "I-495/Route 267 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 182SD and 1819",
     },
     {
         "id": "i66_to_dulles_toll_road",
@@ -213,6 +240,10 @@ _LOCATION_BY_CORRIDOR = {
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
 _I495_JUNCTION_ENTRY = "191NO"
 _I495_JUNCTION_EXIT = "191SD"
+_ROUTE_267_DETOUR_CONNECTORS = {
+    "Dulles Airport Access Highway",
+    "I-495/Route 267 interchange",
+}
 
 
 def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
@@ -457,6 +488,7 @@ def plan_toll_route(
     origin: str,
     destination_corridor: str,
     destination: str,
+    at_time: str | None = None,
 ) -> dict:
     """Return the only oracle-supported pricing, junction, and connector steps.
 
@@ -468,7 +500,13 @@ def plan_toll_route(
     An ``unpriced`` step also calls no tool. Other ``connector`` steps are $0
     and must never be sent to a pricing tool. Boundaries use oracle node IDs
     so their directed entry/exit roles are not lost to duplicate labels.
+    ``at_time`` is normalized once for every tool call in the returned plan.
     """
+    try:
+        planned_at_time = resolve_at_time(at_time).isoformat()
+    except (TypeError, ValueError) as e:
+        return {"error": f"invalid at_time {at_time!r}: {e}"}
+
     if origin_corridor not in _LOCATION_BY_CORRIDOR:
         return {"error": f"unknown origin corridor {origin_corridor!r}"}
     if destination_corridor not in _LOCATION_BY_CORRIDOR:
@@ -487,7 +525,14 @@ def plan_toll_route(
                 f"{destination!r} on {destination_corridor}"
             )
         }
-    return {"steps": steps}
+    connector_labels = {step["label"] for step in steps if step["kind"] == "connector"}
+    if _ROUTE_267_DETOUR_CONNECTORS <= connector_labels:
+        return {
+            "at_time": planned_at_time,
+            "steps": steps,
+            "routing_note": "Route 267 detour; not a direct I-66/I-495 connection",
+        }
+    return {"at_time": planned_at_time, "steps": steps}
 
 
 def build_system_prompt() -> str:
@@ -501,10 +546,27 @@ auditable toll estimates grounded only in the registered tools' results.
 </role>
 
 <tool_rules>
+- For every cross-corridor request, call plan_toll_route before validating or
+  pricing either endpoint. Do not reject an entry-only or exit-only endpoint
+  yourself; the planner is authoritative about whether it can be an origin or
+  destination.
+- Pass the user's requested `at_time` to plan_toll_route. Otherwise omit it.
+  Copy the planner result's `at_time` unchanged into every `priced` and
+  `junction` tool call, including the first one; never omit or recalculate it.
 - Match vague, partial, or misspelled locations to the closest appropriate
   exact label in the priced location oracle below. Use that exact label in a
   pricing-tool call. If more than one listed label could reasonably mean the
   user's location, ask a concise clarifying question instead of guessing.
+  An exact listed label, matched case-insensitively, is unambiguous; use it
+  without asking the user to confirm it.
+- In the oracle, `entry: true` means a location is a valid trip origin and
+  `exit: true` means it is a valid trip destination. An exit-only location is
+  therefore valid as a destination; do not reject it for lacking entry access.
+- On I-495, northbound travel **to** George Washington Memorial Parkway maps
+  to `495 Express Lanes End/George Wash. Mem. Pkwy.`; southbound travel
+  **from** the parkway maps to `495 Express Lanes Start/Georg Wash. Mem.
+  Pkwy.`. Resolve from travel direction and endpoint role, not "north end" or
+  "south end" wording.
 - If a location has no clear match in the priced location oracle, or is on an
   unlisted road, explain that it is outside coverage and do not call a pricing
   tool. Never substitute a nearby listed road or ramp for an uncovered one,
@@ -524,15 +586,21 @@ auditable toll estimates grounded only in the registered tools' results.
   plan_toll_route before any pricing tool. Follow its steps in order: call
   `priced` steps with origin/destination, call `junction` steps with
   movement/location, report `connector` steps as $0.00, and report `unpriced`
-  steps as unavailable without calling any tool. If there is no `priced`
-  i495_route step, never call i495_route; that endpoint is inside the
-  junction gap. A planner-provided node ID is an exact tool argument, not a
-  location to display. If planning returns an error, explain that the
-  repository has no oracle-supported route and do not price any leg.
+  steps as unavailable without calling any tool. Copy every planner-provided
+  tool argument verbatim, call each step exactly once, and never retry with a
+  substituted label. If there is no `priced` i495_route step, never call
+  i495_route; that endpoint is inside the junction gap. A planner-provided
+  node ID is an exact tool argument, not a location to display. If planning
+  returns an error, explain that the repository has no oracle-supported route
+  and do not price any leg.
 - Every `junction` step means the road between the selected 95 boundary and
   I-495 Near Braddock Road is unpriced. Report known segment prices
   separately. Never calculate a subtotal or complete total, even if every
   returned segment has a price or the user asks you to assume the gap is free.
+- If a plan contains both the I-495/Route 267 interchange and Dulles Airport
+  Access Highway connectors, it includes a `routing_note`. Repeat that note
+  verbatim in the answer: **Route 267 detour; not a direct I-66/I-495
+  connection**.
 - Never call a database, write SQL, invent a route, invent a price, or infer
   a timestamp that a tool did not return.
 - This assistant covers only the priced roads in the location oracle. For
@@ -569,6 +637,11 @@ physical connection may exist.
 
 The planner is authoritative for this graph. Do not infer a reverse edge,
 combine route-number labels, or describe a connector absent from its result.
+In particular, I-66 westbound to I-495 northbound and I-495 southbound to
+I-66 eastbound have no direct I-66/I-495 transfer in this graph. When the
+planner connects either trip through the I-495/Route 267 interchange and the
+Dulles Airport Access Highway, explicitly call it a Route 267 detour and
+never describe it as a direct I-66/I-495 connection.
 </routing_context>
 
 <response_format>
