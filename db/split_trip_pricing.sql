@@ -4,6 +4,9 @@
 -- gone (db/drop_agent_surface.sql); the two feeds are structurally
 -- different and are better served by two purpose-built tables.
 --
+-- APPLIED 2026-07-25. Historical one-shot; new databases use db/schema.sql.
+-- Do not run this as routine setup.
+--
 -- The CREATE TABLE statements below are duplicated from db/schema.sql
 -- (needed here so this file is runnable standalone against a DB that hasn't
 -- had schema.sql applied yet). If schema.sql's DDL for these two tables ever

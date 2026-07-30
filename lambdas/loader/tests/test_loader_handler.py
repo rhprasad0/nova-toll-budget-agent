@@ -1,10 +1,8 @@
 import sys
-from datetime import UTC, datetime
 
 import pytest
 from conftest import loader_handler as handler
 from parse_csv import I95Row
-from parse_express_lanes import I95LiveRow
 from parse_xml import I66Row
 
 
@@ -49,20 +47,6 @@ def test_upsert_i66_sql_does_not_update_key_columns():
         assert key_column not in set_clause
 
 
-def test_upsert_i95_live_sql_conflict_key_matches_spec():
-    # Keyed on our capture tick, never the source's hour-truncated observed_at
-    # -- that was the overwrite bug (docs/feed-cadence-tasks.md).
-    assert (
-        "ON CONFLICT (captured_at, od_pair_id) DO UPDATE" in handler.UPSERT_I95_LIVE_SQL
-    )
-
-
-def test_upsert_i95_live_sql_does_not_update_key_columns():
-    set_clause = handler.UPSERT_I95_LIVE_SQL.split("DO UPDATE")[1]
-    for key_column in ("captured_at = ", "od_pair_id = "):
-        assert key_column not in set_clause
-
-
 @pytest.mark.parametrize(
     ("key", "feed"),
     [
@@ -90,7 +74,7 @@ def test_feed_from_key_raises_without_feed_segment():
 )
 def test_feed_from_key_rejects_untrusted_shapes(key):
     with pytest.raises(
-        ValueError, match="unsupported raw object key|unexpected extension"
+        ValueError, match=r"unsupported raw object key|unexpected extension"
     ):
         handler._feed_from_key(key)
 
@@ -152,41 +136,3 @@ def test_row_params_includes_s3_key_and_all_row_fields_i66():
     assert params["s3_key"] == "raw/feed=i66/date=2026-07-21/1440Z.xml"
     assert params["corridor_id"] == 1100
     assert "feed" not in params
-
-
-def test_row_params_includes_captured_at_and_all_row_fields_i95_live():
-    row = I95LiveRow(
-        observed_at=datetime(2026, 7, 28, 12, 0, tzinfo=UTC),
-        od_pair_id=1374,
-        price_usd=None,  # type: ignore[arg-type]
-        status="open",
-        road="495",
-        direction="N",
-    )
-    key = "raw/feed=i95-live/date=2026-07-28/1210Z.json"
-    params = handler._row_params(row, s3_key=key)
-    assert params["s3_key"] == key
-    assert params["captured_at"] == datetime(2026, 7, 28, 12, 10, tzinfo=UTC)
-    # The source's own label stays hourly and distinct from our capture tick --
-    # that difference is the entire point of the new key.
-    assert params["observed_at"] == datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
-
-
-def test_captured_at_from_key_reads_the_tick_not_the_hour():
-    assert handler._captured_at_from_key(
-        "raw/feed=i95-live/date=2026-07-28/1210Z.json"
-    ) == datetime(2026, 7, 28, 12, 10, tzinfo=UTC)
-    # 2026-07-26 ran a 30-minute express-fetcher tick, so keys from that era
-    # are genuinely coarser -- documented, not a parsing bug.
-    assert handler._captured_at_from_key(
-        "raw/feed=i95-live/date=2026-07-26/0030Z.json"
-    ) == datetime(2026, 7, 26, 0, 30, tzinfo=UTC)
-    # Non-live feeds share the key format, so the same derivation holds.
-    assert handler._captured_at_from_key(
-        "raw/feed=i66/date=2026-07-28/1206Z.xml"
-    ) == datetime(2026, 7, 28, 12, 6, tzinfo=UTC)
-
-
-def test_captured_at_from_key_rejects_an_unparseable_key():
-    with pytest.raises(ValueError, match="unsupported raw object key"):
-        handler._captured_at_from_key("raw/feed=i95-live/date=2026-07-28/nope.json")

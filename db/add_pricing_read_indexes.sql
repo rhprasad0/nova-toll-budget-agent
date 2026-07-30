@@ -7,6 +7,9 @@
 -- speculative one (docs/poller-spec.md: "add an index when a real read
 -- pattern asks for one").
 --
+-- APPLIED 2026-07-28. Historical one-shot; new databases use db/schema.sql.
+-- Do not run this as routine setup.
+--
 -- The three CREATE INDEX statements are duplicated from db/schema.sql so this
 -- file is runnable standalone against a DB that hasn't had schema.sql
 -- re-applied yet. Keep them in sync -- the i95-live index moved to captured_at

@@ -15,11 +15,12 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-import i95_route as i95_mod
 import pytest
 from conftest import FakeConnection
 from conftest import connect_returning as _connect_returning
-from i95_route import i95_junction_leg, i95_route
+
+from agent_tools import _oracle_route
+from agent_tools.i95_route import i95_junction_leg, i95_route
 
 _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)
@@ -54,7 +55,7 @@ def test_unrecognized_corridor_name_is_a_hard_error(monkeypatch):
         _OBSERVED_AT,
         "OPEN",
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(bad_row))
+    monkeypatch.setattr(_oracle_route, "env_connect", _connect_returning(bad_row))
     result = i95_route("US-1", "I-395 Near Edsall Road")
     assert "error" in result
     assert "I-395-NEW-EXTENSION" in result["error"]
@@ -86,7 +87,9 @@ def test_unavailable_primary_row_is_a_hard_error(
         _OBSERVED_AT,
         link_status,
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", _connect_returning(unavailable_row))
+    monkeypatch.setattr(
+        _oracle_route, "env_connect", _connect_returning(unavailable_row)
+    )
     result = i95_route(origin, destination)
     assert "error" in result
     assert result["valid_options"] == []
@@ -109,7 +112,7 @@ def test_historical_northbound_closure_is_a_hard_error(monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_route("US-1", "I-395 Near Edsall Road", at_time=at_time)
 
@@ -138,7 +141,7 @@ def test_historical_southbound_closure_is_a_hard_error(monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_route("I-395 Near Edsall Road", "US-1", at_time=at_time)
 
@@ -180,7 +183,7 @@ def test_historical_both_lanes_closure_is_a_hard_error(monkeypatch):
         ]
     )
     connections = iter((northbound_conn, southbound_conn))
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: next(connections))
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: next(connections))
 
     northbound = i95_route("US-1", "I-395 Near Edsall Road", at_time=at_time)
     southbound = i95_route("I-395 Near Edsall Road", "US-1", at_time=at_time)
@@ -211,7 +214,7 @@ def test_wrong_direction_open_primary_row_is_a_hard_error(monkeypatch):
         "NORTHBOUND_OPEN",
     )
     monkeypatch.setattr(
-        i95_mod, "_env_connect", _connect_returning(wrong_direction_row)
+        _oracle_route, "env_connect", _connect_returning(wrong_direction_row)
     )
     result = i95_route("I-395 Near Edsall Road", "US-1")
     assert "error" in result
@@ -223,7 +226,7 @@ def test_label_shared_by_multiple_node_ids_still_resolves_unambiguously(monkeypa
     # oracle (entries and exits, both directions); the (entry_label,
     # exit_label) pair is still unique.
     monkeypatch.setattr(
-        i95_mod, "_env_connect", _connect_returning(_EDSALL_TO_SEMINARY_ROW)
+        _oracle_route, "env_connect", _connect_returning(_EDSALL_TO_SEMINARY_ROW)
     )
     result = i95_route("I-395 Near Edsall Road", "Seminary Road")
     assert result["entry"]["node_id"] == "221NO"
@@ -238,7 +241,7 @@ def test_junction_leg_selects_northbound_franconia(monkeypatch):
             _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70"),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i95_to_i495")
 
@@ -262,7 +265,7 @@ def test_junction_leg_selects_southbound_edsall_in_reverse(monkeypatch):
             _row(1151, "I-95-SB", "SOUTHBOUND_OPEN", "9.05"),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i495_to_i95")
 
@@ -295,7 +298,7 @@ def test_junction_leg_fails_safe_without_money(
             _row(1151, "I-95-SB", southbound_status),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i95_to_i495")
 
@@ -318,7 +321,7 @@ def test_junction_leg_fails_safe_when_open_direction_cannot_reach_boundary(
             _row(1151, "I-95-SB", "SOUTHBOUND_OPEN"),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i95_to_i495")
 
@@ -335,7 +338,7 @@ def test_junction_leg_requires_common_status_interval(monkeypatch):
             _row(1151, "I-95-SB", "CLOSED", at=later),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i95_to_i495")
 
@@ -352,7 +355,7 @@ def test_junction_leg_requires_price_and_status_from_one_interval(monkeypatch):
             _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70", older),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i95_to_i495")
 
@@ -371,7 +374,7 @@ def test_junction_leg_historical_queries_share_at_time(monkeypatch):
             _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70", at),
         ]
     )
-    monkeypatch.setattr(i95_mod, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
     result = i95_junction_leg("US-1", "i95_to_i495", at_time=at_time)
 

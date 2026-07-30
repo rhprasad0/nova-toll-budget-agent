@@ -4,8 +4,8 @@ expresslanes.com's "Map your trip" page ships its whole entry/exit network as a
 static theme asset -- not an API -- and it is the same territory as our curated
 graph: every entry point, every exit reachable from it, and the exact VDOT OD
 pair(s) billed for that trip. The page's own JS looks the prices up by those
-ids against /maps-api/infra-price-confirmed-all (see
-tests/test_expresslanes_crosscheck.py), so the ids are VDOT's ODPAIRID verbatim.
+ids against `/maps-api/infra-price-confirmed-all`, so the ids are VDOT's
+ODPAIRID verbatim.
 
 We commit the *derived* JSON rather than the 221KB of theme source: it's what
 agent_tools/i95_route.py and i495_route.py read at import, and re-running this
@@ -19,6 +19,7 @@ import json
 import re
 import urllib.request
 from pathlib import Path
+from typing import Any, cast
 
 SOURCE_URL = (
     "https://www.expresslanes.com/themes/custom/transurbangroup/js/"
@@ -27,9 +28,10 @@ SOURCE_URL = (
 OUT_PATH = Path(__file__).resolve().parent.parent / "oracles" / "i95.json"
 
 NODE_FIELDS = ("label", "latitude", "longitude", "path", "index")
+type JsonObject = dict[str, Any]
 
 
-def parse_entry_exits(js: str) -> dict:
+def parse_entry_exits(js: str) -> JsonObject:
     """Parse the `var entryExits = {...};` literal out of the theme asset.
 
     It's JS, not JSON: `//` line comments sit inside the object (some of them
@@ -44,18 +46,18 @@ def parse_entry_exits(js: str) -> dict:
     )
     start = body.index("var entryExits =") + len("var entryExits =")
     literal = body[start : body.rindex("};") + 1]
-    return json.loads(re.sub(r",(\s*[}\]])", r"\1", literal))
+    return cast(JsonObject, json.loads(re.sub(r",(\s*[}\]])", r"\1", literal)))
 
 
-def to_snapshot(entry_exits: dict) -> dict:
+def to_snapshot(entry_exits: JsonObject) -> JsonObject:
     """Flatten to {nodes, pairs}: the two things the topology check needs.
 
     Node ids are direction-suffixed (182NO = northbound origin, 181ND =
     northbound destination), so an entry and an exit at the same physical ramp
     are distinct records -- kept as-is, since the pairs reference them.
     """
-    nodes: dict[str, dict] = {}
-    pairs: list[dict] = []
+    nodes: dict[str, JsonObject] = {}
+    pairs: list[JsonObject] = []
     for direction, sides in sorted(entry_exits.items()):
         for side in ("entries", "exits"):
             for node_id, node in sides[side].items():

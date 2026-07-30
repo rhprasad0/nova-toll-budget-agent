@@ -1,5 +1,8 @@
 # IP Assignment — TollChat
 
+**Repository status:** record copy; the signed original retained outside this
+repository is authoritative.
+
 **Effective date:** 2026-07-27
 
 **Assignor:** Ryan Prasad ("Assignor")
@@ -25,8 +28,8 @@ together with all associated goodwill, effective as of the date above.
 
 ## Signatures
 
-This document is a template. A copy signed and dated by both parties is
-retained outside this repository and is not committed here.
+The signature fields are intentionally blank in this repository copy. A copy
+signed and dated by both parties is retained outside this repository.
 
 Assignor: _______________________  Date: _______________
 

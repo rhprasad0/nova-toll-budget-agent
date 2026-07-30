@@ -14,7 +14,6 @@ Run explicitly (with the same environment as the CI integration job):
 from __future__ import annotations
 
 import json
-import sys
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -22,20 +21,16 @@ from typing import LiteralString
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
-
+from agent_tools.dulles_route import dulles_route
+from agent_tools.i66_route import i66_route
+from agent_tools.i95_route import i95_junction_leg, i95_route
+from agent_tools.i495_route import i495_route
 from rds_ci_test_support import (
     configure_pricing_reader_rds_env,
     connect_as_pricing_reader,
 )
 
-sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
-
-from dulles_route import dulles_route
-from i66_route import i66_route
-from i95_route import i95_junction_leg, i95_route
-from i495_route import i495_route
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 pytestmark = pytest.mark.live
 

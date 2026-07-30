@@ -6,7 +6,7 @@ resource "aws_cloudwatch_event_rule" "poll_tick" {
   # whenever the rule was created and had drifted to a steady 212s past each
   # boundary -- 3.5 minutes of pure added staleness on every captured price.
   # Verified live: VDOT's interval-t payload is ready at the boundary, so
-  # firing at :00 captures interval t, not t-10 (docs/feed-cadence-tasks.md).
+  # firing at :00 captures interval t, not t-10 (docs/oracle-findings.md §9).
   schedule_expression = "cron(0/10 * * * ? *)"
 }
 
@@ -48,23 +48,6 @@ resource "aws_lambda_permission" "eventbridge_invoke_fetcher_i66" {
   function_name = aws_lambda_function.fetcher.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.poll_tick_i66.arn
-}
-
-# toll-express-fetcher stays on the 10-minute rule deliberately: sharing I-95's
-# tick is what makes the two feeds' captures alignable, which is how the
-# republish relationship in docs/oracle-findings.md section 9 was measured. It
-# takes no input, so the feed selection above doesn't affect it.
-resource "aws_cloudwatch_event_target" "express_fetcher" {
-  rule = aws_cloudwatch_event_rule.poll_tick.name
-  arn  = aws_lambda_function.express_fetcher.arn
-}
-
-resource "aws_lambda_permission" "eventbridge_invoke_express_fetcher" {
-  statement_id  = "AllowEventBridgeInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.express_fetcher.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.poll_tick.arn
 }
 
 # --- S3 raw/ ObjectCreated → toll-loader ------------------------------------

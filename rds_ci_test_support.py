@@ -1,6 +1,7 @@
 """Shared, credential-free setup for CI tests that read RDS as pricing_reader."""
 
 import os
+from typing import Any, cast
 
 import boto3
 
@@ -15,24 +16,40 @@ def configure_pricing_reader_rds_env() -> None:
     inputs: the helper must not embed credentials, database endpoints, or a
     local AWS profile in the repository.
     """
-    instance = boto3.client("rds", region_name=AWS_REGION).describe_db_instances(
-        DBInstanceIdentifier=DB_IDENTIFIER
-    )["DBInstances"][0]
+    rds = cast(
+        Any,
+        boto3.client(  # pyright: ignore[reportUnknownMemberType]
+            "rds", region_name=AWS_REGION
+        ),
+    )
+    instance = cast(
+        dict[str, Any],
+        rds.describe_db_instances(DBInstanceIdentifier=DB_IDENTIFIER)["DBInstances"][0],
+    )
     os.environ["DB_HOST"] = instance["Endpoint"]["Address"]
     os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
 
 
-def connect_as_pricing_reader():
+def connect_as_pricing_reader() -> object:
     """Open an independent IAM-auth RDS connection for expected-value reads."""
     import psycopg
 
     host = os.environ["DB_HOST"]
     port = int(os.environ["DB_PORT"])
     user = os.environ["DB_USER"]
-    token = boto3.client("rds", region_name=AWS_REGION).generate_db_auth_token(
-        DBHostname=host,
-        Port=port,
-        DBUsername=user,
+    rds = cast(
+        Any,
+        boto3.client(  # pyright: ignore[reportUnknownMemberType]
+            "rds", region_name=AWS_REGION
+        ),
+    )
+    token = cast(
+        str,
+        rds.generate_db_auth_token(
+            DBHostname=host,
+            Port=port,
+            DBUsername=user,
+        ),
     )
     return psycopg.connect(
         host=host,
@@ -42,4 +59,5 @@ def connect_as_pricing_reader():
         password=token,
         sslmode="verify-full",
         sslrootcert=os.environ["DB_CA_BUNDLE_PATH"],
+        connect_timeout=10,
     )

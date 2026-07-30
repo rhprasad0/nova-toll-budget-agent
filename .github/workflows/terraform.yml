@@ -72,8 +72,7 @@ jobs:
       - run: |
           terraform plan -lock=false \
             -var fetcher_package_path=build/fetcher.zip \
-            -var loader_package_path=build/loader.zip \
-            -var express_fetcher_package_path=build/express-fetcher.zip
+            -var loader_package_path=build/loader.zip
         working-directory: infra
 
   apply:
@@ -107,6 +106,5 @@ jobs:
       - run: |
           terraform apply -auto-approve \
             -var fetcher_package_path=build/fetcher.zip \
-            -var loader_package_path=build/loader.zip \
-            -var express_fetcher_package_path=build/express-fetcher.zip
+            -var loader_package_path=build/loader.zip
         working-directory: infra

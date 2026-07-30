@@ -23,7 +23,7 @@ say() { printf '%-22s %s\n' "$1" "$2"; }
 "${AWS[@]}" sns publish --topic-arn "$TOPIC_ARN" \
   --subject "nova-toll smoke test" \
   --message "Smoke test $(date -u +%FT%TZ). If you got this, the alarm path works." >/dev/null
-say "sns publish" "sent -> check rhprasad@outlook.com (confirm the subscription if you haven't)"
+say "sns publish" "sent -> check bills@ryanprasad.ai (confirm the subscription if needed)"
 
 # 1. optionally fire the fetcher, then give the loader a moment to run
 if [[ "${1:-}" == "--fire" ]]; then
@@ -58,8 +58,8 @@ for feed in i95 i66; do
 done
 
 # 5. every alarm in OK (not ALARM, not INSUFFICIENT_DATA)
-for a in toll-fetcher-errors toll-loader-errors toll-freshness-i95 toll-freshness-i66 \
-         toll-loader-onfailure-queue toll-rds-free-storage; do
+for a in toll-fetcher-errors toll-loader-errors toll-freshness-i95 \
+         toll-freshness-i66 toll-loader-onfailure-queue toll-rds-free-storage; do
   st=$("${AWS[@]}" cloudwatch describe-alarms --alarm-names "$a" \
         --query 'MetricAlarms[0].StateValue' --output text 2>/dev/null || echo MISSING)
   if [[ "$st" == "OK" ]]; then say "alarm $a" "OK"; else say "alarm $a" "$st"; fail=1; fi

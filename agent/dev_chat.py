@@ -4,30 +4,31 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import re
-import sys
 import threading
 import time
+import traceback
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from strands.telemetry import StrandsTelemetry
-from toll_agent import build_agent
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT))
+from agent.toll_agent import build_agent
 from rds_ci_test_support import configure_pricing_reader_rds_env
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 _HTML_PATH = Path(__file__).with_suffix(".html")
 _CA_BUNDLE_PATH = _REPO_ROOT / "infra/build/loader/rds-ca-bundle.pem"
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _MAX_MESSAGE_CHARS = 8_000
+logger = logging.getLogger(__name__)
 
 
 def configure_local_pricing_env() -> None:
@@ -58,7 +59,7 @@ class DevChat:
         self.sessions_lock = threading.Lock()
         self.telemetry_lock = threading.Lock()
 
-    def chat(self, session_id: str, message: str) -> dict[str, Any]:
+    def chat(self, session_id: object, message: object) -> dict[str, Any]:
         if not isinstance(session_id, str) or not _SESSION_ID.fullmatch(session_id):
             raise ValueError("invalid session id")
         if not isinstance(message, str):
@@ -92,11 +93,20 @@ class DevChat:
                 "request_id": request_id,
                 "session_id": session_id,
                 "prompt": message,
-                "error": {"type": type(error).__name__, "message": str(error)},
+                "error": {
+                    "type": type(error).__name__,
+                    "message": str(error),
+                    "traceback": "".join(traceback.format_exception(error)),
+                },
                 "messages": copy.deepcopy(agent.messages),
                 "duration_ms": round((time.perf_counter() - started) * 1000),
             }
             self._append(record)
+            logger.exception(
+                "agent request failed request_id=%s session_id=%s",
+                request_id,
+                session_id,
+            )
             raise RuntimeError(
                 "agent request failed; inspect the telemetry panel"
             ) from error
@@ -104,7 +114,7 @@ class DevChat:
         self._append(record)
         return {"answer": answer, "telemetry": record}
 
-    def reset(self, session_id: str) -> None:
+    def reset(self, session_id: object) -> None:
         if not isinstance(session_id, str) or not _SESSION_ID.fullmatch(session_id):
             raise ValueError("invalid session id")
         with self.sessions_lock:
@@ -182,7 +192,7 @@ def create_server(
                 raise ValueError("invalid JSON") from error
             if not isinstance(body, dict):
                 raise TypeError("JSON body must be an object")
-            return body
+            return cast(dict[str, Any], body)
 
         def _json_response(self, status: HTTPStatus, body: dict[str, Any]) -> None:
             self._send(

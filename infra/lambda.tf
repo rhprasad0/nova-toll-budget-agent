@@ -11,8 +11,6 @@ locals {
   loader_zip_path = var.loader_package_path != "" ? var.loader_package_path : data.archive_file.placeholder.output_path
   loader_zip_hash = var.loader_package_path != "" ? filebase64sha256(var.loader_package_path) : data.archive_file.placeholder.output_base64sha256
 
-  express_fetcher_zip_path = var.express_fetcher_package_path != "" ? var.express_fetcher_package_path : data.archive_file.placeholder.output_path
-  express_fetcher_zip_hash = var.express_fetcher_package_path != "" ? filebase64sha256(var.express_fetcher_package_path) : data.archive_file.placeholder.output_base64sha256
 }
 
 resource "aws_cloudwatch_log_group" "fetcher" {
@@ -22,11 +20,6 @@ resource "aws_cloudwatch_log_group" "fetcher" {
 
 resource "aws_cloudwatch_log_group" "loader" {
   name              = "/aws/lambda/toll-loader"
-  retention_in_days = 30
-}
-
-resource "aws_cloudwatch_log_group" "express_fetcher" {
-  name              = "/aws/lambda/toll-express-fetcher"
   retention_in_days = 30
 }
 
@@ -109,35 +102,4 @@ resource "aws_lambda_function_event_invoke_config" "loader" {
       destination = aws_sqs_queue.loader_onfailure.arn
     }
   }
-}
-
-# --- toll-express-fetcher --------------------------------------------------
-
-resource "aws_lambda_function" "express_fetcher" {
-  function_name = "toll-express-fetcher"
-  role          = aws_iam_role.express_fetcher.arn
-  runtime       = "python3.13"
-  handler       = "handler.handler"
-  timeout       = 90
-  memory_size   = 128
-
-  filename         = local.express_fetcher_zip_path
-  source_code_hash = local.express_fetcher_zip_hash
-
-  environment {
-    variables = {
-      RAW_BUCKET      = aws_s3_bucket.raw.bucket
-      RAW_KMS_KEY_ARN = aws_kms_key.raw.arn
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.express_fetcher]
-}
-
-# Unlike toll-fetcher's VDOT feeds, a missed poll here costs nothing -- there's
-# no history to lose (docs/poller-spec.md), the next tick re-establishes
-# "current". So no retry budget at all, not even the fetcher's minimal 1.
-resource "aws_lambda_function_event_invoke_config" "express_fetcher" {
-  function_name          = aws_lambda_function.express_fetcher.function_name
-  maximum_retry_attempts = 0
 }

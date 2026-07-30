@@ -60,23 +60,6 @@ resource "aws_cloudwatch_metric_alarm" "loader_errors" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
-# 2b. toll-express-fetcher errors. No freshness alarm for this source
-# (unlike #3 below, per-feed for i95/i66 only): a missed poll here costs
-# nothing to catch up on next tick, so an Errors alarm alone is proportionate
-# -- see docs/poller-spec.md's "Secondary live source" section.
-resource "aws_cloudwatch_metric_alarm" "express_fetcher_errors" {
-  alarm_name          = "toll-express-fetcher-errors"
-  namespace           = "AWS/Lambda"
-  metric_name         = "Errors"
-  dimensions          = { FunctionName = aws_lambda_function.express_fetcher.function_name }
-  period              = 300
-  evaluation_periods  = 1
-  statistic           = "Sum"
-  threshold           = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  alarm_actions       = [aws_sns_topic.alerts.arn]
-}
-
 # 3. Freshness — NovaToll/LoadSuccess missing 30 min, per feed. The most
 # important alarm: silently losing irreplaceable polls.
 resource "aws_cloudwatch_metric_alarm" "freshness" {

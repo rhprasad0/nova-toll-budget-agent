@@ -3,7 +3,7 @@
 
 CREATE ROLE loader_writer WITH LOGIN;
 GRANT rds_iam TO loader_writer;
-GRANT SELECT, INSERT, UPDATE ON trip_pricing_i95, trip_pricing_i66, trip_pricing_i95_live TO loader_writer;
+GRANT SELECT, INSERT, UPDATE ON trip_pricing_i95, trip_pricing_i66 TO loader_writer;
 
 -- pricing_reader: RDS IAM auth only, SELECT-only. Least-privilege credential
 -- for agent_tools/i66_route.py and i95_route.py, which now query RDS for

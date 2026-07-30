@@ -6,12 +6,12 @@ tests/test_toll_agent_live.py for the real end-to-end check.
 """
 
 import json
-import sys
 from collections import deque
 from pathlib import Path
 
 from strands.models import BedrockModel
-from toll_agent import (
+
+from agent.toll_agent import (
     _DIRECT_PAIR_ORACLES,
     _LOCATION_ALIASES,
     _PRICED_LOCATION_ORACLE_JSON,
@@ -20,13 +20,16 @@ from toll_agent import (
     build_system_prompt,
     plan_toll_route,
 )
+from agent_tools.dulles_route import _lookup as _dulles_lookup
+from agent_tools.i66_route import _lookup as _i66_lookup
+from agent_tools.i95_route import _lookup as _i95_lookup
+from agent_tools.i495_route import _lookup as _i495_lookup
 
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
-_dulles_lookup = sys.modules["dulles_route"]._lookup
 _LOOKUPS = {
-    "i95": sys.modules["i95_route"]._lookup,
-    "i495": sys.modules["i495_route"]._lookup,
-    "i66_itb": sys.modules["i66_route"]._lookup,
+    "i95": _i95_lookup,
+    "i495": _i495_lookup,
+    "i66_itb": _i66_lookup,
 }
 
 

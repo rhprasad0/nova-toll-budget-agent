@@ -199,7 +199,6 @@ data "aws_iam_policy_document" "raw_bucket" {
       variable = "aws:PrincipalArn"
       values = [
         aws_iam_role.fetcher.arn,
-        aws_iam_role.express_fetcher.arn,
         aws_iam_role.replay.arn,
       ]
     }
@@ -215,17 +214,15 @@ resource "aws_s3_bucket_policy" "raw" {
   # intentionally usable for plans but must never be a production deploy.
   lifecycle {
     precondition {
-      condition     = var.fetcher_package_path != "" && var.express_fetcher_package_path != ""
-      error_message = "Raw-bucket write enforcement requires the real fetcher and express-fetcher deployment packages."
+      condition     = var.fetcher_package_path != ""
+      error_message = "Raw-bucket write enforcement requires the real fetcher deployment package."
     }
   }
 
   depends_on = [
     aws_iam_role_policy.fetcher,
-    aws_iam_role_policy.express_fetcher,
     aws_iam_role_policy.replay,
     aws_lambda_function.fetcher,
-    aws_lambda_function.express_fetcher,
   ]
 }
 

@@ -1,11 +1,10 @@
 # Oracle Findings
 
-Status: findings record, graph/tools deleted · Owner: Ryan Prasad · Last updated: 2026-07-28
+Status: findings record and current route-tool rationale · Owner: Ryan Prasad · Last updated: 2026-07-30
 
-The curated toll graph, the four agent tools, and their specs and audits were
-removed from this repo in the same change that added this file (see closing
-section). Before that evidence disappeared, this document preserves what the
-graph work found by checking itself against the operators' own route maps.
+The original curated toll graph and free-form database tools were removed.
+This document preserves what that work found and records the rationale behind
+the narrower oracle-backed route tools that replaced them.
 Sections 1-8 were true as of 2026-07-25; section 9 was added 2026-07-28 and
 supersedes part of section 7. Each section carries its own date. Commit hashes
 are `git log --oneline` short forms on `main`.
@@ -22,10 +21,10 @@ Beltway calculator (vai66tolls.com) — 17 interchanges, 96 entry→exit pairs,
 20 distinct toll-zone pairs.
 
 Both files share one shape, `{source_url, nodes, pairs}`, and each pair
-carries only the **price key** into `trip_pricing` — a list of `od_pair_ids`
-for i95, a `(start_zone, end_zone)` pair for i66 — never a price. They are
-route maps, not price feeds; refreshed by `scripts/fetch_i95_oracle.py` and
-`scripts/fetch_i66_oracle.py`.
+carries only the **price key** into `trip_pricing_i95` — a list of
+`od_pair_ids` for i95 — or `trip_pricing_i66` — a `(start_zone, end_zone)`
+pair for i66 — never a price. They are route maps, not price feeds; refreshed
+by `scripts/fetch_i95_oracle.py` and `scripts/fetch_i66_oracle.py`.
 
 ## 2. The 107-trip VDOT gap
 
@@ -42,16 +41,11 @@ rows for 1374–1389. Transurban, meanwhile, prices all 16 at the time of
 checking (`od_1374` $3.45 on 495 N, `od_1388` $17.00 on 395 S). Roughly 19% of
 real express-lane trips simply cannot be priced from VDOT's public feed.
 
-**Update, 2026-07-25:** a narrower fix now exists — `toll-express-fetcher`
-captures Transurban's own live snapshot into `trip_pricing_i95_live` (see
-`docs/poller-spec.md`'s "Secondary live source" section), so these 16 ids do
-get priced going forward. This does not close the gap described above: the
-live source has no history (current snapshot only, so 2026-04-17 through
-2026-07-25 for these ids stays permanently unpriced), no zone/corridor
-identity (can't feed `trip_pricing_i95` itself), and only prices an id
-reliably when its lane direction is actually open. The 19%-of-trips finding
-above remains true for anyone asking about the historical record; it's now
-false only for "can this be priced right now."
+**Historical update:** `toll-express-fetcher` captured Transurban's live
+snapshot from 2026-07-25 until its retirement on 2026-07-30. That source had
+no history, no zone/corridor identity, and only reliably priced an id while
+its lane direction was open. Its retained rows and raw objects do not change
+the current VDOT-only limitation.
 
 The destination names invite a trap: 1378 → "Old Keene Mill Rd" lines up with
 VDOT's 1158 → "I-495 TO FRANCONIA RD (644)", the same road. Do not build an
@@ -164,12 +158,9 @@ essentially the same moment -- a $4.60 gap, not explained by the already-known
 16-id gap (section 2) or the reverse-drift ids (section 6): 1131 and 1089 are
 ordinary oracle ids, not on either list.
 
-This is not a documented issue anywhere -- not in VDOT's or Transurban's own
-FAQs, not in news coverage, not in this repo. `tests/test_expresslanes_crosscheck.py`
-has cross-checked these two sources since `fd11bf6`, but `test_overlap_price_sanity`
-only asserts the live price is `>= 0`; it has never compared the dollar value
-against what's stored in `trip_pricing_i95`, in either direction. This finding
-is the first time anyone (or anything) actually diffed the two.
+This was not documented by either source. The repository's old live
+crosscheck only asserted that Transurban's price was nonnegative; this
+investigation was the first comparison against stored VDOT values.
 
 **Root cause, evidenced rather than assumed:** every `trip_pricing_i95` row
 carries `calculated_at`, and it consistently trails `interval_end_at` by
@@ -191,16 +182,10 @@ $0.30-$1.30, in **both directions** (VDOT sometimes higher, sometimes lower)
 noise, not a systematic bias one source or the other would produce if this
 were a real data-quality defect.
 
-**Conclusion: probably not a "discrepancy" in the bug sense** -- a "how much
-does this cost right now" question needs Transurban's live feed (or
-`trip_pricing_i95_live`, section above), not `trip_pricing_i95`'s latest row,
-if the honest answer must be accurate to the minute. `trip_pricing_i95`
-remains the right source for history and for ids Transurban's live feed can't
-supply (zone/corridor identity); it just isn't a "right now" price. Not fixed
-here, and not proposing a fix -- `test_overlap_price_sanity` intentionally
-stays a `>= 0` sanity check rather than a value-equality assertion, since a
-tight tolerance would need more samples across more conditions (time of day,
-volatility regime) than this investigation gathered to set without guessing.
+**Conclusion: not a discrepancy in the bug sense.** VDOT is the active source
+for current and historical dynamic prices, but its latest value trails the
+operator by about ten minutes. Answers must report VDOT's observed timestamp
+rather than imply minute-level freshness.
 
 **Superseded in part by section 9 (2026-07-28):** the "~10 minutes" and
 "10-20 minutes" figures above were read off `calculated_at` and the poll
@@ -300,7 +285,8 @@ subtotal or complete total.
 
 ## 9. VDOT republishes Transurban's price on a 10-minute delay
 
-*(2026-07-28, `scripts/feed_cadence.py`; see `docs/feed-cadence-tasks.md`)*
+*(Measured 2026-07-28 over retained S3 payloads; the completed one-off
+analysis script was retired 2026-07-30.)*
 
 Section 7 inferred lag from `calculated_at` alone. This measures it against the
 other source, over every retained raw payload -- 949 `i95` and 283 `i95-live`
@@ -327,17 +313,16 @@ sub-ranges, and hand-checked through prod RDS: `trip_pricing_i95` at
 exactly the 10:00Z Transurban capture; the 10:10Z capture holds $7.00/$8.80/$4.60.
 
 **These are not two independent sources** -- one price series published twice,
-ten minutes apart. Cross-checking them (e.g. `tests/test_expresslanes_crosscheck.py`)
-validates transport, not pricing: once aligned they agree by construction, and a
-"discrepancy" only ever measures the delay. That answers section 7 and removes
-the motivation for a value-agreement tolerance between these two.
+ten minutes apart. Crosschecking them validates transport, not pricing: once
+aligned they agree by construction, and a "discrepancy" only measures delay.
+That redundancy is why the live crosscheck and polling path were retired.
 
 Supporting measurements:
 
 - **VDOT's I-95 feed publishes every 10 minutes, on the mark, without fail** --
   949 objects, zero carrying more than one interval, zero repeating the
-  previous one. (I-66 is a different animal: 6-minute intervals with a variable
-  1-4 min lag. It had its own tick added; see `docs/feed-cadence-tasks.md`.)
+  previous one. I-66 is different: 6-minute intervals with a variable
+  1–4-minute lag, so it has its own tick.
 - **Transurban changes every 10 minutes too, around the clock** -- 272
   comparisons, zero unchanged, median 185 of 347 od pairs per tick. Its `time`
   field is nonetheless hourly, which is why `trip_pricing_i95_live` was
@@ -350,16 +335,12 @@ One trap worth recording: raw object *keys* are the fetcher's clock floored by
 whatever cadence it ran at, and that has already changed once -- on 2026-07-26
 the express fetcher ran a 30-minute tick, so its `0000Z` key holds a payload
 fetched at 00:23:31. Aligning the two feeds by key name manufactures a spurious
-30-minute lag. `feed_cadence.py` aligns on S3 `LastModified` instead.
+30-minute lag. The measurement therefore aligned captures on S3
+`LastModified`.
 
 ## What was deleted, and what remains
 
-Alongside this write-up: `db/graph.sql` (the curated toll graph), the four
-agent tools (`route`, `execute_sql`, `list_tables`, `describe_table`) and their
-JSON schema contracts, and their specs and audits (`docs/toll-graph-spec.md`, `docs/agent-tools-spec.md`,
-`docs/graph-connectivity-audit.md`, `docs/graph-network-audit.md`,
-`docs/implementation-plan.md`) — along with their tests and the DOT graph
-generator. What remains is the poller/`trip_pricing` pipeline
-(`docs/poller-spec.md`) and the two route-map oracles, `oracles/i95.json` and
-`oracles/i66.json`, which this document exists to explain now that the code
-that motivated capturing them is gone.
+The deleted surface was `db/graph.sql`, free-form SQL/schema tools, their
+hand-maintained JSON contracts, and their graph audits. The current surface is
+the poller and per-feed pricing tables, four committed route oracles, and five
+narrow tools documented in `docs/oracle-tools-spec.md`.

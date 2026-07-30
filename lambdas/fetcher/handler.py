@@ -15,7 +15,7 @@ import os
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol, TypedDict, cast
 
 import boto3
 
@@ -25,13 +25,43 @@ logger.setLevel(logging.INFO)
 TIMEOUT_SECONDS = 30
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 
+
 # tick_minutes is each feed's own publish cadence, measured against prod rather
-# than assumed (docs/feed-cadence-tasks.md): I-95 publishes a new interval every
+# than assumed (docs/oracle-findings.md section 9): I-95 publishes a new interval every
 # 10 minutes exactly, I-66 every 6 with a real 6-minute interval window. They
 # ride separate EventBridge rules in infra/triggers.tf, and this is also the
 # S3 key's bucket size -- keep the two in step or two polls of the same feed
 # will floor into one key and overwrite each other.
-FEEDS = {
+class FeedConfig(TypedDict):
+    url: str
+    token_param_env: str
+    extension: str
+    tick_minutes: int
+
+
+class SsmClient(Protocol):
+    def get_parameter(self, *, Name: str, WithDecryption: bool) -> dict[str, Any]: ...
+
+
+class S3Client(Protocol):
+    def put_object(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        Body: bytes,
+        ServerSideEncryption: str,
+        SSEKMSKeyId: str,
+    ) -> object: ...
+
+
+class CloudWatchClient(Protocol):
+    def put_metric_data(
+        self, *, Namespace: str, MetricData: list[dict[str, Any]]
+    ) -> object: ...
+
+
+FEEDS: dict[str, FeedConfig] = {
     "i95": {
         "url": (
             "https://data.511-atis-ttrip-prod.iteriscloud.com/smarterRoads/"
@@ -54,13 +84,16 @@ FEEDS = {
 
 # Lazy singletons: created on first use, not at import time, so tests can
 # stub them without a real AWS region/credentials configured.
-_clients: dict[str, Any] = {}
+_clients: dict[str, object] = {}
 _tokens: dict[str, str] | None = None
 
 
-def _client(name: str):
+def _client(name: str) -> object:
     if name not in _clients:
-        _clients[name] = boto3.client(name)
+        _clients[name] = cast(
+            object,
+            boto3.client(name),  # pyright: ignore[reportUnknownMemberType]
+        )
     return _clients[name]
 
 
@@ -68,11 +101,14 @@ def _load_tokens() -> dict[str, str]:
     """Read both feed tokens from SSM SecureString params, once per cold start."""
     global _tokens
     if _tokens is None:
-        ssm = _client("ssm")
+        ssm = cast(SsmClient, _client("ssm"))
         _tokens = {
-            feed: ssm.get_parameter(
-                Name=os.environ[cfg["token_param_env"]], WithDecryption=True
-            )["Parameter"]["Value"]
+            feed: cast(
+                str,
+                ssm.get_parameter(
+                    Name=os.environ[cfg["token_param_env"]], WithDecryption=True
+                )["Parameter"]["Value"],
+            )
             for feed, cfg in FEEDS.items()
         }
     return _tokens
@@ -115,17 +151,17 @@ def _fetch_feed(feed: str, url: str, token: str) -> bytes:
     return body
 
 
-def _poll_feed(feed: str, cfg: dict, token: str, now: datetime) -> None:
+def _poll_feed(feed: str, cfg: FeedConfig, token: str, now: datetime) -> None:
     body = _fetch_feed(feed, cfg["url"], token)
     key = _s3_key(feed, now, cfg["extension"], cfg["tick_minutes"])
-    _client("s3").put_object(
+    cast(S3Client, _client("s3")).put_object(
         Bucket=os.environ["RAW_BUCKET"],
         Key=key,
         Body=body,
         ServerSideEncryption="aws:kms",
         SSEKMSKeyId=os.environ["RAW_KMS_KEY_ARN"],
     )
-    _client("cloudwatch").put_metric_data(
+    cast(CloudWatchClient, _client("cloudwatch")).put_metric_data(
         Namespace="NovaToll",
         MetricData=[
             {
@@ -139,7 +175,7 @@ def _poll_feed(feed: str, cfg: dict, token: str, now: datetime) -> None:
     logger.info("poll succeeded feed=%s key=%s", feed, key)
 
 
-def handler(event, context):
+def handler(event: dict[str, Any] | None, _context: object) -> None:
     """Poll the feeds named in event["feeds"], or every feed if unspecified.
 
     The two feeds publish on different cadences, so infra/triggers.tf gives
@@ -149,18 +185,27 @@ def handler(event, context):
     """
     tokens = _load_tokens()
     now = datetime.now(UTC)
-    requested = (event or {}).get("feeds") or list(FEEDS)
+    requested_value = (event or {}).get("feeds")
+    if requested_value is None:
+        requested = list(FEEDS)
+    elif not isinstance(requested_value, list):
+        raise RuntimeError("feeds must be a list of strings")
+    else:
+        requested_objects = cast(list[object], requested_value)
+        if not all(isinstance(feed, str) for feed in requested_objects):
+            raise RuntimeError("feeds must be a list of strings")
+        requested = cast(list[str], requested_objects)
     unknown = [feed for feed in requested if feed not in FEEDS]
     if unknown:
         raise RuntimeError(f"unknown feed(s) requested: {', '.join(unknown)}")
 
-    failed_feeds = []
+    failed_feeds: list[str] = []
     for feed in requested:
         cfg = FEEDS[feed]
         try:
             _poll_feed(feed, cfg, tokens[feed], now)
-        except Exception as exc:  # noqa: BLE001 -- each feed must be isolated
-            logger.error(
+        except Exception as exc:
+            logger.exception(
                 "feed=%s poll failed: %s", feed, _scrub(str(exc), tokens[feed])
             )
             failed_feeds.append(feed)

@@ -1,6 +1,6 @@
 # Oracle Route Tools — Spec
 
-Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-29
+Status: implemented · Owner: Ryan Prasad · Last updated: 2026-07-30
 
 Five Strands Agents SDK `@tool` functions, `i66_route`, `i95_route`,
 `i95_junction_leg`, `i495_route`, and `dulles_route`, resolve a human trip ("from X to Y", at an
@@ -61,12 +61,10 @@ a return to that surface:
 - **`at_time` is optional, defaulting to now (America/New_York).** Neither
   oracle encodes time-of-day, so it plays no role in route resolution — it
   only selects which published price row to use.
-- **Shared scaffolding lives in `agent_tools/_oracle_route.py`**, used by
-  i95_route.py and i495_route.py: label lookup/matching, `at_time` parsing,
-  the RDS connection, and the response envelope are byte-identical between
-  the two, so they're extracted once rather than duplicated a third time
-  (i66_route.py still carries its own copy — it predates this split, isn't
-  part of it, and migrating it buys nothing beyond DRY-ness).
+- **Shared scaffolding lives in `agent_tools/_oracle_route.py`**, used by all
+  three RDS-backed tools: label matching, `at_time` parsing, the RDS
+  connection, the resolve/price/log sequence, and the response envelope live
+  in one place.
 
 ## 2. Resolution rules
 
@@ -89,10 +87,9 @@ tool's own oracle subset:
   (verified: zero overlap), so filtering the shared oracle at import time
   introduces no new ambiguity risk.
 
-An `len(matches) > 1` ambiguous-match guard exists in code but is
-unreachable against today's data — it's covered by a synthetic-data test in
-each tool's test file, not a real-data case, because the oracles do get
-refreshed and this invariant isn't permanently guaranteed.
+An `len(matches) > 1` ambiguous-match guard exists in code but is unreachable
+against today's data. A shared synthetic-data test covers it because refreshed
+oracles could invalidate that invariant.
 
 A route-resolution failure never touches the database — pricing only runs
 after `_lookup()` succeeds. Errors never raise; they return `{"error": str,
@@ -287,11 +284,8 @@ mistaken for the final story.
   parsing/defaulting once, where the one implementation lives.
   Pricing tests use a duck-typed fake connection/cursor
   (`agent_tools/tests/conftest.py`'s `FakeConnection`) via `monkeypatch`,
-  not real RDS — no `live` marker. Each tool module still aliases
-  `_oracle_route.env_connect` to a local `_env_connect`, and
-  `_oracle_route.run()` takes that alias as its `connect` argument
-  specifically so this monkeypatch convention keeps working even though
-  the implementation lives in the shared module.
+  not real RDS — no `live` marker. Tests patch the one shared
+  `_oracle_route.env_connect` seam.
   `agent_tools/tests/test_no_psycopg_at_import.py` guards that importing
   any RDS tool module never pulls in `psycopg` (it's a real
   dependency now, but `_oracle_route.env_connect()` imports it lazily).

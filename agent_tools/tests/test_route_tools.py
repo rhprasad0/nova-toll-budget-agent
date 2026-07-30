@@ -9,7 +9,7 @@ test_i95_route.py (the link_status availability gate) and
 test_dulles_route.py (fixed-toll, two facilities, composite legs).
 
 Route resolution is pure local JSON lookup, no network, no RDS. Pricing hits
-RDS via each module's _env_connect(), which every success-path test replaces
+RDS via the shared env_connect(), which every success-path test replaces
 with a FakeConnection (conftest.py) -- no real DB, no psycopg import.
 
 Every fixture value below is verified directly against the committed oracle
@@ -23,12 +23,14 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import i66_route as i66_mod
-import i95_route as i95_mod
-import i495_route as i495_mod
 import pytest
 from conftest import FakeConnection
 from conftest import connect_returning as _connect_returning
+
+from agent_tools import _oracle_route
+from agent_tools import i66_route as i66_mod
+from agent_tools import i95_route as i95_mod
+from agent_tools import i495_route as i495_mod
 
 _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)
@@ -69,11 +71,11 @@ class Case:
 
     @property
     def tool(self):
-        return getattr(self.module, self.module.__name__)
+        return getattr(self.module, self.name)
 
     @property
     def name(self) -> str:
-        return self.module.__name__
+        return self.module.__name__.rsplit(".", 1)[-1]
 
 
 CASES = [
@@ -194,7 +196,7 @@ pytestmark = pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 
 
 def _priced(monkeypatch, case: Case) -> None:
-    monkeypatch.setattr(case.module, "_env_connect", _connect_returning(case.row))
+    monkeypatch.setattr(_oracle_route, "env_connect", _connect_returning(case.row))
 
 
 def test_single_leg_lookup(monkeypatch, case: Case):
@@ -219,7 +221,7 @@ def test_price_queries_select_the_vdot_observation_timestamp(case: Case):
 
 def test_current_price_uses_the_vdot_view(monkeypatch, case: Case):
     conn = FakeConnection([case.row])
-    monkeypatch.setattr(case.module, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
     case.tool(case.origin, case.destination)
     price_sql, params = conn.cur.queries[0]
     assert case.current_price_view in price_sql
@@ -235,7 +237,9 @@ def test_label_lookup_is_case_insensitive(monkeypatch, case: Case):
 
 
 def test_node_id_fallback_matches_label_lookup(monkeypatch, case: Case):
-    monkeypatch.setattr(case.module, "_env_connect", lambda: FakeConnection([case.row]))
+    monkeypatch.setattr(
+        _oracle_route, "env_connect", lambda: FakeConnection([case.row])
+    )
     by_id = case.tool(case.origin_id, case.destination_id)
     by_label = case.tool(case.origin, case.destination)
     # origin/destination echo the caller's raw input, so they legitimately
@@ -245,7 +249,7 @@ def test_node_id_fallback_matches_label_lookup(monkeypatch, case: Case):
 
 
 def test_price_not_found_is_a_hard_error(monkeypatch, case: Case):
-    monkeypatch.setattr(case.module, "_env_connect", _connect_returning(None))
+    monkeypatch.setattr(_oracle_route, "env_connect", _connect_returning(None))
     result = case.tool(case.origin, case.destination)
     assert "error" in result
     assert result["valid_options"] == []
@@ -257,7 +261,7 @@ def test_price_not_found_is_a_hard_error(monkeypatch, case: Case):
 
 def test_at_time_is_passed_through_and_echoed(monkeypatch, case: Case):
     conn = FakeConnection([case.row])
-    monkeypatch.setattr(case.module, "_env_connect", lambda: conn)
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
     result = case.tool(
         case.origin, case.destination, at_time="2026-01-15T09:00:00-05:00"
     )
@@ -272,7 +276,7 @@ def test_invalid_at_time_is_a_hard_error_before_any_db_call(monkeypatch, case: C
     def env_connect():
         raise AssertionError("must not connect to the DB for a malformed at_time")
 
-    monkeypatch.setattr(case.module, "_env_connect", env_connect)
+    monkeypatch.setattr(_oracle_route, "env_connect", env_connect)
     result = case.tool(case.origin, case.destination, at_time="not-a-timestamp")
     assert "error" in result
     assert result["valid_options"] == []

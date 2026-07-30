@@ -2,6 +2,8 @@
 -- graph views, the agent_readonly role, and the three trip_pricing indexes
 -- that existed only to serve agent queries.
 --
+-- APPLIED 2026-07-25. Historical teardown; do not run as routine setup.
+--
 -- Context: we reversed course on letting the agent query the database
 -- directly, so db/graph.sql, db/roles.sql's agent_readonly block and the tool
 -- code are all deleted from the repo. This drops what those already created in

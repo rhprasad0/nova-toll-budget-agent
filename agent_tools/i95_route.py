@@ -40,20 +40,13 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from strands import tool
+from strands import tool  # pyright: ignore[reportUnknownVariableType]
 
-# agent_tools/ has no __init__.py (flat siblings) and this module is
-# imported both as a flat top-level module (agent_tools/tests/conftest.py's
-# sys.path insert) and as agent_tools.i95_route (dotted) -- neither form
-# puts agent_tools/ itself on sys.path, so a plain "import _oracle_route"
-# would fail under the dotted form. Ensuring our own directory is on
-# sys.path here works under both.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _oracle_route
+from agent_tools import _oracle_route
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +56,8 @@ logger = logging.getLogger(__name__)
 # relative path, or this constant needs to change with it.
 _ORACLE_PATH = Path(__file__).resolve().parent.parent / "oracles" / "i95.json"
 _ALL_ORACLE = json.loads(_ORACLE_PATH.read_text())
-_ALL_NODES: dict = _ALL_ORACLE["nodes"]
-_ALL_PAIRS: list = _ALL_ORACLE["pairs"]
+_ALL_NODES: _oracle_route.Nodes = _ALL_ORACLE["nodes"]
+_ALL_PAIRS: _oracle_route.Pairs = _ALL_ORACLE["pairs"]
 
 
 def _is_95_395(node_id: str) -> bool:
@@ -78,13 +71,8 @@ _NODES = {nid: _ALL_NODES[nid] for p in _PAIRS for nid in (p["entry"], p["exit"]
 
 _LABEL_INDEX = _oracle_route.label_index(_NODES)
 
-# Local alias so tests can monkeypatch the connection by name on this module
-# (the established convention here and in i66_route.py), even though the
-# implementation lives in the shared _oracle_route module.
-_env_connect = _oracle_route.env_connect
 
-
-def _lookup(origin: str, destination: str) -> dict:
+def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
     return _oracle_route.lookup(
         origin,
         destination,
@@ -134,7 +122,9 @@ LIMIT 1
 """
 
 
-def _fetch_i95_row(cur, od_pair_id: int, at_time: datetime | None):
+def _fetch_i95_row(
+    cur: _oracle_route.Cursor, od_pair_id: int, at_time: datetime | None
+) -> tuple[Any, ...] | None:
     cur.execute(
         _I95_PRICE_SQL if at_time is not None else _CURRENT_I95_PRICE_SQL,
         {
@@ -145,7 +135,11 @@ def _fetch_i95_row(cur, od_pair_id: int, at_time: datetime | None):
     return cur.fetchone()
 
 
-def _price_i95_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
+def _price_i95_leg(
+    cur: _oracle_route.Cursor,
+    leg_key: _oracle_route.JsonObject,
+    at_time: datetime | None,
+) -> _oracle_route.JsonObject:
     """Current VDOT price, or VDOT history at an explicit time.
 
     Raises PricingError if there's no row at all, if corridor_name isn't
@@ -186,7 +180,9 @@ def _price_i95_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
     }
 
 
-def _junction_lookup(location: str, movement: str, direction: str) -> dict | None:
+def _junction_lookup(
+    location: str, movement: str, direction: str
+) -> _oracle_route.JsonObject | None:
     boundary = _JUNCTION_BOUNDARIES[direction]
     origin, destination = (
         (location, boundary) if movement == "i95_to_i495" else (boundary, location)
@@ -197,7 +193,7 @@ def _junction_lookup(location: str, movement: str, direction: str) -> dict | Non
     return result
 
 
-def _lane_status(row, direction: str) -> str:
+def _lane_status(row: tuple[Any, ...] | None, direction: str) -> str:
     if row is None:
         return "UNAVAILABLE"
     expected_corridor = "I-95-NB" if direction == "Northbound" else "I-95-SB"
@@ -205,7 +201,9 @@ def _lane_status(row, direction: str) -> str:
 
 
 @tool
-def i95_junction_leg(location: str, movement: str, at_time: str | None = None) -> dict:
+def i95_junction_leg(
+    location: str, movement: str, at_time: str | None = None
+) -> _oracle_route.JsonObject:
     """Price the usable 95/395 segment beside the unpriced 95/495 junction.
 
     This tool is only for a trip crossing between the 95/395 and 495
@@ -259,7 +257,7 @@ def i95_junction_leg(location: str, movement: str, at_time: str | None = None) -
             "valid_options": [],
         }
 
-    conn = _env_connect()
+    conn = _oracle_route.env_connect()
     try:
         with conn.cursor() as cur:
             rows = {
@@ -365,7 +363,9 @@ def i95_junction_leg(location: str, movement: str, at_time: str | None = None) -
 
 
 @tool
-def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict:
+def i95_route(
+    origin: str, destination: str, at_time: str | None = None
+) -> _oracle_route.JsonObject:
     """Resolve a trip on Transurban's 95/395 Express Lanes network to its route and price.
 
     Looks up origin/destination against oracles/i95.json's within-95/395
@@ -418,6 +418,5 @@ def i95_route(origin: str, destination: str, at_time: str | None = None) -> dict
         destination,
         at_time,
         lookup_fn=_lookup,
-        connect=_env_connect,
         price_fn=_price_i95_leg,
     )
