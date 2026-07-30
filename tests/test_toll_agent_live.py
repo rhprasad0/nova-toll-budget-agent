@@ -1,4 +1,4 @@
-"""End-to-end checks for direction-aware I-95/I-495 junction pricing.
+"""End-to-end checks for direction-aware junction pricing.
 
 Hits live Bedrock (and, via the tools it calls, live RDS) -- deliberately
 marked `live` and excluded from the default `pytest` run (see
@@ -53,23 +53,45 @@ _BOUNDARY_CASES = [
         [],
     ),
     (
-        "i66-to-i495",
+        "i66-west-to-i495-south-direct",
         (
             "Price Lee Highway - Scott Street on I-66 Inside the Beltway to "
-            "Route 7 (Leesburg Pike) on the I-495 Express Lanes."
+            "Braddock Road on the I-495 Express Lanes."
         ),
         ["I-66/I-495 interchange"],
     ),
     (
-        "i495-to-i66",
+        "i495-north-to-i66-east-direct",
         (
-            "Price Westpark Drive on the I-495 Express Lanes to Westmoreland St "
-            "on I-66 Inside the Beltway."
+            "Price Braddock Road on the I-495 Express Lanes to Washington on "
+            "I-66 Inside the Beltway."
         ),
         ["I-66/I-495 interchange"],
     ),
     (
-        "dulles-to-i495",
+        "i66-west-to-i495-north-detour",
+        (
+            "Price Lee Highway - Scott Street on I-66 Inside the Beltway to "
+            "the 495 Express Lanes End at George Washington Memorial Parkway."
+        ),
+        [
+            "Dulles Airport Access Highway",
+            "I-495/Route 267 interchange",
+        ],
+    ),
+    (
+        "i495-south-to-i66-east-detour",
+        (
+            "Price the 495 Express Lanes Start at George Washington Memorial "
+            "Parkway to Washington on I-66 Inside the Beltway."
+        ),
+        [
+            "I-495/Route 267 interchange",
+            "Dulles Airport Access Highway",
+        ],
+    ),
+    (
+        "dulles-east-to-i495-south",
         (
             "Price Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road to "
             "Braddock Road on the I-495 Express Lanes."
@@ -77,10 +99,96 @@ _BOUNDARY_CASES = [
         ["I-495/Route 267 interchange"],
     ),
     (
-        "i495-to-dulles",
+        "dulles-east-to-i495-north",
+        (
+            "Price Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road to "
+            "the 495 Express Lanes End at George Washington Memorial Parkway."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i495-north-to-dulles-west",
         (
             "Price Braddock Road on the I-495 Express Lanes to Exit 12 - SR 602 "
             "(Reston Pkwy) on the Dulles Toll Road."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i495-south-to-dulles-west",
+        (
+            "Price the 495 Express Lanes Start at George Washington Memorial "
+            "Parkway to Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i66-west-to-i495-south-direct-paraphrase",
+        (
+            "How much is westbound I-66 from Lee Highway/Scott Street, then "
+            "southbound 495 Express to Braddock Road?"
+        ),
+        ["I-66/I-495 interchange"],
+    ),
+    (
+        "i495-north-to-i66-east-direct-paraphrase",
+        (
+            "What is the toll from Braddock Road northbound on 495 Express to "
+            "Washington via eastbound I-66 Inside the Beltway?"
+        ),
+        ["I-66/I-495 interchange"],
+    ),
+    (
+        "i66-west-to-i495-north-detour-paraphrase",
+        (
+            "Price Lee Highway/Scott Street westbound on I-66 to the north end "
+            "of the 495 Express Lanes at George Washington Memorial Parkway."
+        ),
+        [
+            "Dulles Airport Access Highway",
+            "I-495/Route 267 interchange",
+        ],
+    ),
+    (
+        "i495-south-to-i66-east-detour-paraphrase",
+        (
+            "How much from the George Washington Parkway start of southbound "
+            "495 Express to Washington on eastbound I-66?"
+        ),
+        [
+            "I-495/Route 267 interchange",
+            "Dulles Airport Access Highway",
+        ],
+    ),
+    (
+        "dulles-east-to-i495-south-paraphrase",
+        (
+            "Price Reston Parkway eastbound on the Dulles Toll Road to Braddock "
+            "Road southbound on 495 Express."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "dulles-east-to-i495-north-paraphrase",
+        (
+            "How much from Reston Parkway eastbound on the Dulles Toll Road to "
+            "the north end of 495 Express at GW Parkway?"
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i495-north-to-dulles-west-paraphrase",
+        (
+            "Price Braddock Road northbound on 495 Express to Reston Parkway "
+            "westbound on the Dulles Toll Road."
+        ),
+        ["I-495/Route 267 interchange"],
+    ),
+    (
+        "i495-south-to-dulles-west-paraphrase",
+        (
+            "What is the toll from the GW Parkway start of southbound 495 "
+            "Express to Reston Parkway on the Dulles Toll Road?"
         ),
         ["I-495/Route 267 interchange"],
     ),
@@ -133,17 +241,24 @@ _BOUNDARY_CASES = [
         ["I-495/Route 267 interchange"],
     ),
     (
-        "alternate-i95-to-i66",
+        "i95-to-i66-via-direct-junction",
         (
             "Price Courthouse Road/Route 630 on the I-95 Express Lanes to Fairfax "
             "Drive on I-66 Inside the Beltway."
         ),
-        [
-            "I-495/Route 267 interchange",
-            "Dulles Airport Access Highway",
-        ],
+        ["I-66/I-495 interchange"],
     ),
 ]
+_JUNCTION_MATRIX_CASES = {
+    "i66-west-to-i495-south-direct",
+    "i495-north-to-i66-east-direct",
+    "i66-west-to-i495-north-detour",
+    "i495-south-to-i66-east-detour",
+    "dulles-east-to-i495-south",
+    "dulles-east-to-i495-north",
+    "i495-north-to-dulles-west",
+    "i495-south-to-dulles-west",
+}
 
 
 def _tool_uses(agent, tool_name: str) -> list[dict]:
@@ -254,8 +369,7 @@ def test_dumfries_to_westpark_uses_the_unpriced_braddock_junction(
     i495_result = _tool_result(agent, i495_calls[0]["toolUseId"])
     entry, _ = _resolved_endpoints(i495_result)
     assert entry["node_id"] == "191NO"
-    for call in _tool_uses(agent, "i95_route"):
-        assert "error" in _tool_result(agent, call["toolUseId"])
+    assert not _tool_uses(agent, "i95_route")
 
 
 def test_i66_price_answer_shows_work_and_vdot_observed_time(live_pricing_env):
@@ -313,6 +427,14 @@ def test_agent_follows_every_network_boundary(
 
     [plan] = plans
     assert "error" not in plan, plan
+    matrix_case = next(
+        (
+            case
+            for case in _JUNCTION_MATRIX_CASES
+            if _case in {case, f"{case}-paraphrase"}
+        ),
+        None,
+    )
     assert [
         step["label"] for step in plan["steps"] if step["kind"] == "connector"
     ] == expected_connectors
@@ -320,15 +442,25 @@ def test_agent_follows_every_network_boundary(
     expected_steps = [
         step for step in plan["steps"] if step["kind"] in {"priced", "junction"}
     ]
-    assert len(actual_calls) <= len(expected_steps)
+    if matrix_case:
+        assert len(actual_calls) == len(expected_steps), str(response)
+    else:
+        assert len(actual_calls) <= len(expected_steps)
+
     for call, step in zip(actual_calls, expected_steps, strict=False):
         assert call["name"] == step["tool"]
+        result = _tool_result(agent, call["toolUseId"])
+        assert call["input"].get("at_time") == plan["at_time"]
+        if "error" not in result:
+            assert result["at_time"] == plan["at_time"]
+        if matrix_case:
+            assert "error" not in result, str(response)
+
         if step["kind"] == "junction":
             assert call["input"]["location"] == step["location"]
             assert call["input"]["movement"] == step["movement"]
             continue
 
-        result = _tool_result(agent, call["toolUseId"])
         assert "error" not in result, result
         entry, exit_ = _resolved_endpoints(result)
         assert _same_endpoint(step["origin"], call["input"]["origin"], entry)
@@ -338,9 +470,15 @@ def test_agent_follows_every_network_boundary(
             exit_,
         )
 
-    if len(actual_calls) < len(expected_steps):
+    if not matrix_case and len(actual_calls) < len(expected_steps):
         last_result = _tool_result(agent, actual_calls[-1]["toolUseId"])
         assert "error" in last_result, str(response)
+
+    if matrix_case and matrix_case.endswith("-detour"):
+        assert plan["routing_note"] in str(response)
+        assert all(
+            step.get("label") != "I-66/I-495 interchange" for step in plan["steps"]
+        )
 
 
 @pytest.mark.parametrize(
