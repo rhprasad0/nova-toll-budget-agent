@@ -15,10 +15,11 @@ SCHEMA_SQL = (REPO_ROOT / "db" / "schema.sql").read_text()
 SPEC_MD = (REPO_ROOT / "docs" / "poller-spec.md").read_text()
 ROLES_SQL = (REPO_ROOT / "db" / "roles.sql").read_text()
 CURRENT_VIEWS_SQL = (REPO_ROOT / "db" / "add_current_pricing_views.sql").read_text()
+RETIRE_I95_LIVE_SQL = (REPO_ROOT / "db" / "retire_i95_live.sql").read_text()
 
 SEMVER = r"\d+\.\d+\.\d+"
 
-EXPECTED_TABLES = {"trip_pricing_i95", "trip_pricing_i66", "trip_pricing_i95_live"}
+EXPECTED_TABLES = {"trip_pricing_i95", "trip_pricing_i66"}
 
 
 def _cols(paren_body: str) -> list[str]:
@@ -69,7 +70,6 @@ def _upsert_sql_by_table() -> dict[str, str]:
         for sql in (
             loader_handler.UPSERT_I95_SQL,
             loader_handler.UPSERT_I66_SQL,
-            loader_handler.UPSERT_I95_LIVE_SQL,
         )
         for m in [re.search(r"INSERT INTO (\w+)", sql)]
         if m
@@ -159,13 +159,16 @@ def test_current_price_views_are_vdot_only_and_reader_uses_eastern_time():
         "GRANT SELECT ON current_trip_pricing_i95, current_trip_pricing_i66"
         in ROLES_SQL
     )
-    assert "trip_pricing_i95_live TO pricing_reader" not in ROLES_SQL
     assert "ALTER ROLE pricing_reader SET TimeZone TO 'America/New_York'" in ROLES_SQL
     assert "CREATE OR REPLACE VIEW current_trip_pricing_i95" in CURRENT_VIEWS_SQL
-    assert (
-        "REVOKE SELECT ON trip_pricing_i95_live FROM pricing_reader"
-        in CURRENT_VIEWS_SQL
-    )
     assert "\\set ON_ERROR_STOP on" in CURRENT_VIEWS_SQL
     assert "BEGIN;" in CURRENT_VIEWS_SQL
     assert "COMMIT;" in CURRENT_VIEWS_SQL
+
+
+def test_retired_transurban_history_is_inert_not_deleted():
+    assert "REVOKE ALL ON TABLE trip_pricing_i95_live FROM loader_writer" in (
+        RETIRE_I95_LIVE_SQL
+    )
+    assert "DROP TABLE" not in RETIRE_I95_LIVE_SQL
+    assert "DELETE FROM" not in RETIRE_I95_LIVE_SQL

@@ -12,12 +12,10 @@ import logging
 import os
 import re
 import urllib.parse
-from datetime import UTC, datetime
 from typing import Any, LiteralString, cast
 
 import boto3
 from parse_csv import I95Row, parse_trip_pricing_csv
-from parse_express_lanes import I95LiveRow, parse_express_lanes_live_json
 from parse_xml import I66Row, parse_trip_pricing_xml
 
 logger = logging.getLogger()
@@ -25,8 +23,7 @@ logger.setLevel(logging.INFO)
 
 MAX_RAW_OBJECT_BYTES = 5 * 1024 * 1024
 _RAW_KEY_PATTERN = re.compile(
-    r"raw/feed=(?P<feed>i95|i66|i95-live)/date=(?P<date>\d{4}-\d{2}-\d{2})"
-    r"/(?P<tick>\d{4})Z\.(?:csv|xml|json)\Z"
+    r"raw/feed=(?P<feed>i95|i66)/date=\d{4}-\d{2}-\d{2}/\d{4}Z\.(?:csv|xml)\Z"
 )
 
 # RDS CA bundle is dropped into the deployment zip next to this file by the
@@ -118,45 +115,11 @@ SET
     s3_key = EXCLUDED.s3_key -- gitleaks:allow (not a secret; Postgres EXCLUDED pseudo-table)
 """
 
-# Keyed on captured_at, not the source's observed_at: Transurban's "time" is
-# hourly while its prices change every 10 minutes, so an observed_at key
-# collapsed each hour's six captures onto one row (docs/feed-cadence-tasks.md).
-UPSERT_I95_LIVE_SQL = """
-INSERT INTO trip_pricing_i95_live (
-    captured_at,
-    observed_at,
-    od_pair_id,
-    price_usd,
-    status,
-    road,
-    direction,
-    s3_key
-) VALUES (
-    %(captured_at)s,
-    %(observed_at)s,
-    %(od_pair_id)s,
-    %(price_usd)s,
-    %(status)s,
-    %(road)s,
-    %(direction)s,
-    %(s3_key)s
-)
-ON CONFLICT (captured_at, od_pair_id) DO UPDATE
-SET
-    observed_at = EXCLUDED.observed_at,
-    price_usd = EXCLUDED.price_usd,
-    status = EXCLUDED.status,
-    road = EXCLUDED.road,
-    direction = EXCLUDED.direction,
-    s3_key = EXCLUDED.s3_key -- gitleaks:allow (not a secret; Postgres EXCLUDED pseudo-table)
-"""
-
 # feed -> (parser, upsert SQL). Mirrors the fetcher's FEEDS dict -- one place
 # to look for how a feed is routed end to end.
 _FEED_CONFIG: dict[str, tuple[Any, str]] = {
     "i95": (parse_trip_pricing_csv, UPSERT_I95_SQL),
     "i66": (parse_trip_pricing_xml, UPSERT_I66_SQL),
-    "i95-live": (parse_express_lanes_live_json, UPSERT_I95_LIVE_SQL),
 }
 
 
@@ -166,25 +129,10 @@ def _feed_from_key(key: str) -> str:
     if not match:
         raise ValueError(f"unsupported raw object key: {key}")
     feed = match["feed"]
-    expected_extension = {"i95": "csv", "i66": "xml", "i95-live": "json"}[feed]
+    expected_extension = {"i95": "csv", "i66": "xml"}[feed]
     if not key.endswith(f".{expected_extension}"):
         raise ValueError(f"unexpected extension for feed {feed}: {key}")
     return feed
-
-
-def _captured_at_from_key(key: str) -> datetime:
-    """raw/feed=i95-live/date=2026-07-28/1210Z.json -> 2026-07-28 12:10 UTC.
-
-    The key's tick, not the object's S3 LastModified: replays re-touch objects,
-    which moves LastModified but never the key, so this keeps a re-load a no-op
-    rather than a duplicate row. Exact to the poll, not the second.
-    """
-    match = _RAW_KEY_PATTERN.fullmatch(key)
-    if not match:
-        raise ValueError(f"unsupported raw object key: {key}")
-    return datetime.strptime(
-        f"{match['date']} {match['tick']}", "%Y-%m-%d %H%M"
-    ).replace(tzinfo=UTC)
 
 
 def _validate_record(bucket: str, key: str, size: object) -> str:
@@ -203,30 +151,27 @@ def _validate_record(bucket: str, key: str, size: object) -> str:
     return feed
 
 
-def _parse_payload(
-    feed: str, body: str
-) -> list[I95Row] | list[I66Row] | list[I95LiveRow]:
+def _parse_payload(feed: str, body: str) -> list[I95Row] | list[I66Row]:
     if feed not in _FEED_CONFIG:
         raise ValueError(f"unknown feed: {feed}")
     parse_fn, _ = _FEED_CONFIG[feed]
     return parse_fn(body)
 
 
-def _row_params(row: I95Row | I66Row | I95LiveRow, *, s3_key: str) -> dict[str, Any]:
-    """Dataclass fields plus the two values only the object's key can supply.
-    captured_at goes in for every feed: psycopg ignores params the SQL never
-    references, so a feed-specific branch would only be somewhere to be wrong."""
+def _row_params(row: I95Row | I66Row, *, s3_key: str) -> dict[str, Any]:
+    """Dataclass fields plus raw-object provenance."""
     params = dataclasses.asdict(row)
     params["s3_key"] = s3_key
-    params["captured_at"] = _captured_at_from_key(s3_key)
     return params
 
 
-def _connect(*, host: str, port: int, dbname: str, user: str):
+def _connect(*, host: str, port: int, dbname: str, user: str) -> object:
     import psycopg  # type: ignore[import-not-found]  # deployed-zip-only dependency; see module docstring.
 
-    token = boto3.client("rds").generate_db_auth_token(
-        DBHostname=host, Port=port, DBUsername=user
+    rds = cast(Any, boto3.client("rds"))  # pyright: ignore[reportUnknownMemberType]
+    token = cast(
+        str,
+        rds.generate_db_auth_token(DBHostname=host, Port=port, DBUsername=user),
     )
     return psycopg.connect(
         host=host,
@@ -239,16 +184,17 @@ def _connect(*, host: str, port: int, dbname: str, user: str):
     )
 
 
-def _load(
-    feed: str, rows: list[I95Row] | list[I66Row] | list[I95LiveRow], *, s3_key: str
-) -> None:
+def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
     _, upsert_sql = _FEED_CONFIG[feed]
 
-    conn = _connect(
-        host=os.environ["DB_HOST"],
-        port=int(os.environ["DB_PORT"]),
-        dbname=os.environ["DB_NAME"],
-        user=os.environ["DB_USER"],
+    conn = cast(
+        Any,
+        _connect(
+            host=os.environ["DB_HOST"],
+            port=int(os.environ["DB_PORT"]),
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+        ),
     )
     try:
         with conn.transaction(), conn.cursor() as cur:
@@ -270,7 +216,10 @@ def _load(
 
 
 def handler(event: dict[str, Any], _context: object) -> None:
-    s3_client = boto3.client("s3")
+    s3_client = cast(
+        Any,
+        boto3.client("s3"),  # pyright: ignore[reportUnknownMemberType]
+    )
     for record in event["Records"]:
         bucket = record["s3"]["bucket"]["name"]
         key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])

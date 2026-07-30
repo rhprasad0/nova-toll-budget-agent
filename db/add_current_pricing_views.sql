@@ -1,13 +1,7 @@
 -- Current VDOT-price views and Eastern-time agent sessions (schema 4.1.0).
 --
--- Run as the RDS master after db/add_pricing_read_indexes.sql and BEFORE
--- deploying route tools that query these views by default:
---
---     psql -v ON_ERROR_STOP=1 "$NOVA_TOLL_URL" -f db/add_current_pricing_views.sql
---     uv run pytest -m live tests/test_ci_current_pricing_views.py -v
---
--- The old route tools remain compatible after this migration. Do not deploy
--- the new tool code until the reader-role verification passes.
+-- APPLIED 2026-07-28. Historical one-shot; new databases use db/schema.sql
+-- followed by db/roles.sql. Do not run this as routine setup.
 --
 -- Normal views always run this latest-row query at read time. Do not replace
 -- them with materialized views: their refresh cadence would add price lag.

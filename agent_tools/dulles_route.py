@@ -45,19 +45,13 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 from datetime import datetime, time
 from pathlib import Path
+from typing import cast
 
-from strands import tool
+from strands import tool  # pyright: ignore[reportUnknownVariableType]
 
-# agent_tools/ has no __init__.py (flat siblings) and this module is imported
-# both as a flat top-level module and as agent_tools.dulles_route (dotted) --
-# neither form puts agent_tools/ itself on sys.path, so a plain
-# "import _oracle_route" would fail under the dotted form. Ensuring our own
-# directory is on sys.path here works under both.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _oracle_route
+from agent_tools import _oracle_route
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +62,7 @@ _EASTERN = _oracle_route.EASTERN
 _BOUNDARY_LABEL = "Route 28 (Dulles Toll Road / Dulles Greenway)"
 
 
-def _load_facility(filename: str) -> dict:
+def _load_facility(filename: str) -> _oracle_route.JsonObject:
     oracle = json.loads((_ORACLE_DIR / filename).read_text())
     nodes = oracle["nodes"]
     label_index = _oracle_route.label_index(nodes)
@@ -96,15 +90,17 @@ _GREENWAY_PEAK_WINDOWS = {
 }
 
 
-def _resolve_in_facility(facility: dict, query: str) -> list[str]:
+def _resolve_in_facility(facility: _oracle_route.JsonObject, query: str) -> list[str]:
     if query in facility["nodes"]:
         return [query]
     return facility["label_index"].get(query.casefold(), [])
 
 
 def _direct_pairs(
-    facility: dict, origin_ids: list[str], destination_ids: list[str]
-) -> list[dict]:
+    facility: _oracle_route.JsonObject,
+    origin_ids: list[str],
+    destination_ids: list[str],
+) -> list[_oracle_route.JsonObject]:
     return [
         p
         for p in facility["pairs"]
@@ -112,17 +108,17 @@ def _direct_pairs(
     ]
 
 
-def _entry_capable_labels(facility: dict) -> set[str]:
+def _entry_capable_labels(facility: _oracle_route.JsonObject) -> set[str]:
     return {facility["nodes"][p["entry"]]["label"] for p in facility["pairs"]}
 
 
-def _exit_capable_labels(facility: dict) -> set[str]:
+def _exit_capable_labels(facility: _oracle_route.JsonObject) -> set[str]:
     return {facility["nodes"][p["exit"]]["label"] for p in facility["pairs"]}
 
 
 # ponytail: resolution/matching pattern duplicated with i66_route.py/i95_route.py's
 # _lookup; extract if a fourth oracle-backed tool needs the same shape.
-def _lookup(origin: str, destination: str) -> dict:
+def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
     origin_ids = {
         name: _resolve_in_facility(f, origin) for name, f in _FACILITIES.items()
     }
@@ -183,7 +179,7 @@ def _lookup(origin: str, destination: str) -> dict:
 
 def _composite_lookup(
     origin_ids: dict[str, list[str]], destination_ids: dict[str, list[str]]
-) -> list[tuple[str, dict]] | None:
+) -> list[tuple[str, _oracle_route.JsonObject]] | None:
     """A trip starting on one facility and ending on the other, split at the
     Route 28 boundary each oracle shares. Returns None if either leg doesn't
     resolve to exactly one pair (real data always does -- the boundary node
@@ -213,7 +209,9 @@ def _is_greenway_peak(at_time: datetime, direction: str) -> bool:
     return start <= local.time() < end
 
 
-def _price_leg(facility_name: str, pair: dict, at_time: datetime) -> dict:
+def _price_leg(
+    facility_name: str, pair: _oracle_route.JsonObject, at_time: datetime
+) -> _oracle_route.JsonObject:
     nodes = _FACILITIES[facility_name]["nodes"]
     entry_id, exit_id = pair["entry"], pair["exit"]
     if facility_name == "dulles_greenway":
@@ -233,11 +231,11 @@ def _price_leg(facility_name: str, pair: dict, at_time: datetime) -> dict:
 def _build_response(
     origin: str,
     destination: str,
-    legs: list[dict],
-    pairs: list[tuple[str, dict]],
+    legs: list[_oracle_route.JsonObject],
+    pairs: list[tuple[str, _oracle_route.JsonObject]],
     at_time: datetime,
-) -> dict:
-    tolls = []
+) -> _oracle_route.JsonObject:
+    tolls: list[_oracle_route.JsonObject] = []
     for (facility, pair), leg in zip(pairs, legs, strict=True):
         price_key = (
             "price_peak_usd" if leg["rate_period"] == "peak" else "price_off_peak_usd"
@@ -260,7 +258,9 @@ def _build_response(
 
 
 @tool
-def dulles_route(origin: str, destination: str, at_time: str | None = None) -> dict:
+def dulles_route(
+    origin: str, destination: str, at_time: str | None = None
+) -> _oracle_route.JsonObject:
     """Resolve a trip on the Dulles Toll Road and/or Dulles Greenway to its route and price.
 
     Looks up origin/destination against the two committed oracles
@@ -313,7 +313,10 @@ def dulles_route(origin: str, destination: str, at_time: str | None = None) -> d
     try:
         resolved_at_time = _oracle_route.resolve_at_time(at_time)
     except ValueError as e:
-        error = {"error": f"invalid at_time {at_time!r}: {e}", "valid_options": []}
+        error: _oracle_route.JsonObject = {
+            "error": f"invalid at_time {at_time!r}: {e}",
+            "valid_options": [],
+        }
         logger.info(
             "dulles_route miss origin=%r destination=%r error=%r",
             origin,
@@ -322,7 +325,7 @@ def dulles_route(origin: str, destination: str, at_time: str | None = None) -> d
         )
         return error
 
-    pairs = result["legs"]
+    pairs = cast(list[tuple[str, _oracle_route.JsonObject]], result["legs"])
     legs = [_price_leg(name, pair, resolved_at_time) for name, pair in pairs]
     response = _build_response(origin, destination, legs, pairs, resolved_at_time)
     logger.info(

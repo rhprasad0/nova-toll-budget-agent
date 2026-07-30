@@ -36,9 +36,10 @@ GANTRIES = {"EB": {3100, 3110, 3120, 3130}, "WB": {3200, 3210, 3220, 3230}}
 def test_shape_matches_the_express_oracle():
     """Both oracles are the same kind of object: places, and trips between them.
 
-    Each carries only the price *key* into trip_pricing -- od_pair_ids for the
-    express lanes, a zone pair for I-66 -- and never a price. Prices belong in
-    trip_pricing, which has history; these files answer "what trips exist".
+    Each carries only the price key into a per-feed table -- od_pair_ids for
+    the express lanes, a zone pair for I-66 -- and never a price. Prices belong
+    in trip_pricing_i95/trip_pricing_i66, which have history; these files answer
+    "what trips exist".
     """
     assert set(SNAPSHOT) == set(EXPRESS) == {"source_url", "nodes", "pairs"}
     for pair in PAIRS:

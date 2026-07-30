@@ -108,6 +108,8 @@ def test_one_feed_failing_does_not_block_the_other(monkeypatch, stub_aws, caplog
     with pytest.raises(RuntimeError, match="i95"):
         handler.handler({}, None)
 
+    assert any(record.exc_info for record in caplog.records)
+
     # i66 still made it through despite i95 failing.
     stub_aws["s3"].put_object.assert_called_once()
     put_kwargs = stub_aws["s3"].put_object.call_args.kwargs
@@ -152,6 +154,12 @@ def test_empty_event_still_polls_every_feed(monkeypatch, stub_aws):
 def test_unknown_feed_is_rejected(stub_aws):
     with pytest.raises(RuntimeError, match="unknown feed"):
         handler.handler({"feeds": ["i495"]}, None)
+
+
+@pytest.mark.parametrize("feeds", ["i95", [1]])
+def test_feed_selection_must_be_a_string_list(stub_aws, feeds):
+    with pytest.raises(RuntimeError, match="list of strings"):
+        handler.handler({"feeds": feeds}, None)
 
 
 def test_token_never_appears_in_logs_or_exception(monkeypatch, stub_aws, caplog):

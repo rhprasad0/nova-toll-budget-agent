@@ -43,6 +43,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+
+type JsonObject = dict[str, Any]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -85,8 +88,8 @@ DTR_MAINLINE_AFTER_INDEX = (
 )
 
 
-def _dtr_pairs() -> list[dict]:
-    pairs = []
+def _dtr_pairs() -> list[JsonObject]:
+    pairs: list[JsonObject] = []
     n = len(DTR_NODES)
     for i in range(n):
         for j in range(n):
@@ -102,7 +105,7 @@ def _dtr_pairs() -> list[dict]:
                 entry_ramp_usd, exit_ramp_usd = entry_eb_toll, exit_eb_toll
             else:
                 entry_ramp_usd, exit_ramp_usd = entry_wb_toll, exit_wb_toll
-            charges = []
+            charges: list[JsonObject] = []
             if entry_ramp_usd != DTR_FREE_USD:
                 charges.append(
                     {
@@ -138,7 +141,7 @@ def _dtr_pairs() -> list[dict]:
     return pairs
 
 
-def _dtr_oracle() -> dict:
+def _dtr_oracle() -> JsonObject:
     nodes = {
         node_id: {"label": label, "entry_in": ["EB", "WB"], "exit_in": ["EB", "WB"]}
         for node_id, label, _, _ in DTR_NODES
@@ -174,7 +177,7 @@ GW_SECONDARY_OFFPEAK_USD = "4.55"
 # (node_id, label, entry_in, exit_in) -- Exit 2A/2B are genuinely one-way
 # ramps (real topology, not a toll-applicability quirk), so they're the only
 # nodes restricted here.
-GW_NODES = [
+GW_NODES: list[tuple[str, str, list[str], list[str]]] = [
     ("1", "Exit 1 - US 15/SR 7 (Leesburg Bypass)", ["EB", "WB"], ["EB", "WB"]),
     ("2A", "Exit 2A - Battlefield Pkwy", [], ["EB"]),
     ("2B", "Exit 2B - Compass Creek Pkwy", [], ["WB"]),
@@ -190,8 +193,8 @@ GW_NODES = [
 GW_MAINLINE_AFTER_INDEX = 8  # nodes[0..8] (Exits 1-8) are west of the mainline plaza
 
 
-def _gw_pairs() -> list[dict]:
-    pairs = []
+def _gw_pairs() -> list[JsonObject]:
+    pairs: list[JsonObject] = []
     n = len(GW_NODES)
     for i in range(n):
         for j in range(n):
@@ -230,7 +233,7 @@ def _gw_pairs() -> list[dict]:
     return pairs
 
 
-def _gw_oracle() -> dict:
+def _gw_oracle() -> JsonObject:
     nodes = {
         node_id: {"label": label, "entry_in": entry_in, "exit_in": exit_in}
         for node_id, label, entry_in, exit_in in GW_NODES

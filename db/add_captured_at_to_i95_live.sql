@@ -2,16 +2,10 @@
 -- hour-truncated label (db/schema.sql, schema version 4.0.0). Transurban's
 -- prices change every 10 minutes but its "time" field is hourly, so the old
 -- (observed_at, od_pair_id) key let each hour's six captures overwrite one
--- another. Measurement: docs/feed-cadence-tasks.md.
+-- another. Measurement: docs/oracle-findings.md section 9.
 --
---     psql "$NOVA_TOLL_URL" -f db/add_captured_at_to_i95_live.sql
---
--- RUN IMMEDIATELY BEFORE DEPLOYING THE MATCHING LOADER. The deployed loader
--- says ON CONFLICT (observed_at, od_pair_id); the moment this drops that key,
--- every i95-live insert fails. No ordering avoids it -- keeping the old key
--- would break the new loader instead. Missed objects stay in S3, replayable.
---
--- Safe to re-run.
+-- APPLIED 2026-07-28. Historical one-shot; new databases use db/schema.sql.
+-- Do not run this as routine setup.
 
 BEGIN;
 

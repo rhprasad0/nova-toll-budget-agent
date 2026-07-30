@@ -7,8 +7,8 @@ tests/test_route_tools_live_crosscheck.py. Run explicitly:
 
     uv run pytest -m live tests/test_toll_agent_live.py -v
 
-Deliberately does not assert on dollar amounts: trip_pricing_i95/
-trip_pricing_i495 refresh every 10 minutes, so a hard-coded price fails
+Deliberately does not assert on dollar amounts: `trip_pricing_i95` refreshes
+every 10 minutes, so a hard-coded price fails
 tomorrow and reads as an agent regression when it's just a stale rate.
 Instead this walks the tool-call trace in agent.messages and asserts on
 *leg boundaries* -- did the agent actually stop at the junction, not just
@@ -16,16 +16,14 @@ Instead this walks the tool-call trace in agent.messages and asserts on
 """
 
 import json
-import sys
 from pathlib import Path
 
 import boto3
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT / "agent"))
+from agent.toll_agent import build_agent
 
-from toll_agent import build_agent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 pytestmark = pytest.mark.live
 
@@ -319,35 +317,17 @@ def _tool_result(agent, tool_use_id: str) -> dict:
     return result
 
 
-def _resolved_boundaries(tool_name: str, origin: str, destination: str):
-    result = sys.modules[tool_name]._lookup(origin, destination)
-    assert "error" not in result, result
-    if tool_name == "dulles_route":
-        return tuple(
-            (facility, pair["entry"], pair["exit"]) for facility, pair in result["legs"]
-        )
-    return (result["entry"]["node_id"], result["exit"]["node_id"])
+def _resolved_endpoints(result: dict) -> tuple[dict, dict]:
+    if "entry" in result:
+        return result["entry"], result["exit"]
+    return result["legs"][0]["entry"], result["legs"][-1]["exit"]
 
 
-def _semantic_call(call: dict):
-    tool_name = call["name"]
-    tool_input = call["input"]
-    if tool_name in _PRICING_TOOLS:
-        return (
-            tool_name,
-            _resolved_boundaries(
-                tool_name,
-                tool_input["origin"],
-                tool_input["destination"],
-            ),
-        )
+def _same_endpoint(expected: str, actual_input: str, resolved: dict) -> bool:
     return (
-        tool_name,
-        {
-            key: value
-            for key, value in tool_input.items()
-            if key in {"location", "movement"}
-        },
+        expected == actual_input
+        or expected == resolved["node_id"]
+        or expected.casefold() == resolved["label"].casefold()
     )
 
 
@@ -386,14 +366,9 @@ def test_dumfries_to_westpark_uses_the_unpriced_braddock_junction(
     assert len(junction_calls) == 1
     assert i495_calls, "expected the agent to call i495_route for the Westpark leg"
     assert junction_calls[0]["input"]["movement"] == "i95_to_i495"
-    assert (
-        _resolved_boundaries(
-            "i495_route",
-            i495_calls[0]["input"]["origin"],
-            i495_calls[0]["input"]["destination"],
-        )[0]
-        == "191NO"
-    )
+    i495_result = _tool_result(agent, i495_calls[0]["toolUseId"])
+    entry, _ = _resolved_endpoints(i495_result)
+    assert entry["node_id"] == "191NO"
     assert not _tool_uses(agent, "i95_route")
 
 
@@ -464,48 +439,38 @@ def test_agent_follows_every_network_boundary(
         step["label"] for step in plan["steps"] if step["kind"] == "connector"
     ] == expected_connectors
 
-    expected_calls = [
-        (
-            (
-                step["tool"],
-                _resolved_boundaries(
-                    step["tool"],
-                    step["origin"],
-                    step["destination"],
-                ),
-            )
-            if step["kind"] == "priced"
-            else (
-                step["tool"],
-                {
-                    "location": step["location"],
-                    "movement": step["movement"],
-                },
-            )
-        )
-        for step in plan["steps"]
-        if step["kind"] in {"priced", "junction"}
+    expected_steps = [
+        step for step in plan["steps"] if step["kind"] in {"priced", "junction"}
     ]
     if matrix_case:
-        assert len(actual_calls) == len(expected_calls), str(response)
-        assert [_semantic_call(call) for call in actual_calls] == expected_calls
-        assert all(
-            "error" not in _tool_result(agent, call["toolUseId"])
-            for call in actual_calls
-        ), str(response)
+        assert len(actual_calls) == len(expected_steps), str(response)
     else:
-        assert [_semantic_call(call) for call in actual_calls] == expected_calls[
-            : len(actual_calls)
-        ]
-        assert len(actual_calls) <= len(expected_calls)
+        assert len(actual_calls) <= len(expected_steps)
 
-    for call in actual_calls:
+    for call, step in zip(actual_calls, expected_steps, strict=False):
+        assert call["name"] == step["tool"]
         result = _tool_result(agent, call["toolUseId"])
         assert call["input"].get("at_time") == plan["at_time"]
         if "error" not in result:
             assert result["at_time"] == plan["at_time"]
+        if matrix_case:
+            assert "error" not in result, str(response)
 
-    if not matrix_case and len(actual_calls) < len(expected_calls):
+        if step["kind"] == "junction":
+            assert call["input"]["location"] == step["location"]
+            assert call["input"]["movement"] == step["movement"]
+            continue
+
+        assert "error" not in result, result
+        entry, exit_ = _resolved_endpoints(result)
+        assert _same_endpoint(step["origin"], call["input"]["origin"], entry)
+        assert _same_endpoint(
+            step["destination"],
+            call["input"]["destination"],
+            exit_,
+        )
+
+    if not matrix_case and len(actual_calls) < len(expected_steps):
         last_result = _tool_result(agent, actual_calls[-1]["toolUseId"])
         assert "error" in last_result, str(response)
 

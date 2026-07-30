@@ -16,11 +16,12 @@ The prize is inside jsToRun: it calls runChartMake(weekday, beginZone, endZone,
 and ends in -- the ramp-to-gantry mapping we have no other source for.
 
 Output mirrors oracles/i95.json: {source_url, nodes,
-pairs}, where each pair carries the price *key* into trip_pricing and no price.
+pairs}, where each pair carries the price *key* into the per-feed pricing
+table and no price.
 For the express lanes that key is a list of od_pair_ids; for I-66 ITB, which
 prices by zone pair, it is (start_zone, end_zone). Deliberately no toll
 amounts, no averages -- this is route-mapping data, and prices live in
-trip_pricing where they have history.
+`trip_pricing_i66`, where they have history.
 
 TollCalcPartial is still the only handler that attributes zones, so it is
 called with a fixed past weekday/time inside each direction's tolled window
@@ -39,6 +40,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 BASE = "https://vai66tolls.com/Index"
 OUT_PATH = Path(__file__).resolve().parent.parent / "oracles" / "i66.json"
@@ -81,7 +83,10 @@ CHART_RE = re.compile(
 )
 
 
-def _get(**params) -> str:
+type JsonObject = dict[str, Any]
+
+
+def _get(**params: str) -> str:
     time.sleep(DELAY_S)
     url = f"{BASE}?{urllib.parse.urlencode(params)}"
     try:
@@ -108,8 +113,8 @@ def trip_zones(direction: str, a: int, b: int) -> tuple[int, int]:
 
 
 def main() -> None:
-    nodes: dict[str, dict] = {}
-    pairs: list[dict] = []
+    nodes: dict[str, JsonObject] = {}
+    pairs: list[JsonObject] = []
     missing: list[tuple[str, str, str]] = []
 
     for direction, east_val in DIRECTIONS.items():

@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from decimal import Decimal
+from types import TracebackType
+from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
 import boto3
@@ -28,14 +30,42 @@ class PricingError(Exception):
     """Any hard-error pricing condition; caught once at the tool boundary."""
 
 
-def label_index(nodes: dict) -> dict[str, list[str]]:
+class Cursor(Protocol):
+    def execute(self, query: str, params: Mapping[str, object]) -> object: ...
+
+    def fetchone(self) -> tuple[Any, ...] | None: ...
+
+
+class CursorContext(Protocol):
+    def __enter__(self) -> Cursor: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+
+class Connection(Protocol):
+    def cursor(self) -> CursorContext: ...
+
+    def close(self) -> None: ...
+
+
+type JsonObject = dict[str, Any]
+type Nodes = dict[str, JsonObject]
+type Pairs = list[JsonObject]
+
+
+def label_index(nodes: Nodes) -> dict[str, list[str]]:
     idx: dict[str, list[str]] = {}
     for node_id, node in nodes.items():
         idx.setdefault(node["label"].casefold(), []).append(node_id)
     return idx
 
 
-def resolve(query: str, *, nodes: dict, label_idx: dict[str, list[str]]) -> list[str]:
+def resolve(query: str, *, nodes: Nodes, label_idx: dict[str, list[str]]) -> list[str]:
     """Candidate node ids for a caller-supplied label (case-insensitive) or raw node id."""
     if query in nodes:
         return [query]
@@ -46,12 +76,12 @@ def lookup(
     origin: str,
     destination: str,
     *,
-    nodes: dict,
-    pairs: list,
+    nodes: Nodes,
+    pairs: Pairs,
     label_idx: dict[str, list[str]],
     oracle_name: str,
-    build_legs: Callable[[dict], list[dict]],
-) -> dict:
+    build_legs: Callable[[JsonObject], list[JsonObject]],
+) -> JsonObject:
     """Resolve origin/destination to a single oracle pair and its legs.
 
     build_legs(pair) turns the matched pair into the tool's own leg shape
@@ -112,7 +142,9 @@ def lookup(
     }
 
 
-def resolve_at_time(at_time: str | None, *, now=None) -> datetime:
+def resolve_at_time(
+    at_time: str | None, *, now: Callable[[], datetime] | None = None
+) -> datetime:
     """Parse the caller's at_time, defaulting to now (America/New_York).
 
     A naive (no-offset) string is assumed America/New_York. Raises
@@ -128,7 +160,7 @@ def resolve_at_time(at_time: str | None, *, now=None) -> datetime:
     return dt
 
 
-def env_connect():
+def env_connect() -> Connection:
     """Connect to RDS as pricing_reader via IAM auth.
 
     Lazy `import psycopg`: it isn't in the fast dev/test path (mirrors
@@ -141,21 +173,29 @@ def env_connect():
     host = os.environ["DB_HOST"]
     port = int(os.environ["DB_PORT"])
     user = os.environ["DB_USER"]
-    token = boto3.client("rds").generate_db_auth_token(
-        DBHostname=host, Port=port, DBUsername=user
+    rds = cast(Any, boto3.client("rds"))  # pyright: ignore[reportUnknownMemberType]
+    token = cast(
+        str,
+        rds.generate_db_auth_token(DBHostname=host, Port=port, DBUsername=user),
     )
-    return psycopg.connect(
-        host=host,
-        port=port,
-        dbname=os.environ["DB_NAME"],
-        user=user,
-        password=token,
-        sslmode="verify-full",
-        sslrootcert=os.environ["DB_CA_BUNDLE_PATH"],
+    return cast(
+        Connection,
+        psycopg.connect(
+            host=host,
+            port=port,
+            dbname=os.environ["DB_NAME"],
+            user=user,
+            password=token,
+            sslmode="verify-full",
+            sslrootcert=os.environ["DB_CA_BUNDLE_PATH"],
+            connect_timeout=10,
+        ),
     )
 
 
-def build_response(result: dict, priced_legs: list[dict], at_time: datetime) -> dict:
+def build_response(
+    result: JsonObject, priced_legs: list[JsonObject], at_time: datetime
+) -> JsonObject:
     total = sum((Decimal(leg["price_usd"]) for leg in priced_legs), Decimal(0))
     return {
         **result,
@@ -165,7 +205,9 @@ def build_response(result: dict, priced_legs: list[dict], at_time: datetime) -> 
     }
 
 
-def _miss(tool_name: str, origin: str, destination: str, error: dict) -> dict:
+def _miss(
+    tool_name: str, origin: str, destination: str, error: JsonObject
+) -> JsonObject:
     # valid_options is deliberately not logged: on an unknown label it's the
     # whole ramp list, which is noise in an audit line, not signal.
     logger.info(
@@ -184,17 +226,12 @@ def run(
     destination: str,
     at_time: str | None,
     *,
-    lookup_fn: Callable[[str, str], dict],
-    connect: Callable[[], object],
-    price_fn: Callable[..., dict],
-) -> dict:
+    lookup_fn: Callable[[str, str], JsonObject],
+    price_fn: Callable[[Cursor, JsonObject, datetime | None], JsonObject],
+) -> JsonObject:
     """Resolve -> parse at_time -> connect -> price -> envelope, with the
     audit logging each step needs. The single-leg body every RDS-backed
     route tool runs; they differ only in lookup_fn/price_fn.
-
-    `connect` is passed in rather than called as env_connect() directly so
-    each tool module keeps its own patchable `_env_connect` seam (the
-    established test convention here).
 
     price_fn(cur, leg_key, at_time) returns the priced leg, or raises
     PricingError. `at_time` is None for a current-price request, which uses
@@ -214,9 +251,9 @@ def run(
             {"error": f"invalid at_time {at_time!r}: {e}", "valid_options": []},
         )
 
-    conn = connect()
+    conn = env_connect()
     try:
-        with conn.cursor() as cur:  # type: ignore[attr-defined]
+        with conn.cursor() as cur:
             priced_leg = price_fn(
                 cur,
                 result["legs"][0],
@@ -230,7 +267,7 @@ def run(
             {"error": str(e), "valid_options": []},
         )
     finally:
-        conn.close()  # type: ignore[attr-defined]
+        conn.close()
 
     response = build_response(result, [priced_leg], resolved_at_time)
     logger.info(

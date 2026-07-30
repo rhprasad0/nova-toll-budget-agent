@@ -1,6 +1,6 @@
 -- Mirrors docs/poller-spec.md §Database schema. Keep in sync; the schema
 -- version below must match the spec and is enforced by test_schema_contract.py.
--- schema version: 4.1.0
+-- schema version: 5.0.0
 
 -- I-95/395/495: OD pairs exist and legitimately share start/end zones at
 -- different rates, so od_pair_id is part of the key. current_at/od_pair_id/
@@ -44,31 +44,6 @@ CREATE TABLE trip_pricing_i66 (
     PRIMARY KEY (interval_end_at, start_zone_id, end_zone_id)
 );
 
--- Transurban's own live snapshot (maps-api/infra-price-confirmed-all), used
--- to fill od_pair_ids VDOT's feed has never published -- see
--- docs/oracle-findings.md section 2 and docs/poller-spec.md's "Secondary
--- live source" section.
---
--- Keyed on captured_at, the tick from the raw object's S3 key. observed_at is
--- the response's shared "time" field, which the source truncates to the hour
--- while prices change every 10 minutes -- keying on it, as this table did
--- until 4.0.0, collapsed each hour's six captures onto one row. From the key
--- rather than S3 LastModified so replays stay no-ops. status is Transurban's
--- own open/closed/null vocabulary, never mapped onto link_status.
--- status/road/direction are nullable: the source emits the string "null".
-CREATE TABLE trip_pricing_i95_live (
-    captured_at        timestamptz NOT NULL,       -- our poll tick, from s3_key
-    observed_at        timestamptz NOT NULL,       -- source's own label, hourly
-    od_pair_id         integer NOT NULL,
-    price_usd          numeric(10,2) NOT NULL,
-    status             text,
-    road               text,
-    direction          text,
-    s3_key             text NOT NULL,
-    ingested_at        timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (captured_at, od_pair_id)
-);
-
 -- Pricing-lookup indexes for agent_tools/i66_route.py and i95_route.py
 -- (docs/oracle-tools-spec.md) -- see db/add_pricing_read_indexes.sql for the
 -- one-shot migration against an already-live database and the rationale.
@@ -77,9 +52,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i66_zone_lookup_idx
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_od_lookup_idx
     ON trip_pricing_i95 (od_pair_id, interval_end_at DESC);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS trip_pricing_i95_live_od_lookup_idx
-    ON trip_pricing_i95_live (od_pair_id, captured_at DESC);
 
 -- Agent-facing current VDOT prices. These are normal views: the lookup
 -- indexes above make the latest-row query cheap, while a materialized view

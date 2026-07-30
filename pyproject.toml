@@ -17,32 +17,47 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# "live" tests hit the network and RDS directly (tests/test_expresslanes_crosscheck.py) --
+# "live" tests hit Bedrock, the network, or RDS directly --
 # excluded by default so CI's bare `pytest` never runs them. Run explicitly with -m live.
 markers = ["live: hits the network and RDS; run explicitly with -m live"]
 addopts = '-m "not live"'
+pythonpath = ["."]
 
 [tool.pyright]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
 # infra/build/ holds vendored deps (psycopg) assembled into the Lambda zip by
 # scripts/build_zips.sh — not our code, and gitignored. Don't type-check it.
-exclude = ["**/node_modules", "**/__pycache__", ".venv", "infra/build"]
-
-# Most specific root first -- pyright uses the first environment whose root
-# matches, so a "." entry above these would swallow every file.
-#
-# scripts/feed_cadence.py sys.path-inserts lambdas/loader to reuse the feed
-# parsers. That dir must NOT go on the root path below: it holds a handler.py,
-# and lambdas/fetcher/tests imports its own `handler` module by that bare name.
-[[tool.pyright.executionEnvironments]]
-root = "scripts"
-extraPaths = ["lambdas/loader"]
-
-# agent/toll_agent.py and tests/* sys.path-insert their way to these flat
-# (no __init__.py) sibling dirs at runtime -- pyright can't see that, so it
-# needs the same dirs here to resolve the imports statically.
-[[tool.pyright.executionEnvironments]]
-root = "."
-extraPaths = ["agent_tools", "agent"]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/tests",
+    ".venv",
+    "infra/build",
+    "tests",
+]
 
 [tool.ruff]
 extend-exclude = ["infra/build"]
+
+[tool.ruff.lint]
+select = [
+    "ANN",
+    "B",
+    "BLE",
+    "DTZ",
+    "E4",
+    "E7",
+    "E9",
+    "F",
+    "G",
+    "I",
+    "LOG",
+    "RUF",
+    "SIM",
+    "UP",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*.py" = ["ANN"]
+"tests/*.py" = ["ANN"]

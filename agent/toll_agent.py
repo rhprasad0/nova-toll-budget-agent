@@ -29,24 +29,28 @@ import json
 import sys
 from pathlib import Path
 
-from strands import Agent, tool
+from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
 from strands.models import BedrockModel, CacheToolsConfig
 
-# agent_tools/ has no __init__.py (flat siblings, same as i95_route.py's own
-# sys.path comment) -- a dotted "from agent_tools.i95_route import ..."
-# doesn't work, so it must be on sys.path directly.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent_tools"))
-from _oracle_route import resolve_at_time
-from dulles_route import _lookup as _dulles_lookup
-from dulles_route import dulles_route
-from i66_route import i66_route
-from i95_route import i95_junction_leg, i95_route
-from i495_route import i495_route
+from agent_tools import _oracle_route
+from agent_tools.dulles_route import (
+    _lookup as _dulles_lookup,  # pyright: ignore[reportPrivateUsage]
+)
+from agent_tools.dulles_route import dulles_route
+from agent_tools.i66_route import i66_route
+from agent_tools.i95_route import i95_junction_leg, i95_route
+from agent_tools.i495_route import i495_route
 
 _ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles"
+_ORACLES: dict[str, _oracle_route.JsonObject] = {
+    name: json.loads((_ORACLE_DIR / f"{name}.json").read_text())
+    for name in ("i95", "i66", "dulles_toll_road", "dulles_greenway")
+}
 
 
-def _locations(nodes: dict, pairs: list) -> list[dict[str, str | bool]]:
+def _locations(
+    nodes: _oracle_route.Nodes, pairs: _oracle_route.Pairs
+) -> list[dict[str, str | bool]]:
     """Return the labels and roles a route tool can actually resolve."""
     entry_ids = {pair["entry"] for pair in pairs}
     exit_ids = {pair["exit"] for pair in pairs}
@@ -62,10 +66,10 @@ def _locations(nodes: dict, pairs: list) -> list[dict[str, str | bool]]:
     ]
 
 
-def _load_priced_location_oracle() -> dict[str, dict]:
+def _load_priced_location_oracle() -> dict[str, _oracle_route.JsonObject]:
     """Prompt knowledge only; route tools remain the pricing source of truth."""
-    i95 = json.loads((_ORACLE_DIR / "i95.json").read_text())
-    i66 = json.loads((_ORACLE_DIR / "i66.json").read_text())
+    i95 = _ORACLES["i95"]
+    i66 = _ORACLES["i66"]
 
     def is_495(node_id: str) -> bool:
         return i95["nodes"][node_id]["path"].startswith("495")
@@ -78,8 +82,8 @@ def _load_priced_location_oracle() -> dict[str, dict]:
     i495_pairs = [
         pair for pair in i95["pairs"] if is_495(pair["entry"]) and is_495(pair["exit"])
     ]
-    dulles_toll_road = json.loads((_ORACLE_DIR / "dulles_toll_road.json").read_text())
-    dulles_greenway = json.loads((_ORACLE_DIR / "dulles_greenway.json").read_text())
+    dulles_toll_road = _ORACLES["dulles_toll_road"]
+    dulles_greenway = _ORACLES["dulles_greenway"]
     return {
         "i95": {"tool": "i95_route", "locations": _locations(i95["nodes"], i95_pairs)},
         "i495": {
@@ -137,7 +141,7 @@ _LOCATION_ALIASES = {
 }
 _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
 
-NETWORK_TRANSFERS = [
+NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
     {
         "id": "i66_to_i495",
         "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
@@ -246,12 +250,14 @@ _ROUTE_267_DETOUR_CONNECTORS = {
 }
 
 
-def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
+def _load_direct_pair_oracles() -> dict[
+    str, tuple[_oracle_route.Nodes, _oracle_route.Pairs]
+]:
     """Committed pair data used to prove each planned priced step exists."""
-    i95 = json.loads((_ORACLE_DIR / "i95.json").read_text())
-    i66 = json.loads((_ORACLE_DIR / "i66.json").read_text())
-    dulles_toll_road = json.loads((_ORACLE_DIR / "dulles_toll_road.json").read_text())
-    dulles_greenway = json.loads((_ORACLE_DIR / "dulles_greenway.json").read_text())
+    i95 = _ORACLES["i95"]
+    i66 = _ORACLES["i66"]
+    dulles_toll_road = _ORACLES["dulles_toll_road"]
+    dulles_greenway = _ORACLES["dulles_greenway"]
 
     def is_495(node_id: str) -> bool:
         return i95["nodes"][node_id]["path"].startswith("495")
@@ -323,7 +329,9 @@ Braddock Road. The gap between those boundaries has no VDOT price: never
 label it free, assign it $0.00, or add the known segments into a trip total."""
 
 
-def _validate_location(corridor: str, label: str, role: str) -> dict | None:
+def _validate_location(
+    corridor: str, label: str, role: str
+) -> _oracle_route.JsonObject | None:
     location = _LOCATION_BY_CORRIDOR.get(corridor, {}).get(label)
     if location is None:
         return {
@@ -362,7 +370,9 @@ def _can_price(
     )
 
 
-def _priced_step(corridor: str, origin: str, destination: str) -> dict:
+def _priced_step(
+    corridor: str, origin: str, destination: str
+) -> _oracle_route.JsonObject:
     return {
         "kind": "priced",
         "corridor": corridor,
@@ -372,7 +382,7 @@ def _priced_step(corridor: str, origin: str, destination: str) -> dict:
     }
 
 
-def _junction_step(movement: str, location: str) -> dict:
+def _junction_step(movement: str, location: str) -> _oracle_route.JsonObject:
     return {
         "kind": "junction",
         "tool": "i95_junction_leg",
@@ -395,8 +405,10 @@ def _planned_steps(
     origin: str,
     destination_corridor: str,
     destination: str,
-) -> list[dict] | None:
-    frontier = [(origin_corridor, origin, [])]
+) -> list[_oracle_route.JsonObject] | None:
+    frontier: list[tuple[str, str, list[_oracle_route.JsonObject]]] = [
+        (origin_corridor, origin, [])
+    ]
     visited = {(origin_corridor, origin)}
     while frontier:
         corridor, point, steps = frontier.pop(0)
@@ -489,7 +501,7 @@ def plan_toll_route(
     destination_corridor: str,
     destination: str,
     at_time: str | None = None,
-) -> dict:
+) -> _oracle_route.JsonObject:
     """Return the only oracle-supported pricing, junction, and connector steps.
 
     Call after resolving the user's location to exact prompt-oracle labels and
@@ -503,7 +515,7 @@ def plan_toll_route(
     ``at_time`` is normalized once for every tool call in the returned plan.
     """
     try:
-        planned_at_time = resolve_at_time(at_time).isoformat()
+        planned_at_time = _oracle_route.resolve_at_time(at_time).isoformat()
     except (TypeError, ValueError) as e:
         return {"error": f"invalid at_time {at_time!r}: {e}"}
 
@@ -526,7 +538,7 @@ def plan_toll_route(
             )
         }
     connector_labels = {step["label"] for step in steps if step["kind"] == "connector"}
-    if _ROUTE_267_DETOUR_CONNECTORS <= connector_labels:
+    if connector_labels >= _ROUTE_267_DETOUR_CONNECTORS:
         return {
             "at_time": planned_at_time,
             "steps": steps,

@@ -34,17 +34,13 @@ reachable. Run explicitly:
     uv run pytest -m live tests/test_route_tools_live_crosscheck.py -v
 """
 
-import sys
-
 import boto3
 import pytest
 from conftest import REPO_ROOT
 
-sys.path.insert(0, str(REPO_ROOT / "agent_tools"))
-
-import i66_route as i66_mod
-import i95_route as i95_mod
-import i495_route as i495_mod
+from agent_tools import i66_route as i66_mod
+from agent_tools import i95_route as i95_mod
+from agent_tools import i495_route as i495_mod
 
 pytestmark = pytest.mark.live
 
@@ -107,8 +103,7 @@ def _describe_instance() -> dict:
 
 
 def _connect_as_pricing_reader(instance: dict):
-    # Lazy import: see tests/test_expresslanes_crosscheck.py's identical
-    # comment -- lambdas/loader/tests/test_loader_handler.py asserts psycopg
+    # Lazy import: lambdas/loader/tests/test_loader_handler.py asserts psycopg
     # never lands in sys.modules during a plain (non-`live`) pytest run, and a
     # module-level import here would poison that check at collection time
     # even for a deselected test.
@@ -177,7 +172,7 @@ def rds_live_keys() -> tuple[set[tuple[int, int]], set[int], set[int]]:
 
 @pytest.fixture
 def live_pricing_env(monkeypatch):
-    """Points agent_tools/*.py's _env_connect() at live RDS as pricing_reader.
+    """Points agent_tools/*.py's env_connect() at live RDS as pricing_reader.
 
     Only used by the small end-to-end pricing tests below -- the bulk
     _lookup()-driven crosscheck above never touches the DB through the tools
@@ -196,7 +191,7 @@ def live_pricing_env(monkeypatch):
     monkeypatch.setenv("DB_NAME", instance["DBName"])
     monkeypatch.setenv("DB_USER", "pricing_reader")
     monkeypatch.setenv("DB_CA_BUNDLE_PATH", str(CA_BUNDLE_PATH))
-    # generate_db_auth_token inside _env_connect() uses the default boto3
+    # generate_db_auth_token inside env_connect() uses the default boto3
     # session/credential chain, not a profile kwarg -- point it at the same
     # profile the rest of this file uses explicitly.
     monkeypatch.setenv("AWS_PROFILE", AWS_PROFILE)

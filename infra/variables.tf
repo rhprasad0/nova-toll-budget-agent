@@ -33,9 +33,3 @@ variable "loader_package_path" {
   type        = string
   default     = ""
 }
-
-variable "express_fetcher_package_path" {
-  description = "Path to the toll-express-fetcher deployment zip. Empty falls back to the placeholder stub -- see fetcher_package_path for why that fallback exists."
-  type        = string
-  default     = ""
-}

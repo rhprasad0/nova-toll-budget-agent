@@ -23,20 +23,12 @@ See docs/oracle-tools-spec.md for the full contract and known limitations.
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
-from strands import tool
+from strands import tool  # pyright: ignore[reportUnknownVariableType]
 
-# agent_tools/ has no __init__.py (flat siblings) and this module is
-# imported both as a flat top-level module (agent_tools/tests/conftest.py's
-# sys.path insert) and as agent_tools.i66_route (dotted) -- neither form
-# puts agent_tools/ itself on sys.path, so a plain "import _oracle_route"
-# would fail under the dotted form. Ensuring our own directory is on
-# sys.path here works under both.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _oracle_route
+from agent_tools import _oracle_route
 
 # ponytail: path assumes agent_tools/ sits one level under the repo root next
 # to oracles/, matching its current committed location. If this ever ships in
@@ -44,18 +36,13 @@ import _oracle_route
 # relative path, or this constant needs to change with it.
 _ORACLE_PATH = Path(__file__).resolve().parent.parent / "oracles" / "i66.json"
 _ORACLE = json.loads(_ORACLE_PATH.read_text())
-_NODES: dict = _ORACLE["nodes"]
-_PAIRS: list = _ORACLE["pairs"]
+_NODES: _oracle_route.Nodes = _ORACLE["nodes"]
+_PAIRS: _oracle_route.Pairs = _ORACLE["pairs"]
 
 _LABEL_INDEX = _oracle_route.label_index(_NODES)
 
-# Local alias so tests can monkeypatch the connection by name on this module
-# (the established convention here and in i95_route.py/i495_route.py), even
-# though the implementation lives in the shared _oracle_route module.
-_env_connect = _oracle_route.env_connect
 
-
-def _lookup(origin: str, destination: str) -> dict:
+def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
     return _oracle_route.lookup(
         origin,
         destination,
@@ -89,7 +76,11 @@ LIMIT 1
 """
 
 
-def _price_i66_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
+def _price_i66_leg(
+    cur: _oracle_route.Cursor,
+    leg_key: _oracle_route.JsonObject,
+    at_time: datetime | None,
+) -> _oracle_route.JsonObject:
     """Current VDOT price, or VDOT history at an explicit time.
 
     i66 has no live-fallback source (unlike i95's trip_pricing_i95_live),
@@ -126,7 +117,9 @@ def _price_i66_leg(cur, leg_key: dict, at_time: datetime | None) -> dict:
 
 
 @tool
-def i66_route(origin: str, destination: str, at_time: str | None = None) -> dict:
+def i66_route(
+    origin: str, destination: str, at_time: str | None = None
+) -> _oracle_route.JsonObject:
     """Resolve a trip on VDOT's I-66 Inside-the-Beltway toll calculator to its route and price.
 
     Looks up origin/destination against oracles/i66.json's 96 published
@@ -172,6 +165,5 @@ def i66_route(origin: str, destination: str, at_time: str | None = None) -> dict
         destination,
         at_time,
         lookup_fn=_lookup,
-        connect=_env_connect,
         price_fn=_price_i66_leg,
     )

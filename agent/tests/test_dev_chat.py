@@ -1,13 +1,15 @@
 """Offline tests for the loopback dev console and its raw telemetry."""
 
 import json
+import logging
 import os
 import threading
 import urllib.request
 
-import dev_chat
 import pytest
-from dev_chat import DevChat, configure_local_pricing_env, create_server
+
+from agent import dev_chat
+from agent.dev_chat import DevChat, configure_local_pricing_env, create_server
 
 
 class _Metrics:
@@ -55,6 +57,14 @@ class _Factory:
         agent = _Agent(len(self.agents) + 1, trace_attributes)
         self.agents.append(agent)
         return agent
+
+
+class _FailingAgent:
+    def __init__(self):
+        self.messages = []
+
+    def __call__(self, _prompt):
+        raise ValueError("boom")
 
 
 def test_local_server_discovers_its_read_only_database_environment(
@@ -121,6 +131,20 @@ def test_chat_reuses_sessions_writes_raw_telemetry_and_resets(tmp_path):
 def test_chat_rejects_invalid_input(tmp_path, session_id, message):
     with pytest.raises((TypeError, ValueError)):
         DevChat(_Factory(), tmp_path / "telemetry.jsonl").chat(session_id, message)
+
+
+def test_chat_logs_and_records_agent_traceback(tmp_path, caplog):
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    chat = DevChat(lambda **_kwargs: _FailingAgent(), telemetry_path)
+    caplog.set_level(logging.ERROR)
+
+    with pytest.raises(RuntimeError, match="inspect the telemetry panel"):
+        chat.chat("broken", "hello")
+
+    [record] = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
+    assert "ValueError: boom" in record["error"]["traceback"]
+    assert record["request_id"] in caplog.text
+    assert any(log_record.exc_info for log_record in caplog.records)
 
 
 def test_http_server_serves_ui_and_chat_api(tmp_path):

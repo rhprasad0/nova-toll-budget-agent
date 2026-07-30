@@ -12,19 +12,17 @@ public product yet; this repo is the pipeline and tools that back it.
 every 10 minutes and lands the raw payloads in S3; a loader Lambda parses each
 object and upserts it into `trip_pricing_i95`/`trip_pricing_i66` in RDS (the
 cutover from the old shared `trip_pricing` table completed 2026-07-25 — see
-`docs/poller-spec.md`). A second, separate fetcher shares the same 10-minute
-tick to poll Transurban's own live Express Lanes snapshot, filling
-`od_pair_id`s VDOT's feed never publishes into `trip_pricing_i95_live` (see
-`docs/poller-spec.md`'s "Secondary live source" section).
+`docs/poller-spec.md`). Transurban live-price polling was retired
+2026-07-30; its committed route topology remains an oracle, not a runtime
+price source.
 
 | Path | What |
 |---|---|
 | `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the route and junction tools below into an answer — never touches RDS or SQL directly |
 | `agent_tools/` | Separate route tools price I-66, 95/395, 495, and Dulles. `i95_junction_leg` selects the open 95 direction and its Edsall or Franconia-Springfield boundary; 495 pricing resumes at Braddock, while the junction remains explicitly unpriced. |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
-| `lambdas/express_fetcher` | secondary live-source poller (Transurban, no DB access itself — feeds the loader) |
 | `db/` | the per-feed schema and the `loader_writer` role |
-| `infra/` | Terraform for both Lambdas, S3, RDS, observability, and the tollchat.ai coming-soon site (DNS records in Cloudflare, static page on CloudFront) |
+| `infra/` | Terraform for the fetcher/loader Lambdas, S3, RDS, observability, and the tollchat.ai coming-soon site (DNS records in Cloudflare, static page on CloudFront) |
 | `oracles/` | operator-published route maps (see below) |
 | `vdot_sample_data/` | committed raw feed samples the parsers are tested against |
 | `site/` | the static tollchat.ai coming-soon page served by CloudFront |
@@ -61,7 +59,7 @@ from its own committed oracles, no database at all. See
 For SSH-only agent testing, start the loopback console with:
 
 ```sh
-uv run python agent/dev_chat.py
+uv run python -m agent.dev_chat
 ```
 
 Startup discovers `DB_HOST`/`DB_PORT` from RDS and configures the read-only

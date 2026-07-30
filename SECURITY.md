@@ -80,13 +80,18 @@ The public chat agent is not deployed yet. Its release gate is documented in
 
 ## Deployment verification
 
-After the 2026-07-26 deployment:
+Historical verification after the 2026-07-26 deployment:
 
 - `toll-fetcher`, `toll-express-fetcher`, and `toll-loader` were Active with
   successful updates.
 - Raw and Terraform-state buckets reported KMS default encryption.
 - CloudTrail logging was enabled.
 - A reconciliation Terraform plan reported no changes.
+
+The desired configuration now retires `toll-express-fetcher`. Before any
+authorized apply, review the plan for only that Lambda's runtime, role,
+schedule target, alarm, log group, and related policy removal; retained raw
+S3 objects and RDS rows must not be destroyed.
 
 ## Operating rules
 
