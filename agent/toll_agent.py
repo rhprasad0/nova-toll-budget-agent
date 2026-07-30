@@ -140,16 +140,20 @@ NETWORK_TRANSFERS = [
     {
         "id": "i66_to_i495",
         "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
-        "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187NO"},
+        "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187SO"},
         "connector": "I-66/I-495 interchange",
-        "evidence": "oracles/i66.json node 5 and oracles/i95.json node 187NO pair roles",
+        "evidence": "oracles/i66.json node 5 and oracles/i95.json node 187SO pair roles",
     },
     {
         "id": "i495_to_i66",
-        "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187SD"},
-        "to": {"corridor": "i66_itb", "entry": "I-495 N", "node_id": "2"},
+        "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187ND"},
+        "to": {
+            "corridor": "i66_itb",
+            "entry": "I-495 Express Lanes N",
+            "node_id": "3",
+        },
         "connector": "I-66/I-495 interchange",
-        "evidence": "oracles/i95.json node 187SD and oracles/i66.json node 2 pair roles",
+        "evidence": "oracles/i95.json node 187ND and oracles/i66.json node 3 pair roles",
     },
     {
         "id": "dulles_toll_road_to_i495",
@@ -163,6 +167,17 @@ NETWORK_TRANSFERS = [
         "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 182SO",
     },
     {
+        "id": "dulles_toll_road_to_i495_north",
+        "from": {
+            "corridor": "dulles_toll_road",
+            "exit": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "to": {"corridor": "i495", "entry": "Route 267", "node_id": "182NO"},
+        "connector": "I-495/Route 267 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 182NO",
+    },
+    {
         "id": "i495_to_dulles_toll_road",
         "from": {"corridor": "i495", "exit": "Route 267", "node_id": "182ND"},
         "to": {
@@ -172,6 +187,17 @@ NETWORK_TRANSFERS = [
         },
         "connector": "I-495/Route 267 interchange",
         "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 182ND and 1819",
+    },
+    {
+        "id": "i495_south_to_dulles_toll_road",
+        "from": {"corridor": "i495", "exit": "Route 267", "node_id": "182SD"},
+        "to": {
+            "corridor": "dulles_toll_road",
+            "entry": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+            "node_id": "1819",
+        },
+        "connector": "I-495/Route 267 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 182SD and 1819",
     },
     {
         "id": "i66_to_dulles_toll_road",
@@ -213,6 +239,10 @@ _LOCATION_BY_CORRIDOR = {
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
 _I495_JUNCTION_ENTRY = "191NO"
 _I495_JUNCTION_EXIT = "191SD"
+_ROUTE_267_DETOUR_CONNECTORS = {
+    "Dulles Airport Access Highway",
+    "I-495/Route 267 interchange",
+}
 
 
 def _load_direct_pair_oracles() -> dict[str, tuple[dict, list]]:
@@ -487,6 +517,12 @@ def plan_toll_route(
                 f"{destination!r} on {destination_corridor}"
             )
         }
+    connector_labels = {step["label"] for step in steps if step["kind"] == "connector"}
+    if _ROUTE_267_DETOUR_CONNECTORS <= connector_labels:
+        return {
+            "steps": steps,
+            "routing_note": "Route 267 detour; not a direct I-66/I-495 connection",
+        }
     return {"steps": steps}
 
 
@@ -501,10 +537,17 @@ auditable toll estimates grounded only in the registered tools' results.
 </role>
 
 <tool_rules>
+- For every cross-corridor request, call plan_toll_route before validating or
+  pricing either endpoint. Do not reject an entry-only or exit-only endpoint
+  yourself; the planner is authoritative about whether it can be an origin or
+  destination.
 - Match vague, partial, or misspelled locations to the closest appropriate
   exact label in the priced location oracle below. Use that exact label in a
   pricing-tool call. If more than one listed label could reasonably mean the
   user's location, ask a concise clarifying question instead of guessing.
+- In the oracle, `entry: true` means a location is a valid trip origin and
+  `exit: true` means it is a valid trip destination. An exit-only location is
+  therefore valid as a destination; do not reject it for lacking entry access.
 - If a location has no clear match in the priced location oracle, or is on an
   unlisted road, explain that it is outside coverage and do not call a pricing
   tool. Never substitute a nearby listed road or ramp for an uncovered one,
@@ -533,6 +576,10 @@ auditable toll estimates grounded only in the registered tools' results.
   I-495 Near Braddock Road is unpriced. Report known segment prices
   separately. Never calculate a subtotal or complete total, even if every
   returned segment has a price or the user asks you to assume the gap is free.
+- If a plan contains both the I-495/Route 267 interchange and Dulles Airport
+  Access Highway connectors, it includes a `routing_note`. Repeat that note
+  verbatim in the answer: **Route 267 detour; not a direct I-66/I-495
+  connection**.
 - Never call a database, write SQL, invent a route, invent a price, or infer
   a timestamp that a tool did not return.
 - This assistant covers only the priced roads in the location oracle. For
@@ -569,6 +616,11 @@ physical connection may exist.
 
 The planner is authoritative for this graph. Do not infer a reverse edge,
 combine route-number labels, or describe a connector absent from its result.
+In particular, I-66 westbound to I-495 northbound and I-495 southbound to
+I-66 eastbound have no direct I-66/I-495 transfer in this graph. When the
+planner connects either trip through the I-495/Route 267 interchange and the
+Dulles Airport Access Highway, explicitly call it a Route 267 detour and
+never describe it as a direct I-66/I-495 connection.
 </routing_context>
 
 <response_format>

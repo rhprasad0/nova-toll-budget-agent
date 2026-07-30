@@ -10,6 +10,7 @@ import sys
 from collections import deque
 from pathlib import Path
 
+import pytest
 from strands.models import BedrockModel
 from toll_agent import (
     _DIRECT_PAIR_ORACLES,
@@ -85,7 +86,7 @@ def _assert_plan_is_continuous(
     origin_corridor, origin, destination_corridor, destination, plan
 ):
     corridor, point = origin_corridor, origin
-    for step in plan["steps"]:
+    for index, step in enumerate(plan["steps"]):
         if step["kind"] == "priced":
             assert (step["corridor"], step["origin"]) == (corridor, point)
             if corridor in _DULLES_CORRIDORS:
@@ -115,6 +116,25 @@ def _assert_plan_is_continuous(
                 and transfer["from"]["corridor"] == corridor
                 and _same_location(corridor, point, transfer["from"]["node_id"])
             ]
+            if len(transfers) > 1:
+                targets = {
+                    (transfer["to"]["corridor"], transfer["to"]["node_id"])
+                    for transfer in transfers
+                }
+                if len(targets) == 1 or index == len(plan["steps"]) - 1:
+                    transfers = transfers[:1]
+                else:
+                    next_step = plan["steps"][index + 1]
+                    transfers = [
+                        transfer
+                        for transfer in transfers
+                        if next_step.get("corridor") == transfer["to"]["corridor"]
+                        and _same_location(
+                            transfer["to"]["corridor"],
+                            next_step.get("origin"),
+                            transfer["to"]["node_id"],
+                        )
+                    ]
             assert len(transfers) == 1
             target = transfers[0]["to"]
             corridor, point = target["corridor"], target["node_id"]
@@ -148,6 +168,9 @@ def test_system_prompt_describes_curated_network_transfers():
     assert "explicitly labeled curated connector" in prompt
     assert "Do not infer a reverse edge" in prompt
     assert "Dulles Connector Road" not in prompt
+    assert "explicitly call it a Route 267 detour" in prompt
+    assert "never describe it as a direct I-66/I-495 connection" in prompt
+    assert "Route 267 detour; not a direct I-66/I-495" in prompt
 
 
 def test_network_transfers_have_directed_entry_and_exit_roles():
@@ -175,27 +198,151 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
         )
 
 
-def test_planner_uses_only_oracle_supported_i66_i495_steps():
-    plan = plan_toll_route(
-        "i66_itb", "Lee Highway - Scott Street", "i495", "Route 7 (Leesburg Pike)"
-    )
-    assert plan["steps"] == [
-        {
-            "kind": "priced",
-            "corridor": "i66_itb",
-            "tool": "i66_route",
-            "origin": "Lee Highway - Scott Street",
-            "destination": "5",
-        },
-        {"kind": "connector", "label": "I-66/I-495 interchange", "price_usd": "0.00"},
-        {
-            "kind": "priced",
-            "corridor": "i495",
-            "tool": "i495_route",
-            "origin": "187NO",
-            "destination": "Route 7 (Leesburg Pike)",
-        },
+@pytest.mark.parametrize(
+    ("origin_corridor", "origin", "destination_corridor", "destination", "expected"),
+    [
+        (
+            "i66_itb",
+            "Lee Highway - Scott Street",
+            "i495",
+            "Braddock Road",
+            [
+                ("priced", "i66_itb", "Lee Highway - Scott Street", "5"),
+                ("connector", "I-66/I-495 interchange"),
+                ("priced", "i495", "187SO", "Braddock Road"),
+            ],
+        ),
+        (
+            "i495",
+            "Braddock Road",
+            "i66_itb",
+            "Westmoreland St",
+            [
+                ("priced", "i495", "Braddock Road", "187ND"),
+                ("connector", "I-66/I-495 interchange"),
+                ("priced", "i66_itb", "3", "Westmoreland St"),
+            ],
+        ),
+        (
+            "i66_itb",
+            "Lee Highway - Scott Street",
+            "i495",
+            "495 Express Lanes End/George Wash. Mem. Pkwy.",
+            [
+                ("priced", "i66_itb", "Lee Highway - Scott Street", "6"),
+                ("connector", "Dulles Airport Access Highway"),
+                ("connector", "I-495/Route 267 interchange"),
+                (
+                    "priced",
+                    "i495",
+                    "182NO",
+                    "495 Express Lanes End/George Wash. Mem. Pkwy.",
+                ),
+            ],
+        ),
+        (
+            "i495",
+            "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+            "i66_itb",
+            "Westmoreland St",
+            [
+                (
+                    "priced",
+                    "i495",
+                    "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+                    "182SD",
+                ),
+                ("connector", "I-495/Route 267 interchange"),
+                ("connector", "Dulles Airport Access Highway"),
+                ("priced", "i66_itb", "6", "Westmoreland St"),
+            ],
+        ),
+    ],
+    ids=(
+        "i66-west-to-i495-south-direct",
+        "i495-north-to-i66-east-direct",
+        "i66-west-to-i495-north-route-267-detour",
+        "i495-south-to-i66-east-route-267-detour",
+    ),
+)
+def test_planner_covers_every_i66_i495_direction(
+    origin_corridor, origin, destination_corridor, destination, expected
+):
+    plan = plan_toll_route(origin_corridor, origin, destination_corridor, destination)
+
+    actual = []
+    for step in plan["steps"]:
+        if step["kind"] == "priced":
+            actual.append(
+                (
+                    "priced",
+                    step["corridor"],
+                    step["origin"],
+                    step["destination"],
+                )
+            )
+        else:
+            actual.append((step["kind"], step["label"]))
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("origin_corridor", "origin", "destination_corridor", "destination", "boundary"),
+    [
+        (
+            "dulles_toll_road",
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            "i495",
+            "Braddock Road",
+            ("1819", "182SO"),
+        ),
+        (
+            "dulles_toll_road",
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            "i495",
+            "495 Express Lanes End/George Wash. Mem. Pkwy.",
+            ("1819", "182NO"),
+        ),
+        (
+            "i495",
+            "Braddock Road",
+            "dulles_toll_road",
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            ("182ND", "1819"),
+        ),
+        (
+            "i495",
+            "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+            "dulles_toll_road",
+            "Exit 12 - SR 602 (Reston Pkwy)",
+            ("182SD", "1819"),
+        ),
+    ],
+    ids=(
+        "dulles-east-to-i495-south",
+        "dulles-east-to-i495-north",
+        "i495-north-to-dulles-west",
+        "i495-south-to-dulles-west",
+    ),
+)
+def test_planner_covers_every_dulles_i495_direction(
+    origin_corridor, origin, destination_corridor, destination, boundary
+):
+    plan = plan_toll_route(origin_corridor, origin, destination_corridor, destination)
+
+    assert [step["kind"] for step in plan["steps"]] == [
+        "priced",
+        "connector",
+        "priced",
     ]
+    assert plan["steps"][1] == {
+        "kind": "connector",
+        "label": "I-495/Route 267 interchange",
+        "price_usd": "0.00",
+    }
+    first, last = plan["steps"][0], plan["steps"][-1]
+    assert first["destination"] == boundary[0]
+    assert last["origin"] == boundary[1]
 
 
 def test_planner_uses_unpriced_directional_i95_i495_junction_both_ways():
@@ -356,10 +503,10 @@ def test_planner_reaches_the_greenway_from_i495():
     }
 
 
-def test_planner_uses_an_alternate_handoff_when_the_short_path_is_unpriceable():
+def test_planner_uses_route_267_when_direct_i495_south_to_i66_east_is_unsupported():
     plan = plan_toll_route(
-        "i95",
-        "Courthouse Road/Route 630",
+        "i495",
+        "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
         "i66_itb",
         "Fairfax Drive",
     )
@@ -367,7 +514,10 @@ def test_planner_uses_an_alternate_handoff_when_the_short_path_is_unpriceable():
         "I-495/Route 267 interchange",
         "Dulles Airport Access Highway",
     ]
-    assert plan["steps"][0]["kind"] == "junction"
+    assert all(step.get("label") != "I-66/I-495 interchange" for step in plan["steps"])
+    assert plan["routing_note"] == (
+        "Route 267 detour; not a direct I-66/I-495 connection"
+    )
 
 
 def test_planner_matches_exhaustive_directed_oracle_reachability():
