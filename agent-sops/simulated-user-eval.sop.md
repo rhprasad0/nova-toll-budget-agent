@@ -115,7 +115,7 @@ Write a `strands_evals.Case[str, str]` with `name`, `input=initial_query`,
   `run_case_with_simulator(case, agent, simulator, str(case.input), telemetry, mapper)`.
 - You MUST NOT attach OpenTelemetry baggage (`session.id`, `gen_ai.conversation.id`) around the whole conversation loop or around `simulator.act()`/construction, because every `strands.Agent` in the process emits spans once telemetry is installed -- including the simulator's own internal actor and profile-generation agents -- and baggage active when a span starts gets stamped onto that span, so attaching it around the whole loop would fold the simulated user's own turns into the judged `Session`. `run_case_with_simulator` already scopes this correctly (per-`agent(...)`-call only); do not change that scoping.
 - You SHOULD set `max_turns` tight to the scenario's expected turn count
-  (e.g. `3` for one clarification then one answer), not the SDK's default
+  (e.g. `2` for one clarification then one answer), not the SDK's default
   of `10`, because the simulator's own turn-counting means every turn past
   convergence is a wasted, billed Bedrock round trip.
 

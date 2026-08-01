@@ -37,14 +37,17 @@ from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
 )
-from strands_evals.types.evaluation_report import EvaluationReport  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parent / "results"
-_PRICE_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)")
+_PRICE_RE = re.compile(
+    r"(?:\$\s*\d+(?:\.\d{1,2})?|\bUSD\s*\d+(?:\.\d{1,2})?\b|"
+    r"\b\d+(?:\.\d{1,2})?\s*(?:USD|dollars?|bucks?)\b)",
+    re.IGNORECASE,
+)
 
 
 def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
@@ -67,9 +70,8 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
     return cases
 
 
-def _extract_price(text: str) -> float | None:
-    match = _PRICE_RE.search(text)
-    return float(match.group(1)) if match else None
+def _contains_price(text: str) -> bool:
+    return _PRICE_RE.search(text) is not None
 
 
 def _metadata(case: Case[str, str]) -> dict[str, Any]:
@@ -90,16 +92,19 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
     turns: list[dict[str, str]] = _metadata(case)["conversation"]
     trajectory_by_turn: list[list[dict[str, Any]]] = []
+    responses_by_turn: list[str] = []
     response = None
     for turn in turns:
         before = len(agent.messages)
         response = agent(turn["content"])
+        responses_by_turn.append(str(response))
         calls = _extract_tool_calls(agent.messages[before:])
         trajectory_by_turn.append(calls)
     # Smuggled through case.metadata (mutated in place) since TaskOutput has
-    # no slot for per-turn call records -- both evaluators below read it
+    # no slot for per-turn responses/calls -- both evaluators below read them
     # back off the same Case instance.
     _metadata(case)["_trajectory_by_turn"] = trajectory_by_turn
+    _metadata(case)["_responses_by_turn"] = responses_by_turn
     return {
         "output": str(response),
         "trajectory": [call["name"] for call in trajectory_by_turn[-1]],
@@ -107,10 +112,7 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
 
 
 class LocationResolutionEvaluator(Evaluator[str, str]):
-    """Per-turn check: no tool call where the location is still ambiguous
-    (a clarifying question is expected instead), and exactly the expected
-    tool called with the exact oracle-label arguments where resolution is
-    possible. The hard-label check *is* the tool-call-argument check."""
+    """Per-turn check of expected response behavior and exact tool calls."""
 
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
@@ -120,6 +122,7 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
         trajectory_by_turn: list[list[dict[str, Any]]] = metadata.get(
             "_trajectory_by_turn", []
         )
+        responses_by_turn: list[str] = metadata.get("_responses_by_turn", [])
 
         for entry in expected_turns:
             turn_index = cast(int, entry["turn"]) - 1
@@ -127,6 +130,27 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
             if turn_index < len(trajectory_by_turn):
                 actual_calls = trajectory_by_turn[turn_index]
             expected_tool = entry.get("tool")
+
+            response = (
+                responses_by_turn[turn_index]
+                if turn_index < len(responses_by_turn)
+                else ""
+            )
+            expected_terms: list[str] = entry.get("response_must_contain_any", [])
+            if (
+                expected_terms
+                and not any(
+                    term.casefold() in response.casefold() for term in expected_terms
+                )
+            ) or (entry.get("response_must_be_question") and "?" not in response):
+                return [
+                    EvaluationOutput(
+                        score=0.0,
+                        test_pass=False,
+                        reason=f"turn {entry['turn']}: response did not match expected behavior",
+                        label="response_mismatch",
+                    )
+                ]
 
             if expected_tool is None:
                 if actual_calls:
@@ -213,16 +237,17 @@ class NoFabricatedPriceEvaluator(Evaluator[str, str]):
             "_trajectory_by_turn", []
         )
         any_tool_called = any(calls for calls in trajectory_by_turn)
-        price = _extract_price(str(evaluation_case.actual_output or ""))
+        contains_price = _contains_price(str(evaluation_case.actual_output or ""))
 
-        if any_tool_called or price is not None:
+        if any_tool_called or contains_price:
             return [
                 EvaluationOutput(
                     score=0.0,
                     test_pass=False,
                     reason=(
                         f"expected a coverage decline with no tool call and no "
-                        f"price, got tool_called={any_tool_called} price={price}"
+                        f"price, got tool_called={any_tool_called} "
+                        f"contains_price={contains_price}"
                     ),
                     label="fabricated_or_substituted",
                 )
@@ -235,14 +260,6 @@ class NoFabricatedPriceEvaluator(Evaluator[str, str]):
                 label="declined_cleanly",
             )
         ]
-
-
-def _report_cases(report: EvaluationReport) -> list[dict[str, Any]]:
-    return report.cases  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-
-
-def _report_details(report: EvaluationReport) -> list[list[EvaluationOutput]]:
-    return report.detailed_results  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
 
 
 def main() -> None:
@@ -261,33 +278,22 @@ def main() -> None:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     report.to_file(str(_RESULTS_DIR / f"{stamp}.json"))
 
-    # report.run_display() is interactive (blocks on stdin) -- not usable in
-    # a script. report.cases holds case+evaluator identity, and the matching
-    # score/test_pass/reason lives in the parallel report.detailed_results
-    # list (one-item list per row) -- print a plain summary from both.
     print(f"Overall score: {report.overall_score:.2f}")
-    report_cases: list[dict[str, Any]] = _report_cases(report)
-    details: list[list[EvaluationOutput]] = _report_details(report)
-    for case_result, detail in zip(report_cases, details, strict=True):
-        result = detail[0]
-        print(
-            f"{case_result['name']} [{case_result['evaluator']}]: "
-            f"score={result.score:.2f} pass={result.test_pass} - {result.reason}"
-        )
+    report.display(include_input=False)
 
 
 def _self_check() -> None:
-    """No Bedrock/OpenAI/RDS calls -- just the pure per-turn matching logic
-    against synthetic trajectories covering all three shapes: tool fired as
-    expected, no tool fired as expected, and an unexpected tool firing."""
+    """Exercise the pure matching logic against synthetic trajectories."""
     cases = load_cases()
     assert len(cases) == 3
     assert cases[0].name == "ambiguous-alias-mclean-multiturn"
     assert cases[1].expected_trajectory == ["i95_route"]
     assert cases[2].expected_trajectory == []
 
-    assert _extract_price("Your trip costs $4.25 total.") == 4.25
-    assert _extract_price("no price here") is None
+    assert _contains_price("Your trip costs $4.25 total.")
+    assert _contains_price("The toll is 4.25 dollars.")
+    assert _contains_price("The toll is USD 4.25.")
+    assert not _contains_price("no price here")
 
     def _fake_case(
         metadata: dict[str, Any], actual_output: str = ""
@@ -334,6 +340,22 @@ def _self_check() -> None:
         }
     )
     assert resolver.evaluate(clarifying)[0].test_pass is True
+
+    clarification_response: dict[str, Any] = {
+        "expected_trajectory": [
+            {
+                "turn": 1,
+                "tool": None,
+                "response_must_be_question": True,
+                "response_must_contain_any": ["I-495", "I-66"],
+            }
+        ],
+        "_trajectory_by_turn": [[]],
+        "_responses_by_turn": ["I cannot help with that."],
+    }
+    assert resolver.evaluate(_fake_case(clarification_response))[0].test_pass is False
+    clarification_response["_responses_by_turn"] = ["Did you mean I-495 or I-66?"]
+    assert resolver.evaluate(_fake_case(clarification_response))[0].test_pass is True
 
     # Shape 3: unexpected tool fired on a turn that should have clarified.
     premature = _fake_case(
@@ -406,7 +428,7 @@ def _self_check() -> None:
 
     fabricated = _fake_case(
         {"expect_no_price": True, "_trajectory_by_turn": [[]]},
-        actual_output="That trip costs $3.50.",
+        actual_output="That trip costs 3.50 dollars.",
     )
     assert price_check.evaluate(fabricated)[0].test_pass is False
 

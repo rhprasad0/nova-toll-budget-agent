@@ -26,7 +26,6 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
@@ -44,16 +43,9 @@ from strands_evals.evaluators import (  # noqa: E402
 from strands_evals.mappers.strands_in_memory_session_mapper import (  # noqa: E402
     StrandsInMemorySessionMapper,
 )
-from strands_evals.types.evaluation import EvaluationOutput  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
-from eval.run_evaluation import (  # noqa: E402
-    _report_cases as _report_cases,  # pyright: ignore[reportPrivateUsage]
-)
-from eval.run_evaluation import (  # noqa: E402
-    _report_details as _report_details,  # pyright: ignore[reportPrivateUsage]
-)
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
     run_case_with_simulator,
@@ -105,7 +97,7 @@ def _make_task_function(
     def task_function(case: Case[str, str]) -> dict[str, object]:
         agent = build_agent()
         simulator = ActorSimulator.from_case_for_user_simulator(  # pyright: ignore[reportUnknownMemberType]
-            case=case, model=_ACTOR_JUDGE_MODEL_ID, max_turns=3
+            case=case, model=_ACTOR_JUDGE_MODEL_ID, max_turns=2
         )
         return run_case_with_simulator(
             case, agent, simulator, str(case.input), telemetry, mapper
@@ -131,14 +123,7 @@ def main() -> None:
     report.to_file(str(_RESULTS_DIR / f"{stamp}.json"))
 
     print(f"Overall score: {report.overall_score:.2f}")
-    report_cases: list[dict[str, Any]] = _report_cases(report)
-    details: list[list[EvaluationOutput]] = _report_details(report)
-    for case_result, detail in zip(report_cases, details, strict=True):
-        result = detail[0]
-        print(
-            f"{case_result['name']} [{case_result['evaluator']}]: "
-            f"score={result.score:.2f} pass={result.test_pass} - {result.reason}"
-        )
+    report.display(include_input=False)
 
 
 def _self_check() -> None:
