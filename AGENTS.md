@@ -8,8 +8,12 @@ Give 1-2 sentence explanations on more complex topics. Offer to make explanatory
 
 # Repo rules
 
-Perform work in new worktree branches instead of working in the main branch. The main branch is protected, so new changes need to be in a PR and pass CI - but do not open a new PR or push without user authorization.
+Perform work in new branches instead of working in the main branch. The main branch is protected, so new changes need to be in a PR and pass CI - but do not open a new PR or push without user authorization.
+
+# Tools
+
+Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa search for other search tasks.
 
 # Secrets
 
-SSM Parameter Store is the source of truth for every credential in this repo (see `SECURITY.md`) — never a local file. 
+SSM Parameter Store is the source of truth for every credential in this repo (see `SECURITY.md`) — never a local file.

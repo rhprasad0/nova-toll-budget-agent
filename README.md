@@ -4,7 +4,7 @@
 
 TollChat answers one question: what will this trip cost on Northern
 Virginia's toll roads? Ask it in plain language — an origin, a destination —
-and `agent/toll_agent.py` (a Bedrock Claude Haiku agent) resolves it to a
+and `agent/toll_agent.py` (an OpenAI GPT-5.6 Luna agent) resolves it to a
 real interchange and a real price by calling the pricing tools below. No
 public product yet; this repo is the pipeline and tools that back it.
 
@@ -18,7 +18,7 @@ price source.
 
 | Path | What |
 |---|---|
-| `agent/toll_agent.py` | the Bedrock Claude Haiku agent that orchestrates the route and junction tools below into an answer — never touches RDS or SQL directly |
+| `agent/toll_agent.py` | the GPT-5.6 Luna agent that orchestrates the route and junction tools below into an answer — never touches RDS or SQL directly |
 | `agent_tools/` | Separate route tools price I-66, 95/395, 495, and Dulles. `i95_junction_leg` selects the open 95 direction and its Edsall or Franconia-Springfield boundary; 495 pricing resumes at Braddock, while the junction remains explicitly unpriced. |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
 | `db/` | the per-feed schema and the `loader_writer` role |
@@ -62,9 +62,16 @@ For SSH-only agent testing, start the loopback console with:
 uv run python -m agent.dev_chat
 ```
 
-Startup discovers `DB_HOST`/`DB_PORT` from RDS and configures the read-only
+Startup discovers `DB_HOST`/`DB_PORT` from RDS, reads the OpenAI API key from
+SSM parameter `/nova-toll/openai_api_key`, and configures the read-only
 `pricing_reader` connection automatically. It requires the `nova-toll` AWS
 profile, Tailscale access, and a CA bundle built by `scripts/build_zips.sh`.
+
+Direct OpenAI is the default model backend. After Bedrock access is approved,
+the same Responses API and cache plumbing can use Mantle with
+`TOLLCHAT_MODEL_BACKEND=bedrock-mantle`; no prompt changes are required.
+Both backends use stateful Responses so tool and reasoning context continues
+through the provider response ID.
 
 From your workstation, tunnel it before opening `http://127.0.0.1:8000`:
 
@@ -73,8 +80,9 @@ ssh -L 8000:127.0.0.1:8000 <host>
 ```
 
 The console keeps one conversation until **Reset chat** or server shutdown.
-Raw prompts, answers, tool messages, and metrics append to the ignored
-`.tollchat/telemetry.jsonl`; Strands trace spans also print to the server console.
+Raw prompts, answers, and metrics append to the ignored
+`.tollchat/telemetry.jsonl`; `metrics.traces` is the local tool audit trail, and
+Strands trace spans also print to the server console.
 Inspect the JSONL with `tail -f .tollchat/telemetry.jsonl`.
 It uses the same read-only AWS/RDS environment as the live agent tests and is
 not a public preview.

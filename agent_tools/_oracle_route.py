@@ -145,14 +145,14 @@ def lookup(
 def resolve_at_time(
     at_time: str | None, *, now: Callable[[], datetime] | None = None
 ) -> datetime:
-    """Parse the caller's at_time, defaulting to now (America/New_York).
+    """Parse at_time, treating an omitted or empty value as now in Eastern time.
 
     A naive (no-offset) string is assumed America/New_York. Raises
     ValueError on an unparseable string -- the caller turns that into an
     error response before any DB connection opens. `now` is a zero-arg
     callable injection point for tests; production callers never pass it.
     """
-    if at_time is None:
+    if not at_time:
         return (now or (lambda: datetime.now(EASTERN)))()
     dt = datetime.fromisoformat(at_time)
     if dt.tzinfo is None:
@@ -257,7 +257,7 @@ def run(
             priced_leg = price_fn(
                 cur,
                 result["legs"][0],
-                resolved_at_time if at_time is not None else None,
+                resolved_at_time if at_time else None,
             )
     except PricingError as e:
         return _miss(

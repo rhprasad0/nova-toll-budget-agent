@@ -113,11 +113,11 @@ def test_chat_reuses_sessions_writes_raw_telemetry_and_resets(tmp_path):
     assert other["answer"] == "2: other"
     assert len(factory.agents) == 2
     assert factory.agents[0].trace_attributes == {"tollchat.session_id": "one"}
-    assert len(factory.agents[0].messages) == 4
 
     records = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
     assert [record["session_id"] for record in records] == ["one", "one", "two"]
-    assert records[1]["messages"][-1]["content"][0]["text"] == "1: second"
+    assert records[1]["metrics"] == {"total_cycles": 1, "tool_usage": {}}
+    assert "messages" not in records[1]
     assert os.stat(telemetry_path).st_mode & 0o777 == 0o600
 
     chat.reset("one")
@@ -143,6 +143,7 @@ def test_chat_logs_and_records_agent_traceback(tmp_path, caplog):
 
     [record] = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
     assert "ValueError: boom" in record["error"]["traceback"]
+    assert "messages" not in record
     assert record["request_id"] in caplog.text
     assert any(log_record.exc_info for log_record in caplog.records)
 

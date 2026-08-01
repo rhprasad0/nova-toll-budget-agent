@@ -233,7 +233,8 @@ def test_label_shared_by_multiple_node_ids_still_resolves_unambiguously(monkeypa
     assert result["legs"][0]["od_pair_id"] == 1266
 
 
-def test_junction_leg_selects_northbound_franconia(monkeypatch):
+@pytest.mark.parametrize("at_time", [None, ""])
+def test_junction_leg_selects_northbound_franconia(monkeypatch, at_time):
     conn = FakeConnection(
         [
             _row(1132, "I-95-NB", "NORTHBOUND_OPEN"),
@@ -243,7 +244,7 @@ def test_junction_leg_selects_northbound_franconia(monkeypatch):
     )
     monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
-    result = i95_junction_leg("US-1", "i95_to_i495")
+    result = i95_junction_leg("US-1", "i95_to_i495", at_time)
 
     assert result["pricing_status"] == "priced"
     assert result["direction"] == "Northbound"

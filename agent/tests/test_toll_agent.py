@@ -1,18 +1,15 @@
-"""Prompt-content and request-shape assertions only -- no AWS calls/network.
-
-Constructing ``BedrockModel`` creates a boto3 session but does not invoke
-Bedrock, so these tests can verify cache-point placement locally. See
-tests/test_toll_agent_live.py for the real end-to-end check.
-"""
+"""Prompt-content and request-shape assertions only -- no AWS calls/network."""
 
 import json
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from strands.models import BedrockModel
+from strands.models.openai_responses import OpenAIResponsesModel
 
+from agent import toll_agent as toll_agent_module
 from agent.toll_agent import (
     _DIRECT_PAIR_ORACLES,
     _LOCATION_ALIASES,
@@ -711,28 +708,60 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "private reasoning or narrate tool-call deliberation" in prompt
 
 
-def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
+def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch):
+    calls = []
+
+    class Ssm:
+        def get_parameter(self, **kwargs):
+            calls.append(kwargs)
+            return {"Parameter": {"Value": "test-openai-key"}}
+
+    def client(service_name, *, region_name):
+        assert service_name == "ssm"
+        assert region_name == "us-east-1"
+        return Ssm()
+
+    monkeypatch.delenv("TOLLCHAT_MODEL_BACKEND", raising=False)
+    monkeypatch.setattr(toll_agent_module.boto3, "client", client)
     agent = build_agent(trace_attributes={"tollchat.session_id": "test"})
-    assert isinstance(agent.model, BedrockModel)
+    assert isinstance(agent.model, OpenAIResponsesModel)
     assert agent.trace_attributes == {"tollchat.session_id": "test"}
-    request = agent.model.format_request(
+    assert calls == [{"Name": "/nova-toll/openai_api_key", "WithDecryption": True}]
+    assert agent.model.client_args == {"api_key": "test-openai-key"}
+
+    request = agent.model._format_request(
         messages=[
             {"role": "user", "content": [{"text": "Price Dumfries to Westpark"}]}
         ],
         tool_specs=agent.tool_registry.get_all_tool_specs(),
-        system_prompt_content=agent.system_prompt_content,
+        system_prompt=agent.system_prompt,
     )
 
-    assert request["system"] == [
-        {"text": build_system_prompt()},
-        {"cachePoint": {"type": "default", "ttl": "5m"}},
-    ]
-    assert request["toolConfig"]["tools"][-1] == {
-        "cachePoint": {"type": "default", "ttl": "5m"}
+    assert request["model"] == "gpt-5.6-luna"
+    assert request["reasoning"] == {"effort": "low"}
+    assert request["max_output_tokens"] == 2048
+    assert request["prompt_cache_key"] == "tollchat-agent-v1"
+    assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+    assert request["store"] is True
+    assert "temperature" not in request
+    assert "instructions" not in request
+    assert "test-openai-key" not in json.dumps(request)
+    assert request["input"][0] == {
+        "type": "message",
+        "role": "developer",
+        "content": [
+            {
+                "type": "input_text",
+                "text": build_system_prompt(),
+                "prompt_cache_breakpoint": {"mode": "explicit"},
+            }
+        ],
     }
-    assert [
-        tool["toolSpec"]["name"] for tool in request["toolConfig"]["tools"][:-1]
-    ] == [
+    assert request["input"][1] == {
+        "role": "user",
+        "content": [{"type": "input_text", "text": "Price Dumfries to Westpark"}],
+    }
+    assert [tool["name"] for tool in request["tools"]] == [
         "plan_toll_route",
         "i95_junction_leg",
         "i95_route",
@@ -740,3 +769,51 @@ def test_agent_caches_static_tools_and_system_prompt_for_five_minutes():
         "i66_route",
         "dulles_route",
     ]
+
+    continued = agent.model._format_request(
+        messages=[], model_state={"response_id": "resp_test"}
+    )
+    assert continued["previous_response_id"] == "resp_test"
+
+
+def test_agent_reports_prompt_cache_reads_and_writes(monkeypatch):
+    monkeypatch.setattr(toll_agent_module, "_load_openai_api_key", lambda: "test-key")
+    model = toll_agent_module._build_model()
+    chunk = model._format_chunk(
+        {
+            "chunk_type": "metadata",
+            "data": SimpleNamespace(
+                input_tokens=100,
+                output_tokens=10,
+                total_tokens=110,
+                input_tokens_details=SimpleNamespace(
+                    cached_tokens=80, cache_write_tokens=0
+                ),
+            ),
+        }
+    )
+
+    assert chunk["metadata"]["usage"]["cacheReadInputTokens"] == 80
+    assert chunk["metadata"]["usage"]["cacheWriteInputTokens"] == 0
+
+
+def test_agent_keeps_the_bedrock_mantle_backend_ready(monkeypatch):
+    monkeypatch.setenv("TOLLCHAT_MODEL_BACKEND", "bedrock-mantle")
+
+    def fail_if_called():
+        raise AssertionError("Bedrock Mantle must not read the OpenAI API key")
+
+    monkeypatch.setattr(toll_agent_module, "_load_openai_api_key", fail_if_called)
+    agent = build_agent()
+
+    assert agent.model.get_config()["model_id"] == "openai.gpt-5.6-luna"
+    assert agent.model.stateful is True
+    assert agent.model.client_args == {}
+    assert agent.model._bedrock_mantle_config == {"region": "us-east-1"}
+
+
+def test_agent_rejects_an_unknown_model_backend(monkeypatch):
+    monkeypatch.setenv("TOLLCHAT_MODEL_BACKEND", "surprise")
+
+    with pytest.raises(ValueError, match="must be 'openai' or 'bedrock-mantle'"):
+        build_agent()

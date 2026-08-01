@@ -1,16 +1,16 @@
 """End-to-end checks for direction-aware junction pricing.
 
-Hits live Bedrock (and, via the tools it calls, live RDS) -- deliberately
+Hits live OpenAI (and, via the tools it calls, live RDS) -- deliberately
 marked `live` and excluded from the default `pytest` run (see
 pyproject.toml addopts), same convention as
 tests/test_route_tools_live_crosscheck.py. Run explicitly:
 
-    uv run pytest -m live tests/test_toll_agent_live.py -v
+    AWS_PROFILE=nova-toll uv run pytest -m live tests/test_toll_agent_live.py -v
 
 Deliberately does not assert on dollar amounts: `trip_pricing_i95` refreshes
 every 10 minutes, so a hard-coded price fails
 tomorrow and reads as an agent regression when it's just a stale rate.
-Instead this walks the tool-call trace in agent.messages and asserts on
+Instead this walks the tool-call trace in the response metrics and asserts on
 *leg boundaries* -- did the agent actually stop at the junction, not just
 "did some price come back".
 """
@@ -261,9 +261,23 @@ _JUNCTION_MATRIX_CASES = {
 }
 
 
-def _tool_uses(agent, tool_name: str) -> list[dict]:
+def _trace_messages(response) -> list[dict]:
+    def walk(trace):
+        messages = [trace["message"]] if trace.get("message") else []
+        for child in trace.get("children", []):
+            messages.extend(walk(child))
+        return messages
+
+    return [
+        message
+        for trace in response.metrics.get_summary().get("traces", [])
+        for message in walk(trace)
+    ]
+
+
+def _tool_uses(response, tool_name: str) -> list[dict]:
     uses = []
-    for message in agent.messages:
+    for message in _trace_messages(response):
         for block in message.get("content", []):
             tool_use = block.get("toolUse")
             if tool_use and tool_use.get("name") == tool_name:
@@ -271,16 +285,16 @@ def _tool_uses(agent, tool_name: str) -> list[dict]:
     return uses
 
 
-def _tool_results(agent, tool_name: str) -> list[dict]:
+def _tool_results(response, tool_name: str) -> list[dict]:
     tool_use_ids = {
         block["toolUse"]["toolUseId"]
-        for message in agent.messages
+        for message in _trace_messages(response)
         for block in message.get("content", [])
         if block.get("toolUse", {}).get("name") == tool_name
     }
     return [
         json.loads(result["content"][0]["text"])
-        for message in agent.messages
+        for message in _trace_messages(response)
         for block in message.get("content", [])
         if (result := block.get("toolResult"))
         and result["toolUseId"] in tool_use_ids
@@ -288,28 +302,28 @@ def _tool_results(agent, tool_name: str) -> list[dict]:
     ]
 
 
-def _pricing_tool_uses(agent) -> list[dict]:
+def _pricing_tool_uses(response) -> list[dict]:
     return [
         tool_use
-        for message in agent.messages
+        for message in _trace_messages(response)
         for block in message.get("content", [])
         if (tool_use := block.get("toolUse")) and tool_use.get("name") in _PRICING_TOOLS
     ]
 
 
-def _route_tool_uses(agent) -> list[dict]:
+def _route_tool_uses(response) -> list[dict]:
     return [
         tool_use
-        for message in agent.messages
+        for message in _trace_messages(response)
         for block in message.get("content", [])
         if (tool_use := block.get("toolUse")) and tool_use.get("name") in _AGENT_TOOLS
     ]
 
 
-def _tool_result(agent, tool_use_id: str) -> dict:
+def _tool_result(response, tool_use_id: str) -> dict:
     [result] = [
         json.loads(tool_result["content"][0]["text"])
-        for message in agent.messages
+        for message in _trace_messages(response)
         for block in message.get("content", [])
         if (tool_result := block.get("toolResult"))
         and tool_result["toolUseId"] == tool_use_id
@@ -354,22 +368,33 @@ def live_pricing_env(monkeypatch):
     monkeypatch.setenv("DB_CA_BUNDLE_PATH", str(CA_BUNDLE_PATH))
 
 
+def test_agent_reuses_the_explicit_system_prompt_cache():
+    warmup = build_agent()
+    warmup("Reply with exactly CACHE_WARMUP_1. Do not call tools.")
+
+    probe = build_agent()
+    response = probe("Reply with exactly CACHE_WARMUP_2. Do not call tools.")
+
+    assert response.metrics.accumulated_usage.get("cacheReadInputTokens", 0) > 0
+    assert response.metrics.accumulated_usage.get("cacheWriteInputTokens", 0) == 0
+
+
 def test_dumfries_to_westpark_uses_the_unpriced_braddock_junction(
     live_pricing_env,
 ):
     agent = build_agent()
-    agent("Price a trip from Dumfries to Westpark")
+    response = agent("Price a trip from Dumfries to Westpark")
 
-    junction_calls = _tool_uses(agent, "i95_junction_leg")
-    i495_calls = _tool_uses(agent, "i495_route")
+    junction_calls = _tool_uses(response, "i95_junction_leg")
+    i495_calls = _tool_uses(response, "i495_route")
 
     assert len(junction_calls) == 1
     assert i495_calls, "expected the agent to call i495_route for the Westpark leg"
     assert junction_calls[0]["input"]["movement"] == "i95_to_i495"
-    i495_result = _tool_result(agent, i495_calls[0]["toolUseId"])
+    i495_result = _tool_result(response, i495_calls[0]["toolUseId"])
     entry, _ = _resolved_endpoints(i495_result)
     assert entry["node_id"] == "191NO"
-    assert not _tool_uses(agent, "i95_route")
+    assert not _tool_uses(response, "i95_route")
 
 
 def test_i66_price_answer_shows_work_and_vdot_observed_time(live_pricing_env):
@@ -382,7 +407,7 @@ def test_i66_price_answer_shows_work_and_vdot_observed_time(live_pricing_env):
     assert "Final price" in answer
     assert "VDOT observed at:" in answer
 
-    [tool_result] = _tool_results(agent, "i66_route")
+    [tool_result] = _tool_results(response, "i66_route")
     leg = tool_result["legs"][0]
     assert leg["observed_at"] in answer
     assert f"${leg['price_usd']} = ${tool_result['total_usd']}" in answer
@@ -396,7 +421,7 @@ def test_dulles_answer_itemizes_each_charge_and_shows_the_sum():
     )
 
     answer = str(response)
-    [tool_result] = _tool_results(agent, "dulles_route")
+    [tool_result] = _tool_results(response, "dulles_route")
     assert [toll["price_usd"] for toll in tool_result["tolls"]] == [
         "2.00",
         "4.00",
@@ -416,13 +441,13 @@ def test_agent_follows_every_network_boundary(
     agent = build_agent()
     response = agent(prompt)
 
-    plans = _tool_results(agent, "plan_toll_route")
-    actual_calls = _route_tool_uses(agent)
+    plans = _tool_results(response, "plan_toll_route")
+    actual_calls = _route_tool_uses(response)
     assert actual_calls
     if not plans:
         assert expected_connectors == []
         assert [call["name"] for call in actual_calls] == ["dulles_route"]
-        assert "error" not in _tool_result(agent, actual_calls[0]["toolUseId"])
+        assert "error" not in _tool_result(response, actual_calls[0]["toolUseId"])
         return
 
     [plan] = plans
@@ -449,7 +474,7 @@ def test_agent_follows_every_network_boundary(
 
     for call, step in zip(actual_calls, expected_steps, strict=False):
         assert call["name"] == step["tool"]
-        result = _tool_result(agent, call["toolUseId"])
+        result = _tool_result(response, call["toolUseId"])
         assert call["input"].get("at_time") == plan["at_time"]
         if "error" not in result:
             assert result["at_time"] == plan["at_time"]
@@ -471,7 +496,7 @@ def test_agent_follows_every_network_boundary(
         )
 
     if not matrix_case and len(actual_calls) < len(expected_steps):
-        last_result = _tool_result(agent, actual_calls[-1]["toolUseId"])
+        last_result = _tool_result(response, actual_calls[-1]["toolUseId"])
         assert "error" in last_result, str(response)
 
     if matrix_case and matrix_case.endswith("-detour"):
@@ -490,9 +515,10 @@ def test_agent_follows_every_network_boundary(
 )
 def test_agent_does_not_guess_uncovered_or_ambiguous_locations(prompt):
     agent = build_agent()
-    answer = str(agent(prompt))
+    response = agent(prompt)
+    answer = str(response)
 
-    assert not _pricing_tool_uses(agent)
+    assert not _pricing_tool_uses(response)
     assert "Final price" not in answer
 
 
@@ -500,9 +526,9 @@ def test_agent_resolves_dulles_airport_and_leesburg_aliases():
     agent = build_agent()
     response = agent("Price Dulles Airport to Leesburg on the Dulles Greenway.")
 
-    [call] = _pricing_tool_uses(agent)
+    [call] = _pricing_tool_uses(response)
     assert call["name"] == "dulles_route"
-    result = _tool_result(agent, call["toolUseId"])
+    result = _tool_result(response, call["toolUseId"])
     assert "error" not in result, str(response)
     assert result["legs"][0]["entry"]["label"] == (
         "Route 28 (Dulles Toll Road / Dulles Greenway)"
@@ -514,12 +540,13 @@ def test_agent_resolves_dulles_airport_and_leesburg_aliases():
 
 def test_agent_does_not_ignore_a_malformed_time(live_pricing_env):
     agent = build_agent()
-    answer = str(
-        agent("Price I-66 West to Westmoreland St at definitely-not-an-ISO-8601-time.")
+    response = agent(
+        "Price I-66 West to Westmoreland St at definitely-not-an-ISO-8601-time."
     )
+    answer = str(response)
 
-    for call in _pricing_tool_uses(agent):
-        assert "error" in _tool_result(agent, call["toolUseId"])
+    for call in _pricing_tool_uses(response):
+        assert "error" in _tool_result(response, call["toolUseId"])
     assert "Final price" not in answer
 
 
@@ -534,10 +561,11 @@ def test_agent_reports_reversible_lane_availability_without_inventing_a_fare(
     live_pricing_env, prompt
 ):
     agent = build_agent()
-    answer = str(agent(prompt))
+    response = agent(prompt)
+    answer = str(response)
 
-    [call] = _pricing_tool_uses(agent)
-    result = _tool_result(agent, call["toolUseId"])
+    [call] = _pricing_tool_uses(response)
+    result = _tool_result(response, call["toolUseId"])
     if "error" in result:
         assert "Final price" not in answer
     else:
