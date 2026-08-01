@@ -12,6 +12,7 @@ __pycache__/
 eval/results/
 
 .mcp.json
+/.codex/
 
 # Terraform
 infra/.terraform/
