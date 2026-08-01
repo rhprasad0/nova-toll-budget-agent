@@ -21,9 +21,13 @@ from agent.toll_agent import (
     plan_toll_route,
 )
 from agent_tools.dulles_route import _lookup as _dulles_lookup
+from agent_tools.dulles_route import dulles_route
 from agent_tools.i66_route import _lookup as _i66_lookup
+from agent_tools.i66_route import i66_route
 from agent_tools.i95_route import _lookup as _i95_lookup
+from agent_tools.i95_route import i95_junction_leg, i95_route
 from agent_tools.i495_route import _lookup as _i495_lookup
+from agent_tools.i495_route import i495_route
 
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
 _LOOKUPS = {
@@ -716,6 +720,71 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "calculated Dulles total" in prompt
     assert "empty dulles_route tolls list means no toll applies" in prompt
     assert "private reasoning or narrate tool-call deliberation" in prompt
+
+
+def test_agent_tool_specs_are_concise_and_preserve_their_contracts():
+    expected = {
+        "plan_toll_route": (
+            plan_toll_route,
+            {"origin_corridor", "origin", "destination_corridor", "destination"},
+            ("cross-corridor", "ordered steps", "On error"),
+        ),
+        "i95_junction_leg": (
+            i95_junction_leg,
+            {"location", "movement"},
+            ("junction", "pricing_status", "unavailable"),
+        ),
+        "i95_route": (
+            i95_route,
+            {"origin", "destination"},
+            ("I-95/395", "total_usd", "Failure"),
+        ),
+        "i495_route": (
+            i495_route,
+            {"origin", "destination"},
+            ("I-495", "total_usd", "Failure"),
+        ),
+        "i66_route": (
+            i66_route,
+            {"origin", "destination"},
+            ("I-66", "total_usd", "Failure"),
+        ),
+        "dulles_route": (
+            dulles_route,
+            {"origin", "destination"},
+            ("Route 28", "toll items", "Failure"),
+        ),
+    }
+    for name, (tool, required, cues) in expected.items():
+        spec = tool.tool_spec
+        schema = spec["inputSchema"]["json"]
+
+        assert spec["name"] == name
+        assert set(schema["required"]) == required
+        assert all(field["type"] == "string" for field in schema["properties"].values())
+        assert len(spec["description"]) < 900
+        assert all(cue in spec["description"] for cue in cues)
+        assert "America/New_York" in schema["properties"]["at_time"]["description"]
+
+    assert set(
+        plan_toll_route.tool_spec["inputSchema"]["json"]["properties"][
+            "origin_corridor"
+        ]["enum"]
+    ) == {
+        "i95",
+        "i495",
+        "i66_itb",
+        "dulles_toll_road",
+        "dulles_greenway",
+    }
+    assert set(
+        i95_junction_leg.tool_spec["inputSchema"]["json"]["properties"]["movement"][
+            "enum"
+        ]
+    ) == {
+        "i95_to_i495",
+        "i495_to_i95",
+    }
 
 
 def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch):

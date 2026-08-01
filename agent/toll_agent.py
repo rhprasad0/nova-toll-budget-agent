@@ -35,7 +35,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, cast, override
+from typing import Any, Literal, cast, override
 
 import boto3
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
@@ -588,23 +588,36 @@ def _planned_steps(
 
 @tool
 def plan_toll_route(
-    origin_corridor: str,
+    origin_corridor: Literal[
+        "i95", "i495", "i66_itb", "dulles_toll_road", "dulles_greenway"
+    ],
     origin: str,
-    destination_corridor: str,
+    destination_corridor: Literal[
+        "i95", "i495", "i66_itb", "dulles_toll_road", "dulles_greenway"
+    ],
     destination: str,
     at_time: str | None = None,
 ) -> _oracle_route.JsonObject:
-    """Return the only oracle-supported pricing, junction, and connector steps.
+    """Plan a supported cross-corridor trip before pricing either leg.
 
-    Call after resolving the user's location to exact prompt-oracle labels and
-    before any pricing tool on a cross-corridor trip. Inputs must be exact;
-    this tool does not fuzzy-match or invent roads. Its `priced` steps are the
-    only ordinary pricing-tool calls permitted for the trip. A ``junction``
-    step calls ``i95_junction_leg`` and marks the 95/495 gap as unpriced.
-    An ``unpriced`` step also calls no tool. Other ``connector`` steps are $0
-    and must never be sent to a pricing tool. Boundaries use oracle node IDs
-    so their directed entry/exit roles are not lost to duplicate labels.
-    ``at_time`` is normalized once for every tool call in the returned plan.
+    Use exact corridor IDs and oracle labels or node IDs. Returns normalized
+    ``at_time`` and ordered steps: call each ``priced`` or ``junction`` step
+    once with its returned arguments, report ``connector`` steps as $0, and
+    do not call a tool for ``unpriced`` steps. On error, no supported directed
+    route exists and no pricing tool should be called.
+
+    Args:
+        origin_corridor: Exact origin corridor ID from the priced location oracle.
+        origin: Exact origin oracle label or node ID.
+        destination_corridor: Exact destination corridor ID from the priced location oracle.
+        destination: Exact destination oracle label or node ID.
+        at_time: Optional ISO-8601 travel time; offset-less values use
+            America/New_York. Omit for the current VDOT view.
+
+    Returns:
+        dict: ``{"at_time", "steps"}``, optionally with ``routing_note``;
+        each step has a ``kind`` and its documented tool arguments. Failures
+        return ``{"error": str}``.
     """
     try:
         planned_at_time = _oracle_route.resolve_at_time(at_time).isoformat()

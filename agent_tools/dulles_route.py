@@ -261,44 +261,21 @@ def _build_response(
 def dulles_route(
     origin: str, destination: str, at_time: str | None = None
 ) -> _oracle_route.JsonObject:
-    """Resolve a trip on the Dulles Toll Road and/or Dulles Greenway to its route and price.
+    """Price a direct Dulles Toll Road and/or Dulles Greenway trip.
 
-    Looks up origin/destination against the two committed oracles
-    (oracles/dulles_toll_road.json, oracles/dulles_greenway.json) -- a flat,
-    direct lookup, never multi-hop routing. A trip confined to one facility
-    resolves to one leg; a trip crossing both (they connect at Route 28)
-    resolves to two legs, split at that boundary. Every charged toll is
-    returned separately; the tool does not calculate a combined total.
+    The tool handles the Route 28 boundary internally. It returns individual
+    toll items in travel order; it never returns a combined ``total_usd``.
 
     Args:
-        origin: Interchange label (e.g. 'Exit 12 - SR 602 (Reston Pkwy)'),
-            case-insensitive, or the oracle's raw node id (e.g. '12') as a
-            fallback.
-        destination: Same rules as origin.
-        at_time: ISO-8601 timestamp; a value with no offset is assumed
-            America/New_York. Defaults to now (America/New_York) if omitted.
-            The Dulles Toll Road has no time-of-day pricing; the Dulles
-            Greenway does (peak: weekdays 6:30-9:00am eastbound, 4:00-6:30pm
-            westbound), so at_time only affects Greenway legs, via each
-            leg's rate_period.
+        origin: Dulles interchange label or raw oracle node ID.
+        destination: Dulles interchange label or raw oracle node ID.
+        at_time: Optional ISO-8601 travel time; offset-less values use
+            America/New_York and affect Greenway peak pricing only.
 
     Returns:
-        dict: On success, {"origin", "destination", "at_time",
-        "legs": [{"facility": "dulles_toll_road"|"dulles_greenway",
-        "direction", "entry": {"node_id", "label"}, "exit": {"node_id",
-        "label"}, "rate_period": "peak"|"off_peak"|None}, ...],
-        "tolls": [{"facility": "dulles_toll_road"|"dulles_greenway",
-        "label": str, "price_usd": str}, ...]} -- one leg for a
-        single-facility trip, two for a trip crossing both. tolls contains
-        every nonzero charge in travel order; price_usd values are decimal
-        strings, never floats. An empty tolls list means no toll applies.
-        The tool intentionally has no total_usd.
-        rate_period is None for Dulles Toll Road legs (no time-of-day
-        pricing there). On failure, {"error": str, "valid_options":
-        [str, ...]} -- the combined entry/exit-capable label list across
-        both facilities on an unknown identifier, the labels reachable from
-        a known origin on no direct or connecting trip, or a malformed
-        at_time (valid_options empty, since retrying won't fix it).
+        dict: Success includes ``legs`` and decimal-string ``tolls``; an empty
+        ``tolls`` list means no toll applies. Failure is
+        ``{"error", "valid_options"}``.
     """
     result = _lookup(origin, destination)
     if "error" in result:
