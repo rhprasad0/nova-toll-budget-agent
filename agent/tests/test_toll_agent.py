@@ -702,7 +702,7 @@ def test_system_prompt_is_an_agent_sop():
 
 def test_system_prompt_has_no_unresolved_placeholders():
     prompt = build_system_prompt()
-    assert re.findall(r"(?<!\$)\{[A-Z_]+\}", prompt) == []
+    assert re.findall(r"\{[A-Z_]+\}", prompt) == []
 
 
 def test_system_prompt_requires_auditable_price_reporting():

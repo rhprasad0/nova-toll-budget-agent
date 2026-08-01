@@ -20,6 +20,12 @@ SystemContentBlock only has text/cachePoint keys (strands/types/content.py)
 NETWORK_TRANSFERS therefore go in as literal json.dumps(...) text inside the prompt
 string, not any special mechanism.
 
+build_system_prompt() reads its template from
+agent-sops/nova-toll-pricing-assistant.sop.md, a sibling file at the repo
+root -- that file must ship alongside this module in any deployment of this
+agent (today it only runs from a full repo checkout via agent/dev_chat.py;
+there is no packaging step that would drop it).
+
 See docs/oracle-tools-spec.md for the tool contract this builds on.
 """
 
