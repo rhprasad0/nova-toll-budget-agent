@@ -135,46 +135,21 @@ def _price_i495_leg(
 def i495_route(
     origin: str, destination: str, at_time: str | None = None
 ) -> _oracle_route.JsonObject:
-    """Resolve a trip on Transurban's 495 Express Lanes network to its route and price.
+    """Price one direct I-495 Express Lanes trip.
 
-    Looks up origin/destination against oracles/i95.json's within-495
-    published entry/exit trips -- a flat, direct lookup, never multi-hop
-    routing. A trip that crosses into the 95/395 Express Lanes is out of
-    scope for this tool (see i95_route for that facility); this tool never
-    synthesizes a cross-corridor combined price. The resolved leg is then
-    priced against VDOT data over RDS.
+    Use only for one oracle-supported I-495 leg; cross-corridor trips must
+    start with ``plan_toll_route``.
 
     Args:
-        origin: Ramp label (e.g. 'Route 267'), case-insensitive, or the
-            oracle's raw node id as a fallback.
-        destination: Same rules as origin.
-        at_time: ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an
-            explicit UTC offset); a value with no offset is assumed
-            America/New_York. Defaults to now (America/New_York) if omitted.
-            If omitted, the current VDOT view is used; if supplied, the price
-            is the most recently *published* row at or before this time.
-            Neither is "the price this instant" -- VDOT's own
-            feed trails real-time by roughly 10-20 minutes
-            (docs/oracle-findings.md section 7), and this tool reports that
-            lag honestly via priced_as_of and observed_at rather than
-            papering over it.
+        origin: I-495 ramp label or raw oracle node ID.
+        destination: I-495 ramp label or raw oracle node ID.
+        at_time: Optional ISO-8601 travel time; offset-less values use
+            America/New_York. Omit for the current VDOT view.
 
     Returns:
-        dict: On success, {"origin", "destination",
-        "direction": "Northbound"|"Southbound", "entry": {"node_id", "label"},
-        "exit": {"node_id", "label"}, "at_time": str (the resolved,
-        ISO-8601 time actually used), "legs": [{"od_pair_id", "price_usd":
-        str, "corridor_name", "priced_as_of": str, "observed_at": str}], "total_usd": str} --
-        legs has exactly one entry. price_usd/total_usd are decimal strings
-        (never float). observed_at is VDOT's source-calculated timestamp for
-        the returned fare. On failure, {"error": str, "valid_options":
-        [str, ...]} -- the full ramp label list on an unknown identifier,
-        the reachable destination labels on a known origin with no direct
-        trip to the given destination (including a cross-corridor
-        destination on the 95/395 side, which this tool never resolves),
-        or a pricing/at_time failure, so the caller can self-correct where
-        possible; valid_options is empty for a pricing miss or a bad
-        at_time, since retrying the same inputs won't fix either.
+        dict: Success includes resolved ``entry``/``exit``, one ``legs`` item,
+        decimal-string ``total_usd``, and VDOT ``priced_as_of`` and
+        ``observed_at`` timestamps. Failure is ``{"error", "valid_options"}``.
     """
     return _oracle_route.run(
         "i495_route",

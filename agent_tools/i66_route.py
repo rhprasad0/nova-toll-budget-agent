@@ -120,44 +120,21 @@ def _price_i66_leg(
 def i66_route(
     origin: str, destination: str, at_time: str | None = None
 ) -> _oracle_route.JsonObject:
-    """Resolve a trip on VDOT's I-66 Inside-the-Beltway toll calculator to its route and price.
+    """Price one direct I-66 Inside-the-Beltway Express Lanes trip.
 
-    Looks up origin/destination against oracles/i66.json's 96 published
-    entry/exit trips (17 interchanges) -- a flat, direct lookup, never
-    multi-hop routing. Every valid direction+entry+exit combination is
-    already enumerated by VDOT itself. The resolved leg is then priced
-    against VDOT pricing over RDS.
+    Use only for one oracle-supported I-66 leg; do not use it to plan or
+    combine corridors.
 
     Args:
-        origin: Interchange label (e.g. 'Fairfax Drive'), case-insensitive,
-            or the oracle's raw node id (e.g. '4') as a fallback.
-        destination: Same rules as origin.
-        at_time: ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an
-            explicit UTC offset); a value with no offset is assumed
-            America/New_York. Defaults to now (America/New_York) if omitted.
-            If omitted, the current VDOT view is used; if supplied, the price
-            is the most recently *published* row at or before this time.
-            Neither is "the price this instant" -- VDOT's own
-            feed trails real-time by roughly 10-20 minutes
-            (docs/oracle-findings.md section 7), and this tool reports that
-            lag honestly via each leg's priced_as_of and observed_at rather
-            than papering over it.
+        origin: I-66 interchange label or raw oracle node ID.
+        destination: I-66 interchange label or raw oracle node ID.
+        at_time: Optional ISO-8601 travel time; offset-less values use
+            America/New_York. Omit for the current VDOT view.
 
     Returns:
-        dict: On success, {"origin", "destination", "direction": "EB"|"WB",
-        "entry": {"node_id", "label"}, "exit": {"node_id", "label"},
-        "at_time": str (the resolved, ISO-8601 time actually used),
-        "legs": [{"start_zone_id", "end_zone_id", "price_usd": str,
-        "corridor_name", "priced_as_of": str, "observed_at": str}], "total_usd": str} -- legs
-        has exactly one entry for i66. price_usd/total_usd are decimal
-        strings (never float). observed_at is VDOT's source-calculated
-        timestamp for the returned fare. On failure, {"error": str, "valid_options":
-        [str, ...]} -- the full interchange label list on an unknown
-        identifier, the reachable destination labels on a known origin with
-        no direct trip to the given destination, or a malformed at_time, so
-        the caller can self-correct; valid_options is empty for a pricing
-        miss or a bad at_time, since retrying the same inputs won't fix
-        either.
+        dict: Success includes resolved ``entry``/``exit``, one ``legs`` item,
+        decimal-string ``total_usd``, and VDOT ``priced_as_of`` and
+        ``observed_at`` timestamps. Failure is ``{"error", "valid_options"}``.
     """
     return _oracle_route.run(
         "i66_route",

@@ -42,7 +42,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 
@@ -202,31 +202,26 @@ def _lane_status(row: tuple[Any, ...] | None, direction: str) -> str:
 
 @tool
 def i95_junction_leg(
-    location: str, movement: str, at_time: str | None = None
+    location: str,
+    movement: Literal["i95_to_i495", "i495_to_i95"],
+    at_time: str | None = None,
 ) -> _oracle_route.JsonObject:
-    """Price the usable 95/395 segment beside the unpriced 95/495 junction.
+    """Price the I-95/395 leg beside an unpriced I-95/I-495 junction.
 
-    This tool is only for a trip crossing between the 95/395 and 495
-    Express Lanes. It checks both reversible I-95 directions from VDOT at
-    one requested time. Exactly one direction must be fully open:
-    northbound uses Franconia-Springfield as the 95 boundary and southbound
-    uses Edsall. I-495 pricing separately begins or ends at I-495 Near
-    Braddock Road; the road between those boundaries is explicitly unpriced.
+    Call only for a ``junction`` step from ``plan_toll_route``. The returned
+    boundary is priced only when exactly one reversible direction is open;
+    this tool never prices the gap to I-495 Near Braddock Road.
 
     Args:
-        location: The trip's non-junction 95/395 ramp label or raw node id.
-        movement: ``i95_to_i495`` when leaving 95/395, or
-            ``i495_to_i95`` when entering 95/395.
-        at_time: Same ISO-8601 rules as ``i95_route``. Omit for VDOT's
-            current view or provide a time for VDOT history.
+        location: Non-junction I-95/395 ramp label or raw oracle node ID.
+        movement: ``i95_to_i495`` when leaving I-95/395; ``i495_to_i95`` when entering.
+        at_time: Optional ISO-8601 travel time; offset-less values use
+            America/New_York. Omit for the current VDOT view.
 
     Returns:
-        dict: ``pricing_status`` is ``priced`` with the ordinary i95 route
-        and price fields when exactly one direction is open and the
-        location has a matching leg. Otherwise it is ``unavailable`` with
-        no monetary fields. Invalid inputs return the usual ``error`` and
-        ``valid_options`` envelope. This tool never prices the junction and
-        never reads Transurban live pricing.
+        dict: ``pricing_status: "priced"`` includes the I-95 fare fields;
+        ``"unavailable"`` has no monetary fields. Invalid input returns
+        ``{"error", "valid_options"}``.
     """
     if movement not in _JUNCTION_MOVEMENTS:
         return {
@@ -366,51 +361,22 @@ def i95_junction_leg(
 def i95_route(
     origin: str, destination: str, at_time: str | None = None
 ) -> _oracle_route.JsonObject:
-    """Resolve a trip on Transurban's 95/395 Express Lanes network to its route and price.
+    """Price one direct I-95/395 Express Lanes trip with an open VDOT lane.
 
-    Looks up origin/destination against oracles/i95.json's within-95/395
-    published entry/exit trips -- a flat, direct lookup, never multi-hop
-    routing. A trip that crosses into the 495 Express Lanes is out of scope
-    for this tool (see i495_route for that facility); this tool never
-    synthesizes a cross-corridor combined price. The resolved leg is then
-    priced against VDOT data over RDS -- a row only counts if its
-    lane is actually open (link_status), never just because it has a rate.
+    Use only for one oracle-supported I-95/395 leg; cross-corridor trips must
+    start with ``plan_toll_route``.
 
     Args:
-        origin: Ramp label (e.g. 'US-1'), case-insensitive, or the
-            oracle's raw node id as a fallback.
-        destination: Same rules as origin.
-        at_time: ISO-8601 timestamp (e.g. '2026-07-26T14:32:00' or with an
-            explicit UTC offset); a value with no offset is assumed
-            America/New_York. Defaults to now (America/New_York) if omitted.
-            If omitted, the current VDOT view is used; if supplied, the price
-            is the most recently *published* row at or before this time.
-            Neither is "the price this instant" -- VDOT's own
-            feed trails real-time by roughly 10-20 minutes
-            (docs/oracle-findings.md section 7), and this tool reports that
-            lag honestly via priced_as_of and observed_at rather than
-            papering over it.
+        origin: I-95/395 ramp label or raw oracle node ID.
+        destination: I-95/395 ramp label or raw oracle node ID.
+        at_time: Optional ISO-8601 travel time; offset-less values use
+            America/New_York. Omit for the current VDOT view.
 
     Returns:
-        dict: On success, {"origin", "destination",
-        "direction": "Northbound"|"Southbound", "entry": {"node_id", "label"},
-        "exit": {"node_id", "label"}, "at_time": str (the resolved,
-        ISO-8601 time actually used), "legs": [{"od_pair_id", "price_usd":
-        str, "corridor_name", "priced_as_of": str, "observed_at": str}], "total_usd": str} --
-        legs has exactly one entry. price_usd/total_usd are decimal strings
-        (never float). observed_at is VDOT's source-calculated timestamp for
-        the returned fare. On failure, {"error": str, "valid_options":
-        [str, ...]} -- the full ramp label list on an unknown identifier,
-        the reachable destination labels on a known origin with no direct
-        trip to the given destination (including a cross-corridor
-        destination on the 495 side, which this tool never resolves), or a
-        pricing/at_time failure, so the caller can self-correct where
-        possible; valid_options is empty for a pricing miss or a bad
-        at_time, since retrying the same inputs won't fix either. A
-        pricing failure includes a leg whose only known row is
-        closed/unavailable for its lane -- the error message names the
-        corridor and link_status, distinguishing "found but closed" from a
-        true data miss.
+        dict: Success includes resolved ``entry``/``exit``, one ``legs`` item,
+        decimal-string ``total_usd``, and VDOT ``priced_as_of`` and
+        ``observed_at`` timestamps. Failure is ``{"error", "valid_options"}``,
+        including a closed or unavailable lane.
     """
     return _oracle_route.run(
         "i95_route",
