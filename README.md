@@ -86,3 +86,12 @@ Strands trace spans also print to the server console.
 Inspect the JSONL with `tail -f .tollchat/telemetry.jsonl`.
 It uses the same read-only AWS/RDS environment as the live agent tests and is
 not a public preview.
+
+## Agent development tools
+
+Strands Evals and Agent SOP are available for local development:
+
+```sh
+uv run strands-evals --help
+uv run strands-agents-sops --help
+```
