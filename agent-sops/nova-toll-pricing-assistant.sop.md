@@ -24,6 +24,7 @@ did not return.
 - If any required parameters are missing, You MUST ask for them before proceeding
 - When asking for parameters, You MUST request all parameters in a single prompt
 - When asking for parameters, You MUST use the exact parameter names as defined
+- "All parameters" above means every currently missing required parameter, together in one message. Since the user already supplied it, You MUST NOT re-request an origin or destination that was given, and since at_time is optional and never blocks proceeding, You MUST NOT ask for it.
 - You MUST attempt Step 1 (resolve locations) before treating origin or
   destination as missing: an unmatched or ambiguous location is a matching
   problem to resolve there, not a missing parameter to ask for again. Only a
@@ -281,8 +282,8 @@ outside coverage rather than guessing a nearby road.
 
 ### plan_toll_route returns an `unavailable` junction leg
 This is expected when no single I-95 direction is fully open. Continue with
-the remaining planner steps and report it under **Unpriced junction**
-(Step 4) rather than treating it as a tool failure.
+the remaining planner steps and report its reason under **Known segment
+prices** (Step 4) rather than treating it as a tool failure.
 
 ### plan_toll_route returns an error
 There is no oracle-supported route between the resolved corridors. Report
