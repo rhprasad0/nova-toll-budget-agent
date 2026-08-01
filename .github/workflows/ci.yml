@@ -18,6 +18,7 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest
         if: hashFiles('**/test_*.py') != ''
+      - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 
   integration:
     runs-on: ubuntu-latest
