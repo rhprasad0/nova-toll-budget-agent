@@ -1637,6 +1637,18 @@ wheels = [
 ]
 
 [[package]]
+name = "strands-agents-sops"
+version = "1.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mcp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6c/e7/59ac10769f9e691587d77305d57fc7907ccdd2d84b3108963de7b1c71d70/strands_agents_sops-1.1.2.tar.gz", hash = "sha256:bfe0a906a0f5dd596abfe9ff4fda8958ad17f217a24aa6ae956023e6c06c8cbe", size = 45598, upload-time = "2026-04-15T23:05:59.328Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/db/e339541810f24fe420c0f5da4227371fd83de055f2db0b277fe8ba51d5af/strands_agents_sops-1.1.2-py3-none-any.whl", hash = "sha256:4851cfa7228b3272f63e9839346d86aa849d37d1610b982a2e2fff6e764d0c5f", size = 49494, upload-time = "2026-04-15T23:05:57.825Z" },
+]
+
+[[package]]
 name = "strands-agents-tools"
 version = "0.8.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1703,6 +1715,7 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "strands-agents-sops" },
 ]
 
 [package.metadata]
@@ -1720,6 +1733,7 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "strands-agents-sops", specifier = ">=1.1.2" },
 ]
 
 [[package]]
