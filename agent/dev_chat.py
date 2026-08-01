@@ -36,7 +36,8 @@ def configure_local_pricing_env() -> None:
         raise FileNotFoundError(
             f"{_CA_BUNDLE_PATH} missing -- run scripts/build_zips.sh first"
         )
-    os.environ.setdefault("AWS_PROFILE", "nova-toll")
+    if "AWS_ACCESS_KEY_ID" not in os.environ:
+        os.environ.setdefault("AWS_PROFILE", "nova-toll")
     os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
     os.environ.setdefault("DB_NAME", "nova_toll")
     os.environ.setdefault("DB_USER", "pricing_reader")

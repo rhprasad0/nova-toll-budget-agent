@@ -48,17 +48,28 @@ uv run python eval/examples/run_simulated_demo.py --check
 ```
 
 Both only validate deterministic, non-network logic (the turn-loop's stop
-conditions, and the demo `Case`'s shape). Profile generation, span-to-session
-mapping, and both judges only run live and are not covered by `--check`.
+conditions, and the demo `Case` and actor profile shapes). Span-to-session
+mapping and both judges only run live and are not covered by `--check`.
 
 ```bash
 AWS_PROFILE=nova-toll uv run python eval/examples/run_simulated_demo.py
 ```
 
 A live run spends across three billed surfaces for the one demo case:
-OpenAI (the agent under test), Bedrock (the simulator's profile generation,
-its conversational turns, and both judges), and RDS (the agent's pricing
-tools). The simulator's turns and both judges pin Claude Haiku 4.5
-(`us.anthropic.claude-haiku-4-5-20251001-v1:0`); profile generation is a
-bare `Agent(callback_handler=None)` with no model override available, so it
-always runs on `strands.Agent`'s own Bedrock default regardless.
+OpenAI (the agent under test), Bedrock (the simulator's conversational turns
+and both judges), and RDS (the agent's pricing tools). The simulator and judges
+use Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
+`NOVA_TOLL_EVAL_MODEL_ID` overrides that model for automated runs.
+
+## Nightly run
+
+`.github/workflows/nightly-evals.yml` runs the simulated-user demo every day at
+3:17 AM New York time and supports manual dispatch from `main`. Judge verdicts
+are observational; execution failures still fail the workflow. Each JSON report
+is retained as a GitHub artifact for 90 days.
+
+Nightly simulator and judge calls use the `nova-toll-nightly-eval` Bedrock
+application inference profile. In the AWS payer account, activate the `purpose`
+cost-allocation tag, then filter Cost Explorer or CUR by
+`project=nova-toll-budget-agent` and `purpose=nightly-eval`. Tag discovery and
+activation can each take up to 24 hours.
