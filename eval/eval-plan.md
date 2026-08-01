@@ -99,7 +99,7 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | :----------------------- | :------------------------------------------------------ |
 | **Language/Version**     | Python 3.13                                              |
 | **Evaluation Framework** | Strands Evals SDK (`strands-agents-evals`) — `Case`, `Experiment`, custom `Evaluator` subclasses |
-| **Evaluators**           | Code-based only: `LocationResolutionEvaluator` (per-turn trajectory + hard-label args), `NoFabricatedPriceEvaluator` (no tool ever fired + no `$` in output) |
+| **Evaluators**           | Code-based only: `LocationResolutionEvaluator` (per-turn response + hard-label args), `NoFabricatedPriceEvaluator` (no tool or currency amount) |
 | **Agent Integration**    | Direct import of `agent.toll_agent.build_agent` (same pattern as `tests/test_toll_agent_live.py`) |
 | **Results Storage**      | JSON files under `eval/results/` (gitignored) |
 
@@ -123,16 +123,8 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 
 ## Track 2: simulated-user conversations
 
-Track 1 above (`run_evaluation.py`) is a deterministic regression gate: a scripted second turn, exact-match evaluators, `--check` runs the real matching logic with zero network calls. It proves the agent handles one specific scripted follow-up, not that it can handle whatever clarifying question it actually asks.
-
-Track 2 is reusable **scaffolding** for future evals that need an LLM-simulated user (`strands_evals.ActorSimulator`) instead of a scripted turn, proved by one demo case. It is explicitly **not a regression gate** — both the simulated user and both judges below are LLMs, so results are not deterministic run to run. Files:
-
-- **`simulation_support.py`** — the reusable driver: `run_simulated_conversation` (pure turn-loop logic, what `--check` exercises), `build_telemetry` (must be called once from a script's `main()`, never at import — `StrandsEvalsTelemetry()` mutates the process-global OTel tracer provider), and `run_case_with_simulator` (the `task_function`-shaped entry point: attaches OTel baggage around each `agent(...)` call only — never around `simulator.act()` or construction — so the simulated user's own spans don't leak into the judged `Session`; raises if zero agent-invocation spans land in a session, turning a silent empty-trajectory eval into a clear failure).
-- **`examples/run_simulated_demo.py`** — a worked example, not maintained as part of the active harness, reusing Track 1's McLean scenario (`ambiguous-alias-mclean-multiturn`'s real oracle data: McLean fans out to `Route 123 - Dolley Madison Blvd` on I-66 ITB vs `Jones Branch Drive/Route 123` on I-495; `Westpark Drive` is a verified direct I-495 pair with the latter), but lets a simulated user answer the clarifying question instead of a scripted follow-up line.
-
-**Model:** both the simulator's conversational turns and both evaluators pin `model="us.anthropic.claude-haiku-4-5-20251001-v1:0"` (`_ACTOR_JUDGE_MODEL_ID` in `examples/run_simulated_demo.py`) — a cross-region Bedrock inference profile, the same ID this repo's agent itself used before its OpenAI Luna migration, confirmed still live via `aws bedrock list-inference-profiles` under the `nova-toll` profile. This does **not** cover `ActorSimulator`'s internal profile-generation step: that's an unconditional bare `Agent(callback_handler=None)` with no way to pass a model override at all, so it always runs on `strands.Agent`'s own Bedrock default regardless of what the simulator's `model=` or either evaluator's `model=` is set to — there's no way to make every Bedrock call in this flow use the same model. The agent under test keeps its real OpenAI Luna backend throughout, unaffected by any of this.
-
-- `GoalSuccessRateEvaluator` (assertion mode, via the case's `expected_assertion`) — `SESSION_LEVEL`, reads the whole conversation, so it's the primary check: did the agent avoid pricing on turn 1, ask about the interchange, then price the correct I-495 labels once told.
-- `HelpfulnessEvaluator` — `TRACE_LEVEL`, final turn only, a secondary answer-quality signal on top of the trajectory check above, not a replacement for it.
-
-`--check` in both files validates only deterministic, non-network logic (`simulation_support.py`: the turn-loop's stop conditions against a fake simulator; `examples/run_simulated_demo.py`: the demo `Case`'s shape). Profile generation, span-to-session mapping, and both judges only run live.
+Track 2 uses `ActorSimulator` for open-ended turns and is **not a regression
+gate**: the user and judges are LLMs. `simulation_support.py` keeps simulator
+spans out of the judged session; `examples/run_simulated_demo.py` shows the
+McLean case with pinned Haiku 4.5 judges. See `eval/README.md` for commands and
+`agent-sops/simulated-user-eval.sop.md` for the authoring checklist.

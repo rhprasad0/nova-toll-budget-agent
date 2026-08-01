@@ -74,6 +74,14 @@ def _contains_price(text: str) -> bool:
     return _PRICE_RE.search(text) is not None
 
 
+def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
+    return [
+        EvaluationOutput(
+            score=float(passed), test_pass=passed, reason=reason, label=label
+        )
+    ]
+
+
 def _metadata(case: Case[str, str]) -> dict[str, Any]:
     assert case.metadata is not None
     return case.metadata
@@ -143,44 +151,29 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
                     term.casefold() in response.casefold() for term in expected_terms
                 )
             ) or (entry.get("response_must_be_question") and "?" not in response):
-                return [
-                    EvaluationOutput(
-                        score=0.0,
-                        test_pass=False,
-                        reason=f"turn {entry['turn']}: response did not match expected behavior",
-                        label="response_mismatch",
-                    )
-                ]
+                return _result(
+                    False,
+                    f"turn {entry['turn']}: response did not match expected behavior",
+                    "response_mismatch",
+                )
 
             if expected_tool is None:
                 if actual_calls:
-                    return [
-                        EvaluationOutput(
-                            score=0.0,
-                            test_pass=False,
-                            reason=(
-                                f"turn {entry['turn']}: expected a clarifying "
-                                f"question with no tool call, but got "
-                                f"{[c['name'] for c in actual_calls]}"
-                            ),
-                            label="premature_tool_call",
-                        )
-                    ]
+                    return _result(
+                        False,
+                        f"turn {entry['turn']}: expected no tool call, got "
+                        f"{[c['name'] for c in actual_calls]}",
+                        "premature_tool_call",
+                    )
                 continue
 
             if len(actual_calls) != 1 or actual_calls[0]["name"] != expected_tool:
-                return [
-                    EvaluationOutput(
-                        score=0.0,
-                        test_pass=False,
-                        reason=(
-                            f"turn {entry['turn']}: expected exactly one call to "
-                            f"{expected_tool!r}, got "
-                            f"{[c['name'] for c in actual_calls]}"
-                        ),
-                        label="tool_mismatch",
-                    )
-                ]
+                return _result(
+                    False,
+                    f"turn {entry['turn']}: expected exactly one call to "
+                    f"{expected_tool!r}, got {[c['name'] for c in actual_calls]}",
+                    "tool_mismatch",
+                )
 
             expected_input: dict[str, Any] = entry.get("input", {})
             actual_input: dict[str, Any] = actual_calls[0]["input"]
@@ -192,27 +185,18 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
                 actual_input.get(key) == value for key, value in expected_input.items()
             )
             if not labels_match:
-                return [
-                    EvaluationOutput(
-                        score=0.0,
-                        test_pass=False,
-                        reason=(
-                            f"turn {entry['turn']}: {expected_tool} called with "
-                            f"{actual_input}, expected exact hard labels "
-                            f"{expected_input}"
-                        ),
-                        label="label_mismatch",
-                    )
-                ]
+                return _result(
+                    False,
+                    f"turn {entry['turn']}: {expected_tool} called with "
+                    f"{actual_input}, expected exact hard labels {expected_input}",
+                    "label_mismatch",
+                )
 
-        return [
-            EvaluationOutput(
-                score=1.0,
-                test_pass=True,
-                reason="every turn matched its expected tool call (or absence)",
-                label="resolved",
-            )
-        ]
+        return _result(
+            True,
+            "every turn matched its expected tool call (or absence)",
+            "resolved",
+        )
 
 
 class NoFabricatedPriceEvaluator(Evaluator[str, str]):
@@ -224,14 +208,11 @@ class NoFabricatedPriceEvaluator(Evaluator[str, str]):
     ) -> list[EvaluationOutput]:
         metadata: dict[str, Any] = evaluation_case.metadata or {}
         if not metadata.get("expect_no_price"):
-            return [
-                EvaluationOutput(
-                    score=1.0,
-                    test_pass=True,
-                    reason="case does not require a price-free response",
-                    label="not_applicable",
-                )
-            ]
+            return _result(
+                True,
+                "case does not require a price-free response",
+                "not_applicable",
+            )
 
         trajectory_by_turn: list[list[dict[str, Any]]] = metadata.get(
             "_trajectory_by_turn", []
@@ -240,26 +221,17 @@ class NoFabricatedPriceEvaluator(Evaluator[str, str]):
         contains_price = _contains_price(str(evaluation_case.actual_output or ""))
 
         if any_tool_called or contains_price:
-            return [
-                EvaluationOutput(
-                    score=0.0,
-                    test_pass=False,
-                    reason=(
-                        f"expected a coverage decline with no tool call and no "
-                        f"price, got tool_called={any_tool_called} "
-                        f"contains_price={contains_price}"
-                    ),
-                    label="fabricated_or_substituted",
-                )
-            ]
-        return [
-            EvaluationOutput(
-                score=1.0,
-                test_pass=True,
-                reason="no pricing tool called and no price stated",
-                label="declined_cleanly",
+            return _result(
+                False,
+                "expected a coverage decline with no tool call and no price, got "
+                f"tool_called={any_tool_called} contains_price={contains_price}",
+                "fabricated_or_substituted",
             )
-        ]
+        return _result(
+            True,
+            "no pricing tool called and no price stated",
+            "declined_cleanly",
+        )
 
 
 def main() -> None:
@@ -285,155 +257,103 @@ def main() -> None:
 def _self_check() -> None:
     """Exercise the pure matching logic against synthetic trajectories."""
     cases = load_cases()
-    assert len(cases) == 3
-    assert cases[0].name == "ambiguous-alias-mclean-multiturn"
+    assert [case.name for case in cases] == [
+        "ambiguous-alias-mclean-multiturn",
+        "unambiguous-case-insensitive-single-turn",
+        "uncovered-road-no-substitution",
+    ]
     assert cases[1].expected_trajectory == ["i95_route"]
     assert cases[2].expected_trajectory == []
 
-    assert _contains_price("Your trip costs $4.25 total.")
-    assert _contains_price("The toll is 4.25 dollars.")
-    assert _contains_price("The toll is USD 4.25.")
+    for price in ("$4.25", "4.25 dollars", "USD 4.25"):
+        assert _contains_price(price)
     assert not _contains_price("no price here")
 
     def _fake_case(
         metadata: dict[str, Any], actual_output: str = ""
     ) -> EvaluationData[str, str]:
         return EvaluationData[str, str](
-            input="x",
-            actual_output=actual_output,
-            name="x",
-            expected_output=None,
-            expected_assertion=None,
-            expected_trajectory=None,
-            actual_trajectory=None,
-            metadata=metadata,
-            actual_interactions=None,
-            expected_interactions=None,
-            actual_environment_state=None,
-            expected_environment_state=None,
+            input="x", actual_output=actual_output, metadata=metadata
         )
 
     resolver = LocationResolutionEvaluator()
-
-    # Shape 1: tool fired as expected, with exact hard-label args.
-    good = _fake_case(
-        {
-            "expected_trajectory": [
-                {
-                    "turn": 1,
-                    "tool": "i95_route",
-                    "input": {"origin": "A", "destination": "B"},
-                }
-            ],
-            "_trajectory_by_turn": [
-                [{"name": "i95_route", "input": {"origin": "A", "destination": "B"}}]
-            ],
-        }
-    )
-    assert resolver.evaluate(good)[0].test_pass is True
-
-    # Shape 2: no tool fired, as expected (clarifying-question turn).
-    clarifying = _fake_case(
-        {
-            "expected_trajectory": [{"turn": 1, "tool": None}],
-            "_trajectory_by_turn": [[]],
-        }
-    )
-    assert resolver.evaluate(clarifying)[0].test_pass is True
-
-    clarification_response: dict[str, Any] = {
-        "expected_trajectory": [
-            {
-                "turn": 1,
-                "tool": None,
-                "response_must_be_question": True,
-                "response_must_contain_any": ["I-495", "I-66"],
-            }
-        ],
-        "_trajectory_by_turn": [[]],
-        "_responses_by_turn": ["I cannot help with that."],
+    expected_route = {
+        "turn": 1,
+        "tool": "i495_route",
+        "input": {"origin": "A", "destination": "B"},
     }
-    assert resolver.evaluate(_fake_case(clarification_response))[0].test_pass is False
-    clarification_response["_responses_by_turn"] = ["Did you mean I-495 or I-66?"]
-    assert resolver.evaluate(_fake_case(clarification_response))[0].test_pass is True
-
-    # Shape 3: unexpected tool fired on a turn that should have clarified.
-    premature = _fake_case(
-        {
-            "expected_trajectory": [{"turn": 1, "tool": None}],
-            "_trajectory_by_turn": [
-                [{"name": "i95_route", "input": {"origin": "A", "destination": "B"}}]
-            ],
-        }
-    )
-    result = resolver.evaluate(premature)[0]
-    assert result.test_pass is False
-    assert result.label == "premature_tool_call"
-
-    # Wrong hard label reaching the tool -- fuzzy text instead of the exact
-    # oracle label -- must fail, not just "a tool was called".
-    fuzzy_label = _fake_case(
-        {
-            "expected_trajectory": [
-                {
-                    "turn": 1,
-                    "tool": "i95_route",
-                    "input": {"origin": "A", "destination": "B"},
-                }
-            ],
-            "_trajectory_by_turn": [
-                [
-                    {
-                        "name": "i95_route",
-                        "input": {"origin": "a-ish", "destination": "B"},
-                    }
-                ]
-            ],
-        }
-    )
-    result = resolver.evaluate(fuzzy_label)[0]
-    assert result.test_pass is False
-    assert result.label == "label_mismatch"
-
-    # An extra argument the case doesn't pin (e.g. i495_route's optional
-    # at_time) must not fail a case whose hard labels are correct.
-    extra_arg = _fake_case(
-        {
-            "expected_trajectory": [
-                {
-                    "turn": 1,
-                    "tool": "i495_route",
-                    "input": {"origin": "A", "destination": "B"},
-                }
-            ],
-            "_trajectory_by_turn": [
-                [
-                    {
-                        "name": "i495_route",
-                        "input": {"origin": "A", "destination": "B", "at_time": None},
-                    }
-                ]
-            ],
-        }
-    )
-    assert resolver.evaluate(extra_arg)[0].test_pass is True
+    actual_route = {
+        "name": "i495_route",
+        "input": {"origin": "A", "destination": "B", "at_time": None},
+    }
+    clarification = {
+        "turn": 1,
+        "tool": None,
+        "response_must_be_question": True,
+        "response_must_contain_any": ["I-495", "I-66"],
+    }
+    resolver_checks: list[tuple[dict[str, Any], str]] = [
+        (
+            {
+                "expected_trajectory": [expected_route],
+                "_trajectory_by_turn": [[actual_route]],
+            },
+            "resolved",
+        ),
+        (
+            {
+                "expected_trajectory": [clarification],
+                "_trajectory_by_turn": [[]],
+                "_responses_by_turn": ["I cannot help with that."],
+            },
+            "response_mismatch",
+        ),
+        (
+            {
+                "expected_trajectory": [clarification],
+                "_trajectory_by_turn": [[]],
+                "_responses_by_turn": ["Did you mean I-495 or I-66?"],
+            },
+            "resolved",
+        ),
+        (
+            {
+                "expected_trajectory": [{"turn": 1, "tool": None}],
+                "_trajectory_by_turn": [[actual_route]],
+            },
+            "premature_tool_call",
+        ),
+        (
+            {
+                "expected_trajectory": [expected_route],
+                "_trajectory_by_turn": [
+                    [
+                        {
+                            "name": "i495_route",
+                            "input": {"origin": "a-ish", "destination": "B"},
+                        }
+                    ]
+                ],
+            },
+            "label_mismatch",
+        ),
+    ]
+    for metadata, label in resolver_checks:
+        assert resolver.evaluate(_fake_case(metadata))[0].label == label
 
     price_check = NoFabricatedPriceEvaluator()
-
-    declined = _fake_case(
-        {"expect_no_price": True, "_trajectory_by_turn": [[]]},
-        actual_output="That road is outside coverage.",
-    )
-    assert price_check.evaluate(declined)[0].test_pass is True
-
-    fabricated = _fake_case(
-        {"expect_no_price": True, "_trajectory_by_turn": [[]]},
-        actual_output="That trip costs 3.50 dollars.",
-    )
-    assert price_check.evaluate(fabricated)[0].test_pass is False
-
-    not_applicable = _fake_case({"expect_no_price": False, "_trajectory_by_turn": [[]]})
-    assert price_check.evaluate(not_applicable)[0].label == "not_applicable"
+    for expect_no_price, output, label in (
+        (True, "That road is outside coverage.", "declined_cleanly"),
+        (True, "That trip costs 3.50 dollars.", "fabricated_or_substituted"),
+        (False, "", "not_applicable"),
+    ):
+        price_metadata: dict[str, Any] = {
+            "expect_no_price": expect_no_price,
+            "_trajectory_by_turn": [[]],
+        }
+        assert (
+            price_check.evaluate(_fake_case(price_metadata, output))[0].label == label
+        )
 
     print("self-check ok")
 

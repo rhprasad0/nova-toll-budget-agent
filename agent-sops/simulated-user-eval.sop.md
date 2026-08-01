@@ -112,7 +112,7 @@ Write a `strands_evals.Case[str, str]` with `name`, `input=initial_query`,
 - Inside the `task_function`, you MUST call
   `ActorSimulator.from_case_for_user_simulator(case=case, model=model_id, max_turns=max_turns)`
   and `build_agent()` fresh per case, then delegate to
-  `run_case_with_simulator(case, agent, simulator, str(case.input), telemetry, mapper)`.
+  `run_case_with_simulator(case.session_id, agent, simulator, str(case.input), telemetry, mapper)`.
 - You MUST NOT attach OpenTelemetry baggage (`session.id`, `gen_ai.conversation.id`) around the whole conversation loop or around `simulator.act()`/construction, because every `strands.Agent` in the process emits spans once telemetry is installed -- including the simulator's own internal actor and profile-generation agents -- and baggage active when a span starts gets stamped onto that span, so attaching it around the whole loop would fold the simulated user's own turns into the judged `Session`. `run_case_with_simulator` already scopes this correctly (per-`agent(...)`-call only); do not change that scoping.
 - You SHOULD set `max_turns` tight to the scenario's expected turn count
   (e.g. `2` for one clarification then one answer), not the SDK's default
@@ -162,46 +162,7 @@ Write a `strands_evals.Case[str, str]` with `name`, `input=initial_query`,
   that only ran `--check` has previously needed correcting in this repo's
   docs.
 
-## Examples
+## Reference
 
-### Example: ambiguous alias, multi-turn convergence
-
-**Input:**
-- scenario_name: `ambiguous-alias-mclean-simulated`
-- initial_query: `"Price a trip from McLean to Westpark Drive."`
-- task_description: `"Wants a toll price quote from McLean to Westpark Drive. McLean is ambiguous between two interchanges; the user means the I-495 one (Jones Branch Drive) and should say so plainly if asked which McLean they mean, without volunteering it unprompted."`
-- expected_assertion: `"The agent does not price any trip on its first response; it asks which McLean interchange is meant. After the user identifies the I-495 one, it prices Jones Branch Drive/Route 123 to Westpark Drive. It never quotes a price for the I-66 ITB interchange and never substitutes a different corridor."`
-
-**Expected Behavior:**
-Turn 1: the agent asks which McLean interchange is meant, no tool call.
-Turn 2: the simulated user identifies the I-495 interchange; the agent
-calls `i495_route` with the exact labels `Jones Branch Drive/Route 123` →
-`Westpark Drive` and reports a price. `GoalSuccessRateEvaluator` scores
-this against the assertion above; `HelpfulnessEvaluator` scores the final
-answer's clarity and completeness. See `eval/examples/run_simulated_demo.py`
-for the full implementation.
-
-## Troubleshooting
-
-### Live run fails with `DB_HOST` missing (or a similar tool-side config error)
-`main()` did not call `agent.dev_chat.configure_local_pricing_env()` before
-building the agent (Step 6). This is a setup gap, not an agent defect --
-add the call and rerun.
-
-### `run_case_with_simulator` raises "no agent-invocation spans captured"
-OpenTelemetry baggage was not attached before the agent call, or telemetry
-was installed after an agent call already resolved its tracer. Confirm
-`build_telemetry()` runs once in `main()` before any agent invocation, and
-that the `task_function` still delegates to `run_case_with_simulator`
-unmodified (Steps 1 and 5).
-
-### The judged `Session` includes turns the agent never actually said
-OpenTelemetry baggage was attached around the whole conversation loop (or
-around `simulator.act()`) instead of around each `agent(...)` call only,
-letting the simulator's own internal spans leak into the session (Step 5).
-
-### `ActorSimulator.from_case_for_user_simulator(case=case, ...)` fails pyright strict
-`strands_evals`'s `Case` parameter there is unparameterized (`Case`, not
-`Case[str, str]`) and the package ships no `py.typed` marker; expect to
-need a `# pyright: ignore[reportUnknownMemberType]` at that call site, the
-same convention already used in `eval/examples/run_simulated_demo.py`.
+Copy the working pattern in `eval/examples/run_simulated_demo.py`; commands and
+runtime prerequisites are in `eval/README.md`.
