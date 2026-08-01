@@ -1,11 +1,11 @@
 """End-to-end checks for direction-aware junction pricing.
 
-Hits live Bedrock (and, via the tools it calls, live RDS) -- deliberately
+Hits live OpenAI (and, via the tools it calls, live RDS) -- deliberately
 marked `live` and excluded from the default `pytest` run (see
 pyproject.toml addopts), same convention as
 tests/test_route_tools_live_crosscheck.py. Run explicitly:
 
-    uv run pytest -m live tests/test_toll_agent_live.py -v
+    AWS_PROFILE=nova-toll uv run pytest -m live tests/test_toll_agent_live.py -v
 
 Deliberately does not assert on dollar amounts: `trip_pricing_i95` refreshes
 every 10 minutes, so a hard-coded price fails
@@ -352,6 +352,16 @@ def live_pricing_env(monkeypatch):
     monkeypatch.setenv("DB_NAME", instance["DBName"])
     monkeypatch.setenv("DB_USER", "pricing_reader")
     monkeypatch.setenv("DB_CA_BUNDLE_PATH", str(CA_BUNDLE_PATH))
+
+
+def test_agent_reuses_the_explicit_system_prompt_cache():
+    warmup = build_agent()
+    warmup("Reply with exactly CACHE_WARMUP_1. Do not call tools.")
+
+    probe = build_agent()
+    response = probe("Reply with exactly CACHE_WARMUP_2. Do not call tools.")
+
+    assert response.metrics.accumulated_usage.get("cacheReadInputTokens", 0) > 0
 
 
 def test_dumfries_to_westpark_uses_the_unpriced_braddock_junction(

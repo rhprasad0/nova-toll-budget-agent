@@ -1,4 +1,4 @@
-"""toll_agent: a strands.Agent (Bedrock Claude Haiku) that prices NoVA trips
+"""toll_agent: a Strands GPT-5.6 Luna agent that prices NoVA trips
 by calling the route and junction tools in agent_tools/*.py. It never touches RDS or issues SQL
 itself; every price comes from one of those tools (the same
 constraint that led to lambdas/agent/* being deleted -- see README.md and
@@ -26,11 +26,16 @@ See docs/oracle-tools-spec.md for the tool contract this builds on.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+from typing import Any, cast, override
 
+import boto3
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
-from strands.models import BedrockModel, CacheToolsConfig
+from strands.models.openai_responses import OpenAIResponsesModel
+from strands.types.content import Messages
+from strands.types.tools import ToolChoice, ToolSpec
 
 from agent_tools import _oracle_route
 from agent_tools.dulles_route import (
@@ -140,6 +145,87 @@ _LOCATION_ALIASES = {
     "Dulles Airport": ["Route 28 (Dulles Toll Road / Dulles Greenway)"],
 }
 _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
+
+_AWS_REGION = "us-east-1"
+_OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
+_MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
+
+
+class _CachedResponsesModel(OpenAIResponsesModel):
+    """Cache the unchanged developer prompt before variable conversation input."""
+
+    @override
+    def _format_request(
+        self,
+        messages: Messages,
+        tool_specs: list[ToolSpec] | None = None,
+        system_prompt: str | None = None,
+        tool_choice: ToolChoice | None = None,
+        model_state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        request = super()._format_request(
+            messages, tool_specs, None, tool_choice, model_state
+        )
+        if system_prompt:
+            cast(list[dict[str, Any]], request["input"]).insert(
+                0,
+                {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": system_prompt,
+                            "prompt_cache_breakpoint": {"mode": "explicit"},
+                        }
+                    ],
+                },
+            )
+        return request
+
+
+def _load_openai_api_key() -> str:
+    ssm = cast(
+        Any,
+        boto3.client(  # pyright: ignore[reportUnknownMemberType]
+            "ssm", region_name=_AWS_REGION
+        ),
+    )
+    value = ssm.get_parameter(
+        Name=_OPENAI_API_KEY_PARAMETER,
+        WithDecryption=True,
+    )["Parameter"]["Value"]
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{_OPENAI_API_KEY_PARAMETER} is empty")
+    return value
+
+
+def _build_model() -> _CachedResponsesModel:
+    backend = os.environ.get(_MODEL_BACKEND_ENV, "openai")
+    params = {
+        "max_output_tokens": 2048,
+        "reasoning": {"effort": "low"},
+        "prompt_cache_key": "tollchat-agent-v1",
+        "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+    }
+    if backend == "openai":
+        return _CachedResponsesModel(
+            model_id="gpt-5.6-luna",
+            client_args={"api_key": _load_openai_api_key()},
+            params=params,
+            stateful=False,
+        )
+    if backend == "bedrock-mantle":
+        return _CachedResponsesModel(
+            model_id="openai.gpt-5.6-luna",
+            bedrock_mantle_config={"region": _AWS_REGION},
+            params=params,
+            stateful=False,
+        )
+    raise ValueError(
+        f"{_MODEL_BACKEND_ENV} must be 'openai' or 'bedrock-mantle', got {backend!r}"
+    )
+
 
 NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
     {
@@ -753,22 +839,8 @@ cannot provide a combined trip total.
 
 
 def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
-    model = BedrockModel(
-        # Bedrock rejects the plain model id for on-demand throughput
-        # (verified empirically: ValidationException, "Retry your request
-        # with the ID or ARN of an inference profile") -- the "us." prefix
-        # is the cross-region inference profile id, confirmed working.
-        model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        region_name="us-east-1",
-        temperature=0,  # deterministic tool routing, not creative prose
-        streaming=False,
-        max_tokens=2048,
-        # Keep the fixed tool schema prefix in Bedrock's 5-minute cache.
-        # The matching system-prompt cache point below extends that prefix.
-        cache_tools=CacheToolsConfig(type="default", ttl="5m"),
-    )
     return Agent(
-        model=model,
+        model=_build_model(),
         tools=[
             plan_toll_route,
             i95_junction_leg,
@@ -777,11 +849,7 @@ def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
             i66_route,
             dulles_route,
         ],
-        system_prompt=[
-            {"text": build_system_prompt()},
-            # Cache the static instructions after the cached tool definitions.
-            {"cachePoint": {"type": "default", "ttl": "5m"}},
-        ],
+        system_prompt=build_system_prompt(),
         trace_attributes=trace_attributes,
     )
 

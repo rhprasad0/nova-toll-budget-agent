@@ -101,6 +101,9 @@ S3 objects and RDS rows must not be destroyed.
   committing from that clone.
 - Keep VDOT feed tokens in SSM Parameter Store. Do not place them in source,
   Terraform variables, shell history, or this document.
+- Keep the OpenAI API key in SSM Parameter Store at
+  `/nova-toll/openai_api_key`. The agent reads it with decryption through the
+  ambient AWS identity; never export it, log it, or copy it into a local file.
 - Keep the Cloudflare API token in SSM Parameter Store
   (`var.cloudflare_api_token_param_name`, `infra/ssm.tf`), same as the VDOT
   feed tokens, but on its own dedicated KMS key rather than the shared

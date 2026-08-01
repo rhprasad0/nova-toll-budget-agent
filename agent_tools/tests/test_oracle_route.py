@@ -16,6 +16,7 @@ _EASTERN = ZoneInfo("America/New_York")
 def test_resolve_at_time_defaults_to_now_eastern():
     sentinel = datetime(2026, 7, 26, 12, 0, tzinfo=_EASTERN)
     assert _oracle_route.resolve_at_time(None, now=lambda: sentinel) == sentinel
+    assert _oracle_route.resolve_at_time("", now=lambda: sentinel) == sentinel
 
 
 def test_resolve_at_time_assumes_eastern_for_a_naive_string():
