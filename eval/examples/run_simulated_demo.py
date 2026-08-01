@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from strands_evals.evaluators import (  # noqa: E402
     GoalSuccessRateEvaluator,
     HelpfulnessEvaluator,
 )
+from strands_evals.types.simulation import ActorProfile  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
@@ -28,7 +30,8 @@ from eval.simulation_support import (  # noqa: E402
 
 _RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
-_ACTOR_JUDGE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+_MODEL_ID_ENV = "NOVA_TOLL_EVAL_MODEL_ID"
+_DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 _CASE = Case[str, str](
     name="ambiguous-alias-mclean-simulated",
@@ -51,14 +54,37 @@ _CASE = Case[str, str](
     ),
 )
 
+_ACTOR_PROFILE = ActorProfile(
+    traits={
+        "communication_style": "concise and direct",
+        "domain_knowledge": "ordinary driver unfamiliar with toll-system labels",
+        "disclosure": "identifies the intended McLean interchange only when asked",
+    },
+    context=(
+        "The driver is traveling from the I-495 McLean interchange at Jones Branch "
+        "Drive/Route 123 to Westpark Drive, not from the I-66 Inside the Beltway "
+        "McLean interchange."
+    ),
+    actor_goal=(
+        "Get an accurate toll quote from Jones Branch Drive/Route 123 to Westpark "
+        "Drive after clarifying which McLean interchange is intended."
+    ),
+)
+
 
 def main() -> None:
     configure_local_pricing_env()
     telemetry, mapper = build_telemetry()
+    model_id = os.environ.get(_MODEL_ID_ENV, _DEFAULT_MODEL_ID)
+    if not model_id:
+        raise ValueError(f"{_MODEL_ID_ENV} must not be empty")
 
     def task_function(case: Case[str, str]) -> dict[str, object]:
-        simulator = ActorSimulator.from_case_for_user_simulator(  # pyright: ignore[reportUnknownMemberType]
-            case=case, model=_ACTOR_JUDGE_MODEL_ID, max_turns=2
+        simulator = ActorSimulator(
+            actor_profile=_ACTOR_PROFILE,
+            initial_query=str(case.input),
+            model=model_id,
+            max_turns=2,
         )
         return run_case_with_simulator(
             case.session_id,
@@ -72,8 +98,8 @@ def main() -> None:
     experiment = Experiment[str, str](
         cases=[_CASE],
         evaluators=[
-            HelpfulnessEvaluator(model=_ACTOR_JUDGE_MODEL_ID),
-            GoalSuccessRateEvaluator(model=_ACTOR_JUDGE_MODEL_ID),
+            HelpfulnessEvaluator(model=model_id),
+            GoalSuccessRateEvaluator(model=model_id),
         ],
     )
     report = experiment.run_evaluations(task_function)
@@ -87,16 +113,13 @@ def main() -> None:
 
 
 def _self_check() -> None:
-    """No Bedrock/OpenAI/RDS calls -- just asserts the demo Case is
-    well-formed, same 'static fixture is well-formed' pattern as
-    run_evaluation.py's self-check. Cannot cover profile generation,
-    span-to-session mapping, or either judge -- those only run live."""
+    """Assert the static Case and actor profile without network calls."""
     assert _CASE.name == "ambiguous-alias-mclean-simulated"
     assert _CASE.input
     assert _CASE.expected_assertion
     assert "McLean" in _CASE.input
-    print("self-check ok (Case shape only -- see module docstring for what")
-    print("is not covered without a live run)")
+    assert "Jones Branch Drive/Route 123" in _ACTOR_PROFILE.actor_goal
+    print("self-check ok (Case and actor profile shapes; live integrations excluded)")
 
 
 if __name__ == "__main__":

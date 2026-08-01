@@ -226,6 +226,83 @@ resource "aws_iam_role_policy" "github_ci" {
   policy = data.aws_iam_policy_document.github_ci.json
 }
 
+# --- GitHub Actions nightly simulated-user evaluation ----------------------
+
+data "aws_iam_policy_document" "github_nightly_eval_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_nightly_eval" {
+  name               = "nova-toll-github-nightly-eval"
+  assume_role_policy = data.aws_iam_policy_document.github_nightly_eval_assume.json
+}
+
+data "aws_iam_policy_document" "github_nightly_eval" {
+  statement {
+    sid       = "ConnectRdsIam"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/pricing_reader"]
+  }
+
+  statement {
+    sid       = "DescribeRdsEndpoint"
+    actions   = ["rds:DescribeDBInstances"]
+    resources = [aws_db_instance.main.arn]
+  }
+
+  statement {
+    sid     = "ReadEvalParameters"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key",
+      aws_ssm_parameter.nightly_eval_bedrock_profile_arn.arn,
+    ]
+  }
+
+  statement {
+    sid       = "InvokeNightlyEvalProfile"
+    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [aws_bedrock_inference_profile.nightly_eval.arn]
+  }
+
+  statement {
+    sid     = "InvokeNightlyEvalModels"
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+    ]
+    condition {
+      test     = "ArnEquals"
+      variable = "bedrock:InferenceProfileArn"
+      values   = [aws_bedrock_inference_profile.nightly_eval.arn]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "github_nightly_eval" {
+  name   = "nova-toll-github-nightly-eval"
+  role   = aws_iam_role.github_nightly_eval.id
+  policy = data.aws_iam_policy_document.github_nightly_eval.json
+}
+
 # --- GitHub Actions CI (Terraform plan/apply) -------------------------------
 
 data "aws_iam_policy_document" "terraform_plan_assume" {

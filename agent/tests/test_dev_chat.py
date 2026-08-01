@@ -81,6 +81,7 @@ def test_local_server_discovers_its_read_only_database_environment(
         lambda: discovered.append(True),
     )
     for name in (
+        "AWS_ACCESS_KEY_ID",
         "AWS_PROFILE",
         "AWS_DEFAULT_REGION",
         "DB_NAME",
@@ -97,6 +98,20 @@ def test_local_server_discovers_its_read_only_database_environment(
     assert os.environ["DB_NAME"] == "nova_toll"
     assert os.environ["DB_USER"] == "pricing_reader"
     assert os.environ["DB_CA_BUNDLE_PATH"] == str(ca_bundle)
+
+
+def test_local_server_preserves_ambient_aws_credentials(monkeypatch, tmp_path):
+    monkeypatch.setattr(os, "environ", os.environ.copy())
+    ca_bundle = tmp_path / "rds-ca-bundle.pem"
+    ca_bundle.touch()
+    monkeypatch.setattr(dev_chat, "_CA_BUNDLE_PATH", ca_bundle)
+    monkeypatch.setattr(dev_chat, "configure_pricing_reader_rds_env", lambda: None)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "ambient")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+    configure_local_pricing_env()
+
+    assert "AWS_PROFILE" not in os.environ
 
 
 def test_chat_reuses_sessions_writes_raw_telemetry_and_resets(tmp_path):

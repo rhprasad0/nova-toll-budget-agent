@@ -50,6 +50,8 @@ uv pip install \
 # --- zip both, deterministically ---
 zip_stage() {  # <stage_dir> <out.zip>
   local stage="$1" out="$2"
+  find "$stage" -type f ! -name .lock -exec chmod 0644 {} +
+  find "$stage" -type f -name '*.so.*' -exec chmod 0755 {} +
   find "$stage" -exec touch -d "$EPOCH" {} +
   ( cd "$stage" && find . -type f | LC_ALL=C sort | zip -qX "$out" -@ )
 }

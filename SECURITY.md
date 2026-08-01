@@ -78,6 +78,18 @@ The public chat agent is not deployed yet. Its release gate is documented in
   (`infra/kms.tf`) specifically so the plan role's decrypt grant doesn't
   also cover the VDOT feed tokens or Tailscale authkey.
 
+## Implemented hardening (2026-08-01)
+
+- Nightly simulated-user evaluations use a dedicated GitHub OIDC role trusted
+  only for `main`. Its permissions are limited to the read-only pricing path,
+  the two required SSM parameters, and the tagged Claude Haiku application
+  inference profile plus its underlying regional models. The workflow cannot
+  invoke arbitrary Bedrock models.
+- Bedrock evaluation costs are attributed through an application inference
+  profile tagged `project=nova-toll-budget-agent` and
+  `purpose=nightly-eval`; the payer account must activate the `purpose`
+  cost-allocation tag before it appears in Cost Explorer or CUR.
+
 ## Deployment verification
 
 Historical verification after the 2026-07-26 deployment:
