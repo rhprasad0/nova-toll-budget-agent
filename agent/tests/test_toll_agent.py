@@ -1,6 +1,7 @@
 """Prompt-content and request-shape assertions only -- no AWS calls/network."""
 
 import json
+import re
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -678,21 +679,30 @@ def test_location_aliases_only_point_to_priced_labels():
     } <= priced_labels
 
 
-def test_system_prompt_uses_structured_claude_prompt_sections():
+def test_system_prompt_is_an_agent_sop():
     prompt = build_system_prompt()
-    for section in (
-        "role",
-        "tool_rules",
-        "priced_location_oracle",
-        "location_aliases",
-        "routing_context",
-        "network_transfers",
-        "response_format",
-        "examples",
+    for heading in (
+        "# Nova Toll Pricing Assistant",
+        "## Overview",
+        "## Parameters",
+        "## Steps",
+        "### 1. Resolve locations",
+        "### 2. Plan the route",
+        "### 3. Price each leg",
+        "### 4. Report the result",
+        "## Examples",
+        "## Troubleshooting",
     ):
-        assert f"<{section}>" in prompt
-        assert f"</{section}>" in prompt
-    assert prompt.count("<example>") == 3
+        assert heading in prompt
+    assert "**Constraints for parameter acquisition:**" in prompt
+    assert "**Constraints:**" in prompt
+    assert prompt.count("### Example ") == 3
+    assert "You MUST" in prompt
+
+
+def test_system_prompt_has_no_unresolved_placeholders():
+    prompt = build_system_prompt()
+    assert re.findall(r"(?<!\$)\{[A-Z_]+\}", prompt) == []
 
 
 def test_system_prompt_requires_auditable_price_reporting():
