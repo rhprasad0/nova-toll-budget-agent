@@ -70,6 +70,8 @@ profile, Tailscale access, and a CA bundle built by `scripts/build_zips.sh`.
 Direct OpenAI is the default model backend. After Bedrock access is approved,
 the same Responses API and cache plumbing can use Mantle with
 `TOLLCHAT_MODEL_BACKEND=bedrock-mantle`; no prompt changes are required.
+Both backends use stateful Responses so tool and reasoning context continues
+through the provider response ID.
 
 From your workstation, tunnel it before opening `http://127.0.0.1:8000`:
 
@@ -78,8 +80,9 @@ ssh -L 8000:127.0.0.1:8000 <host>
 ```
 
 The console keeps one conversation until **Reset chat** or server shutdown.
-Raw prompts, answers, tool messages, and metrics append to the ignored
-`.tollchat/telemetry.jsonl`; Strands trace spans also print to the server console.
+Raw prompts, answers, and metrics append to the ignored
+`.tollchat/telemetry.jsonl`; `metrics.traces` is the local tool audit trail, and
+Strands trace spans also print to the server console.
 Inspect the JSONL with `tail -f .tollchat/telemetry.jsonl`.
 It uses the same read-only AWS/RDS environment as the live agent tests and is
 not a public preview.

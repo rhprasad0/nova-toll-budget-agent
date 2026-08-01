@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import os
@@ -84,7 +83,6 @@ class DevChat:
                     "answer": answer,
                     "result": result.to_dict(),
                     "metrics": result.metrics.get_summary(),
-                    "messages": copy.deepcopy(agent.messages),
                     "duration_ms": round((time.perf_counter() - started) * 1000),
                 }
         except Exception as error:
@@ -98,7 +96,6 @@ class DevChat:
                     "message": str(error),
                     "traceback": "".join(traceback.format_exception(error)),
                 },
-                "messages": copy.deepcopy(agent.messages),
                 "duration_ms": round((time.perf_counter() - started) * 1000),
             }
             self._append(record)

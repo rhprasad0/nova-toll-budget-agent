@@ -35,6 +35,7 @@ import boto3
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
 from strands.models.openai_responses import OpenAIResponsesModel
 from strands.types.content import Messages
+from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolChoice, ToolSpec
 
 from agent_tools import _oracle_route
@@ -183,6 +184,16 @@ class _CachedResponsesModel(OpenAIResponsesModel):
             )
         return request
 
+    @override
+    def _format_chunk(self, event: dict[str, Any]) -> StreamEvent:
+        chunk = super()._format_chunk(event)
+        if event["chunk_type"] == "metadata":
+            details = getattr(event["data"], "input_tokens_details", None)
+            written = getattr(details, "cache_write_tokens", None)
+            if isinstance(written, int):
+                cast(Any, chunk)["metadata"]["usage"]["cacheWriteInputTokens"] = written
+        return chunk
+
 
 def _load_openai_api_key() -> str:
     ssm = cast(
@@ -213,14 +224,14 @@ def _build_model() -> _CachedResponsesModel:
             model_id="gpt-5.6-luna",
             client_args={"api_key": _load_openai_api_key()},
             params=params,
-            stateful=False,
+            stateful=True,
         )
     if backend == "bedrock-mantle":
         return _CachedResponsesModel(
             model_id="openai.gpt-5.6-luna",
             bedrock_mantle_config={"region": _AWS_REGION},
             params=params,
-            stateful=False,
+            stateful=True,
         )
     raise ValueError(
         f"{_MODEL_BACKEND_ENV} must be 'openai' or 'bedrock-mantle', got {backend!r}"

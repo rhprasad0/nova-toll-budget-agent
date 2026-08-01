@@ -4,6 +4,7 @@ import json
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from strands.models.openai_responses import OpenAIResponsesModel
@@ -741,7 +742,7 @@ def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch
     assert request["max_output_tokens"] == 2048
     assert request["prompt_cache_key"] == "tollchat-agent-v1"
     assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
-    assert request["store"] is False
+    assert request["store"] is True
     assert "temperature" not in request
     assert "instructions" not in request
     assert "test-openai-key" not in json.dumps(request)
@@ -769,6 +770,32 @@ def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch
         "dulles_route",
     ]
 
+    continued = agent.model._format_request(
+        messages=[], model_state={"response_id": "resp_test"}
+    )
+    assert continued["previous_response_id"] == "resp_test"
+
+
+def test_agent_reports_prompt_cache_reads_and_writes(monkeypatch):
+    monkeypatch.setattr(toll_agent_module, "_load_openai_api_key", lambda: "test-key")
+    model = toll_agent_module._build_model()
+    chunk = model._format_chunk(
+        {
+            "chunk_type": "metadata",
+            "data": SimpleNamespace(
+                input_tokens=100,
+                output_tokens=10,
+                total_tokens=110,
+                input_tokens_details=SimpleNamespace(
+                    cached_tokens=80, cache_write_tokens=0
+                ),
+            ),
+        }
+    )
+
+    assert chunk["metadata"]["usage"]["cacheReadInputTokens"] == 80
+    assert chunk["metadata"]["usage"]["cacheWriteInputTokens"] == 0
+
 
 def test_agent_keeps_the_bedrock_mantle_backend_ready(monkeypatch):
     monkeypatch.setenv("TOLLCHAT_MODEL_BACKEND", "bedrock-mantle")
@@ -780,6 +807,7 @@ def test_agent_keeps_the_bedrock_mantle_backend_ready(monkeypatch):
     agent = build_agent()
 
     assert agent.model.get_config()["model_id"] == "openai.gpt-5.6-luna"
+    assert agent.model.stateful is True
     assert agent.model.client_args == {}
     assert agent.model._bedrock_mantle_config == {"region": "us-east-1"}
 

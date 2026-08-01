@@ -1711,7 +1711,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "openai", specifier = ">=2.45.0,<3" },
     { name = "psycopg", extras = ["binary"] },
-    { name = "strands-agents", extras = ["openai"], specifier = ">=1.50.2" },
+    { name = "strands-agents", extras = ["openai"], specifier = "==1.50.2" },
     { name = "strands-agents-evals", specifier = ">=1.0.3" },
 ]
 

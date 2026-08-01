@@ -249,8 +249,9 @@ def i95_junction_leg(
             ),
         }
 
+    effective_at_time = at_time or None
     try:
-        resolved_at_time = _oracle_route.resolve_at_time(at_time)
+        resolved_at_time = _oracle_route.resolve_at_time(effective_at_time)
     except ValueError as e:
         return {
             "error": f"invalid at_time {at_time!r}: {e}",
@@ -264,7 +265,7 @@ def i95_junction_leg(
                 direction: _fetch_i95_row(
                     cur,
                     od_pair_id,
-                    resolved_at_time if at_time is not None else None,
+                    resolved_at_time if effective_at_time is not None else None,
                 )
                 for direction, od_pair_id in _STATUS_OD_PAIR_IDS.items()
             }
@@ -310,7 +311,7 @@ def i95_junction_leg(
                     priced_leg = _price_i95_leg(
                         cur,
                         route["legs"][0],
-                        resolved_at_time if at_time is not None else None,
+                        resolved_at_time if effective_at_time is not None else None,
                     )
                     status_interval = next(iter(intervals)).isoformat()
                     if priced_leg["priced_as_of"] != status_interval:

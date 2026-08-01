@@ -14,7 +14,7 @@
   .note { color: #8b949e; } button { cursor: pointer; }
 </style>
 <header><h1>TollChat dev console</h1><button id="reset" type="button">Reset chat</button></header>
-<p class="note">Loopback-only. Raw prompts, responses, tool messages, and metrics are stored in <code>.tollchat/telemetry.jsonl</code>.</p>
+<p class="note">Loopback-only. Raw prompts, responses, and metrics traces are stored in <code>.tollchat/telemetry.jsonl</code>.</p>
 <main id="messages" aria-live="polite"></main>
 <form id="chat"><textarea id="message" required maxlength="8000" placeholder="Price a trip from Dumfries to Westpark"></textarea><button>Send</button></form>
 <script>
