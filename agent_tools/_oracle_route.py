@@ -241,9 +241,8 @@ def run(
     if "error" in result:
         return _miss(tool_name, origin, destination, result)
 
-    effective_at_time = at_time or None
     try:
-        resolved_at_time = resolve_at_time(effective_at_time)
+        resolved_at_time = resolve_at_time(at_time)
     except ValueError as e:
         return _miss(
             tool_name,
@@ -258,7 +257,7 @@ def run(
             priced_leg = price_fn(
                 cur,
                 result["legs"][0],
-                resolved_at_time if effective_at_time is not None else None,
+                resolved_at_time if at_time else None,
             )
     except PricingError as e:
         return _miss(

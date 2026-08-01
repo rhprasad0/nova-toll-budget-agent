@@ -219,10 +219,11 @@ def test_price_queries_select_the_vdot_observation_timestamp(case: Case):
     assert all("calculated_at" in price_sql for price_sql in price_sqls)
 
 
-def test_current_price_uses_the_vdot_view(monkeypatch, case: Case):
+@pytest.mark.parametrize("at_time", [None, ""])
+def test_current_price_uses_the_vdot_view(monkeypatch, case: Case, at_time):
     conn = FakeConnection([case.row])
     monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
-    case.tool(case.origin, case.destination)
+    case.tool(case.origin, case.destination, at_time=at_time)
     price_sql, params = conn.cur.queries[0]
     assert case.current_price_view in price_sql
     assert "trip_pricing_i95_live" not in price_sql
