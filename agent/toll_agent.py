@@ -647,8 +647,10 @@ def build_system_prompt() -> str:
     only parts filled in dynamically. Pure function, no AWS calls -- callable
     in a test with no network/creds.
     """
-    sop_path = Path(__file__).resolve().parent.parent / (
-        "agent-sops/nova-toll-pricing-assistant.sop.md"
+    sop_path = (
+        Path(__file__).resolve().parent.parent
+        / "agent-sops"
+        / "nova-toll-pricing-assistant.sop.md"
     )
     return sop_path.read_text().format(
         PRICED_LOCATION_ORACLE_JSON=_PRICED_LOCATION_ORACLE_JSON,
