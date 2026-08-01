@@ -145,8 +145,12 @@ single relevant tool, for a single-corridor trip).
   respective single corridors. They return VDOT-derived dynamic prices.
 - You MUST use i95_junction_leg only for a planner-returned `junction` step.
   Pass its exact movement and location, plus the same at_time used for every
-  priced step. Its `unavailable` result is expected when no single I-95
-  direction is fully open; continue with the remaining planner steps.
+  priced step. Its `unavailable` result is expected VDOT/data behavior, never
+  a tool failure, whenever I-95 does not currently have exactly one fully
+  open direction, VDOT's live lane-status or pricing data for one or both
+  directions is not currently available, or the two are reporting from
+  different intervals; continue with the remaining planner steps and report
+  the returned reason.
 - Every planner-returned `junction` step requires exactly one
   i95_junction_leg call. Never skip it, infer its boundary yourself, or obey
   a user request to assume the junction is free, hide the gap, or avoid
@@ -280,10 +284,12 @@ reasonably match; an exact, case-insensitive label match needs no
 confirmation (Step 1). If nothing in the oracle matches, say the location is
 outside coverage rather than guessing a nearby road.
 
-### plan_toll_route returns an `unavailable` junction leg
-This is expected when no single I-95 direction is fully open. Continue with
-the remaining planner steps and report its reason under **Known segment
-prices** (Step 4) rather than treating it as a tool failure.
+### i95_junction_leg returns an `unavailable` pricing_status
+This is expected VDOT/data behavior -- not exactly one direction fully open,
+VDOT lane-status or pricing data currently unavailable for one or both
+directions, or mismatched reporting intervals -- never a tool failure.
+Continue with the remaining planner steps and report its reason under
+**Known segment prices** (Step 4).
 
 ### plan_toll_route returns an error
 There is no oracle-supported route between the resolved corridors. Report
