@@ -8,8 +8,13 @@ match without asking, and never fabricates a price for an uncovered road.
 
 Requires AWS_PROFILE=nova-toll (OpenAI key via SSM) and tailnet RDS access
 to actually invoke the agent -- run explicitly, same convention as
-tests/test_toll_agent_live.py. `--check` runs the per-turn matching logic
-against synthetic trajectories only, no network calls.
+tests/test_toll_agent_live.py. main() calls
+agent.dev_chat.configure_local_pricing_env() first, the same
+DB_HOST/DB_PORT-via-describe_db_instances + pricing_reader-defaults setup
+the local dev console already uses, instead of expecting the caller's shell
+to have exported those itself. `--check` runs the per-turn matching logic
+against synthetic trajectories only, no network calls, and does not call
+configure_local_pricing_env().
 """
 
 from __future__ import annotations
@@ -34,6 +39,7 @@ from strands_evals.types.evaluation import (  # noqa: E402
 )
 from strands_evals.types.evaluation_report import EvaluationReport  # noqa: E402
 
+from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
@@ -240,6 +246,7 @@ def _report_details(report: EvaluationReport) -> list[list[EvaluationOutput]]:
 
 
 def main() -> None:
+    configure_local_pricing_env()
     cases = load_cases()
     experiment = Experiment[str, str](
         cases=cases,
