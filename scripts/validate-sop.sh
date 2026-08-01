@@ -24,7 +24,7 @@ echo ""
 # Check file extension
 if [[ ! "$SOP_FILE" =~ \.sop\.md$ ]]; then
     echo "❌ File must use .sop.md extension"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
 fi
 
 # Check required sections
@@ -33,7 +33,7 @@ check_section() {
     local pattern="$2"
     if ! grep -q "$pattern" "$SOP_FILE"; then
         echo "❌ Missing required section: $section"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
         return 1
     fi
     echo "✅ Section present: $section"
@@ -49,7 +49,7 @@ check_section "Steps" "^## Steps"
 if grep -q "^## Parameters" "$SOP_FILE"; then
     if ! grep -A 20 "^## Parameters" "$SOP_FILE" | grep -q "Constraints for parameter acquisition"; then
         echo "❌ Parameters section missing 'Constraints for parameter acquisition'"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
     else
         echo "✅ Parameter constraints present"
     fi
@@ -57,7 +57,7 @@ if grep -q "^## Parameters" "$SOP_FILE"; then
     # Check for blank line after Parameters heading
     if ! grep -A 1 "^## Parameters$" "$SOP_FILE" | tail -1 | grep -q "^$"; then
         echo "❌ Parameters section must have blank line after heading"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
     else
         echo "✅ Blank line after Parameters heading"
     fi
@@ -66,7 +66,7 @@ fi
 # Check for numbered steps
 if ! grep -q "^### [0-9]\+\." "$SOP_FILE"; then
     echo "❌ No numbered steps found (format: ### 1. Step Name)"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
 else
     echo "✅ Numbered steps present"
 fi
@@ -74,7 +74,7 @@ fi
 # Check for Constraints sections in steps
 if ! grep -q "^\*\*Constraints:\*\*" "$SOP_FILE"; then
     echo "❌ No Constraints sections found in steps"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
 else
     echo "✅ Constraints sections present"
 fi
@@ -82,7 +82,7 @@ fi
 # Check for RFC 2119 keywords
 if ! grep -qE "You (MUST|SHOULD|MAY)" "$SOP_FILE"; then
     echo "⚠️  No RFC 2119 keywords found (MUST, SHOULD, MAY)"
-    ((WARNINGS++))
+    WARNINGS=$((WARNINGS + 1))
 else
     echo "✅ RFC 2119 keywords present"
 fi
@@ -90,18 +90,18 @@ fi
 # Check for negative constraints without context
 if grep -E "You (MUST NOT|SHOULD NOT)" "$SOP_FILE" | grep -v "because\|since\|as\|to avoid" > /dev/null 2>&1; then
     echo "⚠️  Negative constraints found without context (add 'because', 'since', etc.)"
-    ((WARNINGS++))
+    WARNINGS=$((WARNINGS + 1))
 fi
 
 # Recommend Examples and Troubleshooting
 if ! grep -q "^## Examples" "$SOP_FILE"; then
     echo "⚠️  Recommended section missing: Examples"
-    ((WARNINGS++))
+    WARNINGS=$((WARNINGS + 1))
 fi
 
 if ! grep -q "^## Troubleshooting" "$SOP_FILE"; then
     echo "⚠️  Recommended section missing: Troubleshooting"
-    ((WARNINGS++))
+    WARNINGS=$((WARNINGS + 1))
 fi
 
 echo ""
