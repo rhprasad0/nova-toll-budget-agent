@@ -347,6 +347,12 @@ resource "aws_iam_role_policy_attachment" "terraform_plan_readonly" {
 
 data "aws_iam_policy_document" "terraform_plan" {
   statement {
+    sid       = "ListNightlyEvalProfileTags"
+    actions   = ["bedrock:ListTagsForResource"]
+    resources = [aws_bedrock_inference_profile.nightly_eval.arn]
+  }
+
+  statement {
     # ReadOnlyAccess excludes kms:Decrypt (a write-level action in AWS's own
     # classification). Scoped to exactly the two keys `terraform plan` needs
     # to read: encrypted state, and the Cloudflare token it must decrypt to
