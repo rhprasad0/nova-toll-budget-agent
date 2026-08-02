@@ -29,7 +29,8 @@ _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _FORBIDDEN_TOTAL_RE = re.compile(
     r"\b(?:subtotal|final total|combined total|complete total|final price)\b|"
-    r"\btotal\s*(?:is|:)\s*\$",
+    r"\b(?:total|complete(?: trip)? price)\s*"
+    r"(?:is|:|comes to|equals)\s*\$",
     re.I,
 )
 _ARITHMETIC_RE = re.compile(r"\$\s*\d+(?:\.\d{2})?\s*[+=]", re.I)
@@ -37,7 +38,8 @@ _DOLLAR_AMOUNT_RE = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)")
 _ZERO_DOLLARS_RE = re.compile(r"\bzero[- ]dollars?\b", re.I)
 _FREE_CLAIM_RE = re.compile(
     r"\b(?:junction|gap)\s+(?:is|was)\s+free\b|"
-    r"\btreat(?:ed|ing)?\s+(?:the\s+)?(?:junction|gap)\s+as\s+free\b",
+    r"\btreat(?:ed|ing)?\s+(?:the\s+)?(?:junction|gap)\s+as\s+free\b|"
+    r"\b(?:junction|gap)\s+costs?\s+nothing\b",
     re.I,
 )
 _UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
@@ -302,8 +304,13 @@ def evaluate_junction_response(
 
     expected_junction: dict[str, Any] = metadata["expected_junction"]
     if expected_junction["pricing_status"] == "unavailable":
-        if not _UNAVAILABLE_RE.search(response) or not _GENERAL_PURPOSE_RE.search(
-            response
+        if (
+            not any(
+                "i-95" in line.casefold() and _UNAVAILABLE_RE.search(line)
+                for line in response.splitlines()
+            )
+            or "fully open direction" not in folded
+            or not _GENERAL_PURPOSE_RE.search(response)
         ):
             return _result(
                 False,
@@ -547,6 +554,12 @@ def _self_check() -> None:
         == "fabricated_total"
     )
     assert (
+        evaluate_junction_response(
+            response + " The complete trip price comes to $3.50.", calls, metadata
+        )[0].label
+        == "fabricated_total"
+    )
+    assert (
         evaluate_junction_response(response + " Extra fare: $99.99", calls, metadata)[
             0
         ].label
@@ -567,7 +580,36 @@ def _self_check() -> None:
         )[0].label
         == "free_claim"
     )
-    print("self-check ok (10 fixtures and six required mutation invariants)")
+    assert (
+        evaluate_junction_response(
+            response + " The unpriced gap costs nothing.", calls, metadata
+        )[0].label
+        == "free_claim"
+    )
+    unavailable_calls = [
+        calls[0],
+        {
+            **calls[1],
+            "tool_result": {"pricing_status": "unavailable"},
+        },
+        calls[2],
+    ]
+    unavailable_response = (
+        "**Known segment prices**\n"
+        "- I-495 Near Braddock Road to Westpark Drive: $4.25 at "
+        "7/29/2026 10:00 AM ET\n"
+        "**Unpriced junction** to Braddock. The I-95 general-purpose lanes "
+        "are an unpriced alternative. **Complete price unavailable**"
+    )
+    assert (
+        evaluate_junction_response(
+            unavailable_response,
+            unavailable_calls,
+            cast(dict[str, Any], cases[4].metadata),
+        )[0].label
+        == "unavailable_missing"
+    )
+    print("self-check ok (10 fixtures and nine required mutation invariants)")
 
 
 if __name__ == "__main__":
