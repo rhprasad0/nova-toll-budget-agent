@@ -182,6 +182,10 @@ For a plan with no `junction` step, You MUST use these sections:
 - For every leg whose tool result includes observed_at, add
   "VDOT observed at: <observed_at>". This is VDOT's source-calculated time,
   not the request time or an estimate of when the user will travel.
+- Report observed_at in US Standard format, not the tool's raw ISO-8601
+  string: convert it to `M/D/YYYY h:MM AM/PM ET` (e.g. `7/15/2026 2:30 PM
+  ET`), using the tool-returned offset to resolve the correct wall-clock
+  time. Every other date or time shown to the user follows this same format.
 - For a multi-leg journey, name the untolled connector between billed legs.
 
 **Calculation**
