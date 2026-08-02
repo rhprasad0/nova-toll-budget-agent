@@ -33,13 +33,17 @@ previously only said to copy `observed_at` through verbatim.
       `USFormatEvaluator` (checks the final response's timestamp is
       US-formatted, not raw ISO-8601). Include a `--check` self-test.
 - [x] Write `eval/deterministic/ny_time_us_format/README.md`.
-- [ ] Wire the deterministic suite into `.github/workflows/ci.yml`'s
+- [x] Wire the deterministic suite into `.github/workflows/ci.yml`'s
       `integration` job (same pattern as the fuzzy-location step).
-- [ ] Write `eval/simulated/simulated_user_ny_time_us_format.py` (relative
+- [x] Write `eval/simulated/simulated_user_ny_time_us_format.py` (relative
       date phrasing, `HelpfulnessEvaluator` + `GoalSuccessRateEvaluator`,
       observational per the Track 2 convention). Include `--check`.
-- [ ] Wire it into `.github/workflows/nightly-evals.yml` alongside the
-      existing simulated-user job.
-- [ ] Update `eval/README.md` with commands for both new suites.
-- [ ] Run `--check` self-tests, `ruff`, `pyright`; live-run the deterministic
-      suite if RDS/Bedrock access allows.
+- [x] Add `tests/test_simulated_user_ny_time_us_format.py` (mocked
+      model-plumbing test, same pattern as the fuzzy-location suite's).
+- [x] Wire it into `.github/workflows/nightly-evals.yml` alongside the
+      existing simulated-user step.
+- [x] Per-suite READMEs already cover commands (no separate top-level
+      `eval/README.md` exists in this repo -- it was folded into each
+      suite's own `README.md` in `7337f4b`).
+- [ ] Run `--check` self-tests, `ruff`, `pyright`, `pytest`; live-run the
+      deterministic suite if RDS/Bedrock access allows.
