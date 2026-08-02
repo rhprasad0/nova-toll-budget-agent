@@ -10,6 +10,8 @@ Give 1-2 sentence explanations on more complex topics. Offer to make explanatory
 
 Perform work in new branches instead of working in the main branch. The main branch is protected, so new changes need to be in a PR and pass CI - but do not open a new PR or push without user authorization.
 
+Open pull requests ready for review. Do not create draft pull requests.
+
 # Tools
 
 Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa search for other search tasks.

@@ -178,19 +178,21 @@ Save each completed report as timestamped JSON under `eval/results/`.
   technically valid, premise-faithful results as observed.
 - You SHOULD commit only representative, technically valid JSON reports and put
   ad hoc or broken runs outside the curated index.
+- Before committing any report, You MUST update `eval/results/README.md` and run
+  gitleaks, whether or not the report repairs or compares with an earlier run.
 - Claims in `eval-report.md` MUST cite raw telemetry when tool counts or ordering
   matter.
 
 ### 9. Place the eval in automation
 
-Add stable, code-graded live regressions to the trusted internal-PR integration
-job in `.github/workflows/ci.yml`. Add stochastic simulated-user runners to
-`.github/workflows/nightly-evals.yml`, which uploads reports as artifacts.
+Add non-network `--check` modes to ordinary CI. Run all live-agent evaluations,
+whether code-graded or LLM-judged, in `.github/workflows/nightly-evals.yml`,
+which uploads reports as artifacts.
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
-- You MUST NOT run paid simulation on every PR because it is stochastic and
-  consumes OpenAI, Bedrock, and RDS resources.
+- You MUST NOT run live-agent evaluation on every PR because agent execution is
+  stochastic and consumes OpenAI and RDS resources, plus Bedrock for simulation.
 - You MUST keep fork and Dependabot restrictions on trusted integration jobs to
   avoid exposing production connectivity.
 - You MUST update the suite README and eval plan when execution or CI coverage
