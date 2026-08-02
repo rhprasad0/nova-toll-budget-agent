@@ -325,9 +325,22 @@ def evaluate_junction_response(
         if not result or result.get("pricing_status") == "unavailable":
             continue
         price = result.get("total_usd")
-        if price and f"${price}" not in response:
+        entry = str(result.get("entry", {}).get("label", ""))
+        exit_ = str(result.get("exit", {}).get("label", ""))
+        if price and (
+            not entry
+            or not exit_
+            or not any(
+                entry.casefold() in line.casefold()
+                and exit_.casefold() in line.casefold()
+                and f"${price}" in line
+                for line in response.splitlines()
+            )
+        ):
             return _result(
-                False, f"captured segment price ${price} is missing", "price_missing"
+                False,
+                f"captured segment price ${price} is not bound to {entry} -> {exit_}",
+                "price_leg_mismatch",
             )
         for leg in result.get("legs", []):
             observed_at = leg.get("observed_at")
@@ -390,10 +403,12 @@ def main() -> None:
         raise SystemExit("direction-aware 95/495 junction evaluation failed")
 
 
-def _priced_result(*, entry: str, exit_: str, price: str = "4.25") -> dict[str, Any]:
+def _priced_result(
+    *, entry: tuple[str, str], exit_: tuple[str, str], price: str = "4.25"
+) -> dict[str, Any]:
     return {
-        "entry": {"node_id": entry},
-        "exit": {"node_id": exit_},
+        "entry": {"node_id": entry[0], "label": entry[1]},
+        "exit": {"node_id": exit_[0], "label": exit_[1]},
         "at_time": "2026-07-29T10:10:00-04:00",
         "legs": [
             {
@@ -450,7 +465,11 @@ def _self_check() -> None:
         ],
     }
     junction = {
-        **_priced_result(entry="210NO", exit_="206ND", price="3.50"),
+        **_priced_result(
+            entry=("210NO", "US-1"),
+            exit_=("206ND", "Franconia-Springfield Parkway/Route 289"),
+            price="3.50",
+        ),
         "pricing_status": "priced",
         "direction": "Northbound",
         "lane_statuses": {"Northbound": "NORTHBOUND_OPEN", "Southbound": "CLOSED"},
@@ -473,12 +492,19 @@ def _self_check() -> None:
         {
             "name": "i495_route",
             "input": metadata["expected_calls"][2]["input"],
-            "tool_result": _priced_result(entry="191NO", exit_="173ND"),
+            "tool_result": _priced_result(
+                entry=("191NO", "I-495 Near Braddock Road"),
+                exit_=("173ND", "Westpark Drive"),
+            ),
         },
     ]
     response = (
-        "**Known segment prices** $3.50 at 7/29/2026 10:00 AM ET; $4.25 at "
-        "7/29/2026 10:00 AM ET. **Unpriced junction** Franconia-Springfield "
+        "**Known segment prices**\n"
+        "- US-1 to Franconia-Springfield Parkway/Route 289: $3.50 at "
+        "7/29/2026 10:00 AM ET\n"
+        "- I-495 Near Braddock Road to Westpark Drive: $4.25 at "
+        "7/29/2026 10:00 AM ET\n"
+        "**Unpriced junction** Franconia-Springfield "
         "to Braddock. "
         "**Complete price unavailable**"
     )
@@ -526,13 +552,22 @@ def _self_check() -> None:
         ].label
         == "fabricated_amount"
     )
+    swapped = (
+        response.replace("$3.50", "$SWAP", 1)
+        .replace("$4.25", "$3.50", 1)
+        .replace("$SWAP", "$4.25", 1)
+    )
+    assert (
+        evaluate_junction_response(swapped, calls, metadata)[0].label
+        == "price_leg_mismatch"
+    )
     assert (
         evaluate_junction_response(
             response + " The junction is free.", calls, metadata
         )[0].label
         == "free_claim"
     )
-    print("self-check ok (10 fixtures and five required mutation invariants)")
+    print("self-check ok (10 fixtures and six required mutation invariants)")
 
 
 if __name__ == "__main__":
