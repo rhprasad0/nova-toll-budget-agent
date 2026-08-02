@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -78,7 +78,6 @@ def load_cases() -> list[Case[str, str]]:
                         "trip. The origin, destination, and time are complete and "
                         "must never change."
                     ),
-                    "simulation_follow_up": _follow_up(row),
                 },
                 expected_assertion=(
                     "Across all three turns, the agent keeps the fixed trip facts, "
@@ -113,10 +112,8 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
     )
 
 
-def build_helpfulness_evaluator(
-    model_id: str, today: date | None = None
-) -> HelpfulnessEvaluator[str, str]:
-    evaluation_date = today or datetime.now(ZoneInfo("America/New_York")).date()
+def build_helpfulness_evaluator(model_id: str) -> HelpfulnessEvaluator[str, str]:
+    evaluation_date = datetime.now(ZoneInfo("America/New_York")).date()
     evaluator: HelpfulnessEvaluator[str, str] = HelpfulnessEvaluator(model=model_id)
     evaluator.system_prompt += (
         "\n\n# Evaluation context\n"
@@ -232,21 +229,11 @@ def _self_check() -> None:
     assert len({case.name for case in cases}) == 8
     assert all(case.input and case.expected_assertion for case in cases)
     assert all((case.metadata or {}).get("task_description") for case in cases)
-    assert all((case.metadata or {}).get("simulation_follow_up") for case in cases)
     assert all(
         "exactly three turns" in build_actor_profile(case).actor_goal for case in cases
     )
-    assert (
-        sum("VDOT" in (case.metadata or {})["simulation_follow_up"] for case in cases)
-        == 6
-    )
-    assert (
-        sum(
-            "Greenway" in (case.metadata or {})["simulation_follow_up"]
-            for case in cases
-        )
-        == 2
-    )
+    assert "VDOT" in _follow_up(cases[0].metadata or {})
+    assert "Greenway" in _follow_up(cases[-1].metadata or {})
     bad = SingleLegSimulationTraceEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )

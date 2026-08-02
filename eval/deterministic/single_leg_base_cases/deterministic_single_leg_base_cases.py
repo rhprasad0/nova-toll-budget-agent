@@ -33,6 +33,12 @@ _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+\.\d{2})")
 _RAW_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?")
 _REQUIRED_HEADINGS = ("route and fares", "calculation", "final price")
+_ROUTE_ALIASES = {
+    "I-95-NB": "I-95 northbound",
+    "I-95-SB": "I-95 southbound",
+    "I-495-NB": "I-495 northbound",
+    "I-495-SB": "I-495 southbound",
+}
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
@@ -57,10 +63,6 @@ def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
             score=float(passed), test_pass=passed, reason=reason, label=label
         )
     ]
-
-
-def _report_passed(test_passes: list[bool]) -> bool:
-    return all(test_passes)
 
 
 def _turns(evaluation_case: EvaluationData[str, str]) -> list[dict[str, Any]]:
@@ -94,42 +96,6 @@ def _tool_result(call: dict[str, Any]) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             return None
     return cast(dict[str, Any], value) if isinstance(value, dict) else None
-
-
-def _subset_difference(
-    expected: object, actual: object, path: str = "result"
-) -> str | None:
-    if isinstance(expected, dict):
-        if not isinstance(actual, dict):
-            return f"{path} is not an object"
-        expected_dict = cast(dict[str, object], expected)
-        actual_dict = cast(dict[str, object], actual)
-        for key, value in expected_dict.items():
-            if key not in actual_dict:
-                return f"{path}.{key} is missing"
-            if difference := _subset_difference(
-                value, actual_dict[key], f"{path}.{key}"
-            ):
-                return difference
-        return None
-    if isinstance(expected, list):
-        expected_list = cast(list[object], expected)
-        if not isinstance(actual, list):
-            return f"{path} expected {len(expected_list)} item(s), got non-list"
-        actual_list = cast(list[object], actual)
-        if len(actual_list) != len(expected_list):
-            return (
-                f"{path} expected {len(expected_list)} item(s), got {len(actual_list)}"
-            )
-        for index, value in enumerate(expected_list):
-            if difference := _subset_difference(
-                value, actual_list[index], f"{path}[{index}]"
-            ):
-                return difference
-        return None
-    return (
-        None if actual == expected else f"{path} expected {expected!r}, got {actual!r}"
-    )
 
 
 def evaluate_single_leg_calls(
@@ -169,8 +135,15 @@ def evaluate_single_leg_calls(
     legs = captured.get("legs")
     if not isinstance(legs, list) or len(cast(list[object], legs)) != 1:
         return _result(False, "pricing result was not exactly one leg", "leg_count")
-    if difference := _subset_difference(metadata["expected_result"], captured):
-        return _result(False, difference, "result_mismatch")
+    mismatches = [
+        key
+        for key, value in metadata["expected_result"].items()
+        if captured.get(key) != value
+    ]
+    if mismatches:
+        return _result(
+            False, f"result mismatched keys: {mismatches}", "result_mismatch"
+        )
     return _result(True, "exact single-leg fixture matched", "exact_result")
 
 
@@ -204,12 +177,7 @@ def _term_present(response: str, term: str) -> bool:
 
 
 def _route_term_present(response: str, term: str) -> bool:
-    humanized = {
-        "I-95-NB": "I-95 northbound",
-        "I-95-SB": "I-95 southbound",
-        "I-495-NB": "I-495 northbound",
-        "I-495-SB": "I-495 southbound",
-    }.get(term)
+    humanized = _ROUTE_ALIASES.get(term)
     return _term_present(response, term) or bool(
         humanized and _term_present(response, humanized)
     )
@@ -309,7 +277,7 @@ def main() -> None:
     report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
-    if not _report_passed(report.test_passes):
+    if not all(report.test_passes):
         raise SystemExit("deterministic single-leg base evaluation failed")
 
 
@@ -341,6 +309,18 @@ def _self_check() -> None:
             metadata=metadata,
         )
 
+    def trace_label(
+        metadata: dict[str, Any], calls: list[dict[str, Any]]
+    ) -> str | None:
+        return trace.evaluate(fake(metadata, calls))[0].label
+
+    def response_label(
+        metadata: dict[str, Any], call: dict[str, Any], output: str
+    ) -> str | None:
+        return response.evaluate(fake(metadata, [call], output))[0].label
+
+    prepared: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+
     for metadata in rows:
         expected = metadata["expected_trajectory"][0]
         call = {
@@ -348,64 +328,6 @@ def _self_check() -> None:
             "input": expected["input"],
             "tool_result": json.dumps(metadata["expected_result"]),
         }
-        assert trace.evaluate(fake(metadata, [call]))[0].label == "exact_result"
-        assert (
-            trace.evaluate(
-                fake(
-                    metadata, [{**call, "input": {**expected["input"], "extra": True}}]
-                )
-            )[0].label
-            == "exact_result"
-        )
-        assert trace.evaluate(fake(metadata, []))[0].label == "tool_mismatch"
-        assert trace.evaluate(fake(metadata, [call, call]))[0].label == "tool_mismatch"
-        assert (
-            trace.evaluate(fake(metadata, [{**call, "name": "plan_toll_route"}]))[
-                0
-            ].label
-            == "tool_mismatch"
-        )
-        assert (
-            trace.evaluate(
-                fake(
-                    metadata,
-                    [{**call, "input": {**expected["input"], "at_time": "wrong"}}],
-                )
-            )[0].label
-            == "input_mismatch"
-        )
-        assert (
-            trace.evaluate(fake(metadata, [{**call, "tool_result": "not-json"}]))[
-                0
-            ].label
-            == "bad_result"
-        )
-        assert (
-            trace.evaluate(fake(metadata, [{**call, "tool_result": {"error": "no"}}]))[
-                0
-            ].label
-            == "tool_error"
-        )
-        extra_leg = cast(dict[str, Any], metadata["expected_result"]).copy()
-        extra_leg["legs"] = [{}, {}]
-        assert (
-            trace.evaluate(fake(metadata, [{**call, "tool_result": extra_leg}]))[
-                0
-            ].label
-            == "leg_count"
-        )
-        wrong_result = json.loads(json.dumps(metadata["expected_result"]))
-        if "total_usd" in wrong_result:
-            wrong_result["total_usd"] = "999.99"
-        else:
-            wrong_result["tolls"][0]["price_usd"] = "999.99"
-        assert (
-            trace.evaluate(fake(metadata, [{**call, "tool_result": wrong_result}]))[
-                0
-            ].label
-            == "result_mismatch"
-        )
-
         fare = metadata["expected_final_usd"]
         origin = expected["input"]["origin"]
         destination = expected["input"]["destination"]
@@ -414,14 +336,8 @@ def _self_check() -> None:
             if metadata.get("expected_observed_display")
             else f"Rate period: {metadata['expected_rate_period']}"
         )
-        displayed_route = str(
-            {
-                "I-95-NB": "I-95 northbound",
-                "I-95-SB": "I-95 southbound",
-                "I-495-NB": "I-495 northbound",
-                "I-495-SB": "I-495 southbound",
-                "dulles_greenway": "Dulles Greenway",
-            }.get(metadata["expected_route_label"], metadata["expected_route_label"])
+        displayed_route = _ROUTE_ALIASES.get(
+            metadata["expected_route_label"], metadata["expected_route_label"]
         )
         good_output = (
             "## Route and fares\n"
@@ -433,45 +349,71 @@ def _self_check() -> None:
             "## Final price\n"
             f"${fare}"
         )
-        assert (
-            response.evaluate(fake(metadata, [call], good_output))[0].label
-            == "grounded_response"
-        )
-        assert (
-            response.evaluate(
-                fake(
-                    metadata, [call], good_output.replace(displayed_route, "wrong road")
-                )
-            )[0].label
-            == "route_missing"
-        )
-        assert (
-            response.evaluate(
-                fake(metadata, [call], good_output.replace("Calculation", "Math"))
-            )[0].label
-            == "sections_missing"
-        )
-        assert (
-            response.evaluate(
-                fake(metadata, [call], good_output.replace(f"${fare}", "$999.99"))
-            )[0].label
-            == "wrong_money"
-        )
-        assert (
-            response.evaluate(
-                fake(metadata, [call], good_output.replace(" = ", " + "))
-            )[0].label
-            == "bad_math"
-        )
-        if metadata.get("expected_observed_display"):
-            raw = good_output + " 2026-07-29T10:00:00-04:00"
-            assert (
-                response.evaluate(fake(metadata, [call], raw))[0].label
-                == "raw_datetime"
-            )
+        assert trace_label(metadata, [call]) == "exact_result"
+        assert response_label(metadata, call, good_output) == "grounded_response"
+        prepared.append((metadata, call, good_output))
 
-    assert _report_passed([True, True])
-    assert not _report_passed([True, False])
+    metadata, call, good_output = prepared[0]
+    expected = metadata["expected_trajectory"][0]
+    assert (
+        trace_label(metadata, [{**call, "input": {**expected["input"], "extra": True}}])
+        == "exact_result"
+    )
+    assert trace_label(metadata, []) == "tool_mismatch"
+    assert trace_label(metadata, [call, call]) == "tool_mismatch"
+    assert (
+        trace_label(metadata, [{**call, "name": "plan_toll_route"}]) == "tool_mismatch"
+    )
+    assert (
+        trace_label(
+            metadata, [{**call, "input": {**expected["input"], "at_time": "wrong"}}]
+        )
+        == "input_mismatch"
+    )
+    assert trace_label(metadata, [{**call, "tool_result": "not-json"}]) == "bad_result"
+    assert (
+        trace_label(metadata, [{**call, "tool_result": {"error": "no"}}])
+        == "tool_error"
+    )
+    extra_leg: dict[str, Any] = {**metadata["expected_result"], "legs": [{}, {}]}
+    assert trace_label(metadata, [{**call, "tool_result": extra_leg}]) == "leg_count"
+    wrong_result = {**metadata["expected_result"], "total_usd": "999.99"}
+    assert (
+        trace_label(metadata, [{**call, "tool_result": wrong_result}])
+        == "result_mismatch"
+    )
+
+    displayed_route = _ROUTE_ALIASES[metadata["expected_route_label"]]
+    assert (
+        response_label(
+            metadata, call, good_output.replace(displayed_route, "wrong road")
+        )
+        == "route_missing"
+    )
+    assert (
+        response_label(metadata, call, good_output.replace("Calculation", "Math"))
+        == "sections_missing"
+    )
+    fare = metadata["expected_final_usd"]
+    assert (
+        response_label(metadata, call, good_output.replace(f"${fare}", "$999.99"))
+        == "wrong_money"
+    )
+    assert (
+        response_label(metadata, call, good_output.replace(" = ", " + ")) == "bad_math"
+    )
+    assert (
+        response_label(metadata, call, good_output + " 2026-07-29T10:00:00-04:00")
+        == "raw_datetime"
+    )
+
+    metadata, call, _ = prepared[-1]
+    wrong_result = json.loads(json.dumps(metadata["expected_result"]))
+    wrong_result["tolls"][0]["price_usd"] = "999.99"
+    assert (
+        trace_label(metadata, [{**call, "tool_result": wrong_result}])
+        == "result_mismatch"
+    )
     print("self-check ok (8 fixtures and synthetic grader mutations; no network)")
 
 
