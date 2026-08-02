@@ -10,7 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from opentelemetry import baggage, context
 from strands import Agent
@@ -19,6 +19,7 @@ from strands_evals.evaluators import GoalSuccessRateEvaluator, HelpfulnessEvalua
 from strands_evals.mappers.strands_in_memory_session_mapper import (
     StrandsInMemorySessionMapper,
 )
+from strands_evals.types.evaluation_report import EvaluationReport
 from strands_evals.types.simulation import ActorProfile, ActorResponse
 from strands_evals.types.trace import AgentInvocationSpan, Session
 
@@ -88,6 +89,23 @@ def run_case_with_simulator(
     return {"output": output, "trajectory": session}
 
 
+def raise_for_evaluation_errors(report: EvaluationReport) -> None:
+    """Raise for SDK-isolated task/evaluator errors, not ordinary verdicts."""
+    errors: list[str] = []
+    cases = cast(list[dict[str, Any]], cast(Any, report).cases)
+    for index, case in enumerate(cases):
+        details = (
+            report.detailed_results[index]
+            if index < len(report.detailed_results)
+            else []
+        )
+        if not details:
+            reason = report.reasons[index] if index < len(report.reasons) else ""
+            errors.append(f"{case.get('name', f'case {index}')}: {reason}")
+    if errors:
+        raise RuntimeError("evaluation execution failed: " + "; ".join(errors))
+
+
 def run_simulated_evaluation(
     case: Case[str, str],
     actor_profile: ActorProfile,
@@ -126,6 +144,7 @@ def run_simulated_evaluation(
     report.to_file(str(results_dir / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
+    raise_for_evaluation_errors(report)
 
 
 class _FakeSimulator:

@@ -28,7 +28,8 @@ resolves and exports `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_NAME`/`DB_CA_BUNDLE_PATH`
 itself via `agent.dev_chat.configure_local_pricing_env()` (same helper the
 local dev console uses). Run `scripts/build_zips.sh` once first to create the
 gitignored RDS CA bundle; after that, only `AWS_PROFILE` is needed. Results
-land in `eval/results/<timestamp>.json` (gitignored).
+land in `eval/results/<timestamp>.json`; representative valid runs may be curated
+in the repository's results index.
 
 The trusted `integration` job in `.github/workflows/ci.yml` runs this suite as
 a regression gate. Any failed evaluator makes the command exit nonzero.

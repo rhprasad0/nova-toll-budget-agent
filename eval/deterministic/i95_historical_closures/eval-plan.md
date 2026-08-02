@@ -109,6 +109,7 @@ eval/
 | :-- | :-- | :-- |
 | 2026-08-02 | Planning | Four Issue #17 historical closure cases; one deterministic and one simulated-user case for each; follow existing patterns. |
 | 2026-08-02 | Execution | User authorized one billed live simulated-user run across OpenAI, Bedrock, and historical RDS. |
+| 2026-08-02 | Remediation | Use three-turn simulations, make execution errors fail the command, harden adversarial response grading, and curate representative evaluation evidence for recruiters. |
 
 ### 6.2 Evaluation Progress
 
@@ -117,4 +118,5 @@ eval/
 | 2026-08-02 | Plan and test data | Completed | Scope and pinned inputs taken from Issue #17 and existing historical route-tool tests. |
 | 2026-08-02 | Code-graded live regression | Completed | Offline grader mutation checks passed; no billed live run was authorized. |
 | 2026-08-02 | Simulated implementation | Completed | All four case shapes passed offline checks. |
-| 2026-08-02 | Simulated live evaluation | Completed | Four cases and both judges passed (8/8); overall score 0.83. Valid report: `eval/results/20260802T162820Z.json`. An earlier `20260802T162428Z.json` attempt is invalid because the Codex shell's loopback `OPENAI_BASE_URL` caused HTTP 404 errors. |
+| 2026-08-02 | Initial simulated live evaluation | Superseded | The one-turn report and its failed setup attempt were removed when the simulation expanded to three turns. |
+| 2026-08-02 | Three-turn simulated live evaluation | Completed | Technically valid run with no execution errors: 3/8 judgments passed, overall score 0.4165. Repeated route calls and mixed follow-up helpfulness are preserved in `eval/results/20260802T165649Z.json`. |

@@ -31,10 +31,12 @@ from agent.toll_agent import build_agent  # noqa: E402
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*\d|\b\d+\.\d{2}\b|\b(?:USD|dollars?)\b", re.I)
-_UNAVAILABLE_RE = re.compile(
-    r"\b(?:unavailable|closed|cannot\s+(?:provide|price))\b", re.I
+_UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
+_GENERAL_PURPOSE_RE = re.compile(
+    r"\b(?:I-95\s+general[- ]purpose lanes|general[- ]purpose lanes\s+"
+    r"(?:on|of)\s+(?:the\s+)?I-95)\b",
+    re.I,
 )
-_GENERAL_PURPOSE_RE = re.compile(r"\bgeneral[- ]purpose lanes\b", re.I)
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
 
 
@@ -229,7 +231,7 @@ def _self_check() -> None:
 
     def fake(
         calls: list[dict[str, Any]],
-        output: str = "Lane is CLOSED; use the I-95 general-purpose lanes.",
+        output: str = "Lane is unavailable; use the I-95 general-purpose lanes.",
     ) -> EvaluationData[str, str]:
         return EvaluationData[str, str](
             input="x",
@@ -273,9 +275,27 @@ def _self_check() -> None:
     )
     assert (
         response.evaluate(
-            fake([call], "Unavailable; general-purpose lanes cost $6.75.")
+            fake([call], "Unavailable; I-95 general-purpose lanes cost $6.75.")
         )[0].label
         == "fare_quoted"
+    )
+    assert (
+        response.evaluate(
+            fake(
+                [call],
+                "The I-95 lanes are not closed; use the I-66 general-purpose lanes.",
+            )
+        )[0].label
+        == "not_refused"
+    )
+    assert (
+        response.evaluate(
+            fake(
+                [call],
+                "The I-95 Express Lanes are unavailable; use general-purpose lanes on I-66.",
+            )
+        )[0].label
+        == "alternative_missing"
     )
     assert _report_passed([True, True])
     assert not _report_passed([True, False])

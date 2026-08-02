@@ -1,6 +1,9 @@
 from unittest.mock import Mock
 
+import pytest
 from strands_evals import Case
+from strands_evals.types.evaluation import EvaluationOutput
+from strands_evals.types.evaluation_report import EvaluationReport
 from strands_evals.types.simulation import ActorProfile
 
 from eval import simulation_support
@@ -15,7 +18,7 @@ def test_all_eval_calls_use_configured_model(monkeypatch, tmp_path):
     def capture(component):
         return lambda **kwargs: models.append((component, kwargs["model"])) or Mock()
 
-    report = Mock(overall_score=1.0)
+    report = Mock(overall_score=1.0, cases=[], detailed_results=[], reasons=[])
 
     def run_evaluations(_self, task):
         task(Case[str, str](name="x", input="x"))
@@ -49,3 +52,39 @@ def test_all_eval_calls_use_configured_model(monkeypatch, tmp_path):
         ("goal-success", model_id),
         ("actor", model_id),
     ]
+
+
+def test_ordinary_judge_failure_does_not_raise():
+    report = EvaluationReport(
+        overall_score=0.0,
+        scores=[0.0],
+        cases=[{"name": "ordinary-failure"}],
+        test_passes=[False],
+        reasons=["judge said no"],
+        detailed_results=[
+            [
+                EvaluationOutput(
+                    score=0.0,
+                    test_pass=False,
+                    reason="judge said no",
+                    label="NO",
+                )
+            ]
+        ],
+    )
+
+    simulation_support.raise_for_evaluation_errors(report)
+
+
+def test_execution_error_raises():
+    report = EvaluationReport(
+        overall_score=0.0,
+        scores=[0.0],
+        cases=[{"name": "execution-error"}],
+        test_passes=[False],
+        reasons=["An error occurred: provider unavailable"],
+        detailed_results=[[]],
+    )
+
+    with pytest.raises(RuntimeError, match="execution-error"):
+        simulation_support.raise_for_evaluation_errors(report)

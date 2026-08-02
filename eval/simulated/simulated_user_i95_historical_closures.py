@@ -22,6 +22,7 @@ from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
+    raise_for_evaluation_errors,
     run_case_with_simulator,
 )
 
@@ -80,7 +81,7 @@ def main() -> None:
 
     def task_function(case: Case[str, str]) -> dict[str, object]:
         simulator = ActorSimulator.from_case_for_user_simulator(  # pyright: ignore[reportUnknownMemberType]
-            case=case, model=model_id, max_turns=1
+            case=case, model=model_id, max_turns=3
         )
         return run_case_with_simulator(
             case.session_id,
@@ -102,6 +103,7 @@ def main() -> None:
     report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
+    raise_for_evaluation_errors(report)
 
 
 def _self_check() -> None:

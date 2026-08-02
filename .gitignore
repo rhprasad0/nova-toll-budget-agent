@@ -9,8 +9,6 @@ __pycache__/
 .hermes/
 .aws/
 .tollchat/
-eval/results/
-
 .mcp.json
 /.agents/
 /.codex/
