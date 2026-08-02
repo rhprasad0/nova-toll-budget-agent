@@ -44,6 +44,11 @@ _FREE_CLAIM_RE = re.compile(
 )
 _UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
 _GENERAL_PURPOSE_RE = re.compile(r"\bI-95\s+general[- ]purpose lanes\b", re.I)
+_BOTH_DIRECTIONS_CLOSED_RE = re.compile(
+    r"\bboth\s+I-95(?:/395)?(?:\s+Express Lanes)?\s+directions?\s+"
+    r"(?:(?:are|were)\s+)?closed\b",
+    re.I,
+)
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
 
 
@@ -309,7 +314,10 @@ def evaluate_junction_response(
                 "i-95" in line.casefold() and _UNAVAILABLE_RE.search(line)
                 for line in response.splitlines()
             )
-            or "fully open direction" not in folded
+            or (
+                "fully open direction" not in folded
+                and not _BOTH_DIRECTIONS_CLOSED_RE.search(response)
+            )
             or not _GENERAL_PURPOSE_RE.search(response)
         ):
             return _result(
@@ -614,7 +622,20 @@ def _self_check() -> None:
         )[0].label
         == "unavailable_missing"
     )
-    print("self-check ok (10 fixtures and ten required mutation invariants)")
+    closed_response = unavailable_response.replace(
+        "**Unpriced junction**",
+        "I-95 is unavailable because both I-95 directions closed. "
+        "**Unpriced junction**",
+    )
+    assert (
+        evaluate_junction_response(
+            closed_response,
+            unavailable_calls,
+            cast(dict[str, Any], cases[4].metadata),
+        )[0].label
+        == "grounded"
+    )
+    print("self-check ok (10 fixtures and eleven required mutation invariants)")
 
 
 if __name__ == "__main__":
