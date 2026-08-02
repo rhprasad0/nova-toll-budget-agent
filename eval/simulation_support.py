@@ -36,14 +36,15 @@ def run_simulated_conversation(
 ) -> str:
     """Drive agent and simulator turns until the simulator stops."""
     user_message = first_message
-    response = ""
+    responses: list[str] = []
     while simulator.has_next():
         response = agent_turn(user_message)
+        responses.append(response)
         result = cast(SimpleNamespace, simulator.act(response))
         actor_response = cast(ActorResponse, result.structured_output)
         message = actor_response.message
         user_message = message if isinstance(message, str) else ""
-    return response
+    return "\n\n".join(responses)
 
 
 def build_telemetry() -> tuple[StrandsEvalsTelemetry, StrandsInMemorySessionMapper]:
@@ -174,10 +175,14 @@ def _self_check() -> None:
         return f"response to {message!r}"
 
     result = run_simulated_conversation(
-        fake_agent_turn, _FakeSimulator(turns=2), "hello"
+        fake_agent_turn, _FakeSimulator(turns=3), "hello"
     )
-    assert len(calls) == 2, calls
-    assert result == "response to 'next question'", result
+    assert len(calls) == 3, calls
+    assert result == (
+        "response to 'hello'\n\n"
+        "response to 'next question'\n\n"
+        "response to 'next question'"
+    ), result
 
     calls.clear()
     result = run_simulated_conversation(
