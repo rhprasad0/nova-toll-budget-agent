@@ -202,16 +202,23 @@ def _route_endpoints_present(response: str, origin: str, destination: str) -> bo
 
 def _route_term_present(response: str, term: str) -> bool:
     humanized = _ROUTE_ALIASES.get(term)
-    return _term_present(response, term) or bool(
-        humanized
-        and (
-            _term_present(response, humanized)
-            or (
-                term.startswith("I-95-")
-                and _term_present(response, humanized.replace("I-95", "I-95/395"))
-            )
-        )
-    )
+    if _term_present(response, term):
+        return True
+    if not humanized:
+        return False
+    facility, direction = humanized.rsplit(" ", 1)
+    facilities = [facility]
+    if term.startswith("I-95-"):
+        facilities.append(facility.replace("I-95", "I-95/395"))
+    opposite = {
+        "northbound": "southbound",
+        "southbound": "northbound",
+        "eastbound": "westbound",
+        "westbound": "eastbound",
+    }[direction]
+    return any(
+        _term_present(response, name) for name in facilities
+    ) and not _term_present(response, opposite)
 
 
 class SingleLegResponseEvaluator(Evaluator[str, str]):
@@ -505,6 +512,14 @@ def _self_check() -> None:
     )
     assert response_label(metadata, call, general_lanes) == "route_missing"
 
+    metadata, call, good_output = prepared[1]
+    omitted_direction = good_output.replace(
+        " Express Lanes southbound", " Express Lanes"
+    )
+    assert response_label(metadata, call, omitted_direction) == "grounded_response"
+    wrong_direction = good_output.replace("southbound", "northbound")
+    assert response_label(metadata, call, wrong_direction) == "route_missing"
+
     metadata, call, good_output = prepared[4]
     assert (
         response_label(
@@ -527,6 +542,8 @@ def _self_check() -> None:
     )
 
     metadata, call, good_output = prepared[5]
+    omitted_direction = good_output.replace(" westbound", "")
+    assert response_label(metadata, call, omitted_direction) == "grounded_response"
     assert (
         response_label(
             metadata,
