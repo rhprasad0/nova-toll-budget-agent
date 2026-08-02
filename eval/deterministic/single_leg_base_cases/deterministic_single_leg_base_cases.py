@@ -233,8 +233,9 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             )
         plain_response = response.translate(str.maketrans("", "", "*_`"))
         if not re.search(
-            rf"\$\s*{re.escape(fare)}\s*=\s*\$\s*{re.escape(fare)}",
+            rf"^\s*\$\s*{re.escape(fare)}\s*=\s*\$\s*{re.escape(fare)}\s*$",
             plain_response,
+            re.MULTILINE,
         ):
             return _result(
                 False, "response omitted exact one-fare arithmetic", "bad_math"
@@ -421,6 +422,10 @@ def _self_check() -> None:
     assert (
         response_label(metadata, call, good_output.replace(" = ", " + ")) == "bad_math"
     )
+    leading_operand = good_output.replace(
+        f"${fare} = **${fare}**", f"${fare} + ${fare} = **${fare}**"
+    )
+    assert response_label(metadata, call, leading_operand) == "bad_math"
     assert (
         response_label(metadata, call, good_output + " 2026-07-29T10:00:00-04:00")
         == "raw_datetime"
