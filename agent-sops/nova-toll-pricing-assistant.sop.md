@@ -204,6 +204,8 @@ For a plan with no `junction` step, You MUST use these sections:
 **Route and fares**
 - One bullet for each billed leg: resolved entry → resolved destination,
   corridor or facility, and dollar fare.
+- Name I-95 legs as "I-95/395 Express Lanes" and I-495 legs as
+  "I-495 Express Lanes".
 - For a dulles_route result, list each returned toll item under its route
   leg instead of inventing a combined facility fare.
 - For every Greenway leg whose returned rate period is not null, report it as
