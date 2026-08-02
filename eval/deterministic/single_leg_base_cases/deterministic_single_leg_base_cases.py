@@ -30,8 +30,13 @@ from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
-_MONEY_RE = re.compile(r"\$\s*(\d+\.\d{2})")
+_MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _RAW_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?")
+_RATE_PERIOD_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?rate period:\s*[*_`~]*"
+    r"([a-z]+(?:[-_ ][a-z]+)?)\s*[*_`~]*\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 _REQUIRED_HEADINGS = ("route and fares", "calculation", "final price")
 _ROUTE_ALIASES = {
     "I-95-NB": "I-95 northbound",
@@ -253,10 +258,18 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                 )
             if _RAW_DATE_RE.search(response):
                 return _result(False, "response exposed a raw ISO date", "raw_datetime")
-        elif not _term_present(response, str(metadata["expected_rate_period"])):
-            return _result(
-                False, "response omitted the Greenway rate period", "period_missing"
-            )
+        else:
+            periods = {
+                re.sub(r"[-\s]+", "_", period.lower())
+                for period in _RATE_PERIOD_RE.findall(response)
+            }
+            expected_period = str(metadata["expected_rate_period"]).lower()
+            if periods != {expected_period}:
+                return _result(
+                    False,
+                    "response omitted or misstated the Greenway rate period",
+                    "period_missing",
+                )
 
         if "unpriced junction" in lowered or "complete price unavailable" in lowered:
             return _result(
@@ -402,6 +415,10 @@ def _self_check() -> None:
         == "wrong_money"
     )
     assert (
+        response_label(metadata, call, good_output + "\nExtra charge: $6")
+        == "wrong_money"
+    )
+    assert (
         response_label(metadata, call, good_output.replace(" = ", " + ")) == "bad_math"
     )
     assert (
@@ -419,7 +436,12 @@ def _self_check() -> None:
         == "grounded_response"
     )
 
-    metadata, call, _ = prepared[-1]
+    metadata, call, good_output = prepared[-1]
+    for wrong_period in ("off_peak", "off peak", "off-peak"):
+        wrong_output = good_output.replace(
+            "Rate period: peak", f"Rate period: {wrong_period}"
+        )
+        assert response_label(metadata, call, wrong_output) == "period_missing"
     wrong_result = json.loads(json.dumps(metadata["expected_result"]))
     wrong_result["tolls"][0]["price_usd"] = "999.99"
     assert (
