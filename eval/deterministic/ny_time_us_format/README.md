@@ -22,7 +22,7 @@ uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_form
 
 Runs the per-case matching logic in both evaluators against synthetic
 trajectories, including omitted, incorrect, and nonstandard timestamps. No
-AWS/OpenAI/RDS calls. CI runs this check before the live integration job.
+AWS/OpenAI/RDS calls. Required CI runs this offline check.
 
 ## Live run
 
@@ -40,9 +40,9 @@ once first to create the gitignored RDS CA bundle; after that, only
 `AWS_PROFILE` is needed. Results land in `eval/results/<timestamp>.json`;
 representative valid runs may be curated in the repository's results index.
 
-The trusted `integration` job in `.github/workflows/ci.yml` runs this suite
-as a regression gate, alongside the fuzzy-location suite. Any failed
-evaluator makes the command exit nonzero.
+Required CI runs only the offline `--check`. The live suite runs nightly because
+agent execution is stochastic; a failed evaluator fails that nightly workflow
+without blocking a merge.
 
 ## Simulated-user evaluation (Track 2)
 
@@ -51,9 +51,9 @@ evaluator makes the command exit nonzero.
 the fuzzy-location suite uses) to cover relative/fuzzy date phrasing
 ("tomorrow at 5pm", "next Monday morning") that this deterministic suite
 can't assert against, since the agent has no injected notion of "today."
-Unlike the suite above, this is **not a regression gate** — the simulated
-user and both judges (`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`)
-are all LLMs, so results vary run to run.
+Unlike the suite above's code-based grading, the simulated user and both judges
+(`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`) are all LLMs, so results
+vary run to run.
 
 ```bash
 uv run python eval/simulated/simulated_user_ny_time_us_format.py --check
@@ -79,8 +79,8 @@ and judges use Claude Haiku 4.5
 
 ## Nightly run
 
-`.github/workflows/nightly-evals.yml` runs this simulated-user evaluation
-every day at 3:17 AM New York time alongside the fuzzy-location one, and
-supports manual dispatch from `main`. Judge verdicts are observational;
-execution failures still fail the workflow. Each JSON report is retained as
-a GitHub artifact for 90 days.
+`.github/workflows/nightly-evals.yml` runs both the code-graded live suite and
+the simulated-user evaluation every day at 3:17 AM New York time alongside the
+fuzzy-location evaluations, and supports manual dispatch from `main`. Judge
+verdicts are observational; execution failures still fail the workflow. Each
+JSON report is retained as a GitHub artifact for 90 days.

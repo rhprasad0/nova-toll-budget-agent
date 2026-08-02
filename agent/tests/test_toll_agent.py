@@ -729,8 +729,12 @@ def test_system_prompt_suggests_general_purpose_lanes_when_i95_is_closed():
     assert "i95_route" in prompt and "link_status=CLOSED" in prompt
     assert "i95_junction_leg" in prompt and "closed lane" in prompt
     assert re.search(r"Suggest the\s+I-95 general-purpose lanes", prompt)
-    assert re.search(r"Do not call another\s+pricing tool", prompt)
-    assert "quote a fare" in prompt
+    assert re.search(
+        r"Do not call a pricing\s+tool or quote a fare for those lanes", prompt
+    )
+    assert re.search(
+        r"Continue pricing every remaining\s+planner-returned step", prompt
+    )
 
 
 def test_agent_tool_specs_are_concise_and_preserve_their_contracts():

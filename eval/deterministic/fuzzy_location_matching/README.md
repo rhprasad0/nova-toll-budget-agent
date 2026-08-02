@@ -31,8 +31,9 @@ gitignored RDS CA bundle; after that, only `AWS_PROFILE` is needed. Results
 land in `eval/results/<timestamp>.json`; representative valid runs may be curated
 in the repository's results index.
 
-The trusted `integration` job in `.github/workflows/ci.yml` runs this suite as
-a regression gate. Any failed evaluator makes the command exit nonzero.
+Required CI runs only the offline `--check`. The live suite runs nightly because
+agent execution is stochastic; a failed evaluator fails that nightly workflow
+without blocking a merge.
 
 ## Simulated-user evaluation (Track 2)
 
@@ -40,9 +41,8 @@ a regression gate. Any failed evaluator makes the command exit nonzero.
 an LLM-simulated user (`strands_evals.ActorSimulator`) instead of a
 scripted conversation turn — import it directly, same as the deterministic
 suite imports its own helpers. `simulated_user_fuzzy_location_matching.py` is
-the observational fuzzy-location scenario built on it. Unlike Track 1 above,
-this is
-**not a regression gate** — the simulated user and both judges
+the observational fuzzy-location scenario built on it. Unlike Track 1's
+code-based grading, the simulated user and both judges
 (`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`) are all LLMs, so results
 vary run to run. See `eval-plan.md`'s "Track 2" section for the full design.
 
@@ -67,10 +67,11 @@ use Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
 
 ## Nightly run
 
-`.github/workflows/nightly-evals.yml` runs the simulated-user evaluation every day at
-3:17 AM New York time and supports manual dispatch from `main`. Judge verdicts
-are observational; execution failures still fail the workflow. Each JSON report
-is retained as a GitHub artifact for 90 days.
+`.github/workflows/nightly-evals.yml` runs both the code-graded live suite and
+the simulated-user evaluation every day at 3:17 AM New York time, and supports
+manual dispatch from `main`. Judge verdicts are observational; execution
+failures still fail the workflow. Each JSON report is retained as a GitHub
+artifact for 90 days.
 
 Nightly simulator and judge calls use the `nova-toll-nightly-eval` Bedrock
 application inference profile. In the AWS payer account, activate the `purpose`

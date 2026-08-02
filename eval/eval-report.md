@@ -67,12 +67,12 @@ tool was called, and no response invented a fare.
 2. Constrain actor profiles to the fixed route, direction, timestamp, and pricing goal.
 3. Ground the helpfulness judge with evaluation date and agent scope.
 4. Add a prompt regression forbidding unsupported source URLs, phone numbers, and archival claims.
-5. Rerun only after those evaluation fixes; compare the next report without deleting this baseline.
+5. Rerun only after those evaluation fixes; retain this analysis while keeping the failed baseline report out of curated results.
 
 ---
 
 ## Artifacts and Limitations
 
-- **Result:** `eval/results/20260802T165649Z.json`
+- **Result:** Failed baseline report removed from curated results; findings retained here.
 - **Cases and runner:** `eval/deterministic/i95_historical_closures/` and `eval/simulated/simulated_user_i95_historical_closures.py`
 - **Limitation:** This is one stochastic run using LLM actors and judges. Manual findings rely on actual telemetry spans; no adjusted numeric score is assigned.

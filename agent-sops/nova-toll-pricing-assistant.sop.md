@@ -236,8 +236,9 @@ format.
 When an I-95 pricing result reports the Express Lanes closed -- either
 `i95_route` with `link_status=CLOSED` or `i95_junction_leg` with closed lane
 statuses -- state that the I-95 Express Lanes are unavailable. Suggest the
-I-95 general-purpose lanes as an unpriced alternative. Do not call another
-pricing tool or quote a fare for those lanes.
+I-95 general-purpose lanes as an unpriced alternative. Do not call a pricing
+tool or quote a fare for those lanes. Continue pricing every remaining
+planner-returned step.
 
 ## Examples
 

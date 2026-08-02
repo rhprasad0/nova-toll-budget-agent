@@ -18,6 +18,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Clear curated evaluation reports
+        run: rm -f eval/results/*.json
       - name: Fetch RDS CA bundle
         run: |
           mkdir -p infra/build/loader
@@ -35,13 +37,21 @@ jobs:
           role-to-assume: arn:aws:iam::920534282028:role/nova-toll-github-nightly-eval
           aws-region: us-east-1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-      - run: NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py
-      - run: NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_ny_time_us_format.py
-      - run: NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_historical_closures.py
+      - name: Run every evaluation suite
+        run: |
+          failed=0
+          uv run --frozen python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py || failed=1
+          uv run --frozen python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py || failed=1
+          uv run --frozen python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py || failed=1
+          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py || failed=1
+          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_ny_time_us_format.py || failed=1
+          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_historical_closures.py || failed=1
+          exit "$failed"
       - name: Save evaluation report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nightly-eval-${{ github.run_id }}-${{ github.run_attempt }}
           path: eval/results/*.json
+          if-no-files-found: ignore
           retention-days: 90
