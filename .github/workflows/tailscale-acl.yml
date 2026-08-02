@@ -10,6 +10,10 @@ on:
     branches: ["main"]
     paths: ["policy.hujson"]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   acl:
     runs-on: ubuntu-latest
