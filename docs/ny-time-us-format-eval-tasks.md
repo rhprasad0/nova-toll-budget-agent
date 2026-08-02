@@ -1,6 +1,6 @@
 # NY-time handling + US date/time format eval — task checklist
 
-Status: in progress
+Status: implemented, not yet run live
 
 Adds evaluation coverage (following the `eval/deterministic/fuzzy_location_matching`
 pattern) for two agent behaviors that currently have no eval:
@@ -45,5 +45,7 @@ previously only said to copy `observed_at` through verbatim.
 - [x] Per-suite READMEs already cover commands (no separate top-level
       `eval/README.md` exists in this repo -- it was folded into each
       suite's own `README.md` in `7337f4b`).
-- [ ] Run `--check` self-tests, `ruff`, `pyright`, `pytest`; live-run the
-      deterministic suite if RDS/Bedrock access allows.
+- [x] Run `--check` self-tests, `ruff`, `pyright`, `pytest` (all pass).
+      Live-run against the real agent (billed OpenAI + RDS) not done yet --
+      needs explicit go-ahead; CI's `integration` job will run it on first
+      push/PR regardless.
