@@ -1,7 +1,4 @@
-#!/usr/bin/env python3
 """Reject rewritten agent-contract releases relative to a Git base commit."""
-
-from __future__ import annotations
 
 import json
 import subprocess
