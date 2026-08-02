@@ -295,6 +295,18 @@ class USFormatEvaluator(Evaluator[str, str]):
                 "observed_at_missing",
             )
 
+        mislabeled = {
+            value
+            for value in expected_observed_at
+            if f"VDOT observed at: {value}" not in response
+        }
+        if mislabeled:
+            return _result(
+                False,
+                f"response did not label observed_at value(s): {sorted(mislabeled)}",
+                "observed_at_label_missing",
+            )
+
         if reported_timestamps:
             return _result(
                 True, "response used exact US-format date/time", "us_formatted"
@@ -429,6 +441,14 @@ def _self_check() -> None:
                 success,
             ),
             "us_formatted",
+        ),
+        (
+            _format_case("Requested time: 7/15/2026 3:20 PM ET", success),
+            "observed_at_label_missing",
+        ),
+        (
+            _format_case("7/15/2026 3:20 PM ET", success),
+            "observed_at_label_missing",
         ),
         (_format_case("The toll is $32.35.", success), "observed_at_missing"),
         (
