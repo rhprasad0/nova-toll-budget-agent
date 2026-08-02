@@ -685,6 +685,11 @@ def build_system_prompt() -> str:
 
 
 def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
+    trace_attributes = {
+        **(trace_attributes or {}),
+        "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
+        "tollchat.toolset_version": TOOLSET_VERSION,
+    }
     return Agent(
         model=_build_model(),
         tools=list(_AGENT_TOOLS),

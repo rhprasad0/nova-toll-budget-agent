@@ -253,7 +253,10 @@ mistaken for the final story.
   system prompt and the ordered runtime-generated Strands tool specs. Both
   contracts start at `1.0.0`; CI hashes the current payloads against their
   release entries so contract edits require a deliberate manifest update,
-  without copying prompt text or tool schemas. Review preserves prior entries.
+  without copying prompt text or tool schemas. CI also compares the event-base
+  manifest so prior releases cannot be rewritten or deleted and `current`
+  cannot move backward. The agent adds both current versions to its trace
+  attributes as `tollchat.system_prompt_version` and `tollchat.toolset_version`.
   Bump major for incompatible behavior or schema, minor for a
   backward-compatible capability, tool, or optional field, and patch for a
   compatible correction or wording-only clarification.
