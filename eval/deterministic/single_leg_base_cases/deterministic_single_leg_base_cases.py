@@ -31,7 +31,6 @@ from agent.toll_agent import build_agent  # noqa: E402
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
-_RAW_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?")
 _RATE_PERIOD_RE = re.compile(
     r"^\s*(?:[-*]\s*)?[*_`~]*rate period[*_`~]*:[ \t]*[*_`~]*[ \t]*"
     r"([a-z]+(?:[-_ ][a-z]+)?)\s*[*_`~]*\s*$",
@@ -281,8 +280,15 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                     "response omitted the formatted VDOT observation",
                     "observed_missing",
                 )
-            if _RAW_DATE_RE.search(response):
-                return _result(False, "response exposed a raw ISO date", "raw_datetime")
+            raw_observed = str(metadata["expected_result"]["legs"][0]["observed_at"])[
+                :16
+            ]
+            if raw_observed in response:
+                return _result(
+                    False,
+                    "response exposed the raw observation timestamp",
+                    "raw_datetime",
+                )
         else:
             periods = {
                 re.sub(r"[-\s]+", "_", period.lower())
@@ -453,6 +459,14 @@ def _self_check() -> None:
     assert (
         response_label(metadata, call, good_output + " 2026-07-29T10:00:00-04:00")
         == "raw_datetime"
+    )
+    assert (
+        response_label(
+            metadata,
+            call,
+            good_output + "\nTravel time: 2026-07-29T10:10:00-04:00",
+        )
+        == "grounded_response"
     )
 
     metadata, call, good_output = prepared[4]
