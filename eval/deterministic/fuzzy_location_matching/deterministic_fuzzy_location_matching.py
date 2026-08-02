@@ -29,7 +29,7 @@ from typing import Any, cast
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
-from strands.types.content import Messages  # noqa: E402
+from strands.types.content import Message, Messages  # noqa: E402
 from strands_evals import Case, Experiment  # noqa: E402
 from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.extractors import tools_use_extractor  # noqa: E402
@@ -98,6 +98,16 @@ def _turns(evaluation_case: EvaluationData[str, str]) -> list[dict[str, Any]]:
     )
 
 
+def _trace_messages(traces: list[dict[str, Any]]) -> Messages:
+    def walk(trace: dict[str, Any]) -> Messages:
+        messages = [cast(Message, trace["message"])] if trace.get("message") else []
+        for child in trace.get("children", []):
+            messages.extend(walk(child))
+        return messages
+
+    return [message for trace in traces for message in walk(trace)]
+
+
 def _extract_tool_calls(messages: Messages) -> list[dict[str, Any]]:
     # extract_agent_tools_used_from_messages returns tool-call records
     # ({"name", "input", "tool_result", "is_error"}), not plain name
@@ -113,9 +123,10 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     trajectory_by_turn: list[dict[str, Any]] = []
     response = None
     for turn in turns:
-        before = len(agent.messages)
         response = agent(turn["content"])
-        calls = _extract_tool_calls(agent.messages[before:])
+        summary: dict[str, Any] = response.metrics.get_summary()
+        traces = cast(list[dict[str, Any]], summary.get("traces", []))
+        calls = _extract_tool_calls(_trace_messages(traces))
         trajectory_by_turn.append({"response": str(response), "calls": calls})
     return {
         "output": str(response),
@@ -292,6 +303,42 @@ def _self_check() -> None:
         "name": "i495_route",
         "input": {"origin": "A", "destination": "B", "at_time": None},
     }
+    trace_calls = _extract_tool_calls(
+        _trace_messages(
+            [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "toolUse": {
+                                    **actual_route,
+                                    "toolUseId": "route-1",
+                                }
+                            }
+                        ],
+                    },
+                    "children": [
+                        {
+                            "message": {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "toolResult": {
+                                            "toolUseId": "route-1",
+                                            "status": "success",
+                                            "content": [{"text": "ok"}],
+                                        }
+                                    }
+                                ],
+                            }
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    assert trace_calls == [{**actual_route, "tool_result": "ok", "is_error": False}]
     clarification = {
         "turn": 1,
         "tool": None,
