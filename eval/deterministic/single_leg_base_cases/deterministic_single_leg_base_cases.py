@@ -187,17 +187,16 @@ def _term_present(response: str, term: str) -> bool:
     )
 
 
-def _route_endpoints_present(response: str, origin: str, destination: str) -> bool:
+def _route_line(response: str, origin: str, destination: str) -> str | None:
     plain = re.sub(r"[ \t]+", " ", response.translate(str.maketrans("", "", "*_`")))
-    return bool(
-        re.search(
-            rf"{re.escape(origin)}\s*(?:→|->|\bto\b)\s*"
-            rf"{re.escape(destination)}"
-            rf"(?=[ \t]*(?:$|[-—,.!?;:(]|\b(?:via|on|using)\b))",
-            plain,
-            re.IGNORECASE | re.MULTILINE,
-        )
+    match = re.search(
+        rf"^[^\r\n]*{re.escape(origin)}\s*(?:→|->|\bto\b)\s*"
+        rf"{re.escape(destination)}"
+        rf"(?=[ \t]*(?:$|[-—,.!?;:(]|\b(?:via|on|using)\b))[^\r\n]*$",
+        plain,
+        re.IGNORECASE | re.MULTILINE,
     )
+    return match.group(0) if match else None
 
 
 def _route_term_present(response: str, term: str) -> bool:
@@ -241,13 +240,15 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
         expected_call = metadata["expected_trajectory"][0]
         origin = expected_call["input"]["origin"]
         destination = expected_call["input"]["destination"]
-        missing_terms = (
-            []
-            if _route_endpoints_present(response, origin, destination)
-            else [f"{origin} → {destination}"]
-        )
-        if not _route_term_present(response, metadata["expected_route_label"]):
+        fare = str(metadata["expected_final_usd"])
+        route_line = _route_line(response, origin, destination)
+        missing_terms = [] if route_line else [f"{origin} → {destination}"]
+        if not route_line or not _route_term_present(
+            route_line, metadata["expected_route_label"]
+        ):
             missing_terms.append(metadata["expected_route_label"])
+        if not route_line or not re.search(rf"\$\s*{re.escape(fare)}\b", route_line):
+            missing_terms.append(f"${fare} route fare")
         missing_terms.extend(
             toll["label"]
             for toll in metadata["expected_result"].get("tolls", [])
@@ -258,7 +259,6 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                 False, f"response omitted route facts: {missing_terms}", "route_missing"
             )
 
-        fare = str(metadata["expected_final_usd"])
         amounts = set(_MONEY_RE.findall(response))
         if amounts != {fare}:
             return _result(
@@ -459,10 +459,8 @@ def _self_check() -> None:
         == "sections_missing"
     )
     fare = metadata["expected_final_usd"]
-    assert (
-        response_label(metadata, call, good_output.replace(f"${fare}", "$999.99"))
-        == "wrong_money"
-    )
+    wrong_final = "$999.99".join(good_output.rsplit(f"${fare}", 1))
+    assert response_label(metadata, call, wrong_final) == "wrong_money"
     assert (
         response_label(metadata, call, good_output + "\nExtra charge: $6")
         == "wrong_money"
@@ -516,6 +514,8 @@ def _self_check() -> None:
         "I-95-NB (I-95/395 Express Lanes southbound)",
     )
     assert response_label(metadata, call, contradictory_code) == "route_missing"
+    unbound_fare = good_output.replace(f": ${fare}\n", ": fare unavailable\n", 1)
+    assert response_label(metadata, call, unbound_fare) == "route_missing"
 
     metadata, call, good_output = prepared[1]
     omitted_direction = good_output.replace(
