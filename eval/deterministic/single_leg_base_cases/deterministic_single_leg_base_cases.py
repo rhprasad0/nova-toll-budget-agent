@@ -188,6 +188,17 @@ def _term_present(response: str, term: str) -> bool:
     )
 
 
+def _endpoint_present(response: str, label: str) -> bool:
+    plain = re.sub(r"[ \t]+", " ", response.translate(str.maketrans("", "", "*_`")))
+    return bool(
+        re.search(
+            rf"(?<!\w)(?<!\w ){re.escape(label)}(?!\w| \w)",
+            plain,
+            re.IGNORECASE,
+        )
+    )
+
+
 def _route_term_present(response: str, term: str) -> bool:
     humanized = _ROUTE_ALIASES.get(term)
     return _term_present(response, term) or bool(
@@ -220,14 +231,15 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             )
 
         expected_call = metadata["expected_trajectory"][0]
-        required_terms = [
+        endpoints = [
             expected_call["input"]["origin"],
             expected_call["input"]["destination"],
-            expected_call["tool"],
         ]
         missing_terms = [
-            term for term in required_terms if not _term_present(response, term)
+            label for label in endpoints if not _endpoint_present(response, label)
         ]
+        if not _term_present(response, expected_call["tool"]):
+            missing_terms.append(expected_call["tool"])
         if not _route_term_present(response, metadata["expected_route_label"]):
             missing_terms.append(metadata["expected_route_label"])
         if missing_terms:
@@ -454,6 +466,12 @@ def _self_check() -> None:
             ),
         )
         == "grounded_response"
+    )
+    assert (
+        response_label(
+            metadata, call, good_output.replace("Washington", "Washington Blvd")
+        )
+        == "route_missing"
     )
 
     metadata, call, good_output = prepared[5]
