@@ -48,6 +48,7 @@ jobs:
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py || failed=1
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_ny_time_us_format.py || failed=1
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_historical_closures.py || failed=1
+          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_i495_junctions.py || failed=1
           exit "$failed"
       - name: Save evaluation report
         if: always()

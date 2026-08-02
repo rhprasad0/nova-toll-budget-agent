@@ -651,11 +651,13 @@ def test_system_prompt_states_the_overshoot_anti_example():
     assert "Washington D.C." in prompt
     assert "I-495 Near Braddock Road" in prompt
     assert "NOT evidence the leg boundary is correct" in prompt
-    assert "assign it $0.00" in prompt
+    assert "never display a zero-dollar amount for the gap" in prompt
+    assert "even while" in prompt and "assume it is free" in prompt
     assert "**Known segment prices**" in prompt
     assert "**Unpriced junction**" in prompt
     assert "**Complete price unavailable**" in prompt
     assert "Never calculate a subtotal or complete total" in prompt
+    assert "Do not repeat a user's proposed amount" in prompt
     assert "requires exactly one" in prompt
     assert "Never skip it" in prompt
 
@@ -775,14 +777,19 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
     with pytest.raises(ValueError, match=r"rewrites system_prompt release 1\.0\.0"):
         validate_manifest_update(previous, rewritten)
 
+    current_version = previous["system_prompt"]["current"]
+    major, minor, _patch = map(int, current_version.split("."))
+    next_version = f"{major}.{minor + 1}.0"
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.1.0"
-    advanced["system_prompt"]["releases"]["1.1.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = next_version
+    advanced["system_prompt"]["releases"][next_version] = "0" * 64
     validate_manifest_update(previous, advanced)
 
-    advanced["system_prompt"]["current"] = "0.9.0"
-    advanced["system_prompt"]["releases"]["0.9.0"] = "1" * 64
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.0\.0"):
+    advanced["system_prompt"]["current"] = "0.0.0"
+    advanced["system_prompt"]["releases"]["0.0.0"] = "1" * 64
+    with pytest.raises(
+        ValueError, match=rf"must advance beyond {re.escape(current_version)}"
+    ):
         validate_manifest_update(previous, advanced)
 
 
