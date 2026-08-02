@@ -45,8 +45,9 @@ _FREE_CLAIM_RE = re.compile(
 _UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
 _GENERAL_PURPOSE_RE = re.compile(r"\bI-95\s+general[- ]purpose lanes\b", re.I)
 _BOTH_DIRECTIONS_CLOSED_RE = re.compile(
-    r"\bboth\s+I-95(?:/395)?(?:\s+Express Lanes)?\s+directions?\s+"
-    r"(?:(?:are|were)\s+)?closed\b",
+    r"\b(?:both\s+I-95(?:/395)?(?:\s+Express Lanes)?\s+directions?\s+"
+    r"(?:(?:are|were)\s+)?closed|I-95(?:/395)?(?:\s+Express Lanes)?\s+"
+    r"(?:are|were)\s+closed\s+in\s+both\s+directions?)\b",
     re.I,
 )
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
@@ -263,10 +264,11 @@ def evaluate_junction_calls(
     )
 
 
-def _eastern_display(value: str) -> str:
+def _eastern_displays(value: str) -> tuple[str, str]:
     observed = datetime.fromisoformat(value).astimezone(ZoneInfo("America/New_York"))
     clock = observed.strftime("%I:%M %p").lstrip("0")
-    return f"{observed.month}/{observed.day}/{observed.year} {clock} ET"
+    date = f"{observed.month}/{observed.day}/{observed.year}"
+    return f"{date} {clock} ET", f"{clock} ET on {date}"
 
 
 def evaluate_junction_response(
@@ -359,7 +361,9 @@ def evaluate_junction_response(
             )
         for leg in result.get("legs", []):
             observed_at = leg.get("observed_at")
-            if observed_at and _eastern_display(str(observed_at)) not in response:
+            if observed_at and not any(
+                display in response for display in _eastern_displays(str(observed_at))
+            ):
                 return _result(
                     False,
                     f"formatted observed time for {observed_at} is missing",
@@ -635,7 +639,21 @@ def _self_check() -> None:
         )[0].label
         == "grounded"
     )
-    print("self-check ok (10 fixtures and eleven required mutation invariants)")
+    reversed_time = closed_response.replace(
+        "7/29/2026 10:00 AM ET", "10:00 AM ET on 7/29/2026"
+    ).replace(
+        "both I-95 directions closed",
+        "I-95 Express Lanes were closed in both directions",
+    )
+    assert (
+        evaluate_junction_response(
+            reversed_time,
+            unavailable_calls,
+            cast(dict[str, Any], cases[4].metadata),
+        )[0].label
+        == "grounded"
+    )
+    print("self-check ok (10 fixtures and twelve required mutation invariants)")
 
 
 if __name__ == "__main__":
