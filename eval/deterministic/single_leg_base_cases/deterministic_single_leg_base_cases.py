@@ -247,12 +247,20 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             route_line, metadata["expected_route_label"]
         ):
             missing_terms.append(metadata["expected_route_label"])
-        if not route_line or not re.search(rf"\$\s*{re.escape(fare)}\b", route_line):
+        tolls = metadata["expected_result"].get("tolls", [])
+        if not tolls and (
+            not route_line or not re.search(rf"\$\s*{re.escape(fare)}\b", route_line)
+        ):
             missing_terms.append(f"${fare} route fare")
         missing_terms.extend(
-            toll["label"]
-            for toll in metadata["expected_result"].get("tolls", [])
-            if not _term_present(response, toll["label"])
+            f"{toll['label']}: ${toll['price_usd']}"
+            for toll in tolls
+            if not re.search(
+                rf"^[^\r\n]*{re.escape(toll['label'])}[^\r\n]*"
+                rf"\$\s*{re.escape(toll['price_usd'])}\b[^\r\n]*$",
+                response,
+                re.IGNORECASE | re.MULTILINE,
+            )
         )
         if missing_terms:
             return _result(
@@ -589,6 +597,8 @@ def _self_check() -> None:
         )
         == "route_missing"
     )
+    unpriced_toll = good_output.replace("Mainline plaza: $5.80", "Mainline plaza")
+    assert response_label(metadata, call, unpriced_toll) == "route_missing"
     wrong_result = json.loads(json.dumps(metadata["expected_result"]))
     wrong_result["tolls"][0]["price_usd"] = "999.99"
     assert (
