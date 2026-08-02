@@ -118,53 +118,56 @@ class ClosureTraceEvaluator(Evaluator[str, str]):
         self, evaluation_case: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         metadata: dict[str, Any] = evaluation_case.metadata or {}
-        expected = metadata["expected_trajectory"][0]
         turns = _turns(evaluation_case)
         calls = (
             cast(list[dict[str, Any]], turns[0].get("calls", []))
             if len(turns) == 1
             else []
         )
-        if len(calls) != 1 or calls[0].get("name") != expected["tool"]:
-            return _result(
-                False,
-                f"expected exactly one {expected['tool']} call, got "
-                f"{[call.get('name') for call in calls]}",
-                "tool_mismatch",
-            )
-        expected_input: dict[str, Any] = expected["input"]
-        raw_input = calls[0].get("input")
-        actual_input = (
-            cast(dict[str, Any], raw_input) if isinstance(raw_input, dict) else {}
+        return evaluate_closure_calls(calls, metadata)
+
+
+def evaluate_closure_calls(
+    calls: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    """Grade captured calls against one historical closure fixture."""
+    expected = metadata["expected_trajectory"][0]
+    if len(calls) != 1 or calls[0].get("name") != expected["tool"]:
+        return _result(
+            False,
+            f"expected exactly one {expected['tool']} call, got "
+            f"{[call.get('name') for call in calls]}",
+            "tool_mismatch",
         )
-        if not isinstance(raw_input, dict) or not all(
-            actual_input.get(key) == value for key, value in expected_input.items()
-        ):
-            return _result(
-                False,
-                f"tool input {actual_input} lacks required arguments {expected_input}",
-                "input_mismatch",
-            )
-        captured = _tool_result(calls[0])
-        if captured is None:
-            return _result(
-                False, "missing or invalid captured tool result", "bad_result"
-            )
-        error = str(captured.get("error", ""))
-        expected_od = str(metadata["expected_od_pair_id"])
-        expected_status = str(metadata["expected_link_status"])
-        if expected_od not in error or expected_status not in error:
-            return _result(
-                False, f"unexpected closure result: {captured}", "wrong_result"
-            )
-        forbidden = sorted(_MONETARY_FIELDS & captured.keys())
-        if forbidden:
-            return _result(
-                False,
-                f"unavailable result exposed monetary fields: {forbidden}",
-                "fare_exposed",
-            )
-        return _result(True, "exact call returned the expected closure", "closed")
+    expected_input: dict[str, Any] = expected["input"]
+    raw_input = calls[0].get("input")
+    actual_input = (
+        cast(dict[str, Any], raw_input) if isinstance(raw_input, dict) else {}
+    )
+    if not isinstance(raw_input, dict) or not all(
+        actual_input.get(key) == value for key, value in expected_input.items()
+    ):
+        return _result(
+            False,
+            f"tool input {actual_input} lacks required arguments {expected_input}",
+            "input_mismatch",
+        )
+    captured = _tool_result(calls[0])
+    if captured is None:
+        return _result(False, "missing or invalid captured tool result", "bad_result")
+    error = str(captured.get("error", ""))
+    expected_od = str(metadata["expected_od_pair_id"])
+    expected_status = str(metadata["expected_link_status"])
+    if expected_od not in error or expected_status not in error:
+        return _result(False, f"unexpected closure result: {captured}", "wrong_result")
+    forbidden = sorted(_MONETARY_FIELDS & captured.keys())
+    if forbidden:
+        return _result(
+            False,
+            f"unavailable result exposed monetary fields: {forbidden}",
+            "fare_exposed",
+        )
+    return _result(True, "exact call returned the expected closure", "closed")
 
 
 class ClosureResponseEvaluator(Evaluator[str, str]):

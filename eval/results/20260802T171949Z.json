@@ -1,0 +1,3737 @@
+{
+  "overall_score": 0.9166666666666666,
+  "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.667,
+    0.667,
+    0.833,
+    0.833
+  ],
+  "cases": [
+    {
+      "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
+      "actual_output": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here.\n",
+      "name": "i95-nb-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "520f0d70d17f7b3a",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "ab8d441fd6cdc838",
+                  "start_time": "2026-08-02T17:17:43.570345Z",
+                  "end_time": "2026-08-02T17:17:47.016256Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T15:40:00-04:00"
+                        },
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "483ace7efc6ed6de",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "ab8d441fd6cdc838",
+                  "start_time": "2026-08-02T17:17:47.016686Z",
+                  "end_time": "2026-08-02T17:17:47.599952Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "I-395 Near Edsall Road",
+                    "at_time": "2026-07-29T15:40:00-04:00"
+                  },
+                  "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "d96151ad6c7952f7",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "bb2bb3460d214b7d",
+                  "start_time": "2026-08-02T17:17:47.602530Z",
+                  "end_time": "2026-08-02T17:17:49.695980Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T15:40:00-04:00"
+                        },
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "27d00503a40e8a08",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "e6839651ca92cd83",
+                  "start_time": "2026-08-02T17:17:43.567787Z",
+                  "end_time": "2026-08-02T17:17:49.697077Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+            "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927"
+          }
+        ],
+        "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927"
+      },
+      "metadata": {
+        "id": "i95-nb-closed",
+        "description": "Historical northbound I-95 closure for OD 1132.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "I-395 Near Edsall Road",
+              "at_time": "2026-07-29T15:40:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1132,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "ClosureSimulationTraceEvaluator",
+      "evaluator_type": "ClosureSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
+      "actual_output": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them.\n",
+      "name": "i95-sb-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "5e6e6e707b0e4b10",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "3b756e8b518469a6",
+                  "start_time": "2026-08-02T17:18:06.507476Z",
+                  "end_time": "2026-08-02T17:18:08.468175Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:10:00-04:00"
+                        },
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "a48788947d3f2bc0",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "3b756e8b518469a6",
+                  "start_time": "2026-08-02T17:18:08.468575Z",
+                  "end_time": "2026-08-02T17:18:08.703648Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "I-395 Near Edsall Road",
+                    "destination": "US-1",
+                    "at_time": "2026-07-29T10:10:00-04:00"
+                  },
+                  "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "e8f6c782ed8542b8",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "c0bde8e555c322f0",
+                  "start_time": "2026-08-02T17:18:08.705969Z",
+                  "end_time": "2026-08-02T17:18:10.229822Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:10:00-04:00"
+                        },
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for this trip at **7/29/2026 10:10 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "2e2fe77ffadb4ba7",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:06.505272Z",
+                  "end_time": "2026-08-02T17:18:10.230760Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for this trip at **7/29/2026 10:10 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "b779481e92f07cc1",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "afa4fa153ca7b277",
+                  "start_time": "2026-08-02T17:18:20.300326Z",
+                  "end_time": "2026-08-02T17:18:22.765086Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I need to follow the staged process\u2014so to confirm: there's no Express fare available because the lanes are closed?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. For **7/29/2026 10:10 AM ET**, no Express Lanes fare is available because the southbound I-95 Express Lanes were closed. The general-purpose lanes are available as an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "6ae0abb3e3ea205c",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:20.298180Z",
+                  "end_time": "2026-08-02T17:18:22.765963Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I need to follow the staged process\u2014so to confirm: there's no Express fare available because the lanes are closed?",
+                "agent_response": "Yes. For **7/29/2026 10:10 AM ET**, no Express Lanes fare is available because the southbound I-95 Express Lanes were closed. The general-purpose lanes are available as an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "c0ff9ab556ac3480",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "42fd36b29502fe5a",
+                  "start_time": "2026-08-02T17:18:30.923430Z",
+                  "end_time": "2026-08-02T17:18:32.333059Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So the I-95 general-purpose lanes are unpriced, correct?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "9701e8cff89e3e19",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:30.922766Z",
+                  "end_time": "2026-08-02T17:18:32.333943Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So the I-95 general-purpose lanes are unpriced, correct?",
+                "agent_response": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+            "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29"
+          }
+        ],
+        "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29"
+      },
+      "metadata": {
+        "id": "i95-sb-closed",
+        "description": "Historical southbound I-95 closure for OD 1151.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "I-395 Near Edsall Road",
+              "destination": "US-1",
+              "at_time": "2026-07-29T10:10:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1151,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "ClosureSimulationTraceEvaluator",
+      "evaluator_type": "ClosureSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative.\n",
+      "name": "i95-both-closed-nb-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "8f4bdac85f2a8207",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "36bb0425cca0986d",
+                  "start_time": "2026-08-02T17:18:49.417718Z",
+                  "end_time": "2026-08-02T17:18:52.124951Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "e8050ca0f7ec2b9f",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "36bb0425cca0986d",
+                  "start_time": "2026-08-02T17:18:52.125228Z",
+                  "end_time": "2026-08-02T17:18:52.569342Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "I-395 Near Edsall Road",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "fb23d0ff5e10ec33",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "c075b4ec3af3840d",
+                  "start_time": "2026-08-02T17:18:52.571806Z",
+                  "end_time": "2026-08-02T17:18:54.119738Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for **US-1 \u2192 I-395 Near Edsall Road** at **7/29/2026 10:50 AM ET** because the northbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "1f29eaa98643cdad",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "04dfcb09a846c5be",
+                  "start_time": "2026-08-02T17:18:49.415492Z",
+                  "end_time": "2026-08-02T17:18:54.120669Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for **US-1 \u2192 I-395 Near Edsall Road** at **7/29/2026 10:50 AM ET** because the northbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "88915d92a644f092",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "d22ab58852ff2b30",
+                  "start_time": "2026-08-02T17:19:01.343630Z",
+                  "end_time": "2026-08-02T17:19:03.283845Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So no Express fare is available at all for this trip and time, correct?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "07fd9abe6989d3eb",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "04dfcb09a846c5be",
+                  "start_time": "2026-08-02T17:19:01.341511Z",
+                  "end_time": "2026-08-02T17:19:03.284676Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So no Express fare is available at all for this trip and time, correct?",
+                "agent_response": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+            "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b"
+          }
+        ],
+        "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b"
+      },
+      "metadata": {
+        "id": "i95-both-closed-nb",
+        "description": "Northbound request while both I-95 directions are closed.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "I-395 Near Edsall Road",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1132,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "ClosureSimulationTraceEvaluator",
+      "evaluator_type": "ClosureSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply.\n",
+      "name": "i95-both-closed-sb-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "da78fff0d02586a8",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "bc3d74380e3d6ea5",
+                  "start_time": "2026-08-02T17:19:17.857263Z",
+                  "end_time": "2026-08-02T17:19:19.596592Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "dd6e1cc78abe634f",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "bc3d74380e3d6ea5",
+                  "start_time": "2026-08-02T17:19:19.597313Z",
+                  "end_time": "2026-08-02T17:19:19.912453Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "I-395 Near Edsall Road",
+                    "destination": "US-1",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "52054b10edc75071",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "8891df2a528785a3",
+                  "start_time": "2026-08-02T17:19:19.914758Z",
+                  "end_time": "2026-08-02T17:19:21.751261Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for travel from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available alternative, but they are unpriced here."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "c6f827a1406b2d58",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "f75b56d4643c15e8",
+                  "start_time": "2026-08-02T17:19:17.855745Z",
+                  "end_time": "2026-08-02T17:19:21.752181Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for travel from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available alternative, but they are unpriced here.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "7476b23eb5ae7a81",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "4b732549db172426",
+                  "start_time": "2026-08-02T17:19:29.926405Z",
+                  "end_time": "2026-08-02T17:19:31.897567Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I understand\u2014so there's no Express fare available due to the closure. Just to clarify: are the I-95 general-purpose lanes truly unpriced for this route and time?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "2c43aba8d9ee8183",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "f75b56d4643c15e8",
+                  "start_time": "2026-08-02T17:19:29.924260Z",
+                  "end_time": "2026-08-02T17:19:31.898463Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I understand\u2014so there's no Express fare available due to the closure. Just to clarify: are the I-95 general-purpose lanes truly unpriced for this route and time?",
+                "agent_response": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "2f968daa74794373357f1fccfcded3ff",
+            "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194"
+          }
+        ],
+        "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194"
+      },
+      "metadata": {
+        "id": "i95-both-closed-sb",
+        "description": "Southbound request while both I-95 directions are closed.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "I-395 Near Edsall Road",
+              "destination": "US-1",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1151,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "ClosureSimulationTraceEvaluator",
+      "evaluator_type": "ClosureSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
+      "actual_output": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here.\n",
+      "name": "i95-nb-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "520f0d70d17f7b3a",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "ab8d441fd6cdc838",
+                  "start_time": "2026-08-02T17:17:43.570345Z",
+                  "end_time": "2026-08-02T17:17:47.016256Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T15:40:00-04:00"
+                        },
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "483ace7efc6ed6de",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "ab8d441fd6cdc838",
+                  "start_time": "2026-08-02T17:17:47.016686Z",
+                  "end_time": "2026-08-02T17:17:47.599952Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "I-395 Near Edsall Road",
+                    "at_time": "2026-07-29T15:40:00-04:00"
+                  },
+                  "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "d96151ad6c7952f7",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "bb2bb3460d214b7d",
+                  "start_time": "2026-08-02T17:17:47.602530Z",
+                  "end_time": "2026-08-02T17:17:49.695980Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T15:40:00-04:00"
+                        },
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "27d00503a40e8a08",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "e6839651ca92cd83",
+                  "start_time": "2026-08-02T17:17:43.567787Z",
+                  "end_time": "2026-08-02T17:17:49.697077Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+            "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927"
+          }
+        ],
+        "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927"
+      },
+      "metadata": {
+        "id": "i95-nb-closed",
+        "description": "Historical northbound I-95 closure for OD 1132.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "I-395 Near Edsall Road",
+              "at_time": "2026-07-29T15:40:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1132,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
+      "actual_output": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them.\n",
+      "name": "i95-sb-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "5e6e6e707b0e4b10",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "3b756e8b518469a6",
+                  "start_time": "2026-08-02T17:18:06.507476Z",
+                  "end_time": "2026-08-02T17:18:08.468175Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:10:00-04:00"
+                        },
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "a48788947d3f2bc0",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "3b756e8b518469a6",
+                  "start_time": "2026-08-02T17:18:08.468575Z",
+                  "end_time": "2026-08-02T17:18:08.703648Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "I-395 Near Edsall Road",
+                    "destination": "US-1",
+                    "at_time": "2026-07-29T10:10:00-04:00"
+                  },
+                  "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "e8f6c782ed8542b8",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "c0bde8e555c322f0",
+                  "start_time": "2026-08-02T17:18:08.705969Z",
+                  "end_time": "2026-08-02T17:18:10.229822Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:10:00-04:00"
+                        },
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for this trip at **7/29/2026 10:10 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "2e2fe77ffadb4ba7",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:06.505272Z",
+                  "end_time": "2026-08-02T17:18:10.230760Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for this trip at **7/29/2026 10:10 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "b779481e92f07cc1",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "afa4fa153ca7b277",
+                  "start_time": "2026-08-02T17:18:20.300326Z",
+                  "end_time": "2026-08-02T17:18:22.765086Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I need to follow the staged process\u2014so to confirm: there's no Express fare available because the lanes are closed?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. For **7/29/2026 10:10 AM ET**, no Express Lanes fare is available because the southbound I-95 Express Lanes were closed. The general-purpose lanes are available as an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "6ae0abb3e3ea205c",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:20.298180Z",
+                  "end_time": "2026-08-02T17:18:22.765963Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I need to follow the staged process\u2014so to confirm: there's no Express fare available because the lanes are closed?",
+                "agent_response": "Yes. For **7/29/2026 10:10 AM ET**, no Express Lanes fare is available because the southbound I-95 Express Lanes were closed. The general-purpose lanes are available as an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "c0ff9ab556ac3480",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "42fd36b29502fe5a",
+                  "start_time": "2026-08-02T17:18:30.923430Z",
+                  "end_time": "2026-08-02T17:18:32.333059Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So the I-95 general-purpose lanes are unpriced, correct?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "9701e8cff89e3e19",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:30.922766Z",
+                  "end_time": "2026-08-02T17:18:32.333943Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So the I-95 general-purpose lanes are unpriced, correct?",
+                "agent_response": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+            "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29"
+          }
+        ],
+        "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29"
+      },
+      "metadata": {
+        "id": "i95-sb-closed",
+        "description": "Historical southbound I-95 closure for OD 1151.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "I-395 Near Edsall Road",
+              "destination": "US-1",
+              "at_time": "2026-07-29T10:10:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1151,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative.\n",
+      "name": "i95-both-closed-nb-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "8f4bdac85f2a8207",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "36bb0425cca0986d",
+                  "start_time": "2026-08-02T17:18:49.417718Z",
+                  "end_time": "2026-08-02T17:18:52.124951Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "e8050ca0f7ec2b9f",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "36bb0425cca0986d",
+                  "start_time": "2026-08-02T17:18:52.125228Z",
+                  "end_time": "2026-08-02T17:18:52.569342Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "I-395 Near Edsall Road",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "fb23d0ff5e10ec33",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "c075b4ec3af3840d",
+                  "start_time": "2026-08-02T17:18:52.571806Z",
+                  "end_time": "2026-08-02T17:18:54.119738Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for **US-1 \u2192 I-395 Near Edsall Road** at **7/29/2026 10:50 AM ET** because the northbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "1f29eaa98643cdad",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "04dfcb09a846c5be",
+                  "start_time": "2026-08-02T17:18:49.415492Z",
+                  "end_time": "2026-08-02T17:18:54.120669Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for **US-1 \u2192 I-395 Near Edsall Road** at **7/29/2026 10:50 AM ET** because the northbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "88915d92a644f092",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "d22ab58852ff2b30",
+                  "start_time": "2026-08-02T17:19:01.343630Z",
+                  "end_time": "2026-08-02T17:19:03.283845Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So no Express fare is available at all for this trip and time, correct?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "07fd9abe6989d3eb",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "04dfcb09a846c5be",
+                  "start_time": "2026-08-02T17:19:01.341511Z",
+                  "end_time": "2026-08-02T17:19:03.284676Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So no Express fare is available at all for this trip and time, correct?",
+                "agent_response": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+            "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b"
+          }
+        ],
+        "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b"
+      },
+      "metadata": {
+        "id": "i95-both-closed-nb",
+        "description": "Northbound request while both I-95 directions are closed.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "I-395 Near Edsall Road",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1132,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply.\n",
+      "name": "i95-both-closed-sb-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "da78fff0d02586a8",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "bc3d74380e3d6ea5",
+                  "start_time": "2026-08-02T17:19:17.857263Z",
+                  "end_time": "2026-08-02T17:19:19.596592Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "dd6e1cc78abe634f",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "bc3d74380e3d6ea5",
+                  "start_time": "2026-08-02T17:19:19.597313Z",
+                  "end_time": "2026-08-02T17:19:19.912453Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "I-395 Near Edsall Road",
+                    "destination": "US-1",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "52054b10edc75071",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "8891df2a528785a3",
+                  "start_time": "2026-08-02T17:19:19.914758Z",
+                  "end_time": "2026-08-02T17:19:21.751261Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for travel from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available alternative, but they are unpriced here."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "c6f827a1406b2d58",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "f75b56d4643c15e8",
+                  "start_time": "2026-08-02T17:19:17.855745Z",
+                  "end_time": "2026-08-02T17:19:21.752181Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for travel from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available alternative, but they are unpriced here.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "7476b23eb5ae7a81",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "4b732549db172426",
+                  "start_time": "2026-08-02T17:19:29.926405Z",
+                  "end_time": "2026-08-02T17:19:31.897567Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I understand\u2014so there's no Express fare available due to the closure. Just to clarify: are the I-95 general-purpose lanes truly unpriced for this route and time?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "2c43aba8d9ee8183",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "f75b56d4643c15e8",
+                  "start_time": "2026-08-02T17:19:29.924260Z",
+                  "end_time": "2026-08-02T17:19:31.898463Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I understand\u2014so there's no Express fare available due to the closure. Just to clarify: are the I-95 general-purpose lanes truly unpriced for this route and time?",
+                "agent_response": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "2f968daa74794373357f1fccfcded3ff",
+            "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194"
+          }
+        ],
+        "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194"
+      },
+      "metadata": {
+        "id": "i95-both-closed-sb",
+        "description": "Southbound request while both I-95 directions are closed.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "I-395 Near Edsall Road",
+              "destination": "US-1",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1151,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
+      "actual_output": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here.\n",
+      "name": "i95-nb-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "520f0d70d17f7b3a",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "ab8d441fd6cdc838",
+                  "start_time": "2026-08-02T17:17:43.570345Z",
+                  "end_time": "2026-08-02T17:17:47.016256Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T15:40:00-04:00"
+                        },
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "483ace7efc6ed6de",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "ab8d441fd6cdc838",
+                  "start_time": "2026-08-02T17:17:47.016686Z",
+                  "end_time": "2026-08-02T17:17:47.599952Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "I-395 Near Edsall Road",
+                    "at_time": "2026-07-29T15:40:00-04:00"
+                  },
+                  "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "d96151ad6c7952f7",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "bb2bb3460d214b7d",
+                  "start_time": "2026-08-02T17:17:47.602530Z",
+                  "end_time": "2026-08-02T17:17:49.695980Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T15:40:00-04:00"
+                        },
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_18hFlEMhVgQuxTe5TVqKOwuO",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+                  "span_id": "27d00503a40e8a08",
+                  "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927",
+                  "parent_span_id": "e6839651ca92cd83",
+                  "start_time": "2026-08-02T17:17:43.567787Z",
+                  "end_time": "2026-08-02T17:17:49.697077Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for this trip because the northbound link is closed at the requested travel time.\n\nThe I-95 general-purpose lanes are an alternative, but they are unpriced here.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "4f6032a26790f053ee95b17183f2ac57",
+            "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927"
+          }
+        ],
+        "session_id": "c90fbca9-0666-4f5d-8472-f16bf2576927"
+      },
+      "metadata": {
+        "id": "i95-nb-closed",
+        "description": "Historical northbound I-95 closure for OD 1132.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "I-395 Near Edsall Road",
+              "at_time": "2026-07-29T15:40:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1132,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
+      "actual_output": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them.\n",
+      "name": "i95-sb-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "5e6e6e707b0e4b10",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "3b756e8b518469a6",
+                  "start_time": "2026-08-02T17:18:06.507476Z",
+                  "end_time": "2026-08-02T17:18:08.468175Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:10:00-04:00"
+                        },
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "a48788947d3f2bc0",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "3b756e8b518469a6",
+                  "start_time": "2026-08-02T17:18:08.468575Z",
+                  "end_time": "2026-08-02T17:18:08.703648Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "I-395 Near Edsall Road",
+                    "destination": "US-1",
+                    "at_time": "2026-07-29T10:10:00-04:00"
+                  },
+                  "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "e8f6c782ed8542b8",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "c0bde8e555c322f0",
+                  "start_time": "2026-08-02T17:18:08.705969Z",
+                  "end_time": "2026-08-02T17:18:10.229822Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:10:00-04:00"
+                        },
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_mPoiKNBifoIu3GeKhErH4PS6",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for this trip at **7/29/2026 10:10 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "2e2fe77ffadb4ba7",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:06.505272Z",
+                  "end_time": "2026-08-02T17:18:10.230760Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for this trip at **7/29/2026 10:10 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "b779481e92f07cc1",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "afa4fa153ca7b277",
+                  "start_time": "2026-08-02T17:18:20.300326Z",
+                  "end_time": "2026-08-02T17:18:22.765086Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I need to follow the staged process\u2014so to confirm: there's no Express fare available because the lanes are closed?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. For **7/29/2026 10:10 AM ET**, no Express Lanes fare is available because the southbound I-95 Express Lanes were closed. The general-purpose lanes are available as an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "6ae0abb3e3ea205c",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:20.298180Z",
+                  "end_time": "2026-08-02T17:18:22.765963Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I need to follow the staged process\u2014so to confirm: there's no Express fare available because the lanes are closed?",
+                "agent_response": "Yes. For **7/29/2026 10:10 AM ET**, no Express Lanes fare is available because the southbound I-95 Express Lanes were closed. The general-purpose lanes are available as an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "c0ff9ab556ac3480",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "42fd36b29502fe5a",
+                  "start_time": "2026-08-02T17:18:30.923430Z",
+                  "end_time": "2026-08-02T17:18:32.333059Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So the I-95 general-purpose lanes are unpriced, correct?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+                  "span_id": "9701e8cff89e3e19",
+                  "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29",
+                  "parent_span_id": "2c41c0f38efcc193",
+                  "start_time": "2026-08-02T17:18:30.922766Z",
+                  "end_time": "2026-08-02T17:18:32.333943Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So the I-95 general-purpose lanes are unpriced, correct?",
+                "agent_response": "Correct. The I-95 general-purpose lanes are an **unpriced alternative**; no fare was provided for them.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "8ba9ead7c9abf3b5fed48e704d5917a8",
+            "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29"
+          }
+        ],
+        "session_id": "119f4f45-088b-4042-9219-c4a7c957ce29"
+      },
+      "metadata": {
+        "id": "i95-sb-closed",
+        "description": "Historical southbound I-95 closure for OD 1151.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "I-395 Near Edsall Road",
+              "destination": "US-1",
+              "at_time": "2026-07-29T10:10:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1151,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative.\n",
+      "name": "i95-both-closed-nb-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "8f4bdac85f2a8207",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "36bb0425cca0986d",
+                  "start_time": "2026-08-02T17:18:49.417718Z",
+                  "end_time": "2026-08-02T17:18:52.124951Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "e8050ca0f7ec2b9f",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "36bb0425cca0986d",
+                  "start_time": "2026-08-02T17:18:52.125228Z",
+                  "end_time": "2026-08-02T17:18:52.569342Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "I-395 Near Edsall Road",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "fb23d0ff5e10ec33",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "c075b4ec3af3840d",
+                  "start_time": "2026-08-02T17:18:52.571806Z",
+                  "end_time": "2026-08-02T17:18:54.119738Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "I-395 Near Edsall Road",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_iIYFcpNXW4GppEBFvc60jD1V",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for **US-1 \u2192 I-395 Near Edsall Road** at **7/29/2026 10:50 AM ET** because the northbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "1f29eaa98643cdad",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "04dfcb09a846c5be",
+                  "start_time": "2026-08-02T17:18:49.415492Z",
+                  "end_time": "2026-08-02T17:18:54.120669Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for **US-1 \u2192 I-395 Near Edsall Road** at **7/29/2026 10:50 AM ET** because the northbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "88915d92a644f092",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "d22ab58852ff2b30",
+                  "start_time": "2026-08-02T17:19:01.343630Z",
+                  "end_time": "2026-08-02T17:19:03.283845Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So no Express fare is available at all for this trip and time, correct?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+                  "span_id": "07fd9abe6989d3eb",
+                  "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b",
+                  "parent_span_id": "04dfcb09a846c5be",
+                  "start_time": "2026-08-02T17:19:01.341511Z",
+                  "end_time": "2026-08-02T17:19:03.284676Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So no Express fare is available at all for this trip and time, correct?",
+                "agent_response": "Correct. No Express Lanes fare is available for this trip at **7/29/2026 10:50 AM ET** because the northbound I-95 Express Lanes were closed. The general-purpose lanes are an unpriced alternative.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9ed391c0dda9f15627ceccb324e3fb66",
+            "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b"
+          }
+        ],
+        "session_id": "a3b67f41-ae23-427b-a20f-bc02e7a6516b"
+      },
+      "metadata": {
+        "id": "i95-both-closed-nb",
+        "description": "Northbound request while both I-95 directions are closed.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "I-395 Near Edsall Road",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1132,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    },
+    {
+      "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply.\n",
+      "name": "i95-both-closed-sb-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "da78fff0d02586a8",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "bc3d74380e3d6ea5",
+                  "start_time": "2026-08-02T17:19:17.857263Z",
+                  "end_time": "2026-08-02T17:19:19.596592Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "dd6e1cc78abe634f",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "bc3d74380e3d6ea5",
+                  "start_time": "2026-08-02T17:19:19.597313Z",
+                  "end_time": "2026-08-02T17:19:19.912453Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "I-395 Near Edsall Road",
+                    "destination": "US-1",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                  "error": null,
+                  "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "52054b10edc75071",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "8891df2a528785a3",
+                  "start_time": "2026-08-02T17:19:19.914758Z",
+                  "end_time": "2026-08-02T17:19:21.751261Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "I-395 Near Edsall Road",
+                          "destination": "US-1",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+                        "error": null,
+                        "tool_call_id": "call_SFLYPby53o9LoJoOyQvYJ9YL",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The I-95 Express Lanes are unavailable for travel from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available alternative, but they are unpriced here."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "c6f827a1406b2d58",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "f75b56d4643c15e8",
+                  "start_time": "2026-08-02T17:19:17.855745Z",
+                  "end_time": "2026-08-02T17:19:21.752181Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "The I-95 Express Lanes are unavailable for travel from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET** because the southbound lanes are closed.\n\nThe I-95 general-purpose lanes are an available alternative, but they are unpriced here.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "7476b23eb5ae7a81",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "4b732549db172426",
+                  "start_time": "2026-08-02T17:19:29.926405Z",
+                  "end_time": "2026-08-02T17:19:31.897567Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I understand\u2014so there's no Express fare available due to the closure. Just to clarify: are the I-95 general-purpose lanes truly unpriced for this route and time?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "2f968daa74794373357f1fccfcded3ff",
+                  "span_id": "2c43aba8d9ee8183",
+                  "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194",
+                  "parent_span_id": "f75b56d4643c15e8",
+                  "start_time": "2026-08-02T17:19:29.924260Z",
+                  "end_time": "2026-08-02T17:19:31.898463Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I understand\u2014so there's no Express fare available due to the closure. Just to clarify: are the I-95 general-purpose lanes truly unpriced for this route and time?",
+                "agent_response": "Yes. The I-95 general-purpose lanes are **unpriced in this tool\u2019s coverage** for the route from **I-395 Near Edsall Road** to **US-1** at **7/29/2026 10:50 AM ET**.\n\nThat means I can\u2019t provide a toll estimate for those lanes\u2014not that travel is necessarily free or that no other charges could apply.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "2f968daa74794373357f1fccfcded3ff",
+            "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194"
+          }
+        ],
+        "session_id": "a7f67711-aea7-4085-b500-73f34b9b9194"
+      },
+      "metadata": {
+        "id": "i95-both-closed-sb",
+        "description": "Southbound request while both I-95 directions are closed.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": "i95_route",
+            "input": {
+              "origin": "I-395 Near Edsall Road",
+              "destination": "US-1",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_od_pair_id": 1151,
+        "expected_link_status": "CLOSED",
+        "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "exact call returned the expected closure",
+    "exact call returned the expected closure",
+    "exact call returned the expected closure",
+    "exact call returned the expected closure",
+    "The agent's behavior satisfies all three components of the success assertion: (1) It states the requested I-95 Express Lanes trip is unavailable, citing \"The I-95 Express Lanes are unavailable for this trip because the northbound link is closed\"; (2) It quotes no fare\u2014neither for the Express Lanes nor the general-purpose lanes; (3) It identifies the I-95 general-purpose lanes as an alternative and notes they are unpriced (\"The I-95 general-purpose lanes are an alternative, but they are unpriced here\"). The response directly aligns with the assertion's intent.",
+    "The agent was asked to price the I-95 Express Lanes for a specific trip. The API returned an error indicating the southbound Express Lanes were closed. Across all three user exchanges, the agent consistently: (1) communicated that the Express Lanes trip was unavailable due to closure, (2) did not quote any fare for the Express Lanes or general-purpose lanes, and (3) identified the I-95 general-purpose lanes as an unpriced alternative. The agent correctly handled the unavailability and accurately reflected the API response throughout the conversation, satisfying the assertion requirements.",
+    "The agent successfully satisfied all three components of the assertion: (1) It consistently stated the requested I-95 Express Lanes trip is unavailable, citing the closed northbound lanes in both responses. (2) It quoted no fare for the Express Lanes or general-purpose lanes\u2014no pricing was provided. (3) It identified the I-95 general-purpose lanes as an unpriced alternative in both responses. The agent's behavior fully aligns with the success assertions.",
+    "The agent successfully addressed all three components of the success assertion: (1) It consistently stated the I-95 Express Lanes trip is unavailable, citing the closure (\"link_status='CLOSED'\" and \"requires 'SOUTHBOUND_OPEN'\") in both responses. (2) It quoted no fare for the Express Lanes trip (acknowledging unavailability) and confirmed no fare pricing for the general-purpose lanes (\"unpriced in this tool's coverage\"). (3) It identified the I-95 general-purpose lanes as an unpriced alternative, explicitly stating in the first response \"The I-95 general-purpose lanes are an available alternative, but they are unpriced here\" and reinforcing this in the follow-up response. The agent's behavior directly satisfies all elements of the assertion.",
+    "The assistant successfully explains why the pricing request cannot be fulfilled\u2014the I-95 Express Lanes northbound link was closed at the requested time. This addresses the user's confusion about the tool error and provides clarity about the situation. However, the response is limited in forward momentum because it doesn't proactively suggest alternatives like checking a different time or route. The user's core goal (getting a price) remains unmet, though understanding the reason why is a step toward resolving the issue. The response is accurate, clear, and directly addresses the error, but lacks anticipatory guidance to help the user move toward their ultimate goal of finding toll pricing information.",
+    "The user asked a straightforward clarification question: \"So the I-95 general-purpose lanes are unpriced, correct?\" The assistant provided a direct confirmation that matches the user's understanding. This is a validating response that helps the user proceed with confidence through their stated \"staged process.\" While it's not advancing new information, it is appropriately confirming the user's current understanding of the situation. The response is clear, accurate relative to the tool outputs and context, and helps maintain momentum in the conversation by confirming what the user already understands. This is a somewhat helpful response\u2014it moves the user one step forward by validating their understanding and allowing them to proceed to the next stage of their process.",
+    "The user asked a direct confirmation question about toll fare availability. The assistant provided a clear, accurate confirmation based on the tool result, directly answering \"Correct\" to confirm the user's understanding. The response is concise, appropriately contextualized with the reason (closed lanes), and mentions the alternative of general-purpose lanes. This moves the user's understanding forward by confirming their interpretation of the pricing situation. The response is helpful in affirming what the user suspected and providing closure to this inquiry.",
+    "The assistant directly answers the user's clarification question with transparency about tool limitations. The key strength is distinguishing between \"unpriced in the tool's coverage\" versus \"free travel,\" which prevents a critical misunderstanding. The response is factually accurate based on the tool results (both attempts returned closure errors), and it moves the user toward a correct understanding of the situation: (1) Express Lanes are closed, (2) the tool cannot provide pricing for this route/time, and (3) this limitation doesn't tell us whether general-purpose lanes are free. The response appropriately acknowledges scope limitations while providing the most useful information possible given the constraints. This is very helpful for the user's goal of understanding toll pricing availability."
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact call returned the expected closure",
+        "label": "closed"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact call returned the expected closure",
+        "label": "closed"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact call returned the expected closure",
+        "label": "closed"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact call returned the expected closure",
+        "label": "closed"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent's behavior satisfies all three components of the success assertion: (1) It states the requested I-95 Express Lanes trip is unavailable, citing \"The I-95 Express Lanes are unavailable for this trip because the northbound link is closed\"; (2) It quotes no fare\u2014neither for the Express Lanes nor the general-purpose lanes; (3) It identifies the I-95 general-purpose lanes as an alternative and notes they are unpriced (\"The I-95 general-purpose lanes are an alternative, but they are unpriced here\"). The response directly aligns with the assertion's intent.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent was asked to price the I-95 Express Lanes for a specific trip. The API returned an error indicating the southbound Express Lanes were closed. Across all three user exchanges, the agent consistently: (1) communicated that the Express Lanes trip was unavailable due to closure, (2) did not quote any fare for the Express Lanes or general-purpose lanes, and (3) identified the I-95 general-purpose lanes as an unpriced alternative. The agent correctly handled the unavailability and accurately reflected the API response throughout the conversation, satisfying the assertion requirements.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent successfully satisfied all three components of the assertion: (1) It consistently stated the requested I-95 Express Lanes trip is unavailable, citing the closed northbound lanes in both responses. (2) It quoted no fare for the Express Lanes or general-purpose lanes\u2014no pricing was provided. (3) It identified the I-95 general-purpose lanes as an unpriced alternative in both responses. The agent's behavior fully aligns with the success assertions.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent successfully addressed all three components of the success assertion: (1) It consistently stated the I-95 Express Lanes trip is unavailable, citing the closure (\"link_status='CLOSED'\" and \"requires 'SOUTHBOUND_OPEN'\") in both responses. (2) It quoted no fare for the Express Lanes trip (acknowledging unavailability) and confirmed no fare pricing for the general-purpose lanes (\"unpriced in this tool's coverage\"). (3) It identified the I-95 general-purpose lanes as an unpriced alternative, explicitly stating in the first response \"The I-95 general-purpose lanes are an available alternative, but they are unpriced here\" and reinforcing this in the follow-up response. The agent's behavior directly satisfies all elements of the assertion.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 0.667,
+        "test_pass": true,
+        "reason": "The assistant successfully explains why the pricing request cannot be fulfilled\u2014the I-95 Express Lanes northbound link was closed at the requested time. This addresses the user's confusion about the tool error and provides clarity about the situation. However, the response is limited in forward momentum because it doesn't proactively suggest alternatives like checking a different time or route. The user's core goal (getting a price) remains unmet, though understanding the reason why is a step toward resolving the issue. The response is accurate, clear, and directly addresses the error, but lacks anticipatory guidance to help the user move toward their ultimate goal of finding toll pricing information.",
+        "label": "Somewhat helpful"
+      }
+    ],
+    [
+      {
+        "score": 0.667,
+        "test_pass": true,
+        "reason": "The user asked a straightforward clarification question: \"So the I-95 general-purpose lanes are unpriced, correct?\" The assistant provided a direct confirmation that matches the user's understanding. This is a validating response that helps the user proceed with confidence through their stated \"staged process.\" While it's not advancing new information, it is appropriately confirming the user's current understanding of the situation. The response is clear, accurate relative to the tool outputs and context, and helps maintain momentum in the conversation by confirming what the user already understands. This is a somewhat helpful response\u2014it moves the user one step forward by validating their understanding and allowing them to proceed to the next stage of their process.",
+        "label": "Somewhat helpful"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The user asked a direct confirmation question about toll fare availability. The assistant provided a clear, accurate confirmation based on the tool result, directly answering \"Correct\" to confirm the user's understanding. The response is concise, appropriately contextualized with the reason (closed lanes), and mentions the alternative of general-purpose lanes. This moves the user's understanding forward by confirming their interpretation of the pricing situation. The response is helpful in affirming what the user suspected and providing closure to this inquiry.",
+        "label": "Very helpful"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The assistant directly answers the user's clarification question with transparency about tool limitations. The key strength is distinguishing between \"unpriced in the tool's coverage\" versus \"free travel,\" which prevents a critical misunderstanding. The response is factually accurate based on the tool results (both attempts returned closure errors), and it moves the user toward a correct understanding of the situation: (1) Express Lanes are closed, (2) the tool cannot provide pricing for this route/time, and (3) this limitation doesn't tell us whether general-purpose lanes are free. The response appropriately acknowledges scope limitations while providing the most useful information possible given the constraints. This is very helpful for the user's goal of understanding toll pricing availability.",
+        "label": "Very helpful"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ]
+}

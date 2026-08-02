@@ -5,21 +5,32 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands_evals import ActorSimulator, Case, Experiment  # noqa: E402
 from strands_evals.evaluators import (  # noqa: E402
+    Evaluator,
     GoalSuccessRateEvaluator,
     HelpfulnessEvaluator,
 )
+from strands_evals.types.evaluation import (  # noqa: E402
+    EvaluationData,
+    EvaluationOutput,
+)
+from strands_evals.types.simulation import ActorProfile  # noqa: E402
+from strands_evals.types.trace import Session, ToolExecutionSpan  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
+from eval.deterministic.i95_historical_closures.deterministic_i95_historical_closures import (  # noqa: E402
+    evaluate_closure_calls,
+)
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
     raise_for_evaluation_errors,
@@ -44,32 +55,105 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
         if not line.strip():
             continue
         row: dict[str, Any] = json.loads(line)
-        expected = row["expected_trajectory"][0]
         cases.append(
             Case[str, str](
                 name=f"{row['id']}-simulated",
                 input=row["conversation"][0]["content"],
                 metadata={
+                    **row,
                     "task_description": (
                         "The driver wants only the requested historical I-95 Express "
                         "Lanes fare. The origin, destination, and time are complete and "
                         "must not be changed. If those lanes are closed, they need a "
                         "safe alternative suggestion without an invented toll quote."
-                    )
+                    ),
                 },
                 expected_assertion=(
-                    f"The agent calls i95_route exactly once with origin "
-                    f"{expected['input']['origin']!r}, destination "
-                    f"{expected['input']['destination']!r}, and at_time "
-                    f"{expected['input']['at_time']!r}. After the tool reports "
-                    f"OD {row['expected_od_pair_id']} CLOSED, the agent says the "
+                    "Across the conversation, the agent consistently says the "
                     "requested I-95 Express Lanes trip is unavailable, quotes no "
-                    "fare, suggests the I-95 general-purpose lanes as an unpriced "
-                    "alternative, and does not call a substitute pricing tool."
+                    "fare for it or the general-purpose lanes, and identifies the "
+                    "I-95 general-purpose lanes as an unpriced alternative."
                 ),
             )
         )
     return cases
+
+
+def build_actor_profile(case: Case[str, str]) -> ActorProfile:
+    metadata = case.metadata or {}
+    expected_input = metadata["expected_trajectory"][0]["input"]
+    return ActorProfile(
+        traits={"communication_style": "concise and direct"},
+        context=(
+            f"Your trip origin is {expected_input['origin']}, destination is "
+            f"{expected_input['destination']}, and departure time is "
+            f"{expected_input['at_time']}. These facts are fixed; never change them."
+        ),
+        actor_goal=(
+            "Get the requested pricing result. If the lanes are closed, continue "
+            "with staged pricing clarification: first confirm that no Express fare "
+            "exists, then ask separately whether the I-95 general-purpose lanes are "
+            "unpriced. Do not ask for source documentation, alternate corridors, "
+            "live traffic routing, or change the trip facts."
+        ),
+    )
+
+
+def build_helpfulness_evaluator(
+    model_id: str, today: date | None = None
+) -> HelpfulnessEvaluator[str, str]:
+    evaluation_date = today or datetime.now(ZoneInfo("America/New_York")).date()
+    evaluator: HelpfulnessEvaluator[str, str] = HelpfulnessEvaluator(model=model_id)
+    evaluator.system_prompt += (
+        "\n\n# Evaluation context\n"
+        f"The evaluation date in America/New_York is "
+        f"{evaluation_date:%B} {evaluation_date.day}, {evaluation_date.year}. "
+        "TollChat is a pricing-only assistant. Live traffic routing and source "
+        "documentation are outside its scope; do not penalize the agent for not "
+        "providing them, and do not reward unsupported facts."
+    )
+    return evaluator
+
+
+class ClosureSimulationTraceEvaluator(Evaluator[str, str]):
+    """Grade unique raw tool execution spans without LLM trace duplication."""
+
+    def evaluate(
+        self, evaluation_case: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        trajectory = evaluation_case.actual_trajectory
+        if not isinstance(trajectory, Session):
+            return [
+                EvaluationOutput(
+                    score=0.0,
+                    test_pass=False,
+                    reason="actual trajectory was not a telemetry session",
+                    label="bad_trajectory",
+                )
+            ]
+
+        calls: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for trace_index, trace in enumerate(trajectory.traces):
+            for span_index, span in enumerate(trace.spans):
+                if not isinstance(span, ToolExecutionSpan):
+                    continue
+                span_id = span.span_info.span_id or f"{trace_index}:{span_index}"
+                key = (trace.trace_id, span_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                calls.append(
+                    {
+                        "name": span.tool_call.name,
+                        "input": cast(
+                            dict[str, Any],
+                            span.tool_call.arguments,  # pyright: ignore[reportUnknownMemberType]
+                        ),
+                        "tool_result": span.tool_result.content,
+                    }
+                )
+        return evaluate_closure_calls(calls, evaluation_case.metadata or {})
 
 
 def main() -> None:
@@ -80,8 +164,11 @@ def main() -> None:
     telemetry, mapper = build_telemetry()
 
     def task_function(case: Case[str, str]) -> dict[str, object]:
-        simulator = ActorSimulator.from_case_for_user_simulator(  # pyright: ignore[reportUnknownMemberType]
-            case=case, model=model_id, max_turns=3
+        simulator = ActorSimulator(
+            actor_profile=build_actor_profile(case),
+            initial_query=str(case.input),
+            model=model_id,
+            max_turns=3,
         )
         return run_case_with_simulator(
             case.session_id,
@@ -95,8 +182,9 @@ def main() -> None:
     report = Experiment[str, str](
         cases=load_cases(),
         evaluators=[
+            ClosureSimulationTraceEvaluator(),
             GoalSuccessRateEvaluator(model=model_id),
-            HelpfulnessEvaluator(model=model_id),
+            build_helpfulness_evaluator(model_id),
         ],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
@@ -113,6 +201,7 @@ def _self_check() -> None:
     assert all(case.input for case in cases)
     assert all(case.expected_assertion for case in cases)
     assert all((case.metadata or {}).get("task_description") for case in cases)
+    assert all((case.metadata or {}).get("expected_trajectory") for case in cases)
     print(
         "self-check ok (Case shapes only; live simulator, telemetry, and judges excluded)"
     )
