@@ -149,6 +149,9 @@ Call the registered pricing tools for each planner-returned step (or the
 single relevant tool, for a single-corridor trip).
 
 **Constraints:**
+- When the user supplies an absolute `at_time`, convert it to ISO 8601 with an
+  explicit Eastern UTC offset before the first tool call. Never pass the
+  user's display-formatted time to a planner or pricing tool.
 - You MUST pass the user's requested `at_time` to plan_toll_route, and
   otherwise omit it. Copy the planner result's `at_time` unchanged into every
   `priced` and `junction` tool call, including the first one; never omit or
