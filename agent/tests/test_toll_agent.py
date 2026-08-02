@@ -777,19 +777,14 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
     with pytest.raises(ValueError, match=r"rewrites system_prompt release 1\.0\.0"):
         validate_manifest_update(previous, rewritten)
 
-    current_version = previous["system_prompt"]["current"]
-    major, minor, _patch = map(int, current_version.split("."))
-    next_version = f"{major}.{minor + 1}.0"
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = next_version
-    advanced["system_prompt"]["releases"][next_version] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.2.0"
+    advanced["system_prompt"]["releases"]["1.2.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "0.0.0"
     advanced["system_prompt"]["releases"]["0.0.0"] = "1" * 64
-    with pytest.raises(
-        ValueError, match=rf"must advance beyond {re.escape(current_version)}"
-    ):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.1\.0"):
         validate_manifest_update(previous, advanced)
 
 

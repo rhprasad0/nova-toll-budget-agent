@@ -346,12 +346,13 @@ def _calls_from_evaluation(
     evaluation_case: EvaluationData[str, str],
 ) -> list[dict[str, Any]]:
     trajectory = evaluation_case.actual_trajectory
-    if not isinstance(trajectory, list) or len(trajectory) != 1:
+    if (
+        not isinstance(trajectory, list)
+        or len(trajectory) != 1
+        or not isinstance(trajectory[0], dict)
+    ):
         return []
-    turn = trajectory[0]
-    if not isinstance(turn, dict):
-        return []
-    turn_data = cast(dict[str, Any], turn)
+    turn_data = cast(dict[str, Any], trajectory[0])
     return cast(list[dict[str, Any]], turn_data.get("calls", []))
 
 

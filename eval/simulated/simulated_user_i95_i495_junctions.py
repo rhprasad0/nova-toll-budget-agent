@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -109,10 +109,8 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
     )
 
 
-def build_helpfulness_evaluator(
-    model_id: str, today: date | None = None
-) -> HelpfulnessEvaluator[str, str]:
-    evaluation_date = today or datetime.now(ZoneInfo("America/New_York")).date()
+def build_helpfulness_evaluator(model_id: str) -> HelpfulnessEvaluator[str, str]:
+    evaluation_date = datetime.now(ZoneInfo("America/New_York")).date()
     evaluator: HelpfulnessEvaluator[str, str] = HelpfulnessEvaluator(model=model_id)
     evaluator.system_prompt += (
         "\n\n# Evaluation context\n"
