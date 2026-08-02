@@ -123,4 +123,6 @@ eval/
 | 2026-08-02 | Deterministic implementation | Completed | Exact captured-call and response graders with offline mutation checks. |
 | 2026-08-02 | Simulated implementation | Completed | Eight three-turn immutable actor profiles with deterministic trace grading. |
 | 2026-08-02 | Automation | Completed | Offline checks and trusted live regression in CI; simulations nightly. |
-| 2026-08-02 | Live execution | Not authorized | No local billed run requested. |
+| 2026-08-02 | Deterministic live execution | Reviewed, not curated | Exact tool results passed 8/8; response grading exposed presentation false negatives and one genuine missing-rate-period response. |
+| 2026-08-02 | Simulated live execution | Reviewed, not curated | Goal/helpfulness passed 16/16; trace grading caught one invalid-time retry, and only 5/8 conversations reached all three turns. |
+| 2026-08-02 | Adversarial review | Completed | Accepted valid human-readable route labels and Markdown arithmetic, moved tool and turn counts to code grading, and now require exactly three simulation turns. |

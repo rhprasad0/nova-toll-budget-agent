@@ -23,7 +23,11 @@ from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationOutput,
 )
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
-from strands_evals.types.trace import Session, ToolExecutionSpan  # noqa: E402
+from strands_evals.types.trace import (  # noqa: E402
+    AgentInvocationSpan,
+    Session,
+    ToolExecutionSpan,
+)
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
@@ -57,7 +61,6 @@ def _follow_up(metadata: dict[str, Any]) -> str:
 def load_cases() -> list[Case[str, str]]:
     cases: list[Case[str, str]] = []
     for row in load_rows():
-        expected = row["expected_trajectory"][0]
         fare = row["expected_final_usd"]
         provenance = (
             f"the VDOT observation time {row['expected_observed_display']}"
@@ -79,8 +82,8 @@ def load_cases() -> list[Case[str, str]]:
                 },
                 expected_assertion=(
                     "Across all three turns, the agent keeps the fixed trip facts, "
-                    f"uses only {expected['tool']} once, consistently reports the "
-                    f"exact final fare ${fare} with correct arithmetic, and explains "
+                    f"consistently reports the exact final fare ${fare} with correct "
+                    "arithmetic, and explains "
                     f"{provenance} without inventing another route or price."
                 ),
             )
@@ -144,9 +147,12 @@ class SingleLegSimulationTraceEvaluator(Evaluator[str, str]):
             ]
 
         calls: list[dict[str, Any]] = []
+        turn_count = 0
         seen: set[tuple[str, str]] = set()
         for trace_index, trace in enumerate(trajectory.traces):
             for span_index, span in enumerate(trace.spans):
+                if isinstance(span, AgentInvocationSpan):
+                    turn_count += 1
                 if not isinstance(span, ToolExecutionSpan):
                     continue
                 span_id = span.span_info.span_id or f"{trace_index}:{span_index}"
@@ -164,7 +170,22 @@ class SingleLegSimulationTraceEvaluator(Evaluator[str, str]):
                         "tool_result": span.tool_result.content,
                     }
                 )
-        return evaluate_single_leg_calls(calls, evaluation_case.metadata or {})
+        return _evaluate_simulation(calls, turn_count, evaluation_case.metadata or {})
+
+
+def _evaluate_simulation(
+    calls: list[dict[str, Any]], turn_count: int, metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if turn_count != 3:
+        return [
+            EvaluationOutput(
+                score=0.0,
+                test_pass=False,
+                reason=f"expected exactly three agent turns, got {turn_count}",
+                label="turn_count",
+            )
+        ]
+    return evaluate_single_leg_calls(calls, metadata)
 
 
 def main() -> None:
@@ -230,6 +251,15 @@ def _self_check() -> None:
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )
     assert bad[0].label == "bad_trajectory"
+    row = load_rows()[0]
+    expected = row["expected_trajectory"][0]
+    call = {
+        "name": expected["tool"],
+        "input": expected["input"],
+        "tool_result": row["expected_result"],
+    }
+    assert _evaluate_simulation([call], 2, row)[0].label == "turn_count"
+    assert _evaluate_simulation([call], 3, row)[0].label == "exact_result"
     print("self-check ok (8 case/profile shapes and bad-session guard; no network)")
 
 

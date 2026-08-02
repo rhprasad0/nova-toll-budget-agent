@@ -203,6 +203,18 @@ def _term_present(response: str, term: str) -> bool:
     return term.lower() in lowered or term.replace("_", " ").lower() in lowered
 
 
+def _route_term_present(response: str, term: str) -> bool:
+    humanized = {
+        "I-95-NB": "I-95 northbound",
+        "I-95-SB": "I-95 southbound",
+        "I-495-NB": "I-495 northbound",
+        "I-495-SB": "I-495 southbound",
+    }.get(term)
+    return _term_present(response, term) or bool(
+        humanized and _term_present(response, humanized)
+    )
+
+
 class SingleLegResponseEvaluator(Evaluator[str, str]):
     """Require the fixture fare, arithmetic, route facts, and provenance."""
 
@@ -225,11 +237,12 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             expected_call["input"]["origin"],
             expected_call["input"]["destination"],
             expected_call["tool"],
-            metadata["expected_route_label"],
         ]
         missing_terms = [
             term for term in required_terms if not _term_present(response, term)
         ]
+        if not _route_term_present(response, metadata["expected_route_label"]):
+            missing_terms.append(metadata["expected_route_label"])
         if missing_terms:
             return _result(
                 False, f"response omitted route facts: {missing_terms}", "route_missing"
@@ -243,8 +256,10 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                 f"response dollar values {sorted(amounts)} did not equal only ${fare}",
                 "wrong_money",
             )
+        plain_response = response.translate(str.maketrans("", "", "*_`"))
         if not re.search(
-            rf"\$\s*{re.escape(fare)}\s*=\s*\$\s*{re.escape(fare)}", response
+            rf"\$\s*{re.escape(fare)}\s*=\s*\$\s*{re.escape(fare)}",
+            plain_response,
         ):
             return _result(
                 False, "response omitted exact one-fare arithmetic", "bad_math"
@@ -399,19 +414,36 @@ def _self_check() -> None:
             if metadata.get("expected_observed_display")
             else f"Rate period: {metadata['expected_rate_period']}"
         )
+        displayed_route = str(
+            {
+                "I-95-NB": "I-95 northbound",
+                "I-95-SB": "I-95 southbound",
+                "I-495-NB": "I-495 northbound",
+                "I-495-SB": "I-495 southbound",
+                "dulles_greenway": "Dulles Greenway",
+            }.get(metadata["expected_route_label"], metadata["expected_route_label"])
+        )
         good_output = (
             "## Route and fares\n"
             f"- {origin} → {destination} — {expected['tool']} "
-            f"({metadata['expected_route_label']}): ${fare}\n"
+            f"({displayed_route}): ${fare}\n"
             f"  - {provenance}\n"
             "## Calculation\n"
-            f"${fare} = ${fare}\n"
+            f"${fare} = **${fare}**\n"
             "## Final price\n"
             f"${fare}"
         )
         assert (
             response.evaluate(fake(metadata, [call], good_output))[0].label
             == "grounded_response"
+        )
+        assert (
+            response.evaluate(
+                fake(
+                    metadata, [call], good_output.replace(displayed_route, "wrong road")
+                )
+            )[0].label
+            == "route_missing"
         )
         assert (
             response.evaluate(
