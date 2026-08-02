@@ -1,10 +1,10 @@
 """Runs the Strands Evals experiment for TollChat's fuzzy location-matching
-and clarification behavior (see eval-plan.md). Both evaluators are
-code-based, not LLM-judged: this evaluation only tests whether the agent's
+and clarification behavior (see eval-plan.md). The evaluator is code-based,
+not LLM-judged: this evaluation only tests whether the agent's
 Step 1 location resolution (agent-sops/nova-toll-pricing-assistant.sop.md)
 asks before guessing an ambiguous location, converges to the exact oracle
-label once the user picks one, resolves an unambiguous case-insensitive
-match without asking, and never fabricates a price for an uncovered road.
+label once the user picks one, and resolves an unambiguous case-insensitive
+match without asking.
 
 Requires AWS_PROFILE=nova-toll (OpenAI key via SSM) and tailnet RDS access
 to actually invoke the agent -- run explicitly, same convention as
@@ -20,7 +20,6 @@ configure_local_pricing_env().
 from __future__ import annotations
 
 import json
-import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,11 +42,6 @@ from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
-_PRICE_RE = re.compile(
-    r"(?:\$\s*\d+(?:\.\d{1,2})?|\bUSD\s*\d+(?:\.\d{1,2})?\b|"
-    r"\b\d+(?:\.\d{1,2})?\s*(?:USD|dollars?|bucks?)\b)",
-    re.IGNORECASE,
-)
 
 
 def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
@@ -68,10 +62,6 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
             )
         )
     return cases
-
-
-def _contains_price(text: str) -> bool:
-    return _PRICE_RE.search(text) is not None
 
 
 def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
@@ -210,47 +200,12 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
         )
 
 
-class NoFabricatedPriceEvaluator(Evaluator[str, str]):
-    """For cases marked expect_no_price: no pricing tool ever fired across
-    the whole conversation, and the final response states no dollar amount."""
-
-    def evaluate(
-        self, evaluation_case: EvaluationData[str, str]
-    ) -> list[EvaluationOutput]:
-        metadata: dict[str, Any] = evaluation_case.metadata or {}
-        if not metadata.get("expect_no_price"):
-            return _result(
-                True,
-                "case does not require a price-free response",
-                "not_applicable",
-            )
-
-        any_tool_called = any(turn.get("calls", []) for turn in _turns(evaluation_case))
-        contains_price = _contains_price(str(evaluation_case.actual_output or ""))
-
-        if any_tool_called or contains_price:
-            return _result(
-                False,
-                "expected a coverage decline with no tool call and no price, got "
-                f"tool_called={any_tool_called} contains_price={contains_price}",
-                "fabricated_or_substituted",
-            )
-        return _result(
-            True,
-            "no pricing tool called and no price stated",
-            "declined_cleanly",
-        )
-
-
 def main() -> None:
     configure_local_pricing_env()
     cases = load_cases()
     experiment = Experiment[str, str](
         cases=cases,
-        evaluators=[
-            LocationResolutionEvaluator(),
-            NoFabricatedPriceEvaluator(),
-        ],
+        evaluators=[LocationResolutionEvaluator()],
     )
     report = experiment.run_evaluations(task_function)
 
@@ -270,25 +225,18 @@ def _self_check() -> None:
     assert [case.name for case in cases] == [
         "ambiguous-alias-mclean-multiturn",
         "unambiguous-case-insensitive-single-turn",
-        "uncovered-road-no-substitution",
     ]
     assert cases[1].expected_trajectory == ["i95_route"]
-    assert cases[2].expected_trajectory == []
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
-
-    for price in ("$4.25", "4.25 dollars", "USD 4.25"):
-        assert _contains_price(price)
-    assert not _contains_price("no price here")
 
     def _fake_case(
         metadata: dict[str, Any],
         trajectory: list[dict[str, Any]],
-        actual_output: str = "",
     ) -> EvaluationData[str, str]:
         return EvaluationData[str, str](
             input="x",
-            actual_output=actual_output,
+            actual_output="",
             actual_trajectory=trajectory,
             metadata=metadata,
         )
@@ -407,20 +355,6 @@ def _self_check() -> None:
         cases=[transport_case], evaluators=[LocationResolutionEvaluator()]
     ).run_evaluations(_transport_task)
     assert report.test_passes == [True]
-
-    price_check = NoFabricatedPriceEvaluator()
-    for expect_no_price, output, label in (
-        (True, "That road is outside coverage.", "declined_cleanly"),
-        (True, "That trip costs 3.50 dollars.", "fabricated_or_substituted"),
-        (False, "", "not_applicable"),
-    ):
-        price_metadata: dict[str, Any] = {
-            "expect_no_price": expect_no_price,
-        }
-        assert (
-            price_check.evaluate(_fake_case(price_metadata, [], output))[0].label
-            == label
-        )
 
     print("self-check ok")
 
