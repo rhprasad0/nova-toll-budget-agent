@@ -19,6 +19,8 @@ jobs:
       - run: uv run pytest
         if: hashFiles('**/test_*.py') != ''
       - run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py --check
+      - run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py --check
+      - run: uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 
   integration:
@@ -71,3 +73,5 @@ jobs:
         run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py
       - name: Run deterministic NY-time/US-format evaluation
         run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py
+      - name: Run deterministic historical I-95 closure evaluation
+        run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py

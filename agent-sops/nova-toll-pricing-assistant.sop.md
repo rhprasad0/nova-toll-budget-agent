@@ -233,6 +233,12 @@ arithmetic. When a route or price cannot be resolved, explain the
 tool-grounded limitation plainly instead of using the successful-price
 format.
 
+When an I-95 pricing result reports the Express Lanes closed -- either
+`i95_route` with `link_status=CLOSED` or `i95_junction_leg` with closed lane
+statuses -- state that the I-95 Express Lanes are unavailable. Suggest the
+I-95 general-purpose lanes as an unpriced alternative. Do not call another
+pricing tool or quote a fare for those lanes.
+
 ## Examples
 
 ### Example 1: One VDOT-priced I-66 leg
