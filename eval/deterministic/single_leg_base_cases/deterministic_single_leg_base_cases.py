@@ -33,7 +33,7 @@ _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _RAW_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?")
 _RATE_PERIOD_RE = re.compile(
-    r"^\s*(?:[-*]\s*)?rate period:\s*[*_`~]*"
+    r"^\s*(?:[-*]\s*)?[*_`~]*rate period[*_`~]*:[ \t]*[*_`~]*[ \t]*"
     r"([a-z]+(?:[-_ ][a-z]+)?)\s*[*_`~]*\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -437,6 +437,8 @@ def _self_check() -> None:
     )
 
     metadata, call, good_output = prepared[-1]
+    markdown_period = good_output.replace("Rate period: peak", "**Rate period:** peak")
+    assert response_label(metadata, call, markdown_period) == "grounded_response"
     for wrong_period in ("off_peak", "off peak", "off-peak"):
         wrong_output = good_output.replace(
             "Rate period: peak", f"Rate period: {wrong_period}"
