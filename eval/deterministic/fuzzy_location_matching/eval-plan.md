@@ -84,11 +84,15 @@ flowchart LR
 ├── .venv/                      # uv-managed virtual environment
 │
 └── eval/
-    ├── README.md
-    ├── run_evaluation.py
     ├── results/
-    ├── eval-plan.md
-    └── test-cases.jsonl
+    ├── simulation_support.py
+    ├── deterministic/fuzzy_location_matching/
+    │   ├── README.md
+    │   ├── eval-plan.md
+    │   ├── deterministic_fuzzy_location_matching.py
+    │   └── test-cases.jsonl
+    └── simulated/
+        └── simulated_user_fuzzy_location_matching.py
 ```
 
 No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproject.toml` dependency.
@@ -119,12 +123,12 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | :----------------- | :--------------- | :------------------------------ | :--------------------------------------------- |
 | 2026-08-01 18:20 | eval-plan.md   | Completed | Plan drafted from `agent/toll_agent.py`, `agent-sops/nova-toll-pricing-assistant.sop.md` Step 1, and live oracle queries confirming the McLean/Pentagon/I-66 OTB scenarios are grounded in real data (not assumed). A prior, now-stale `eval/tollchat-i95-single-leg` branch (pre-dates the SOP rewrite) supplied a bug-fixed reference for the Strands Evals API surface but was not merged — its `strands_evals` import pattern was re-verified against the currently installed package instead. |
 | 2026-08-01 18:20 | test-cases.jsonl | Completed | 3 cases; all origin/destination hard labels and the McLean/Pentagon-Dumfries direct-pair claims verified against `_LOCATION_BY_CORRIDOR` / `_has_direct_pair` before being written to the file, not assumed. |
-| 2026-08-01 18:20 | run_evaluation.py | Completed | Two code-based evaluators only — no LLM-judge half exists or is claimed for either metric. Requires `AWS_PROFILE=nova-toll` (OpenAI key via SSM) and tailnet RDS access to actually invoke the agent; not run live as part of this session, so results reflect the self-test only, not a real agent trajectory. `--check` self-test covers response requirements, expected/absent tool calls, exact hard labels, and currency detection against synthetic trajectories with no network calls. Per-turn call extraction reads `agent.messages[before:]` (only the messages added during that turn) into `tools_use_extractor.extract_agent_tools_used_from_messages`, verified against its source to be a safe slice: it pairs each turn's own `toolUse` blocks with `toolResult` blocks later in the same slice, so no cross-turn record is dropped or misattributed. |
+| 2026-08-01 18:20 | deterministic_fuzzy_location_matching.py | Completed | Two code-based evaluators only — no LLM-judge half exists or is claimed for either metric. Requires `AWS_PROFILE=nova-toll` (OpenAI key via SSM) and tailnet RDS access to actually invoke the agent; not run live as part of this session, so results reflect the self-test only, not a real agent trajectory. `--check` self-test covers response requirements, expected/absent tool calls, exact hard labels, and currency detection against synthetic trajectories with no network calls. Per-turn call extraction walks the response's `metrics.traces` and feeds those messages into `tools_use_extractor.extract_agent_tools_used_from_messages`, because stateful Responses leave `agent.messages` empty. |
 
 ## Track 2: simulated-user conversations
 
 Track 2 uses `ActorSimulator` for open-ended turns and is **not a regression
 gate**: the user and judges are LLMs. `simulation_support.py` keeps simulator
-spans out of the judged session; `examples/run_simulated_demo.py` shows the
-McLean case with pinned Haiku 4.5 judges. See `eval/README.md` for commands and
+spans out of the judged session; `simulated/simulated_user_fuzzy_location_matching.py`
+shows the McLean case with pinned Haiku 4.5 judges. See `README.md` for commands and
 `agent-sops/simulated-user-eval.sop.md` for the authoring checklist.

@@ -26,10 +26,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
-from strands.types.content import Messages  # noqa: E402
+from strands.types.content import Message, Messages  # noqa: E402
 from strands_evals import Case, Experiment  # noqa: E402
 from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.extractors import tools_use_extractor  # noqa: E402
@@ -42,7 +42,7 @@ from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
-_RESULTS_DIR = Path(__file__).resolve().parent / "results"
+_RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _PRICE_RE = re.compile(
     r"(?:\$\s*\d+(?:\.\d{1,2})?|\bUSD\s*\d+(?:\.\d{1,2})?\b|"
     r"\b\d+(?:\.\d{1,2})?\s*(?:USD|dollars?|bucks?)\b)",
@@ -82,9 +82,30 @@ def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
     ]
 
 
+def _report_passed(test_passes: list[bool]) -> bool:
+    return all(test_passes)
+
+
 def _metadata(case: Case[str, str]) -> dict[str, Any]:
     assert case.metadata is not None
     return case.metadata
+
+
+def _turns(evaluation_case: EvaluationData[str, str]) -> list[dict[str, Any]]:
+    trajectory = evaluation_case.actual_trajectory
+    return (
+        cast(list[dict[str, Any]], trajectory) if isinstance(trajectory, list) else []
+    )
+
+
+def _trace_messages(traces: list[dict[str, Any]]) -> Messages:
+    def walk(trace: dict[str, Any]) -> Messages:
+        messages = [cast(Message, trace["message"])] if trace.get("message") else []
+        for child in trace.get("children", []):
+            messages.extend(walk(child))
+        return messages
+
+    return [message for trace in traces for message in walk(trace)]
 
 
 def _extract_tool_calls(messages: Messages) -> list[dict[str, Any]]:
@@ -99,23 +120,17 @@ def _extract_tool_calls(messages: Messages) -> list[dict[str, Any]]:
 def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
     turns: list[dict[str, str]] = _metadata(case)["conversation"]
-    trajectory_by_turn: list[list[dict[str, Any]]] = []
-    responses_by_turn: list[str] = []
+    trajectory_by_turn: list[dict[str, Any]] = []
     response = None
     for turn in turns:
-        before = len(agent.messages)
         response = agent(turn["content"])
-        responses_by_turn.append(str(response))
-        calls = _extract_tool_calls(agent.messages[before:])
-        trajectory_by_turn.append(calls)
-    # Smuggled through case.metadata (mutated in place) since TaskOutput has
-    # no slot for per-turn responses/calls -- both evaluators below read them
-    # back off the same Case instance.
-    _metadata(case)["_trajectory_by_turn"] = trajectory_by_turn
-    _metadata(case)["_responses_by_turn"] = responses_by_turn
+        summary: dict[str, Any] = response.metrics.get_summary()
+        traces = cast(list[dict[str, Any]], summary.get("traces", []))
+        calls = _extract_tool_calls(_trace_messages(traces))
+        trajectory_by_turn.append({"response": str(response), "calls": calls})
     return {
         "output": str(response),
-        "trajectory": [call["name"] for call in trajectory_by_turn[-1]],
+        "trajectory": trajectory_by_turn,
     }
 
 
@@ -127,23 +142,19 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
     ) -> list[EvaluationOutput]:
         metadata: dict[str, Any] = evaluation_case.metadata or {}
         expected_turns: list[dict[str, Any]] = metadata.get("expected_trajectory", [])
-        trajectory_by_turn: list[list[dict[str, Any]]] = metadata.get(
-            "_trajectory_by_turn", []
-        )
-        responses_by_turn: list[str] = metadata.get("_responses_by_turn", [])
+        trajectory_by_turn = _turns(evaluation_case)
 
         for entry in expected_turns:
             turn_index = cast(int, entry["turn"]) - 1
-            actual_calls: list[dict[str, Any]] = []
-            if turn_index < len(trajectory_by_turn):
-                actual_calls = trajectory_by_turn[turn_index]
+            turn = (
+                trajectory_by_turn[turn_index]
+                if turn_index < len(trajectory_by_turn)
+                else {}
+            )
+            actual_calls: list[dict[str, Any]] = turn.get("calls", [])
             expected_tool = entry.get("tool")
 
-            response = (
-                responses_by_turn[turn_index]
-                if turn_index < len(responses_by_turn)
-                else ""
-            )
+            response = str(turn.get("response", ""))
             expected_terms: list[str] = entry.get("response_must_contain_any", [])
             if (
                 expected_terms
@@ -214,10 +225,7 @@ class NoFabricatedPriceEvaluator(Evaluator[str, str]):
                 "not_applicable",
             )
 
-        trajectory_by_turn: list[list[dict[str, Any]]] = metadata.get(
-            "_trajectory_by_turn", []
-        )
-        any_tool_called = any(calls for calls in trajectory_by_turn)
+        any_tool_called = any(turn.get("calls", []) for turn in _turns(evaluation_case))
         contains_price = _contains_price(str(evaluation_case.actual_output or ""))
 
         if any_tool_called or contains_price:
@@ -252,6 +260,8 @@ def main() -> None:
 
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
+    if not _report_passed(report.test_passes):
+        raise SystemExit("deterministic fuzzy-location evaluation failed")
 
 
 def _self_check() -> None:
@@ -264,16 +274,23 @@ def _self_check() -> None:
     ]
     assert cases[1].expected_trajectory == ["i95_route"]
     assert cases[2].expected_trajectory == []
+    assert _report_passed([True, True])
+    assert not _report_passed([True, False])
 
     for price in ("$4.25", "4.25 dollars", "USD 4.25"):
         assert _contains_price(price)
     assert not _contains_price("no price here")
 
     def _fake_case(
-        metadata: dict[str, Any], actual_output: str = ""
+        metadata: dict[str, Any],
+        trajectory: list[dict[str, Any]],
+        actual_output: str = "",
     ) -> EvaluationData[str, str]:
         return EvaluationData[str, str](
-            input="x", actual_output=actual_output, metadata=metadata
+            input="x",
+            actual_output=actual_output,
+            actual_trajectory=trajectory,
+            metadata=metadata,
         )
 
     resolver = LocationResolutionEvaluator()
@@ -286,60 +303,110 @@ def _self_check() -> None:
         "name": "i495_route",
         "input": {"origin": "A", "destination": "B", "at_time": None},
     }
+    trace_calls = _extract_tool_calls(
+        _trace_messages(
+            [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "toolUse": {
+                                    **actual_route,
+                                    "toolUseId": "route-1",
+                                }
+                            }
+                        ],
+                    },
+                    "children": [
+                        {
+                            "message": {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "toolResult": {
+                                            "toolUseId": "route-1",
+                                            "status": "success",
+                                            "content": [{"text": "ok"}],
+                                        }
+                                    }
+                                ],
+                            }
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    assert trace_calls == [{**actual_route, "tool_result": "ok", "is_error": False}]
     clarification = {
         "turn": 1,
         "tool": None,
         "response_must_be_question": True,
         "response_must_contain_any": ["I-495", "I-66"],
     }
-    resolver_checks: list[tuple[dict[str, Any], str]] = [
+    resolver_checks: list[tuple[dict[str, Any], list[dict[str, Any]], str]] = [
         (
-            {
-                "expected_trajectory": [expected_route],
-                "_trajectory_by_turn": [[actual_route]],
-            },
+            {"expected_trajectory": [expected_route]},
+            [{"response": "", "calls": [actual_route]}],
             "resolved",
         ),
         (
             {
                 "expected_trajectory": [clarification],
-                "_trajectory_by_turn": [[]],
-                "_responses_by_turn": ["I cannot help with that."],
             },
+            [{"response": "I cannot help with that.", "calls": []}],
             "response_mismatch",
         ),
         (
             {
                 "expected_trajectory": [clarification],
-                "_trajectory_by_turn": [[]],
-                "_responses_by_turn": ["Did you mean I-495 or I-66?"],
             },
+            [{"response": "Did you mean I-495 or I-66?", "calls": []}],
             "resolved",
         ),
         (
-            {
-                "expected_trajectory": [{"turn": 1, "tool": None}],
-                "_trajectory_by_turn": [[actual_route]],
-            },
+            {"expected_trajectory": [{"turn": 1, "tool": None}]},
+            [{"response": "", "calls": [actual_route]}],
             "premature_tool_call",
         ),
         (
             {
                 "expected_trajectory": [expected_route],
-                "_trajectory_by_turn": [
-                    [
+            },
+            [
+                {
+                    "response": "",
+                    "calls": [
                         {
                             "name": "i495_route",
                             "input": {"origin": "a-ish", "destination": "B"},
                         }
-                    ]
-                ],
-            },
+                    ],
+                }
+            ],
             "label_mismatch",
         ),
     ]
-    for metadata, label in resolver_checks:
-        assert resolver.evaluate(_fake_case(metadata))[0].label == label
+    for metadata, trajectory, label in resolver_checks:
+        assert resolver.evaluate(_fake_case(metadata, trajectory))[0].label == label
+
+    transport_case = Case[str, str](
+        name="trajectory-transport",
+        input="x",
+        metadata={"expected_trajectory": [clarification]},
+    )
+
+    def _transport_task(_: Case[str, str]) -> dict[str, Any]:
+        return {
+            "output": "Did you mean I-495 or I-66?",
+            "trajectory": [{"response": "Did you mean I-495 or I-66?", "calls": []}],
+        }
+
+    report = Experiment[str, str](
+        cases=[transport_case], evaluators=[LocationResolutionEvaluator()]
+    ).run_evaluations(_transport_task)
+    assert report.test_passes == [True]
 
     price_check = NoFabricatedPriceEvaluator()
     for expect_no_price, output, label in (
@@ -349,10 +416,10 @@ def _self_check() -> None:
     ):
         price_metadata: dict[str, Any] = {
             "expect_no_price": expect_no_price,
-            "_trajectory_by_turn": [[]],
         }
         assert (
-            price_check.evaluate(_fake_case(price_metadata, output))[0].label == label
+            price_check.evaluate(_fake_case(price_metadata, [], output))[0].label
+            == label
         )
 
     print("self-check ok")

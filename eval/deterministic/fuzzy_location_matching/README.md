@@ -1,4 +1,4 @@
-# TollChat evaluation: fuzzy location matching
+# Deterministic TollChat evaluation: fuzzy location matching
 
 Tests Step 1 of `agent-sops/nova-toll-pricing-assistant.sop.md` — does the
 agent ask before guessing an ambiguous location, converge on the exact
@@ -9,7 +9,7 @@ See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 3 cases.
 ## Self-check (no network)
 
 ```bash
-uv run python eval/run_evaluation.py --check
+uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py --check
 ```
 
 Runs the per-turn matching logic in both evaluators against synthetic
@@ -18,7 +18,7 @@ trajectories. No AWS/OpenAI/RDS calls.
 ## Live run
 
 ```bash
-AWS_PROFILE=nova-toll uv run python eval/run_evaluation.py
+AWS_PROFILE=nova-toll uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py
 ```
 
 Invokes the real agent (`agent.toll_agent.build_agent`), which needs the
@@ -30,32 +30,35 @@ local dev console uses). Run `scripts/build_zips.sh` once first to create the
 gitignored RDS CA bundle; after that, only `AWS_PROFILE` is needed. Results
 land in `eval/results/<timestamp>.json` (gitignored).
 
-## Simulated-user demo (Track 2)
+The trusted `integration` job in `.github/workflows/ci.yml` runs this suite as
+a regression gate. Any failed evaluator makes the command exit nonzero.
+
+## Simulated-user evaluation (Track 2)
 
 `simulation_support.py` is reusable scaffolding for future evals that need
 an LLM-simulated user (`strands_evals.ActorSimulator`) instead of a
-scripted conversation turn — import it directly, same as `run_evaluation.py`
-imports its own helpers. `examples/run_simulated_demo.py` is a worked
-example built on it, kept for reference rather than as part of the active
-harness (not re-run routinely). Unlike Track 1 above, this is
+scripted conversation turn — import it directly, same as the deterministic
+suite imports its own helpers. `simulated_user_fuzzy_location_matching.py` is
+the observational fuzzy-location scenario built on it. Unlike Track 1 above,
+this is
 **not a regression gate** — the simulated user and both judges
 (`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`) are all LLMs, so results
 vary run to run. See `eval-plan.md`'s "Track 2" section for the full design.
 
 ```bash
 uv run python eval/simulation_support.py --check
-uv run python eval/examples/run_simulated_demo.py --check
+uv run python eval/simulated/simulated_user_fuzzy_location_matching.py --check
 ```
 
 Both only validate deterministic, non-network logic (the turn-loop's stop
-conditions, and the demo `Case` and actor profile shapes). Span-to-session
+conditions, and the simulated `Case` and actor profile shapes). Span-to-session
 mapping and both judges only run live and are not covered by `--check`.
 
 ```bash
-AWS_PROFILE=nova-toll uv run python eval/examples/run_simulated_demo.py
+AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_fuzzy_location_matching.py
 ```
 
-A live run spends across three billed surfaces for the one demo case:
+A live run spends across three billed surfaces for the one simulated case:
 OpenAI (the agent under test), Bedrock (the simulator's conversational turns
 and both judges), and RDS (the agent's pricing tools). The simulator and judges
 use Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
@@ -63,7 +66,7 @@ use Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
 
 ## Nightly run
 
-`.github/workflows/nightly-evals.yml` runs the simulated-user demo every day at
+`.github/workflows/nightly-evals.yml` runs the simulated-user evaluation every day at
 3:17 AM New York time and supports manual dispatch from `main`. Judge verdicts
 are observational; execution failures still fail the workflow. Each JSON report
 is retained as a GitHub artifact for 90 days.
