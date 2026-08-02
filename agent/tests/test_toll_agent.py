@@ -1,5 +1,6 @@
 """Prompt-content and request-shape assertions only -- no AWS calls/network."""
 
+import hashlib
 import json
 import re
 from collections import deque
@@ -30,11 +31,21 @@ from agent_tools.i495_route import _lookup as _i495_lookup
 from agent_tools.i495_route import i495_route
 
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
+_CONTRACT_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "contract-manifest.json"
+_SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
 _LOOKUPS = {
     "i95": _i95_lookup,
     "i495": _i495_lookup,
     "i66_itb": _i66_lookup,
 }
+
+
+def _contract_manifest():
+    return json.loads(_CONTRACT_MANIFEST_PATH.read_text())
+
+
+def _sha256(value):
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _same_location(corridor, query, node_id):
@@ -735,6 +746,40 @@ def test_system_prompt_suggests_general_purpose_lanes_when_i95_is_closed():
     assert re.search(
         r"Continue pricing every remaining\s+planner-returned step", prompt
     )
+
+
+def test_agent_contract_manifest_versions_are_semver():
+    manifest = _contract_manifest()
+    versions = {
+        "system_prompt": toll_agent_module.SYSTEM_PROMPT_VERSION,
+        "toolset": toll_agent_module.TOOLSET_VERSION,
+    }
+
+    for contract, version in versions.items():
+        assert _SEMVER.fullmatch(version)
+        assert manifest[contract]["current"] == version
+        assert version in manifest[contract]["releases"]
+        assert all(_SEMVER.fullmatch(v) for v in manifest[contract]["releases"])
+        assert all(
+            re.fullmatch(r"[0-9a-f]{64}", digest)
+            for digest in manifest[contract]["releases"].values()
+        )
+
+
+def test_rendered_system_prompt_matches_its_versioned_digest():
+    manifest = _contract_manifest()["system_prompt"]
+    assert _sha256(build_system_prompt()) == manifest["releases"][manifest["current"]]
+
+
+def test_registered_toolset_matches_its_versioned_digest():
+    manifest = _contract_manifest()["toolset"]
+    canonical_specs = json.dumps(
+        [tool.tool_spec for tool in toll_agent_module._AGENT_TOOLS],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    assert _sha256(canonical_specs) == manifest["releases"][manifest["current"]]
 
 
 def test_agent_tool_specs_are_concise_and_preserve_their_contracts():
