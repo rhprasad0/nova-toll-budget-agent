@@ -186,11 +186,12 @@ def _term_present(response: str, term: str) -> bool:
     )
 
 
-def _endpoint_present(response: str, label: str) -> bool:
+def _route_endpoints_present(response: str, origin: str, destination: str) -> bool:
     plain = re.sub(r"[ \t]+", " ", response.translate(str.maketrans("", "", "*_`")))
     return bool(
         re.search(
-            rf"{re.escape(label)}(?!\w| \w)",
+            rf"{re.escape(origin)}\s*(?:→|->|\bto\b)\s*"
+            rf"{re.escape(destination)}(?!\w| \w)",
             plain,
             re.IGNORECASE,
         )
@@ -232,13 +233,13 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             )
 
         expected_call = metadata["expected_trajectory"][0]
-        endpoints = [
-            expected_call["input"]["origin"],
-            expected_call["input"]["destination"],
-        ]
-        missing_terms = [
-            label for label in endpoints if not _endpoint_present(response, label)
-        ]
+        origin = expected_call["input"]["origin"]
+        destination = expected_call["input"]["destination"]
+        missing_terms = (
+            []
+            if _route_endpoints_present(response, origin, destination)
+            else [f"{origin} → {destination}"]
+        )
         if not _route_term_present(response, metadata["expected_route_label"]):
             missing_terms.append(metadata["expected_route_label"])
         missing_terms.extend(
@@ -261,7 +262,8 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             )
         plain_response = response.translate(str.maketrans("", "", "*_`"))
         if not re.search(
-            rf"^\s*\$\s*{re.escape(fare)}\s*=\s*\$\s*{re.escape(fare)}\s*$",
+            rf"^\s*(?:[-+]\s+)?\$\s*{re.escape(fare)}\s*=\s*"
+            rf"\$\s*{re.escape(fare)}\s*$",
             plain_response,
             re.MULTILINE,
         ):
@@ -466,6 +468,10 @@ def _self_check() -> None:
         f"${fare} = **${fare}**", f"${fare} + ${fare} = **${fare}**"
     )
     assert response_label(metadata, call, leading_operand) == "bad_math"
+    listed_math = good_output.replace(
+        f"${fare} = **${fare}**", f"- ${fare} = **${fare}**"
+    )
+    assert response_label(metadata, call, listed_math) == "grounded_response"
     assert (
         response_label(metadata, call, good_output + " 2026-07-29T10:00:00-04:00")
         == "raw_datetime"
@@ -482,6 +488,11 @@ def _self_check() -> None:
         "I-95 Near Route 17", "From I-95 Near Route 17", 1
     )
     assert response_label(metadata, call, prefixed_origin) == "grounded_response"
+    reversed_route = good_output.replace(
+        "I-95 Near Route 17 → Washington D.C.",
+        "Washington D.C. → I-95 Near Route 17",
+    )
+    assert response_label(metadata, call, reversed_route) == "route_missing"
     assert (
         response_label(metadata, call, good_output.replace("i95_route ", ""))
         == "grounded_response"
