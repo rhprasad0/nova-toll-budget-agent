@@ -340,7 +340,7 @@ def evaluate_junction_response(
             or not any(
                 entry.casefold() in line.casefold()
                 and exit_.casefold() in line.casefold()
-                and f"${price}" in line
+                and _DOLLAR_AMOUNT_RE.findall(line) == [str(price)]
                 for line in response.splitlines()
             )
         ):
@@ -574,6 +574,11 @@ def _self_check() -> None:
         evaluate_junction_response(swapped, calls, metadata)[0].label
         == "price_leg_mismatch"
     )
+    one_line_swapped = swapped.replace("\n- I-495", " - I-495")
+    assert (
+        evaluate_junction_response(one_line_swapped, calls, metadata)[0].label
+        == "price_leg_mismatch"
+    )
     assert (
         evaluate_junction_response(
             response + " The junction is free.", calls, metadata
@@ -609,7 +614,7 @@ def _self_check() -> None:
         )[0].label
         == "unavailable_missing"
     )
-    print("self-check ok (10 fixtures and nine required mutation invariants)")
+    print("self-check ok (10 fixtures and ten required mutation invariants)")
 
 
 if __name__ == "__main__":
