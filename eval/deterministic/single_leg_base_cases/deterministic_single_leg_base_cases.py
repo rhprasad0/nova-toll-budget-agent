@@ -191,7 +191,7 @@ def _endpoint_present(response: str, label: str) -> bool:
     plain = re.sub(r"[ \t]+", " ", response.translate(str.maketrans("", "", "*_`")))
     return bool(
         re.search(
-            rf"(?<!\w)(?<!\w ){re.escape(label)}(?!\w| \w)",
+            rf"{re.escape(label)}(?!\w| \w)",
             plain,
             re.IGNORECASE,
         )
@@ -204,9 +204,12 @@ def _route_term_present(response: str, term: str) -> bool:
         humanized
         and (
             _term_present(response, humanized)
-            or all(
-                _term_present(response, part)
-                for part in (humanized.split()[0], humanized.split()[-1])
+            or (
+                term.startswith(("I-95-", "I-495-"))
+                and all(
+                    _term_present(response, part)
+                    for part in (humanized.split()[0], humanized.split()[-1])
+                )
             )
         )
     )
@@ -468,6 +471,10 @@ def _self_check() -> None:
         )
         == "grounded_response"
     )
+    prefixed_origin = good_output.replace(
+        "I-95 Near Route 17", "From I-95 Near Route 17", 1
+    )
+    assert response_label(metadata, call, prefixed_origin) == "grounded_response"
 
     metadata, call, good_output = prepared[4]
     assert (
@@ -481,6 +488,8 @@ def _self_check() -> None:
         )
         == "grounded_response"
     )
+    wrong_corridor = good_output.replace("Inside the Beltway", "Outside the Beltway")
+    assert response_label(metadata, call, wrong_corridor) == "route_missing"
     assert (
         response_label(
             metadata, call, good_output.replace("Washington", "Washington Blvd")
