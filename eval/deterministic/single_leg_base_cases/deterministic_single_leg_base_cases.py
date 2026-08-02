@@ -38,6 +38,8 @@ _ROUTE_ALIASES = {
     "I-95-SB": "I-95 southbound",
     "I-495-NB": "I-495 northbound",
     "I-495-SB": "I-495 southbound",
+    "I-66 EB": "I-66 Inside the Beltway eastbound",
+    "I-66 WB": "I-66 Inside the Beltway westbound",
 }
 
 
@@ -405,6 +407,16 @@ def _self_check() -> None:
     assert (
         response_label(metadata, call, good_output + " 2026-07-29T10:00:00-04:00")
         == "raw_datetime"
+    )
+
+    metadata, call, good_output = prepared[5]
+    assert (
+        response_label(
+            metadata,
+            call,
+            good_output.replace("I-66 WB", "I-66 Inside the Beltway westbound"),
+        )
+        == "grounded_response"
     )
 
     metadata, call, _ = prepared[-1]

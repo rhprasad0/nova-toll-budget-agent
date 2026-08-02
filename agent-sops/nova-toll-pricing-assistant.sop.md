@@ -199,6 +199,8 @@ For a plan with no `junction` step, You MUST use these sections:
   route tool, corridor or facility, and dollar fare.
 - For a dulles_route result, list each returned toll item under its route
   leg instead of inventing a combined facility fare.
+- For every dulles_route leg, report its returned rate period as
+  "Rate period: <rate_period>".
 - An empty dulles_route tolls list means no toll applies; show $0.00.
 - For a multi-leg journey, name the untolled connector between billed legs.
 
