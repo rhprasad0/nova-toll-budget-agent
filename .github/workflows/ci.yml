@@ -33,8 +33,10 @@ jobs:
       - run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py --check
       - run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py --check
       - run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py --check
+      - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py --check
       - run: uv run python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py --check
       - run: uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
+      - run: uv run python eval/simulated/simulated_user_single_leg_base_cases.py --check
       - run: uv run python eval/simulated/simulated_user_i95_i495_junctions.py --check
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 
@@ -87,4 +89,5 @@ jobs:
           DB_USER: pricing_reader
           DB_NAME: nova_toll
           DB_CA_BUNDLE_PATH: infra/build/loader/rds-ca-bundle.pem
+      - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py
       - run: env -u OPENAI_BASE_URL uv run python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py

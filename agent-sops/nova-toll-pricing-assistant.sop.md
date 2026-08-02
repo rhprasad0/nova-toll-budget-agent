@@ -97,6 +97,8 @@ Decide whether the resolved origin and destination stay on one corridor or
 require a cross-corridor plan.
 
 **Constraints:**
+- For a single-corridor request, You MUST NOT call plan_toll_route because its
+  endpoints already resolve to one pricing tool. Call that tool exactly once.
 - For every cross-corridor request, You MUST call plan_toll_route before
   validating or pricing either endpoint. You MUST NOT reject an entry-only or exit-only endpoint yourself, since the planner is authoritative about whether it can be an origin or destination.
 - For a trip whose resolved endpoints are on different corridors, You MUST
@@ -151,6 +153,9 @@ Call the registered pricing tools for each planner-returned step (or the
 single relevant tool, for a single-corridor trip).
 
 **Constraints:**
+- When the user supplies an absolute `at_time`, convert it to ISO 8601 with an
+  explicit Eastern UTC offset before the first tool call. Never pass the
+  user's display-formatted time to a planner or pricing tool.
 - You MUST pass the user's requested `at_time` to plan_toll_route, and
   otherwise omit it. Copy the planner result's `at_time` unchanged into every
   `priced` and `junction` tool call, including the first one; never omit or
@@ -198,9 +203,14 @@ For a plan with no `junction` step, You MUST use these sections:
 
 **Route and fares**
 - One bullet for each billed leg: resolved entry → resolved destination,
-  route tool, corridor or facility, and dollar fare.
-- For a dulles_route result, list each returned toll item under its route
-  leg instead of inventing a combined facility fare.
+  corridor or facility, and dollar fare, except that a dulles_route leg lists
+  its fares on the nested toll-item lines instead.
+- Name I-95 legs as "I-95/395 Express Lanes" and I-495 legs as
+  "I-495 Express Lanes".
+- For a dulles_route result, list each returned toll item's label and dollar
+  fare under its route leg instead of inventing a combined facility fare.
+- For every Greenway leg whose returned rate period is not null, report it as
+  "Rate period: <rate_period>".
 - An empty dulles_route tolls list means no toll applies; show $0.00.
 - For a multi-leg journey, name the untolled connector between billed legs.
 
