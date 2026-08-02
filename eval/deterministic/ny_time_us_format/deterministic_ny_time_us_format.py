@@ -51,7 +51,7 @@ _NONSTANDARD_DATE_TIME_RE = re.compile(
     r"(?:Z|[+-]\d{2}:\d{2})?)?"
     r"|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
     r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|"
-    r"Dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?"
+    r"Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?"
     r"|\d{1,2}/\d{1,2}/\d{2,4}"
     r"|\d{1,2}(?::\d{2})?\s*(?:AM|PM)"
     r"|(?:[01]?\d|2[0-3]):[0-5]\d(?:\s*ET)?)\b",
@@ -430,6 +430,13 @@ def _self_check() -> None:
                 "Requested time: November 3, 2026 at 10:00 AM ET; unavailable.",
                 unavailable,
                 "2026-11-03T10:00:00-05:00",
+            ),
+            "nonstandard_datetime",
+        ),
+        (
+            _format_case(
+                "VDOT observed at: 7/15/2026 3:20 PM ET; requested July 15th, 2026.",
+                success,
             ),
             "nonstandard_datetime",
         ),

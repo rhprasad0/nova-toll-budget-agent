@@ -16,7 +16,9 @@ Instead this walks the tool-call trace in the response metrics and asserts on
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import boto3
 import pytest
@@ -409,7 +411,14 @@ def test_i66_price_answer_shows_work_and_vdot_observed_time(live_pricing_env):
 
     [tool_result] = _tool_results(response, "i66_route")
     leg = tool_result["legs"][0]
-    assert leg["observed_at"] in answer
+    observed_at_raw = str(leg["observed_at"])
+    observed_at = datetime.fromisoformat(observed_at_raw).astimezone(
+        ZoneInfo("America/New_York")
+    )
+    clock = observed_at.strftime("%I:%M %p").lstrip("0")
+    formatted = f"{observed_at.month}/{observed_at.day}/{observed_at.year} {clock} ET"
+    assert formatted in answer
+    assert observed_at_raw not in answer
     assert f"${leg['price_usd']} = ${tool_result['total_usd']}" in answer
 
 

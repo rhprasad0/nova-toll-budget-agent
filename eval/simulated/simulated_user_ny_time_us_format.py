@@ -4,10 +4,9 @@ and US-format reporting.
 Track 1 (eval/deterministic/ny_time_us_format/) only asserts against
 absolute dates, since the agent has no injected notion of "today" to
 resolve a relative phrase like "tomorrow afternoon" against. This scenario
-covers that relative phrasing instead, judged rather than exact-matched:
-does the agent interpret "tomorrow afternoon, around 3" as an
-America/New_York time without silently defaulting to another zone, and does
-it report the returned VDOT timestamp in US Standard format
+covers that relative phrasing instead, judged rather than exact-matched: does
+the agent request only the concrete calendar date needed to resolve
+"tomorrow," then report the returned VDOT timestamp in US Standard format
 (M/D/YYYY h:MM AM/PM ET) rather than the tool's raw ISO-8601 string.
 """
 
@@ -58,29 +57,26 @@ def build_case_and_profile(
         metadata={
             "task_description": (
                 "Wants a toll price quote for tomorrow afternoon around 3 "
-                "o'clock. If asked to clarify AM/PM, an exact time, or the "
-                f"calendar date, says 3:00 PM on {tomorrow_label}. Does not "
-                "volunteer a full calendar date unless asked."
+                f"o'clock. If asked for the concrete calendar date, says "
+                f"{tomorrow_label}. Does not volunteer the date unless asked."
             )
         },
         expected_assertion=(
-            "The agent interprets 'tomorrow afternoon, around 3' as an "
-            "America/New_York date and time -- never silently defaulting to "
-            "UTC or another zone or guessing a wrong calendar date. Any "
-            "clarifying question it asks is about the ambiguous time or "
-            "date, not the (unambiguous) locations. Once it has a specific "
-            "time, it prices the trip and reports the VDOT observed "
-            "timestamp in US Standard format (M/D/YYYY h:MM AM/PM ET), "
-            "never as a raw ISO-8601 string."
+            "The user supplied a relative travel time, and the agent has no "
+            "current-date anchor, so it may ask only for the concrete calendar "
+            "date needed to resolve 'tomorrow' -- not for the unambiguous "
+            "locations or for a travel time that was omitted. It then treats "
+            "around 3 in the afternoon as 3:00 PM America/New_York, prices the "
+            "trip, and reports the VDOT observed timestamp as "
+            "M/D/YYYY h:MM AM/PM ET, never raw ISO-8601."
         ),
     )
     profile = ActorProfile(
         traits={
             "communication_style": "casual, gives relative time references",
             "domain_knowledge": "ordinary driver, thinks in local wall-clock time",
-            "disclosure": "gives an exact time (3:00 PM) and, if separately "
-            f"asked for the calendar date, names {tomorrow_label} -- only "
-            "when asked, never volunteered upfront",
+            "disclosure": f"names {tomorrow_label} if asked for the concrete "
+            "calendar date, but never volunteers it upfront",
         },
         context=(
             f"Today is {resolved_today:%B} {resolved_today.day}, "

@@ -31,7 +31,12 @@ or `August 3, 2026 at 3:00 PM ET`.
 - If any required parameters are missing, You MUST ask for them before proceeding
 - When asking for parameters, You MUST request all parameters in a single prompt
 - When asking for parameters, You MUST use the exact parameter names as defined
-- "All parameters" above means every currently missing required parameter, together in one message. Since the user already supplied it, You MUST NOT re-request an origin or destination that was given, and since at_time is optional and never blocks proceeding, You MUST NOT ask for it.
+- "All parameters" above means every currently missing required parameter,
+  together in one message. You MUST NOT re-request an origin or destination that was given because it was already supplied.
+  You MUST NOT ask the user to supply an at_time when it was omitted because at_time is optional. If
+  the user supplied a relative or ambiguous at_time that cannot be resolved
+  from available context, You MAY ask only for the missing date/time detail
+  needed to resolve that value.
 - You MUST attempt Step 1 (resolve locations) before treating origin or
   destination as missing: an unmatched or ambiguous location is a matching
   problem to resolve there, not a missing parameter to ask for again. Only a
