@@ -121,6 +121,6 @@ eval/
 | 2026-08-02 | Code-graded live regression | Completed | Offline grader mutation checks passed; no billed live run was authorized. |
 | 2026-08-02 | Simulated implementation | Completed | All four case shapes passed offline checks. |
 | 2026-08-02 | Initial simulated live evaluation | Superseded | The one-turn report and its failed setup attempt were removed when the simulation expanded to three turns. |
-| 2026-08-02 | Three-turn simulated live evaluation | Completed | Technically valid run with no execution errors: 3/8 judgments passed, overall score 0.4165. Repeated route calls and mixed follow-up helpfulness are preserved in `eval/results/20260802T165649Z.json`. |
+| 2026-08-02 | Three-turn simulated live evaluation | Superseded | The failed 3/8 baseline report was removed from curated results; its telemetry-grounded findings remain in `eval/eval-report.md`. |
 | 2026-08-02 | Results analysis | Completed | Manual telemetry review found 4/4 correct initial closure responses; raw goal scores were distorted by cumulative trace duplication and actor premise drift. Follow-up source guidance remains a genuine grounding risk. See `eval/eval-report.md`. |
 | 2026-08-02 | Repaired simulated live evaluation | Completed | One authorized run produced 12/12 passing verdicts and 0.9167 overall with no execution errors. Raw telemetry contains exactly one correct `i95_route` execution per case; all actor turns retained the assigned route and time. Preserved in `eval/results/20260802T171949Z.json`. |
