@@ -298,7 +298,7 @@ class USFormatEvaluator(Evaluator[str, str]):
         mislabeled = {
             value
             for value in expected_observed_at
-            if f"VDOT observed at: {value}" not in response
+            if not re.search(rf"VDOT observed at:[\s*_`~]*{re.escape(value)}", response)
         }
         if mislabeled:
             return _result(
@@ -432,6 +432,10 @@ def _self_check() -> None:
     format_checks = [
         (
             _format_case("VDOT observed at: 7/15/2026 3:20 PM ET", success),
+            "us_formatted",
+        ),
+        (
+            _format_case("- **VDOT observed at:** 7/15/2026 3:20 PM ET", success),
             "us_formatted",
         ),
         (
