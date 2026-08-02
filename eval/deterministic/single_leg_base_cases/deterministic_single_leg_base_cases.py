@@ -180,7 +180,12 @@ class SingleLegTraceEvaluator(Evaluator[str, str]):
 
 def _term_present(response: str, term: str) -> bool:
     lowered = response.lower()
-    return term.lower() in lowered or term.replace("_", " ").lower() in lowered
+    normalized = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return (
+        term.lower() in lowered
+        or term.replace("_", " ").lower() in lowered
+        or re.sub(r"[^a-z0-9]+", " ", term.lower()) in normalized
+    )
 
 
 def _route_term_present(response: str, term: str) -> bool:
@@ -429,6 +434,19 @@ def _self_check() -> None:
     assert (
         response_label(metadata, call, good_output + " 2026-07-29T10:00:00-04:00")
         == "raw_datetime"
+    )
+
+    metadata, call, good_output = prepared[4]
+    assert (
+        response_label(
+            metadata,
+            call,
+            good_output.replace(
+                "I-66 Inside the Beltway eastbound",
+                "I-66 Inside the Beltway (eastbound)",
+            ),
+        )
+        == "grounded_response"
     )
 
     metadata, call, good_output = prepared[5]
