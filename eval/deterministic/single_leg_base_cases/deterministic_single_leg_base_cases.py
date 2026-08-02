@@ -202,10 +202,8 @@ def _route_endpoints_present(response: str, origin: str, destination: str) -> bo
 
 def _route_term_present(response: str, term: str) -> bool:
     humanized = _ROUTE_ALIASES.get(term)
-    if _term_present(response, term):
-        return True
     if not humanized:
-        return False
+        return _term_present(response, term)
     facility, direction = humanized.rsplit(" ", 1)
     facilities = [facility]
     if term.startswith("I-95-"):
@@ -216,9 +214,11 @@ def _route_term_present(response: str, term: str) -> bool:
         "eastbound": "westbound",
         "westbound": "eastbound",
     }[direction]
-    return any(
+    if _term_present(response, opposite):
+        return False
+    return _term_present(response, term) or any(
         _term_present(response, name) for name in facilities
-    ) and not _term_present(response, opposite)
+    )
 
 
 class SingleLegResponseEvaluator(Evaluator[str, str]):
@@ -511,6 +511,11 @@ def _self_check() -> None:
         "I-95 Express Lanes northbound", "I-95 general-purpose lanes northbound"
     )
     assert response_label(metadata, call, general_lanes) == "route_missing"
+    contradictory_code = good_output.replace(
+        "I-95 Express Lanes northbound",
+        "I-95-NB (I-95/395 Express Lanes southbound)",
+    )
+    assert response_label(metadata, call, contradictory_code) == "route_missing"
 
     metadata, call, good_output = prepared[1]
     omitted_direction = good_output.replace(
