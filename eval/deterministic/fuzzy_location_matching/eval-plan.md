@@ -95,7 +95,7 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | **Evaluation Framework** | Strands Evals SDK (`strands-agents-evals`) — `Case`, `Experiment`, custom `Evaluator` subclasses |
 | **Evaluators**           | Code-based only: `LocationResolutionEvaluator` (per-turn response + hard-label args) |
 | **Agent Integration**    | Direct import of `agent.toll_agent.build_agent` (same pattern as `tests/test_toll_agent_live.py`) |
-| **Results Storage**      | JSON files under `eval/results/` (gitignored) |
+| **Results Storage**      | JSON files under `eval/results/`; representative valid runs are curated for review |
 
 ---
 

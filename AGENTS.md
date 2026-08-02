@@ -17,3 +17,7 @@ Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa searc
 # Secrets
 
 SSM Parameter Store is the source of truth for every credential in this repo (see `SECURITY.md`) — never a local file.
+
+# Evaluation evidence
+
+Curate technically valid, representative reports in `eval/results/` for reviewers. Do not commit failed or superseded runs. Update `eval/results/README.md` and run gitleaks before committing a report.

@@ -132,12 +132,14 @@ def _format_et(value: str) -> str:
     return f"{timestamp.month}/{timestamp.day}/{timestamp.year} {clock} ET"
 
 
-def _tool_observed_at(evaluation_case: EvaluationData[str, str]) -> list[str]:
+def _tool_timestamps(
+    evaluation_case: EvaluationData[str, str],
+) -> tuple[list[str], list[str]]:
     turns = _turns(evaluation_case)
     calls = cast(list[dict[str, Any]], turns[0].get("calls", [])) if turns else []
     tool_result: Any = calls[0].get("tool_result") if calls else None
     if tool_result is None:
-        return []
+        return [], []
     if isinstance(tool_result, str):
         try:
             tool_result = json.loads(tool_result)
@@ -148,16 +150,20 @@ def _tool_observed_at(evaluation_case: EvaluationData[str, str]) -> list[str]:
     result = cast(dict[str, Any], tool_result)
     legs: Any = result.get("legs")
     if legs is None:
-        return []
+        return [], []
     if not isinstance(legs, list):
         raise ValueError("pricing tool result does not contain exactly one leg")
     leg_list = cast(list[Any], legs)
     if len(leg_list) != 1 or not isinstance(leg_list[0], dict):
         raise ValueError("pricing tool result does not contain exactly one leg")
-    observed_at: Any = cast(dict[str, Any], leg_list[0]).get("observed_at")
+    leg = cast(dict[str, Any], leg_list[0])
+    observed_at: Any = leg.get("observed_at")
     if not isinstance(observed_at, str):
         raise ValueError("observed_at is not a string")
-    return [observed_at]
+    priced_as_of: Any = leg.get("priced_as_of")
+    if priced_as_of is not None and not isinstance(priced_as_of, str):
+        raise ValueError("priced_as_of is not a string")
+    return [observed_at], [observed_at, *([priced_as_of] if priced_as_of else [])]
 
 
 def task_function(case: Case[str, str]) -> dict[str, Any]:
@@ -249,17 +255,15 @@ class USFormatEvaluator(Evaluator[str, str]):
     ) -> list[EvaluationOutput]:
         response = str(evaluation_case.actual_output or "")
         try:
-            expected_observed_at = {
-                _format_et(value) for value in _tool_observed_at(evaluation_case)
-            }
+            observed_at, tool_timestamps = _tool_timestamps(evaluation_case)
+            expected_observed_at = {_format_et(value) for value in observed_at}
+            allowed_timestamps = {_format_et(value) for value in tool_timestamps}
         except ValueError as error:
             return _result(
                 False,
                 f"could not read pricing-tool timestamps: {error}",
                 "invalid_tool_result",
             )
-
-        allowed_timestamps = set(expected_observed_at)
         expected_instant = (evaluation_case.metadata or {}).get(
             "expected_at_time_instant"
         )
@@ -404,11 +408,26 @@ def _self_check() -> None:
             output,
         )
 
-    success = {"legs": [{"observed_at": "2026-07-15T15:20:00-04:00"}]}
+    success = {
+        "legs": [
+            {
+                "observed_at": "2026-07-15T15:20:00-04:00",
+                "priced_as_of": "2026-07-15T15:30:00-04:00",
+            }
+        ]
+    }
     unavailable = {"error": "price unavailable"}
     format_checks = [
         (
             _format_case("VDOT observed at: 7/15/2026 3:20 PM ET", success),
+            "us_formatted",
+        ),
+        (
+            _format_case(
+                "VDOT observed at: 7/15/2026 3:20 PM ET; "
+                "priced as of: 7/15/2026 3:30 PM ET",
+                success,
+            ),
             "us_formatted",
         ),
         (_format_case("The toll is $32.35.", success), "observed_at_missing"),

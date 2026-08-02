@@ -724,6 +724,15 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "private reasoning or narrate tool-call deliberation" in prompt
 
 
+def test_system_prompt_suggests_general_purpose_lanes_when_i95_is_closed():
+    prompt = build_system_prompt()
+    assert "i95_route" in prompt and "link_status=CLOSED" in prompt
+    assert "i95_junction_leg" in prompt and "closed lane" in prompt
+    assert re.search(r"Suggest the\s+I-95 general-purpose lanes", prompt)
+    assert re.search(r"Do not call another\s+pricing tool", prompt)
+    assert "quote a fare" in prompt
+
+
 def test_agent_tool_specs_are_concise_and_preserve_their_contracts():
     expected = {
         "plan_toll_route": (
