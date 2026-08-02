@@ -12,10 +12,10 @@ sensible clarifying question and then converges correctly once answered.
 
 This SOP builds on the reusable scaffolding in `eval/simulation_support.py`
 (`run_simulated_conversation`, `build_telemetry`, `run_case_with_simulator`)
-and the worked example in `eval/examples/run_simulated_demo.py`. It produces a case
-for Track 2 of `eval/eval-plan.md` -- the non-deterministic,
+and the worked scenario in `eval/simulated/simulated_user_fuzzy_location_matching.py`. It produces a case
+for Track 2 of `eval/deterministic/fuzzy_location_matching/eval-plan.md` -- the non-deterministic,
 not-a-regression-gate track, distinct from Track 1's scripted, exact-match
-harness (`eval/run_evaluation.py`). See that plan's "Track 2" section for
+harness (`eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py`). See that plan's "Track 2" section for
 the full design rationale before starting.
 
 ## Parameters
@@ -156,7 +156,7 @@ Write a `strands_evals.Case[str, str]` with `name`, `input=initial_query`,
 
 **Constraints:**
 - You MUST NOT report a single live run's score as a pass/fail regression signal, because both the simulated user and the judges are LLMs, so results vary run to run -- that is Track 1's job, not this one's.
-- You SHOULD append the new case to `eval/eval-plan.md`'s Track 2 section
+- You SHOULD append the new case to `eval/deterministic/fuzzy_location_matching/eval-plan.md`'s Track 2 section
   (not a new plan file) and note in its progress table whether the run was
   self-checked only or actually invoked live, because a claim of "tested"
   that only ran `--check` has previously needed correcting in this repo's
@@ -164,5 +164,5 @@ Write a `strands_evals.Case[str, str]` with `name`, `input=initial_query`,
 
 ## Reference
 
-Copy the working pattern in `eval/examples/run_simulated_demo.py`; commands and
-runtime prerequisites are in `eval/README.md`.
+Copy the working pattern in `eval/simulated/simulated_user_fuzzy_location_matching.py`; commands and
+runtime prerequisites are in `eval/deterministic/fuzzy_location_matching/README.md`.

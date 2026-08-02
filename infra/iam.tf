@@ -206,6 +206,12 @@ resource "aws_iam_role" "github_ci" {
 
 data "aws_iam_policy_document" "github_ci" {
   statement {
+    sid       = "ReadOpenAiApiKey"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"]
+  }
+
+  statement {
     sid       = "ConnectRdsIam"
     actions   = ["rds-db:connect"]
     resources = ["arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/pricing_reader"]

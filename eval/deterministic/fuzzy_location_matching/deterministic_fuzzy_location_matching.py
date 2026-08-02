@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands.types.content import Messages  # noqa: E402
@@ -42,7 +42,7 @@ from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
-_RESULTS_DIR = Path(__file__).resolve().parent / "results"
+_RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _PRICE_RE = re.compile(
     r"(?:\$\s*\d+(?:\.\d{1,2})?|\bUSD\s*\d+(?:\.\d{1,2})?\b|"
     r"\b\d+(?:\.\d{1,2})?\s*(?:USD|dollars?|bucks?)\b)",
@@ -80,6 +80,10 @@ def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
             score=float(passed), test_pass=passed, reason=reason, label=label
         )
     ]
+
+
+def _report_passed(test_passes: list[bool]) -> bool:
+    return all(test_passes)
 
 
 def _metadata(case: Case[str, str]) -> dict[str, Any]:
@@ -252,6 +256,8 @@ def main() -> None:
 
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
+    if not _report_passed(report.test_passes):
+        raise SystemExit("deterministic fuzzy-location evaluation failed")
 
 
 def _self_check() -> None:
@@ -264,6 +270,8 @@ def _self_check() -> None:
     ]
     assert cases[1].expected_trajectory == ["i95_route"]
     assert cases[2].expected_trajectory == []
+    assert _report_passed([True, True])
+    assert not _report_passed([True, False])
 
     for price in ("$4.25", "4.25 dollars", "USD 4.25"):
         assert _contains_price(price)

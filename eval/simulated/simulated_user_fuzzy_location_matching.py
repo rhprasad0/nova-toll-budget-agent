@@ -1,4 +1,4 @@
-"""Non-deterministic ActorSimulator demo; see ``eval/README.md`` to run it."""
+"""Observational ActorSimulator evaluation for fuzzy location matching."""
 
 from __future__ import annotations
 
