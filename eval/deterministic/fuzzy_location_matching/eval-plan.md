@@ -121,4 +121,4 @@ Track 2 uses `ActorSimulator` for open-ended turns and is **not a regression
 gate**: the user and judges are LLMs. `simulation_support.py` keeps simulator
 spans out of the judged session; `simulated/simulated_user_fuzzy_location_matching.py`
 shows the McLean case with pinned Haiku 4.5 judges. See `README.md` for commands and
-`agent-sops/simulated-user-eval.sop.md` for the authoring checklist.
+`agent-sops/eval-authoring.sop.md` for the authoring checklist.
