@@ -32,15 +32,16 @@ _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _RATE_PERIOD_RE = re.compile(
-    r"^\s*(?:[-*]\s*)?rate period\s*:\s*([a-z]+(?:[-_][a-z]+)?)(?:\s+.*)?$",
+    r"^\s*(?:[-*]\s*)?rate period\s*:\s*([a-z]+(?:[-_][a-z]+)?)"
+    r"(?:[.,;:!?](?:\s+.*)?|\s+.*)?$",
     re.IGNORECASE | re.MULTILINE,
 )
 _REQUIRED_HEADINGS = ("route and fares", "calculation", "final price")
 _ROUTE_ALIASES = {
-    "I-95-NB": "I-95 northbound",
-    "I-95-SB": "I-95 southbound",
-    "I-495-NB": "I-495 northbound",
-    "I-495-SB": "I-495 southbound",
+    "I-95-NB": "I-95 Express Lanes northbound",
+    "I-95-SB": "I-95 Express Lanes southbound",
+    "I-495-NB": "I-495 Express Lanes northbound",
+    "I-495-SB": "I-495 Express Lanes southbound",
     "I-66 EB": "I-66 Inside the Beltway eastbound",
     "I-66 WB": "I-66 Inside the Beltway westbound",
 }
@@ -191,9 +192,10 @@ def _route_endpoints_present(response: str, origin: str, destination: str) -> bo
     return bool(
         re.search(
             rf"{re.escape(origin)}\s*(?:→|->|\bto\b)\s*"
-            rf"{re.escape(destination)}(?!\w| \w)",
+            rf"{re.escape(destination)}"
+            rf"(?=[ \t]*(?:$|[-—,.!?;:(]|\b(?:via|on|using)\b))",
             plain,
-            re.IGNORECASE,
+            re.IGNORECASE | re.MULTILINE,
         )
     )
 
@@ -205,11 +207,8 @@ def _route_term_present(response: str, term: str) -> bool:
         and (
             _term_present(response, humanized)
             or (
-                term.startswith(("I-95-", "I-495-"))
-                and all(
-                    _term_present(response, part)
-                    for part in (humanized.split()[0], humanized.split()[-1])
-                )
+                term.startswith("I-95-")
+                and _term_present(response, humanized.replace("I-95", "I-95/395"))
             )
         )
     )
@@ -497,6 +496,14 @@ def _self_check() -> None:
         response_label(metadata, call, good_output.replace("i95_route ", ""))
         == "grounded_response"
     )
+    prose_destination = good_output.replace(
+        "Washington D.C. —", "Washington D.C. via I-95 northbound —"
+    )
+    assert response_label(metadata, call, prose_destination) == "grounded_response"
+    general_lanes = good_output.replace(
+        "I-95 Express Lanes northbound", "I-95 general-purpose lanes northbound"
+    )
+    assert response_label(metadata, call, general_lanes) == "route_missing"
 
     metadata, call, good_output = prepared[4]
     assert (
@@ -547,6 +554,8 @@ def _self_check() -> None:
         "Rate period: peak", "Rate period: peak (weekday morning)"
     )
     assert response_label(metadata, call, explained_period) == "grounded_response"
+    punctuated_period = good_output.replace("Rate period: peak", "Rate period: peak.")
+    assert response_label(metadata, call, punctuated_period) == "grounded_response"
     for wrong_period in ("off_peak", "off peak", "off-peak"):
         wrong_output = good_output.replace(
             "Rate period: peak", f"Rate period: {wrong_period}"
