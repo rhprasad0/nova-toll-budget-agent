@@ -8,6 +8,11 @@ already named Eastern time, and across the DST boundary), and does it
 report timestamps back to the user in US Standard format
 (`M/D/YYYY h:MM AM/PM ET`) rather than the tool's raw ISO-8601 string. See
 `eval-plan.md` for the full plan and `test-cases.jsonl` for the 3 cases.
+The format evaluator derives the exact expected values from captured tool
+results; a successful tool call cannot pass if the response omits or changes
+its `observed_at` timestamp.
+All cases use Jones Branch Drive/Route 123 → Westpark Drive on I-495, which
+has prices but no reversible-lane closure gate.
 
 ## Self-check (no network)
 
@@ -16,7 +21,8 @@ uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_form
 ```
 
 Runs the per-case matching logic in both evaluators against synthetic
-trajectories. No AWS/OpenAI/RDS calls.
+trajectories, including omitted, incorrect, and nonstandard timestamps. No
+AWS/OpenAI/RDS calls. CI runs this check before the live integration job.
 
 ## Live run
 
@@ -60,6 +66,9 @@ are not covered by `--check`.
 ```bash
 AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_ny_time_us_format.py
 ```
+
+To match nightly exactly, set `NOVA_TOLL_EVAL_MODEL_ID` from
+`/nova-toll/nightly_eval_bedrock_profile_arn` in SSM for that command.
 
 A live run spends across three billed surfaces for the one simulated case:
 OpenAI (the agent under test), Bedrock (the simulator's conversational

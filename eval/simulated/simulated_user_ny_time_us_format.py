@@ -15,30 +15,19 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from strands_evals import (  # noqa: E402
-    ActorSimulator,
-    Case,
-    Experiment,
-)
-from strands_evals.evaluators import (  # noqa: E402
-    GoalSuccessRateEvaluator,
-    HelpfulnessEvaluator,
-)
+from strands_evals import Case  # noqa: E402
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
-from eval.simulation_support import (  # noqa: E402
-    build_telemetry,
-    run_case_with_simulator,
-)
+from eval.simulation_support import run_simulated_evaluation  # noqa: E402
 
 _RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
@@ -63,8 +52,8 @@ def build_case_and_profile(
     case = Case[str, str](
         name="relative-time-tomorrow-afternoon-simulated",
         input=(
-            "How much would it cost to drive from Pentagon/Eads Street to I-95 "
-            "Near Dumfries Road/Route 234 tomorrow afternoon, around 3?"
+            "How much would it cost to drive from Jones Branch Drive/Route 123 "
+            "to Westpark Drive tomorrow afternoon, around 3?"
         ),
         metadata={
             "task_description": (
@@ -96,13 +85,13 @@ def build_case_and_profile(
         context=(
             f"Today is {resolved_today:%B} {resolved_today.day}, "
             f"{resolved_today.year}. The driver means 3:00 PM Eastern Time "
-            f"tomorrow ({tomorrow_label}), driving from Pentagon/Eads Street "
-            "to I-95 Near Dumfries Road/Route 234."
+            f"tomorrow ({tomorrow_label}), driving from Jones Branch "
+            "Drive/Route 123 to Westpark Drive."
         ),
         actor_goal=(
             f"Get an accurate toll quote for 3:00 PM Eastern Time on "
-            f"{tomorrow_label} from Pentagon/Eads Street to I-95 Near "
-            "Dumfries Road/Route 234."
+            f"{tomorrow_label} from Jones Branch Drive/Route 123 to "
+            "Westpark Drive."
         ),
     )
     return case, profile
@@ -110,44 +99,12 @@ def build_case_and_profile(
 
 def main() -> None:
     configure_local_pricing_env()
-    telemetry, mapper = build_telemetry()
     model_id = os.environ.get(_MODEL_ID_ENV, _DEFAULT_MODEL_ID)
     if not model_id:
         raise ValueError(f"{_MODEL_ID_ENV} must not be empty")
 
     case, actor_profile = build_case_and_profile()
-
-    def task_function(case: Case[str, str]) -> dict[str, object]:
-        simulator = ActorSimulator(
-            actor_profile=actor_profile,
-            initial_query=str(case.input),
-            model=model_id,
-            max_turns=2,
-        )
-        return run_case_with_simulator(
-            case.session_id,
-            build_agent(),
-            simulator,
-            str(case.input),
-            telemetry,
-            mapper,
-        )
-
-    experiment = Experiment[str, str](
-        cases=[case],
-        evaluators=[
-            HelpfulnessEvaluator(model=model_id),
-            GoalSuccessRateEvaluator(model=model_id),
-        ],
-    )
-    report = experiment.run_evaluations(task_function)
-
-    _RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    report.to_file(str(_RESULTS_DIR / f"{stamp}.json"))
-
-    print(f"Overall score: {report.overall_score:.2f}")
-    report.display(include_input=False)
+    run_simulated_evaluation(case, actor_profile, model_id, _RESULTS_DIR, build_agent)
 
 
 def _self_check() -> None:
@@ -157,6 +114,7 @@ def _self_check() -> None:
     assert case.input
     assert case.expected_assertion
     assert "tomorrow" in case.input
+    assert "Jones Branch Drive/Route 123" in case.input
     assert "August 3, 2026" in profile.context
     assert "August 3, 2026" in profile.actor_goal
     print("self-check ok (Case and actor profile shapes; live integrations excluded)")

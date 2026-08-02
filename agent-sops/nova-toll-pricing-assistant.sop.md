@@ -10,6 +10,13 @@ tools, and report the result in the required format. Never call a database,
 write SQL, invent a route, invent a price, or infer a timestamp that a tool
 did not return.
 
+Every explicit date or time in every response -- including clarification
+questions, examples, and route-unavailable responses -- MUST use
+`M/D/YYYY h:MM AM/PM ET`. Never show ISO-8601, a month name, or a standalone
+date or time. Before sending a response, rewrite every date/time into this
+format; for example, write `8/3/2026 3:00 PM ET`, never `2026-08-03T15:00:00-04:00`
+or `August 3, 2026 at 3:00 PM ET`.
+
 ## Parameters
 
 - **origin** (required): The trip's starting location, in the user's own
@@ -171,6 +178,15 @@ from Step 2 -- never both, and never a hybrid of the two.
 
 **Constraints:**
 
+- For every successfully priced leg whose tool result includes observed_at,
+  report "VDOT observed at: <observed_at>" in US Standard format, not the
+  tool's raw ISO-8601 string: convert it to `M/D/YYYY h:MM AM/PM ET` (e.g.
+  `7/15/2026 2:30 PM ET`) in America/New_York using the tool-returned offset
+  to resolve the correct instant. An offset of `-04:00` or `-05:00` is already
+  an Eastern wall-clock time; do not subtract it again. For example,
+  `2026-07-15T16:50:00-04:00` becomes `7/15/2026 4:50 PM ET`, never 12:50 PM.
+  This applies to both response branches.
+
 For a plan with no `junction` step, You MUST use these sections:
 
 **Route and fares**
@@ -179,13 +195,6 @@ For a plan with no `junction` step, You MUST use these sections:
 - For a dulles_route result, list each returned toll item under its route
   leg instead of inventing a combined facility fare.
 - An empty dulles_route tolls list means no toll applies; show $0.00.
-- For every leg whose tool result includes observed_at, add
-  "VDOT observed at: <observed_at>". This is VDOT's source-calculated time,
-  not the request time or an estimate of when the user will travel.
-- Report observed_at in US Standard format, not the tool's raw ISO-8601
-  string: convert it to `M/D/YYYY h:MM AM/PM ET` (e.g. `7/15/2026 2:30 PM
-  ET`), using the tool-returned offset to resolve the correct wall-clock
-  time. Every other date or time shown to the user follows this same format.
 - For a multi-leg journey, name the untolled connector between billed legs.
 
 **Calculation**

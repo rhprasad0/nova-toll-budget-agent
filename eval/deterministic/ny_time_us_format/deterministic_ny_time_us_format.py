@@ -21,6 +21,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
@@ -40,8 +41,22 @@ from agent_tools._oracle_route import resolve_at_time  # noqa: E402
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
-_US_FORMAT_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2} (AM|PM) ET\b")
-_RAW_ISO_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+_EASTERN = ZoneInfo("America/New_York")
+_US_FORMAT_RE = re.compile(
+    r"\b(?:1[0-2]|[1-9])/(?:3[01]|[12]\d|[1-9])/\d{4} "
+    r"(?:1[0-2]|[1-9]):[0-5]\d (?:AM|PM) ET\b"
+)
+_NONSTANDARD_DATE_TIME_RE = re.compile(
+    r"\b(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?"
+    r"(?:Z|[+-]\d{2}:\d{2})?)?"
+    r"|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|"
+    r"Dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?"
+    r"|\d{1,2}/\d{1,2}/\d{2,4}"
+    r"|\d{1,2}(?::\d{2})?\s*(?:AM|PM)"
+    r"|(?:[01]?\d|2[0-3]):[0-5]\d(?:\s*ET)?)\b",
+    re.IGNORECASE,
+)
 
 
 def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
@@ -106,6 +121,43 @@ def _extract_tool_calls(messages: Messages) -> list[dict[str, Any]]:
     return tools_use_extractor.extract_agent_tools_used_from_messages(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         messages
     )
+
+
+def _format_et(value: str) -> str:
+    timestamp = datetime.fromisoformat(value)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=_EASTERN)
+    timestamp = timestamp.astimezone(_EASTERN)
+    clock = timestamp.strftime("%I:%M %p").lstrip("0")
+    return f"{timestamp.month}/{timestamp.day}/{timestamp.year} {clock} ET"
+
+
+def _tool_observed_at(evaluation_case: EvaluationData[str, str]) -> list[str]:
+    turns = _turns(evaluation_case)
+    calls = cast(list[dict[str, Any]], turns[0].get("calls", [])) if turns else []
+    tool_result: Any = calls[0].get("tool_result") if calls else None
+    if tool_result is None:
+        return []
+    if isinstance(tool_result, str):
+        try:
+            tool_result = json.loads(tool_result)
+        except json.JSONDecodeError as error:
+            raise ValueError("pricing tool returned invalid JSON") from error
+    if not isinstance(tool_result, dict):
+        raise ValueError("pricing tool result is not an object")
+    result = cast(dict[str, Any], tool_result)
+    legs: Any = result.get("legs")
+    if legs is None:
+        return []
+    if not isinstance(legs, list):
+        raise ValueError("pricing tool result does not contain exactly one leg")
+    leg_list = cast(list[Any], legs)
+    if len(leg_list) != 1 or not isinstance(leg_list[0], dict):
+        raise ValueError("pricing tool result does not contain exactly one leg")
+    observed_at: Any = cast(dict[str, Any], leg_list[0]).get("observed_at")
+    if not isinstance(observed_at, str):
+        raise ValueError("observed_at is not a string")
+    return [observed_at]
 
 
 def task_function(case: Case[str, str]) -> dict[str, Any]:
@@ -190,44 +242,64 @@ class TimeInterpretationEvaluator(Evaluator[str, str]):
 
 
 class USFormatEvaluator(Evaluator[str, str]):
-    """The final response must show a US-format timestamp and no raw ISO-8601.
-
-    Route/price availability (SOUTHBOUND_OPEN vs CLOSED, a real reversible-lane
-    schedule -- see SOP Step 3's i95_junction_leg `unavailable` note, which
-    applies just as much to i95_route) is a different concern from format:
-    if the trip legitimately declines with no VDOT-observed timestamp at
-    all, this evaluator has nothing to check and must not fail the case for
-    it. The raw-ISO-8601 leak check still applies unconditionally.
-    """
+    """Tool-returned timestamps must appear exactly in US Standard format."""
 
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         response = str(evaluation_case.actual_output or "")
-        has_raw_iso = _RAW_ISO_RE.search(response) is not None
+        try:
+            expected_observed_at = {
+                _format_et(value) for value in _tool_observed_at(evaluation_case)
+            }
+        except ValueError as error:
+            return _result(
+                False,
+                f"could not read pricing-tool timestamps: {error}",
+                "invalid_tool_result",
+            )
 
-        if has_raw_iso:
+        allowed_timestamps = set(expected_observed_at)
+        expected_instant = (evaluation_case.metadata or {}).get(
+            "expected_at_time_instant"
+        )
+        if expected_instant:
+            allowed_timestamps.add(_format_et(expected_instant))
+
+        reported_timestamps = set(_US_FORMAT_RE.findall(response))
+        response_without_us_timestamps = _US_FORMAT_RE.sub("", response)
+        if _NONSTANDARD_DATE_TIME_RE.search(response_without_us_timestamps):
             return _result(
                 False,
-                "response contains a raw ISO-8601 timestamp instead of "
-                "US-format (M/D/YYYY h:MM AM/PM ET)",
-                "raw_iso_leaked",
+                "response contains a date/time outside M/D/YYYY h:MM AM/PM ET",
+                "nonstandard_datetime",
             )
-        if "observed at" not in response.casefold():
-            return _result(
-                True,
-                "no VDOT-observed timestamp reported (trip declined); "
-                "format check not applicable",
-                "not_applicable",
-            )
-        if not _US_FORMAT_RE.search(response):
+
+        unexpected = reported_timestamps - allowed_timestamps
+        if unexpected:
             return _result(
                 False,
-                "response does not contain a US-format timestamp "
-                "(M/D/YYYY h:MM AM/PM ET)",
-                "us_format_missing",
+                f"response contains unexpected timestamp(s): {sorted(unexpected)}",
+                "unexpected_datetime",
             )
-        return _result(True, "response used US-format date/time", "us_formatted")
+
+        missing = expected_observed_at - reported_timestamps
+        if missing:
+            return _result(
+                False,
+                f"response omitted tool-returned observed_at value(s): {sorted(missing)}",
+                "observed_at_missing",
+            )
+
+        if reported_timestamps:
+            return _result(
+                True, "response used exact US-format date/time", "us_formatted"
+            )
+        return _result(
+            True,
+            "tool returned no observed_at and response reported no explicit date/time",
+            "not_applicable",
+        )
 
 
 def main() -> None:
@@ -260,19 +332,11 @@ def _self_check() -> None:
         "non-eastern-zone-converted",
         "naive-eastern-est-dst-boundary",
     ]
-    assert cases[0].expected_trajectory == ["i95_route"]
+    assert cases[0].expected_trajectory == ["i495_route"]
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
 
-    for text in (
-        "VDOT observed at: 7/15/2026 2:30 PM ET",
-        "as of 11/3/2026 10:00 AM ET",
-    ):
-        assert _US_FORMAT_RE.search(text)
-    for text in ("VDOT observed at: 2026-07-15T14:30:00-04:00", "no timestamp here"):
-        assert not _US_FORMAT_RE.search(text)
-    assert _RAW_ISO_RE.search("VDOT observed at: 2026-07-15T14:30:00-04:00")
-    assert not _RAW_ISO_RE.search("VDOT observed at: 7/15/2026 2:30 PM ET")
+    assert _format_et("2026-07-15T12:30:00-07:00") == "7/15/2026 3:30 PM ET"
 
     def _fake_case(
         metadata: dict[str, Any],
@@ -286,73 +350,37 @@ def _self_check() -> None:
             metadata=metadata,
         )
 
+    def _trajectory(
+        tool_input: dict[str, Any], tool_result: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        call = {"name": "i495_route", "input": tool_input}
+        if tool_result is not None:
+            call["tool_result"] = json.dumps(tool_result)
+        return [{"calls": [call]}]
+
     time_checker = TimeInterpretationEvaluator()
-    expected_entry = {
-        "turn": 1,
-        "tool": "i95_route",
-        "input": {
-            "origin": "Pentagon/Eads Street",
-            "destination": "I-95 Near Dumfries Road/Route 234",
-        },
-    }
     time_metadata = {
-        "expected_trajectory": [expected_entry],
+        "expected_trajectory": [{"turn": 1, "tool": "i495_route"}],
         "expected_at_time_instant": "2026-07-15T17:00:00-04:00",
     }
     time_checks: list[tuple[list[dict[str, Any]], str]] = [
         (
-            [
-                {
-                    "calls": [
-                        {
-                            "name": "i95_route",
-                            "input": {"at_time": "2026-07-15T14:00:00-07:00"},
-                        }
-                    ]
-                }
-            ],
+            _trajectory({"at_time": "2026-07-15T14:00:00-07:00"}),
             "resolved",
         ),
         (
-            [
-                {
-                    "calls": [
-                        {
-                            "name": "i95_route",
-                            "input": {"at_time": "2026-07-15T17:00:00"},
-                        }
-                    ]
-                }
-            ],
+            _trajectory({"at_time": "2026-07-15T17:00:00"}),
             "resolved",
         ),
         (
             # Naive passthrough bug: 14:00 assumed Eastern is 3h off from
             # the expected 17:00 Eastern instant (2 PM Pacific).
-            [
-                {
-                    "calls": [
-                        {
-                            "name": "i95_route",
-                            "input": {"at_time": "2026-07-15T14:00:00"},
-                        }
-                    ]
-                }
-            ],
+            _trajectory({"at_time": "2026-07-15T14:00:00"}),
             "wrong_instant",
         ),
-        (
-            [{"calls": [{"name": "i95_route", "input": {}}]}],
-            "missing_at_time",
-        ),
-        (
-            [{"calls": [{"name": "i95_route", "input": {"at_time": "not-a-date"}}]}],
-            "unparseable_at_time",
-        ),
-        (
-            [{"calls": []}],
-            "tool_mismatch",
-        ),
+        (_trajectory({}), "missing_at_time"),
+        (_trajectory({"at_time": "not-a-date"}), "unparseable_at_time"),
+        ([{"calls": []}], "tool_mismatch"),
     ]
     for trajectory, label in time_checks:
         assert (
@@ -361,16 +389,81 @@ def _self_check() -> None:
         ), label
 
     format_checker = USFormatEvaluator()
-    format_checks: list[tuple[str, str]] = [
-        ("VDOT observed at: 7/15/2026 2:30 PM ET", "us_formatted"),
-        ("VDOT observed at: 2026-07-15T14:30:00-04:00", "raw_iso_leaked"),
-        ("VDOT observed at: sometime this afternoon", "us_format_missing"),
-        ("The trip is unavailable: I-95 southbound is closed.", "not_applicable"),
-    ]
-    for output, label in format_checks:
-        assert format_checker.evaluate(_fake_case({}, [], output))[0].label == label, (
-            label
+
+    def _format_case(
+        output: str,
+        tool_result: dict[str, Any],
+        expected_at_time: str | None = None,
+    ) -> EvaluationData[str, str]:
+        metadata = (
+            {"expected_at_time_instant": expected_at_time} if expected_at_time else {}
         )
+        return _fake_case(
+            metadata,
+            _trajectory({}, tool_result),
+            output,
+        )
+
+    success = {"legs": [{"observed_at": "2026-07-15T15:20:00-04:00"}]}
+    unavailable = {"error": "price unavailable"}
+    format_checks = [
+        (
+            _format_case("VDOT observed at: 7/15/2026 3:20 PM ET", success),
+            "us_formatted",
+        ),
+        (_format_case("The toll is $32.35.", success), "observed_at_missing"),
+        (
+            _format_case("VDOT observed at: 1/1/1999 1:11 AM ET", success),
+            "unexpected_datetime",
+        ),
+        (
+            _format_case(
+                "VDOT observed at: 2026-07-15T15:20-04:00; "
+                "requested 7/15/2026 3:30 PM ET",
+                success,
+                "2026-07-15T15:30:00-04:00",
+            ),
+            "nonstandard_datetime",
+        ),
+        (
+            _format_case(
+                "Requested time: November 3, 2026 at 10:00 AM ET; unavailable.",
+                unavailable,
+                "2026-11-03T10:00:00-05:00",
+            ),
+            "nonstandard_datetime",
+        ),
+        (
+            _format_case(
+                "Requested time: 11/3/2026 at 10 AM ET; unavailable.",
+                unavailable,
+                "2026-11-03T10:00:00-05:00",
+            ),
+            "nonstandard_datetime",
+        ),
+        (
+            _format_case(
+                "Requested time: 11/3/2026 15:00 ET; unavailable.",
+                unavailable,
+                "2026-11-03T15:00:00-05:00",
+            ),
+            "nonstandard_datetime",
+        ),
+        (
+            _format_case(
+                "Requested time: 11/3/2026 10:00 AM ET; unavailable.",
+                unavailable,
+                "2026-11-03T10:00:00-05:00",
+            ),
+            "us_formatted",
+        ),
+        (
+            _format_case("The requested price is unavailable.", unavailable),
+            "not_applicable",
+        ),
+    ]
+    for evaluation_case, label in format_checks:
+        assert format_checker.evaluate(evaluation_case)[0].label == label, label
 
     print("self-check ok")
 
