@@ -18,6 +18,7 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest
         if: hashFiles('**/test_*.py') != ''
+      - run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py --check
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 
   integration:
@@ -68,3 +69,5 @@ jobs:
           DB_CA_BUNDLE_PATH: infra/build/loader/rds-ca-bundle.pem
       - name: Run deterministic fuzzy-location evaluation
         run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py
+      - name: Run deterministic NY-time/US-format evaluation
+        run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py

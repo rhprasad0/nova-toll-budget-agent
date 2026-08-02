@@ -4,29 +4,17 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from strands_evals import (  # noqa: E402
-    ActorSimulator,
-    Case,
-    Experiment,
-)
-from strands_evals.evaluators import (  # noqa: E402
-    GoalSuccessRateEvaluator,
-    HelpfulnessEvaluator,
-)
+from strands_evals import Case  # noqa: E402
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
-from eval.simulation_support import (  # noqa: E402
-    build_telemetry,
-    run_case_with_simulator,
-)
+from eval.simulation_support import run_simulated_evaluation  # noqa: E402
 
 _RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
@@ -74,42 +62,10 @@ _ACTOR_PROFILE = ActorProfile(
 
 def main() -> None:
     configure_local_pricing_env()
-    telemetry, mapper = build_telemetry()
     model_id = os.environ.get(_MODEL_ID_ENV, _DEFAULT_MODEL_ID)
     if not model_id:
         raise ValueError(f"{_MODEL_ID_ENV} must not be empty")
-
-    def task_function(case: Case[str, str]) -> dict[str, object]:
-        simulator = ActorSimulator(
-            actor_profile=_ACTOR_PROFILE,
-            initial_query=str(case.input),
-            model=model_id,
-            max_turns=2,
-        )
-        return run_case_with_simulator(
-            case.session_id,
-            build_agent(),
-            simulator,
-            str(case.input),
-            telemetry,
-            mapper,
-        )
-
-    experiment = Experiment[str, str](
-        cases=[_CASE],
-        evaluators=[
-            HelpfulnessEvaluator(model=model_id),
-            GoalSuccessRateEvaluator(model=model_id),
-        ],
-    )
-    report = experiment.run_evaluations(task_function)
-
-    _RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    report.to_file(str(_RESULTS_DIR / f"{stamp}.json"))
-
-    print(f"Overall score: {report.overall_score:.2f}")
-    report.display(include_input=False)
+    run_simulated_evaluation(_CASE, _ACTOR_PROFILE, model_id, _RESULTS_DIR, build_agent)
 
 
 def _self_check() -> None:

@@ -7,16 +7,19 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Protocol, cast
 
 from opentelemetry import baggage, context
 from strands import Agent
-from strands_evals import StrandsEvalsTelemetry
+from strands_evals import ActorSimulator, Case, Experiment, StrandsEvalsTelemetry
+from strands_evals.evaluators import GoalSuccessRateEvaluator, HelpfulnessEvaluator
 from strands_evals.mappers.strands_in_memory_session_mapper import (
     StrandsInMemorySessionMapper,
 )
-from strands_evals.types.simulation import ActorResponse
+from strands_evals.types.simulation import ActorProfile, ActorResponse
 from strands_evals.types.trace import AgentInvocationSpan, Session
 
 
@@ -83,6 +86,46 @@ def run_case_with_simulator(
             "leaked into a different session"
         )
     return {"output": output, "trajectory": session}
+
+
+def run_simulated_evaluation(
+    case: Case[str, str],
+    actor_profile: ActorProfile,
+    model_id: str,
+    results_dir: Path,
+    agent_factory: Callable[[], Agent],
+) -> None:
+    """Run one simulated case with the shared actor/judge plumbing."""
+    telemetry, mapper = build_telemetry()
+
+    def task_function(case: Case[str, str]) -> dict[str, object]:
+        simulator = ActorSimulator(
+            actor_profile=actor_profile,
+            initial_query=str(case.input),
+            model=model_id,
+            max_turns=2,
+        )
+        return run_case_with_simulator(
+            case.session_id,
+            agent_factory(),
+            simulator,
+            str(case.input),
+            telemetry,
+            mapper,
+        )
+
+    experiment = Experiment[str, str](
+        cases=[case],
+        evaluators=[
+            HelpfulnessEvaluator(model=model_id),
+            GoalSuccessRateEvaluator(model=model_id),
+        ],
+    )
+    report = experiment.run_evaluations(task_function)
+    results_dir.mkdir(exist_ok=True)
+    report.to_file(str(results_dir / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
+    print(f"Overall score: {report.overall_score:.2f}")
+    report.display(include_input=False)
 
 
 class _FakeSimulator:

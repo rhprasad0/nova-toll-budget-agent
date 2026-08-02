@@ -3,8 +3,8 @@
 Tests Step 1 of `agent-sops/nova-toll-pricing-assistant.sop.md` — does the
 agent ask before guessing an ambiguous location, converge on the exact
 oracle label once the user clarifies, resolve an unambiguous case-insensitive
-match without asking, and never fabricate a price for an uncovered road.
-See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 3 cases.
+match without asking. See `eval-plan.md` for the full plan and
+`test-cases.jsonl` for the 2 cases.
 
 ## Self-check (no network)
 
@@ -12,8 +12,8 @@ See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 3 cases.
 uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py --check
 ```
 
-Runs the per-turn matching logic in both evaluators against synthetic
-trajectories. No AWS/OpenAI/RDS calls.
+Runs the per-turn matching logic against synthetic trajectories. No
+AWS/OpenAI/RDS calls.
 
 ## Live run
 

@@ -700,6 +700,8 @@ def test_system_prompt_is_an_agent_sop():
         assert heading in prompt
     assert "**Constraints for parameter acquisition:**" in prompt
     assert "**Constraints:**" in prompt
+    assert "MUST NOT ask the user to supply an at_time when it was omitted" in prompt
+    assert "relative or ambiguous at_time" in prompt
     assert prompt.count("### Example ") == 3
     assert "You MUST" in prompt
 
