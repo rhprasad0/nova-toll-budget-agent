@@ -119,7 +119,9 @@ the cross-corridor request must instead use i95_junction_leg. That tool
 selects Edsall for a southbound 95 leg or Franconia-Springfield for a
 northbound 95 leg. I-495 pricing independently starts or ends at I-495 Near
 Braddock Road. The gap between those boundaries has no VDOT price: never
-label it free, assign it $0.00, or add the known segments into a trip total.
+label it free or add the known segments into a trip total. For any plan with
+a junction step, never display a zero-dollar amount for the gap, even while
+rejecting a user's request to assume it is free; describe it only as unpriced.
 
 The following directed transfer graph uses committed oracle node IDs and
 their entry/exit pair roles. It also includes explicitly labeled curated connector
@@ -225,7 +227,9 @@ For a plan containing a `junction` step, You MUST use these sections instead:
 - State that VDOT does not provide a price for the road between them.
 
 **Complete price unavailable**
-- Do not show arithmetic, a subtotal, a final total, or $0.00 for the gap.
+- Do not show arithmetic, a subtotal, a final total, or any zero-dollar amount
+  for the gap. Do not repeat a user's proposed amount while rejecting it;
+  state only that the gap is unpriced.
 
 You MUST NOT call a multi-leg total a single operator-issued fare, since it is a sum of independently priced legs. You MUST NOT expose private reasoning or narrate tool-call deliberation, because the user needs auditable facts, not
 process; report only tool-grounded route facts, prices, timestamps, and
