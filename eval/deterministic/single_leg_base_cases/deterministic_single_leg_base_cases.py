@@ -191,7 +191,14 @@ def _term_present(response: str, term: str) -> bool:
 def _route_term_present(response: str, term: str) -> bool:
     humanized = _ROUTE_ALIASES.get(term)
     return _term_present(response, term) or bool(
-        humanized and _term_present(response, humanized)
+        humanized
+        and (
+            _term_present(response, humanized)
+            or all(
+                _term_present(response, part)
+                for part in (humanized.split()[0], humanized.split()[-1])
+            )
+        )
     )
 
 
@@ -458,6 +465,17 @@ def _self_check() -> None:
         )
         == "grounded_response"
     )
+
+    for index, full_name in (
+        (0, "I-95/395 Express Lanes northbound"),
+        (2, "I-495 Express Lanes northbound"),
+    ):
+        metadata, call, good_output = prepared[index]
+        alias = _ROUTE_ALIASES[metadata["expected_route_label"]]
+        assert (
+            response_label(metadata, call, good_output.replace(alias, full_name))
+            == "grounded_response"
+        )
 
     metadata, call, good_output = prepared[-1]
     markdown_period = good_output.replace("Rate period: peak", "**Rate period:** peak")
