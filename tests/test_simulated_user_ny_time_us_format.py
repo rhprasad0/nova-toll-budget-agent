@@ -1,5 +1,7 @@
 from unittest.mock import Mock
 
+from strands_evals import Case
+
 from eval.simulated import simulated_user_ny_time_us_format as evaluation
 
 
@@ -15,7 +17,7 @@ def test_all_eval_calls_use_configured_model(monkeypatch, tmp_path):
     report = Mock(overall_score=1.0)
 
     def run_evaluations(_self, task):
-        task(evaluation._CASE)
+        task(Case[str, str](name="x", input="x"))
         return report
 
     monkeypatch.setenv(evaluation._MODEL_ID_ENV, model_id)

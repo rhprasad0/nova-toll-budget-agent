@@ -1,6 +1,6 @@
 # NY-time handling + US date/time format eval — task checklist
 
-Status: implemented, not yet run live
+Status: implemented and run live -- both suites pass
 
 Adds evaluation coverage (following the `eval/deterministic/fuzzy_location_matching`
 pattern) for two agent behaviors that currently have no eval:
@@ -46,6 +46,11 @@ previously only said to copy `observed_at` through verbatim.
       `eval/README.md` exists in this repo -- it was folded into each
       suite's own `README.md` in `7337f4b`).
 - [x] Run `--check` self-tests, `ruff`, `pyright`, `pytest` (all pass).
-      Live-run against the real agent (billed OpenAI + RDS) not done yet --
-      needs explicit go-ahead; CI's `integration` job will run it on first
-      push/PR regardless.
+- [x] Live-run both suites (authorized). Deterministic: found and fixed a
+      test-design bug (two cases collided with I-95's real reversible-lane
+      `CLOSED` schedule; `USFormatEvaluator` wrongly required a price) --
+      6/6 after the fix. Simulated: found and fixed a scenario bug (the
+      persona had no concrete date to give when the agent correctly asked
+      for one) -- `GoalSuccessRateEvaluator` 1.00 after the fix. Full
+      writeup in `eval/deterministic/ny_time_us_format/eval-plan.md`
+      section 6.2 / Track 2.

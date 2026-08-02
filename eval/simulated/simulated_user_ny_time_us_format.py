@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
@@ -43,50 +44,68 @@ _RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
 _MODEL_ID_ENV = "NOVA_TOLL_EVAL_MODEL_ID"
 _DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+_EASTERN = ZoneInfo("America/New_York")
 
-_CASE = Case[str, str](
-    name="relative-time-tomorrow-afternoon-simulated",
-    input=(
-        "How much would it cost to drive from Pentagon/Eads Street to I-95 "
-        "Near Dumfries Road/Route 234 tomorrow afternoon, around 3?"
-    ),
-    metadata={
-        "task_description": (
-            "Wants a toll price quote for tomorrow afternoon around 3 "
-            "o'clock. If asked to clarify AM/PM or an exact time, says "
-            "3:00 PM. If asked to confirm 'tomorrow' means the day after "
-            "today's date, confirms that plainly. Does not volunteer a "
-            "full calendar date unless asked."
-        )
-    },
-    expected_assertion=(
-        "The agent interprets 'tomorrow afternoon, around 3' as an "
-        "America/New_York date and time -- never silently defaulting to "
-        "UTC or another zone. Any clarifying question it asks is about the "
-        "ambiguous time or date, not the (unambiguous) locations. Once it "
-        "has a specific time, it prices the trip and reports the VDOT "
-        "observed timestamp in US Standard format (M/D/YYYY h:MM AM/PM "
-        "ET), never as a raw ISO-8601 string."
-    ),
-)
 
-_ACTOR_PROFILE = ActorProfile(
-    traits={
-        "communication_style": "casual, gives relative time references",
-        "domain_knowledge": "ordinary driver, thinks in local wall-clock time",
-        "disclosure": "gives an exact time (3:00 PM) or confirms 'tomorrow' "
-        "means the day after today only when asked",
-    },
-    context=(
-        "The driver means 3:00 PM Eastern Time on the calendar day after "
-        "today, driving from Pentagon/Eads Street to I-95 Near Dumfries "
-        "Road/Route 234."
-    ),
-    actor_goal=(
-        "Get an accurate toll quote for 3:00 PM Eastern Time tomorrow from "
-        "Pentagon/Eads Street to I-95 Near Dumfries Road/Route 234."
-    ),
-)
+def build_case_and_profile(
+    today: date | None = None,
+) -> tuple[Case[str, str], ActorProfile]:
+    """ "Tomorrow" only means something relative to the real current date, so
+    the simulated user needs to know today's actual date to name a concrete
+    one if asked -- exactly what a real user would do without being handed
+    the answer. `today` is a fixed-date injection point for `--check`; a
+    live run always uses the real date.
+    """
+    resolved_today = today or datetime.now(_EASTERN).date()
+    tomorrow = resolved_today + timedelta(days=1)
+    tomorrow_label = f"{tomorrow:%B} {tomorrow.day}, {tomorrow.year}"
+
+    case = Case[str, str](
+        name="relative-time-tomorrow-afternoon-simulated",
+        input=(
+            "How much would it cost to drive from Pentagon/Eads Street to I-95 "
+            "Near Dumfries Road/Route 234 tomorrow afternoon, around 3?"
+        ),
+        metadata={
+            "task_description": (
+                "Wants a toll price quote for tomorrow afternoon around 3 "
+                "o'clock. If asked to clarify AM/PM, an exact time, or the "
+                f"calendar date, says 3:00 PM on {tomorrow_label}. Does not "
+                "volunteer a full calendar date unless asked."
+            )
+        },
+        expected_assertion=(
+            "The agent interprets 'tomorrow afternoon, around 3' as an "
+            "America/New_York date and time -- never silently defaulting to "
+            "UTC or another zone or guessing a wrong calendar date. Any "
+            "clarifying question it asks is about the ambiguous time or "
+            "date, not the (unambiguous) locations. Once it has a specific "
+            "time, it prices the trip and reports the VDOT observed "
+            "timestamp in US Standard format (M/D/YYYY h:MM AM/PM ET), "
+            "never as a raw ISO-8601 string."
+        ),
+    )
+    profile = ActorProfile(
+        traits={
+            "communication_style": "casual, gives relative time references",
+            "domain_knowledge": "ordinary driver, thinks in local wall-clock time",
+            "disclosure": "gives an exact time (3:00 PM) and, if separately "
+            f"asked for the calendar date, names {tomorrow_label} -- only "
+            "when asked, never volunteered upfront",
+        },
+        context=(
+            f"Today is {resolved_today:%B} {resolved_today.day}, "
+            f"{resolved_today.year}. The driver means 3:00 PM Eastern Time "
+            f"tomorrow ({tomorrow_label}), driving from Pentagon/Eads Street "
+            "to I-95 Near Dumfries Road/Route 234."
+        ),
+        actor_goal=(
+            f"Get an accurate toll quote for 3:00 PM Eastern Time on "
+            f"{tomorrow_label} from Pentagon/Eads Street to I-95 Near "
+            "Dumfries Road/Route 234."
+        ),
+    )
+    return case, profile
 
 
 def main() -> None:
@@ -96,9 +115,11 @@ def main() -> None:
     if not model_id:
         raise ValueError(f"{_MODEL_ID_ENV} must not be empty")
 
+    case, actor_profile = build_case_and_profile()
+
     def task_function(case: Case[str, str]) -> dict[str, object]:
         simulator = ActorSimulator(
-            actor_profile=_ACTOR_PROFILE,
+            actor_profile=actor_profile,
             initial_query=str(case.input),
             model=model_id,
             max_turns=2,
@@ -113,7 +134,7 @@ def main() -> None:
         )
 
     experiment = Experiment[str, str](
-        cases=[_CASE],
+        cases=[case],
         evaluators=[
             HelpfulnessEvaluator(model=model_id),
             GoalSuccessRateEvaluator(model=model_id),
@@ -130,12 +151,14 @@ def main() -> None:
 
 
 def _self_check() -> None:
-    """Assert the static Case and actor profile without network calls."""
-    assert _CASE.name == "relative-time-tomorrow-afternoon-simulated"
-    assert _CASE.input
-    assert _CASE.expected_assertion
-    assert "tomorrow" in _CASE.input
-    assert "3:00 PM Eastern" in _ACTOR_PROFILE.actor_goal
+    """Assert the Case/profile shapes for a fixed date, without network calls."""
+    case, profile = build_case_and_profile(today=date(2026, 8, 2))
+    assert case.name == "relative-time-tomorrow-afternoon-simulated"
+    assert case.input
+    assert case.expected_assertion
+    assert "tomorrow" in case.input
+    assert "August 3, 2026" in profile.context
+    assert "August 3, 2026" in profile.actor_goal
     print("self-check ok (Case and actor profile shapes; live integrations excluded)")
 
 

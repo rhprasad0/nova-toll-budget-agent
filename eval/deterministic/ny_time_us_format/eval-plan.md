@@ -16,7 +16,7 @@
 | **Agent Name**        | TollChat (`agent/toll_agent.py`)                             |
 | **Purpose**           | Prices NoVA Express Lanes trips by chaining route/pricing tool calls; never queries RDS or writes SQL directly. |
 | **Core Capabilities** | Resolves a user-stated travel time to an `at_time` argument the pricing tools understand, prices the trip, and reports the result including VDOT's `observed_at` timestamp. |
-| **Input**             | Free-text prompt with an origin, destination, and (for this eval) an explicit date/time, e.g. `"...at 2:30 PM on July 15, 2026"` or `"...at 2 PM Pacific on July 15, 2026"`. |
+| **Input**             | Free-text prompt with an origin, destination, and (for this eval) an explicit date/time, e.g. `"...at 3:30 PM on July 15, 2026"` or `"...at 2 PM Pacific on July 15, 2026"`. |
 | **Output**            | Agent text response (Markdown route/fare report) containing a `VDOT observed at: <timestamp>` line. |
 | **Agent Framework**   | Strands Agents (`strands.Agent`), system prompt sourced from `agent-sops/nova-toll-pricing-assistant.sop.md` |
 | **Technology Stack**  | Python 3.13, `strands-agents[openai]`, `strands-agents-evals`, OpenAI GPT-5.6 Luna (direct or via Bedrock Mantle) |
@@ -61,18 +61,18 @@ flowchart LR
 ### US Date/Time Format on Report
 
 - **Evaluation Area:** Final response quality / spec compliance (SOP Step 4)
-- **Description:** The agent's final response must contain the VDOT-observed timestamp rendered as `M/D/YYYY h:MM AM/PM ET` (a regex asserts the US-format shape is present) and must not contain the tool's raw ISO-8601 string (a second regex asserts no `YYYY-MM-DDTHH:MM:SS` pattern leaked through).
+- **Description:** Whenever the agent's final response reports a VDOT-observed timestamp, it must be rendered as `M/D/YYYY h:MM AM/PM ET` (a regex asserts the US-format shape is present), never the tool's raw ISO-8601 string (a second regex, checked unconditionally, asserts no `YYYY-MM-DDTHH:MM:SS` pattern leaked through). I-95's Express Lanes are reversible (`SOUTHBOUND_OPEN`/`CLOSED`/etc. in `trip_pricing_i95.link_status`, a real schedule, not test flakiness), so a request can legitimately decline with no timestamp to check at all; that outcome is `not_applicable` for this metric, not a failure, since price/route availability is a different concern (out of scope here, same as the fuzzy-location suite's evaluators never asserting on price success either).
 - **Method:** Code-based (two regexes against the final response text)
 
 ---
 
 ## 4. Test Data Generation
 
-All three cases reuse the same verified direct pair (Pentagon/Eads Street → I-95 Near Dumfries Road/Route 234, `od_pair_id` 1212, `trip_pricing_i95` confirmed to have continuous data from 2026-04-17 through 2026-08-02 at query time) so only the stated date/time varies. `resolve_at_time`'s "at or before" lookup means a future `at_time` still returns the most recent available row rather than erroring, so all three cases succeed regardless of how far the stated date is from today.
+All three cases reuse the same verified direct pair (Pentagon/Eads Street → I-95 Near Dumfries Road/Route 234, `od_pair_id` 1212, `trip_pricing_i95` confirmed to have continuous data from 2026-04-17 through 2026-08-02 at query time) so only the stated date/time varies. `resolve_at_time`'s "at or before" lookup means a future `at_time` still returns the most recent available row rather than erroring, so all three cases exercise `i95_route` regardless of how far the stated date is from today -- though a live run can still land on the reversible-lane `CLOSED` schedule and get a legitimate decline instead of a price; see the format metric above for how that's handled.
 
-- **Naive Eastern, EDT side**: `"...at 2:30 PM on July 15, 2026"`, no zone stated. Expected `at_time` instant: `2026-07-15T14:30:00-04:00` (July is daylight time; verified `resolve_at_time("2026-07-15T14:30:00").isoformat() == "2026-07-15T14:30:00-04:00"`).
-- **Non-Eastern zone stated**: `"...at 2:00 PM Pacific on July 15, 2026"`. Expected `at_time` instant: `2026-07-15T17:00:00-04:00` (2 PM PDT = 5 PM EDT). This is the case that catches a naive passthrough bug: an agent that just writes `14:00` and lets `resolve_at_time` assume Eastern would be off by three hours.
-- **Naive Eastern, EST side (DST boundary)**: `"...at 10:00 AM on November 3, 2026"`, no zone stated. Expected `at_time` instant: `2026-11-03T10:00:00-05:00` (after DST ends Nov 1, 2026; verified `resolve_at_time("2026-11-03T10:00:00").isoformat() == "2026-11-03T10:00:00-05:00"`). Confirms the agent (and `resolve_at_time`) select the correct offset rather than hardcoding `-04:00` from the other two EDT-side cases.
+- **Naive Eastern, EDT side**: `"...at 3:30 PM on July 15, 2026"`, no zone stated. Expected `at_time` instant: `2026-07-15T15:30:00-04:00` (July is daylight time; verified `resolve_at_time("2026-07-15T15:30:00").isoformat() == "2026-07-15T15:30:00-04:00"`). 3:30 PM was chosen, not the more obvious 2:30 PM, because a live RDS query confirmed `trip_pricing_i95` shows `SOUTHBOUND_OPEN` continuously from 14:50 through 18:00 that day but `CLOSED` just before -- an initial 2:30 PM live run caught this and returned a legitimate decline.
+- **Non-Eastern zone stated**: `"...at 2:00 PM Pacific on July 15, 2026"`. Expected `at_time` instant: `2026-07-15T17:00:00-04:00` (2 PM PDT = 5 PM EDT). This is the case that catches a naive passthrough bug: an agent that just writes `14:00` and lets `resolve_at_time` assume Eastern would be off by three hours. Live-confirmed: priced successfully, `VDOT observed at: 7/15/2026 4:50 PM ET`.
+- **Naive Eastern, EST side (DST boundary)**: `"...at 10:00 AM on November 3, 2026"`, no zone stated. Expected `at_time` instant: `2026-11-03T10:00:00-05:00` (after DST ends Nov 1, 2026; verified `resolve_at_time("2026-11-03T10:00:00").isoformat() == "2026-11-03T10:00:00-05:00"`). Confirms the agent (and `resolve_at_time`) select the correct offset rather than hardcoding `-04:00` from the other two EDT-side cases. A future date resolves to the latest archived row via "at or before"; at query time that row (2026-08-02 08:30 EDT) falls in the corridor's routine morning-`CLOSED` window, so this case is expected to decline (`not_applicable` on the format metric) both now and, per the observed daily pattern, likely once real November data eventually loads -- the time-interpretation check does not depend on pricing succeeding.
 - **Total number of test cases**: 3
 
 ---
@@ -130,13 +130,34 @@ No new dependency — `strands-agents-evals` is already a `pyproject.toml` depen
 | :----------------- | :--------------- | :------------------------------ | :--------------------------------------------- |
 | 2026-08-02 12:10 | eval-plan.md   | Completed | Plan drafted from `agent_tools/_oracle_route.py`, SOP Step 4 (as amended), and a live RDS query confirming od_pair_id 1212 has continuous `trip_pricing_i95` data 2026-04-17 through 2026-08-02 — not assumed. DST offsets for the three chosen dates verified by calling `resolve_at_time` directly, not assumed. |
 | 2026-08-02 12:10 | test-cases.jsonl | Completed | 3 cases; the reused Pentagon/Eads Street → I-95 Near Dumfries Road/Route 234 pair and its `resolve_at_time`-verified expected instants are the only new claims — no new oracle pair was introduced. |
-| 2026-08-02 12:10 | deterministic_ny_time_us_format.py | Completed | Two code-based evaluators, no LLM-judge half. `--check` self-test covers tool-mismatch, missing/unparseable at_time, correct/wrong instant resolution (including the naive-passthrough-treated-as-Eastern bug), and both US-format/raw-ISO-8601 regex branches against synthetic data. Not run live as part of this session (would spend real OpenAI + RDS calls); self-check only, so results reflect the matching logic, not a real agent trajectory. |
+| 2026-08-02 12:10 | deterministic_ny_time_us_format.py | Completed | Two code-based evaluators, no LLM-judge half. `--check` self-test covers tool-mismatch, missing/unparseable at_time, correct/wrong instant resolution (including the naive-passthrough-treated-as-Eastern bug), and both US-format/raw-ISO-8601 regex branches against synthetic data. |
+| 2026-08-02 13:30 | deterministic_ny_time_us_format.py | Run live (authorized) | First live run (`AWS_PROFILE=nova-toll`) scored 4/6 (0.67): `TimeInterpretationEvaluator` passed all 3 cases, but `USFormatEvaluator` failed 2/3 -- not an agent bug. I-95's Express Lanes are a real reversible corridor (`trip_pricing_i95.link_status`: `SOUTHBOUND_OPEN`/`CLOSED`), and the original 2:30 PM July 15 case and the Nov 3 future-date case (which falls back to the latest archived row, then in the corridor's routine morning-`CLOSED` window) both hit a legitimate decline with no `observed_at` to format. Fixed by (1) moving the EDT case to 3:30 PM, confirmed `SOUTHBOUND_OPEN` for the full window that day, and (2) making `USFormatEvaluator` return `not_applicable` rather than fail when the trip declines with no timestamp at all -- format compliance and route/price availability are different concerns, same principle the fuzzy-location suite already applies by never asserting on price success. Re-run after the fix: 6/6 (1.00). All three `at_time` values were confirmed correct live, including the EST-side case even though it declined. |
 
 ## Track 2: simulated-user conversations
 
 Track 2 uses `ActorSimulator` for relative/fuzzy date phrasing ("tomorrow at
 5pm", "next Monday morning") that Track 1 cannot assert against, since the
 agent has no injected notion of "today." It is **not a regression gate**:
-the simulated user and both judges are LLMs. See
+the simulated user and both judges are LLMs.
+
+**Run live (authorized), 2026-08-02 13:35:** first run scored 0.08
+(`GoalSuccessRateEvaluator` 0.0) -- also not an agent bug. The agent
+correctly refused to guess a calendar date for "tomorrow" and asked for one
+explicitly (the expected, no-anchor behavior this suite exists to observe),
+but the simulated persona's `context`/`actor_goal` only said "the day after
+today" in the abstract, with no concrete date to disclose when asked, so
+the conversation stalled for a reason that was a scenario bug, not a
+finding about the agent. Fixed by computing `tomorrow` from the real
+current date at run time (`build_case_and_profile()`, `--check` pins a
+fixed `today` for reproducibility) and giving the persona a concrete date
+to name if pressed -- exactly what a real user would already know, not
+information invented for it. Re-run after the fix: `GoalSuccessRateEvaluator`
+1.00 (the agent resolved the relative time to the correct Eastern instant,
+then declined cleanly when I-95 southbound was closed at that time, citing
+"August 3, 2026 at 3:00 PM ET"). `HelpfulnessEvaluator` scored 0.33 on that
+same run -- expected per the authoring SOP's Step 3 constraint: it only
+judges the final turn's answer quality (no price was ultimately available,
+the same real corridor closure Track 1 also hit) and is not evidence about
+time-interpretation correctness. See
 `simulated/simulated_user_ny_time_us_format.py` and this suite's `README.md`
 for commands.

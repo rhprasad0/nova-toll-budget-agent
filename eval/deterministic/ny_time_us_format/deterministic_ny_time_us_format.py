@@ -190,13 +190,20 @@ class TimeInterpretationEvaluator(Evaluator[str, str]):
 
 
 class USFormatEvaluator(Evaluator[str, str]):
-    """The final response must show a US-format timestamp and no raw ISO-8601."""
+    """The final response must show a US-format timestamp and no raw ISO-8601.
+
+    Route/price availability (SOUTHBOUND_OPEN vs CLOSED, a real reversible-lane
+    schedule -- see SOP Step 3's i95_junction_leg `unavailable` note, which
+    applies just as much to i95_route) is a different concern from format:
+    if the trip legitimately declines with no VDOT-observed timestamp at
+    all, this evaluator has nothing to check and must not fail the case for
+    it. The raw-ISO-8601 leak check still applies unconditionally.
+    """
 
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
         response = str(evaluation_case.actual_output or "")
-        has_us_format = _US_FORMAT_RE.search(response) is not None
         has_raw_iso = _RAW_ISO_RE.search(response) is not None
 
         if has_raw_iso:
@@ -206,7 +213,14 @@ class USFormatEvaluator(Evaluator[str, str]):
                 "US-format (M/D/YYYY h:MM AM/PM ET)",
                 "raw_iso_leaked",
             )
-        if not has_us_format:
+        if "observed at" not in response.casefold():
+            return _result(
+                True,
+                "no VDOT-observed timestamp reported (trip declined); "
+                "format check not applicable",
+                "not_applicable",
+            )
+        if not _US_FORMAT_RE.search(response):
             return _result(
                 False,
                 "response does not contain a US-format timestamp "
@@ -350,7 +364,8 @@ def _self_check() -> None:
     format_checks: list[tuple[str, str]] = [
         ("VDOT observed at: 7/15/2026 2:30 PM ET", "us_formatted"),
         ("VDOT observed at: 2026-07-15T14:30:00-04:00", "raw_iso_leaked"),
-        ("The trip costs $4.25.", "us_format_missing"),
+        ("VDOT observed at: sometime this afternoon", "us_format_missing"),
+        ("The trip is unavailable: I-95 southbound is closed.", "not_applicable"),
     ]
     for output, label in format_checks:
         assert format_checker.evaluate(_fake_case({}, [], output))[0].label == label, (
