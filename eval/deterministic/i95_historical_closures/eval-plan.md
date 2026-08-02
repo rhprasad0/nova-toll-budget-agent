@@ -110,6 +110,7 @@ eval/
 | 2026-08-02 | Planning | Four Issue #17 historical closure cases; one deterministic and one simulated-user case for each; follow existing patterns. |
 | 2026-08-02 | Execution | User authorized one billed live simulated-user run across OpenAI, Bedrock, and historical RDS. |
 | 2026-08-02 | Remediation | Use three-turn simulations, make execution errors fail the command, harden adversarial response grading, and curate representative evaluation evidence for recruiters. |
+| 2026-08-02 | Analysis | Analyze the curated three-turn simulation, separating agent behavior from actor, judge, and telemetry artifacts. |
 
 ### 6.2 Evaluation Progress
 
@@ -120,3 +121,4 @@ eval/
 | 2026-08-02 | Simulated implementation | Completed | All four case shapes passed offline checks. |
 | 2026-08-02 | Initial simulated live evaluation | Superseded | The one-turn report and its failed setup attempt were removed when the simulation expanded to three turns. |
 | 2026-08-02 | Three-turn simulated live evaluation | Completed | Technically valid run with no execution errors: 3/8 judgments passed, overall score 0.4165. Repeated route calls and mixed follow-up helpfulness are preserved in `eval/results/20260802T165649Z.json`. |
+| 2026-08-02 | Results analysis | Completed | Manual telemetry review found 4/4 correct initial closure responses; raw goal scores were distorted by cumulative trace duplication and actor premise drift. Follow-up source guidance remains a genuine grounding risk. See `eval/eval-report.md`. |

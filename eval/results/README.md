@@ -10,4 +10,5 @@ not curated.
 
 The I-95 run exposed repeated `i95_route` calls during actor follow-ups and mixed
 helpfulness on requests beyond toll pricing. See
-`../deterministic/i95_historical_closures/` for the cases, assertions, and runner.
+`../deterministic/i95_historical_closures/` for the cases, assertions, and runner,
+and `../eval-report.md` for the telemetry-grounded analysis.
