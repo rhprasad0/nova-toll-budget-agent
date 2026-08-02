@@ -32,8 +32,7 @@ _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _RATE_PERIOD_RE = re.compile(
-    r"^\s*(?:[-*]\s*)?[*_`~]*rate period[*_`~]*:[ \t]*[*_`~]*[ \t]*"
-    r"([a-z]+(?:[-_ ][a-z]+)?)\s*[*_`~]*\s*$",
+    r"^\s*(?:[-*]\s*)?rate period\s*:\s*([a-z]+(?:[-_][a-z]+)?)(?:\s+.*)?$",
     re.IGNORECASE | re.MULTILINE,
 )
 _REQUIRED_HEADINGS = ("route and fares", "calculation", "final price")
@@ -240,10 +239,13 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
         missing_terms = [
             label for label in endpoints if not _endpoint_present(response, label)
         ]
-        if not _term_present(response, expected_call["tool"]):
-            missing_terms.append(expected_call["tool"])
         if not _route_term_present(response, metadata["expected_route_label"]):
             missing_terms.append(metadata["expected_route_label"])
+        missing_terms.extend(
+            toll["label"]
+            for toll in metadata["expected_result"].get("tolls", [])
+            if not _term_present(response, toll["label"])
+        )
         if missing_terms:
             return _result(
                 False, f"response omitted route facts: {missing_terms}", "route_missing"
@@ -295,7 +297,7 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
         else:
             periods = {
                 re.sub(r"[-\s]+", "_", period.lower())
-                for period in _RATE_PERIOD_RE.findall(response)
+                for period in _RATE_PERIOD_RE.findall(plain_response)
             }
             expected_period = str(metadata["expected_rate_period"]).lower()
             if periods != {expected_period}:
@@ -388,10 +390,15 @@ def _self_check() -> None:
         displayed_route = _ROUTE_ALIASES.get(
             metadata["expected_route_label"], metadata["expected_route_label"]
         )
+        toll_lines = "".join(
+            f"  - {toll['label']}: ${toll['price_usd']}\n"
+            for toll in metadata["expected_result"].get("tolls", [])
+        )
         good_output = (
             "## Route and fares\n"
             f"- {origin} → {destination} — {expected['tool']} "
             f"({displayed_route}): ${fare}\n"
+            f"{toll_lines}"
             f"  - {provenance}\n"
             "## Calculation\n"
             f"${fare} = **${fare}**\n"
@@ -475,6 +482,10 @@ def _self_check() -> None:
         "I-95 Near Route 17", "From I-95 Near Route 17", 1
     )
     assert response_label(metadata, call, prefixed_origin) == "grounded_response"
+    assert (
+        response_label(metadata, call, good_output.replace("i95_route ", ""))
+        == "grounded_response"
+    )
 
     metadata, call, good_output = prepared[4]
     assert (
@@ -521,11 +532,21 @@ def _self_check() -> None:
     metadata, call, good_output = prepared[-1]
     markdown_period = good_output.replace("Rate period: peak", "**Rate period:** peak")
     assert response_label(metadata, call, markdown_period) == "grounded_response"
+    explained_period = good_output.replace(
+        "Rate period: peak", "Rate period: peak (weekday morning)"
+    )
+    assert response_label(metadata, call, explained_period) == "grounded_response"
     for wrong_period in ("off_peak", "off peak", "off-peak"):
         wrong_output = good_output.replace(
             "Rate period: peak", f"Rate period: {wrong_period}"
         )
         assert response_label(metadata, call, wrong_output) == "period_missing"
+    assert (
+        response_label(
+            metadata, call, good_output.replace("Mainline plaza", "Exit plaza")
+        )
+        == "route_missing"
+    )
     wrong_result = json.loads(json.dumps(metadata["expected_result"]))
     wrong_result["tolls"][0]["price_usd"] = "999.99"
     assert (

@@ -203,7 +203,7 @@ For a plan with no `junction` step, You MUST use these sections:
 
 **Route and fares**
 - One bullet for each billed leg: resolved entry → resolved destination,
-  route tool, corridor or facility, and dollar fare.
+  corridor or facility, and dollar fare.
 - For a dulles_route result, list each returned toll item under its route
   leg instead of inventing a combined facility fare.
 - For every Greenway leg whose returned rate period is not null, report it as
