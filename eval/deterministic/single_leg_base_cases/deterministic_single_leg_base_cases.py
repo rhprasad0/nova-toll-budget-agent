@@ -33,7 +33,7 @@ _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _RATE_PERIOD_RE = re.compile(
     r"^\s*(?:[-*]\s*)?rate period\s*:\s*([a-z]+(?:[-_][a-z]+)?)"
-    r"(?:[.,;:!?](?:\s+.*)?|\s+.*)?$",
+    r"(.*)$",
     re.IGNORECASE | re.MULTILINE,
 )
 _REQUIRED_HEADINGS = ("route and fares", "calculation", "final price")
@@ -215,9 +215,7 @@ def _route_term_present(response: str, term: str) -> bool:
     }[direction]
     if _term_present(response, opposite):
         return False
-    return _term_present(response, term) or any(
-        _term_present(response, name) for name in facilities
-    )
+    return any(_term_present(response, name) for name in facilities)
 
 
 class SingleLegResponseEvaluator(Evaluator[str, str]):
@@ -311,12 +309,14 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                     "raw_datetime",
                 )
         else:
-            periods = {
-                re.sub(r"[-\s]+", "_", period.lower())
-                for period in _RATE_PERIOD_RE.findall(plain_response)
-            }
+            matches = _RATE_PERIOD_RE.findall(plain_response)
+            periods = {re.sub(r"[-\s]+", "_", period.lower()) for period, _ in matches}
             expected_period = str(metadata["expected_rate_period"]).lower()
-            if periods != {expected_period}:
+            contradictory_tail = any(
+                re.search(r"\b(?:off[-_ ]?peak|peak)\b", tail, re.IGNORECASE)
+                for _, tail in matches
+            )
+            if periods != {expected_period} or contradictory_tail:
                 return _result(
                     False,
                     "response omitted or misstated the Greenway rate period",
@@ -517,6 +517,8 @@ def _self_check() -> None:
         "I-95 Express Lanes northbound", "I-95 general-purpose lanes northbound"
     )
     assert response_label(metadata, call, general_lanes) == "route_missing"
+    raw_code = good_output.replace("I-95 Express Lanes northbound", "I-95-NB")
+    assert response_label(metadata, call, raw_code) == "route_missing"
     contradictory_code = good_output.replace(
         "I-95 Express Lanes northbound",
         "I-95-NB (I-95/395 Express Lanes southbound)",
@@ -586,6 +588,10 @@ def _self_check() -> None:
     assert response_label(metadata, call, explained_period) == "grounded_response"
     punctuated_period = good_output.replace("Rate period: peak", "Rate period: peak.")
     assert response_label(metadata, call, punctuated_period) == "grounded_response"
+    contradictory_period = good_output.replace(
+        "Rate period: peak", "Rate period: peak, but actually off-peak"
+    )
+    assert response_label(metadata, call, contradictory_period) == "period_missing"
     for wrong_period in ("off_peak", "off peak", "off-peak"):
         wrong_output = good_output.replace(
             "Rate period: peak", f"Rate period: {wrong_period}"

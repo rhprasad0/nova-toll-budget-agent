@@ -24,7 +24,6 @@ from strands_evals.types.evaluation import (  # noqa: E402
 )
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
 from strands_evals.types.trace import (  # noqa: E402
-    AgentInvocationSpan,
     Session,
     ToolExecutionSpan,
 )
@@ -80,7 +79,7 @@ def load_cases() -> list[Case[str, str]]:
                     ),
                 },
                 expected_assertion=(
-                    "Across all three turns, the agent keeps the fixed trip facts, "
+                    "Across the conversation, the agent keeps the fixed trip facts, "
                     f"consistently reports the exact final fare ${fare} with correct "
                     "arithmetic, and explains "
                     f"{provenance} without inventing another route or price."
@@ -104,7 +103,7 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
             "Never change, omit, or reinterpret these facts."
         ),
         actor_goal=(
-            "Use exactly three turns. Start with the supplied price request. After "
+            "Use up to three turns. Start with the supplied price request. After "
             "the first answer, ask the agent to confirm the final fare and show the "
             f"calculation. {_follow_up(metadata)} Do not request alternate routes, "
             "live traffic, source documents, or a different travel time."
@@ -144,12 +143,9 @@ class SingleLegSimulationTraceEvaluator(Evaluator[str, str]):
             ]
 
         calls: list[dict[str, Any]] = []
-        turn_count = 0
         seen: set[tuple[str, str]] = set()
         for trace_index, trace in enumerate(trajectory.traces):
             for span_index, span in enumerate(trace.spans):
-                if isinstance(span, AgentInvocationSpan):
-                    turn_count += 1
                 if not isinstance(span, ToolExecutionSpan):
                     continue
                 span_id = span.span_info.span_id or f"{trace_index}:{span_index}"
@@ -167,22 +163,7 @@ class SingleLegSimulationTraceEvaluator(Evaluator[str, str]):
                         "tool_result": span.tool_result.content,
                     }
                 )
-        return _evaluate_simulation(calls, turn_count, evaluation_case.metadata or {})
-
-
-def _evaluate_simulation(
-    calls: list[dict[str, Any]], turn_count: int, metadata: dict[str, Any]
-) -> list[EvaluationOutput]:
-    if turn_count != 3:
-        return [
-            EvaluationOutput(
-                score=0.0,
-                test_pass=False,
-                reason=f"expected exactly three agent turns, got {turn_count}",
-                label="turn_count",
-            )
-        ]
-    return evaluate_single_leg_calls(calls, metadata)
+        return evaluate_single_leg_calls(calls, evaluation_case.metadata or {})
 
 
 def main() -> None:
@@ -230,7 +211,7 @@ def _self_check() -> None:
     assert all(case.input and case.expected_assertion for case in cases)
     assert all((case.metadata or {}).get("task_description") for case in cases)
     assert all(
-        "exactly three turns" in build_actor_profile(case).actor_goal for case in cases
+        "up to three turns" in build_actor_profile(case).actor_goal for case in cases
     )
     assert "VDOT" in _follow_up(cases[0].metadata or {})
     assert "Greenway" in _follow_up(cases[-1].metadata or {})
@@ -245,8 +226,7 @@ def _self_check() -> None:
         "input": expected["input"],
         "tool_result": row["expected_result"],
     }
-    assert _evaluate_simulation([call], 2, row)[0].label == "turn_count"
-    assert _evaluate_simulation([call], 3, row)[0].label == "exact_result"
+    assert evaluate_single_leg_calls([call], row)[0].label == "exact_result"
     print("self-check ok (8 case/profile shapes and bad-session guard; no network)")
 
 

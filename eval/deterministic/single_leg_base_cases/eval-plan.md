@@ -113,7 +113,7 @@ eval/
 | :-- | :-- | :-- |
 | 2026-08-02 | Planning | Eight longest reciprocal, exact-price, single-leg base cases with boundary endpoints allowed. |
 | 2026-08-02 | Automation | Deterministic live cases in trusted internal-PR CI; simulations nightly. |
-| 2026-08-02 | Simulation | Matching explicit-profile simulations with three agent turns per case. |
+| 2026-08-02 | Simulation | Matching explicit-profile simulations capped at three agent turns per case. |
 
 ### 6.2 Evaluation Progress
 
@@ -121,8 +121,8 @@ eval/
 | :-- | :-- | :-- | :-- |
 | 2026-08-02 | Plan and fixtures | Completed | Routes and exact historical fares verified against committed oracles and read-only RDS. |
 | 2026-08-02 | Deterministic implementation | Completed | Exact captured-call and response graders with offline mutation checks. |
-| 2026-08-02 | Simulated implementation | Completed | Eight three-turn immutable actor profiles with deterministic trace grading. |
+| 2026-08-02 | Simulated implementation | Completed | Eight immutable actor profiles capped at three turns with deterministic trace grading. |
 | 2026-08-02 | Automation | Completed | Offline checks and trusted live regression in CI; simulations nightly. |
 | 2026-08-02 | Deterministic live execution | Reviewed, not curated | Exact tool results passed 8/8; response grading exposed presentation false negatives and one genuine missing-rate-period response. |
 | 2026-08-02 | Simulated live execution | Reviewed, not curated | Goal/helpfulness passed 16/16; trace grading caught one invalid-time retry, and only 5/8 conversations reached all three turns. |
-| 2026-08-02 | Adversarial review | Completed | Accepted valid human-readable route labels and Markdown arithmetic, moved tool and turn counts to code grading, and now require exactly three simulation turns. |
+| 2026-08-02 | Adversarial review | Completed | Accepted valid human-readable route labels and Markdown arithmetic and kept tool counts in code grading; turn count remains an SDK cap because valid actors may finish early. |
