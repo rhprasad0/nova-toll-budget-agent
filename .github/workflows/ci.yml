@@ -32,10 +32,11 @@ jobs:
     # RDS. Dependabot has its own GitHub secret store, so it cannot receive
     # the Tailscale OAuth credentials this job requires; regular CI still
     # validates its dependency updates without exposing deployment access.
-    # github.event.pull_request fields are event-payload data, not
-    # attacker-controlled string interpolation, so they are safe here.
+    # Run paid integration once per SHA: feature branches use their internal
+    # PR event; main uses its push event. github.event.pull_request fields are
+    # event-payload data, not attacker-controlled string interpolation.
     if: >-
-      github.event_name == 'push' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'dependabot[bot]')
     permissions:
@@ -69,9 +70,9 @@ jobs:
           DB_USER: pricing_reader
           DB_NAME: nova_toll
           DB_CA_BUNDLE_PATH: infra/build/loader/rds-ca-bundle.pem
-      - name: Run deterministic fuzzy-location evaluation
+      - name: Run code-graded fuzzy-location regression
         run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py
-      - name: Run deterministic NY-time/US-format evaluation
+      - name: Run code-graded NY-time/US-format regression
         run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py
-      - name: Run deterministic historical I-95 closure evaluation
+      - name: Run code-graded historical I-95 closure regression
         run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py

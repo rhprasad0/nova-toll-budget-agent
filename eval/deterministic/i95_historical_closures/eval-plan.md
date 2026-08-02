@@ -3,7 +3,7 @@
 ## 1. Evaluation Requirements
 
 - **User Input:** `Create one deterministic and one simulated-user eval for each "Historical single-corridor closure eval" in GitHub Issue #17, following the existing eval patterns.`
-- **Interpreted Evaluation Requirements:** Cover all four pinned historical I-95 closure requests. Each deterministic case must use a fresh TollChat agent, capture the complete ordered trace, require exactly one `i95_route` call with the issue's exact ramps and `at_time`, verify the captured tool result is the expected closed OD pair with no monetary fields, and reject a final answer that quotes a fare. Mirror all four prompts in an observational simulated-user experiment.
+- **Interpreted Evaluation Requirements:** Cover all four pinned historical I-95 closure requests. Each code-graded live case must use a fresh TollChat agent, capture the complete ordered trace, require exactly one `i95_route` call with the issue's exact ramps and `at_time`, verify the captured tool result is the expected closed OD pair with no monetary fields, and reject a final answer that quotes a fare. Mirror all four prompts in an observational simulated-user experiment. The grader is deterministic; live agent execution is stochastic.
 
 ---
 
@@ -42,7 +42,7 @@ flowchart LR
 
 **Observability Status**
 
-- **Tracing Framework:** Strands response metrics for deterministic cases; Strands Evals in-memory telemetry for simulations.
+- **Tracing Framework:** Strands response metrics for code-graded live cases; Strands Evals in-memory telemetry for simulations.
 - **Custom Attributes:** Simulations scope `session.id` and `gen_ai.conversation.id` to agent-under-test calls.
 
 ---
@@ -52,14 +52,14 @@ flowchart LR
 ### Closure Tool Trace
 
 - **Evaluation Area:** Tool selection, arguments, order, and captured result.
-- **Description:** Require exactly one `i95_route` call with exact ramps/time. Its captured result must identify the expected OD pair and `CLOSED`, and expose no monetary fields.
+- **Description:** Require exactly one `i95_route` call whose required ramps/time match exactly. Harmless extra arguments do not fail grading. Its captured result must identify the expected OD pair and `CLOSED`, and expose no monetary fields.
 - **Method:** Code-based.
 
 ### Unavailable Response
 
 - **Evaluation Area:** Final-answer grounding.
 - **Description:** Require the final answer to report the requested route unavailable, suggest the I-95 general-purpose lanes, and reject any dollar amount, USD amount, or decimal fare.
-- **Method:** Code-based for deterministic cases; `GoalSuccessRateEvaluator` plus `HelpfulnessEvaluator` for observational simulations.
+- **Method:** Deterministic code-based grading for live cases; `GoalSuccessRateEvaluator` plus `HelpfulnessEvaluator` for observational simulations.
 
 ---
 
@@ -95,7 +95,7 @@ eval/
 | :-- | :-- |
 | **Language/Version** | Python 3.13+ |
 | **Evaluation Framework** | Installed Strands Evals SDK, verified against Context7 `/strands-agents/evals` |
-| **Evaluators** | Custom deterministic trace/response evaluators; simulated goal-success and helpfulness judges |
+| **Evaluators** | Custom code-based trace/response evaluators; simulated goal-success and helpfulness judges |
 | **Agent Integration** | Direct `build_agent()` import, fresh per case |
 | **Results Storage** | JSON under `eval/results/` |
 
@@ -114,5 +114,5 @@ eval/
 | **Timestamp** | **Component** | **Status** | **Notes** |
 | :-- | :-- | :-- | :-- |
 | 2026-08-02 | Plan and test data | Completed | Scope and pinned inputs taken from Issue #17 and existing historical route-tool tests. |
-| 2026-08-02 | Deterministic implementation | Completed | Offline mutation checks passed; no billed live run was authorized. |
+| 2026-08-02 | Code-graded live regression | Completed | Offline grader mutation checks passed; no billed live run was authorized. |
 | 2026-08-02 | Simulated implementation | Completed | All four case shapes passed offline checks; simulator, telemetry mapping, and judges were not run live. |

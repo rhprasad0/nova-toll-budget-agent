@@ -1,9 +1,10 @@
 # Historical I-95 closure evaluations
 
-Four deterministic and four simulated-user cases cover Issue #17's
-historical single-corridor closures. The deterministic suite requires one
-exact `i95_route` call, requires an unpriced I-95 general-purpose-lanes
-suggestion, and rejects any fare for the captured `CLOSED` result.
+Four code-graded live cases and four simulated-user cases cover Issue #17's
+historical single-corridor closures. The code-based grader requires one exact
+`i95_route` call, an unpriced I-95 general-purpose-lanes suggestion, and no fare
+for the captured `CLOSED` result. Grading is deterministic; live agent execution
+is stochastic.
 
 ## Offline checks
 
@@ -14,7 +15,7 @@ uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
 
 These make no AWS, OpenAI, Bedrock, or RDS calls.
 
-## Deterministic live run
+## Code-graded live regression
 
 ```bash
 AWS_PROFILE=nova-toll uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py

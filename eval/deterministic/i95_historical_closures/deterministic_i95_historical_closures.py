@@ -1,7 +1,7 @@
-"""Deterministic agent eval for Issue #17's historical I-95 closures.
+"""Code-graded live regression for Issue #17's historical I-95 closures.
 
-The live run invokes TollChat and historical RDS pricing. ``--check`` only
-exercises the case loader and evaluator mutations against synthetic traces.
+The grader is deterministic; the live TollChat invocation is stochastic.
+``--check`` only exercises the loader and grader against synthetic traces.
 """
 
 from __future__ import annotations
@@ -130,10 +130,17 @@ class ClosureTraceEvaluator(Evaluator[str, str]):
                 f"{[call.get('name') for call in calls]}",
                 "tool_mismatch",
             )
-        if calls[0].get("input") != expected["input"]:
+        expected_input: dict[str, Any] = expected["input"]
+        raw_input = calls[0].get("input")
+        actual_input = (
+            cast(dict[str, Any], raw_input) if isinstance(raw_input, dict) else {}
+        )
+        if not isinstance(raw_input, dict) or not all(
+            actual_input.get(key) == value for key, value in expected_input.items()
+        ):
             return _result(
                 False,
-                f"tool input {calls[0].get('input')} != {expected['input']}",
+                f"tool input {actual_input} lacks required arguments {expected_input}",
                 "input_mismatch",
             )
         captured = _tool_result(calls[0])
@@ -194,7 +201,7 @@ def main() -> None:
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
     if not _report_passed(report.test_passes):
-        raise SystemExit("deterministic historical I-95 closure evaluation failed")
+        raise SystemExit("code-graded historical I-95 closure regression failed")
 
 
 def _self_check() -> None:
@@ -234,6 +241,12 @@ def _self_check() -> None:
     trace = ClosureTraceEvaluator()
     response = ClosureResponseEvaluator()
     assert trace.evaluate(fake([call]))[0].label == "closed"
+    assert (
+        trace.evaluate(fake([{**call, "input": {**expected["input"], "extra": True}}]))[
+            0
+        ].label
+        == "closed"
+    )
     assert trace.evaluate(fake([]))[0].label == "tool_mismatch"
     assert trace.evaluate(fake([call, call]))[0].label == "tool_mismatch"
     assert (
