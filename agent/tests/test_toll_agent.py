@@ -735,6 +735,7 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "exact decimal addition" in prompt
     assert "returned toll items" in prompt
     assert "Greenway leg whose returned rate period is not null" in prompt
+    assert "single-corridor request, You MUST NOT call plan_toll_route" in prompt
     assert "before the first tool call" in prompt
     assert re.search(r"ISO 8601 with an\s+explicit Eastern UTC offset", prompt)
     assert "calculated Dulles total" in prompt
@@ -781,12 +782,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.3.0"
-    advanced["system_prompt"]["releases"]["1.3.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.4.0"
+    advanced["system_prompt"]["releases"]["1.4.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
-    advanced["system_prompt"]["current"] = "1.1.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.2\.0"):
+    advanced["system_prompt"]["current"] = "1.2.0"
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.3\.0"):
         validate_manifest_update(previous, advanced)
 
 

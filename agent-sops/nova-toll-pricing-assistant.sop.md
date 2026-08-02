@@ -97,6 +97,8 @@ Decide whether the resolved origin and destination stay on one corridor or
 require a cross-corridor plan.
 
 **Constraints:**
+- For a single-corridor request, You MUST NOT call plan_toll_route because its
+  endpoints already resolve to one pricing tool. Call that tool exactly once.
 - For every cross-corridor request, You MUST call plan_toll_route before
   validating or pricing either endpoint. You MUST NOT reject an entry-only or exit-only endpoint yourself, since the planner is authoritative about whether it can be an origin or destination.
 - For a trip whose resolved endpoints are on different corridors, You MUST
