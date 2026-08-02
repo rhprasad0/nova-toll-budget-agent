@@ -129,6 +129,8 @@ No new dependency — `strands-agents-evals` is already a `pyproject.toml` depen
 | **Timestamp**      | **Component**    | **Status**                      | **Notes**                                      |
 | :----------------- | :--------------- | :------------------------------ | :--------------------------------------------- |
 | 2026-08-02 12:10 | eval-plan.md   | Completed | Plan drafted from `agent_tools/_oracle_route.py`, SOP Step 4 (as amended), and a live RDS query confirming od_pair_id 1212 has continuous `trip_pricing_i95` data 2026-04-17 through 2026-08-02 — not assumed. DST offsets for the three chosen dates verified by calling `resolve_at_time` directly, not assumed. |
+| 2026-08-02 12:10 | test-cases.jsonl | Completed | 3 cases; the reused Pentagon/Eads Street → I-95 Near Dumfries Road/Route 234 pair and its `resolve_at_time`-verified expected instants are the only new claims — no new oracle pair was introduced. |
+| 2026-08-02 12:10 | deterministic_ny_time_us_format.py | Completed | Two code-based evaluators, no LLM-judge half. `--check` self-test covers tool-mismatch, missing/unparseable at_time, correct/wrong instant resolution (including the naive-passthrough-treated-as-Eastern bug), and both US-format/raw-ISO-8601 regex branches against synthetic data. Not run live as part of this session (would spend real OpenAI + RDS calls); self-check only, so results reflect the matching logic, not a real agent trajectory. |
 
 ## Track 2: simulated-user conversations
 
