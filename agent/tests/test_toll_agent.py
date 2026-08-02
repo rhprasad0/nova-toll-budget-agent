@@ -1,8 +1,10 @@
 """Prompt-content and request-shape assertions only -- no AWS calls/network."""
 
+import hashlib
 import json
 import re
 from collections import deque
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,13 +30,24 @@ from agent_tools.i95_route import _lookup as _i95_lookup
 from agent_tools.i95_route import i95_junction_leg, i95_route
 from agent_tools.i495_route import _lookup as _i495_lookup
 from agent_tools.i495_route import i495_route
+from scripts.check_agent_contract_versions import validate_manifest_update
 
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
+_CONTRACT_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "contract-manifest.json"
+_SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
 _LOOKUPS = {
     "i95": _i95_lookup,
     "i495": _i495_lookup,
     "i66_itb": _i66_lookup,
 }
+
+
+def _contract_manifest():
+    return json.loads(_CONTRACT_MANIFEST_PATH.read_text())
+
+
+def _sha256(value):
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _same_location(corridor, query, node_id):
@@ -737,6 +750,58 @@ def test_system_prompt_suggests_general_purpose_lanes_when_i95_is_closed():
     )
 
 
+def test_agent_contract_manifest_versions_are_semver():
+    manifest = _contract_manifest()
+    versions = {
+        "system_prompt": toll_agent_module.SYSTEM_PROMPT_VERSION,
+        "toolset": toll_agent_module.TOOLSET_VERSION,
+    }
+
+    for contract, version in versions.items():
+        assert _SEMVER.fullmatch(version)
+        assert manifest[contract]["current"] == version
+        assert version in manifest[contract]["releases"]
+        assert all(_SEMVER.fullmatch(v) for v in manifest[contract]["releases"])
+        assert all(
+            re.fullmatch(r"[0-9a-f]{64}", digest)
+            for digest in manifest[contract]["releases"].values()
+        )
+
+
+def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
+    previous = _contract_manifest()
+    rewritten = deepcopy(previous)
+    rewritten["system_prompt"]["releases"]["1.0.0"] = "0" * 64
+    with pytest.raises(ValueError, match=r"rewrites system_prompt release 1\.0\.0"):
+        validate_manifest_update(previous, rewritten)
+
+    advanced = deepcopy(previous)
+    advanced["system_prompt"]["current"] = "1.1.0"
+    advanced["system_prompt"]["releases"]["1.1.0"] = "0" * 64
+    validate_manifest_update(previous, advanced)
+
+    advanced["system_prompt"]["current"] = "0.9.0"
+    advanced["system_prompt"]["releases"]["0.9.0"] = "1" * 64
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.0\.0"):
+        validate_manifest_update(previous, advanced)
+
+
+def test_rendered_system_prompt_matches_its_versioned_digest():
+    manifest = _contract_manifest()["system_prompt"]
+    assert _sha256(build_system_prompt()) == manifest["releases"][manifest["current"]]
+
+
+def test_registered_toolset_matches_its_versioned_digest():
+    manifest = _contract_manifest()["toolset"]
+    canonical_specs = json.dumps(
+        [tool.tool_spec for tool in toll_agent_module._AGENT_TOOLS],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    assert _sha256(canonical_specs) == manifest["releases"][manifest["current"]]
+
+
 def test_agent_tool_specs_are_concise_and_preserve_their_contracts():
     expected = {
         "plan_toll_route": (
@@ -817,9 +882,19 @@ def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch
 
     monkeypatch.delenv("TOLLCHAT_MODEL_BACKEND", raising=False)
     monkeypatch.setattr(toll_agent_module.boto3, "client", client)
-    agent = build_agent(trace_attributes={"tollchat.session_id": "test"})
+    agent = build_agent(
+        trace_attributes={
+            "tollchat.session_id": "test",
+            "tollchat.system_prompt_version": "wrong",
+            "tollchat.toolset_version": "wrong",
+        }
+    )
     assert isinstance(agent.model, OpenAIResponsesModel)
-    assert agent.trace_attributes == {"tollchat.session_id": "test"}
+    assert agent.trace_attributes == {
+        "tollchat.session_id": "test",
+        "tollchat.system_prompt_version": toll_agent_module.SYSTEM_PROMPT_VERSION,
+        "tollchat.toolset_version": toll_agent_module.TOOLSET_VERSION,
+    }
     assert calls == [{"Name": "/nova-toll/openai_api_key", "WithDecryption": True}]
     assert agent.model.client_args == {"api_key": "test-openai-key"}
 

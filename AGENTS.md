@@ -8,7 +8,7 @@ Give 1-2 sentence explanations on more complex topics. Offer to make explanatory
 
 # Repo rules
 
-Perform work in new branches instead of working in the main branch. The main branch is protected, so new changes need to be in a PR and pass CI - but do not open a new PR or push without user authorization.
+Perform work in new worktrees (for isolation from other coding agents) instead of working in the main branch. The main branch is protected, so new changes need to be in a PR and pass CI - but do not open a new PR or push without user authorization.
 
 Open pull requests ready for review. Do not create draft pull requests.
 

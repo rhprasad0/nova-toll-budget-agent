@@ -156,6 +156,8 @@ _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
 _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
+SYSTEM_PROMPT_VERSION = "1.0.0"
+TOOLSET_VERSION = "1.0.0"
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -652,6 +654,16 @@ def plan_toll_route(
     return {"at_time": planned_at_time, "steps": steps}
 
 
+_AGENT_TOOLS = (
+    plan_toll_route,
+    i95_junction_leg,
+    i95_route,
+    i495_route,
+    i66_route,
+    dulles_route,
+)
+
+
 def build_system_prompt() -> str:
     """System prompt loaded from the Nova Toll Pricing Assistant Agent SOP.
 
@@ -673,16 +685,14 @@ def build_system_prompt() -> str:
 
 
 def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
+    trace_attributes = {
+        **(trace_attributes or {}),
+        "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
+        "tollchat.toolset_version": TOOLSET_VERSION,
+    }
     return Agent(
         model=_build_model(),
-        tools=[
-            plan_toll_route,
-            i95_junction_leg,
-            i95_route,
-            i495_route,
-            i66_route,
-            dulles_route,
-        ],
+        tools=list(_AGENT_TOOLS),
         system_prompt=build_system_prompt(),
         trace_attributes=trace_attributes,
     )
