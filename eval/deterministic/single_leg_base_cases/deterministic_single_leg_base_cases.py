@@ -312,11 +312,14 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             matches = _RATE_PERIOD_RE.findall(plain_response)
             periods = {re.sub(r"[-\s]+", "_", period.lower()) for period, _ in matches}
             expected_period = str(metadata["expected_rate_period"]).lower()
-            contradictory_tail = any(
-                re.search(r"\b(?:off[-_ ]?peak|peak)\b", tail, re.IGNORECASE)
+            tail_periods = {
+                re.sub(r"[-\s]+", "_", period.lower())
                 for _, tail in matches
-            )
-            if periods != {expected_period} or contradictory_tail:
+                for period in re.findall(
+                    r"\b(?:off[-_ ]?peak|peak)\b", tail, re.IGNORECASE
+                )
+            }
+            if periods != {expected_period} or tail_periods - {expected_period}:
                 return _result(
                     False,
                     "response omitted or misstated the Greenway rate period",
@@ -588,6 +591,10 @@ def _self_check() -> None:
     assert response_label(metadata, call, explained_period) == "grounded_response"
     punctuated_period = good_output.replace("Rate period: peak", "Rate period: peak.")
     assert response_label(metadata, call, punctuated_period) == "grounded_response"
+    repeated_period = good_output.replace(
+        "Rate period: peak", "Rate period: peak (weekday peak hours)"
+    )
+    assert response_label(metadata, call, repeated_period) == "grounded_response"
     contradictory_period = good_output.replace(
         "Rate period: peak", "Rate period: peak, but actually off-peak"
     )
