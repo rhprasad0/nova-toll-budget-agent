@@ -75,14 +75,18 @@ def test_map_uses_token_free_pinned_maplibre_and_stays_accessible() -> None:
 def test_map_embeds_road_following_geojson_for_every_facility() -> None:
     route_data = cast(dict[str, object], _embedded_json("route-data"))
     assert route_data["type"] == "FeatureCollection"
+    assert route_data["source"] == "U.S. Census Bureau TIGER/Line 2019"
+    assert route_data["sourceArchive"] == "tl_2019_51_prisecroads.zip"
     features = cast(list[dict[str, object]], route_data["features"])
     assert {
         cast(dict[str, str], feature["properties"])["facility"] for feature in features
     } == {"i66", "i95", "i495", "dulles", "greenway"}
     for feature in features:
         geometry = cast(dict[str, object], feature["geometry"])
-        assert geometry["type"] == "LineString"
-        assert len(cast(list[list[float]], geometry["coordinates"])) >= 8
+        assert geometry["type"] == "MultiLineString"
+        lines = cast(list[list[list[float]]], geometry["coordinates"])
+        assert lines
+        assert sum(len(line) for line in lines) >= 8
 
 
 def test_map_exposes_native_filters_reset_and_details() -> None:
