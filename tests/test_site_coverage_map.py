@@ -164,5 +164,12 @@ def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
 def test_footer_states_ai_support_and_vdot_independence() -> None:
     page = SITE.read_text()
     assert "We support American AI innovation" in page
-    assert "TollChat is not affiliated with VDOT" in page
+    assert "Virginia Department of Transportation (VDOT)" in page
     assert "We use VDOT\u2019s public toll pricing data - and we\u2019re fans." in page
+
+
+def test_page_explains_congestion_pricing_problem() -> None:
+    page = SITE.read_text()
+    assert "I-95, I-495, and I-66" in page
+    assert "dynamic pricing based on congestion" in page
+    assert "difficult to plan and budget" in page
