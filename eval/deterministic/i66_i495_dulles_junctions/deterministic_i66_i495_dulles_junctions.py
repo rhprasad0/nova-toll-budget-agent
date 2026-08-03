@@ -331,6 +331,15 @@ def _route_label(label: str) -> str:
     return _response_label(label)
 
 
+def _route_labels(label: str) -> tuple[str, ...]:
+    primary = _route_label(label)
+    if label.startswith("Exit 18/19"):
+        return primary, "Route 267"
+    if label.startswith("Exit 12"):
+        return primary, "Reston Parkway", "Reston Pkwy"
+    return (primary,)
+
+
 def _line_has_direction(response: str, terms: list[str], direction: str) -> bool:
     aliases = _DIRECTION_ALIASES[direction]
     wrong_aliases = tuple(
@@ -406,14 +415,17 @@ def evaluate_junction_response(
         entry = _endpoint(result, "entry")
         exit_ = _endpoint(result, "exit")
         direction = str(expected["direction"])
-        terms = [
-            _route_label(str(entry.get("label", ""))),
-            _route_label(str(exit_.get("label", ""))),
-        ]
-        if not _line_has_direction(response, terms, direction):
+        entry_labels = _route_labels(str(entry.get("label", "")))
+        exit_labels = _route_labels(str(exit_.get("label", "")))
+        if not any(
+            _line_has_direction(response, [entry_label, exit_label], direction)
+            for entry_label in entry_labels
+            for exit_label in exit_labels
+        ):
             return _result(
                 False,
-                f"route leg does not state only {direction}: {terms}",
+                f"route leg does not state only {direction}: "
+                f"{entry_labels} -> {exit_labels}",
                 "direction_mismatch",
             )
 
@@ -603,6 +615,15 @@ def _self_check() -> None:
             == "response_grounded"
         )
         prepared.append((metadata, calls, response))
+
+    alias_metadata, alias_calls, alias_response = prepared[6]
+    alias_response = alias_response.replace(
+        "Exit 18/19 -> Exit 12", "Route 267 -> Reston Parkway"
+    )
+    assert (
+        evaluate_junction_response(alias_response, alias_calls, alias_metadata)[0].label
+        == "response_grounded"
+    )
 
     metadata, calls, response = prepared[0]
     assert evaluate_junction_calls(calls[1:], metadata)[0].label == "tool_sequence"

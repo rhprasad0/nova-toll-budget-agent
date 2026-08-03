@@ -22,11 +22,12 @@ successful captured results, and expected entry/exit node IDs and directions.
 
 ### Grounded response
 
-Require every priced leg's expected direction on the same line as its endpoints,
-plus every captured fare and connector, exact decimal arithmetic over only those
-fares, and the matching final total. Reject any fare attributed to the connector,
-Route 267 detours for direct cases, reverse-edge claims, I-66 Outside the Beltway
-substitutions, Transurban attribution, and uncaptured amounts.
+Require every priced leg's expected direction on the same line as its endpoints
+or their unambiguous user-facing aliases, plus every captured fare and connector,
+exact decimal arithmetic over only those fares, and the matching final total.
+Reject any fare attributed to the connector, Route 267 detours for direct cases,
+reverse-edge claims, I-66 Outside the Beltway substitutions, Transurban
+attribution, and uncaptured amounts.
 
 ### Conversational consistency
 
