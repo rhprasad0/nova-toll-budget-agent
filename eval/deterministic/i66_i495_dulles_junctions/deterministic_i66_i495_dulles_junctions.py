@@ -450,6 +450,7 @@ def evaluate_junction_response(
             )
 
     fare_items = _fare_items(calls)
+    grounded_money_lines: set[int] = set()
     for label, fare in fare_items:
         if " -> " in label:
             entry, exit_ = label.split(" -> ", 1)
@@ -460,27 +461,32 @@ def evaluate_junction_response(
             )
         else:
             term_sets = ((_response_label(label),), (f"${fare:.2f}",))
-        if not any(_line_has(response, list(terms)) for terms in product(*term_sets)):
+        matching_lines = [
+            index
+            for index, line in enumerate(lines)
+            if [Decimal(value) for value in _MONEY_RE.findall(line)] == [fare]
+            and any(_line_has(line, list(terms)) for terms in product(*term_sets))
+        ]
+        if len(matching_lines) != 1:
             return _result(
                 False,
-                f"fare item is not grounded on one line: {term_sets}",
+                f"fare item must appear on one grounded line: {term_sets}",
                 "item_missing",
             )
+        grounded_money_lines.update(matching_lines)
 
     fares = [fare for _, fare in fare_items]
     total = sum(fares, Decimal(0))
-    if not _calculation_matches(response, fares, total):
+    calculation_lines = [
+        index
+        for index, line in enumerate(lines)
+        if _calculation_matches(line, fares, total)
+    ]
+    if len(calculation_lines) != 1:
         return _result(
             False, f"calculation does not sum {fares} to {total}", "bad_math"
         )
-    allowed = {*fares, total}
-    if zero_lines:
-        allowed.add(Decimal(0))
-    quoted = {Decimal(value) for value in _MONEY_RE.findall(response)}
-    if unexpected := sorted(quoted - allowed):
-        return _result(
-            False, f"response invented amounts {unexpected}", "fabricated_amount"
-        )
+    grounded_money_lines.update(calculation_lines)
     final_index = next(
         (
             index
@@ -489,15 +495,42 @@ def evaluate_junction_response(
         ),
         None,
     )
-    final_value = (
-        next((line for line in lines[final_index + 1 :] if line.strip()), "")
+    final_value_index = (
+        next(
+            (
+                index
+                for index in range(final_index + 1, len(lines))
+                if lines[index].strip()
+            ),
+            None,
+        )
         if final_index is not None
-        else ""
+        else None
     )
-    if final_index is None or not _line_has(
-        "\n".join((lines[final_index], final_value)), [f"${total:.2f}"]
-    ):
+    if final_value_index is None or [
+        Decimal(value) for value in _MONEY_RE.findall(lines[final_value_index])
+    ] != [total]:
         return _result(False, "final total is missing", "final_missing")
+    grounded_money_lines.add(final_value_index)
+    unbilled_zero_lines = {
+        index
+        for index, line in enumerate(lines)
+        if (amounts := [Decimal(value) for value in _MONEY_RE.findall(line)])
+        and all(amount == 0 for amount in amounts)
+        and _UNBILLED_RE.search(line)
+    }
+    unexpected_money_lines = [
+        line
+        for index, line in enumerate(lines)
+        if _MONEY_RE.search(line)
+        and index not in grounded_money_lines | unbilled_zero_lines
+    ]
+    if unexpected_money_lines:
+        return _result(
+            False,
+            f"response contains unattributed amounts: {unexpected_money_lines}",
+            "fabricated_amount",
+        )
     return _result(True, "response is grounded in captured fares", "response_grounded")
 
 
@@ -695,6 +728,12 @@ def _self_check() -> None:
     )
     assert (
         evaluate_junction_response(response + "\nExtra: $9.99", calls, metadata)[
+            0
+        ].label
+        == "fabricated_amount"
+    )
+    assert (
+        evaluate_junction_response(response + "\nService fee: $1.25", calls, metadata)[
             0
         ].label
         == "fabricated_amount"

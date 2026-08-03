@@ -43,7 +43,12 @@ _FREE_CLAIM_RE = re.compile(
     re.I,
 )
 _UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
-_GENERAL_PURPOSE_RE = re.compile(r"\b(?:I-95\s+)?general[- ]purpose lanes\b", re.I)
+_GENERAL_PURPOSE_RE = re.compile(
+    r"\bI-95\s+general[- ]purpose lanes\b|"
+    r"\bI-95(?:/395)?(?:\s+Express Lanes)?[^.;\n]{0,80};\s*"
+    r"(?:the\s+)?general[- ]purpose lanes\b",
+    re.I,
+)
 _BOTH_DIRECTIONS_CLOSED_RE = re.compile(
     r"\b(?:both\s+I-95(?:/395)?(?:\s+Express Lanes)?\s+directions?\s+"
     r"(?:(?:are|were)\s+)?closed|I-95(?:/395)?(?:\s+Express Lanes)?\s+"
@@ -668,6 +673,17 @@ def _self_check() -> None:
             cast(dict[str, Any], cases[4].metadata),
         )[0].label
         == "grounded"
+    )
+    wrong_facility_response = closed_response.replace(
+        "I-95 general-purpose lanes", "I-495 general-purpose lanes"
+    )
+    assert (
+        evaluate_junction_response(
+            wrong_facility_response,
+            unavailable_calls,
+            cast(dict[str, Any], cases[4].metadata),
+        )[0].label
+        == "unavailable_missing"
     )
     reversed_time = closed_response.replace(
         "7/29/2026 10:00 AM ET", "10:00 AM ET on 7/29/2026"
