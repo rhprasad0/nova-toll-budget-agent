@@ -131,7 +131,7 @@
     <div id="map-loading" class="map-state" role="status"><strong>Drawing the toll map…</strong>Loading road and coverage data.</div>
     <div id="map-error" class="map-state" role="alert" hidden><strong>The map could not load.</strong>Coverage includes I-66, 95/395, 495, the Dulles Toll Road, and the Dulles Greenway. Try refreshing when you’re back online.</div>
     <button id="reset-map" class="reset-map" type="button" disabled>Reset coverage</button>
-    <aside id="map-detail" class="map-detail" aria-label="95/495 junction price unavailable" aria-live="polite">
+    <aside id="map-detail" class="map-detail" aria-live="polite">
       <span class="detail-kicker">Coverage break</span>
       <strong>I-95 ↔ I-495 junction price unavailable.</strong>
       <p>We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available.</p>
@@ -296,11 +296,15 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
     detail.append(detailKicker, title, description);
   };
 
-  const showJunction = () => setDetail(
-    "Coverage break",
-    "I-95 ↔ I-495 junction price unavailable.",
-    "We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available."
-  );
+  const showJunction = () => {
+    selectedMarker?.classList.remove("selected");
+    selectedMarker = undefined;
+    setDetail(
+      "Coverage break",
+      "I-95 ↔ I-495 junction price unavailable.",
+      "We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available."
+    );
+  };
 
   const showPin = (pin, markerButton) => {
     selectedMarker?.classList.remove("selected");

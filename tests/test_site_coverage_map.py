@@ -135,6 +135,7 @@ def test_map_exposes_native_filters_reset_and_details() -> None:
         assert f'data-facility="{facility}"' in page
     assert 'id="reset-map"' in page
     assert 'aria-live="polite"' in page
+    assert '<aside id="map-detail" class="map-detail" aria-live="polite">' in page
     assert 'className = "map-pin"' in page
     assert 'markerButton.type = "button"' in page
     assert 'id="map-loading"' in page
@@ -153,9 +154,16 @@ def test_rendered_pins_use_precomputed_fixed_positions() -> None:
 def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
     page = SITE.read_text()
     assert "Coverage, with one honest gap." in page
-    assert "95/495 junction price unavailable" in page
+    assert "I-95 \u2194 I-495 junction price unavailable." in page
     assert 'dataset.junction = "true"' in page
     assert 'aria-label", "I-95 to I-495 junction: price unavailable"' in page
+    assert (
+        """const showJunction = () => {
+    selectedMarker?.classList.remove("selected");
+    selectedMarker = undefined;
+"""
+        in page
+    )
     assert "Edsall or Franconia-Springfield" in page
     assert "I-495 pricing begins or ends at Braddock" in page
     assert "no complete trip total is available" in page
