@@ -63,4 +63,8 @@ test-cases.jsonl
 - [x] Rerun the direction-pinned simulation and curate its 48/48 passing report
 - [x] Require direction-grounded response lines after PR review
 - [x] Require exact planner-boundary copying and reject connector-attributed fares
+- [x] Reject same-leg direction contradictions while allowing explicitly unbilled
+  zero-valued planner sentinels
+- [x] Accept unambiguous George Washington Parkway response aliases after the
+  full CI suite reached 31/32 verdicts; no failed report was curated
 - [x] Commit

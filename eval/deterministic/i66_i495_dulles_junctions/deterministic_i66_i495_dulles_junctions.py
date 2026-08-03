@@ -15,6 +15,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
+from itertools import product
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
@@ -338,6 +339,8 @@ def _route_label(label: str) -> str:
 
 def _route_labels(label: str) -> tuple[str, ...]:
     primary = _route_label(label)
+    if "Georg Wash. Mem. Pkwy." in label:
+        return primary, "George Wash. Mem. Pkwy.", "George Washington Memorial Parkway"
     if label.startswith("Exit 18/19"):
         return primary, "Route 267"
     if label.startswith("Exit 12"):
@@ -450,12 +453,18 @@ def evaluate_junction_response(
     for label, fare in fare_items:
         if " -> " in label:
             entry, exit_ = label.split(" -> ", 1)
-            terms = [_response_label(entry), _response_label(exit_), f"${fare:.2f}"]
+            term_sets = (
+                _route_labels(entry),
+                _route_labels(exit_),
+                (f"${fare:.2f}",),
+            )
         else:
-            terms = [_response_label(label), f"${fare:.2f}"]
-        if not _line_has(response, terms):
+            term_sets = ((_response_label(label),), (f"${fare:.2f}",))
+        if not any(_line_has(response, list(terms)) for terms in product(*term_sets)):
             return _result(
-                False, f"fare item is not grounded on one line: {terms}", "item_missing"
+                False,
+                f"fare item is not grounded on one line: {term_sets}",
+                "item_missing",
             )
 
     fares = [fare for _, fare in fare_items]
@@ -641,6 +650,14 @@ def _self_check() -> None:
     )
     assert (
         evaluate_junction_response(alias_response, alias_calls, alias_metadata)[0].label
+        == "response_grounded"
+    )
+    parkway_metadata, parkway_calls, parkway_response = prepared[15]
+    parkway_response = parkway_response.replace("GW Parkway", "George Wash. Mem. Pkwy.")
+    assert (
+        evaluate_junction_response(parkway_response, parkway_calls, parkway_metadata)[
+            0
+        ].label
         == "response_grounded"
     )
 
