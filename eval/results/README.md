@@ -7,7 +7,6 @@ not curated.
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |
 | [`20260803T204055Z.json`](20260803T204055Z.json) | Sixteen direction-pinned I-66/I-495 and Dulles/I-495 conversations, capped at three turns | Simulation trace grading plus goal-success and helpfulness judges | 0.9443 overall; 48/48 judgments passed; 0 execution errors |
-| [`20260803T200505Z.json`](20260803T200505Z.json) | Sixteen directed I-66/I-495 and Dulles/I-495 junction requests | Deterministic trace and response grading with controlled prices | 1.0000 overall; 32/32 judgments passed; 0 execution errors |
 | [`20260802T171949Z.json`](20260802T171949Z.json) | Same four closures with fixed actor premises and scoped judges | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
 | [`20260802T200228Z.json`](20260802T200228Z.json) | Ten direction-aware I-95/I-495 junction cases after system prompt 1.1.0 | Deterministic trace and response grading | 1.0000 overall; 20/20 judgments passed; 0 execution errors |
 
@@ -23,13 +22,6 @@ every applicable pricing call, omitted `i495_route` for the inside-gap case,
 and passed the adversarial no-zero-dollar/no-total response invariant. The
 alias-control trace resolved Dumfries to I-95 Near Dumfries Road/Route 234 and
 stopped the 95 leg at Franconia-Springfield before starting I-495 at `191NO`.
-
-The I-66/Dulles junction run used one planner call and both directed pricing
-calls in every case, preserved the planner time, crossed the expected untolled
-connector, and grounded every fare and total in captured tool results. Its raw
-outputs and trajectories were regraded offline after the evaluator was corrected
-to treat the tool schema's empty optional time as omitted and accept unambiguous
-fare-label abbreviations; no additional model calls were made.
 
 The matching simulation run kept every actor on its assigned directions, used
 one to three TollChat turns per case under the three-turn cap, and passed all 16

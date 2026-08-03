@@ -49,6 +49,12 @@ _FORBIDDEN_CLAIMS = (
     "transurban",
 )
 _I495_NORTHBOUND_PAIRS = {1017, 1021, 1034, 1038}
+_DIRECTION_ALIASES = {
+    "EB": ("EB", "eastbound"),
+    "WB": ("WB", "westbound"),
+    "Northbound": ("NB", "northbound"),
+    "Southbound": ("SB", "southbound"),
+}
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
@@ -309,6 +315,35 @@ def _response_label(label: str) -> str:
     return label
 
 
+def _route_label(label: str) -> str:
+    if label.startswith("Exit "):
+        return label.partition(" - ")[0]
+    return _response_label(label)
+
+
+def _line_has_direction(response: str, terms: list[str], direction: str) -> bool:
+    aliases = _DIRECTION_ALIASES[direction]
+    wrong_aliases = tuple(
+        alias
+        for candidate, candidate_aliases in _DIRECTION_ALIASES.items()
+        if candidate != direction
+        for alias in candidate_aliases
+    )
+
+    def mentions(line: str, choices: tuple[str, ...]) -> bool:
+        return any(
+            re.search(rf"(?<!\w){re.escape(choice)}(?!\w)", line, re.IGNORECASE)
+            for choice in choices
+        )
+
+    return any(
+        _line_has(line, terms)
+        and mentions(line, aliases)
+        and not mentions(line, wrong_aliases)
+        for line in response.splitlines()
+    )
+
+
 def _calculation_matches(response: str, fares: list[Decimal], total: Decimal) -> bool:
     plain = response.replace("**", "").replace("__", "")
     for line in plain.splitlines():
@@ -337,6 +372,26 @@ def evaluate_junction_response(
     connector_label = str(expected_connector["label"])
     if connector_label.casefold() not in folded:
         return _result(False, "connector is not identified", "connector_missing")
+
+    for call, expected in zip(
+        calls[1:],
+        cast(list[dict[str, Any]], metadata["expected_priced"]),
+        strict=True,
+    ):
+        result = _tool_result(call) or {}
+        entry = _endpoint(result, "entry")
+        exit_ = _endpoint(result, "exit")
+        direction = str(expected["direction"])
+        terms = [
+            _route_label(str(entry.get("label", ""))),
+            _route_label(str(exit_.get("label", ""))),
+        ]
+        if not _line_has_direction(response, terms, direction):
+            return _result(
+                False,
+                f"route leg does not state only {direction}: {terms}",
+                "direction_mismatch",
+            )
 
     fare_items = _fare_items(calls)
     for label, fare in fare_items:
@@ -470,8 +525,32 @@ def _good_response(calls: list[dict[str, Any]], metadata: dict[str, Any]) -> str
     fares = [fare for _, fare in items]
     total = sum(fares, Decimal(0))
     lines = ["## Route and fares"]
-    lines.extend(f"- {label}: ${fare:.2f}" for label, fare in items)
-    lines.append(f"- Untolled connector: {metadata['expected_connector']['label']}")
+    for index, (call, expected) in enumerate(
+        zip(
+            calls[1:],
+            cast(list[dict[str, Any]], metadata["expected_priced"]),
+            strict=True,
+        )
+    ):
+        result = _tool_result(call) or {}
+        entry = _route_label(str(_endpoint(result, "entry").get("label", "")))
+        exit_ = _route_label(str(_endpoint(result, "exit").get("label", "")))
+        direction = expected["direction"]
+        if call.get("name") == "dulles_route":
+            lines.append(f"- {entry} -> {exit_}, {direction}:")
+            lines.extend(
+                f"  - {toll['label']}: ${Decimal(str(toll['price_usd'])):.2f}"
+                for toll in result.get("tolls", [])
+            )
+        else:
+            lines.append(
+                f"- {entry} -> {exit_}, {direction}: "
+                f"${Decimal(str(result['total_usd'])):.2f}"
+            )
+        if index == 0:
+            lines.append(
+                f"- Untolled connector: {metadata['expected_connector']['label']}"
+            )
     equation = " + ".join(f"${fare:.2f}" for fare in fares)
     lines.extend(
         [
@@ -541,6 +620,24 @@ def _self_check() -> None:
             0
         ].label
         == "forbidden_claim"
+    )
+    wrong_direction = response.replace(
+        "Lee Highway - Scott Street -> I-495 S",
+        "Lee Highway - Scott Street -> I-495 S, eastbound",
+    )
+    assert (
+        evaluate_junction_response(wrong_direction, calls, metadata)[0].label
+        == "direction_mismatch"
+    )
+    missing_direction = response.replace(", WB", "", 1)
+    assert (
+        evaluate_junction_response(missing_direction, calls, metadata)[0].label
+        == "direction_mismatch"
+    )
+    wrong_second_direction = response.replace(", Southbound", ", Northbound", 1)
+    assert (
+        evaluate_junction_response(wrong_second_direction, calls, metadata)[0].label
+        == "direction_mismatch"
     )
     bad_math = response.replace(" = $4.00", " = $9.99")
     assert evaluate_junction_response(bad_math, calls, metadata)[0].label == "bad_math"

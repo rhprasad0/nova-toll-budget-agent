@@ -22,10 +22,11 @@ accepted only when the captured production tool result resolves to those nodes.
 
 ### Grounded response
 
-Require every captured fare and connector, exact decimal arithmetic over only
-those fares, and the matching final total. Reject connector `$0.00` billing,
-Route 267 detours for direct cases, reverse-edge claims, I-66 Outside the
-Beltway substitutions, Transurban attribution, and uncaptured amounts.
+Require every priced leg's expected direction on the same line as its endpoints,
+plus every captured fare and connector, exact decimal arithmetic over only those
+fares, and the matching final total. Reject connector `$0.00` billing, Route 267
+detours for direct cases, reverse-edge claims, I-66 Outside the Beltway
+substitutions, Transurban attribution, and uncaptured amounts.
 
 ### Conversational consistency
 
@@ -56,7 +57,8 @@ test-cases.jsonl
 - [x] Add sixteen explicit three-turn simulation profiles
 - [x] Complete all offline and repository validation
 - [x] Execute and inspect the two authorized live suites
-- [x] Curate the valid deterministic report; retain the rejected simulation run
-  only in ignored scratch evidence
+- [x] Remove the superseded deterministic report after direction-aware response
+  replay exposed 12 answers that omitted at least one leg direction
 - [x] Rerun the direction-pinned simulation and curate its 48/48 passing report
+- [x] Require direction-grounded response lines after PR review
 - [x] Commit
