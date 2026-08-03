@@ -15,17 +15,17 @@
 
 ### Directed junction trace
 
-Require one planner call followed by the two planned pricing calls, exact
-connector label and `transfer_id`, one shared planner time, successful captured
-results, and expected entry/exit node IDs and directions. Human tool inputs are
-accepted only when the captured production tool result resolves to those nodes.
+Require one planner call followed by the two planned pricing calls, with each
+pricing call copying its planner step's origin and destination exactly. Also
+require the exact connector label and `transfer_id`, one shared planner time,
+successful captured results, and expected entry/exit node IDs and directions.
 
 ### Grounded response
 
 Require every priced leg's expected direction on the same line as its endpoints,
 plus every captured fare and connector, exact decimal arithmetic over only those
-fares, and the matching final total. Reject connector `$0.00` billing, Route 267
-detours for direct cases, reverse-edge claims, I-66 Outside the Beltway
+fares, and the matching final total. Reject any fare attributed to the connector,
+Route 267 detours for direct cases, reverse-edge claims, I-66 Outside the Beltway
 substitutions, Transurban attribution, and uncaptured amounts.
 
 ### Conversational consistency
@@ -61,4 +61,5 @@ test-cases.jsonl
   replay exposed 12 answers that omitted at least one leg direction
 - [x] Rerun the direction-pinned simulation and curate its 48/48 passing report
 - [x] Require direction-grounded response lines after PR review
+- [x] Require exact planner-boundary copying and reject connector-attributed fares
 - [x] Commit

@@ -242,7 +242,8 @@ def evaluate_junction_calls(
     if [steps[0].get("tool"), steps[2].get("tool")] != expected_names[1:]:
         return _result(False, f"unexpected priced steps: {steps}", "plan_mismatch")
 
-    for call, result, expected in zip(
+    for step, call, result, expected in zip(
+        steps[::2],
         calls[1:],
         results[1:],
         cast(list[dict[str, Any]], metadata["expected_priced"]),
@@ -252,6 +253,15 @@ def evaluate_junction_calls(
         if not isinstance(raw_input, dict):
             return _result(False, "pricing input is not an object", "shared_time")
         actual_input = cast(dict[str, Any], raw_input)
+        if any(
+            actual_input.get(field) != step.get(field)
+            for field in ("origin", "destination")
+        ):
+            return _result(
+                False,
+                f"{call.get('name')} input {raw_input} did not copy {step}",
+                "plan_boundary",
+            )
         if actual_input.get("at_time") != plan_time:
             return _result(
                 False,
@@ -370,8 +380,22 @@ def evaluate_junction_response(
 
     expected_connector = cast(dict[str, Any], metadata["expected_connector"])
     connector_label = str(expected_connector["label"])
-    if connector_label.casefold() not in folded:
+    lines = response.splitlines()
+    connector_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if connector_label.casefold() in line.casefold()
+    ]
+    if not connector_indexes:
         return _result(False, "connector is not identified", "connector_missing")
+    for index in connector_indexes:
+        connector_block = [lines[index]]
+        for continuation in lines[index + 1 :]:
+            if continuation and not continuation[0].isspace():
+                break
+            connector_block.append(continuation)
+        if any(_MONEY_RE.search(line) for line in connector_block):
+            return _result(False, "connector is attributed a fare", "connector_billed")
 
     for call, expected in zip(
         calls[1:],
@@ -417,7 +441,6 @@ def evaluate_junction_response(
         return _result(
             False, f"response invented amounts {unexpected}", "fabricated_amount"
         )
-    lines = response.splitlines()
     final_index = next(
         (
             index
@@ -592,6 +615,16 @@ def _self_check() -> None:
         evaluate_junction_calls(wrong_connector, metadata)[0].label
         == "connector_mismatch"
     )
+    wrong_plan_boundary = json.loads(json.dumps(calls))
+    first_step = wrong_plan_boundary[0]["tool_result"]["steps"][0]
+    first_step["origin"], first_step["destination"] = (
+        first_step["destination"],
+        first_step["origin"],
+    )
+    assert (
+        evaluate_junction_calls(wrong_plan_boundary, metadata)[0].label
+        == "plan_boundary"
+    )
     tool_error = json.loads(json.dumps(calls))
     tool_error[1]["tool_result"] = {"error": "no"}
     assert evaluate_junction_calls(tool_error, metadata)[0].label == "tool_error"
@@ -614,6 +647,22 @@ def _self_check() -> None:
             0
         ].label
         == "sentinel_billed"
+    )
+    billed_connector = response.replace(
+        metadata["expected_connector"]["label"],
+        f"{metadata['expected_connector']['label']}: $1.25",
+    )
+    assert (
+        evaluate_junction_response(billed_connector, calls, metadata)[0].label
+        == "connector_billed"
+    )
+    nested_connector_fare = response.replace(
+        metadata["expected_connector"]["label"],
+        f"{metadata['expected_connector']['label']}\n  - Fare: $1.25",
+    )
+    assert (
+        evaluate_junction_response(nested_connector_fare, calls, metadata)[0].label
+        == "connector_billed"
     )
     assert (
         evaluate_junction_response(response + "\nRoute 267 detour", calls, metadata)[

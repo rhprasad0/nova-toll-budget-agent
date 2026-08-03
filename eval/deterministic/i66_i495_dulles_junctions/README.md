@@ -17,7 +17,8 @@ uv run python eval/simulated/simulated_user_i66_i495_dulles_junctions.py --check
 ```
 
 These checks exercise all fixtures and representative grader branches, including
-wrong-way response claims, without OpenAI, Bedrock, AWS, or RDS.
+wrong-way response claims, changed planner boundaries, and connector-attributed
+fares, without OpenAI, Bedrock, AWS, or RDS.
 
 ## Code-graded live regression
 
