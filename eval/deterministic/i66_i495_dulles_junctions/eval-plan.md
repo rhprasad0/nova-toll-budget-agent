@@ -58,4 +58,5 @@ test-cases.jsonl
 - [x] Execute and inspect the two authorized live suites
 - [x] Curate the valid deterministic report; retain the rejected simulation run
   only in ignored scratch evidence
-- [ ] Commit
+- [x] Rerun the direction-pinned simulation and curate its 48/48 passing report
+- [x] Commit
