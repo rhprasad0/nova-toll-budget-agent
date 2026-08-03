@@ -125,4 +125,4 @@ def test_footer_states_ai_support_and_vdot_independence() -> None:
     page = SITE.read_text()
     assert "We support American AI innovation" in page
     assert "TollChat is not affiliated with VDOT" in page
-    assert "We use VDOT\u2019s public toll pricing data—and we\u2019re fans." in page
+    assert "We use VDOT\u2019s public toll pricing data - and we\u2019re fans." in page
