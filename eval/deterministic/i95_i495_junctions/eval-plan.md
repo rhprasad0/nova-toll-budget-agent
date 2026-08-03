@@ -104,8 +104,9 @@ eval/
 | **Timestamp** | **Component** | **Status** | **Notes** |
 | :-- | :-- | :-- | :-- |
 | 2026-08-02 | Plan and fixtures | Completed | Facts copied from Issue #17 and committed planner/tool contracts. |
-| 2026-08-02 | Deterministic runner | Completed | Ten fixtures and all five named mutation checks pass offline. |
+| 2026-08-02 | Deterministic runner | Completed | Ten fixtures and mutation checks pass offline, including recovery from a rejected alias planner attempt and contextual I-95 general-purpose wording. |
 | 2026-08-02 | Simulated runner | Completed | Ten explicit three-turn profiles pass offline shape/error checks; no billed run performed. |
 | 2026-08-02 | Live evidence | Completed | One authorized run produced 18/20 passing verdicts and no execution errors. Corrected the Dumfries fixture to Route 234; the free-override response genuinely violated the no-`$0.00` invariant. No retry was performed and the failed report was not curated. |
 | 2026-08-02 | Prompt remediation | Completed | System-prompt contract 1.1.0 removed the tempting zero-dollar example and forbids echoing proposed amounts. All offline gates passed; the one authorized comparison run scored 1.0000 with 20/20 verdicts and no execution errors. Curated as `eval/results/20260802T200228Z.json`. |
 | 2026-08-02 | Adversarial review | Completed | Hardened response grading against uncaptured dollar amounts and affirmative free-gap claims, and require the specific Edsall/Franconia boundary. The saved live trajectories passed the final evaluator offline 20/20; no additional live calls were made. |
+| 2026-08-03 | Full-suite CI rerun | Remediated offline | RDS and single-leg stages passed. I-95/I-495 scored 18/20: the agent recovered from one rejected alias planner attempt and used correct downstream calls, while one response contextually identified I-95 general-purpose lanes. Both valid behaviors now have narrow self-checks; I-66/Dulles did not run because CI stopped at the I-95 failure. |

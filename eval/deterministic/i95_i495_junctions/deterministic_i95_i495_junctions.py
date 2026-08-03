@@ -43,7 +43,7 @@ _FREE_CLAIM_RE = re.compile(
     re.I,
 )
 _UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
-_GENERAL_PURPOSE_RE = re.compile(r"\bI-95\s+general[- ]purpose lanes\b", re.I)
+_GENERAL_PURPOSE_RE = re.compile(r"\b(?:I-95\s+)?general[- ]purpose lanes\b", re.I)
 _BOTH_DIRECTIONS_CLOSED_RE = re.compile(
     r"\b(?:both\s+I-95(?:/395)?(?:\s+Express Lanes)?\s+directions?\s+"
     r"(?:(?:are|were)\s+)?closed|I-95(?:/395)?(?:\s+Express Lanes)?\s+"
@@ -153,6 +153,13 @@ def evaluate_junction_calls(
     calls: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
     """Grade exact ordered calls and their captured results."""
+    if (
+        metadata["id"] == "junction-alias-control"
+        and calls
+        and calls[0].get("name") == "plan_toll_route"
+        and (_tool_result(calls[0]) or {}).get("error")
+    ):
+        calls = calls[1:]
     names = [str(call.get("name")) for call in calls]
     if "i95_route" in names:
         return _result(
@@ -528,6 +535,18 @@ def _self_check() -> None:
         "**Complete price unavailable**"
     )
     assert evaluate_junction_calls(calls, metadata)[0].label == "junction_ok"
+    recovered = [
+        {
+            "name": "plan_toll_route",
+            "input": {"origin": "Dumfries", "destination": "Westpark"},
+            "tool_result": {"error": "exact oracle labels required"},
+        },
+        *calls,
+    ]
+    recovered_metadata = {**metadata, "id": "junction-alias-control"}
+    assert (
+        evaluate_junction_calls(recovered, recovered_metadata)[0].label == "junction_ok"
+    )
     assert evaluate_junction_response(response, calls, metadata)[0].label == "grounded"
 
     skipped = [calls[0], calls[2]]
@@ -634,6 +653,17 @@ def _self_check() -> None:
     assert (
         evaluate_junction_response(
             closed_response,
+            unavailable_calls,
+            cast(dict[str, Any], cases[4].metadata),
+        )[0].label
+        == "grounded"
+    )
+    contextual_response = closed_response.replace(
+        "I-95 general-purpose lanes", "I-95 Express Lanes; the general-purpose lanes"
+    )
+    assert (
+        evaluate_junction_response(
+            contextual_response,
             unavailable_calls,
             cast(dict[str, Any], cases[4].metadata),
         )[0].label
