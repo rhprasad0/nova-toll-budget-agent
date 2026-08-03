@@ -155,6 +155,7 @@ _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
 
 _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
+_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
 SYSTEM_PROMPT_VERSION = "1.6.0"
 TOOLSET_VERSION = "1.0.0"
@@ -230,7 +231,10 @@ def _build_model() -> _CachedResponsesModel:
     if backend == "openai":
         return _CachedResponsesModel(
             model_id="gpt-5.6-luna",
-            client_args={"api_key": _load_openai_api_key()},
+            client_args={
+                "api_key": _load_openai_api_key(),
+                "base_url": _OPENAI_BASE_URL,
+            },
             params=params,
             stateful=True,
         )

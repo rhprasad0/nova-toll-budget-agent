@@ -886,6 +886,7 @@ def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch
         return Ssm()
 
     monkeypatch.delenv("TOLLCHAT_MODEL_BACKEND", raising=False)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8000/v1")
     monkeypatch.setattr(toll_agent_module.boto3, "client", client)
     agent = build_agent(
         trace_attributes={
@@ -901,7 +902,10 @@ def test_agent_uses_direct_openai_luna_with_an_explicit_prompt_cache(monkeypatch
         "tollchat.toolset_version": toll_agent_module.TOOLSET_VERSION,
     }
     assert calls == [{"Name": "/nova-toll/openai_api_key", "WithDecryption": True}]
-    assert agent.model.client_args == {"api_key": "test-openai-key"}
+    assert agent.model.client_args == {
+        "api_key": "test-openai-key",
+        "base_url": "https://api.openai.com/v1",
+    }
 
     request = agent.model._format_request(
         messages=[
