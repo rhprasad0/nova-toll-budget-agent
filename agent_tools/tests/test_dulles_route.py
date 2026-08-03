@@ -10,6 +10,7 @@ reason).
 """
 
 import logging
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from agent_tools import dulles_route as dulles_mod
@@ -125,6 +126,11 @@ def test_composite_trip_splits_at_route_28_and_returns_each_charge():
             "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
             "price_usd": "2.00",
         },
+        {
+            "facility": "dulles_toll_road",
+            "label": "Mainline plaza",
+            "price_usd": "2.00",
+        },
         {"facility": "dulles_greenway", "label": "Mainline plaza", "price_usd": "5.25"},
     ]
 
@@ -139,7 +145,42 @@ def test_composite_trip_reverse_direction():
         "dulles_greenway",
         "dulles_toll_road",
     ]
-    assert [toll["price_usd"] for toll in result["tolls"]] == ["5.25", "4.00", "2.00"]
+    assert [toll["price_usd"] for toll in result["tolls"]] == [
+        "5.25",
+        "2.00",
+        "4.00",
+        "2.00",
+    ]
+
+
+def test_issue_48_mainline_fee_is_additive_in_both_directions():
+    to_greenway = dulles_route(
+        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        "Exit 5 - SR 901 (Claiborne Pkwy)",
+        at_time=_WEEKDAY_OFF_PEAK,
+    )
+    to_beltway = dulles_route(
+        "Exit 5 - SR 901 (Claiborne Pkwy)",
+        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+        at_time=_WEEKDAY_OFF_PEAK,
+    )
+
+    assert [
+        (toll["facility"], toll["label"], toll["price_usd"])
+        for toll in to_greenway["tolls"]
+    ] == [
+        ("dulles_toll_road", "Mainline plaza", "4.00"),
+        ("dulles_toll_road", "Mainline plaza", "2.00"),
+        ("dulles_greenway", "Mainline plaza", "5.25"),
+    ]
+    assert [toll["price_usd"] for toll in to_beltway["tolls"]] == [
+        "5.25",
+        "2.00",
+        "4.00",
+    ]
+    assert sum(Decimal(toll["price_usd"]) for toll in to_greenway["tolls"]) == Decimal(
+        "11.25"
+    )
 
 
 def test_composite_trip_uses_route_28_from_the_i495_side_in_both_directions():

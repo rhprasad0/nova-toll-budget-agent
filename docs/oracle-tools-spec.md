@@ -341,6 +341,8 @@ route resolution, `{"error", "valid_options"}` failure shape,
   language) — a trip crossing the mainline plaza (between Exit 8 and Route
   28) pays the mainline rate ($5.80 peak / $5.25 off-peak); a trip confined
   to Exits 1-8 pays the lower secondary rate ($5.10 peak / $4.55 off-peak).
+  Every mainline crossing also incurs a separate, additive $2.00 Dulles Toll
+  Road charge.
   Peak hours are 6:30-9:00am eastbound, 4:00-6:30pm westbound, **assumed
   weekday-only** — "rush hour" framing and industry convention support this,
   but no source explicitly excluded weekends; worth confirming before
@@ -349,7 +351,10 @@ route resolution, `{"error", "valid_options"}` failure shape,
 Both oracles carry ordered nonzero `charges` on every pair, each with
 `price_peak_usd`/`price_off_peak_usd` (the Dulles Toll Road's two values are
 always equal). This preserves the individual charge facts instead of storing
-a pre-summed fare. Every leg carries a
+a pre-summed fare. A charge may override its oracle's facility when another
+operator collects it: every Greenway mainline crossing includes an additive
+`$2.00` Dulles Toll Road item, ordered at the shared Route 28 end of the
+Greenway leg. Every leg carries a
 `rate_period` field: `"peak"`/`"off_peak"` for a `dulles_greenway` leg,
 `null` for a `dulles_toll_road` leg (reporting `"off_peak"` there would
 imply a peak rate exists, which it doesn't).

@@ -242,7 +242,7 @@ def _build_response(
         )
         tolls.extend(
             {
-                "facility": facility,
+                "facility": charge.get("facility", facility),
                 "label": charge["label"],
                 "price_usd": charge[price_key],
             }
