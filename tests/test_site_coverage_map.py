@@ -169,6 +169,24 @@ def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
     assert "no complete trip total is available" in page
 
 
+def test_map_keeps_filtered_controls_and_responsive_camera_in_sync() -> None:
+    page = SITE.read_text()
+    assert 'let activeFacility = "all";' in page
+    assert "activeFacility = facility;" in page
+    assert (
+        'const junctionVisible = facility === "all" || facility === "i95" || facility === "i495";'
+        in page
+    )
+    assert 'map.setLayoutProperty("junction-zone", "visibility"' in page
+    assert 'map.setLayoutProperty("junction-outline", "visibility"' in page
+    assert "junctionMarker.hidden = !junctionVisible;" in page
+    assert (
+        'const bounds = activeFacility === "all" ? coverageBounds : facilityBounds(activeFacility);'
+        in page
+    )
+    assert "map.fitBounds(bounds, { padding:mapPadding(), duration:0 });" in page
+
+
 def test_footer_states_ai_support_and_vdot_independence() -> None:
     page = SITE.read_text()
     assert "We support American AI innovation" in page

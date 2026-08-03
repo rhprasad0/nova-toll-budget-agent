@@ -262,6 +262,8 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
   const junction = { type:"Feature", properties:{}, geometry:{ type:"Polygon", coordinates:[junctionCoordinates] } };
   const markers = [];
   let selectedMarker;
+  let junctionMarker;
+  let activeFacility = "all";
   let ready = false;
 
   const mapPadding = () => {
@@ -322,10 +324,15 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
   };
 
   const selectFacility = (facility) => {
+    activeFacility = facility;
     filters.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.facility === facility)));
     const routeFilter = facility === "all" ? null : ["==", ["get", "facility"], facility];
+    const junctionVisible = facility === "all" || facility === "i95" || facility === "i495";
     map.setFilter("toll-route-casing", routeFilter);
     map.setFilter("toll-routes", routeFilter);
+    map.setLayoutProperty("junction-zone", "visibility", junctionVisible ? "visible" : "none");
+    map.setLayoutProperty("junction-outline", "visibility", junctionVisible ? "visible" : "none");
+    junctionMarker.hidden = !junctionVisible;
     markers.forEach((marker) => { marker.element.hidden = facility !== "all" && marker.facility !== facility; });
     selectedMarker?.classList.remove("selected");
     selectedMarker = undefined;
@@ -365,7 +372,7 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
       markers.push({ facility:pin.facility, element:markerButton });
     });
 
-    const junctionMarker = document.createElement("button");
+    junctionMarker = document.createElement("button");
     junctionMarker.type = "button";
     junctionMarker.className = "junction-pin";
     junctionMarker.dataset.junction = "true";
@@ -378,7 +385,12 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
 
   filters.forEach((button) => button.addEventListener("click", () => selectFacility(button.dataset.facility)));
   document.getElementById("reset-map").addEventListener("click", () => selectFacility("all"));
-  addEventListener("resize", () => { if (ready) map.resize(); });
+  addEventListener("resize", () => {
+    if (!ready) return;
+    map.resize();
+    const bounds = activeFacility === "all" ? coverageBounds : facilityBounds(activeFacility);
+    map.fitBounds(bounds, { padding:mapPadding(), duration:0 });
+  });
   map.on("error", () => { if (!ready) showMapError(); });
   setTimeout(() => { if (!ready) showMapError(); }, 12000);
 }).catch(showMapError);
