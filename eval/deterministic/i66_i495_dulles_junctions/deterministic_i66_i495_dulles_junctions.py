@@ -452,6 +452,7 @@ def evaluate_junction_response(
     grounded_money_lines: set[int] = set()
     for label, fare in fare_items:
         expected_exit: str | None = None
+        location_terms: tuple[str, ...] | None = None
         if " -> " in label:
             entry, exit_ = label.split(" -> ", 1)
             term_sets = (
@@ -461,23 +462,44 @@ def evaluate_junction_response(
             )
         elif label.casefold().startswith(("entrance ramp at ", "exit ramp at ")):
             ramp, location = label.split(" at ", 1)
-            term_sets = ((ramp,), _route_labels(location), (f"${fare:.2f}",))
+            term_sets = ((ramp,), (f"${fare:.2f}",))
+            location_terms = _route_labels(location)
             expected_exit = (
                 match.group() if (match := _EXIT_RE.search(location)) else None
             )
         else:
             term_sets = ((_response_label(label),), (f"${fare:.2f}",))
-        matching_lines = [
-            index
-            for index, line in enumerate(lines)
-            if [Decimal(value) for value in _MONEY_RE.findall(line)] == [fare]
-            and (
-                expected_exit is None
-                or not (actual_exit := _EXIT_RE.search(line))
-                or actual_exit.group().casefold() == expected_exit.casefold()
-            )
-            and any(_line_has(line, list(terms)) for terms in product(*term_sets))
-        ]
+        matching_lines: list[int] = []
+        for index, line in enumerate(lines):
+            actual_exit = _EXIT_RE.search(line)
+            if (
+                [Decimal(value) for value in _MONEY_RE.findall(line)] != [fare]
+                or (
+                    expected_exit is not None
+                    and actual_exit is not None
+                    and actual_exit.group().casefold() != expected_exit.casefold()
+                )
+                or not any(
+                    _line_has(line, list(terms)) for terms in product(*term_sets)
+                )
+            ):
+                continue
+            context = line
+            if location_terms is not None and line[:1].isspace():
+                indent = len(line) - len(line.lstrip())
+                context += next(
+                    (
+                        previous
+                        for previous in reversed(lines[:index])
+                        if previous.strip()
+                        and len(previous) - len(previous.lstrip()) < indent
+                    ),
+                    "",
+                )
+            if location_terms is None or any(
+                _line_has(context, [term]) for term in location_terms
+            ):
+                matching_lines.append(index)
         if len(matching_lines) != 1:
             return _result(
                 False,
@@ -706,6 +728,16 @@ def _self_check() -> None:
     )
     for index, ramp in ((4, "Entrance"), (6, "Exit")):
         ramp_metadata, ramp_calls, ramp_response = prepared[index]
+        short_ramp_response = re.sub(
+            rf"{ramp} ramp at Exit 12[^:]*", f"{ramp} ramp toll", ramp_response
+        )
+        assert short_ramp_response != ramp_response
+        assert (
+            evaluate_junction_response(short_ramp_response, ramp_calls, ramp_metadata)[
+                0
+            ].label
+            == "response_grounded"
+        )
         wrong_ramp_response = ramp_response.replace(
             f"{ramp} ramp at Exit 12", f"{ramp} ramp at Exit 99"
         )
