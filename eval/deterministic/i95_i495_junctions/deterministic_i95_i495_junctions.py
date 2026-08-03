@@ -44,9 +44,12 @@ _FREE_CLAIM_RE = re.compile(
 )
 _UNAVAILABLE_RE = re.compile(r"\b(?:unavailable|cannot\s+(?:provide|price))\b", re.I)
 _GENERAL_PURPOSE_RE = re.compile(
-    r"\bI-95\s+general[- ]purpose lanes\b|"
+    r"\b(?:use|take|consider)\s+(?:the\s+)?I-95\s+general[- ]purpose lanes\b|"
+    r"\bI-95\s+general[- ]purpose lanes\b[^.\n]{0,80}"
+    r"\b(?:available|open|alternative|option)\b|"
     r"\bI-95(?:/395)?(?:\s+Express Lanes)?[^.;\n]{0,80};\s*"
-    r"(?:the\s+)?general[- ]purpose lanes\b",
+    r"(?:the\s+)?general[- ]purpose lanes\b[^.\n]{0,80}"
+    r"\b(?:available|open|alternative|option)\b",
     re.I,
 )
 _BOTH_DIRECTIONS_CLOSED_RE = re.compile(
@@ -674,6 +677,17 @@ def _self_check() -> None:
     assert (
         evaluate_junction_response(
             wrong_facility_response,
+            unavailable_calls,
+            cast(dict[str, Any], cases[4].metadata),
+        )[0].label
+        == "unavailable_missing"
+    )
+    closed_fallback = closed_response.replace(
+        "are an unpriced alternative", "are also closed"
+    )
+    assert (
+        evaluate_junction_response(
+            closed_fallback,
             unavailable_calls,
             cast(dict[str, Any], cases[4].metadata),
         )[0].label

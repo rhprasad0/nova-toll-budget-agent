@@ -19,6 +19,7 @@ from itertools import pairwise, product
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
@@ -293,13 +294,22 @@ def evaluate_junction_calls(
 
 def _fare_items(
     calls: list[dict[str, Any]],
-) -> list[tuple[str, Decimal, str | None]]:
-    items: list[tuple[str, Decimal, str | None]] = []
+) -> list[tuple[str, Decimal, str, str | None]]:
+    items: list[tuple[str, Decimal, str, str | None]] = []
     for call in calls[1:]:
         result = _tool_result(call) or {}
         if call.get("name") == "dulles_route":
             items.extend(
-                (str(toll["label"]), Decimal(str(toll["price_usd"])), None)
+                (
+                    str(toll["label"]),
+                    Decimal(str(toll["price_usd"])),
+                    (
+                        "Dulles Toll Road"
+                        if toll.get("facility") == "dulles_toll_road"
+                        else "Dulles Greenway"
+                    ),
+                    None,
+                )
                 for toll in result.get("tolls", [])
             )
         else:
@@ -310,6 +320,7 @@ def _fare_items(
                     f"{entry.get('label', '')} -> {exit_.get('label', '')}",
                     Decimal(str(result["total_usd"])),
                     ("I-66" if call.get("name") == "i66_route" else "I-495"),
+                    str(result.get("legs", [{}])[0].get("observed_at", "")) or None,
                 )
             )
     return items
@@ -327,6 +338,12 @@ def _line_has(response: str, terms: list[str]) -> bool:
         else:
             return True
     return False
+
+
+def _eastern_display(value: str) -> str:
+    observed = datetime.fromisoformat(value).astimezone(ZoneInfo("America/New_York"))
+    clock = observed.strftime("%I:%M %p").lstrip("0")
+    return f"{observed.month}/{observed.day}/{observed.year} {clock} ET"
 
 
 def _response_label(label: str) -> str:
@@ -461,14 +478,14 @@ def evaluate_junction_response(
 
     fare_items = _fare_items(calls)
     grounded_money_lines: set[int] = set()
-    for label, fare, facility in fare_items:
+    for label, fare, facility, observed_at in fare_items:
         expected_exit: str | None = None
         location_terms: tuple[str, ...] | None = None
         route_terms: tuple[tuple[str, ...], tuple[str, ...]] | None = None
         if " -> " in label:
             entry, exit_ = label.split(" -> ", 1)
             route_terms = (_route_labels(entry), _route_labels(exit_))
-            term_sets = ((cast(str, facility),), (f"${fare:.2f}",))
+            term_sets = ((f"${fare:.2f}",),)
         elif label.casefold().startswith(("entrance ramp at ", "exit ramp at ")):
             ramp, location = label.split(" at ", 1)
             term_sets = ((ramp,), (f"${fare:.2f}",))
@@ -502,7 +519,7 @@ def evaluate_junction_response(
             ):
                 continue
             context = line
-            if location_terms is not None and line[:1].isspace():
+            if line[:1].isspace():
                 indent = len(line) - len(line.lstrip())
                 context += next(
                     (
@@ -513,9 +530,10 @@ def evaluate_junction_response(
                     ),
                     "",
                 )
-            if location_terms is None or any(
-                _line_has(context, [term]) for term in location_terms
-            ):
+            if (
+                location_terms is None
+                or any(_line_has(context, [term]) for term in location_terms)
+            ) and _line_has(context, [facility]):
                 matching_lines.append(index)
         if len(matching_lines) != 1:
             return _result(
@@ -524,8 +542,21 @@ def evaluate_junction_response(
                 "item_missing",
             )
         grounded_money_lines.update(matching_lines)
+        if observed_at is not None:
+            index = matching_lines[0]
+            item_block = [lines[index]]
+            for continuation in lines[index + 1 :]:
+                if continuation and not continuation[0].isspace():
+                    break
+                item_block.append(continuation)
+            if _eastern_display(observed_at) not in "\n".join(item_block):
+                return _result(
+                    False,
+                    f"formatted observed time for {observed_at} is missing",
+                    "timestamp_missing",
+                )
 
-    fares = [fare for _, fare, _ in fare_items]
+    fares = [fare for _, fare, _, _ in fare_items]
     total = sum(fares, Decimal(0))
     calculation_lines = [
         index
@@ -668,7 +699,7 @@ def fixture_calls(metadata: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _good_response(calls: list[dict[str, Any]], metadata: dict[str, Any]) -> str:
     items = _fare_items(calls)
-    fares = [fare for _, fare, _ in items]
+    fares = [fare for _, fare, _, _ in items]
     total = sum(fares, Decimal(0))
     lines = ["## Route and fares"]
     for index, (call, expected) in enumerate(
@@ -683,7 +714,7 @@ def _good_response(calls: list[dict[str, Any]], metadata: dict[str, Any]) -> str
         exit_ = _route_label(str(_endpoint(result, "exit").get("label", "")))
         direction = expected["direction"]
         if call.get("name") == "dulles_route":
-            lines.append(f"- {entry} -> {exit_}, {direction}:")
+            lines.append(f"- {entry} -> {exit_}, Dulles Toll Road, {direction}:")
             lines.extend(
                 f"  - {toll['label']}: ${Decimal(str(toll['price_usd'])):.2f}"
                 for toll in result.get("tolls", [])
@@ -698,6 +729,9 @@ def _good_response(calls: list[dict[str, Any]], metadata: dict[str, Any]) -> str
                 f"- {entry} -> {exit_}, {direction}: "
                 f"{facility}: ${Decimal(str(result['total_usd'])):.2f}"
             )
+            observed_at = str(result.get("legs", [{}])[0].get("observed_at", ""))
+            if observed_at:
+                lines.append(f"  - VDOT observed at: {_eastern_display(observed_at)}")
         if index == 0:
             lines.append(
                 f"- Untolled connector: {metadata['expected_connector']['label']}"
@@ -771,7 +805,26 @@ def _self_check() -> None:
             == "item_missing"
         )
 
+    dulles_metadata, dulles_calls, dulles_response = prepared[4]
+    wrong_dulles_facility = dulles_response.replace(
+        "Dulles Toll Road", "I-95 Express Lanes", 1
+    )
+    assert (
+        evaluate_junction_response(
+            wrong_dulles_facility, dulles_calls, dulles_metadata
+        )[0].label
+        == "item_missing"
+    )
+
     metadata, calls, response = prepared[0]
+    observed_line = next(
+        line for line in response.splitlines() if "VDOT observed at:" in line
+    )
+    missing_timestamp = response.replace(f"{observed_line}\n", "", 1)
+    assert (
+        evaluate_junction_response(missing_timestamp, calls, metadata)[0].label
+        == "timestamp_missing"
+    )
     prefixed_facility = response.replace(
         "Lee Highway - Scott Street -> I-495 S, WB: "
         "I-66 Inside-the-Beltway Express Lanes",
