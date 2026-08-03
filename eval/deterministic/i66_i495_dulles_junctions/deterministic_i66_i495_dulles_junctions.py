@@ -15,7 +15,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
-from itertools import product
+from itertools import pairwise, product
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
@@ -387,9 +387,14 @@ def _calculation_matches(response: str, fares: list[Decimal], total: Decimal) ->
         if "=" not in line:
             continue
         left, right = line.split("=", 1)
-        operands = [Decimal(value) for value in _MONEY_RE.findall(left)]
+        operand_matches = list(_MONEY_RE.finditer(left))
+        operands = [Decimal(match.group(1)) for match in operand_matches]
         totals = [Decimal(value) for value in _MONEY_RE.findall(right)]
-        if Counter(operands) == Counter(fares) and totals == [total]:
+        additions = all(
+            re.fullmatch(r"\s*\+\s*", left[first.end() : second.start()])
+            for first, second in pairwise(operand_matches)
+        )
+        if additions and Counter(operands) == Counter(fares) and totals == [total]:
             return True
     return False
 
@@ -857,6 +862,11 @@ def _self_check() -> None:
     )
     bad_math = response.replace(" = $4.00", " = $9.99")
     assert evaluate_junction_response(bad_math, calls, metadata)[0].label == "bad_math"
+    subtraction = response.replace(" + ", " - ", 1)
+    assert subtraction != response
+    assert (
+        evaluate_junction_response(subtraction, calls, metadata)[0].label == "bad_math"
+    )
     missing_final = "\n".join(response.splitlines()[:-1])
     assert (
         evaluate_junction_response(missing_final, calls, metadata)[0].label
