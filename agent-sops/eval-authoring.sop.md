@@ -20,8 +20,8 @@ Simulated users and LLM judges remain stochastic and observational.
 - **scenarios** (required): Concrete prompts and expected behavior to cover.
 - **tracks** (optional, default: inferred): `deterministic`, `simulated`, or
   both, selected using Step 2.
-- **authorized_live_runs** (optional, default: `0`): Exact number of live runs
-  the user has approved for the current task.
+- **authorized_live_runs** (optional, default: `0`): Exact case-run count the
+  user approved for each live track, including the maximum simulator turns.
 
 **Constraints for parameter acquisition:**
 - You MUST inspect the referenced issue, SOP, tool contract, and existing evals
@@ -148,9 +148,12 @@ be safe for ordinary CI and imports.
 
 ### 7. Run live only with explicit authorization
 
-Before a live run, state that TollChat uses OpenAI, simulated actors and judges
-use Bedrock, and pricing tools use historical RDS. State the exact number of
-runs requested and wait for authorization.
+Before a live run, state the actual network and billed surfaces for that runner.
+TollChat normally uses OpenAI, simulated actors and judges use Bedrock, and
+pricing tools use historical RDS unless a documented controlled fixture replaces
+that boundary. State the exact case-run count and simulator turn cap, plus an
+approximate provider-request count when tool loops make the exact count
+model-controlled, then wait for authorization.
 
 **Constraints:**
 - You MUST use SSM Parameter Store and the repository configuration path for
@@ -191,6 +194,8 @@ job in `.github/workflows/ci.yml`. Add stochastic simulated-user runners to
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
+- A controlled pricing fixture does not move a live model regression to nightly;
+  once its trace and result grading are stable, keep it in trusted integration.
 - You MUST NOT run paid simulation on every PR because it is stochastic and
   consumes OpenAI, Bedrock, and RDS resources.
 - You MUST keep fork and Dependabot restrictions on trusted integration jobs to
