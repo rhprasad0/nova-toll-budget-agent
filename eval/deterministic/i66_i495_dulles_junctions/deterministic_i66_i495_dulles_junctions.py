@@ -309,11 +309,7 @@ def _fare_items(
                 (
                     f"{entry.get('label', '')} -> {exit_.get('label', '')}",
                     Decimal(str(result["total_usd"])),
-                    (
-                        "I-66"
-                        if call.get("name") == "i66_route"
-                        else "I-495 Express Lanes"
-                    ),
+                    ("I-66" if call.get("name") == "i66_route" else "I-495"),
                 )
             )
     return items
@@ -785,6 +781,14 @@ def _self_check() -> None:
     assert prefixed_facility != response
     assert (
         evaluate_junction_response(prefixed_facility, calls, metadata)[0].label
+        == "response_grounded"
+    )
+    directional_facility = response.replace(
+        "I-495 Express Lanes", "I-495 Southbound Express Lanes", 1
+    )
+    assert directional_facility != response
+    assert (
+        evaluate_junction_response(directional_facility, calls, metadata)[0].label
         == "response_grounded"
     )
     for expected_facility, wrong_facility in (
