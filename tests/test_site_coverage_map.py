@@ -68,7 +68,7 @@ def test_map_uses_token_free_pinned_maplibre_and_stays_accessible() -> None:
     assert "144 supported entry and exit nodes" in page
     assert 'href="/assets/maplibre-gl-6.0.0/maplibre-gl.css"' in page
     assert 'import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs")' in page
-    assert 'setWorkerUrl("/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs")' in page
+    assert "setWorkerUrl" not in page
     assert "https://tiles.openfreemap.org/styles/dark" in page
     assert "OpenStreetMap contributors" in page
     assert "mapbox" not in page.lower()
@@ -141,12 +141,13 @@ def test_map_exposes_native_filters_reset_and_details() -> None:
     assert 'id="map-error"' in page
 
 
-def test_rendered_pins_snap_to_fixed_positions_on_their_routes() -> None:
+def test_rendered_pins_use_precomputed_fixed_positions() -> None:
     page = SITE.read_text()
     assert ".map-pin, .junction-pin { position: absolute;" in page
-    assert "const snapToRoute = (pin) =>" in page
-    assert ".setLngLat(snapToRoute(pin))" in page
-    assert ".setLngLat([pin.lon,pin.lat])" not in page
+    assert "snapToRoute" not in page
+    assert ".setLngLat([pin.lon,pin.lat])" in page
+    assert "move = true" not in page
+    assert "if (move)" not in page
 
 
 def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
