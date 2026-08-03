@@ -146,6 +146,10 @@ def test_rendered_pins_use_precomputed_fixed_positions() -> None:
     page = SITE.read_text()
     assert ".map-pin, .junction-pin { position: absolute;" in page
     assert "snapToRoute" not in page
+    assert "const markerPins = new Map();" in page
+    assert "grouped.label = `${grouped.label} / ${pin.label}`;" in page
+    assert "grouped.nodeIds.push(...pin.nodeIds);" in page
+    assert "for (const pin of markerPins.values())" in page
     assert ".setLngLat([pin.lon,pin.lat])" in page
     assert "move = true" not in page
     assert "if (move)" not in page

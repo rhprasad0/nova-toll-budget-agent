@@ -257,6 +257,15 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
   const colors = { i66: "#67d4ff", i95: "#ff7085", i495: "#ffd05a", dulles: "#55dda8", greenway: "#c99cff" };
   const names = { i66: "I-66", i95: "95/395 Express Lanes", i495: "495 Express Lanes", dulles: "Dulles Toll Road", greenway: "Dulles Greenway" };
   const routeLines = Object.fromEntries(routes.features.map((route) => [route.properties.facility, route.geometry.coordinates]));
+  const markerPins = new Map();
+  pins.forEach((pin) => {
+    const key = `${pin.lon},${pin.lat}`;
+    const grouped = markerPins.get(key);
+    if (grouped) {
+      grouped.label = `${grouped.label} / ${pin.label}`;
+      grouped.nodeIds.push(...pin.nodeIds);
+    } else markerPins.set(key, { ...pin, nodeIds:[...pin.nodeIds] });
+  });
   const coverageBounds = [[-77.61, 38.28], [-77.01, 39.15]];
   const junctionCoordinates = [[-77.205606,38.799890],[-77.149552,38.810914],[-77.182593,38.769837],[-77.205606,38.799890]];
   const junction = { type:"Feature", properties:{}, geometry:{ type:"Polygon", coordinates:[junctionCoordinates] } };
@@ -359,7 +368,7 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
     map.addLayer({ id:"junction-zone", type:"fill", source:"excluded-junction", paint:{ "fill-color":"#fbbf24", "fill-opacity":.17 } });
     map.addLayer({ id:"junction-outline", type:"line", source:"excluded-junction", paint:{ "line-color":"#fbbf24", "line-width":3, "line-dasharray":[2,2] } });
 
-    pins.forEach((pin) => {
+    for (const pin of markerPins.values()) {
       const markerButton = document.createElement("button");
       markerButton.type = "button";
       markerButton.className = "map-pin";
@@ -370,7 +379,7 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
       markerButton.addEventListener("focus", () => showPin(pin, markerButton));
       new maplibregl.Marker({ element:markerButton, anchor:"center" }).setLngLat([pin.lon,pin.lat]).addTo(map);
       markers.push({ facility:pin.facility, element:markerButton });
-    });
+    }
 
     junctionMarker = document.createElement("button");
     junctionMarker.type = "button";
