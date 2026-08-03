@@ -313,14 +313,17 @@ def _fare_items(calls: list[dict[str, Any]]) -> list[tuple[str, Decimal]]:
 
 
 def _line_has(response: str, terms: list[str]) -> bool:
-    return any(
-        all(
-            term.casefold()
-            in line.replace("Georg Wash. Mem. Pkwy.", "GW Parkway").casefold()
-            for term in terms
-        )
-        for line in response.splitlines()
-    )
+    for line in response.splitlines():
+        folded = line.replace("Georg Wash. Mem. Pkwy.", "GW Parkway").casefold()
+        position = 0
+        for term in terms:
+            position = folded.find(term.casefold(), position)
+            if position < 0:
+                break
+            position += len(term)
+        else:
+            return True
+    return False
 
 
 def _response_label(label: str) -> str:
@@ -848,6 +851,15 @@ def _self_check() -> None:
     )
     assert (
         evaluate_junction_response(wrong_direction, calls, metadata)[0].label
+        == "direction_mismatch"
+    )
+    reversed_leg = response.replace(
+        "Lee Highway - Scott Street -> I-495 S",
+        "I-495 S -> Lee Highway - Scott Street",
+    )
+    assert reversed_leg != response
+    assert (
+        evaluate_junction_response(reversed_leg, calls, metadata)[0].label
         == "direction_mismatch"
     )
     missing_direction = response.replace(", WB", "", 1)
