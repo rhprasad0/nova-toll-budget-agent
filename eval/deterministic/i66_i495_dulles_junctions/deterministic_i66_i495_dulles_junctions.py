@@ -44,6 +44,7 @@ _CHECK_TIME = "2026-08-03T12:00:00-04:00"
 _FIXTURE_TIME = datetime.fromisoformat("2026-08-03T14:00:00-04:00")
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)")
 _ZERO_RE = re.compile(r"\$\s*0(?:\.00)?(?![\d.])")
+_EXIT_RE = re.compile(r"\bExit\s+\d+(?:/\d+)?\b", re.I)
 _UNBILLED_RE = re.compile(
     r"\b(?:untolled|not (?:a |separate )?billed|not included in (?:the )?fare arithmetic)\b",
     re.I,
@@ -324,8 +325,6 @@ def _line_has(response: str, terms: list[str]) -> bool:
 
 def _response_label(label: str) -> str:
     """Use the shortest unambiguous user-facing form of a tool label."""
-    if label.casefold().startswith(("entrance ramp at ", "exit ramp at ")):
-        return label.split(" at ", 1)[0]
     if "Georg Wash. Mem. Pkwy." in label:
         return "GW Parkway"
     return label
@@ -452,6 +451,7 @@ def evaluate_junction_response(
     fare_items = _fare_items(calls)
     grounded_money_lines: set[int] = set()
     for label, fare in fare_items:
+        expected_exit: str | None = None
         if " -> " in label:
             entry, exit_ = label.split(" -> ", 1)
             term_sets = (
@@ -459,12 +459,23 @@ def evaluate_junction_response(
                 _route_labels(exit_),
                 (f"${fare:.2f}",),
             )
+        elif label.casefold().startswith(("entrance ramp at ", "exit ramp at ")):
+            ramp, location = label.split(" at ", 1)
+            term_sets = ((ramp,), _route_labels(location), (f"${fare:.2f}",))
+            expected_exit = (
+                match.group() if (match := _EXIT_RE.search(location)) else None
+            )
         else:
             term_sets = ((_response_label(label),), (f"${fare:.2f}",))
         matching_lines = [
             index
             for index, line in enumerate(lines)
             if [Decimal(value) for value in _MONEY_RE.findall(line)] == [fare]
+            and (
+                expected_exit is None
+                or not (actual_exit := _EXIT_RE.search(line))
+                or actual_exit.group().casefold() == expected_exit.casefold()
+            )
             and any(_line_has(line, list(terms)) for terms in product(*term_sets))
         ]
         if len(matching_lines) != 1:
@@ -693,6 +704,18 @@ def _self_check() -> None:
         ].label
         == "response_grounded"
     )
+    for index, ramp in ((4, "Entrance"), (6, "Exit")):
+        ramp_metadata, ramp_calls, ramp_response = prepared[index]
+        wrong_ramp_response = ramp_response.replace(
+            f"{ramp} ramp at Exit 12", f"{ramp} ramp at Exit 99"
+        )
+        assert wrong_ramp_response != ramp_response
+        assert (
+            evaluate_junction_response(wrong_ramp_response, ramp_calls, ramp_metadata)[
+                0
+            ].label
+            == "item_missing"
+        )
 
     metadata, calls, response = prepared[0]
     assert evaluate_junction_calls(calls[1:], metadata)[0].label == "tool_sequence"
