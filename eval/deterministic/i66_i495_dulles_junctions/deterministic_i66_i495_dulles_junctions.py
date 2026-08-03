@@ -319,7 +319,11 @@ def _fare_items(
                 (
                     f"{entry.get('label', '')} -> {exit_.get('label', '')}",
                     Decimal(str(result["total_usd"])),
-                    ("I-66" if call.get("name") == "i66_route" else "I-495"),
+                    (
+                        "I-66 Inside-the-Beltway Express Lanes"
+                        if call.get("name") == "i66_route"
+                        else "I-495 Express Lanes"
+                    ),
                     str(result.get("legs", [{}])[0].get("observed_at", "")) or None,
                 )
             )
@@ -338,6 +342,18 @@ def _line_has(response: str, terms: list[str]) -> bool:
         else:
             return True
     return False
+
+
+def _has_facility(response: str, facility: str) -> bool:
+    if facility == "I-495 Express Lanes":
+        return bool(
+            re.search(
+                r"\bI-495(?:\s+(?:northbound|southbound|NB|SB))?\s+Express Lanes\b",
+                response,
+                re.IGNORECASE,
+            )
+        )
+    return _line_has(response, [facility])
 
 
 def _eastern_display(value: str) -> str:
@@ -533,7 +549,7 @@ def evaluate_junction_response(
             if (
                 location_terms is None
                 or any(_line_has(context, [term]) for term in location_terms)
-            ) and _line_has(context, [facility]):
+            ) and _has_facility(context, facility):
                 matching_lines.append(index)
         if len(matching_lines) != 1:
             return _result(
@@ -843,6 +859,14 @@ def _self_check() -> None:
     assert (
         evaluate_junction_response(directional_facility, calls, metadata)[0].label
         == "response_grounded"
+    )
+    general_purpose_facility = response.replace(
+        "I-495 Express Lanes", "I-495 general-purpose lanes", 1
+    )
+    assert general_purpose_facility != response
+    assert (
+        evaluate_junction_response(general_purpose_facility, calls, metadata)[0].label
+        == "item_missing"
     )
     for expected_facility, wrong_facility in (
         ("I-66 Inside-the-Beltway Express Lanes", "I-95 Express Lanes"),
