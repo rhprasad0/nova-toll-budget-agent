@@ -7,8 +7,7 @@ Eastern time, and (2) reports that timestamp back to the user in US
 Standard format (SOP Step 4), not the tool's raw ISO-8601 string.
 
 Requires AWS_PROFILE=nova-toll (OpenAI key via SSM) and tailnet RDS access
-to actually invoke the agent -- run explicitly, same convention as
-tests/test_toll_agent_live.py and the fuzzy-location suite. `--check` runs
+to actually invoke the agent -- run explicitly. `--check` runs
 the per-case matching logic against synthetic trajectories only, no network
 calls, and does not call configure_local_pricing_env().
 """

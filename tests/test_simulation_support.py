@@ -14,9 +14,16 @@ def test_all_eval_calls_use_configured_model(monkeypatch, tmp_path):
         "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/nightly"
     )
     models = []
+    actor_options = {}
 
     def capture(component):
-        return lambda **kwargs: models.append((component, kwargs["model"])) or Mock()
+        def factory(**kwargs):
+            models.append((component, kwargs["model"]))
+            if component == "actor":
+                actor_options.update(kwargs)
+            return Mock()
+
+        return factory
 
     report = Mock(overall_score=1.0, cases=[], detailed_results=[], reasons=[])
 
@@ -52,6 +59,7 @@ def test_all_eval_calls_use_configured_model(monkeypatch, tmp_path):
         ("goal-success", model_id),
         ("actor", model_id),
     ]
+    assert actor_options["max_turns"] == 3
 
 
 def test_ordinary_judge_failure_does_not_raise():

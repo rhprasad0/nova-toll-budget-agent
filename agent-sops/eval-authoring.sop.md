@@ -22,8 +22,9 @@ Simulated users and LLM judges remain stochastic and observational.
   both, selected using Step 2.
 - **case_count** (optional, default: number of scenarios): Cases executed by one
   complete suite run.
-- **max_simulator_turns** (optional, default: not applicable): Per-case turn cap
-  for a simulated track.
+- **max_simulator_turns** (optional, default: `3` for simulated tracks):
+  Per-case turn cap; use another value only when the behavior contract requires
+  a different conversation length.
 - **authorized_live_runs** (optional, default: `0`): Exact number of complete
   suite executions the user approved for each live track.
 
@@ -124,8 +125,9 @@ the shared helper's baggage scoping around agent-under-test calls only.
 - You MAY use `ActorSimulator.from_case_for_user_simulator` only for exploratory
   scenarios where generated persona variation is part of the intended test.
 - You MUST pass an explicit actor and judge model, using the committed default
-  with `NOVA_TOLL_EVAL_MODEL_ID` as its override, and set `max_turns` to the
-  expected conversation length rather than the SDK default.
+  with `NOVA_TOLL_EVAL_MODEL_ID` as its override.
+- You SHOULD set `max_turns` to `3`; use another explicit value only when the
+  behavior contract requires a different conversation length.
 - You MUST use unique raw `ToolExecutionSpan` IDs for deterministic tool grading
   and keep `GoalSuccessRateEvaluator` assertions focused on conversational
   outcomes.

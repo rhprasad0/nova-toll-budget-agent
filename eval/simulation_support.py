@@ -148,7 +148,7 @@ def run_simulated_evaluation(
             actor_profile=actor_profile,
             initial_query=str(case.input),
             model=model_id,
-            max_turns=2,
+            max_turns=3,
         )
         return run_case_with_simulator(
             case.session_id,
