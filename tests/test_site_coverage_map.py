@@ -81,6 +81,7 @@ def test_map_uses_token_free_pinned_maplibre_and_stays_accessible() -> None:
 def test_maplibre_assets_are_pinned_and_published_by_terraform() -> None:
     expected_hashes = {
         "maplibre-gl.mjs": "a641b06ae13a7aecc688c2de315b6483353ff62ba8276367e19acf51394fd3b1",
+        "maplibre-gl-shared.mjs": "ba5bae6a93301ad92b8466fce6b80f8299c5825c41ae76496293bde34db96713",
         "maplibre-gl-worker.mjs": "a55efc5d80ad1d6a286c1d0e82d4d59c9d50b4e7a7da1d17c44e7791b2325930",
         "maplibre-gl.css": "9467ecb10416776e4ec880d662c20bbc1d1ea4e439ac3aeda45901bdf124b609",
     }
@@ -106,8 +107,8 @@ def test_maplibre_assets_are_pinned_and_published_by_terraform() -> None:
 def test_map_recovers_from_a_slow_load_and_preserves_mobile_attribution() -> None:
     page = SITE.read_text()
     assert "error.hidden = true;" in page
-    assert ".map-detail { right: .75rem; bottom: 2.5rem;" in page
-    assert ".reset-map { top: auto; right: .75rem; bottom: 13.75rem;" in page
+    assert ".map-detail { right: .75rem; bottom: 3.25rem;" in page
+    assert ".reset-map { top: auto; right: .75rem; bottom: 14.5rem;" in page
 
 
 def test_map_embeds_road_following_geojson_for_every_facility() -> None:

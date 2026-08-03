@@ -36,6 +36,7 @@ locals {
   site_assets = {
     "assets/maplibre-gl-6.0.0/maplibre-gl.css"        = "text/css"
     "assets/maplibre-gl-6.0.0/maplibre-gl.mjs"        = "text/javascript"
+    "assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs" = "text/javascript"
     "assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs" = "text/javascript"
   }
 }
