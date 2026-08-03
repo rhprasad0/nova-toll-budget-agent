@@ -468,14 +468,11 @@ def evaluate_junction_response(
     for label, fare, facility in fare_items:
         expected_exit: str | None = None
         location_terms: tuple[str, ...] | None = None
+        route_terms: tuple[tuple[str, ...], tuple[str, ...]] | None = None
         if " -> " in label:
             entry, exit_ = label.split(" -> ", 1)
-            term_sets = (
-                _route_labels(entry),
-                _route_labels(exit_),
-                (cast(str, facility),),
-                (f"${fare:.2f}",),
-            )
+            route_terms = (_route_labels(entry), _route_labels(exit_))
+            term_sets = ((cast(str, facility),), (f"${fare:.2f}",))
         elif label.casefold().startswith(("entrance ramp at ", "exit ramp at ")):
             ramp, location = label.split(" at ", 1)
             term_sets = ((ramp,), (f"${fare:.2f}",))
@@ -497,6 +494,14 @@ def evaluate_junction_response(
                 )
                 or not any(
                     _line_has(line, list(terms)) for terms in product(*term_sets)
+                )
+                or (
+                    route_terms is not None
+                    and not any(
+                        _line_has(line, [entry_term, exit_term])
+                        for entry_term in route_terms[0]
+                        for exit_term in route_terms[1]
+                    )
                 )
             ):
                 continue
@@ -771,6 +776,17 @@ def _self_check() -> None:
         )
 
     metadata, calls, response = prepared[0]
+    prefixed_facility = response.replace(
+        "Lee Highway - Scott Street -> I-495 S, WB: "
+        "I-66 Inside-the-Beltway Express Lanes",
+        "I-66 Inside-the-Beltway Express Lanes: "
+        "Lee Highway - Scott Street -> I-495 S, WB",
+    )
+    assert prefixed_facility != response
+    assert (
+        evaluate_junction_response(prefixed_facility, calls, metadata)[0].label
+        == "response_grounded"
+    )
     for expected_facility, wrong_facility in (
         ("I-66 Inside-the-Beltway Express Lanes", "I-95 Express Lanes"),
         ("I-495 Express Lanes", "I-95 Express Lanes"),
