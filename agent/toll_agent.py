@@ -157,8 +157,8 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.6.0"
-TOOLSET_VERSION = "1.0.0"
+SYSTEM_PROMPT_VERSION = "1.8.0"
+TOOLSET_VERSION = "1.1.0"
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -259,6 +259,13 @@ NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
         "evidence": "oracles/i66.json node 5 and oracles/i95.json node 187SO pair roles",
     },
     {
+        "id": "i66_to_i495_north",
+        "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
+        "to": {"corridor": "i495", "entry": "Interstate 66", "node_id": "187NO"},
+        "connector": "I-66/I-495 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 5 and 187NO",
+    },
+    {
         "id": "i495_to_i66",
         "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187ND"},
         "to": {
@@ -268,6 +275,13 @@ NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
         },
         "connector": "I-66/I-495 interchange",
         "evidence": "oracles/i95.json node 187ND and oracles/i66.json node 3 pair roles",
+    },
+    {
+        "id": "i495_south_to_i66",
+        "from": {"corridor": "i495", "exit": "Interstate 66", "node_id": "187SD"},
+        "to": {"corridor": "i66_itb", "entry": "I-495 S", "node_id": "5"},
+        "connector": "I-66/I-495 interchange",
+        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 187SD and 5",
     },
     {
         "id": "dulles_toll_road_to_i495",
@@ -560,6 +574,12 @@ def _planned_steps(
             ]
 
         for transfer in NETWORK_TRANSFERS:
+            if any(
+                step.get("kind") == "connector"
+                and step.get("label") == transfer["connector"]
+                for step in steps
+            ):
+                continue
             source = transfer["from"]
             if corridor == source["corridor"] and _same_location(
                 corridor, point, source["node_id"]
@@ -583,6 +603,7 @@ def _planned_steps(
                         *priced_steps,
                         {
                             "kind": "connector",
+                            "transfer_id": transfer["id"],
                             "label": transfer["connector"],
                             "price_usd": "0.00",
                         },
@@ -608,9 +629,11 @@ def plan_toll_route(
 
     Use exact corridor IDs and oracle labels or node IDs. Returns normalized
     ``at_time`` and ordered steps: call each ``priced`` or ``junction`` step
-    once with its returned arguments, report ``connector`` steps as $0, and
-    do not call a tool for ``unpriced`` steps. On error, no supported directed
-    route exists and no pricing tool should be called.
+    once with its returned arguments, use each connector step's
+    ``transfer_id`` to identify its directed transfer, and do not call a tool
+    for ``connector`` or ``unpriced`` steps. A connector's ``price_usd`` is an
+    untolled planning sentinel, not a billed fare. On error, no supported
+    directed route exists and no pricing tool should be called.
 
     Args:
         origin_corridor: Exact origin corridor ID from the priced location oracle.

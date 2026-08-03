@@ -17,6 +17,7 @@ Instead this walks the tool-call trace in the response metrics and asserts on
 
 import json
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -71,26 +72,20 @@ _BOUNDARY_CASES = [
         ["I-66/I-495 interchange"],
     ),
     (
-        "i66-west-to-i495-north-detour",
+        "i66-west-to-i495-north-direct",
         (
-            "Price Lee Highway - Scott Street on I-66 Inside the Beltway to "
-            "the 495 Express Lanes End at George Washington Memorial Parkway."
+            "Price Route 7 - Leesburg Pike on I-66 Inside the Beltway to "
+            "Westpark Drive on the I-495 Express Lanes."
         ),
-        [
-            "Dulles Airport Access Highway",
-            "I-495/Route 267 interchange",
-        ],
+        ["I-66/I-495 interchange"],
     ),
     (
-        "i495-south-to-i66-east-detour",
+        "i495-south-to-i66-east-direct",
         (
             "Price the 495 Express Lanes Start at George Washington Memorial "
             "Parkway to Washington on I-66 Inside the Beltway."
         ),
-        [
-            "I-495/Route 267 interchange",
-            "Dulles Airport Access Highway",
-        ],
+        ["I-66/I-495 interchange"],
     ),
     (
         "dulles-east-to-i495-south",
@@ -141,26 +136,20 @@ _BOUNDARY_CASES = [
         ["I-66/I-495 interchange"],
     ),
     (
-        "i66-west-to-i495-north-detour-paraphrase",
+        "i66-west-to-i495-north-direct-paraphrase",
         (
-            "Price Lee Highway/Scott Street westbound on I-66 to the north end "
-            "of the 495 Express Lanes at George Washington Memorial Parkway."
+            "How much is Route 7/Leesburg Pike westbound on I-66, then "
+            "northbound 495 Express to Westpark Drive?"
         ),
-        [
-            "Dulles Airport Access Highway",
-            "I-495/Route 267 interchange",
-        ],
+        ["I-66/I-495 interchange"],
     ),
     (
-        "i495-south-to-i66-east-detour-paraphrase",
+        "i495-south-to-i66-east-direct-paraphrase",
         (
             "How much from the George Washington Parkway start of southbound "
             "495 Express to Washington on eastbound I-66?"
         ),
-        [
-            "I-495/Route 267 interchange",
-            "Dulles Airport Access Highway",
-        ],
+        ["I-66/I-495 interchange"],
     ),
     (
         "dulles-east-to-i495-south-paraphrase",
@@ -254,8 +243,8 @@ _BOUNDARY_CASES = [
 _JUNCTION_MATRIX_CASES = {
     "i66-west-to-i495-south-direct",
     "i495-north-to-i66-east-direct",
-    "i66-west-to-i495-north-detour",
-    "i495-south-to-i66-east-detour",
+    "i66-west-to-i495-north-direct",
+    "i495-south-to-i66-east-direct",
     "dulles-east-to-i495-south",
     "dulles-east-to-i495-north",
     "i495-north-to-dulles-west",
@@ -508,10 +497,19 @@ def test_agent_follows_every_network_boundary(
         last_result = _tool_result(response, actual_calls[-1]["toolUseId"])
         assert "error" in last_result, str(response)
 
-    if matrix_case and matrix_case.endswith("-detour"):
-        assert plan["routing_note"] in str(response)
-        assert all(
-            step.get("label") != "I-66/I-495 interchange" for step in plan["steps"]
+    if _case == "i66-west-to-i495-north-direct":
+        [connector] = [step for step in plan["steps"] if step["kind"] == "connector"]
+        assert connector["transfer_id"] == "i66_to_i495_north"
+        [i66_result] = _tool_results(response, "i66_route")
+        [i495_result] = _tool_results(response, "i495_route")
+        i66_fare = i66_result["total_usd"]
+        i495_fare = i495_result["total_usd"]
+        total = Decimal(i66_fare) + Decimal(i495_fare)
+        answer = str(response)
+        assert f"${i66_fare} + ${i495_fare} = ${total:.2f}" in answer.replace("**", "")
+        assert "I-66/I-495" in answer
+        assert not any(
+            "I-66/I-495" in line and "$0.00" in line for line in answer.splitlines()
         )
 
 
