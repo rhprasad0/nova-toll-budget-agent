@@ -361,13 +361,12 @@ import("https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.mjs").then((maplibr
     loading.hidden = true;
     filters.forEach((button) => { button.disabled = false; });
     document.getElementById("reset-map").disabled = false;
-    const firstLabel = map.getStyle().layers.find((layer) => layer.type === "symbol")?.id;
     map.addSource("toll-routes", { type:"geojson", data:routes });
-    map.addLayer({ id:"toll-route-casing", type:"line", source:"toll-routes", paint:{ "line-color":"#06100f", "line-width":["interpolate",["linear"],["zoom"],7,16,12,26], "line-opacity":.82 }, layout:{ "line-cap":"round", "line-join":"round" } }, firstLabel);
-    map.addLayer({ id:"toll-routes", type:"line", source:"toll-routes", paint:{ "line-color":["match",["get","facility"],"i66",colors.i66,"i95",colors.i95,"i495",colors.i495,"dulles",colors.dulles,"greenway",colors.greenway,"#ffffff"], "line-width":["interpolate",["linear"],["zoom"],7,3.5,12,6], "line-opacity":.95 }, layout:{ "line-cap":"round", "line-join":"round" } }, firstLabel);
+    map.addLayer({ id:"toll-route-casing", type:"line", source:"toll-routes", paint:{ "line-color":"#06100f", "line-width":["interpolate",["linear"],["zoom"],7,16,12,26], "line-opacity":.82 }, layout:{ "line-cap":"round", "line-join":"round" } });
+    map.addLayer({ id:"toll-routes", type:"line", source:"toll-routes", paint:{ "line-color":["match",["get","facility"],"i66",colors.i66,"i95",colors.i95,"i495",colors.i495,"dulles",colors.dulles,"greenway",colors.greenway,"#ffffff"], "line-width":["interpolate",["linear"],["zoom"],7,3.5,12,6], "line-opacity":.95 }, layout:{ "line-cap":"round", "line-join":"round" } });
     map.addSource("excluded-junction", { type:"geojson", data:junction });
-    map.addLayer({ id:"junction-zone", type:"fill", source:"excluded-junction", paint:{ "fill-color":"#fbbf24", "fill-opacity":.17 } }, firstLabel);
-    map.addLayer({ id:"junction-outline", type:"line", source:"excluded-junction", paint:{ "line-color":"#fbbf24", "line-width":3, "line-dasharray":[2,2] } }, firstLabel);
+    map.addLayer({ id:"junction-zone", type:"fill", source:"excluded-junction", paint:{ "fill-color":"#fbbf24", "fill-opacity":.17 } });
+    map.addLayer({ id:"junction-outline", type:"line", source:"excluded-junction", paint:{ "line-color":"#fbbf24", "line-width":3, "line-dasharray":[2,2] } });
 
     pins.forEach((pin) => {
       const markerButton = document.createElement("button");
