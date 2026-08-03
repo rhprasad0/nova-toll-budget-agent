@@ -23,16 +23,18 @@ from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationOutput,
 )
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
-from strands_evals.types.trace import Session, ToolExecutionSpan  # noqa: E402
+from strands_evals.types.trace import Session  # noqa: E402
 
 from agent.toll_agent import build_agent  # noqa: E402
 from eval.deterministic.i66_i495_dulles_junctions.deterministic_i66_i495_dulles_junctions import (  # noqa: E402
     controlled_pricing,
     evaluate_junction_calls,
+    fixture_calls,
     load_rows,
 )
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
+    extract_unique_tool_calls,
     raise_for_evaluation_errors,
     run_case_with_simulator,
 )
@@ -122,6 +124,38 @@ def build_helpfulness_evaluator(model_id: str) -> HelpfulnessEvaluator[str, str]
     return evaluator
 
 
+def evaluate_conversation_calls(
+    calls: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    """Grade every complete lookup, independent of parallel completion order."""
+    groups: list[list[dict[str, Any]]] = []
+    for call in calls:
+        if call["name"] == "plan_toll_route":
+            groups.append([])
+        if not groups:
+            return evaluate_junction_calls(calls, metadata)
+        groups[-1].append(call)
+
+    expected = cast(list[str], metadata.get("expected_tools", []))
+    if not groups or len(expected) != 3:
+        return evaluate_junction_calls(calls, metadata)
+    for group in groups:
+        by_name = {call["name"]: call for call in group}
+        if set(by_name) != set(expected) or len(group) != len(expected):
+            return evaluate_junction_calls(group, metadata)
+        result = evaluate_junction_calls([by_name[name] for name in expected], metadata)
+        if not result[0].test_pass:
+            return result
+    return [
+        EvaluationOutput(
+            score=1.0,
+            test_pass=True,
+            reason=f"{len(groups)} complete junction lookup(s) are grounded",
+            label="trace_grounded",
+        )
+    ]
+
+
 class JunctionSimulationTraceEvaluator(Evaluator[str, str]):
     """Code-grade unique agent tool executions across all conversation turns."""
 
@@ -139,56 +173,9 @@ class JunctionSimulationTraceEvaluator(Evaluator[str, str]):
                 )
             ]
 
-        calls: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
-        for trace_index, trace in enumerate(trajectory.traces):
-            for span_index, span in enumerate(trace.spans):
-                if not isinstance(span, ToolExecutionSpan):
-                    continue
-                span_id = span.span_info.span_id or f"{trace_index}:{span_index}"
-                key = (trace.trace_id, span_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                calls.append(
-                    {
-                        "name": span.tool_call.name,
-                        "input": cast(
-                            dict[str, Any],
-                            span.tool_call.arguments,  # pyright: ignore[reportUnknownMemberType]
-                        ),
-                        "tool_result": span.tool_result.content,
-                    }
-                )
+        calls = extract_unique_tool_calls(trajectory)
         metadata = evaluation_case.metadata or {}
-        groups: list[list[dict[str, Any]]] = []
-        for call in calls:
-            if call["name"] == "plan_toll_route":
-                groups.append([])
-            if not groups:
-                return evaluate_junction_calls(calls, metadata)
-            groups[-1].append(call)
-
-        expected = cast(list[str], metadata.get("expected_tools", []))
-        if not groups or len(expected) != 3:
-            return evaluate_junction_calls(calls, metadata)
-        for group in groups:
-            by_name = {call["name"]: call for call in group}
-            if set(by_name) != set(expected) or len(group) != len(expected):
-                return evaluate_junction_calls(group, metadata)
-            result = evaluate_junction_calls(
-                [by_name[name] for name in expected], metadata
-            )
-            if not result[0].test_pass:
-                return result
-        return [
-            EvaluationOutput(
-                score=1.0,
-                test_pass=True,
-                reason=f"{len(groups)} complete junction lookup(s) are grounded",
-                label="trace_grounded",
-            )
-        ]
+        return evaluate_conversation_calls(calls, metadata)
 
 
 def main() -> None:
@@ -257,6 +244,12 @@ def _self_check() -> None:
         )
     )
     assert empty[0].label == "tool_sequence"
+    metadata = cast(dict[str, Any], cases[0].metadata)
+    calls = fixture_calls(metadata)
+    parallel = [calls[0], calls[2], calls[1]]
+    assert evaluate_conversation_calls(parallel, metadata)[0].test_pass
+    assert evaluate_conversation_calls(parallel * 2, metadata)[0].test_pass
+    assert not evaluate_conversation_calls(calls[:-1], metadata)[0].test_pass
     print("self-check ok (16 three-turn profiles and telemetry guards; no network)")
 
 

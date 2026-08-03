@@ -24,7 +24,7 @@ from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationOutput,
 )
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
-from strands_evals.types.trace import Session, ToolExecutionSpan  # noqa: E402
+from strands_evals.types.trace import Session  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
@@ -33,6 +33,7 @@ from eval.deterministic.i95_i495_junctions.deterministic_i95_i495_junctions impo
 )
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
+    extract_unique_tool_calls,
     raise_for_evaluation_errors,
     run_case_with_simulator,
 )
@@ -139,27 +140,7 @@ class JunctionSimulationTraceEvaluator(Evaluator[str, str]):
                 )
             ]
 
-        calls: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
-        for trace_index, trace in enumerate(trajectory.traces):
-            for span_index, span in enumerate(trace.spans):
-                if not isinstance(span, ToolExecutionSpan):
-                    continue
-                span_id = span.span_info.span_id or f"{trace_index}:{span_index}"
-                key = (trace.trace_id, span_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                calls.append(
-                    {
-                        "name": span.tool_call.name,
-                        "input": cast(
-                            dict[str, Any],
-                            span.tool_call.arguments,  # pyright: ignore[reportUnknownMemberType]
-                        ),
-                        "tool_result": span.tool_result.content,
-                    }
-                )
+        calls = extract_unique_tool_calls(trajectory)
         return evaluate_junction_calls(calls, evaluation_case.metadata or {})
 
 

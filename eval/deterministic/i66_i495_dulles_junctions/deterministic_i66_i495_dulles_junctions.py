@@ -362,7 +362,23 @@ def evaluate_junction_response(
         return _result(
             False, f"response invented amounts {unexpected}", "fabricated_amount"
         )
-    if "final price" not in folded or not _line_has(response, [f"${total:.2f}"]):
+    lines = response.splitlines()
+    final_index = next(
+        (
+            index
+            for index in range(len(lines) - 1, -1, -1)
+            if "final price" in lines[index].casefold()
+        ),
+        None,
+    )
+    final_value = (
+        next((line for line in lines[final_index + 1 :] if line.strip()), "")
+        if final_index is not None
+        else ""
+    )
+    if final_index is None or not _line_has(
+        "\n".join((lines[final_index], final_value)), [f"${total:.2f}"]
+    ):
         return _result(False, "final total is missing", "final_missing")
     return _result(True, "response is grounded in captured fares", "response_grounded")
 
@@ -415,22 +431,7 @@ def main() -> None:
         raise SystemExit("Issue #19 deterministic junction evaluation failed")
 
 
-def _planned_calls(plan: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": step["tool"],
-            "input": {
-                "origin": step["origin"],
-                "destination": step["destination"],
-                "at_time": plan["at_time"],
-            },
-        }
-        for step in plan["steps"]
-        if step["kind"] == "priced"
-    ]
-
-
-def _fixture_calls(metadata: dict[str, Any]) -> list[dict[str, Any]]:
+def fixture_calls(metadata: dict[str, Any]) -> list[dict[str, Any]]:
     plan = plan_toll_route(**metadata["plan_input"], at_time=_CHECK_TIME)
     calls = [
         {
@@ -445,11 +446,20 @@ def _fixture_calls(metadata: dict[str, Any]) -> list[dict[str, Any]]:
         "dulles_route": dulles_route,
     }
     with controlled_pricing():
-        for planned in _planned_calls(plan):
+        for step in plan["steps"]:
+            if step["kind"] != "priced":
+                continue
+            name = step["tool"]
+            tool_input = {
+                "origin": step["origin"],
+                "destination": step["destination"],
+                "at_time": plan["at_time"],
+            }
             calls.append(
                 {
-                    **planned,
-                    "tool_result": tools[planned["name"]](**planned["input"]),
+                    "name": name,
+                    "input": tool_input,
+                    "tool_result": tools[name](**tool_input),
                 }
             )
     return calls
@@ -479,10 +489,11 @@ def _self_check() -> None:
     assert len(rows) == 16
     assert len({row["id"] for row in rows}) == 16
     assert sum(row["id"].endswith("-paraphrase") for row in rows) == 8
+    assert all("tool" not in item for row in rows for item in row["expected_priced"])
 
     prepared: list[tuple[dict[str, Any], list[dict[str, Any]], str]] = []
     for metadata in rows:
-        calls = _fixture_calls(metadata)
+        calls = fixture_calls(metadata)
         response = _good_response(calls, metadata)
         assert evaluate_junction_calls(calls, metadata)[0].label == "trace_grounded"
         assert (
@@ -533,6 +544,11 @@ def _self_check() -> None:
     )
     bad_math = response.replace(" = $4.00", " = $9.99")
     assert evaluate_junction_response(bad_math, calls, metadata)[0].label == "bad_math"
+    missing_final = "\n".join(response.splitlines()[:-1])
+    assert (
+        evaluate_junction_response(missing_final, calls, metadata)[0].label
+        == "final_missing"
+    )
     print("self-check ok (16 fixtures and synthetic grader mutations; no network)")
 
 
