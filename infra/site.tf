@@ -32,6 +32,26 @@ resource "aws_s3_object" "index" {
   cache_control = "no-cache"
 }
 
+locals {
+  site_assets = {
+    "assets/maplibre-gl-6.0.0/maplibre-gl.css"        = "text/css"
+    "assets/maplibre-gl-6.0.0/maplibre-gl.mjs"        = "text/javascript"
+    "assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs" = "text/javascript"
+    "assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs" = "text/javascript"
+  }
+}
+
+resource "aws_s3_object" "site_assets" {
+  for_each = local.site_assets
+
+  bucket        = aws_s3_bucket.site.id
+  key           = each.key
+  source        = "${path.module}/../site/${each.key}"
+  etag          = filemd5("${path.module}/../site/${each.key}")
+  content_type  = each.value
+  cache_control = "public, max-age=31536000, immutable"
+}
+
 # --- CloudFront distribution (OAC-gated S3 origin) --------------------------
 
 resource "aws_cloudfront_origin_access_control" "site" {
