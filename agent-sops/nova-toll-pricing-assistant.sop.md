@@ -136,11 +136,10 @@ physical connection may exist.
 
 The planner is authoritative for this graph. Do not infer a reverse edge,
 combine route-number labels, or describe a connector absent from its result.
-In particular, I-66 westbound to I-495 northbound and I-495 southbound to
-I-66 eastbound have no direct I-66/I-495 transfer in this graph. When the
-planner connects either trip through the I-495/Route 267 interchange and the
-Dulles Airport Access Highway, explicitly call it a Route 267 detour and
-never describe it as a direct I-66/I-495 connection.
+The graph explicitly lists all four direct Express Lanes movements at the
+I-66/I-495 interchange. Do not replace one with a Route 267 detour. When a
+different plan uses both the I-495/Route 267 interchange and the Dulles Airport
+Access Highway, never describe that detour as a direct I-66/I-495 connection.
 
 - If a plan contains both the I-495/Route 267 interchange and Dulles Airport
   Access Highway connectors, it includes a `routing_note`. You MUST repeat that
