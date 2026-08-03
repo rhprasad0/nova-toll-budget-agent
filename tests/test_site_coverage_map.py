@@ -5,12 +5,16 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
+from hashlib import sha256
 from pathlib import Path
 from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site" / "index.html"
 ORACLES = ROOT / "oracles"
+ASSETS = ROOT / "site" / "assets"
+MAPLIBRE_ASSETS = ASSETS / "maplibre-gl-6.0.0"
+SITE_TERRAFORM = ROOT / "infra" / "site.tf"
 
 
 class CoveragePin(TypedDict):
@@ -62,14 +66,48 @@ def test_map_uses_token_free_pinned_maplibre_and_stays_accessible() -> None:
     assert 'id="coverage-map"' in page
     assert 'aria-label="Interactive TollChat coverage map"' in page
     assert "144 supported entry and exit nodes" in page
-    assert "maplibre-gl@6.0.0/dist/maplibre-gl.css" in page
-    assert "maplibre-gl@6.0.0/dist/maplibre-gl.mjs" in page
+    assert 'href="/assets/maplibre-gl-6.0.0/maplibre-gl.css"' in page
+    assert 'import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs")' in page
+    assert 'setWorkerUrl("/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs")' in page
     assert "https://tiles.openfreemap.org/styles/dark" in page
     assert "OpenStreetMap contributors" in page
     assert "mapbox" not in page.lower()
     assert "leaflet" not in page.lower()
     assert "access_token" not in page.lower()
     assert "api_key" not in page.lower()
+    assert "unpkg.com" not in page
+
+
+def test_maplibre_assets_are_pinned_and_published_by_terraform() -> None:
+    expected_hashes = {
+        "maplibre-gl.mjs": "a641b06ae13a7aecc688c2de315b6483353ff62ba8276367e19acf51394fd3b1",
+        "maplibre-gl-worker.mjs": "a55efc5d80ad1d6a286c1d0e82d4d59c9d50b4e7a7da1d17c44e7791b2325930",
+        "maplibre-gl.css": "9467ecb10416776e4ec880d662c20bbc1d1ea4e439ac3aeda45901bdf124b609",
+    }
+    for filename, expected_hash in expected_hashes.items():
+        assert (
+            sha256((MAPLIBRE_ASSETS / filename).read_bytes()).hexdigest()
+            == expected_hash
+        )
+    assert (
+        (MAPLIBRE_ASSETS / "LICENSE.txt")
+        .read_text()
+        .startswith("Copyright (c) 2023, MapLibre contributors")
+    )
+
+    terraform = SITE_TERRAFORM.read_text()
+    for filename in expected_hashes:
+        assert f'"assets/maplibre-gl-6.0.0/{filename}"' in terraform
+    assert 'cache_control = "public, max-age=31536000, immutable"' in terraform
+    assert '"text/css"' in terraform
+    assert '"text/javascript"' in terraform
+
+
+def test_map_recovers_from_a_slow_load_and_preserves_mobile_attribution() -> None:
+    page = SITE.read_text()
+    assert "error.hidden = true;" in page
+    assert ".map-detail { right: .75rem; bottom: 2.5rem;" in page
+    assert ".reset-map { top: auto; right: .75rem; bottom: 13.75rem;" in page
 
 
 def test_map_embeds_road_following_geojson_for_every_facility() -> None:

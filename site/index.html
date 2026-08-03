@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="TollChat helps Northern Virginia drivers know their toll before they drive.">
 <title>TollChat: Know your toll before you drive</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="/assets/maplibre-gl-6.0.0/maplibre-gl.css">
 <style>
   :root {
     color-scheme: dark;
@@ -92,8 +92,8 @@
     .coverage-head { margin-top: 1rem; }
     .filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .2rem; scrollbar-width: none; }
     .filter { flex: 0 0 auto; min-height: 44px; }
-    .map-detail { right: .75rem; bottom: .75rem; left: .75rem; width: auto; }
-    .reset-map { top: auto; right: .75rem; bottom: 12rem; min-height: 44px; }
+    .map-detail { right: .75rem; bottom: 2.5rem; left: .75rem; width: auto; }
+    .reset-map { top: auto; right: .75rem; bottom: 13.75rem; min-height: 44px; }
     .maplibregl-ctrl-top-right { top: 35rem; right: .4rem; }
     .footer { grid-template-columns: 1fr; align-items: start; }
     .legal { text-align: left; }
@@ -248,7 +248,8 @@ const showMapError = () => {
   error.hidden = false;
 };
 
-import("https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.mjs").then((maplibregl) => {
+import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
+  maplibregl.setWorkerUrl("/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs");
   const pins = JSON.parse(document.getElementById("coverage-data").textContent);
   const routes = JSON.parse(document.getElementById("route-data").textContent);
   const detail = document.getElementById("map-detail");
@@ -363,6 +364,7 @@ import("https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.mjs").then((maplibr
   map.on("load", () => {
     ready = true;
     loading.hidden = true;
+    error.hidden = true;
     filters.forEach((button) => { button.disabled = false; });
     document.getElementById("reset-map").disabled = false;
     map.addSource("toll-routes", { type:"geojson", data:routes });
