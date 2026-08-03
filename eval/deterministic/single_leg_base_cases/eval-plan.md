@@ -9,6 +9,8 @@
 - **Interpreted Evaluation Requirements:** Every case must call exactly one
   corridor pricing tool, return exactly one priced leg matching a verified
   fixture, and report the exact fare without crossing or planning a junction.
+  Greenway mainline cases must separately attribute the additive $2.00 Dulles
+  Toll Road fee, preserve toll order, and include it in the total.
 
 ---
 
@@ -65,6 +67,9 @@ flowchart LR
 - **Method:** Code-based deterministic response grading; goal-success and
   helpfulness judges for conversational behavior.
 
+For multi-item Dulles results, code grading binds each amount to its facility
+and plaza, enforces travel order, and checks exact component arithmetic.
+
 ---
 
 ## 4. Test Data Generation
@@ -72,7 +77,8 @@ flowchart LR
 - Two verified longest reciprocal one-leg trips per requested facility.
 - I-95 directions use separate known-open historical times.
 - I-66 directions use their respective charged commute windows.
-- Greenway directions use weekday peak windows and the mainline rate.
+- Greenway directions use weekday peak windows and cross the mainline plaza;
+  each expects the $5.80 Greenway fare plus the separate $2.00 DTR item.
 - **Total number of test cases:** 8, explicitly requested above the SOP default.
 
 ---
@@ -114,6 +120,7 @@ eval/
 | 2026-08-02 | Planning | Eight longest reciprocal, exact-price, single-leg base cases with boundary endpoints allowed. |
 | 2026-08-02 | Automation | Deterministic live cases in trusted internal-PR CI; simulations nightly. |
 | 2026-08-02 | Simulation | Matching explicit-profile simulations capped at three agent turns per case. |
+| 2026-08-03 | Coverage | Reuse both Greenway directions to validate the separate additive DTR mainline fee. |
 
 ### 6.2 Evaluation Progress
 
@@ -126,3 +133,6 @@ eval/
 | 2026-08-02 | Deterministic live execution | Reviewed, not curated | Exact tool results passed 8/8; response grading exposed presentation false negatives and one genuine missing-rate-period response. |
 | 2026-08-02 | Simulated live execution | Reviewed, not curated | Goal/helpfulness passed 16/16; trace grading caught one invalid-time retry, and only 5/8 conversations reached all three turns. |
 | 2026-08-02 | Adversarial review | Completed | Accepted valid human-readable route labels and Markdown arithmetic and kept tool counts in code grading; turn count remains an SDK cap because valid actors may finish early. |
+| 2026-08-03 | Greenway fee fixtures and graders | Completed | Both directions require the separate DTR item, travel order, component arithmetic, and fee-aware simulated assertions. |
+| 2026-08-03 | Deterministic live execution | Completed | 1.0000 overall; 16/16 judgments passed; 0 execution errors. |
+| 2026-08-03 | Simulated live execution | Completed | 0.9443 overall; 24/24 judgments passed; 0 execution errors. |

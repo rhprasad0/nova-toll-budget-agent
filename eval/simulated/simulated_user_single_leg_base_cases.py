@@ -51,7 +51,9 @@ def _follow_up(metadata: dict[str, Any]) -> str:
         )
     return (
         "After confirming the fare and arithmetic, ask which Greenway rate period "
-        "applies and why. Do not suggest an answer."
+        "applies, which facility owns each mainline charge, and whether the "
+        "separate $2.00 Dulles Toll Road charge is included in the total. Do not "
+        "suggest an answer."
     )
 
 
@@ -63,6 +65,15 @@ def load_cases() -> list[Case[str, str]]:
             f"the VDOT observation time {row['expected_observed_display']}"
             if row.get("expected_observed_display")
             else f"the {row['expected_rate_period']} Greenway rate period"
+        )
+        fee_requirement = (
+            " It must show the separate $2.00 Dulles Toll Road mainline item "
+            "in the fixture's travel order."
+            if any(
+                toll.get("facility") == "dulles_toll_road"
+                for toll in row["expected_result"].get("tolls", [])
+            )
+            else ""
         )
         cases.append(
             Case[str, str](
@@ -81,6 +92,7 @@ def load_cases() -> list[Case[str, str]]:
                     f"consistently reports the exact final fare ${fare} with correct "
                     "arithmetic, and explains "
                     f"{provenance} without inventing another route or price."
+                    f"{fee_requirement}"
                 ),
             )
         )
@@ -193,6 +205,12 @@ def _self_check() -> None:
     )
     assert "VDOT" in _follow_up(cases[0].metadata or {})
     assert "Greenway" in _follow_up(cases[-1].metadata or {})
+    assert "Dulles Toll Road" in _follow_up(cases[-1].metadata or {})
+    assert "included in the total" in _follow_up(cases[-1].metadata or {})
+    assert all(
+        "separate $2.00 Dulles Toll Road" in str(case.expected_assertion)
+        for case in cases[-2:]
+    )
     bad = SingleLegSimulationTraceEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )

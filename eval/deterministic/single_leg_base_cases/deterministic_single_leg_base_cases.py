@@ -45,6 +45,10 @@ _ROUTE_ALIASES = {
     "I-66 EB": "I-66 Inside the Beltway eastbound",
     "I-66 WB": "I-66 Inside the Beltway westbound",
 }
+_FACILITY_LABELS = {
+    "dulles_greenway": "Dulles Greenway",
+    "dulles_toll_road": "Dulles Toll Road",
+}
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
@@ -250,37 +254,75 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             not route_line or not re.search(rf"\$\s*{re.escape(fare)}\b", route_line)
         ):
             missing_terms.append(f"${fare} route fare")
-        missing_terms.extend(
-            f"{toll['label']}: ${toll['price_usd']}"
-            for toll in tolls
-            if not re.search(
+        toll_matches: list[re.Match[str] | None] = []
+        for toll in tolls:
+            candidates = re.finditer(
                 rf"^[^\r\n]*{re.escape(toll['label'])}[^\r\n]*"
                 rf"\$\s*{re.escape(toll['price_usd'])}\b[^\r\n]*$",
                 response,
                 re.IGNORECASE | re.MULTILINE,
             )
+            expected_facility = str(toll["facility"])
+            route_facility = str(metadata["expected_route_label"])
+            match = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if expected_facility
+                    in {
+                        facility
+                        for facility, label in _FACILITY_LABELS.items()
+                        if label.casefold() in candidate.group().casefold()
+                    }
+                    or (
+                        expected_facility == route_facility
+                        and not any(
+                            label.casefold() in candidate.group().casefold()
+                            for label in _FACILITY_LABELS.values()
+                        )
+                    )
+                ),
+                None,
+            )
+            toll_matches.append(match)
+        missing_terms.extend(
+            f"{_FACILITY_LABELS[toll['facility']]} {toll['label']}: "
+            f"${toll['price_usd']}"
+            for toll, match in zip(tolls, toll_matches, strict=True)
+            if not match
         )
         if missing_terms:
             return _result(
                 False, f"response omitted route facts: {missing_terms}", "route_missing"
             )
+        toll_positions = [match.start() for match in toll_matches if match]
+        if toll_positions != sorted(toll_positions):
+            return _result(
+                False, "response listed toll items out of travel order", "toll_order"
+            )
 
         amounts = set(_MONEY_RE.findall(response))
-        if amounts != {fare}:
+        expected_amounts = {fare, *(str(toll["price_usd"]) for toll in tolls)}
+        if amounts != expected_amounts:
             return _result(
                 False,
-                f"response dollar values {sorted(amounts)} did not equal only ${fare}",
+                f"response dollar values {sorted(amounts)} did not equal "
+                f"{sorted(expected_amounts)}",
                 "wrong_money",
             )
         plain_response = response.translate(str.maketrans("", "", "*_`"))
+        operands = [str(toll["price_usd"]) for toll in tolls] or [fare]
+        calculation = r"\s*\+\s*".join(
+            rf"\$\s*{re.escape(amount)}" for amount in operands
+        )
         if not re.search(
-            rf"^\s*(?:[-+]\s+)?\$\s*{re.escape(fare)}\s*=\s*"
+            rf"^\s*(?:[-+]\s+)?{calculation}\s*=\s*"
             rf"\$\s*{re.escape(fare)}\s*$",
             plain_response,
             re.MULTILINE,
         ):
             return _result(
-                False, "response omitted exact one-fare arithmetic", "bad_math"
+                False, "response omitted exact component arithmetic", "bad_math"
             )
         final_section = lowered.rsplit("final price", 1)[-1]
         if not re.search(rf"\$\s*{re.escape(fare)}", final_section):
@@ -390,7 +432,6 @@ def _self_check() -> None:
         return response.evaluate(fake(metadata, [call], output))[0].label
 
     prepared: list[tuple[dict[str, Any], dict[str, Any], str]] = []
-
     for metadata in rows:
         expected = metadata["expected_trajectory"][0]
         call = {
@@ -409,10 +450,14 @@ def _self_check() -> None:
         displayed_route = _ROUTE_ALIASES.get(
             metadata["expected_route_label"], metadata["expected_route_label"]
         )
+        tolls = metadata["expected_result"].get("tolls", [])
         toll_lines = "".join(
-            f"  - {toll['label']}: ${toll['price_usd']}\n"
-            for toll in metadata["expected_result"].get("tolls", [])
+            f"  - {_FACILITY_LABELS[toll['facility']]} "
+            f"{toll['label']}: ${toll['price_usd']}\n"
+            for toll in tolls
         )
+        operands = [toll["price_usd"] for toll in tolls] or [fare]
+        calculation = " + ".join(f"${amount}" for amount in operands)
         good_output = (
             "## Route and fares\n"
             f"- {origin} → {destination} — {expected['tool']} "
@@ -420,7 +465,7 @@ def _self_check() -> None:
             f"{toll_lines}"
             f"  - {provenance}\n"
             "## Calculation\n"
-            f"${fare} = **${fare}**\n"
+            f"{calculation} = **${fare}**\n"
             "## Final price\n"
             f"${fare}"
         )
@@ -612,10 +657,40 @@ def _self_check() -> None:
     )
     unpriced_toll = good_output.replace("Mainline plaza: $5.80", "Mainline plaza")
     assert response_label(metadata, call, unpriced_toll) == "route_missing"
+    missing_dtr = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n", ""
+    )
+    assert response_label(metadata, call, missing_dtr) == "route_missing"
+    wrong_facility = good_output.replace(
+        "Dulles Toll Road Mainline plaza: $2.00",
+        "Dulles Greenway Mainline plaza: $2.00",
+    )
+    assert response_label(metadata, call, wrong_facility) == "route_missing"
+    implicit_route_facility = good_output.replace(
+        "Dulles Greenway Mainline plaza: $5.80", "Mainline plaza: $5.80"
+    )
+    assert (
+        response_label(metadata, call, implicit_route_facility) == "grounded_response"
+    )
+    reversed_tolls = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n"
+        "  - Dulles Greenway Mainline plaza: $5.80\n",
+        "  - Dulles Greenway Mainline plaza: $5.80\n"
+        "  - Dulles Toll Road Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, reversed_tolls) == "toll_order"
+    nonadditive = good_output.replace("$2.00 + $5.80 = **$7.80**", "$5.80 = **$5.80**")
+    assert response_label(metadata, call, nonadditive) == "bad_math"
     wrong_result = json.loads(json.dumps(metadata["expected_result"]))
     wrong_result["tolls"][0]["price_usd"] = "999.99"
     assert (
         trace_label(metadata, [{**call, "tool_result": wrong_result}])
+        == "result_mismatch"
+    )
+    missing_fee_result = json.loads(json.dumps(metadata["expected_result"]))
+    missing_fee_result["tolls"] = missing_fee_result["tolls"][1:]
+    assert (
+        trace_label(metadata, [{**call, "tool_result": missing_fee_result}])
         == "result_mismatch"
     )
     print("self-check ok (8 fixtures and synthetic grader mutations; no network)")
