@@ -133,6 +133,6 @@ eval/
 | 2026-08-02 | Deterministic live execution | Reviewed, not curated | Exact tool results passed 8/8; response grading exposed presentation false negatives and one genuine missing-rate-period response. |
 | 2026-08-02 | Simulated live execution | Reviewed, not curated | Goal/helpfulness passed 16/16; trace grading caught one invalid-time retry, and only 5/8 conversations reached all three turns. |
 | 2026-08-02 | Adversarial review | Completed | Accepted valid human-readable route labels and Markdown arithmetic and kept tool counts in code grading; turn count remains an SDK cap because valid actors may finish early. |
-| 2026-08-03 | Greenway fee fixtures and graders | Completed | Both directions require the separate DTR item, travel order, component arithmetic, and fee-aware simulated assertions. |
+| 2026-08-03 | Greenway fee fixtures and graders | Completed | Both directions require one distinct DTR item, exact multiplicity, travel order, component arithmetic, and neutral simulated follow-ups. |
 | 2026-08-03 | Deterministic live execution | Completed | 1.0000 overall; 16/16 judgments passed; 0 execution errors. |
-| 2026-08-03 | Simulated live execution | Completed | 0.9443 overall; 24/24 judgments passed; 0 execution errors. |
+| 2026-08-03 | Simulated live execution | Completed | 0.9167 overall; 24/24 judgments passed; 0 execution errors. |

@@ -21,7 +21,7 @@
   "cases": [
     {
       "input": "Price the I-95 Express Lanes from I-95 Near Route 17 to Washington D.C. at 7/29/2026 10:10 AM ET.",
-      "actual_output": "## Route and fares\n\n- **I-95 Near Route 17 \u2192 Washington D.C.** \u2014 I-95/395 Express Lanes (northbound): **$43.20**\n  - VDOT observed at: **7/29/2026 10:00 AM ET**\n\n## Calculation\n\n**$43.20 = $43.20**\n\n## Final price\n\n**$43.20**\n",
+      "actual_output": "## Route and fares\n\n- **I-95 Near Route 17 \u2192 Washington D.C.** \u2014 I-95/395 Express Lanes: **$43.20**\n  - VDOT observed at: 7/29/2026 10:00 AM ET\n\n## Calculation\n\n$43.20 = $43.20\n\n## Final price\n\n**$43.20**\n",
       "name": "i95-northbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -175,7 +175,7 @@
     },
     {
       "input": "Price the I-495 Express Lanes from I-495/I-95 Near Van Dorn Street to Route 267 at 7/26/2026 2:32 PM ET.",
-      "actual_output": "## Route and fares\n\n- I-495/I-95 Near Van Dorn Street \u2192 Route 267 \u2014 **I-495 Express Lanes**: **$14.05**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n**$14.05 = $14.05**\n\n## Final price\n\n**$14.05**\n",
+      "actual_output": "## Route and fares\n\n- I-495/I-95 Near Van Dorn Street \u2192 Route 267 \u2014 **I-495 Express Lanes (northbound): $14.05**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n**$14.05 = $14.05**\n\n## Final price\n\n**$14.05**\n",
       "name": "i495-northbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -252,7 +252,7 @@
     },
     {
       "input": "Price the I-495 Express Lanes from Route 267 to I-495/I-95 Near Van Dorn Street at 7/26/2026 2:32 PM ET.",
-      "actual_output": "## Route and fares\n\n- Route 267 \u2192 I-495/I-95 Near Van Dorn Street \u2014 **I-495 Express Lanes (southbound): $8.85**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n$8.85 = **$8.85**\n\n## Final price\n\n**$8.85**\n",
+      "actual_output": "## Route and fares\n\n- Route 267 \u2192 I-495/I-95 Near Van Dorn Street \u2014 **I-495 Express Lanes (southbound): $8.85**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n$8.85 = $8.85\n\n## Final price\n\n**$8.85**\n",
       "name": "i495-southbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -329,7 +329,7 @@
     },
     {
       "input": "Price I-66 Inside the Beltway from I-66 West to Washington at 7/29/2026 8:30 AM ET.",
-      "actual_output": "## Route and fares\n\n- I-66 West \u2192 Washington \u2014 I-66 Inside the Beltway (EB): **$12.15**\n  - VDOT observed at: **7/29/2026 8:26 AM ET**\n\n## Calculation\n\n**$12.15 = $12.15**\n\n## Final price\n\n**$12.15**\n",
+      "actual_output": "## Route and fares\n\n- I-66 West \u2192 Washington \u2014 I-66 Inside-the-Beltway Express Lanes (EB): **$12.15**\n  - VDOT observed at: **7/29/2026 8:26 AM ET**\n\n## Calculation\n\n**$12.15 = $12.15**\n\n## Final price\n\n**$12.15**\n",
       "name": "i66-eastbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -407,7 +407,7 @@
     },
     {
       "input": "Price I-66 Inside the Beltway from Washington to I-66 West at 7/29/2026 5:30 PM ET.",
-      "actual_output": "## Route and fares\n\n- Washington \u2192 I-66 West \u2014 I-66 Inside the Beltway (westbound): **$9.05**\n  - VDOT observed at: 7/29/2026 5:26 PM ET\n\n## Calculation\n\n**$9.05 = $9.05**\n\n## Final price\n\n**$9.05**\n",
+      "actual_output": "## Route and fares\n\n- Washington \u2192 I-66 West \u2014 I-66 Inside the Beltway (WB): **$9.05**\n  - VDOT observed at: 7/29/2026 5:26 PM ET\n\n## Calculation\n\n**$9.05 = $9.05**\n\n## Final price\n\n**$9.05**\n",
       "name": "i66-westbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -485,7 +485,7 @@
     },
     {
       "input": "Price the Dulles Greenway from Exit 1 - US 15/SR 7 (Leesburg Bypass) to Route 28 (Dulles Toll Road / Dulles Greenway) at 7/27/2026 7:30 AM ET.",
-      "actual_output": "## Route and fares\n\n- Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2192 Route 28 (Dulles Toll Road / Dulles Greenway)\n  - Dulles Greenway mainline plaza: **$5.80**\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Rate period: **peak**\n\n## Calculation\n\n**$5.80 + $2.00 = $7.80**\n\n## Final price\n\n**$7.80**\n",
+      "actual_output": "## Route and fares\n\n- Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2192 Route 28 (Dulles Toll Road / Dulles Greenway) \u2014 Dulles Greenway eastbound\n  - Mainline plaza: **$5.80**\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Rate period: **peak**\n\n## Calculation\n\n**$5.80 + $2.00 = $7.80**\n\n## Final price\n\n**$7.80**\n",
       "name": "greenway-eastbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -570,7 +570,7 @@
     },
     {
       "input": "Price the Dulles Greenway from Route 28 (Dulles Toll Road / Dulles Greenway) to Exit 1 - US 15/SR 7 (Leesburg Bypass) at 7/27/2026 5:00 PM ET.",
-      "actual_output": "## Route and fares\n\n- Route 28 (Dulles Toll Road / Dulles Greenway) \u2192 Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2014 westbound\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Dulles Greenway mainline plaza: **$5.80**\n  - Rate period: **peak**\n\n## Calculation\n\n**$2.00 + $5.80 = $7.80**\n\n## Final price\n\n**$7.80**\n",
+      "actual_output": "## Route and fares\n\n- Route 28 (Dulles Toll Road / Dulles Greenway) \u2192 Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2014 Dulles Greenway, westbound\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Dulles Greenway mainline plaza: **$5.80**\n  - Rate period: **peak**\n\n## Calculation\n\n**$2.00 + $5.80 = $7.80**\n\n## Final price\n\n**$7.80**\n",
       "name": "greenway-westbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -655,7 +655,7 @@
     },
     {
       "input": "Price the I-95 Express Lanes from I-95 Near Route 17 to Washington D.C. at 7/29/2026 10:10 AM ET.",
-      "actual_output": "## Route and fares\n\n- **I-95 Near Route 17 \u2192 Washington D.C.** \u2014 I-95/395 Express Lanes (northbound): **$43.20**\n  - VDOT observed at: **7/29/2026 10:00 AM ET**\n\n## Calculation\n\n**$43.20 = $43.20**\n\n## Final price\n\n**$43.20**\n",
+      "actual_output": "## Route and fares\n\n- **I-95 Near Route 17 \u2192 Washington D.C.** \u2014 I-95/395 Express Lanes: **$43.20**\n  - VDOT observed at: 7/29/2026 10:00 AM ET\n\n## Calculation\n\n$43.20 = $43.20\n\n## Final price\n\n**$43.20**\n",
       "name": "i95-northbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -809,7 +809,7 @@
     },
     {
       "input": "Price the I-495 Express Lanes from I-495/I-95 Near Van Dorn Street to Route 267 at 7/26/2026 2:32 PM ET.",
-      "actual_output": "## Route and fares\n\n- I-495/I-95 Near Van Dorn Street \u2192 Route 267 \u2014 **I-495 Express Lanes**: **$14.05**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n**$14.05 = $14.05**\n\n## Final price\n\n**$14.05**\n",
+      "actual_output": "## Route and fares\n\n- I-495/I-95 Near Van Dorn Street \u2192 Route 267 \u2014 **I-495 Express Lanes (northbound): $14.05**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n**$14.05 = $14.05**\n\n## Final price\n\n**$14.05**\n",
       "name": "i495-northbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -886,7 +886,7 @@
     },
     {
       "input": "Price the I-495 Express Lanes from Route 267 to I-495/I-95 Near Van Dorn Street at 7/26/2026 2:32 PM ET.",
-      "actual_output": "## Route and fares\n\n- Route 267 \u2192 I-495/I-95 Near Van Dorn Street \u2014 **I-495 Express Lanes (southbound): $8.85**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n$8.85 = **$8.85**\n\n## Final price\n\n**$8.85**\n",
+      "actual_output": "## Route and fares\n\n- Route 267 \u2192 I-495/I-95 Near Van Dorn Street \u2014 **I-495 Express Lanes (southbound): $8.85**\n  - VDOT observed at: **7/26/2026 2:20 PM ET**\n\n## Calculation\n\n$8.85 = $8.85\n\n## Final price\n\n**$8.85**\n",
       "name": "i495-southbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -963,7 +963,7 @@
     },
     {
       "input": "Price I-66 Inside the Beltway from I-66 West to Washington at 7/29/2026 8:30 AM ET.",
-      "actual_output": "## Route and fares\n\n- I-66 West \u2192 Washington \u2014 I-66 Inside the Beltway (EB): **$12.15**\n  - VDOT observed at: **7/29/2026 8:26 AM ET**\n\n## Calculation\n\n**$12.15 = $12.15**\n\n## Final price\n\n**$12.15**\n",
+      "actual_output": "## Route and fares\n\n- I-66 West \u2192 Washington \u2014 I-66 Inside-the-Beltway Express Lanes (EB): **$12.15**\n  - VDOT observed at: **7/29/2026 8:26 AM ET**\n\n## Calculation\n\n**$12.15 = $12.15**\n\n## Final price\n\n**$12.15**\n",
       "name": "i66-eastbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -1041,7 +1041,7 @@
     },
     {
       "input": "Price I-66 Inside the Beltway from Washington to I-66 West at 7/29/2026 5:30 PM ET.",
-      "actual_output": "## Route and fares\n\n- Washington \u2192 I-66 West \u2014 I-66 Inside the Beltway (westbound): **$9.05**\n  - VDOT observed at: 7/29/2026 5:26 PM ET\n\n## Calculation\n\n**$9.05 = $9.05**\n\n## Final price\n\n**$9.05**\n",
+      "actual_output": "## Route and fares\n\n- Washington \u2192 I-66 West \u2014 I-66 Inside the Beltway (WB): **$9.05**\n  - VDOT observed at: 7/29/2026 5:26 PM ET\n\n## Calculation\n\n**$9.05 = $9.05**\n\n## Final price\n\n**$9.05**\n",
       "name": "i66-westbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -1119,7 +1119,7 @@
     },
     {
       "input": "Price the Dulles Greenway from Exit 1 - US 15/SR 7 (Leesburg Bypass) to Route 28 (Dulles Toll Road / Dulles Greenway) at 7/27/2026 7:30 AM ET.",
-      "actual_output": "## Route and fares\n\n- Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2192 Route 28 (Dulles Toll Road / Dulles Greenway)\n  - Dulles Greenway mainline plaza: **$5.80**\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Rate period: **peak**\n\n## Calculation\n\n**$5.80 + $2.00 = $7.80**\n\n## Final price\n\n**$7.80**\n",
+      "actual_output": "## Route and fares\n\n- Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2192 Route 28 (Dulles Toll Road / Dulles Greenway) \u2014 Dulles Greenway eastbound\n  - Mainline plaza: **$5.80**\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Rate period: **peak**\n\n## Calculation\n\n**$5.80 + $2.00 = $7.80**\n\n## Final price\n\n**$7.80**\n",
       "name": "greenway-eastbound-full",
       "expected_output": null,
       "expected_assertion": null,
@@ -1204,7 +1204,7 @@
     },
     {
       "input": "Price the Dulles Greenway from Route 28 (Dulles Toll Road / Dulles Greenway) to Exit 1 - US 15/SR 7 (Leesburg Bypass) at 7/27/2026 5:00 PM ET.",
-      "actual_output": "## Route and fares\n\n- Route 28 (Dulles Toll Road / Dulles Greenway) \u2192 Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2014 westbound\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Dulles Greenway mainline plaza: **$5.80**\n  - Rate period: **peak**\n\n## Calculation\n\n**$2.00 + $5.80 = $7.80**\n\n## Final price\n\n**$7.80**\n",
+      "actual_output": "## Route and fares\n\n- Route 28 (Dulles Toll Road / Dulles Greenway) \u2192 Exit 1 - US 15/SR 7 (Leesburg Bypass) \u2014 Dulles Greenway, westbound\n  - Dulles Toll Road mainline plaza: **$2.00**\n  - Dulles Greenway mainline plaza: **$5.80**\n  - Rate period: **peak**\n\n## Calculation\n\n**$2.00 + $5.80 = $7.80**\n\n## Final price\n\n**$7.80**\n",
       "name": "greenway-westbound-full",
       "expected_output": null,
       "expected_assertion": null,

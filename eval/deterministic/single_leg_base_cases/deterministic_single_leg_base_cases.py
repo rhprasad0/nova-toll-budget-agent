@@ -256,34 +256,36 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
             missing_terms.append(f"${fare} route fare")
         toll_matches: list[re.Match[str] | None] = []
         for toll in tolls:
-            candidates = re.finditer(
-                rf"^[^\r\n]*{re.escape(toll['label'])}[^\r\n]*"
-                rf"\$\s*{re.escape(toll['price_usd'])}\b[^\r\n]*$",
-                response,
-                re.IGNORECASE | re.MULTILINE,
+            candidates = list(
+                re.finditer(
+                    rf"^[^\r\n]*{re.escape(toll['label'])}[^\r\n]*"
+                    rf"\$\s*{re.escape(toll['price_usd'])}\b[^\r\n]*$",
+                    response,
+                    re.IGNORECASE | re.MULTILINE,
+                )
             )
             expected_facility = str(toll["facility"])
             route_facility = str(metadata["expected_route_label"])
-            match = next(
-                (
-                    candidate
-                    for candidate in candidates
-                    if expected_facility
-                    in {
-                        facility
-                        for facility, label in _FACILITY_LABELS.items()
-                        if label.casefold() in candidate.group().casefold()
-                    }
-                    or (
-                        expected_facility == route_facility
-                        and not any(
-                            label.casefold() in candidate.group().casefold()
-                            for label in _FACILITY_LABELS.values()
-                        )
-                    )
-                ),
-                None,
-            )
+            if len(candidates) > 1:
+                return _result(
+                    False,
+                    f"response repeated {_FACILITY_LABELS[expected_facility]} "
+                    f"{toll['label']}: ${toll['price_usd']}",
+                    "toll_multiplicity",
+                )
+            match = candidates[0] if candidates else None
+            if match:
+                line = match.group().casefold()
+                explicit_facilities = {
+                    facility
+                    for facility, label in _FACILITY_LABELS.items()
+                    if label.casefold() in line
+                }
+                facility_matches = explicit_facilities == {expected_facility} or (
+                    not explicit_facilities and expected_facility == route_facility
+                )
+                if len(_MONEY_RE.findall(line)) != 1 or not facility_matches:
+                    match = None
             toll_matches.append(match)
         missing_terms.extend(
             f"{_FACILITY_LABELS[toll['facility']]} {toll['label']}: "
@@ -672,6 +674,19 @@ def _self_check() -> None:
     assert (
         response_label(metadata, call, implicit_route_facility) == "grounded_response"
     )
+    combined_tolls = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n"
+        "  - Dulles Greenway Mainline plaza: $5.80\n",
+        "  - Dulles Toll Road Mainline plaza: $2.00; "
+        "Dulles Greenway Mainline plaza: $5.80\n",
+    )
+    assert response_label(metadata, call, combined_tolls) == "route_missing"
+    duplicated_dtr = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n",
+        "  - Dulles Toll Road Mainline plaza: $2.00\n"
+        "  - Dulles Toll Road Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, duplicated_dtr) == "toll_multiplicity"
     reversed_tolls = good_output.replace(
         "  - Dulles Toll Road Mainline plaza: $2.00\n"
         "  - Dulles Greenway Mainline plaza: $5.80\n",

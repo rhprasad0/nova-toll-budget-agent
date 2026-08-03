@@ -230,11 +230,7 @@ def _gw_pairs() -> list[JsonObject]:
                     "price_peak_usd": GW_DTR_MAINLINE_USD,
                     "price_off_peak_usd": GW_DTR_MAINLINE_USD,
                 }
-                charges = (
-                    [greenway_charge, dtr_charge]
-                    if direction == "EB"
-                    else [dtr_charge, greenway_charge]
-                )
+                charges.insert(1 if direction == "EB" else 0, dtr_charge)
             pairs.append(
                 {
                     "direction": direction,
