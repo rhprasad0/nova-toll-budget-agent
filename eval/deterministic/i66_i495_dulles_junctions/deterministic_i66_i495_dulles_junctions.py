@@ -42,6 +42,11 @@ _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _CHECK_TIME = "2026-08-03T12:00:00-04:00"
 _FIXTURE_TIME = datetime.fromisoformat("2026-08-03T14:00:00-04:00")
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)")
+_ZERO_RE = re.compile(r"\$\s*0(?:\.00)?(?![\d.])")
+_UNBILLED_RE = re.compile(
+    r"\b(?:untolled|not (?:a |separate )?billed|not included in (?:the )?fare arithmetic)\b",
+    re.I,
+)
 _FORBIDDEN_CLAIMS = (
     "outside the beltway",
     "route 267 detour",
@@ -340,7 +345,12 @@ def _route_labels(label: str) -> tuple[str, ...]:
     return (primary,)
 
 
-def _line_has_direction(response: str, terms: list[str], direction: str) -> bool:
+def _line_has_direction(
+    response: str,
+    entry_terms: tuple[str, ...],
+    exit_terms: tuple[str, ...],
+    direction: str,
+) -> bool:
     aliases = _DIRECTION_ALIASES[direction]
     wrong_aliases = tuple(
         alias
@@ -355,11 +365,17 @@ def _line_has_direction(response: str, terms: list[str], direction: str) -> bool
             for choice in choices
         )
 
-    return any(
-        _line_has(line, terms)
-        and mentions(line, aliases)
-        and not mentions(line, wrong_aliases)
+    relevant = [
+        line
         for line in response.splitlines()
+        if any(
+            _line_has(line, [entry, exit_])
+            for entry in entry_terms
+            for exit_ in exit_terms
+        )
+    ]
+    return any(mentions(line, aliases) for line in relevant) and not any(
+        mentions(line, wrong_aliases) for line in relevant
     )
 
 
@@ -384,7 +400,8 @@ def evaluate_junction_response(
     forbidden = [claim for claim in _FORBIDDEN_CLAIMS if claim in folded]
     if forbidden:
         return _result(False, f"forbidden claims: {forbidden}", "forbidden_claim")
-    if "$0.00" in response or "$0" in response:
+    zero_lines = [line for line in response.splitlines() if _ZERO_RE.search(line)]
+    if any(not _UNBILLED_RE.search(line) for line in zero_lines):
         return _result(False, "connector sentinel was billed", "sentinel_billed")
 
     expected_connector = cast(dict[str, Any], metadata["expected_connector"])
@@ -403,7 +420,11 @@ def evaluate_junction_response(
             if continuation and not continuation[0].isspace():
                 break
             connector_block.append(continuation)
-        if any(_MONEY_RE.search(line) for line in connector_block):
+        if any(
+            any(Decimal(value) != 0 for value in _MONEY_RE.findall(line))
+            or (_ZERO_RE.search(line) and not _UNBILLED_RE.search(line))
+            for line in connector_block
+        ):
             return _result(False, "connector is attributed a fare", "connector_billed")
 
     for call, expected in zip(
@@ -417,11 +438,7 @@ def evaluate_junction_response(
         direction = str(expected["direction"])
         entry_labels = _route_labels(str(entry.get("label", "")))
         exit_labels = _route_labels(str(exit_.get("label", "")))
-        if not any(
-            _line_has_direction(response, [entry_label, exit_label], direction)
-            for entry_label in entry_labels
-            for exit_label in exit_labels
-        ):
+        if not _line_has_direction(response, entry_labels, exit_labels, direction):
             return _result(
                 False,
                 f"route leg does not state only {direction}: "
@@ -448,6 +465,8 @@ def evaluate_junction_response(
             False, f"calculation does not sum {fares} to {total}", "bad_math"
         )
     allowed = {*fares, total}
+    if zero_lines:
+        allowed.add(Decimal(0))
     quoted = {Decimal(value) for value in _MONEY_RE.findall(response)}
     if unexpected := sorted(quoted - allowed):
         return _result(
@@ -668,6 +687,22 @@ def _self_check() -> None:
             0
         ].label
         == "sentinel_billed"
+    )
+    unbilled_sentinel = response.replace(
+        metadata["expected_connector"]["label"],
+        f"{metadata['expected_connector']['label']} "
+        "($0.00 planner sentinel, not a billed fare)",
+    )
+    assert (
+        evaluate_junction_response(unbilled_sentinel, calls, metadata)[0].label
+        == "response_grounded"
+    )
+    contradictory_direction = response + (
+        "\n- Lee Highway - Scott Street -> I-495 S, EB"
+    )
+    assert (
+        evaluate_junction_response(contradictory_direction, calls, metadata)[0].label
+        == "direction_mismatch"
     )
     billed_connector = response.replace(
         metadata["expected_connector"]["label"],
