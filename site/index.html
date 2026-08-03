@@ -64,7 +64,7 @@
   .reset-map { position: absolute; top: 12.5rem; right: clamp(1rem, 4vw, 3rem); z-index: 3; padding: .55rem .8rem; background: var(--panel-solid); font-size: .72rem; font-weight: 750; box-shadow: 0 8px 30px rgba(0,0,0,.24); }
   .map-state { position: absolute; top: 50%; left: 50%; z-index: 4; width: min(21rem, calc(100% - 2rem)); padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: .85rem; background: var(--panel-solid); color: var(--muted); font-size: .82rem; line-height: 1.45; text-align: center; transform: translate(-50%, -50%); }
   .map-state strong { display: block; margin-bottom: .3rem; color: var(--ink); }
-  .map-pin, .junction-pin { position: relative; display: grid; width: 44px; height: 44px; padding: 0; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 8px; font-weight: 850; outline: none; }
+  .map-pin, .junction-pin { position: absolute; top: 0; left: 0; display: grid; width: 44px; height: 44px; padding: 0; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 8px; font-weight: 850; outline: none; }
   .map-pin::before, .junction-pin::before { position: absolute; z-index: -1; width: 15px; height: 15px; border: 2px solid var(--pin); border-radius: 50%; background: #0b1715; box-shadow: 0 0 0 4px rgba(4,12,11,.38), 0 0 12px color-mix(in srgb, var(--pin) 55%, transparent); content: ""; transition: transform .16s ease, background-color .16s ease; }
   .map-pin:hover::before, .map-pin:focus-visible::before, .map-pin.selected::before, .junction-pin:hover::before, .junction-pin:focus-visible::before { background: color-mix(in srgb, var(--pin) 25%, #0b1715); transform: scale(1.28); }
   .map-pin:focus-visible, .junction-pin:focus-visible { border-radius: 50%; box-shadow: inset 0 0 0 2px var(--ink); }
@@ -261,12 +261,36 @@ import("https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.mjs").then((maplibr
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const colors = { i66: "#67d4ff", i95: "#ff7085", i495: "#ffd05a", dulles: "#55dda8", greenway: "#c99cff" };
   const names = { i66: "I-66", i95: "95/395 Express Lanes", i495: "495 Express Lanes", dulles: "Dulles Toll Road", greenway: "Dulles Greenway" };
+  const routeCoordinates = Object.fromEntries(routes.features.map((route) => [route.properties.facility, route.geometry.coordinates]));
   const coverageBounds = [[-77.61, 38.28], [-77.01, 39.15]];
   const junctionCoordinates = [[-77.205606,38.799890],[-77.149552,38.810914],[-77.182593,38.769837],[-77.205606,38.799890]];
   const junction = { type:"Feature", properties:{}, geometry:{ type:"Polygon", coordinates:[junctionCoordinates] } };
   const markers = [];
   let selectedMarker;
   let ready = false;
+
+  const snapToRoute = (pin) => {
+    const coordinates = routeCoordinates[pin.facility];
+    const longitudeScale = Math.cos(pin.lat * Math.PI / 180);
+    let nearest = coordinates[0];
+    let nearestDistance = Infinity;
+    // ponytail: linear scan is trivial for 81 pins; add a spatial index only if coverage grows materially.
+    for (let index = 1; index < coordinates.length; index += 1) {
+      const start = coordinates[index - 1];
+      const end = coordinates[index];
+      const dx = (end[0] - start[0]) * longitudeScale;
+      const dy = end[1] - start[1];
+      const lengthSquared = dx * dx + dy * dy;
+      const t = Math.max(0, Math.min(1, (((pin.lon - start[0]) * longitudeScale * dx) + ((pin.lat - start[1]) * dy)) / lengthSquared));
+      const candidate = [start[0] + ((end[0] - start[0]) * t), start[1] + ((end[1] - start[1]) * t)];
+      const distance = ((pin.lon - candidate[0]) * longitudeScale) ** 2 + (pin.lat - candidate[1]) ** 2;
+      if (distance < nearestDistance) {
+        nearest = candidate;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  };
 
   const mapPadding = () => {
     if (innerWidth <= 720) return { top:330, right:24, bottom:175, left:24 };
@@ -362,7 +386,7 @@ import("https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.mjs").then((maplibr
       if (pin.nodeIds.length > 1) markerButton.textContent = pin.nodeIds.length;
       markerButton.addEventListener("click", () => showPin(pin, markerButton));
       markerButton.addEventListener("focus", () => showPin(pin, markerButton));
-      new maplibregl.Marker({ element:markerButton, anchor:"center" }).setLngLat([pin.lon,pin.lat]).addTo(map);
+      new maplibregl.Marker({ element:markerButton, anchor:"center" }).setLngLat(snapToRoute(pin)).addTo(map);
       markers.push({ facility:pin.facility, element:markerButton });
     });
 

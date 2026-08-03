@@ -98,6 +98,14 @@ def test_map_exposes_native_filters_reset_and_details() -> None:
     assert 'id="map-error"' in page
 
 
+def test_rendered_pins_snap_to_fixed_positions_on_their_routes() -> None:
+    page = SITE.read_text()
+    assert ".map-pin, .junction-pin { position: absolute;" in page
+    assert "const snapToRoute = (pin) =>" in page
+    assert ".setLngLat(snapToRoute(pin))" in page
+    assert ".setLngLat([pin.lon,pin.lat])" not in page
+
+
 def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
     page = SITE.read_text()
     assert "Coverage, with one honest gap." in page
