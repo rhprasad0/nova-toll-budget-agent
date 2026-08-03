@@ -320,7 +320,7 @@ def _fare_items(
                     f"{entry.get('label', '')} -> {exit_.get('label', '')}",
                     Decimal(str(result["total_usd"])),
                     (
-                        "I-66 Inside-the-Beltway Express Lanes"
+                        "I-66"
                         if call.get("name") == "i66_route"
                         else "I-495 Express Lanes"
                     ),
