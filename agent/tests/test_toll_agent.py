@@ -66,10 +66,10 @@ def _can_price(origin_corridor, origin, destination_corridor, destination):
 
 
 def _reference_reachable(origin_corridor, origin, destination_corridor, destination):
-    frontier = deque([(origin_corridor, origin)])
+    frontier = deque([(origin_corridor, origin, frozenset())])
     visited = {(origin_corridor, origin)}
     while frontier:
-        corridor, point = frontier.popleft()
+        corridor, point, used_connectors = frontier.popleft()
         if (
             corridor == destination_corridor
             and _same_location(corridor, destination, point)
@@ -79,11 +79,15 @@ def _reference_reachable(origin_corridor, origin, destination_corridor, destinat
             state = ("i495", "191NO")
             if state not in visited:
                 visited.add(state)
-                frontier.append(state)
+                frontier.append((*state, used_connectors))
             continue
         if corridor == "i495" and destination_corridor == "i95":
             return True
+        if corridor == destination_corridor == "i495" and point == "191NO":
+            return True
         for transfer in NETWORK_TRANSFERS:
+            if transfer["connector"] in used_connectors:
+                continue
             source = transfer["from"]
             if not (
                 (
@@ -97,7 +101,7 @@ def _reference_reachable(origin_corridor, origin, destination_corridor, destinat
             state = (target["corridor"], target["node_id"])
             if state not in visited:
                 visited.add(state)
-                frontier.append(state)
+                frontier.append((*state, used_connectors | {transfer["connector"]}))
     return False
 
 
@@ -105,7 +109,7 @@ def _assert_plan_is_continuous(
     origin_corridor, origin, destination_corridor, destination, plan
 ):
     corridor, point = origin_corridor, origin
-    for index, step in enumerate(plan["steps"]):
+    for step in plan["steps"]:
         if step["kind"] == "priced":
             assert (step["corridor"], step["origin"]) == (corridor, point)
             if corridor in _DULLES_CORRIDORS:
@@ -131,42 +135,15 @@ def _assert_plan_is_continuous(
             transfers = [
                 transfer
                 for transfer in NETWORK_TRANSFERS
-                if transfer["connector"] == step["label"]
-                and transfer["from"]["corridor"] == corridor
-                and _same_location(corridor, point, transfer["from"]["node_id"])
+                if transfer["id"] == step["transfer_id"]
             ]
-            if len(transfers) > 1:
-                targets = {
-                    (transfer["to"]["corridor"], transfer["to"]["node_id"])
-                    for transfer in transfers
-                }
-                if len(targets) == 1:
-                    transfers = transfers[:1]
-                elif index == len(plan["steps"]) - 1:
-                    transfers = [
-                        transfer
-                        for transfer in transfers
-                        if transfer["to"]["corridor"] == destination_corridor
-                        and _same_location(
-                            destination_corridor,
-                            destination,
-                            transfer["to"]["node_id"],
-                        )
-                    ][:1]
-                else:
-                    next_step = plan["steps"][index + 1]
-                    transfers = [
-                        transfer
-                        for transfer in transfers
-                        if next_step.get("corridor") == transfer["to"]["corridor"]
-                        and _same_location(
-                            transfer["to"]["corridor"],
-                            next_step.get("origin"),
-                            transfer["to"]["node_id"],
-                        )
-                    ]
             assert len(transfers) == 1
-            target = transfers[0]["to"]
+            transfer = transfers[0]
+            source = transfer["from"]
+            assert transfer["connector"] == step["label"]
+            assert source["corridor"] == corridor
+            assert _same_location(corridor, point, source["node_id"])
+            target = transfer["to"]
             corridor, point = target["corridor"], target["node_id"]
     if (
         destination_corridor == "i495"
@@ -248,7 +225,7 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
             "Braddock Road",
             [
                 ("priced", "i66_itb", "Lee Highway - Scott Street", "5"),
-                ("connector", "I-66/I-495 interchange"),
+                ("connector", "I-66/I-495 interchange", "i66_to_i495"),
                 ("priced", "i495", "187SO", "Braddock Road"),
             ],
             None,
@@ -260,7 +237,7 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
             "Westmoreland St",
             [
                 ("priced", "i495", "Braddock Road", "187ND"),
-                ("connector", "I-66/I-495 interchange"),
+                ("connector", "I-66/I-495 interchange", "i495_to_i66"),
                 ("priced", "i66_itb", "3", "Westmoreland St"),
             ],
             None,
@@ -272,7 +249,11 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
             "Westpark Drive",
             [
                 ("priced", "i66_itb", "Route 7 - Leesburg Pike", "5"),
-                ("connector", "I-66/I-495 interchange"),
+                (
+                    "connector",
+                    "I-66/I-495 interchange",
+                    "i66_to_i495_north",
+                ),
                 (
                     "priced",
                     "i495",
@@ -294,7 +275,11 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
                     "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
                     "187SD",
                 ),
-                ("connector", "I-66/I-495 interchange"),
+                (
+                    "connector",
+                    "I-66/I-495 interchange",
+                    "i495_south_to_i66",
+                ),
                 ("priced", "i66_itb", "5", "Westmoreland St"),
             ],
             None,
@@ -329,7 +314,7 @@ def test_planner_covers_every_i66_i495_direction(
                 )
             )
         else:
-            actual.append((step["kind"], step["label"]))
+            actual.append((step["kind"], step["label"], step["transfer_id"]))
     assert actual == expected
     assert plan.get("routing_note") == routing_note
 
@@ -377,28 +362,28 @@ def test_planner_rejects_a_malformed_timestamp_before_planning():
             "Exit 12 - SR 602 (Reston Pkwy)",
             "i495",
             "Braddock Road",
-            ("1819", "182SO"),
+            ("1819", "182SO", "dulles_toll_road_to_i495"),
         ),
         (
             "dulles_toll_road",
             "Exit 12 - SR 602 (Reston Pkwy)",
             "i495",
             "495 Express Lanes End/George Wash. Mem. Pkwy.",
-            ("1819", "182NO"),
+            ("1819", "182NO", "dulles_toll_road_to_i495_north"),
         ),
         (
             "i495",
             "Braddock Road",
             "dulles_toll_road",
             "Exit 12 - SR 602 (Reston Pkwy)",
-            ("182ND", "1819"),
+            ("182ND", "1819", "i495_to_dulles_toll_road"),
         ),
         (
             "i495",
             "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
             "dulles_toll_road",
             "Exit 12 - SR 602 (Reston Pkwy)",
-            ("182SD", "1819"),
+            ("182SD", "1819", "i495_south_to_dulles_toll_road"),
         ),
     ],
     ids=(
@@ -420,6 +405,7 @@ def test_planner_covers_every_dulles_i495_direction(
     ]
     assert plan["steps"][1] == {
         "kind": "connector",
+        "transfer_id": boundary[2],
         "label": "I-495/Route 267 interchange",
         "price_usd": "0.00",
     }
@@ -497,6 +483,7 @@ def test_planner_uses_the_curated_i66_dulles_handoff():
         },
         {
             "kind": "connector",
+            "transfer_id": "i66_to_dulles_toll_road",
             "label": "Dulles Airport Access Highway",
             "price_usd": "0.00",
         },
@@ -527,6 +514,7 @@ def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
         },
         {
             "kind": "connector",
+            "transfer_id": "dulles_toll_road_to_i495",
             "label": "I-495/Route 267 interchange",
             "price_usd": "0.00",
         },
@@ -547,34 +535,6 @@ def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
                 "node_id": "191SD",
             },
             "pricing": "unpriced between the selected 95 boundary and Braddock",
-        },
-    ]
-
-
-def test_planner_reaches_i66_from_the_dulles_junction_via_i495_south():
-    plan = plan_toll_route(
-        "dulles_toll_road",
-        "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
-        "i66_itb",
-        "I-495 S",
-    )
-    assert plan["steps"] == [
-        {
-            "kind": "connector",
-            "label": "I-495/Route 267 interchange",
-            "price_usd": "0.00",
-        },
-        {
-            "kind": "priced",
-            "corridor": "i495",
-            "tool": "i495_route",
-            "origin": "182SO",
-            "destination": "187SD",
-        },
-        {
-            "kind": "connector",
-            "label": "I-66/I-495 interchange",
-            "price_usd": "0.00",
         },
     ]
 
@@ -600,21 +560,6 @@ def test_planner_reaches_the_greenway_from_i495():
     }
 
 
-def test_planner_uses_direct_junction_from_i495_south_to_i66_east():
-    plan = plan_toll_route(
-        "i495",
-        "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
-        "i66_itb",
-        "Fairfax Drive",
-    )
-    assert [step["label"] for step in plan["steps"] if step["kind"] == "connector"] == [
-        "I-66/I-495 interchange"
-    ]
-    assert plan["steps"][0]["destination"] == "187SD"
-    assert plan["steps"][-1]["origin"] == "5"
-    assert "routing_note" not in plan
-
-
 def test_planner_keeps_route_267_note_when_the_plan_uses_both_connectors():
     plan = plan_toll_route(
         "i66_itb",
@@ -630,6 +575,26 @@ def test_planner_keeps_route_267_note_when_the_plan_uses_both_connectors():
     assert plan["routing_note"] == (
         "Route 267 detour; not a direct I-66/I-495 connection"
     )
+
+
+@pytest.mark.parametrize(
+    ("origin_corridor", "origin", "destination_corridor", "destination"),
+    [
+        (
+            "i66_itb",
+            "Route 267 - Dulles Toll Road",
+            "i495",
+            "Jones Branch Drive/Route 123",
+        ),
+        ("i495", "Braddock Road", "i66_itb", "I-495 S"),
+    ],
+)
+def test_planner_rejects_routes_that_reuse_a_connector(
+    origin_corridor, origin, destination_corridor, destination
+):
+    plan = plan_toll_route(origin_corridor, origin, destination_corridor, destination)
+
+    assert plan["error"].startswith("no oracle-supported directed route connects")
 
 
 def test_planner_matches_exhaustive_directed_oracle_reachability():
@@ -672,6 +637,12 @@ def test_planner_matches_exhaustive_directed_oracle_reachability():
                         plan,
                     )
                     if expected:
+                        connectors = [
+                            step["label"]
+                            for step in plan["steps"]
+                            if step["kind"] == "connector"
+                        ]
+                        assert len(connectors) == len(set(connectors)), plan
                         _assert_plan_is_continuous(
                             origin_corridor,
                             origin,
@@ -777,6 +748,7 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert re.search(r"ISO 8601 with an\s+explicit Eastern UTC offset", prompt)
     assert "calculated Dulles total" in prompt
     assert "empty dulles_route tolls list means no toll applies" in prompt
+    assert "never list its $0.00 sentinel as a billed fare" in prompt
     assert "private reasoning or narrate tool-call deliberation" in prompt
 
 
@@ -819,12 +791,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.8.0"
-    advanced["system_prompt"]["releases"]["1.8.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.9.0"
+    advanced["system_prompt"]["releases"]["1.9.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
-    advanced["system_prompt"]["current"] = "1.6.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.7\.0"):
+    advanced["system_prompt"]["current"] = "1.7.0"
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.8\.0"):
         validate_manifest_update(previous, advanced)
 
 

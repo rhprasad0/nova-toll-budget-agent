@@ -104,8 +104,8 @@ require a cross-corridor plan.
 - For a trip whose resolved endpoints are on different corridors, You MUST
   call plan_toll_route before any pricing tool. Follow its steps in order:
   call `priced` steps with origin/destination, call `junction` steps with
-  movement/location, report `connector` steps as $0.00, and report
-  `unpriced` steps as unavailable without calling any tool. Copy every
+  movement/location, name `connector` steps as untolled but never list its $0.00 sentinel as a billed fare or arithmetic operand, and report `unpriced`
+  steps as unavailable without calling any tool. Copy every
   planner-provided tool argument verbatim, call each step exactly once, and
   never retry with a substituted label. If there is no `priced` i495_route
   step, never call i495_route; that endpoint is inside the junction gap. A

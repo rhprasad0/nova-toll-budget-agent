@@ -157,8 +157,8 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.7.0"
-TOOLSET_VERSION = "1.0.0"
+SYSTEM_PROMPT_VERSION = "1.8.0"
+TOOLSET_VERSION = "1.1.0"
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -574,6 +574,12 @@ def _planned_steps(
             ]
 
         for transfer in NETWORK_TRANSFERS:
+            if any(
+                step.get("kind") == "connector"
+                and step.get("label") == transfer["connector"]
+                for step in steps
+            ):
+                continue
             source = transfer["from"]
             if corridor == source["corridor"] and _same_location(
                 corridor, point, source["node_id"]
@@ -597,6 +603,7 @@ def _planned_steps(
                         *priced_steps,
                         {
                             "kind": "connector",
+                            "transfer_id": transfer["id"],
                             "label": transfer["connector"],
                             "price_usd": "0.00",
                         },
@@ -622,9 +629,11 @@ def plan_toll_route(
 
     Use exact corridor IDs and oracle labels or node IDs. Returns normalized
     ``at_time`` and ordered steps: call each ``priced`` or ``junction`` step
-    once with its returned arguments, report ``connector`` steps as $0, and
-    do not call a tool for ``unpriced`` steps. On error, no supported directed
-    route exists and no pricing tool should be called.
+    once with its returned arguments, use each connector step's
+    ``transfer_id`` to identify its directed transfer, and do not call a tool
+    for ``connector`` or ``unpriced`` steps. A connector's ``price_usd`` is an
+    untolled planning sentinel, not a billed fare. On error, no supported
+    directed route exists and no pricing tool should be called.
 
     Args:
         origin_corridor: Exact origin corridor ID from the priced location oracle.

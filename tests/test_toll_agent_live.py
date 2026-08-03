@@ -498,13 +498,19 @@ def test_agent_follows_every_network_boundary(
         assert "error" in last_result, str(response)
 
     if _case == "i66-west-to-i495-north-direct":
+        [connector] = [step for step in plan["steps"] if step["kind"] == "connector"]
+        assert connector["transfer_id"] == "i66_to_i495_north"
         [i66_result] = _tool_results(response, "i66_route")
         [i495_result] = _tool_results(response, "i495_route")
         i66_fare = i66_result["total_usd"]
         i495_fare = i495_result["total_usd"]
         total = Decimal(i66_fare) + Decimal(i495_fare)
-        assert f"${i66_fare} + ${i495_fare} = ${total:.2f}" in str(response)
-        assert "I-66/I-495" in str(response)
+        answer = str(response)
+        assert f"${i66_fare} + ${i495_fare} = ${total:.2f}" in answer.replace("**", "")
+        assert "I-66/I-495" in answer
+        assert not any(
+            "I-66/I-495" in line and "$0.00" in line for line in answer.splitlines()
+        )
 
 
 @pytest.mark.parametrize(
