@@ -158,13 +158,6 @@ def evaluate_junction_calls(
     calls: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
     """Grade exact ordered calls and their captured results."""
-    if (
-        metadata["id"] == "junction-alias-control"
-        and calls
-        and calls[0].get("name") == "plan_toll_route"
-        and (_tool_result(calls[0]) or {}).get("error")
-    ):
-        calls = calls[1:]
     names = [str(call.get("name")) for call in calls]
     if "i95_route" in names:
         return _result(
@@ -550,7 +543,8 @@ def _self_check() -> None:
     ]
     recovered_metadata = {**metadata, "id": "junction-alias-control"}
     assert (
-        evaluate_junction_calls(recovered, recovered_metadata)[0].label == "junction_ok"
+        evaluate_junction_calls(recovered, recovered_metadata)[0].label
+        == "tool_sequence"
     )
     assert evaluate_junction_response(response, calls, metadata)[0].label == "grounded"
 

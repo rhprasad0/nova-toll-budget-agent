@@ -291,13 +291,15 @@ def evaluate_junction_calls(
     return _result(True, "ordered junction trace is grounded", "trace_grounded")
 
 
-def _fare_items(calls: list[dict[str, Any]]) -> list[tuple[str, Decimal]]:
-    items: list[tuple[str, Decimal]] = []
+def _fare_items(
+    calls: list[dict[str, Any]],
+) -> list[tuple[str, Decimal, str | None]]:
+    items: list[tuple[str, Decimal, str | None]] = []
     for call in calls[1:]:
         result = _tool_result(call) or {}
         if call.get("name") == "dulles_route":
             items.extend(
-                (str(toll["label"]), Decimal(str(toll["price_usd"])))
+                (str(toll["label"]), Decimal(str(toll["price_usd"])), None)
                 for toll in result.get("tolls", [])
             )
         else:
@@ -307,6 +309,11 @@ def _fare_items(calls: list[dict[str, Any]]) -> list[tuple[str, Decimal]]:
                 (
                     f"{entry.get('label', '')} -> {exit_.get('label', '')}",
                     Decimal(str(result["total_usd"])),
+                    (
+                        "I-66"
+                        if call.get("name") == "i66_route"
+                        else "I-495 Express Lanes"
+                    ),
                 )
             )
     return items
@@ -458,7 +465,7 @@ def evaluate_junction_response(
 
     fare_items = _fare_items(calls)
     grounded_money_lines: set[int] = set()
-    for label, fare in fare_items:
+    for label, fare, facility in fare_items:
         expected_exit: str | None = None
         location_terms: tuple[str, ...] | None = None
         if " -> " in label:
@@ -466,6 +473,7 @@ def evaluate_junction_response(
             term_sets = (
                 _route_labels(entry),
                 _route_labels(exit_),
+                (cast(str, facility),),
                 (f"${fare:.2f}",),
             )
         elif label.casefold().startswith(("entrance ramp at ", "exit ramp at ")):
@@ -516,7 +524,7 @@ def evaluate_junction_response(
             )
         grounded_money_lines.update(matching_lines)
 
-    fares = [fare for _, fare in fare_items]
+    fares = [fare for _, fare, _ in fare_items]
     total = sum(fares, Decimal(0))
     calculation_lines = [
         index
@@ -659,7 +667,7 @@ def fixture_calls(metadata: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _good_response(calls: list[dict[str, Any]], metadata: dict[str, Any]) -> str:
     items = _fare_items(calls)
-    fares = [fare for _, fare in items]
+    fares = [fare for _, fare, _ in items]
     total = sum(fares, Decimal(0))
     lines = ["## Route and fares"]
     for index, (call, expected) in enumerate(
@@ -680,9 +688,14 @@ def _good_response(calls: list[dict[str, Any]], metadata: dict[str, Any]) -> str
                 for toll in result.get("tolls", [])
             )
         else:
+            facility = (
+                "I-66 Inside-the-Beltway Express Lanes"
+                if call.get("name") == "i66_route"
+                else "I-495 Express Lanes"
+            )
             lines.append(
                 f"- {entry} -> {exit_}, {direction}: "
-                f"${Decimal(str(result['total_usd'])):.2f}"
+                f"{facility}: ${Decimal(str(result['total_usd'])):.2f}"
             )
         if index == 0:
             lines.append(
@@ -758,6 +771,18 @@ def _self_check() -> None:
         )
 
     metadata, calls, response = prepared[0]
+    for expected_facility, wrong_facility in (
+        ("I-66 Inside-the-Beltway Express Lanes", "I-95 Express Lanes"),
+        ("I-495 Express Lanes", "I-95 Express Lanes"),
+    ):
+        wrong_facility_response = response.replace(expected_facility, wrong_facility, 1)
+        assert wrong_facility_response != response
+        assert (
+            evaluate_junction_response(wrong_facility_response, calls, metadata)[
+                0
+            ].label
+            == "item_missing"
+        )
     assert evaluate_junction_calls(calls[1:], metadata)[0].label == "tool_sequence"
     wrong_time = json.loads(json.dumps(calls))
     wrong_time[1]["input"]["at_time"] = "wrong"
