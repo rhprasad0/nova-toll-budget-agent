@@ -94,7 +94,7 @@ def main() -> None:
 
 def _self_check() -> None:
     rows = load_rows()
-    assert len(rows) == 4
+    assert len(rows) == 5
     assert {row["expected_trajectory"][0]["calls"][0]["tool"] for row in rows} == {
         "plan_toll_route",
         "i66_route",

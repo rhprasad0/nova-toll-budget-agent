@@ -227,6 +227,35 @@ def test_dtr_mainline_only_trip_omits_free_ramps():
     ]
 
 
+def test_i66_junction_starts_dtr_billing_at_the_mainline_plaza():
+    westbound = dulles_route(
+        "I-66 / Dulles Toll Road junction",
+        "Exit 13 - SR 828 (Wiehle Ave)",
+    )
+    eastbound = dulles_route(
+        "Exit 13 - SR 828 (Wiehle Ave)",
+        "I-66 / Dulles Toll Road junction",
+    )
+
+    assert westbound["legs"][0]["entry"] == {
+        "node_id": "66",
+        "label": "I-66 / Dulles Toll Road junction",
+    }
+    assert [(toll["label"], toll["price_usd"]) for toll in westbound["tolls"]] == [
+        ("Mainline plaza", "4.00"),
+        ("Exit ramp at Exit 13 - SR 828 (Wiehle Ave)", "2.00"),
+    ]
+    assert [(toll["label"], toll["price_usd"]) for toll in eastbound["tolls"]] == [
+        ("Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)", "2.00"),
+        ("Mainline plaza", "4.00"),
+    ]
+
+
+def test_i66_junction_to_beltway_is_untolled_in_both_directions():
+    assert dulles_route("66", "1819")["tolls"] == []
+    assert dulles_route("1819", "66")["tolls"] == []
+
+
 def test_dtr_toll_free_trip_returns_an_empty_charge_list():
     result = dulles_route(
         "Route 28 (Dulles Toll Road / Dulles Greenway)",

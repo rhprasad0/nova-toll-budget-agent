@@ -84,6 +84,12 @@ DTR_NODES = [
         DTR_FREE_USD,
         DTR_FREE_USD,
     ),
+    (
+        "66",
+        "I-66 / Dulles Toll Road junction",
+        DTR_FREE_USD,
+        DTR_FREE_USD,
+    ),
 ]
 DTR_MAINLINE_AFTER_INDEX = (
     6  # nodes[0..6] are west of the mainline plaza, nodes[7..] east of it
@@ -160,6 +166,8 @@ def _dtr_oracle() -> JsonObject:
             "trip. Exit 16's ramp toll applies to the eastbound exit only "
             "(quoted from source); the westbound movement there is free. "
             "No time-of-day variation on this facility."
+            " The I-66 / Dulles Toll Road junction is a virtual, bidirectional "
+            "routing boundary confirmed by the user, not a toll collection point."
         ),
         "nodes": nodes,
         "pairs": _dtr_pairs(),

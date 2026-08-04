@@ -109,9 +109,20 @@
     "WB"
    ],
    "label": "Route 28 (Dulles Toll Road / Dulles Greenway)"
+  },
+  "66": {
+   "entry_in": [
+    "EB",
+    "WB"
+   ],
+   "exit_in": [
+    "EB",
+    "WB"
+   ],
+   "label": "I-66 / Dulles Toll Road junction"
   }
  },
- "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Mainline toll ($4.00) crosses between Exit 16 and Exit 17; ramp toll ($2.00) applies per tolled interchange used, additive with the mainline toll -- two independently confirmed sources agree on a $6.00 total for a typical mainline-crossing single-ramp trip. Exit 16's ramp toll applies to the eastbound exit only (quoted from source); the westbound movement there is free. No time-of-day variation on this facility.",
+ "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Mainline toll ($4.00) crosses between Exit 16 and Exit 17; ramp toll ($2.00) applies per tolled interchange used, additive with the mainline toll -- two independently confirmed sources agree on a $6.00 total for a typical mainline-crossing single-ramp trip. Exit 16's ramp toll applies to the eastbound exit only (quoted from source); the westbound movement there is free. No time-of-day variation on this facility. The I-66 / Dulles Toll Road junction is a virtual, bidirectional routing boundary confirmed by the user, not a toll collection point.",
  "pairs": [
   {
    "charges": [
@@ -228,6 +239,18 @@
   {
    "charges": [
     {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "28",
+   "exit": "66"
+  },
+  {
+   "charges": [
+    {
      "label": "Entrance ramp at Exit 10 - SR 657",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -377,6 +400,23 @@
    "direction": "EB",
    "entry": "10",
    "exit": "1819"
+  },
+  {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "10",
+   "exit": "66"
   },
   {
    "charges": [
@@ -534,6 +574,23 @@
   {
    "charges": [
     {
+     "label": "Entrance ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "11",
+   "exit": "66"
+  },
+  {
+   "charges": [
+    {
      "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -683,6 +740,23 @@
    "direction": "EB",
    "entry": "12",
    "exit": "1819"
+  },
+  {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "12",
+   "exit": "66"
   },
   {
    "charges": [
@@ -840,6 +914,23 @@
   {
    "charges": [
     {
+     "label": "Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "13",
+   "exit": "66"
+  },
+  {
+   "charges": [
+    {
      "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -989,6 +1080,23 @@
    "direction": "EB",
    "entry": "14",
    "exit": "1819"
+  },
+  {
+   "charges": [
+    {
+     "label": "Entrance ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "14",
+   "exit": "66"
   },
   {
    "charges": [],
@@ -1101,6 +1209,18 @@
    "direction": "EB",
    "entry": "15",
    "exit": "1819"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "15",
+   "exit": "66"
   },
   {
    "charges": [
@@ -1243,6 +1363,18 @@
   {
    "charges": [
     {
+     "label": "Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "16",
+   "exit": "66"
+  },
+  {
+   "charges": [
+    {
      "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1411,6 +1543,18 @@
   {
    "charges": [
     {
+     "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "17",
+   "exit": "66"
+  },
+  {
+   "charges": [
+    {
      "label": "Mainline plaza",
      "price_off_peak_usd": "4.00",
      "price_peak_usd": "4.00"
@@ -1534,6 +1678,145 @@
    "direction": "WB",
    "entry": "1819",
    "exit": "17"
+  },
+  {
+   "charges": [],
+   "direction": "EB",
+   "entry": "1819",
+   "exit": "66"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "28"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 10 - SR 657",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "10"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "11"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "12"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "13"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    },
+    {
+     "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "14"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "15"
+  },
+  {
+   "charges": [],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "16"
+  },
+  {
+   "charges": [
+    {
+     "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "17"
+  },
+  {
+   "charges": [],
+   "direction": "WB",
+   "entry": "66",
+   "exit": "1819"
   }
  ],
  "retrieved_at": "2026-07-26",

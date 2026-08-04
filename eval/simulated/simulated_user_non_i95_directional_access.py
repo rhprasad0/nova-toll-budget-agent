@@ -44,9 +44,10 @@ _DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 def load_cases() -> list[Case[str, str]]:
     cases: list[Case[str, str]] = []
-    # The cross-corridor and direct I-66 cases cover both complete replanning
-    # and same-tool recovery; the deterministic suite covers all corridors.
-    for row in load_rows()[:2]:
+    # The two cross-corridor telemetry regressions cover complete replanning;
+    # the deterministic suite covers direct-tool and remaining corridors.
+    rows = load_rows()
+    for row in (rows[0], rows[-1]):
         selected = row["expected_mismatch"]["constraint"]["nearby_options"][0]
         cases.append(
             Case(
@@ -69,9 +70,11 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
         traits={"communication_style": "concise and direct"},
         context=f"You are a driver. The only acceptable replacement is {selected!r}.",
         actor_goal=(
-            "After the agent explains the fixed "
-            f"directional restriction, say 'Use {selected} instead.' Then confirm "
-            "that it kept the other endpoint. Do not propose another route."
+            "The conversation is incomplete until the agent prices the recovered "
+            "trip. After it explains the fixed directional restriction, reply "
+            f"exactly 'Use {selected} instead.' Then confirm that it kept the "
+            "other endpoint. Never stop after the first response or propose "
+            "another route."
         ),
     )
 
@@ -170,13 +173,14 @@ def _self_check() -> None:
     assert all((case.metadata or {}).get("selected_alternative") for case in cases)
     assert all(
         "fixed directional restriction" in build_actor_profile(case).actor_goal
+        and "incomplete until" in build_actor_profile(case).actor_goal
         for case in cases
     )
     bad = RecoveryTraceEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )
     assert bad[0].label == "bad_trajectory"
-    print("self-check ok (two simulated recovery profiles; no network)")
+    print("self-check ok (two cross-corridor recovery profiles; no network)")
 
 
 if __name__ == "__main__":

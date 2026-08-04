@@ -190,7 +190,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.14.0"
+SYSTEM_PROMPT_VERSION = "1.15.0"
 TOOLSET_VERSION = "1.4.0"
 
 
@@ -369,26 +369,26 @@ NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
         },
         "to": {
             "corridor": "dulles_toll_road",
-            "entry": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
-            "node_id": "1819",
+            "entry": "I-66 / Dulles Toll Road junction",
+            "node_id": "66",
         },
-        "connector": "Dulles Connector Road",
-        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 6 and 1819",
+        "connector": "I-66 / Dulles Toll Road junction",
+        "evidence": "curated shared boundary confirmed by the user; oracle endpoints are nodes 6 and 66",
     },
     {
         "id": "dulles_toll_road_to_i66",
         "from": {
             "corridor": "dulles_toll_road",
-            "exit": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
-            "node_id": "1819",
+            "exit": "I-66 / Dulles Toll Road junction",
+            "node_id": "66",
         },
         "to": {
             "corridor": "i66_itb",
             "entry": "Route 267 - Dulles Toll Road",
             "node_id": "6",
         },
-        "connector": "Dulles Connector Road",
-        "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 6",
+        "connector": "I-66 / Dulles Toll Road junction",
+        "evidence": "curated shared boundary confirmed by the user; oracle endpoints are nodes 66 and 6",
     },
 ]
 
@@ -402,7 +402,7 @@ _CROSS_I95_HANDOFF = "Franconia-Springfield Parkway/Route 289"
 _I495_JUNCTION_ENTRY = "191NO"
 _I495_JUNCTION_EXIT = "191SD"
 _ROUTE_267_DETOUR_CONNECTORS = {
-    "Dulles Connector Road",
+    "I-66 / Dulles Toll Road junction",
     "I-495/Route 267 interchange",
 }
 
@@ -585,7 +585,7 @@ def _planned_steps(
             return steps
         direct = _route_lookup(corridor, point, destination_corridor, destination)
         if direct.get("status") == "one_way_mismatch":
-            mismatch = mismatch or direct
+            mismatch = direct
         elif "error" not in direct and direct.get("ok", True):
             return [*steps, _priced_step(corridor, point, destination)]
         if (
@@ -643,10 +643,16 @@ def _planned_steps(
                 corridor, point, source["node_id"]
             ):
                 priced_steps = []
-            elif _can_price(corridor, point, source["corridor"], source["node_id"]):
-                priced_steps = [_priced_step(corridor, point, source["node_id"])]
             else:
-                continue
+                source_route = _route_lookup(
+                    corridor, point, source["corridor"], source["node_id"]
+                )
+                if source_route.get("status") == "one_way_mismatch":
+                    mismatch = mismatch or source_route
+                    continue
+                if "error" in source_route or not source_route.get("ok", True):
+                    continue
+                priced_steps = [_priced_step(corridor, point, source["node_id"])]
 
             target = transfer["to"]
             state = (target["corridor"], target["node_id"])

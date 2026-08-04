@@ -65,7 +65,7 @@ def test_map_uses_token_free_pinned_maplibre_and_stays_accessible() -> None:
     page = SITE.read_text()
     assert 'id="coverage-map"' in page
     assert 'aria-label="Interactive TollChat coverage map"' in page
-    assert "144 supported entry and exit nodes" in page
+    assert "145 supported entry and exit nodes" in page
     assert 'href="/assets/maplibre-gl-6.0.0/maplibre-gl.css"' in page
     assert 'import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs")' in page
     assert "setWorkerUrl" not in page
