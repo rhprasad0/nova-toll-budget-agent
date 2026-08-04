@@ -24,6 +24,7 @@ The runner uses OpenAI for TollChat, a deterministic scripted user,
 SSM-backed configuration, and read-only RDS pricing. A deterministic trace
 evaluator is the only judge. It runs three cases with exactly two agent turns
 each and writes a timestamped report to `eval/results/`. The agent remains
-stochastic; one observation is evidence, not proof of future responses.
+stochastic; one observation is evidence, not proof of future responses. Any
+failed deterministic verdict makes the runner exit nonzero.
 
 Ordinary CI runs only `--check`. The paid live suite runs nightly.

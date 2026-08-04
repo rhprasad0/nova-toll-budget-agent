@@ -219,6 +219,13 @@ class MissingParameterTraceEvaluator(Evaluator[str, str]):
         return evaluate_turns(_ordered_turns(session), evaluation_case.metadata or {})
 
 
+def _raise_for_failed_verdicts(test_passes: list[bool]) -> None:
+    failed = test_passes.count(False)
+    if failed:
+        suffix = "" if failed == 1 else "s"
+        raise RuntimeError(f"{failed} deterministic evaluation verdict{suffix} failed")
+
+
 def main() -> None:
     configure_local_pricing_env()
     telemetry, mapper = build_telemetry()
@@ -245,9 +252,18 @@ def main() -> None:
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
     raise_for_evaluation_errors(report)
+    _raise_for_failed_verdicts(report.test_passes)
 
 
 def _self_check() -> None:
+    _raise_for_failed_verdicts([True, True])
+    try:
+        _raise_for_failed_verdicts([True, False])
+    except RuntimeError as error:
+        assert str(error) == "1 deterministic evaluation verdict failed"
+    else:
+        raise AssertionError("failed verdict did not raise")
+
     cases = load_cases()
     assert len(cases) == 3
     assert len({case.name for case in cases}) == 3
