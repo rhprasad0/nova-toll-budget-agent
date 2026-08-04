@@ -35,6 +35,7 @@ jobs:
       - run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py --check
       - run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py --check
       - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py --check
+      - run: uv run python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py --check
       - run: uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
       - run: uv run python eval/simulated/simulated_user_i95_one_way_access.py --check
       - run: uv run python eval/simulated/simulated_user_single_leg_base_cases.py --check

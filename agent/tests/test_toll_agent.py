@@ -940,12 +940,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.13.0"
-    advanced["system_prompt"]["releases"]["1.13.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.14.0"
+    advanced["system_prompt"]["releases"]["1.14.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.12\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.13\.0"):
         validate_manifest_update(previous, advanced)
 
 
