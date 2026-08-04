@@ -17,6 +17,7 @@ not curated.
 | [`20260804T211001Z.json`](20260804T211001Z.json) | Reciprocal I-66 / Dulles Toll Road trips split at the shared untolled junction | Code-graded live planner trajectory and response wording | 1.0000 overall; 2/2 cases passed; plaza billing preserved |
 | [`20260804T211034Z.json`](20260804T211034Z.json) | Fixed directional access plus Glebe-to-Wiehle cross-corridor recovery | Deterministic trace and response grading | 1.0000 overall; 5/5 cases passed; 0 execution errors |
 | [`20260804T211601Z.json`](20260804T211601Z.json) | Westpark-to-Scott and Glebe-to-Wiehle multi-turn alternative selection | Simulated-user trace grading plus goal-success and helpfulness judges | 0.9443 overall; 6/6 judgments passed; 0 execution errors |
+| [`20260804T214919Z.json`](20260804T214919Z.json) | Missing origin, destination, or both before an I-495 quote | Scripted user with deterministic trace grading | 1.0000 overall; 6/6 verdicts passed; 0 execution errors |
 
 The repaired run found exactly one raw `i95_route` execution per case, kept
 every actor on its assigned route and time, and used response-only LLM
@@ -43,3 +44,7 @@ Glebe-to-Wiehle request. Both simulated drivers selected Fairfax Drive and
 completed full cross-corridor replans without changing the other endpoint. The
 reciprocal junction run started or ended each Dulles leg at node `66`; the
 junction stayed out of billing while mainline and ramp charges remained intact.
+
+The missing-parameter run asked the exact question for all and only the absent
+endpoints, then made one matching `i495_route` call per case after the scripted
+user supplied the missing values. No LLM actor or judge participated.

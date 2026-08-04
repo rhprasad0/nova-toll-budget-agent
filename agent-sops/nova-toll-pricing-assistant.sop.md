@@ -28,12 +28,19 @@ or `August 3, 2026 at 3:00 PM ET`.
 
 **Constraints for parameter acquisition:**
 - If all required parameters are already provided, You MUST proceed to the Steps
-- If any required parameters are missing, You MUST ask for them before proceeding
-- When asking for parameters, You MUST request all parameters in a single prompt
-- When asking for parameters, You MUST use the exact parameter names as defined
+- If any required parameters are missing, You MUST respond with exactly one
+  clarifying question before proceeding. That question MUST use the exact
+  parameter names as defined and request every currently missing required
+  parameter together. You MUST NOT add anything else because the agent must wait
+  for complete required inputs; explanations, optional suggestions, and tool
+  calls are all extra content.
+- Use the one exact question matching the missing parameters: if only origin is
+  missing, ask exactly: "What is the origin?" If only destination is missing,
+  ask exactly: "What is the destination?" If both are missing, ask exactly:
+  "What are the origin and destination?"
 - "All parameters" above means every currently missing required parameter,
   together in one message. You MUST NOT re-request an origin or destination that was given because it was already supplied.
-  You MUST NOT ask the user to supply an at_time when it was omitted because at_time is optional. If
+  You MUST NOT mention, offer, suggest, or ask the user to supply an at_time because it was omitted and is optional. If
   the user supplied a relative or ambiguous at_time that cannot be resolved
   from available context, You MAY ask only for the missing date/time detail
   needed to resolve that value.

@@ -1,0 +1,957 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Can you tell me how much my toll trip will cost?",
+      "actual_output": "What are the origin and destination?\n\n\n## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.35**\n  - VDOT observed at: **8/4/2026 5:20 PM ET**\n\n## Calculation\n\n$1.35 = $1.35\n\n## Final price\n\n**$1.35**\n",
+      "name": "missing-both-simulated",
+      "expected_output": null,
+      "expected_assertion": "The first agent response asks exactly one clarification question for all and only these missing parameters: origin, destination. It does not call a tool, re-request a supplied endpoint, or ask for optional at_time. After the user supplies the missing information, it prices the fixed trip without guessing or changing either endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+                  "span_id": "e4e1a96fc2e05c2a",
+                  "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5",
+                  "parent_span_id": "a6e67db716264930",
+                  "start_time": "2026-08-04T21:48:57.319822Z",
+                  "end_time": "2026-08-04T21:49:01.618534Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can you tell me how much my toll trip will cost?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "What are the origin and destination?"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+                  "span_id": "02d30d7a19f3c9e3",
+                  "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5",
+                  "parent_span_id": "1655b722d9284e8f",
+                  "start_time": "2026-08-04T21:48:57.317168Z",
+                  "end_time": "2026-08-04T21:49:01.618988Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can you tell me how much my toll trip will cost?",
+                "agent_response": "What are the origin and destination?\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+                  "span_id": "82ad7b77e9dd3ad2",
+                  "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5",
+                  "parent_span_id": "01a7d130c8fea818",
+                  "start_time": "2026-08-04T21:49:01.621902Z",
+                  "end_time": "2026-08-04T21:49:03.301265Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "My origin is Jones Branch Drive/Route 123 and my destination is Westpark Drive."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Jones Branch Drive/Route 123",
+                          "destination": "Westpark Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_jdYGaOhyx7m5XmfRpgKfOH1r",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+                  "span_id": "b6c40bb7bda96e67",
+                  "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5",
+                  "parent_span_id": "01a7d130c8fea818",
+                  "start_time": "2026-08-04T21:49:03.301673Z",
+                  "end_time": "2026-08-04T21:49:03.940898Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "Jones Branch Drive/Route 123",
+                    "destination": "Westpark Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_jdYGaOhyx7m5XmfRpgKfOH1r"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.35\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T17:30:00-04:00\", \"observed_at\": \"2026-08-04T17:20:00-04:00\"}], \"at_time\": \"2026-08-04T17:49:03.302130-04:00\", \"total_usd\": \"1.35\"}",
+                  "error": null,
+                  "tool_call_id": "call_jdYGaOhyx7m5XmfRpgKfOH1r"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+                  "span_id": "acc3693d680ef8dc",
+                  "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5",
+                  "parent_span_id": "f6bdb44159bd35d4",
+                  "start_time": "2026-08-04T21:49:03.943503Z",
+                  "end_time": "2026-08-04T21:49:05.518744Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "My origin is Jones Branch Drive/Route 123 and my destination is Westpark Drive."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Jones Branch Drive/Route 123",
+                          "destination": "Westpark Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_jdYGaOhyx7m5XmfRpgKfOH1r",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.35\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T17:30:00-04:00\", \"observed_at\": \"2026-08-04T17:20:00-04:00\"}], \"at_time\": \"2026-08-04T17:49:03.302130-04:00\", \"total_usd\": \"1.35\"}",
+                        "error": null,
+                        "tool_call_id": "call_jdYGaOhyx7m5XmfRpgKfOH1r",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.35**\n  - VDOT observed at: **8/4/2026 5:20 PM ET**\n\n## Calculation\n\n$1.35 = $1.35\n\n## Final price\n\n**$1.35**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+                  "span_id": "6bb587dbe8e0ba2a",
+                  "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5",
+                  "parent_span_id": "1655b722d9284e8f",
+                  "start_time": "2026-08-04T21:49:01.621082Z",
+                  "end_time": "2026-08-04T21:49:05.519774Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "My origin is Jones Branch Drive/Route 123 and my destination is Westpark Drive.",
+                "agent_response": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.35**\n  - VDOT observed at: **8/4/2026 5:20 PM ET**\n\n## Calculation\n\n$1.35 = $1.35\n\n## Final price\n\n**$1.35**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "306eed295a8fb41d7adbc2aad68796f3",
+            "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5"
+          }
+        ],
+        "session_id": "5f10e192-bceb-48ff-a452-d4b980fa47d5"
+      },
+      "metadata": {
+        "id": "missing-both",
+        "initial_message": "Can you tell me how much my toll trip will cost?",
+        "missing_parameters": [
+          "origin",
+          "destination"
+        ],
+        "origin": "Jones Branch Drive/Route 123",
+        "destination": "Westpark Drive",
+        "actor_reply": "My origin is Jones Branch Drive/Route 123 and my destination is Westpark Drive.",
+        "task_description": "Get a toll quote for the fixed trip after supplying only the genuinely missing required parameters: origin, destination."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "MissingParameterTraceEvaluator",
+      "evaluator_type": "MissingParameterTraceEvaluator"
+    },
+    {
+      "input": "How much will it cost to drive to Westpark Drive?",
+      "actual_output": "What is the origin?\n\n\n## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 Southbound, I-495 Express Lanes: **$1.35**\n  - VDOT observed at: 8/4/2026 5:20 PM ET\n\n## Calculation\n\n**$1.35 = $1.35**\n\n## Final price\n\n**$1.35**\n",
+      "name": "missing-origin-simulated",
+      "expected_output": null,
+      "expected_assertion": "The first agent response asks exactly one clarification question for all and only these missing parameters: origin. It does not call a tool, re-request a supplied endpoint, or ask for optional at_time. After the user supplies the missing information, it prices the fixed trip without guessing or changing either endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+                  "span_id": "1fa8ccd5999f0efe",
+                  "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b",
+                  "parent_span_id": "369d642927c35f41",
+                  "start_time": "2026-08-04T21:49:05.658600Z",
+                  "end_time": "2026-08-04T21:49:06.572181Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "How much will it cost to drive to Westpark Drive?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "What is the origin?"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+                  "span_id": "0c737a9c525a8632",
+                  "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b",
+                  "parent_span_id": "b8aa1808e8062f9b",
+                  "start_time": "2026-08-04T21:49:05.656261Z",
+                  "end_time": "2026-08-04T21:49:06.573052Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "How much will it cost to drive to Westpark Drive?",
+                "agent_response": "What is the origin?\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+                  "span_id": "faddac916d0f4563",
+                  "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b",
+                  "parent_span_id": "e056d5b3d6fbf49c",
+                  "start_time": "2026-08-04T21:49:06.580521Z",
+                  "end_time": "2026-08-04T21:49:08.474934Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "My origin is Jones Branch Drive/Route 123."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Jones Branch Drive/Route 123",
+                          "destination": "Westpark Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_vRljsL01Ko8XlUzbNOFGvtpR",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+                  "span_id": "86685d2c6294d6e8",
+                  "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b",
+                  "parent_span_id": "e056d5b3d6fbf49c",
+                  "start_time": "2026-08-04T21:49:08.475763Z",
+                  "end_time": "2026-08-04T21:49:08.821923Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "Jones Branch Drive/Route 123",
+                    "destination": "Westpark Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_vRljsL01Ko8XlUzbNOFGvtpR"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.35\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T17:30:00-04:00\", \"observed_at\": \"2026-08-04T17:20:00-04:00\"}], \"at_time\": \"2026-08-04T17:49:08.477090-04:00\", \"total_usd\": \"1.35\"}",
+                  "error": null,
+                  "tool_call_id": "call_vRljsL01Ko8XlUzbNOFGvtpR"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+                  "span_id": "f1fd0eeae741d8ab",
+                  "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b",
+                  "parent_span_id": "41dfd686d9cc8f38",
+                  "start_time": "2026-08-04T21:49:08.824354Z",
+                  "end_time": "2026-08-04T21:49:10.249689Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "My origin is Jones Branch Drive/Route 123."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Jones Branch Drive/Route 123",
+                          "destination": "Westpark Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_vRljsL01Ko8XlUzbNOFGvtpR",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.35\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T17:30:00-04:00\", \"observed_at\": \"2026-08-04T17:20:00-04:00\"}], \"at_time\": \"2026-08-04T17:49:08.477090-04:00\", \"total_usd\": \"1.35\"}",
+                        "error": null,
+                        "tool_call_id": "call_vRljsL01Ko8XlUzbNOFGvtpR",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 Southbound, I-495 Express Lanes: **$1.35**\n  - VDOT observed at: 8/4/2026 5:20 PM ET\n\n## Calculation\n\n**$1.35 = $1.35**\n\n## Final price\n\n**$1.35**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+                  "span_id": "092b7a0f106935eb",
+                  "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b",
+                  "parent_span_id": "b8aa1808e8062f9b",
+                  "start_time": "2026-08-04T21:49:06.578220Z",
+                  "end_time": "2026-08-04T21:49:10.250613Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "My origin is Jones Branch Drive/Route 123.",
+                "agent_response": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 Southbound, I-495 Express Lanes: **$1.35**\n  - VDOT observed at: 8/4/2026 5:20 PM ET\n\n## Calculation\n\n**$1.35 = $1.35**\n\n## Final price\n\n**$1.35**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "97fb54516f055d3c02a8c69d80d3a0d2",
+            "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b"
+          }
+        ],
+        "session_id": "8ea019aa-79f4-4cd2-b8b3-8bb038f67b0b"
+      },
+      "metadata": {
+        "id": "missing-origin",
+        "initial_message": "How much will it cost to drive to Westpark Drive?",
+        "missing_parameters": [
+          "origin"
+        ],
+        "origin": "Jones Branch Drive/Route 123",
+        "destination": "Westpark Drive",
+        "actor_reply": "My origin is Jones Branch Drive/Route 123.",
+        "task_description": "Get a toll quote for the fixed trip after supplying only the genuinely missing required parameters: origin."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "MissingParameterTraceEvaluator",
+      "evaluator_type": "MissingParameterTraceEvaluator"
+    },
+    {
+      "input": "How much will it cost to drive from Jones Branch Drive/Route 123?",
+      "actual_output": "What is the destination?\n\n\n## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.35**\n  - VDOT observed at: **8/4/2026 5:20 PM ET**\n\n## Calculation\n\n**$1.35 = $1.35**\n\n## Final price\n\n**$1.35**\n",
+      "name": "missing-destination-simulated",
+      "expected_output": null,
+      "expected_assertion": "The first agent response asks exactly one clarification question for all and only these missing parameters: destination. It does not call a tool, re-request a supplied endpoint, or ask for optional at_time. After the user supplies the missing information, it prices the fixed trip without guessing or changing either endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+                  "span_id": "b6b48e88afdfc70b",
+                  "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed",
+                  "parent_span_id": "30a89e3033be72fd",
+                  "start_time": "2026-08-04T21:49:10.386453Z",
+                  "end_time": "2026-08-04T21:49:11.744211Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "How much will it cost to drive from Jones Branch Drive/Route 123?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "What is the destination?"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+                  "span_id": "c6965cfac28beb18",
+                  "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed",
+                  "parent_span_id": "dee2e08e8c129635",
+                  "start_time": "2026-08-04T21:49:10.384224Z",
+                  "end_time": "2026-08-04T21:49:11.744502Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "How much will it cost to drive from Jones Branch Drive/Route 123?",
+                "agent_response": "What is the destination?\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+                  "span_id": "f92bfae80e85e9de",
+                  "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed",
+                  "parent_span_id": "c4cc3fa2662d0490",
+                  "start_time": "2026-08-04T21:49:11.746885Z",
+                  "end_time": "2026-08-04T21:49:15.442363Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "My destination is Westpark Drive."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Jones Branch Drive/Route 123",
+                          "destination": "Westpark Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_v73cyMS0iZjd8m8DUL22kRz4",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+                  "span_id": "44509f136f86bb2f",
+                  "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed",
+                  "parent_span_id": "c4cc3fa2662d0490",
+                  "start_time": "2026-08-04T21:49:15.443146Z",
+                  "end_time": "2026-08-04T21:49:15.799494Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "Jones Branch Drive/Route 123",
+                    "destination": "Westpark Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_v73cyMS0iZjd8m8DUL22kRz4"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.35\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T17:30:00-04:00\", \"observed_at\": \"2026-08-04T17:20:00-04:00\"}], \"at_time\": \"2026-08-04T17:49:15.444360-04:00\", \"total_usd\": \"1.35\"}",
+                  "error": null,
+                  "tool_call_id": "call_v73cyMS0iZjd8m8DUL22kRz4"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+                  "span_id": "c342f01e54217e2a",
+                  "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed",
+                  "parent_span_id": "d63e110a475a1d86",
+                  "start_time": "2026-08-04T21:49:15.801829Z",
+                  "end_time": "2026-08-04T21:49:19.336436Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "My destination is Westpark Drive."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Jones Branch Drive/Route 123",
+                          "destination": "Westpark Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_v73cyMS0iZjd8m8DUL22kRz4",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.35\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T17:30:00-04:00\", \"observed_at\": \"2026-08-04T17:20:00-04:00\"}], \"at_time\": \"2026-08-04T17:49:15.444360-04:00\", \"total_usd\": \"1.35\"}",
+                        "error": null,
+                        "tool_call_id": "call_v73cyMS0iZjd8m8DUL22kRz4",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.35**\n  - VDOT observed at: **8/4/2026 5:20 PM ET**\n\n## Calculation\n\n**$1.35 = $1.35**\n\n## Final price\n\n**$1.35**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+                  "span_id": "689502dbe6b90da1",
+                  "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed",
+                  "parent_span_id": "dee2e08e8c129635",
+                  "start_time": "2026-08-04T21:49:11.746124Z",
+                  "end_time": "2026-08-04T21:49:19.337350Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "My destination is Westpark Drive.",
+                "agent_response": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.35**\n  - VDOT observed at: **8/4/2026 5:20 PM ET**\n\n## Calculation\n\n**$1.35 = $1.35**\n\n## Final price\n\n**$1.35**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "c07d6d62b0bd278a7deb46bfc0cf1e8f",
+            "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed"
+          }
+        ],
+        "session_id": "8a8c6b54-77df-4351-aeb8-a3b7a590f4ed"
+      },
+      "metadata": {
+        "id": "missing-destination",
+        "initial_message": "How much will it cost to drive from Jones Branch Drive/Route 123?",
+        "missing_parameters": [
+          "destination"
+        ],
+        "origin": "Jones Branch Drive/Route 123",
+        "destination": "Westpark Drive",
+        "actor_reply": "My destination is Westpark Drive.",
+        "task_description": "Get a toll quote for the fixed trip after supplying only the genuinely missing required parameters: destination."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "MissingParameterTraceEvaluator",
+      "evaluator_type": "MissingParameterTraceEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "first turn asks the exact question for only the missing parameters | second turn priced the fixed route exactly once",
+    "first turn asks the exact question for only the missing parameters | second turn priced the fixed route exactly once",
+    "first turn asks the exact question for only the missing parameters | second turn priced the fixed route exactly once"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "first turn asks the exact question for only the missing parameters",
+        "label": "parameter_request"
+      },
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "second turn priced the fixed route exactly once",
+        "label": "completed_route"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "first turn asks the exact question for only the missing parameters",
+        "label": "parameter_request"
+      },
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "second turn priced the fixed route exactly once",
+        "label": "completed_route"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "first turn asks the exact question for only the missing parameters",
+        "label": "parameter_request"
+      },
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "second turn priced the fixed route exactly once",
+        "label": "completed_route"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null
+  ]
+}
