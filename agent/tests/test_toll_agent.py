@@ -475,6 +475,13 @@ def test_planner_offers_entries_for_a_wrong_way_cross_corridor_origin():
     ]
 
 
+def test_planner_does_not_surface_an_internal_transfer_mismatch():
+    plan = plan_toll_route("i95", "US-1", "i66_itb", "I-66 West")
+
+    assert "status" not in plan
+    assert plan["error"].startswith("no oracle-supported directed route connects")
+
+
 def test_can_price_rejects_an_unconnected_i95_pair():
     assert not toll_agent_module._can_price(
         "i95", "US-1", "i95", "Courthouse Road/Route 630"
@@ -968,6 +975,7 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "VDOT observed at: <observed_at>" in prompt
     assert "exact decimal addition" in prompt
     assert "returned toll items" in prompt
+    assert "each toll item's returned facility" in prompt
     assert "direction returned by its tool" in prompt
     assert "Greenway leg whose returned rate period is not null" in prompt
     assert "single-corridor request, You MUST NOT call plan_toll_route" in prompt
@@ -1018,12 +1026,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.16.0"
-    advanced["system_prompt"]["releases"]["1.16.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.17.0"
+    advanced["system_prompt"]["releases"]["1.17.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.15\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.16\.0"):
         validate_manifest_update(previous, advanced)
 
 

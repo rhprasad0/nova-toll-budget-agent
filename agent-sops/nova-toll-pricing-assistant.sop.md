@@ -253,8 +253,9 @@ For a plan with no `junction` step, You MUST use these sections:
   instead.
 - Name I-95 legs as "I-95/395 Express Lanes" and I-495 legs as
   "I-495 Express Lanes".
-- For a dulles_route result, list each returned toll item's label and dollar
-  fare under its route leg instead of inventing a combined facility fare.
+- For a dulles_route result, You MUST name each toll item's returned facility
+  and list its label and dollar fare under the route leg instead of inventing
+  a combined facility fare.
 - For every Greenway leg whose returned rate period is not null, report it as
   "Rate period: <rate_period>".
 - An empty dulles_route tolls list means no toll applies; show $0.00.

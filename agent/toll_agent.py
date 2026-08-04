@@ -190,7 +190,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.15.0"
+SYSTEM_PROMPT_VERSION = "1.16.0"
 TOOLSET_VERSION = "1.4.0"
 
 
@@ -564,6 +564,42 @@ def _junction_step(movement: str, location: str) -> _oracle_route.JsonObject:
     }
 
 
+def _requested_endpoint_mismatch(
+    result: _oracle_route.JsonObject,
+    leg_origin: tuple[str, str],
+    leg_destination: tuple[str, str],
+    requested_origin: tuple[str, str],
+    requested_destination: tuple[str, str],
+) -> _oracle_route.JsonObject | None:
+    constraints = [
+        constraint
+        for constraint in result.get("constraints", [])
+        if (
+            constraint.get("role") == "entry"
+            and leg_origin[0] == requested_origin[0]
+            and _same_location(
+                leg_origin[0], constraint.get("location", ""), requested_origin[1]
+            )
+        )
+        or (
+            constraint.get("role") == "exit"
+            and leg_destination[0] == requested_destination[0]
+            and _same_location(
+                leg_destination[0],
+                constraint.get("location", ""),
+                requested_destination[1],
+            )
+        )
+    ]
+    if not constraints:
+        return None
+    return {
+        "status": "one_way_mismatch",
+        "direction": result["direction"],
+        "constraints": constraints,
+    }
+
+
 def _planned_steps(
     origin_corridor: str,
     origin: str,
@@ -585,7 +621,14 @@ def _planned_steps(
             return steps
         direct = _route_lookup(corridor, point, destination_corridor, destination)
         if direct.get("status") == "one_way_mismatch":
-            mismatch = direct
+            if requested := _requested_endpoint_mismatch(
+                direct,
+                (corridor, point),
+                (destination_corridor, destination),
+                (origin_corridor, origin),
+                (destination_corridor, destination),
+            ):
+                mismatch = requested
         elif "error" not in direct and direct.get("ok", True):
             return [*steps, _priced_step(corridor, point, destination)]
         if (
@@ -648,7 +691,14 @@ def _planned_steps(
                     corridor, point, source["corridor"], source["node_id"]
                 )
                 if source_route.get("status") == "one_way_mismatch":
-                    mismatch = mismatch or source_route
+                    requested = _requested_endpoint_mismatch(
+                        source_route,
+                        (corridor, point),
+                        (source["corridor"], source["node_id"]),
+                        (origin_corridor, origin),
+                        (destination_corridor, destination),
+                    )
+                    mismatch = mismatch or requested
                     continue
                 if "error" in source_route or not source_route.get("ok", True):
                     continue
