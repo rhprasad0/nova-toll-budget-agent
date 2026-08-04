@@ -41,3 +41,5 @@ agent-only telemetry, a fresh agent per case, and exactly two turns. Offline
   scripted user and exact trace grading after the authorized rerun exposed
   early actor termination, a false-positive code verdict, and a false-positive
   judge verdict.
+- 2026-08-04: the authorized post-fix live run passed all three cases and all
+  six deterministic verdicts with no execution errors; its report was curated.
