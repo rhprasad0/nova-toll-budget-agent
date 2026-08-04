@@ -42,6 +42,42 @@ _LOOKUPS = {
 }
 
 
+class _ScriptedPlannerModel(OpenAIResponsesModel):
+    """Drive one real planner call through Agent without a provider request."""
+
+    def __init__(self, tool_input):
+        super().__init__(model_id="test", client_args={"api_key": "test"})
+        self.tool_input = tool_input
+        self.requests = []
+
+    async def stream(self, messages, _tool_specs=None, _system_prompt=None, **_kwargs):
+        self.requests.append(deepcopy(messages))
+        yield {"messageStart": {"role": "assistant"}}
+        if len(self.requests) == 1:
+            yield {
+                "contentBlockStart": {
+                    "start": {
+                        "toolUse": {
+                            "toolUseId": "plan",
+                            "name": "plan_toll_route",
+                        }
+                    }
+                }
+            }
+            yield {
+                "contentBlockDelta": {
+                    "delta": {"toolUse": {"input": json.dumps(self.tool_input)}}
+                }
+            }
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+        else:
+            yield {"contentBlockStart": {"start": {}}}
+            yield {"contentBlockDelta": {"delta": {"text": "planned"}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+
 def _contract_manifest():
     return json.loads(_CONTRACT_MANIFEST_PATH.read_text())
 
@@ -181,6 +217,80 @@ def test_system_prompt_describes_curated_network_transfers():
     assert "Resolve from travel direction and endpoint role" in prompt
     assert "call each step exactly once" in prompt
     assert "without asking the user to confirm it" in prompt
+
+
+@pytest.mark.parametrize(
+    ("tool_input", "expected_boundary", "expected_transfer"),
+    [
+        (
+            {
+                "origin_corridor": "i95",
+                "origin": "US-1",
+                "destination_corridor": "i495",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T10:10:00-04:00",
+            },
+            ("US-1", "191NO"),
+            None,
+        ),
+        (
+            {
+                "origin_corridor": "i66_itb",
+                "origin": "Lee Highway - Scott Street",
+                "destination_corridor": "i495",
+                "destination": "Braddock Road",
+                "at_time": "2026-08-03T14:00:00-04:00",
+            },
+            ("5", "187SO"),
+            "i66_to_i495",
+        ),
+        (
+            {
+                "origin_corridor": "dulles_toll_road",
+                "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+                "destination_corridor": "i495",
+                "destination": "Braddock Road",
+                "at_time": "2026-08-03T14:00:00-04:00",
+            },
+            ("1819", "182SO"),
+            "dulles_toll_road_to_i495",
+        ),
+    ],
+    ids=("i95-i495", "i66-i495", "dulles-i495"),
+)
+def test_agent_runs_junction_plans_without_a_live_model(
+    monkeypatch, tool_input, expected_boundary, expected_transfer
+):
+    model = _ScriptedPlannerModel(tool_input)
+    monkeypatch.setattr(toll_agent_module, "_build_model", lambda: model)
+
+    assert str(build_agent()("price this junction trip")).strip() == "planned"
+
+    [tool_result] = [
+        block["toolResult"]
+        for message in model.requests[1]
+        for block in message["content"]
+        if "toolResult" in block
+    ]
+    plan = json.loads(tool_result["content"][0]["text"])
+    first, *middle, last = plan["steps"]
+    if expected_transfer is None:
+        assert (first["location"], last["origin"]) == expected_boundary
+        assert first["movement"] == "i95_to_i495"
+        assert first["pricing"].startswith("unpriced between")
+        return
+    [connector] = middle
+    assert (first["destination"], last["origin"]) == expected_boundary
+    assert connector == {
+        "kind": "connector",
+        "transfer_id": expected_transfer,
+        "label": (
+            "I-66/I-495 interchange"
+            if expected_transfer == "i66_to_i495"
+            else "I-495/Route 267 interchange"
+        ),
+        "price_usd": "0.00",
+    }
 
 
 def test_network_transfers_have_directed_entry_and_exit_roles():
