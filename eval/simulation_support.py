@@ -21,7 +21,7 @@ from strands_evals.mappers.strands_in_memory_session_mapper import (
 )
 from strands_evals.types.evaluation_report import EvaluationReport
 from strands_evals.types.simulation import ActorProfile, ActorResponse
-from strands_evals.types.trace import AgentInvocationSpan, Session
+from strands_evals.types.trace import AgentInvocationSpan, Session, ToolExecutionSpan
 
 
 class Simulator(Protocol):
@@ -51,6 +51,32 @@ def build_telemetry() -> tuple[StrandsEvalsTelemetry, StrandsInMemorySessionMapp
     """Install the process-global in-memory exporter."""
     telemetry = StrandsEvalsTelemetry().setup_in_memory_exporter()
     return telemetry, StrandsInMemorySessionMapper()
+
+
+def extract_unique_tool_calls(session: Session) -> list[dict[str, Any]]:
+    """Return each raw agent tool execution once, in telemetry order."""
+    calls: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for trace_index, trace in enumerate(session.traces):
+        for span_index, span in enumerate(trace.spans):
+            if not isinstance(span, ToolExecutionSpan):
+                continue
+            span_id = span.span_info.span_id or f"{trace_index}:{span_index}"
+            key = (trace.trace_id, span_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            calls.append(
+                {
+                    "name": span.tool_call.name,
+                    "input": cast(
+                        dict[str, Any],
+                        span.tool_call.arguments,  # pyright: ignore[reportUnknownMemberType]
+                    ),
+                    "tool_result": span.tool_result.content,
+                }
+            )
+    return calls
 
 
 def run_case_with_simulator(
@@ -122,7 +148,7 @@ def run_simulated_evaluation(
             actor_profile=actor_profile,
             initial_query=str(case.input),
             model=model_id,
-            max_turns=2,
+            max_turns=3,
         )
         return run_case_with_simulator(
             case.session_id,

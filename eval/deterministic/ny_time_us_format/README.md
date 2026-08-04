@@ -32,8 +32,7 @@ AWS_PROFILE=nova-toll uv run python eval/deterministic/ny_time_us_format/determi
 
 Invokes the real agent (`agent.toll_agent.build_agent`), which needs the
 OpenAI key from SSM and the pricing tools' RDS access over the Tailscale
-bridge — same requirements as `tests/test_toll_agent_live.py` and the
-fuzzy-location suite. `main()` resolves and exports
+bridge. `main()` resolves and exports
 `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_NAME`/`DB_CA_BUNDLE_PATH` itself via
 `agent.dev_chat.configure_local_pricing_env()`. Run `scripts/build_zips.sh`
 once first to create the gitignored RDS CA bundle; after that, only

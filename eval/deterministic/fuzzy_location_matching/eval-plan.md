@@ -43,7 +43,7 @@ flowchart LR
 
 **Observability Status**
 
-- **Tracing Framework:** `strands.Agent` supports `trace_attributes`; not exercised here (direct import + invoke, same as `tests/test_toll_agent_live.py`).
+- **Tracing Framework:** `strands.Agent` supports `trace_attributes`; not exercised here (direct import + invoke).
 - **Custom Attributes:** None used.
 
 ---
@@ -94,7 +94,7 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | **Language/Version**     | Python 3.13                                              |
 | **Evaluation Framework** | Strands Evals SDK (`strands-agents-evals`) — `Case`, `Experiment`, custom `Evaluator` subclasses |
 | **Evaluators**           | Code-based only: `LocationResolutionEvaluator` (per-turn response + hard-label args) |
-| **Agent Integration**    | Direct import of `agent.toll_agent.build_agent` (same pattern as `tests/test_toll_agent_live.py`) |
+| **Agent Integration**    | Direct import of `agent.toll_agent.build_agent` |
 | **Results Storage**      | JSON files under `eval/results/`; representative valid runs are curated for review |
 
 ---

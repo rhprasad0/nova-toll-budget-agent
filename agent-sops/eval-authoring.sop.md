@@ -20,8 +20,13 @@ Simulated users and LLM judges remain stochastic and observational.
 - **scenarios** (required): Concrete prompts and expected behavior to cover.
 - **tracks** (optional, default: inferred): `deterministic`, `simulated`, or
   both, selected using Step 2.
-- **authorized_live_runs** (optional, default: `0`): Exact number of live runs
-  the user has approved for the current task.
+- **case_count** (optional, default: number of scenarios): Cases executed by one
+  complete suite run.
+- **max_simulator_turns** (optional, default: `3` for simulated tracks):
+  Per-case turn cap; use another value only when the behavior contract requires
+  a different conversation length.
+- **authorized_live_runs** (optional, default: `0`): Exact number of complete
+  suite executions the user approved for each live track.
 
 **Constraints for parameter acquisition:**
 - You MUST inspect the referenced issue, SOP, tool contract, and existing evals
@@ -30,7 +35,8 @@ Simulated users and LLM judges remain stochastic and observational.
 - You SHOULD infer tracks from Step 2 instead of asking the user to understand
   evaluator implementation details.
 - You MUST treat live-run authorization as absent unless the user explicitly
-  approves a run count after the billed surfaces are named.
+  approves a suite-execution count after the billed surfaces, case count, and
+  simulator turn cap are named.
 
 ## Steps
 
@@ -119,8 +125,9 @@ the shared helper's baggage scoping around agent-under-test calls only.
 - You MAY use `ActorSimulator.from_case_for_user_simulator` only for exploratory
   scenarios where generated persona variation is part of the intended test.
 - You MUST pass an explicit actor and judge model, using the committed default
-  with `NOVA_TOLL_EVAL_MODEL_ID` as its override, and set `max_turns` to the
-  expected conversation length rather than the SDK default.
+  with `NOVA_TOLL_EVAL_MODEL_ID` as its override.
+- You SHOULD set `max_turns` to `3`; use another explicit value only when the
+  behavior contract requires a different conversation length.
 - You MUST use unique raw `ToolExecutionSpan` IDs for deterministic tool grading
   and keep `GoalSuccessRateEvaluator` assertions focused on conversational
   outcomes.
@@ -148,17 +155,25 @@ be safe for ordinary CI and imports.
 
 ### 7. Run live only with explicit authorization
 
-Before a live run, state that TollChat uses OpenAI, simulated actors and judges
-use Bedrock, and pricing tools use historical RDS. State the exact number of
-runs requested and wait for authorization.
+Before a live run, state the actual network and billed surfaces for that runner.
+TollChat normally uses OpenAI, simulated actors and judges use Bedrock, and
+pricing tools use historical RDS unless a documented controlled fixture replaces
+that boundary. State the requested number of complete suite executions, cases
+per execution, and simulator turn cap, plus an approximate provider-request
+count when tool loops make the exact count model-controlled, then wait for
+authorization.
 
 **Constraints:**
 - You MUST use SSM Parameter Store and the repository configuration path for
   credentials; never create a local secrets file.
 - An authorized local command SHOULD clear an accidental OpenAI base override:
   `env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll uv run python <runner>`.
-- You MUST NOT retry without renewed authorization because execution failures,
-  actor drift, and disappointing scores all require another billed run.
+- You MUST NOT start another suite execution without renewed authorization because
+  each additional execution is separately billed; execution failures, actor
+  drift, and disappointing scores do not grant another run. Provider-client
+  retries inside one authorized execution do
+  not authorize a second execution because they remain part of the original;
+  they MUST be disclosed when observed.
 - After the run, You MUST inspect raw spans, tool inputs/results, actor turns,
   populated evaluator details, and execution errors before trusting the score.
 
@@ -191,6 +206,8 @@ job in `.github/workflows/ci.yml`. Add stochastic simulated-user runners to
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
+- A controlled pricing fixture does not move a live model regression to nightly;
+  once its trace and result grading are stable, keep it in trusted integration.
 - You MUST NOT run paid simulation on every PR because it is stochastic and
   consumes OpenAI, Bedrock, and RDS resources.
 - You MUST keep fork and Dependabot restrictions on trusted integration jobs to

@@ -7,8 +7,7 @@ label once the user picks one, and resolves an unambiguous case-insensitive
 match without asking.
 
 Requires AWS_PROFILE=nova-toll (OpenAI key via SSM) and tailnet RDS access
-to actually invoke the agent -- run explicitly, same convention as
-tests/test_toll_agent_live.py. main() calls
+to actually invoke the agent -- run explicitly. main() calls
 agent.dev_chat.configure_local_pricing_env() first, the same
 DB_HOST/DB_PORT-via-describe_db_instances + pricing_reader-defaults setup
 the local dev console already uses, instead of expecting the caller's shell
