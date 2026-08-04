@@ -213,11 +213,11 @@ def test_system_prompt_requires_i95_direction_access_check():
 def test_system_prompt_describes_curated_network_transfers():
     prompt = build_system_prompt()
     assert '"connector": "I-66/I-495 interchange"' in prompt
-    assert '"connector": "Dulles Airport Access Highway"' in prompt
+    assert '"connector": "Dulles Connector Road"' in prompt
     assert '"connector": "I-495/Route 267 interchange"' in prompt
     assert "explicitly labeled curated connector" in prompt
     assert "Do not infer a reverse edge" in prompt
-    assert "Dulles Connector Road" not in prompt
+    assert "Dulles Airport Access Highway" not in prompt
     assert "have no direct I-66/I-495 transfer" not in prompt
     assert "Route 267 detour; not a direct I-66/I-495" in prompt
     assert "Copy the planner result's `at_time` unchanged" in prompt
@@ -629,7 +629,7 @@ def test_planner_uses_the_curated_i66_dulles_handoff():
         {
             "kind": "connector",
             "transfer_id": "i66_to_dulles_toll_road",
-            "label": "Dulles Airport Access Highway",
+            "label": "Dulles Connector Road",
             "price_usd": "0.00",
         },
         {
@@ -714,7 +714,7 @@ def test_planner_keeps_route_267_note_when_the_plan_uses_both_connectors():
     )
 
     assert [step["label"] for step in plan["steps"] if step["kind"] == "connector"] == [
-        "Dulles Airport Access Highway",
+        "Dulles Connector Road",
         "I-495/Route 267 interchange",
     ]
     assert plan["routing_note"] == (
@@ -940,12 +940,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.12.0"
-    advanced["system_prompt"]["releases"]["1.12.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.14.0"
+    advanced["system_prompt"]["releases"]["1.14.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.11\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.13\.0"):
         validate_manifest_update(previous, advanced)
 
 

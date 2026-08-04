@@ -1,0 +1,253 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Price a trip from Fairfax Drive on I-66 to Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **Fairfax Drive \u2192 Route 267 - Dulles Toll Road** \u2014 I-66 WB, I-66 Inside-the-Beltway: **$0.00**\n  - VDOT observed at: **7/27/2026 7:25 AM ET**\n- **Untolled connector:** Dulles Connector Road\n- **Exit 18/19 - I-495 / SR 123 (Capital Beltway) \u2192 Exit 12 - SR 602 (Reston Pkwy)** \u2014 Dulles Toll Road WB:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$0.00 + $4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+      "name": "i66-to-dulles-connector-road",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "plan_toll_route",
+        "i66_route",
+        "dulles_route"
+      ],
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i66_itb",
+                "origin": "Fairfax Drive",
+                "destination_corridor": "dulles_toll_road",
+                "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                "at_time": "2026-07-27T07:30:00-04:00"
+              },
+              "tool_result": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Fairfax Drive\", \"destination\": \"6\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"Dulles Connector Road\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"1819\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+              "is_error": false
+            },
+            {
+              "name": "i66_route",
+              "input": {
+                "origin": "Fairfax Drive",
+                "destination": "6",
+                "at_time": "2026-07-27T07:30:00-04:00"
+              },
+              "tool_result": "{\"origin\": \"Fairfax Drive\", \"destination\": \"6\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"exit\": {\"node_id\": \"6\", \"label\": \"Route 267 - Dulles Toll Road\"}, \"legs\": [{\"start_zone_id\": 3210, \"end_zone_id\": 3220, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:25:35-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"0.00\"}",
+              "is_error": false
+            },
+            {
+              "name": "dulles_route",
+              "input": {
+                "origin": "1819",
+                "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                "at_time": "2026-07-27T07:30:00-04:00"
+              },
+              "tool_result": "{\"origin\": \"1819\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "i66-to-dulles-connector-road",
+        "description": "I-66 eastbound hands off to the Dulles Toll Road through the untolled Dulles Connector Road; the user-facing answer must not mention an airport.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Fairfax Drive on I-66 to Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "i66_itb",
+              "origin": "Fairfax Drive",
+              "destination_corridor": "dulles_toll_road",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "i66_route",
+            "input": {
+              "origin": "Fairfax Drive",
+              "destination": "6",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "dulles_route",
+            "input": {
+              "origin": "1819",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "expected_connector": {
+          "transfer_id": "i66_to_dulles_toll_road",
+          "label": "Dulles Connector Road",
+          "price_usd": "0.00"
+        }
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DullesConnectorEvaluator",
+      "evaluator_type": "DullesConnectorEvaluator"
+    },
+    {
+      "input": "Price a trip from Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road to Fairfax Drive on I-66 at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **Dulles Toll Road:** Exit 12 - SR 602 (Reston Pkwy) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway), eastbound\n  - Entrance ramp at Exit 12: **$2.00**\n  - Mainline plaza: **$4.00**\n- **Untolled connector:** Dulles Connector Road\n- **I-66 EB:** Route 267 - Dulles Toll Road \u2192 Fairfax Drive \u2014 **$2.50**\n  - VDOT observed at: **7/27/2026 7:25 AM ET**\n\n## Calculation\n\n**$2.00 + $4.00 + $2.50 = $8.50**\n\n## Final price\n\n**$8.50** for travel at **7/27/2026 7:30 AM ET**.\n",
+      "name": "dulles-to-i66-connector-road",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "plan_toll_route",
+        "dulles_route",
+        "i66_route"
+      ],
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "plan_toll_route",
+              "input": {
+                "origin_corridor": "dulles_toll_road",
+                "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+                "destination_corridor": "i66_itb",
+                "destination": "Fairfax Drive",
+                "at_time": "2026-07-27T07:30:00-04:00"
+              },
+              "tool_result": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i66\", \"label\": \"Dulles Connector Road\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"6\", \"destination\": \"Fairfax Drive\"}]}",
+              "is_error": false
+            },
+            {
+              "name": "dulles_route",
+              "input": {
+                "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+                "destination": "1819",
+                "at_time": "2026-07-27T07:30:00-04:00"
+              },
+              "tool_result": "{\"origin\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"destination\": \"1819\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Entrance ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+              "is_error": false
+            },
+            {
+              "name": "i66_route",
+              "input": {
+                "origin": "6",
+                "destination": "Fairfax Drive",
+                "at_time": "2026-07-27T07:30:00-04:00"
+              },
+              "tool_result": "{\"origin\": \"6\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"6\", \"label\": \"Route 267 - Dulles Toll Road\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"2.50\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:25:35-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"2.50\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "dulles-to-i66-connector-road",
+        "description": "The reciprocal Dulles Toll Road handoff to I-66 uses the untolled Dulles Connector Road and must not mention an airport.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Exit 12 - SR 602 (Reston Pkwy) on the Dulles Toll Road to Fairfax Drive on I-66 at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "dulles_toll_road",
+              "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+              "destination_corridor": "i66_itb",
+              "destination": "Fairfax Drive",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "dulles_route",
+            "input": {
+              "origin": "Exit 12 - SR 602 (Reston Pkwy)",
+              "destination": "1819",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "i66_route",
+            "input": {
+              "origin": "6",
+              "destination": "Fairfax Drive",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "expected_connector": {
+          "transfer_id": "dulles_toll_road_to_i66",
+          "label": "Dulles Connector Road",
+          "price_usd": "0.00"
+        }
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DullesConnectorEvaluator",
+      "evaluator_type": "DullesConnectorEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true
+  ],
+  "reasons": [
+    "directed untolled connector and legs matched | response named the untolled connector",
+    "directed untolled connector and legs matched | response named the untolled connector"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "directed untolled connector and legs matched",
+        "label": "route_matched"
+      },
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "response named the untolled connector",
+        "label": "response_matched"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "directed untolled connector and legs matched",
+        "label": "route_matched"
+      },
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "response named the untolled connector",
+        "label": "response_matched"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null
+  ]
+}
