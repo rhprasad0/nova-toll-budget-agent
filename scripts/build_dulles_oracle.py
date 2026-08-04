@@ -31,7 +31,9 @@ unified into one model):
     "the Greenway does not offer a discount for partial usage" (its own
     published FAQ language). A trip that crosses the mainline plaza (between
     Exit 8 and Exit 9) pays the mainline rate; a trip confined to Exits 1-8
-    pays the lower secondary rate. Peak/off-peak varies both rates.
+    pays the lower secondary rate. Peak/off-peak varies both rates. Every
+    mainline crossing also incurs a separate, additive $2.00 Dulles Toll Road
+    charge.
 
 Both oracles carry ordered nonzero charge components on every pair, with
 `price_peak_usd`/`price_off_peak_usd` on each component (DTR's values are
@@ -171,6 +173,7 @@ def _dtr_oracle() -> JsonObject:
 # ---------------------------------------------------------------------------
 GW_MAINLINE_PEAK_USD = "5.80"
 GW_MAINLINE_OFFPEAK_USD = "5.25"
+GW_DTR_MAINLINE_USD = "2.00"
 GW_SECONDARY_PEAK_USD = "5.10"
 GW_SECONDARY_OFFPEAK_USD = "4.55"
 
@@ -214,20 +217,26 @@ def _gw_pairs() -> list[JsonObject]:
                 if crosses_mainline
                 else GW_SECONDARY_OFFPEAK_USD
             )
+            greenway_charge = {
+                "label": "Mainline plaza" if crosses_mainline else "Secondary plaza",
+                "price_peak_usd": peak,
+                "price_off_peak_usd": off_peak,
+            }
+            charges = [greenway_charge]
+            if crosses_mainline:
+                dtr_charge = {
+                    "facility": "dulles_toll_road",
+                    "label": "Mainline plaza",
+                    "price_peak_usd": GW_DTR_MAINLINE_USD,
+                    "price_off_peak_usd": GW_DTR_MAINLINE_USD,
+                }
+                charges.insert(1 if direction == "EB" else 0, dtr_charge)
             pairs.append(
                 {
                     "direction": direction,
                     "entry": entry_id,
                     "exit": exit_id,
-                    "charges": [
-                        {
-                            "label": "Mainline plaza"
-                            if crosses_mainline
-                            else "Secondary plaza",
-                            "price_peak_usd": peak,
-                            "price_off_peak_usd": off_peak,
-                        }
-                    ],
+                    "charges": charges,
                 }
             )
     return pairs
@@ -247,7 +256,9 @@ def _gw_oracle() -> JsonObject:
             'does not offer a discount for partial usage." A trip crossing '
             "the mainline plaza (between Exit 8 and Exit 9/Rte 28) pays the "
             "mainline rate; a trip confined to Exits 1-8 pays the lower "
-            "secondary rate. Peak hours (6:30-9:00am EB, 4:00-6:30pm WB) are "
+            "secondary rate. Every mainline crossing also incurs a separate "
+            "$2.00 Dulles Toll Road charge. Peak hours (6:30-9:00am EB, "
+            "4:00-6:30pm WB) are "
             'assumed weekday-only -- "rush hour" framing and industry '
             "convention support this, but no source explicitly excluded "
             "weekends; verify before relying on this for a weekend trip."

@@ -103,7 +103,7 @@
    "label": "Exit 8 - SR 606 (Ox Rd)"
   }
  },
- "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Flat fare per trip, never summed across plazas -- \"the Greenway does not offer a discount for partial usage.\" A trip crossing the mainline plaza (between Exit 8 and Exit 9/Rte 28) pays the mainline rate; a trip confined to Exits 1-8 pays the lower secondary rate. Peak hours (6:30-9:00am EB, 4:00-6:30pm WB) are assumed weekday-only -- \"rush hour\" framing and industry convention support this, but no source explicitly excluded weekends; verify before relying on this for a weekend trip.",
+ "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Flat fare per trip, never summed across plazas -- \"the Greenway does not offer a discount for partial usage.\" A trip crossing the mainline plaza (between Exit 8 and Exit 9/Rte 28) pays the mainline rate; a trip confined to Exits 1-8 pays the lower secondary rate. Every mainline crossing also incurs a separate $2.00 Dulles Toll Road charge. Peak hours (6:30-9:00am EB, 4:00-6:30pm WB) are assumed weekday-only -- \"rush hour\" framing and industry convention support this, but no source explicitly excluded weekends; verify before relying on this for a weekend trip.",
  "pairs": [
   {
    "charges": [
@@ -195,6 +195,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -291,6 +297,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -387,6 +399,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -483,6 +501,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -579,6 +603,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -675,6 +705,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -771,6 +807,12 @@
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
     }
    ],
    "direction": "EB",
@@ -779,6 +821,12 @@
   },
   {
    "charges": [
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
     {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
@@ -792,6 +840,12 @@
   {
    "charges": [
     {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
@@ -803,6 +857,12 @@
   },
   {
    "charges": [
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
     {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
@@ -816,6 +876,12 @@
   {
    "charges": [
     {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
@@ -827,6 +893,12 @@
   },
   {
    "charges": [
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
     {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
@@ -840,6 +912,12 @@
   {
    "charges": [
     {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
@@ -852,6 +930,12 @@
   {
    "charges": [
     {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",
      "price_peak_usd": "5.80"
@@ -863,6 +947,12 @@
   },
   {
    "charges": [
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
     {
      "label": "Mainline plaza",
      "price_off_peak_usd": "5.25",

@@ -4,6 +4,9 @@ Eight exact-price cases cover both directions of I-95, I-495, I-66 ITB, and
 the Dulles Greenway. Every request is a verified single corridor leg: exactly
 one pricing tool call, no route planner, and no junction tool. See
 `eval-plan.md` and `test-cases.jsonl` for the contract and fixtures.
+The reciprocal Greenway cases cross its mainline plaza and require the full
+peak fare plus a separately attributed $2.00 Dulles Toll Road item in travel
+order.
 
 ## Self-check (no network)
 
