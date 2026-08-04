@@ -32,12 +32,14 @@ jobs:
       - run: uv run pytest
       - run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py --check
       - run: uv run python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py --check
+      - run: uv run python eval/deterministic/non_i95_directional_access/deterministic_non_i95_directional_access.py --check
       - run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py --check
       - run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py --check
       - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py --check
       - run: uv run python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py --check
       - run: uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
       - run: uv run python eval/simulated/simulated_user_i95_one_way_access.py --check
+      - run: uv run python eval/simulated/simulated_user_non_i95_directional_access.py --check
       - run: uv run python eval/simulated/simulated_user_single_leg_base_cases.py --check
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 

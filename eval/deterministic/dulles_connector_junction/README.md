@@ -1,8 +1,9 @@
-# Dulles Connector Road junction evaluation
+# I-66 / Dulles Toll Road junction evaluation
 
 This two-case regression verifies the directed I-66/Dulles Toll Road handoffs.
-It code-grades the planner and final answer: the connector must be **Dulles
-Connector Road**, have a `$0.00` planner price, and never mention an airport.
+It code-grades the planner and final answer: both priced legs must meet at the
+shared **I-66 / Dulles Toll Road junction**, whose planner sentinel is `$0.00`
+but which is omitted from billed items and arithmetic.
 
 Run the offline fixture check:
 

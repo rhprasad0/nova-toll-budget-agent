@@ -1,4 +1,4 @@
-"""Code-graded live regression for the two Dulles Connector Road handoffs.
+"""Code-graded live regression for the shared I-66/Dulles boundary.
 
 ``--check`` exercises fixtures and grader branches without network access.
 Without it, the runner invokes TollChat and saves the live report.
@@ -134,9 +134,11 @@ def evaluate_response(response: str) -> list[EvaluationOutput]:
     lowered = response.casefold()
     if "airport" in lowered:
         return _result(False, "response mentioned an airport", "airport_mentioned")
-    if "dulles connector road" not in lowered:
+    if "i-66 / dulles toll road junction" not in lowered:
         return _result(
-            False, "response omitted Dulles Connector Road", "connector_missing"
+            False,
+            "response omitted I-66 / Dulles Toll Road junction",
+            "connector_missing",
         )
     if not any(term in lowered for term in ("untolled", "no toll", "$0.00")):
         return _result(
@@ -187,7 +189,7 @@ def main() -> None:
     print(f"Overall score: {report.overall_score:.2f}")
     report.display(include_input=False)
     if not all(report.test_passes):
-        raise SystemExit("deterministic Dulles Connector Road evaluation failed")
+        raise SystemExit("deterministic I-66/Dulles junction evaluation failed")
 
 
 def _self_check() -> None:
@@ -243,7 +245,7 @@ def _self_check() -> None:
     ]
     assert evaluate_calls(bad_calls, row)[0].label == "connector_mismatch"
     assert (
-        evaluate_response("Dulles Connector Road is untolled ($0.00).")[0].label
+        evaluate_response("The I-66 / Dulles Toll Road junction is untolled.")[0].label
         == "response_matched"
     )
     assert (
@@ -251,7 +253,7 @@ def _self_check() -> None:
         == "airport_mentioned"
     )
     assert (
-        evaluate_response("Dulles Connector Road is tolled.")[0].label
+        evaluate_response("The I-66 / Dulles Toll Road junction is tolled.")[0].label
         == "untolled_missing"
     )
     print("self-check ok (two directions and negative connector/response guards)")

@@ -95,10 +95,12 @@ def _same_location(corridor, query, node_id):
 
 def _can_price(origin_corridor, origin, destination_corridor, destination):
     if {origin_corridor, destination_corridor} <= _DULLES_CORRIDORS:
-        return "error" not in _dulles_lookup(origin, destination)
-    return origin_corridor == destination_corridor and "error" not in _LOOKUPS[
-        origin_corridor
-    ](origin, destination)
+        result = _dulles_lookup(origin, destination)
+    elif origin_corridor == destination_corridor:
+        result = _LOOKUPS[origin_corridor](origin, destination)
+    else:
+        return False
+    return "error" not in result and result.get("status") != "one_way_mismatch"
 
 
 def _reference_reachable(origin_corridor, origin, destination_corridor, destination):
@@ -203,17 +205,22 @@ def test_system_prompt_contains_i95_i495_junction():
     assert "unpriced junction" in prompt.casefold()
 
 
-def test_system_prompt_requires_i95_direction_access_check():
+def test_system_prompt_requires_direction_access_checks_on_every_corridor():
     prompt = build_system_prompt()
     assert '"entry_directions"' in prompt
     assert "i95_access_options" in prompt
     assert "Never substitute an option" in prompt
+    assert "same `one_way_mismatch` contract applies" in prompt
+    assert "fixed ramp topology" in prompt
+    assert re.search(
+        r"Never reject a cross-corridor request\s+from prompt knowledge", prompt
+    )
 
 
 def test_system_prompt_describes_curated_network_transfers():
     prompt = build_system_prompt()
     assert '"connector": "I-66/I-495 interchange"' in prompt
-    assert '"connector": "Dulles Connector Road"' in prompt
+    assert '"connector": "I-66 / Dulles Toll Road junction"' in prompt
     assert '"connector": "I-495/Route 267 interchange"' in prompt
     assert "explicitly labeled curated connector" in prompt
     assert "Do not infer a reverse edge" in prompt
@@ -436,6 +443,57 @@ def test_planner_covers_every_i66_i495_direction(
     assert plan.get("routing_note") == routing_note
 
 
+def test_planner_rejects_westpark_to_scott_and_offers_eastbound_recovery():
+    plan = plan_toll_route(
+        "i495", "Westpark Drive", "i66_itb", "Lee Highway - Scott Street"
+    )
+
+    assert plan["status"] == "one_way_mismatch"
+    assert plan["direction"] == "EB"
+    assert plan["constraints"][0]["location"] == "Lee Highway - Scott Street"
+    assert plan["constraints"][0]["nearby_options"][0] == "Fairfax Drive"
+
+
+def test_planner_offers_entries_for_a_wrong_way_cross_corridor_origin():
+    plan = plan_toll_route(
+        "i66_itb",
+        "Glebe Road",
+        "dulles_toll_road",
+        "Exit 13 - SR 828 (Wiehle Ave)",
+    )
+
+    assert plan["status"] == "one_way_mismatch"
+    assert plan["direction"] == "WB"
+    assert plan["constraints"] == [
+        {
+            "location": "Glebe Road",
+            "role": "entry",
+            "required_direction": "WB",
+            "available_directions": ["EB"],
+            "nearby_options": ["Fairfax Drive", "Lee Highway - Scott Street"],
+        }
+    ]
+
+
+def test_planner_does_not_surface_an_internal_transfer_mismatch():
+    plan = plan_toll_route("i95", "US-1", "i66_itb", "I-66 West")
+
+    assert "status" not in plan
+    assert plan["error"].startswith("no oracle-supported directed route connects")
+
+
+def test_can_price_rejects_an_unconnected_i95_pair():
+    assert not toll_agent_module._can_price(
+        "i95", "US-1", "i95", "Courthouse Road/Route 630"
+    )
+
+
+def test_planner_does_not_treat_a_transfer_entry_as_a_destination():
+    plan = plan_toll_route("i495", "Braddock Road", "i66_itb", "I-495 Express Lanes N")
+
+    assert "steps" not in plan
+
+
 def test_planner_defaults_to_one_timezone_aware_timestamp():
     plan = plan_toll_route(
         "i66_itb", "Lee Highway - Scott Street", "i495", "Braddock Road"
@@ -629,17 +687,35 @@ def test_planner_uses_the_curated_i66_dulles_handoff():
         {
             "kind": "connector",
             "transfer_id": "i66_to_dulles_toll_road",
-            "label": "Dulles Connector Road",
+            "label": "I-66 / Dulles Toll Road junction",
             "price_usd": "0.00",
         },
         {
             "kind": "priced",
             "corridor": "dulles_toll_road",
             "tool": "dulles_route",
-            "origin": "1819",
+            "origin": "66",
             "destination": "Exit 12 - SR 602 (Reston Pkwy)",
         },
     ]
+
+
+def test_planner_ends_and_starts_i66_dulles_legs_at_the_shared_junction():
+    reverse = plan_toll_route(
+        "dulles_toll_road",
+        "Exit 13 - SR 828 (Wiehle Ave)",
+        "i66_itb",
+        "Fairfax Drive",
+    )
+
+    assert reverse["steps"][0]["destination"] == "66"
+    assert reverse["steps"][1] == {
+        "kind": "connector",
+        "transfer_id": "dulles_toll_road_to_i66",
+        "label": "I-66 / Dulles Toll Road junction",
+        "price_usd": "0.00",
+    }
+    assert reverse["steps"][2]["origin"] == "6"
 
 
 def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
@@ -714,7 +790,7 @@ def test_planner_keeps_route_267_note_when_the_plan_uses_both_connectors():
     )
 
     assert [step["label"] for step in plan["steps"] if step["kind"] == "connector"] == [
-        "Dulles Connector Road",
+        "I-66 / Dulles Toll Road junction",
         "I-495/Route 267 interchange",
     ]
     assert plan["routing_note"] == (
@@ -739,7 +815,9 @@ def test_planner_rejects_routes_that_reuse_a_connector(
 ):
     plan = plan_toll_route(origin_corridor, origin, destination_corridor, destination)
 
-    assert plan["error"].startswith("no oracle-supported directed route connects")
+    assert plan.get("status") == "one_way_mismatch" or plan["error"].startswith(
+        "no oracle-supported directed route connects"
+    )
 
 
 def test_planner_matches_exhaustive_directed_oracle_reachability():
@@ -775,7 +853,14 @@ def test_planner_matches_exhaustive_directed_oracle_reachability():
                         destination,
                     )
                     if plan.get("status") == "one_way_mismatch":
-                        assert origin_corridor == "i95" or destination_corridor == "i95"
+                        if "i95" not in (origin_corridor, destination_corridor):
+                            assert not expected, (
+                                origin_corridor,
+                                origin,
+                                destination_corridor,
+                                destination,
+                                plan,
+                            )
                         continue
                     assert ("error" not in plan) is expected, (
                         origin_corridor,
@@ -890,6 +975,7 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "VDOT observed at: <observed_at>" in prompt
     assert "exact decimal addition" in prompt
     assert "returned toll items" in prompt
+    assert "each toll item's returned facility" in prompt
     assert "direction returned by its tool" in prompt
     assert "Greenway leg whose returned rate period is not null" in prompt
     assert "single-corridor request, You MUST NOT call plan_toll_route" in prompt
@@ -940,12 +1026,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.14.0"
-    advanced["system_prompt"]["releases"]["1.14.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.17.0"
+    advanced["system_prompt"]["releases"]["1.17.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.13\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.16\.0"):
         validate_manifest_update(previous, advanced)
 
 

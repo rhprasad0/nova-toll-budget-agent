@@ -23,11 +23,15 @@
    "label": "Route 28 (Dulles Toll Road / Dulles Greenway)"
   },
   "2A": {
-   "entry_in": [],
-   "exit_in": [
-    "EB"
+   "entry_in": [
+    "EB",
+    "WB"
    ],
-   "label": "Exit 2A - Battlefield Pkwy"
+   "exit_in": [
+    "EB",
+    "WB"
+   ],
+   "label": "Exit 2 - Battlefield Pkwy"
   },
   "2B": {
    "entry_in": [],
@@ -103,7 +107,7 @@
    "label": "Exit 8 - SR 606 (Ox Rd)"
   }
  },
- "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Flat fare per trip, never summed across plazas -- \"the Greenway does not offer a discount for partial usage.\" A trip crossing the mainline plaza (between Exit 8 and Exit 9/Rte 28) pays the mainline rate; a trip confined to Exits 1-8 pays the lower secondary rate. Every mainline crossing also incurs a separate $2.00 Dulles Toll Road charge. Peak hours (6:30-9:00am EB, 4:00-6:30pm WB) are assumed weekday-only -- \"rush hour\" framing and industry convention support this, but no source explicitly excluded weekends; verify before relying on this for a weekend trip.",
+ "notes": "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. Flat fare per trip, never summed across plazas -- \"the Greenway does not offer a discount for partial usage.\" A trip crossing the mainline plaza (between Exit 8 and Exit 9/Rte 28) pays the mainline rate; a trip confined to Exits 1-8 pays the lower secondary rate. Every mainline crossing also incurs a separate $2.00 Dulles Toll Road charge. Peak hours (6:30-9:00am EB, 4:00-6:30pm WB) are assumed weekday-only -- \"rush hour\" framing and industry convention support this, but no source explicitly excluded weekends; verify before relying on this for a weekend trip. Ramp direction availability is fixed; only the toll rate period depends on time. Battlefield Parkway is bidirectional; Compass Creek is a westbound exit only with no entrance.",
  "pairs": [
   {
    "charges": [
@@ -216,8 +220,122 @@
     }
    ],
    "direction": "WB",
+   "entry": "2A",
+   "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "3"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "4"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "5"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "6"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "7"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "8"
+  },
+  {
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "5.25",
+     "price_peak_usd": "5.80"
+    },
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    }
+   ],
+   "direction": "EB",
+   "entry": "2A",
+   "exit": "28"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
    "entry": "3",
    "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
+   "entry": "3",
+   "exit": "2A"
   },
   {
    "charges": [
@@ -331,6 +449,18 @@
    ],
    "direction": "WB",
    "entry": "4",
+   "exit": "2A"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
+   "entry": "4",
    "exit": "2B"
   },
   {
@@ -422,6 +552,18 @@
    "direction": "WB",
    "entry": "5",
    "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
+   "entry": "5",
+   "exit": "2A"
   },
   {
    "charges": [
@@ -524,6 +666,18 @@
    "direction": "WB",
    "entry": "6",
    "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
+   "entry": "6",
+   "exit": "2A"
   },
   {
    "charges": [
@@ -626,6 +780,18 @@
    "direction": "WB",
    "entry": "7",
    "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
+   "entry": "7",
+   "exit": "2A"
   },
   {
    "charges": [
@@ -728,6 +894,18 @@
    "direction": "WB",
    "entry": "8",
    "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "label": "Secondary plaza",
+     "price_off_peak_usd": "4.55",
+     "price_peak_usd": "5.10"
+    }
+   ],
+   "direction": "WB",
+   "entry": "8",
+   "exit": "2A"
   },
   {
    "charges": [
@@ -836,6 +1014,24 @@
    "direction": "WB",
    "entry": "28",
    "exit": "1"
+  },
+  {
+   "charges": [
+    {
+     "facility": "dulles_toll_road",
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "2.00",
+     "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "5.25",
+     "price_peak_usd": "5.80"
+    }
+   ],
+   "direction": "WB",
+   "entry": "28",
+   "exit": "2A"
   },
   {
    "charges": [
@@ -964,6 +1160,6 @@
    "exit": "8"
   }
  ],
- "retrieved_at": "2026-07-26",
+ "retrieved_at": "2026-08-04",
  "source_url": "https://www.dullesgreenway.com/toll-calculator/"
 }

@@ -84,28 +84,20 @@ def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
         build_legs=lambda p: [{"od_pair_id": p["ods"][0]}],
     )
     if result.get("error", "").startswith("no direct trip"):
-        result.update(_one_way_mismatch(origin, destination))
+        result.update(
+            _oracle_route.directional_mismatch(
+                origin,
+                destination,
+                nodes=_NODES,
+                pairs=_PAIRS,
+                label_idx=_LABEL_INDEX,
+                position=lambda node_id: float(_NODES[node_id]["latitude"]),
+                increasing_direction="Northbound",
+                decreasing_direction="Southbound",
+                distance=_distance,
+            )
+        )
     return result
-
-
-def _role_directions(location_ids: list[str], role: str) -> set[str]:
-    return {pair["direction"] for pair in _PAIRS if pair[role] in location_ids}
-
-
-def _has_direct_pair(origin: str, destination: str) -> bool:
-    origin_ids = _oracle_route.resolve(origin, nodes=_NODES, label_idx=_LABEL_INDEX)
-    destination_ids = _oracle_route.resolve(
-        destination, nodes=_NODES, label_idx=_LABEL_INDEX
-    )
-    return any(
-        pair["entry"] in origin_ids and pair["exit"] in destination_ids
-        for pair in _PAIRS
-    )
-
-
-def _latitude(location_ids: list[str]) -> float | None:
-    values = [float(_NODES[node_id]["latitude"]) for node_id in location_ids]
-    return sum(values) / len(values) if values else None
 
 
 def _distance(node_id: str, location_ids: list[str]) -> float:
@@ -127,98 +119,6 @@ def _distance(node_id: str, location_ids: list[str]) -> float:
     return min(distances)
 
 
-def _nearby_options(
-    location_ids: list[str],
-    role: str,
-    direction: str,
-    opposite_ids: list[str],
-    *,
-    require_direct_pair: bool,
-) -> list[str]:
-    if not location_ids:
-        return []
-    opposite_role = "exit" if role == "entry" else "entry"
-    candidates = [
-        pair[role]
-        for pair in _PAIRS
-        if pair["direction"] == direction
-        and (not require_direct_pair or pair[opposite_role] in opposite_ids)
-    ]
-    distances: dict[str, float] = {}
-    for node_id in candidates:
-        label = _NODES[node_id]["label"]
-        distance = _distance(node_id, location_ids)
-        distances[label] = min(distances.get(label, math.inf), distance)
-    return sorted(distances, key=lambda label: (distances[label], label))[:2]
-
-
-def _one_way_mismatch(origin: str, destination: str) -> _oracle_route.JsonObject:
-    origin_ids = _oracle_route.resolve(origin, nodes=_NODES, label_idx=_LABEL_INDEX)
-    destination_ids = _oracle_route.resolve(
-        destination, nodes=_NODES, label_idx=_LABEL_INDEX
-    )
-    origin_latitude = _latitude(origin_ids)
-    destination_latitude = _latitude(destination_ids)
-    if (
-        origin_latitude is None
-        or destination_latitude is None
-        or origin_latitude == destination_latitude
-    ):
-        return {}
-    direction = "Northbound" if destination_latitude > origin_latitude else "Southbound"
-    requested_roles = (
-        (origin, origin_ids, "entry", destination_ids),
-        (destination, destination_ids, "exit", origin_ids),
-    )
-    invalid_roles = [
-        (location, location_ids, role, opposite_ids)
-        for location, location_ids, role, opposite_ids in requested_roles
-        if direction not in _role_directions(location_ids, role)
-    ]
-    nearby_by_role = {
-        role: _nearby_options(
-            location_ids,
-            role,
-            direction,
-            opposite_ids,
-            require_direct_pair=len(invalid_roles) == 1,
-        )
-        for _, location_ids, role, opposite_ids in invalid_roles
-    }
-    if len(invalid_roles) == 2:
-        entries = nearby_by_role["entry"]
-        exits = nearby_by_role["exit"]
-        nearby_by_role["entry"] = [
-            entry
-            for entry in entries
-            if any(_has_direct_pair(entry, exit) for exit in exits)
-        ]
-        nearby_by_role["exit"] = [
-            exit
-            for exit in exits
-            if any(_has_direct_pair(entry, exit) for entry in entries)
-        ]
-    constraints = [
-        {
-            "location": location,
-            "role": role,
-            "required_direction": direction,
-            "available_directions": sorted(_role_directions(location_ids, role)),
-            "nearby_options": nearby_by_role[role],
-        }
-        for location, location_ids, role, _ in invalid_roles
-    ]
-    return (
-        {
-            "status": "one_way_mismatch",
-            "direction": direction,
-            "constraints": constraints,
-        }
-        if constraints
-        else {}
-    )
-
-
 def i95_endpoint_access_options(
     location: str,
     role: Literal["entry", "exit"],
@@ -234,38 +134,31 @@ def i95_endpoint_access_options(
     counterpart_ids = _oracle_route.resolve(
         counterpart, nodes=_NODES, label_idx=_LABEL_INDEX
     )
-    location_latitude = _latitude(location_ids)
-    counterpart_latitude = _latitude(counterpart_ids)
-    if location_latitude is None or counterpart_latitude is None:
+    if not location_ids or not counterpart_ids:
         return {}
-    northbound = (
-        counterpart_latitude > location_latitude
-        if role == "entry"
-        else location_latitude > counterpart_latitude
-    )
-    direction: Literal["Northbound", "Southbound"] = (
-        "Northbound" if northbound else "Southbound"
-    )
+    if set(location_ids) & set(counterpart_ids):
+        return {
+            "status": "supported",
+            "direction": "Northbound" if role == "entry" else "Southbound",
+        }
     route = (
         _lookup(location, counterpart)
         if role == "entry"
         else _lookup(counterpart, location)
     )
     if "error" not in route:
-        return {"status": "supported", "direction": direction}
-    constraint = {
-        "location": location,
-        "role": role,
-        "required_direction": direction,
-        "available_directions": sorted(_role_directions(location_ids, role)),
-        "nearby_options": _nearby_options(
-            location_ids,
-            role,
-            direction,
-            counterpart_ids,
-            require_direct_pair=True,
+        return {"status": "supported", "direction": route["direction"]}
+    direction = route.get("direction")
+    constraint = next(
+        (
+            constraint
+            for constraint in route.get("constraints", [])
+            if constraint["location"] == location and constraint["role"] == role
         ),
-    }
+        None,
+    )
+    if direction is None or constraint is None:
+        return route
     return {
         "error": (
             f"{location!r} is not a valid {direction.lower()} {role} "

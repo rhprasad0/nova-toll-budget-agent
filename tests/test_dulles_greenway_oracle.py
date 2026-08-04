@@ -67,13 +67,12 @@ def test_boundary_node_exists_for_the_dulles_toll_road_connection():
     )
 
 
-def test_exit_2a_2b_are_one_way_ramps():
-    # Real topology (not a toll-applicability quirk like DTR's Exit 16):
-    # Exit 2A is eastbound-exit-only, Exit 2B is westbound-exit-only, and
-    # neither can ever be an origin.
-    assert NODES["2A"]["entry_in"] == [] and NODES["2A"]["exit_in"] == ["EB"]
+def test_battlefield_is_bidirectional_and_compass_is_exit_only():
+    assert NODES["2A"]["entry_in"] == ["EB", "WB"]
+    assert NODES["2A"]["exit_in"] == ["EB", "WB"]
     assert NODES["2B"]["entry_in"] == [] and NODES["2B"]["exit_in"] == ["WB"]
-    assert not any(p["entry"] in ("2A", "2B") for p in PAIRS)
+    assert any(p["entry"] == "2A" for p in PAIRS)
+    assert not any(p["entry"] == "2B" for p in PAIRS)
 
 
 def test_flat_fare_never_sums_mainline_and_secondary():

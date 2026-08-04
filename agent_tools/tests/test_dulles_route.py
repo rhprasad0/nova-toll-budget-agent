@@ -227,6 +227,35 @@ def test_dtr_mainline_only_trip_omits_free_ramps():
     ]
 
 
+def test_i66_junction_starts_dtr_billing_at_the_mainline_plaza():
+    westbound = dulles_route(
+        "I-66 / Dulles Toll Road junction",
+        "Exit 13 - SR 828 (Wiehle Ave)",
+    )
+    eastbound = dulles_route(
+        "Exit 13 - SR 828 (Wiehle Ave)",
+        "I-66 / Dulles Toll Road junction",
+    )
+
+    assert westbound["legs"][0]["entry"] == {
+        "node_id": "66",
+        "label": "I-66 / Dulles Toll Road junction",
+    }
+    assert [(toll["label"], toll["price_usd"]) for toll in westbound["tolls"]] == [
+        ("Mainline plaza", "4.00"),
+        ("Exit ramp at Exit 13 - SR 828 (Wiehle Ave)", "2.00"),
+    ]
+    assert [(toll["label"], toll["price_usd"]) for toll in eastbound["tolls"]] == [
+        ("Entrance ramp at Exit 13 - SR 828 (Wiehle Ave)", "2.00"),
+        ("Mainline plaza", "4.00"),
+    ]
+
+
+def test_i66_junction_to_beltway_is_untolled_in_both_directions():
+    assert dulles_route("66", "1819")["tolls"] == []
+    assert dulles_route("1819", "66")["tolls"] == []
+
+
 def test_dtr_toll_free_trip_returns_an_empty_charge_list():
     result = dulles_route(
         "Route 28 (Dulles Toll Road / Dulles Greenway)",
@@ -249,10 +278,43 @@ def test_unknown_destination_returns_combined_valid_options():
     assert "Exit 17 - SR 684 (Spring Hill Rd)" in result["valid_options"]
 
 
-def test_exit_only_ramp_is_never_a_valid_origin():
-    result = dulles_route("Exit 2A - Battlefield Pkwy", "Exit 8 - SR 606 (Ox Rd)")
-    assert "error" in result
-    assert "Exit 2A - Battlefield Pkwy" not in result["valid_options"]
+def test_battlefield_parkway_is_bidirectional():
+    eastbound = dulles_route("Exit 2 - Battlefield Pkwy", "Exit 8 - SR 606 (Ox Rd)")
+    westbound = dulles_route("Exit 8 - SR 606 (Ox Rd)", "Exit 2 - Battlefield Pkwy")
+
+    assert eastbound["legs"][0]["direction"] == "EB"
+    assert westbound["legs"][0]["direction"] == "WB"
+
+
+def test_compass_creek_wrong_direction_entry_returns_recovery():
+    result = dulles_route("Exit 2B - Compass Creek Pkwy", "Exit 8 - SR 606 (Ox Rd)")
+
+    assert result["status"] == "one_way_mismatch"
+    assert result["direction"] == "EB"
+    assert result["constraints"] == [
+        {
+            "location": "Exit 2B - Compass Creek Pkwy",
+            "role": "entry",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+                "Exit 2 - Battlefield Pkwy",
+                "Exit 3 - SR 653 (Shreve Mill Rd)",
+            ],
+        }
+    ]
+
+
+def test_compass_creek_cross_facility_trip_returns_the_same_recovery():
+    result = dulles_route(
+        "Exit 2B - Compass Creek Pkwy",
+        "Exit 12 - SR 602 (Reston Pkwy)",
+    )
+
+    assert result["status"] == "one_way_mismatch"
+    assert result["constraints"][0]["nearby_options"][0] == (
+        "Exit 2 - Battlefield Pkwy"
+    )
 
 
 def test_invalid_at_time_is_a_hard_error():

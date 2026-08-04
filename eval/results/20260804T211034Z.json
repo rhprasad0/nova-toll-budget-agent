@@ -1,0 +1,446 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+      "actual_output": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit from I-66.\n\nPlease choose one of these direction-compatible alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nWestpark Drive and the rest of the route will remain unchanged.\n",
+      "name": "westpark-to-scott-cross-corridor",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i495",
+                "origin": "Westpark Drive",
+                "destination_corridor": "i66_itb",
+                "destination": "Lee Highway - Scott Street",
+                "at_time": ""
+              },
+              "tool_result": "{\"error\": \"no direct trip from '6' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "westpark-to-scott-cross-corridor",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i495",
+                  "origin": "Westpark Drive",
+                  "destination_corridor": "i66_itb",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DirectionalAccessEvaluator",
+      "evaluator_type": "DirectionalAccessEvaluator"
+    },
+    {
+      "input": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+      "actual_output": "`Lee Highway - Scott Street` is not a valid **eastbound exit** for this trip.\n\nYou can choose one of these nearby eastbound exits instead:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose an exit, and I\u2019ll price the trip from **I-495 North**.\n",
+      "name": "i66-direct-wrong-way-exit",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "i66_route",
+              "input": {
+                "origin": "I-495 N",
+                "destination": "Lee Highway - Scott Street",
+                "at_time": ""
+              },
+              "tool_result": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "i66-direct-wrong-way-exit",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "i66_route",
+                "input": {
+                  "origin": "I-495 N",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DirectionalAccessEvaluator",
+      "evaluator_type": "DirectionalAccessEvaluator"
+    },
+    {
+      "input": "Price northbound 495 Express Lanes from Westpark Drive to the exact listed destination `495 Express Lanes Start/Georg Wash. Mem. Pkwy.`. Do not reinterpret the requested ramp.",
+      "actual_output": "The requested destination, **495 Express Lanes Start/Georg Wash. Mem. Pkwy.**, is not a valid northbound exit. The exact ramp is entry-only for southbound travel.\n\nFor northbound travel from **Westpark Drive**, choose one of these direction-compatible destinations:\n\n- **495 Express Lanes End/George Wash. Mem. Pkwy.**\n- **Route 267**\n\nI have not substituted either option.\n",
+      "name": "i495-wrong-parkway-end",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "i495_route",
+              "input": {
+                "origin": "Westpark Drive",
+                "destination": "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+                "at_time": ""
+              },
+              "tool_result": "{\"error\": \"no direct trip from 'Westpark Drive' to '495 Express Lanes Start/Georg Wash. Mem. Pkwy.' in the i495 oracle\", \"valid_options\": [\"495 Express Lanes End/George Wash. Mem. Pkwy.\", \"Braddock Road\", \"Gallows Road\", \"I-495 Near Braddock Road\", \"I-495/I-95 Near Van Dorn Street\", \"Interstate 66\", \"Jones Branch Drive/Route 123\", \"Route 267\"], \"status\": \"one_way_mismatch\", \"direction\": \"Northbound\", \"constraints\": [{\"location\": \"495 Express Lanes Start/Georg Wash. Mem. Pkwy.\", \"role\": \"exit\", \"required_direction\": \"Northbound\", \"available_directions\": [], \"nearby_options\": [\"495 Express Lanes End/George Wash. Mem. Pkwy.\", \"Route 267\"]}]}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "i495-wrong-parkway-end",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price northbound 495 Express Lanes from Westpark Drive to the exact listed destination `495 Express Lanes Start/Georg Wash. Mem. Pkwy.`. Do not reinterpret the requested ramp."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "i495_route",
+                "input": {
+                  "origin": "Westpark Drive",
+                  "destination": "495 Express Lanes Start/Georg Wash. Mem. Pkwy."
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "Northbound",
+          "constraint": {
+            "location": "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+            "role": "exit",
+            "required_direction": "Northbound",
+            "available_directions": [],
+            "nearby_options": [
+              "495 Express Lanes End/George Wash. Mem. Pkwy.",
+              "Route 267"
+            ]
+          }
+        },
+        "response_terms": [
+          "northbound",
+          "George Wash",
+          "End"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DirectionalAccessEvaluator",
+      "evaluator_type": "DirectionalAccessEvaluator"
+    },
+    {
+      "input": "Price an eastbound Greenway trip entering at Compass Creek and exiting at Ox Road.",
+      "actual_output": "Compass Creek is not a valid **eastbound entry** for the Greenway. Please choose one of these eastbound alternatives:\n\n- **Exit 2 \u2013 Battlefield Pkwy**\n- **Exit 3 \u2013 SR 653 (Shreve Mill Rd)**\n\nOx Road remains the requested exit.\n",
+      "name": "greenway-compass-invalid-entry",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "dulles_route",
+              "input": {
+                "origin": "Exit 2B - Compass Creek Pkwy",
+                "destination": "Exit 8 - SR 606 (Ox Rd)",
+                "at_time": ""
+              },
+              "tool_result": "{\"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Exit 2B - Compass Creek Pkwy\", \"role\": \"entry\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Exit 2 - Battlefield Pkwy\", \"Exit 3 - SR 653 (Shreve Mill Rd)\"]}]}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "greenway-compass-invalid-entry",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price an eastbound Greenway trip entering at Compass Creek and exiting at Ox Road."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "dulles_route",
+                "input": {
+                  "origin": "Exit 2B - Compass Creek Pkwy",
+                  "destination": "Exit 8 - SR 606 (Ox Rd)"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Exit 2B - Compass Creek Pkwy",
+            "role": "entry",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Exit 2 - Battlefield Pkwy",
+              "Exit 3 - SR 653 (Shreve Mill Rd)"
+            ]
+          }
+        },
+        "response_terms": [
+          "Compass Creek",
+          "eastbound",
+          "Battlefield"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DirectionalAccessEvaluator",
+      "evaluator_type": "DirectionalAccessEvaluator"
+    },
+    {
+      "input": "What is the current price from Glebe Road to SR 828?",
+      "actual_output": "`Glebe Road` is not a valid **westbound entry** for this trip. Please choose one of these nearby westbound entries:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Scott Street**\n\nWhich entry should I use for the trip to **Exit 13 - SR 828 (Wiehle Ave)**?\n",
+      "name": "glebe-to-wiehle-cross-corridor",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "calls": [
+            {
+              "name": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i66_itb",
+                "origin": "Glebe Road",
+                "destination_corridor": "dulles_toll_road",
+                "destination": "Exit 13 - SR 828 (Wiehle Ave)",
+                "at_time": ""
+              },
+              "tool_result": "{\"error\": \"no direct trip from 'Glebe Road' to '5' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Lee Highway - Spout Run Parkway\", \"Washington\"], \"status\": \"one_way_mismatch\", \"direction\": \"WB\", \"constraints\": [{\"location\": \"Glebe Road\", \"role\": \"entry\", \"required_direction\": \"WB\", \"available_directions\": [\"EB\"], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Scott Street\"]}]}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "glebe-to-wiehle-cross-corridor",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "What is the current price from Glebe Road to SR 828?"
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i66_itb",
+                  "origin": "Glebe Road",
+                  "destination_corridor": "dulles_toll_road",
+                  "destination": "Exit 13 - SR 828 (Wiehle Ave)"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "WB",
+          "constraint": {
+            "location": "Glebe Road",
+            "role": "entry",
+            "required_direction": "WB",
+            "available_directions": [
+              "EB"
+            ],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Scott Street"
+            ]
+          }
+        },
+        "response_terms": [
+          "Glebe Road",
+          "westbound",
+          "entry",
+          "Fairfax Drive",
+          "Lee Highway"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DirectionalAccessEvaluator",
+      "evaluator_type": "DirectionalAccessEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "one-way mismatch was explained without a fare",
+    "one-way mismatch was explained without a fare",
+    "one-way mismatch was explained without a fare",
+    "one-way mismatch was explained without a fare",
+    "one-way mismatch was explained without a fare"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "one-way mismatch was explained without a fare",
+        "label": "mismatch"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "one-way mismatch was explained without a fare",
+        "label": "mismatch"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "one-way mismatch was explained without a fare",
+        "label": "mismatch"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "one-way mismatch was explained without a fare",
+        "label": "mismatch"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "one-way mismatch was explained without a fare",
+        "label": "mismatch"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null,
+    null,
+    null
+  ]
+}

@@ -325,6 +325,18 @@ def test_endpoint_access_options_require_a_cross_corridor_southbound_exit():
     ]
 
 
+@pytest.mark.parametrize(
+    ("role", "direction"), [("entry", "Northbound"), ("exit", "Southbound")]
+)
+def test_endpoint_access_accepts_a_trip_at_the_handoff(role, direction):
+    handoff = "Franconia-Springfield Parkway/Route 289"
+
+    assert i95_endpoint_access_options(handoff, role, handoff) == {
+        "status": "supported",
+        "direction": direction,
+    }
+
+
 def test_access_options_returns_choices_for_both_invalid_endpoints():
     result = i95_access_options("I-95 Near Joplin Road/Quantico", "I-95 Near Quantico")
 

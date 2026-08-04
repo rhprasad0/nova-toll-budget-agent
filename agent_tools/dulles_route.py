@@ -88,6 +88,18 @@ _GREENWAY_PEAK_WINDOWS = {
     "EB": (time(6, 30), time(9, 0)),
     "WB": (time(16, 0), time(18, 30)),
 }
+_GREENWAY_POSITION = {
+    "1": 0,
+    "2A": 1,
+    "2B": 1.1,
+    "3": 2,
+    "4": 3,
+    "5": 4,
+    "6": 5,
+    "7": 6,
+    "8": 7,
+    "28": 8,
+}
 
 
 def _resolve_in_facility(facility: _oracle_route.JsonObject, query: str) -> list[str]:
@@ -114,6 +126,25 @@ def _entry_capable_labels(facility: _oracle_route.JsonObject) -> set[str]:
 
 def _exit_capable_labels(facility: _oracle_route.JsonObject) -> set[str]:
     return {facility["nodes"][p["exit"]]["label"] for p in facility["pairs"]}
+
+
+def _greenway_mismatch(origin: str, destination: str) -> _oracle_route.JsonObject:
+    greenway = _FACILITIES["dulles_greenway"]
+    return _oracle_route.directional_mismatch(
+        origin,
+        destination,
+        nodes=greenway["nodes"],
+        pairs=greenway["pairs"],
+        label_idx=greenway["label_index"],
+        position=_GREENWAY_POSITION.__getitem__,
+        increasing_direction="EB",
+        decreasing_direction="WB",
+        preferred={
+            ("Exit 2B - Compass Creek Pkwy", "entry", "EB"): [
+                "Exit 2 - Battlefield Pkwy"
+            ]
+        },
+    )
 
 
 # ponytail: resolution/matching pattern duplicated with i66_route.py/i95_route.py's
@@ -163,6 +194,17 @@ def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
     composite = _composite_lookup(origin_ids, destination_ids)
     if composite is not None:
         return {"legs": composite}
+
+    if origin_ids["dulles_greenway"] and destination_ids["dulles_greenway"]:
+        mismatch = _greenway_mismatch(origin, destination)
+        if mismatch:
+            return mismatch
+    elif origin_ids["dulles_greenway"]:
+        if mismatch := _greenway_mismatch(origin, _BOUNDARY_LABEL):
+            return mismatch
+    elif destination_ids["dulles_greenway"]:
+        if mismatch := _greenway_mismatch(_BOUNDARY_LABEL, destination):
+            return mismatch
 
     reachable = sorted(
         {
@@ -274,10 +316,13 @@ def dulles_route(
 
     Returns:
         dict: Success includes ``legs`` and decimal-string ``tolls``; an empty
-        ``tolls`` list means no toll applies. Failure is
+        ``tolls`` list means no toll applies. A wrong-way endpoint returns
+        ``one_way_mismatch`` before pricing. Failure otherwise returns
         ``{"error", "valid_options"}``.
     """
     result = _lookup(origin, destination)
+    if result.get("status") == "one_way_mismatch":
+        return result
     if "error" in result:
         logger.info(
             "dulles_route miss origin=%r destination=%r error=%r",

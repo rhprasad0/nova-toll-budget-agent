@@ -40,10 +40,30 @@ _NODES: _oracle_route.Nodes = _ORACLE["nodes"]
 _PAIRS: _oracle_route.Pairs = _ORACLE["pairs"]
 
 _LABEL_INDEX = _oracle_route.label_index(_NODES)
+_POSITION = {
+    node_id: position
+    for position, node_ids in enumerate(
+        (
+            ("1",),
+            ("2", "3", "5"),
+            ("4",),
+            ("6",),
+            ("7",),
+            ("10",),
+            ("11",),
+            ("8", "9", "12"),
+            ("13", "17"),
+            ("14",),
+            ("15",),
+            ("16",),
+        )
+    )
+    for node_id in node_ids
+}
 
 
 def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
-    return _oracle_route.lookup(
+    result = _oracle_route.lookup(
         origin,
         destination,
         nodes=_NODES,
@@ -54,6 +74,26 @@ def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
             {"start_zone_id": p["start_zone"], "end_zone_id": p["end_zone"]}
         ],
     )
+    if result.get("error", "").startswith("no direct trip"):
+        result.update(
+            _oracle_route.directional_mismatch(
+                origin,
+                destination,
+                nodes=_NODES,
+                pairs=_PAIRS,
+                label_idx=_LABEL_INDEX,
+                position=_POSITION.__getitem__,
+                increasing_direction="EB",
+                decreasing_direction="WB",
+                preferred={
+                    ("Lee Highway - Scott Street", "exit", "EB"): [
+                        "Fairfax Drive",
+                        "Lee Highway - Spout Run Parkway",
+                    ]
+                },
+            )
+        )
+    return result
 
 
 _CURRENT_I66_PRICE_SQL = """
@@ -134,7 +174,9 @@ def i66_route(
     Returns:
         dict: Success includes resolved ``entry``/``exit``, one ``legs`` item,
         decimal-string ``total_usd``, and VDOT ``priced_as_of`` and
-        ``observed_at`` timestamps. Failure is ``{"error", "valid_options"}``.
+        ``observed_at`` timestamps. A wrong-way endpoint returns
+        ``one_way_mismatch`` before pricing. Failure otherwise returns
+        ``{"error", "valid_options"}``.
     """
     return _oracle_route.run(
         "i66_route",
