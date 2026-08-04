@@ -20,7 +20,12 @@ from conftest import FakeConnection
 from conftest import connect_returning as _connect_returning
 
 from agent_tools import _oracle_route
-from agent_tools.i95_route import i95_access_options, i95_junction_leg, i95_route
+from agent_tools.i95_route import (
+    i95_access_options,
+    i95_endpoint_access_options,
+    i95_junction_leg,
+    i95_route,
+)
 
 _EASTERN = ZoneInfo("America/New_York")
 _PRICED_AS_OF = datetime(2026, 7, 26, 14, 20, tzinfo=_EASTERN)
@@ -282,6 +287,42 @@ def test_access_options_reports_supported_pair_without_pricing():
     )
 
     assert result == {"status": "supported", "direction": "Southbound"}
+
+
+def test_endpoint_access_options_require_a_cross_corridor_northbound_entry():
+    result = i95_endpoint_access_options(
+        "I-95 Near Joplin Road/Quantico",
+        "entry",
+        "Franconia-Springfield Parkway/Route 289",
+    )
+
+    assert result["status"] == "one_way_mismatch"
+    assert result["constraints"] == [
+        {
+            "location": "I-95 Near Joplin Road/Quantico",
+            "role": "entry",
+            "required_direction": "Northbound",
+            "available_directions": [],
+            "nearby_options": [
+                "I-95 Near Dumfries Road/Route 234",
+                "I-95 Near Cardinal Drive",
+            ],
+        }
+    ]
+
+
+def test_endpoint_access_options_require_a_cross_corridor_southbound_exit():
+    result = i95_endpoint_access_options(
+        "I-95 Near Quantico",
+        "exit",
+        "Franconia-Springfield Parkway/Route 289",
+    )
+
+    assert result["status"] == "one_way_mismatch"
+    assert result["constraints"][0]["nearby_options"] == [
+        "I-95 Near Garrisonville Road/Route 610",
+        "I-95 Near Joplin Road/Quantico",
+    ]
 
 
 def test_access_options_returns_choices_for_both_invalid_endpoints():

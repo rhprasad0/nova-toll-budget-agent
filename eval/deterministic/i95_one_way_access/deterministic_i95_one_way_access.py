@@ -187,6 +187,8 @@ def _self_check() -> None:
     assert [row["id"] for row in rows] == [
         "invalid-southbound-destination",
         "invalid-northbound-origin",
+        "invalid-cross-corridor-origin",
+        "invalid-cross-corridor-destination",
         "supported-direct-control",
     ]
     mismatch = rows[0]
@@ -207,7 +209,23 @@ def _self_check() -> None:
         == "mismatch"
     )
     assert evaluate_one_way_access_turn([], "", mismatch)[0].label == "tool_mismatch"
-    supported = rows[2]
+    cross_mismatch = rows[2]
+    cross_call = {
+        "name": "plan_toll_route",
+        "input": cross_mismatch["expected_trajectory"][0]["calls"][0]["input"],
+        "tool_result": {
+            "status": "one_way_mismatch",
+            "direction": cross_mismatch["expected_mismatch"]["direction"],
+            "constraints": [cross_mismatch["expected_mismatch"]["constraint"]],
+        },
+    }
+    assert (
+        evaluate_one_way_access_turn(
+            [cross_call], " ".join(cross_mismatch["response_terms"]), cross_mismatch
+        )[0].label
+        == "mismatch"
+    )
+    supported = rows[4]
     calls = [
         {
             "name": expected["tool"],

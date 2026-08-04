@@ -45,7 +45,7 @@ _DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 def load_cases() -> list[Case[str, str]]:
     cases: list[Case[str, str]] = []
-    for row in load_rows()[:2]:
+    for row in [row for row in load_rows() if "expected_mismatch" in row][:3]:
         constraint = row["expected_mismatch"]["constraint"]
         selected = constraint["nearby_options"][0]
         cases.append(
@@ -126,6 +126,44 @@ class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
         expected = metadata["expected_trajectory"][0]["calls"][0]["input"]
         selected = metadata["selected_alternative"]
         calls = extract_unique_tool_calls(session)
+        role = metadata["expected_mismatch"]["constraint"]["role"]
+        if metadata["expected_trajectory"][0]["calls"][0]["tool"] == "plan_toll_route":
+            expected_selected = {
+                **expected,
+                "origin" if role == "entry" else "destination": selected,
+            }
+            if [call["name"] for call in calls[:2]] != [
+                "plan_toll_route",
+                "plan_toll_route",
+            ]:
+                return _result(
+                    False,
+                    f"unexpected planner calls: {[call['name'] for call in calls]}",
+                    "tool_order",
+                )
+            if not _matches_input(calls[0], expected) or not _matches_input(
+                calls[1], expected_selected
+            ):
+                return _result(
+                    False,
+                    "planner inputs changed the assigned route",
+                    "input_mismatch",
+                )
+            first = _tool_result(calls[0])
+            second = _tool_result(calls[1])
+            if first is None or second is None:
+                return _result(False, "missing planner result", "bad_access_result")
+            if first.get("status") != "one_way_mismatch" or "steps" not in second:
+                return _result(
+                    False,
+                    f"unexpected planner results: {first}, {second}",
+                    "wrong_access_result",
+                )
+            return _result(
+                True,
+                "recovery replanned the complete journey with the selected ramp",
+                "recovered",
+            )
         if [call["name"] for call in calls] != [
             "i95_access_options",
             "i95_access_options",
@@ -138,9 +176,7 @@ class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
             )
         expected_selected = {
             **expected,
-            "origin"
-            if metadata["expected_mismatch"]["constraint"]["role"] == "entry"
-            else "destination": selected,
+            "origin" if role == "entry" else "destination": selected,
         }
         if not _matches_input(calls[0], expected) or any(
             not _matches_input(call, expected_selected) for call in calls[1:]
@@ -224,7 +260,7 @@ def main() -> None:
 
 def _self_check() -> None:
     cases = load_cases()
-    assert len(cases) == 2
+    assert len(cases) == 3
     assert all(
         "up to three turns" in build_actor_profile(case).actor_goal for case in cases
     )

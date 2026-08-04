@@ -1,8 +1,8 @@
 # I-95/395 one-way access evaluations
 
 This track verifies TollChat checks I-95/395 direction-specific access before
-pricing. It covers invalid southbound exits, invalid northbound entries, and a
-supported control route.
+pricing. It covers direct and cross-corridor invalid southbound exits,
+invalid northbound entries, and a supported control route.
 
 ## Offline checks
 

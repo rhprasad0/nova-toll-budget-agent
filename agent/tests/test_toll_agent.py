@@ -577,6 +577,34 @@ def test_planner_uses_unpriced_directional_i95_i495_junction_both_ways():
     ]
 
 
+def test_planner_explains_an_invalid_cross_corridor_i95_origin():
+    plan = plan_toll_route(
+        "i95", "I-95 Near Joplin Road/Quantico", "i495", "Westpark Drive"
+    )
+
+    assert plan["status"] == "one_way_mismatch"
+    assert plan["direction"] == "Northbound"
+    assert plan["constraints"][0]["role"] == "entry"
+    assert plan["constraints"][0]["nearby_options"] == [
+        "I-95 Near Dumfries Road/Route 234",
+        "I-95 Near Cardinal Drive",
+    ]
+    assert "steps" not in plan
+
+
+def test_planner_explains_an_invalid_cross_corridor_i95_destination():
+    plan = plan_toll_route("i495", "Westpark Drive", "i95", "I-95 Near Quantico")
+
+    assert plan["status"] == "one_way_mismatch"
+    assert plan["direction"] == "Southbound"
+    assert plan["constraints"][0]["role"] == "exit"
+    assert plan["constraints"][0]["nearby_options"] == [
+        "I-95 Near Garrisonville Road/Route 610",
+        "I-95 Near Joplin Road/Quantico",
+    ]
+    assert "steps" not in plan
+
+
 def test_planner_omits_495_price_for_an_endpoint_inside_the_gap():
     plan = plan_toll_route("i95", "US-1", "i495", "I-495/I-95 Near Van Dorn Street")
     assert [step["kind"] for step in plan["steps"]] == ["junction", "unpriced"]
@@ -746,6 +774,9 @@ def test_planner_matches_exhaustive_directed_oracle_reachability():
                         destination_corridor,
                         destination,
                     )
+                    if plan.get("status") == "one_way_mismatch":
+                        assert origin_corridor == "i95" or destination_corridor == "i95"
+                        continue
                     assert ("error" not in plan) is expected, (
                         origin_corridor,
                         origin,
@@ -909,12 +940,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.11.0"
-    advanced["system_prompt"]["releases"]["1.11.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.12.0"
+    advanced["system_prompt"]["releases"]["1.12.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.10\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.11\.0"):
         validate_manifest_update(previous, advanced)
 
 

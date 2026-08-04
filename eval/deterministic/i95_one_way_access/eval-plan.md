@@ -8,11 +8,11 @@ replacement.
 
 ## Tracks
 
-- **Deterministic:** three code-graded cases validate checker-first tool calls,
-  exact structured constraints, alternatives, no premature fare, and a supported
-  control route.
-- **Simulated:** two explicit driver profiles use three turns to choose a named
-  returned alternative and confirm the recovered route.
+- **Deterministic:** direct and cross-corridor code-graded cases validate
+  checker/planner-first calls, exact structured constraints, alternatives, no
+  premature fare, and a supported control route.
+- **Simulated:** three explicit driver profiles use up to three turns to choose
+  a named returned alternative and confirm the recovered route.
 
 ## Promotion and execution
 

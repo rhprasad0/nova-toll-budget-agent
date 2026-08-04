@@ -191,6 +191,65 @@ def _one_way_mismatch(origin: str, destination: str) -> _oracle_route.JsonObject
     )
 
 
+def i95_endpoint_access_options(
+    location: str,
+    role: Literal["entry", "exit"],
+    counterpart: str,
+) -> _oracle_route.JsonObject:
+    """Check one I-95 endpoint against a cross-corridor handoff.
+
+    ``counterpart`` is the I-95/I-495 boundary the selected endpoint must
+    reach. This is intentionally not a tool: ``plan_toll_route`` owns
+    cross-corridor endpoint validation.
+    """
+    location_ids = _oracle_route.resolve(location, nodes=_NODES, label_idx=_LABEL_INDEX)
+    counterpart_ids = _oracle_route.resolve(
+        counterpart, nodes=_NODES, label_idx=_LABEL_INDEX
+    )
+    location_latitude = _latitude(location_ids)
+    counterpart_latitude = _latitude(counterpart_ids)
+    if location_latitude is None or counterpart_latitude is None:
+        return {}
+    northbound = (
+        counterpart_latitude > location_latitude
+        if role == "entry"
+        else location_latitude > counterpart_latitude
+    )
+    direction: Literal["Northbound", "Southbound"] = (
+        "Northbound" if northbound else "Southbound"
+    )
+    route = (
+        _lookup(location, counterpart)
+        if role == "entry"
+        else _lookup(counterpart, location)
+    )
+    if "error" not in route:
+        return {"status": "supported", "direction": direction}
+    constraint = {
+        "location": location,
+        "role": role,
+        "required_direction": direction,
+        "available_directions": sorted(_role_directions(location_ids, role)),
+        "nearby_options": _nearby_options(
+            location_ids,
+            role,
+            direction,
+            counterpart_ids,
+            require_direct_pair=True,
+        ),
+    }
+    return {
+        "error": (
+            f"{location!r} is not a valid {direction.lower()} {role} "
+            "for this cross-corridor trip"
+        ),
+        "valid_options": constraint["nearby_options"],
+        "status": "one_way_mismatch",
+        "direction": direction,
+        "constraints": [constraint],
+    }
+
+
 @tool
 def i95_access_options(origin: str, destination: str) -> _oracle_route.JsonObject:
     """Check direct I-95/395 access before requesting a price.
