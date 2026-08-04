@@ -3,7 +3,7 @@ name = "tollchat"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "boto3>=1.43.57",
+    "boto3>=1.43.62",
     "defusedxml>=0.7.1",
     "openai>=2.45.0,<3",
     "strands-agents[openai]==1.50.2",
