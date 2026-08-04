@@ -19,12 +19,20 @@ from strands_evals.evaluators import (  # noqa: E402
     GoalSuccessRateEvaluator,
     HelpfulnessEvaluator,
 )
+from strands_evals.simulation.actor_simulator import (  # noqa: E402
+    DEFAULT_USER_SIMULATOR_PROMPT_TEMPLATE,
+)
 from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
 )
 from strands_evals.types.simulation import ActorProfile  # noqa: E402
-from strands_evals.types.trace import Session  # noqa: E402
+from strands_evals.types.trace import (  # noqa: E402
+    AgentInvocationSpan,
+    Session,
+    SpanInfo,
+    Trace,
+)
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
@@ -41,6 +49,11 @@ from eval.simulation_support import (  # noqa: E402
 _RESULTS_DIR = _REPO_ROOT / "eval" / "results"
 _MODEL_ID_ENV = "NOVA_TOLL_EVAL_MODEL_ID"
 _DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+_THREE_TURN_ACTOR_PROMPT = (
+    DEFAULT_USER_SIMULATOR_PROMPT_TEMPLATE
+    + "\n\nTurn requirement: produce exactly three response turns. Never set "
+    "stop=true before your third response; set stop=true on that response."
+)
 
 
 def load_cases() -> list[Case[str, str]]:
@@ -111,6 +124,14 @@ def _matches_input(call: dict[str, Any], expected: dict[str, Any]) -> bool:
     )
 
 
+def _agent_turn_count(session: Session) -> int:
+    return sum(
+        isinstance(span, AgentInvocationSpan)
+        for trace in session.traces
+        for span in trace.spans
+    )
+
+
 class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
     """Code-grade the distinct access and recovery calls across actor turns."""
 
@@ -121,6 +142,10 @@ class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
         if not isinstance(session, Session):
             return _result(
                 False, "actual trajectory was not a telemetry session", "bad_trajectory"
+            )
+        if _agent_turn_count(session) != 3:
+            return _result(
+                False, "simulation did not use exactly three turns", "turn_count"
             )
         metadata = evaluation_case.metadata or {}
         expected = metadata["expected_trajectory"][0]["calls"][0]["input"]
@@ -177,7 +202,8 @@ def build_helpfulness_evaluator(model_id: str) -> HelpfulnessEvaluator[str, str]
         "\n\n# Evaluation context\n"
         f"The evaluation date in America/New_York is {today:%B} {today.day}, {today.year}. "
         "TollChat prices Northern Virginia toll roads only. Do not reward invented "
-        "routing, fares, or access points."
+        "routing, fares, or access points. When I-95 Express Lanes are unavailable, "
+        "it is appropriate to call the I-95 general-purpose lanes an unpriced alternative."
     )
     return evaluator
 
@@ -195,6 +221,7 @@ def main() -> None:
             initial_query=str(case.input),
             model=model_id,
             max_turns=3,
+            system_prompt_template=_THREE_TURN_ACTOR_PROMPT,
         )
         return run_case_with_simulator(
             case.session_id,
@@ -226,11 +253,37 @@ def _self_check() -> None:
         "exactly three turns" in build_actor_profile(case).actor_goal for case in cases
     )
     assert all((case.metadata or {}).get("selected_alternative") for case in cases)
+    assert "Never set stop=true before your third response" in _THREE_TURN_ACTOR_PROMPT
     bad = OneWaySimulationTraceEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )
     assert bad[0].label == "bad_trajectory"
-    print("self-check ok (two actor profiles and bad-session guard; no network)")
+    now = datetime.now(UTC)
+    span = AgentInvocationSpan(
+        span_info=SpanInfo(session_id="test", start_time=now, end_time=now),
+        user_prompt="x",
+        agent_response="y",
+        available_tools=[],
+    )
+    session = Session(
+        traces=[Trace(spans=[span] * 3, trace_id="test", session_id="test")],
+        session_id="test",
+    )
+    assert _agent_turn_count(session) == 3
+    assert (
+        OneWaySimulationTraceEvaluator()
+        .evaluate(
+            EvaluationData[str, str](
+                input="x",
+                actual_output="",
+                actual_trajectory=session,
+                metadata=cases[0].metadata,
+            )
+        )[0]
+        .label
+        == "tool_order"
+    )
+    print("self-check ok (two actor profiles and exact-turn guard; no network)")
 
 
 if __name__ == "__main__":

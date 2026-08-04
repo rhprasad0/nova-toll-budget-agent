@@ -18,8 +18,7 @@ replacement.
 
 Run the deterministic suite three times. Only three complete perfect runs make
 it eligible for trusted integration CI. The simulated suite is observational and
-runs nightly. The authorized live budget is three deterministic suite executions
-and one two-case simulation execution.
+runs nightly.
 
 ## Execution record
 
@@ -29,3 +28,7 @@ and one two-case simulation execution.
   judgments). It is not curated or rerun: one actor stopped after turn one,
   while a grader comparison was corrected to ignore harmless extra tool fields.
   Its next live attempt remains a nightly observation.
+- 2026-08-04: one renewed deterministic run passed 3/3. The renewed simulation
+  scored 0.5277 (3/6): both actors ended before its exact-three-turn criterion,
+  so it is not curated. The actor prompt now structurally requires three turns,
+  and the helpfulness judge includes the documented unpriced-lanes policy.
