@@ -40,7 +40,6 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
         Case[str, str](
             name=row["id"],
             input=row["conversation"][0]["content"],
-            expected_trajectory=[call["name"] for call in row["expected_calls"]],
             metadata=row,
         )
         for row in load_rows(path)
@@ -110,6 +109,12 @@ def evaluate_calls(
         return _result(False, f"planner returned {plan}", "planner_error")
     raw_steps = plan.get("steps")
     steps = cast(list[dict[str, Any]], raw_steps) if isinstance(raw_steps, list) else []
+    if [step.get("kind") for step in steps] != ["priced", "connector", "priced"]:
+        return _result(
+            False,
+            f"planner step kinds {[step.get('kind') for step in steps]} were unexpected",
+            "step_mismatch",
+        )
     connectors = [step for step in steps if step.get("kind") == "connector"]
     expected_connector = metadata["expected_connector"]
     if len(connectors) != 1 or any(
@@ -190,7 +195,8 @@ def _self_check() -> None:
     assert len(rows) == 2
 
     for row in rows:
-        plan = plan_toll_route(**row["expected_calls"][0]["input"])
+        expected_calls = cast(list[dict[str, Any]], row["expected_calls"])
+        plan = plan_toll_route(**cast(dict[str, Any], expected_calls[0]["input"]))
         calls = [
             {
                 **expected,
@@ -198,16 +204,36 @@ def _self_check() -> None:
                     plan if expected["name"] == "plan_toll_route" else {}
                 ),
             }
-            for expected in row["expected_calls"]
+            for expected in expected_calls
         ]
         assert evaluate_calls(calls, row)[0].label == "route_matched"
 
     row: dict[str, Any] = rows[-1]
-    connector = cast(dict[str, Any], row["expected_connector"])
-    bad_plan: dict[str, list[dict[str, Any]]] = {
-        "steps": [{"kind": "connector", **connector, "price_usd": "1.00"}]
-    }
     expected_calls = cast(list[dict[str, Any]], row["expected_calls"])
+    plan = plan_toll_route(**cast(dict[str, Any], expected_calls[0]["input"]))
+    steps = cast(list[dict[str, Any]], plan["steps"])
+    bad_plan = {
+        **plan,
+        "steps": [
+            {**step, "price_usd": "1.00"} if step.get("kind") == "connector" else step
+            for step in steps
+        ],
+    }
+    extra_step_plan: dict[str, Any] = {
+        **plan,
+        "steps": [
+            *steps,
+            {"kind": "unpriced", "reason": "unexpected"},
+        ],
+    }
+    extra_step_calls: list[dict[str, Any]] = [
+        {
+            **expected_calls[0],
+            "tool_result": json.dumps(extra_step_plan),
+        },
+        *expected_calls[1:],
+    ]
+    assert evaluate_calls(extra_step_calls, row)[0].label == "step_mismatch"
     bad_calls: list[dict[str, Any]] = [
         {
             **expected_calls[0],
