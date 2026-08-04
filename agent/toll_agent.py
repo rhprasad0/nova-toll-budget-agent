@@ -510,7 +510,11 @@ def _can_price(
     destination: str,
 ) -> bool:
     result = _route_lookup(origin_corridor, origin, destination_corridor, destination)
-    return "error" not in result and result.get("status") != "one_way_mismatch"
+    return (
+        "error" not in result
+        and result.get("status") != "one_way_mismatch"
+        and result.get("ok", True)
+    )
 
 
 def _route_lookup(
@@ -573,8 +577,10 @@ def _planned_steps(
     mismatch: _oracle_route.JsonObject | None = None
     while frontier:
         corridor, point, steps = frontier.pop(0)
-        if corridor == destination_corridor and _same_location(
-            corridor, destination, point
+        if (
+            corridor == destination_corridor
+            and _same_location(corridor, destination, point)
+            and _LOCATION_BY_CORRIDOR[corridor][destination]["exit"]
         ):
             return steps
         direct = _route_lookup(corridor, point, destination_corridor, destination)

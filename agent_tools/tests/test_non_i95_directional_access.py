@@ -35,6 +35,17 @@ def test_i495_wrong_direction_exit_returns_recovery():
     )
 
 
+def test_i495_dual_mismatch_never_offers_an_unroutable_pair():
+    result = i495_mod._lookup(
+        "495 Express Lanes End/George Wash. Mem. Pkwy.",
+        "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+    )
+
+    entry, exit = result["constraints"]
+    assert entry["role"] == "entry" and exit["role"] == "exit"
+    assert exit["nearby_options"] == ["495 Express Lanes End/George Wash. Mem. Pkwy."]
+
+
 def test_fixed_directional_access_does_not_depend_on_time():
     calls = (
         lambda at_time: i66_mod.i66_route(

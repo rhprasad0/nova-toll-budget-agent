@@ -451,6 +451,18 @@ def test_planner_rejects_westpark_to_scott_and_offers_eastbound_recovery():
     assert plan["constraints"][0]["nearby_options"][0] == "Fairfax Drive"
 
 
+def test_can_price_rejects_an_unconnected_i95_pair():
+    assert not toll_agent_module._can_price(
+        "i95", "US-1", "i95", "Courthouse Road/Route 630"
+    )
+
+
+def test_planner_does_not_treat_a_transfer_entry_as_a_destination():
+    plan = plan_toll_route("i495", "Braddock Road", "i66_itb", "I-495 Express Lanes N")
+
+    assert "steps" not in plan
+
+
 def test_planner_defaults_to_one_timezone_aware_timestamp():
     plan = plan_toll_route(
         "i66_itb", "Lee Highway - Scott Street", "i495", "Braddock Road"
@@ -792,6 +804,14 @@ def test_planner_matches_exhaustive_directed_oracle_reachability():
                         destination,
                     )
                     if plan.get("status") == "one_way_mismatch":
+                        if "i95" not in (origin_corridor, destination_corridor):
+                            assert not expected, (
+                                origin_corridor,
+                                origin,
+                                destination_corridor,
+                                destination,
+                                plan,
+                            )
                         continue
                     assert ("error" not in plan) is expected, (
                         origin_corridor,

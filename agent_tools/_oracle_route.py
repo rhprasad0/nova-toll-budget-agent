@@ -152,6 +152,7 @@ def directional_mismatch(
     position: Callable[[str], float],
     increasing_direction: str,
     decreasing_direction: str,
+    distance: Callable[[str, list[str]], float] | None = None,
     preferred: Mapping[tuple[str, str, str], list[str]] | None = None,
 ) -> JsonObject:
     """Explain a known endpoint that cannot serve the requested direction."""
@@ -191,8 +192,14 @@ def directional_mismatch(
         distances: dict[str, float] = {}
         for node_id in candidates:
             label = nodes[node_id]["label"]
-            distance = min(abs(position(node_id) - position(i)) for i in location_ids)
-            distances[label] = min(distances.get(label, float("inf")), distance)
+            candidate_distance = (
+                distance(node_id, location_ids)
+                if distance
+                else min(abs(position(node_id) - position(i)) for i in location_ids)
+            )
+            distances[label] = min(
+                distances.get(label, float("inf")), candidate_distance
+            )
         favorites = (preferred or {}).get((location, role, direction), [])
         nearby = sorted(
             distances,
@@ -211,6 +218,26 @@ def directional_mismatch(
                 "nearby_options": nearby,
             }
         )
+    if len(constraints) == 2:
+        entry_constraint = next(c for c in constraints if c["role"] == "entry")
+        exit_constraint = next(c for c in constraints if c["role"] == "exit")
+        entries = entry_constraint["nearby_options"]
+        exits = exit_constraint["nearby_options"]
+
+        def has_pair(entry: str, exit: str) -> bool:
+            entry_ids = resolve(entry, nodes=nodes, label_idx=label_idx)
+            exit_ids = resolve(exit, nodes=nodes, label_idx=label_idx)
+            return any(
+                pair["entry"] in entry_ids and pair["exit"] in exit_ids
+                for pair in pairs
+            )
+
+        entry_constraint["nearby_options"] = [
+            entry for entry in entries if any(has_pair(entry, exit) for exit in exits)
+        ]
+        exit_constraint["nearby_options"] = [
+            exit for exit in exits if any(has_pair(entry, exit) for entry in entries)
+        ]
     return (
         {
             "status": "one_way_mismatch",
