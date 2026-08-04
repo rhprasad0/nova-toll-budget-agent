@@ -45,6 +45,7 @@ jobs:
           uv run --frozen python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py || failed=1
           uv run --frozen python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py || failed=1
           uv run --frozen python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py || failed=1
+          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_one_way_access.py || failed=1
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py || failed=1
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_ny_time_us_format.py || failed=1
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_historical_closures.py || failed=1

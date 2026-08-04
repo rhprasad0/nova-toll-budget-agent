@@ -50,7 +50,12 @@ from agent_tools.dulles_route import (
 )
 from agent_tools.dulles_route import dulles_route
 from agent_tools.i66_route import i66_route
-from agent_tools.i95_route import i95_junction_leg, i95_route
+from agent_tools.i95_route import (
+    i95_access_options,
+    i95_endpoint_access_options,
+    i95_junction_leg,
+    i95_route,
+)
 from agent_tools.i495_route import i495_route
 
 _ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles"
@@ -61,21 +66,38 @@ _ORACLES: dict[str, _oracle_route.JsonObject] = {
 
 
 def _locations(
-    nodes: _oracle_route.Nodes, pairs: _oracle_route.Pairs
-) -> list[dict[str, str | bool]]:
+    nodes: _oracle_route.Nodes,
+    pairs: _oracle_route.Pairs,
+    *,
+    directional: bool = False,
+) -> list[dict[str, object]]:
     """Return the labels and roles a route tool can actually resolve."""
     entry_ids = {pair["entry"] for pair in pairs}
     exit_ids = {pair["exit"] for pair in pairs}
-    return [
-        {
+    locations: list[dict[str, object]] = []
+    for label in sorted({nodes[node_id]["label"] for node_id in entry_ids | exit_ids}):
+        location: dict[str, object] = {
             "label": label,
             "entry": any(nodes[node_id]["label"] == label for node_id in entry_ids),
             "exit": any(nodes[node_id]["label"] == label for node_id in exit_ids),
         }
-        for label in sorted(
-            {nodes[node_id]["label"] for node_id in entry_ids | exit_ids}
-        )
-    ]
+        if directional:
+            location["entry_directions"] = sorted(
+                {
+                    pair["direction"]
+                    for pair in pairs
+                    if nodes[pair["entry"]]["label"] == label
+                }
+            )
+            location["exit_directions"] = sorted(
+                {
+                    pair["direction"]
+                    for pair in pairs
+                    if nodes[pair["exit"]]["label"] == label
+                }
+            )
+        locations.append(location)
+    return locations
 
 
 def _load_priced_location_oracle() -> dict[str, _oracle_route.JsonObject]:
@@ -97,7 +119,10 @@ def _load_priced_location_oracle() -> dict[str, _oracle_route.JsonObject]:
     dulles_toll_road = _ORACLES["dulles_toll_road"]
     dulles_greenway = _ORACLES["dulles_greenway"]
     return {
-        "i95": {"tool": "i95_route", "locations": _locations(i95["nodes"], i95_pairs)},
+        "i95": {
+            "tool": "i95_route",
+            "locations": _locations(i95["nodes"], i95_pairs, directional=True),
+        },
         "i495": {
             "tool": "i495_route",
             "locations": _locations(i95["nodes"], i495_pairs),
@@ -157,8 +182,8 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.9.0"
-TOOLSET_VERSION = "1.1.0"
+SYSTEM_PROMPT_VERSION = "1.11.0"
+TOOLSET_VERSION = "1.3.0"
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -365,6 +390,7 @@ _LOCATION_BY_CORRIDOR = {
     for corridor, data in _PRICED_LOCATION_ORACLE.items()
 }
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
+_CROSS_I95_HANDOFF = "Franconia-Springfield Parkway/Route 289"
 _I495_JUNCTION_ENTRY = "191NO"
 _I495_JUNCTION_EXIT = "191SD"
 _ROUTE_267_DETOUR_CONNECTORS = {
@@ -645,7 +671,9 @@ def plan_toll_route(
 
     Returns:
         dict: ``{"at_time", "steps"}``, optionally with ``routing_note``;
-        each step has a ``kind`` and its documented tool arguments. Failures
+        each step has a ``kind`` and its documented tool arguments. A
+        directionally invalid I-95 endpoint returns the same structured
+        ``one_way_mismatch`` result as ``i95_access_options``; other failures
         return ``{"error": str}``.
     """
     try:
@@ -657,6 +685,22 @@ def plan_toll_route(
         return {"error": f"unknown origin corridor {origin_corridor!r}"}
     if destination_corridor not in _LOCATION_BY_CORRIDOR:
         return {"error": f"unknown destination corridor {destination_corridor!r}"}
+    if (
+        origin_corridor == "i95"
+        and destination_corridor != "i95"
+        and origin in _LOCATION_BY_CORRIDOR["i95"]
+    ):
+        access = i95_endpoint_access_options(origin, "entry", _CROSS_I95_HANDOFF)
+        if access["status"] == "one_way_mismatch":
+            return access
+    if (
+        destination_corridor == "i95"
+        and origin_corridor != "i95"
+        and destination in _LOCATION_BY_CORRIDOR["i95"]
+    ):
+        access = i95_endpoint_access_options(destination, "exit", _CROSS_I95_HANDOFF)
+        if access["status"] == "one_way_mismatch":
+            return access
     if error := _validate_location(origin_corridor, origin, "entry"):
         return error
     if error := _validate_location(destination_corridor, destination, "exit"):
@@ -683,6 +727,7 @@ def plan_toll_route(
 
 _AGENT_TOOLS = (
     plan_toll_route,
+    i95_access_options,
     i95_junction_leg,
     i95_route,
     i495_route,

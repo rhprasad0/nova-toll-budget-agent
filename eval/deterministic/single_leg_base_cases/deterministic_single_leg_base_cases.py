@@ -111,17 +111,21 @@ def _tool_result(call: dict[str, Any]) -> dict[str, Any] | None:
 def evaluate_single_leg_calls(
     calls: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
-    """Grade one captured pricing call against its verified fixture."""
+    """Grade the required access check and pricing call against the fixture."""
     expected = metadata["expected_trajectory"][0]
-    if len(calls) != 1 or calls[0].get("name") != expected["tool"]:
+    names = [call.get("name") for call in calls]
+    expected_names = [expected["tool"]]
+    if expected["tool"] == "i95_route":
+        expected_names.insert(0, "i95_access_options")
+    if names != expected_names:
         return _result(
             False,
-            f"expected exactly one {expected['tool']} call, got "
-            f"{[call.get('name') for call in calls]}",
+            f"expected calls {expected_names}, got {names}",
             "tool_mismatch",
         )
 
-    raw_input = calls[0].get("input")
+    pricing_call = calls[-1]
+    raw_input = pricing_call.get("input")
     actual_input = (
         cast(dict[str, Any], raw_input) if isinstance(raw_input, dict) else {}
     )
@@ -135,7 +139,30 @@ def evaluate_single_leg_calls(
             "input_mismatch",
         )
 
-    captured = _tool_result(calls[0])
+    if expected["tool"] == "i95_route":
+        raw_access_input = calls[0].get("input")
+        access_input = (
+            cast(dict[str, Any], raw_access_input)
+            if isinstance(raw_access_input, dict)
+            else None
+        )
+        required_access = {
+            key: required_input[key] for key in ("origin", "destination")
+        }
+        if access_input is None or any(
+            access_input.get(key) != value for key, value in required_access.items()
+        ):
+            return _result(False, "access check used different ramps", "access_input")
+        access_result = _tool_result(calls[0])
+        if access_result != {
+            "status": "supported",
+            "direction": metadata["expected_result"]["direction"],
+        }:
+            return _result(
+                False, f"unexpected access result: {access_result}", "access_result"
+            )
+
+    captured = _tool_result(pricing_call)
     if captured is None:
         return _result(False, "missing or invalid captured tool result", "bad_result")
     if "error" in captured:
@@ -167,7 +194,7 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
 
 
 class SingleLegTraceEvaluator(Evaluator[str, str]):
-    """Require one exact pricing call and fixture-matching captured result."""
+    """Require the I-95 access check plus exact fixture-matching pricing."""
 
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
@@ -428,6 +455,27 @@ def _self_check() -> None:
     ) -> str | None:
         return trace.evaluate(fake(metadata, calls))[0].label
 
+    def required_calls(
+        metadata: dict[str, Any], pricing_call: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        if pricing_call["name"] != "i95_route":
+            return [pricing_call]
+        required_input = pricing_call["input"]
+        return [
+            {
+                "name": "i95_access_options",
+                "input": {
+                    "origin": required_input["origin"],
+                    "destination": required_input["destination"],
+                },
+                "tool_result": {
+                    "status": "supported",
+                    "direction": metadata["expected_result"]["direction"],
+                },
+            },
+            pricing_call,
+        ]
+
     def response_label(
         metadata: dict[str, Any], call: dict[str, Any], output: str
     ) -> str | None:
@@ -471,14 +519,19 @@ def _self_check() -> None:
             "## Final price\n"
             f"${fare}"
         )
-        assert trace_label(metadata, [call]) == "exact_result"
+        assert trace_label(metadata, required_calls(metadata, call)) == "exact_result"
         assert response_label(metadata, call, good_output) == "grounded_response"
         prepared.append((metadata, call, good_output))
 
     metadata, call, good_output = prepared[0]
     expected = metadata["expected_trajectory"][0]
     assert (
-        trace_label(metadata, [{**call, "input": {**expected["input"], "extra": True}}])
+        trace_label(
+            metadata,
+            required_calls(
+                metadata, {**call, "input": {**expected["input"], "extra": True}}
+            ),
+        )
         == "exact_result"
     )
     assert trace_label(metadata, []) == "tool_mismatch"
@@ -488,21 +541,45 @@ def _self_check() -> None:
     )
     assert (
         trace_label(
-            metadata, [{**call, "input": {**expected["input"], "at_time": "wrong"}}]
+            metadata,
+            required_calls(
+                metadata, {**call, "input": {**expected["input"], "at_time": "wrong"}}
+            ),
         )
         == "input_mismatch"
     )
-    assert trace_label(metadata, [{**call, "tool_result": "not-json"}]) == "bad_result"
     assert (
-        trace_label(metadata, [{**call, "tool_result": {"error": "no"}}])
+        trace_label(
+            metadata, required_calls(metadata, {**call, "tool_result": "not-json"})
+        )
+        == "bad_result"
+    )
+    assert (
+        trace_label(
+            metadata, required_calls(metadata, {**call, "tool_result": {"error": "no"}})
+        )
         == "tool_error"
     )
     extra_leg: dict[str, Any] = {**metadata["expected_result"], "legs": [{}, {}]}
-    assert trace_label(metadata, [{**call, "tool_result": extra_leg}]) == "leg_count"
+    assert (
+        trace_label(
+            metadata, required_calls(metadata, {**call, "tool_result": extra_leg})
+        )
+        == "leg_count"
+    )
     wrong_result = {**metadata["expected_result"], "total_usd": "999.99"}
     assert (
-        trace_label(metadata, [{**call, "tool_result": wrong_result}])
+        trace_label(
+            metadata, required_calls(metadata, {**call, "tool_result": wrong_result})
+        )
         == "result_mismatch"
+    )
+    access = required_calls(metadata, call)[0]
+    assert (
+        trace_label(
+            metadata, [{**access, "tool_result": {"status": "supported"}}, call]
+        )
+        == "access_result"
     )
 
     displayed_route = _ROUTE_ALIASES[metadata["expected_route_label"]]
