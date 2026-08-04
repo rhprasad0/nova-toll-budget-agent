@@ -956,10 +956,23 @@ def test_system_prompt_is_an_agent_sop():
         assert heading in prompt
     assert "**Constraints for parameter acquisition:**" in prompt
     assert "**Constraints:**" in prompt
-    assert "MUST NOT ask the user to supply an at_time when it was omitted" in prompt
+    assert "MUST NOT mention, offer, suggest, or ask" in prompt
     assert "relative or ambiguous at_time" in prompt
     assert prompt.count("### Example ") == 3
     assert "You MUST" in prompt
+
+
+def test_system_prompt_acquires_all_and_only_missing_required_parameters():
+    prompt = " ".join(build_system_prompt().split())
+    assert "respond with exactly one clarifying question" in prompt
+    assert "every currently missing required parameter" in prompt
+    assert "exact parameter names as defined" in prompt
+    assert "MUST NOT add anything else because" in prompt
+    assert "MUST NOT re-request an origin or destination" in prompt
+    assert "MUST NOT mention, offer, suggest, or ask" in prompt
+    assert 'ask exactly: "What is the origin?"' in prompt
+    assert 'ask exactly: "What is the destination?"' in prompt
+    assert 'ask exactly: "What are the origin and destination?"' in prompt
 
 
 def test_system_prompt_has_no_unresolved_placeholders():
@@ -1026,12 +1039,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.18.0"
-    advanced["system_prompt"]["releases"]["1.18.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.19.0"
+    advanced["system_prompt"]["releases"]["1.19.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.17\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.18\.0"):
         validate_manifest_update(previous, advanced)
 
 

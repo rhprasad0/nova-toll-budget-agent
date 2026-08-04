@@ -1,6 +1,6 @@
 {
   "system_prompt": {
-    "current": "1.17.0",
+    "current": "1.18.0",
     "releases": {
       "1.0.0": "fb8d9b5d78a8da76835812c415f283e34e6412b591ae742beca0fb9a1dfbd633",
       "1.1.0": "28f4007a8d558addc4360ed4d5e9d6738394234ae2080fc42dbf28022249591e",
@@ -19,7 +19,8 @@
       "1.14.0": "e6d7b9e02522b051e7b2fb6ee1c398a16d1327ccb7e5996b5c66d0c194fd53de",
       "1.15.0": "213ca4cd65aeea6fc6627bbf508905fecf868360acc5b5d0b3de8584cf92af78",
       "1.16.0": "352401ce84e3bbf6d141f558c81f6a555bf83f3606f6428e2fcaae0ce6db60d9",
-      "1.17.0": "5295875998d07de6837780608c37c5e36d974a01e018354be10ead8314b9a87a"
+      "1.17.0": "5295875998d07de6837780608c37c5e36d974a01e018354be10ead8314b9a87a",
+      "1.18.0": "76c5cec8bdcafa25ce0013ce4af0be5c8423de8b1ea6eecfab6d8059db07f5ae"
     }
   },
   "toolset": {

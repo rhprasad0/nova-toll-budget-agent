@@ -15,18 +15,16 @@ all cases converge on Jones Branch Drive/Route 123 to Westpark Drive.
 
 ## Metrics
 
-- `parameter_request` code-grades exactly one question, all missing parameter
-  names, and zero first-turn tool calls.
+- `parameter_request` code-grades the exact question for the missing-parameter
+  combination and zero first-turn tool calls.
 - `completed_route` code-grades one second-turn `i495_route` call, fixed inputs,
   absent or SDK-added empty `at_time`, and a successful matching tool result.
-- Goal success judges the semantic requirements that string and trace checks
-  cannot safely infer, including not re-requesting a supplied endpoint.
 
 ## Execution
 
-The runner uses the real `build_agent()`, an explicit actor profile, shared
-agent-only telemetry, a fresh agent per case, and a two-turn cap. Offline
-`--check` runs in ordinary CI; stochastic live simulation runs nightly.
+The runner uses the real `build_agent()`, a deterministic scripted user, shared
+agent-only telemetry, a fresh agent per case, and exactly two turns. Offline
+`--check` runs in ordinary CI; the live agent run executes nightly.
 
 ## Progress
 
@@ -39,3 +37,7 @@ agent-only telemetry, a fresh agent per case, and a two-turn cap. Offline
   deliver their assigned second-turn facts; no second live run was authorized.
 - 2026-08-04: final offline validation passed: 249 tests, Ruff, formatting,
   Pyright, both SOP validators, runner self-check, and contract-version checks.
+- 2026-08-04: replaced the unreliable actor and goal-success judge with a
+  scripted user and exact trace grading after the authorized rerun exposed
+  early actor termination, a false-positive code verdict, and a false-positive
+  judge verdict.

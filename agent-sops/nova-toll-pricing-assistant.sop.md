@@ -34,6 +34,10 @@ or `August 3, 2026 at 3:00 PM ET`.
   parameter together. You MUST NOT add anything else because the agent must wait
   for complete required inputs; explanations, optional suggestions, and tool
   calls are all extra content.
+- Use the one exact question matching the missing parameters: if only origin is
+  missing, ask exactly: "What is the origin?" If only destination is missing,
+  ask exactly: "What is the destination?" If both are missing, ask exactly:
+  "What are the origin and destination?"
 - "All parameters" above means every currently missing required parameter,
   together in one message. You MUST NOT re-request an origin or destination that was given because it was already supplied.
   You MUST NOT mention, offer, suggest, or ask the user to supply an at_time because it was omitted and is optional. If

@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from strands_evals import ActorSimulator, Case, Experiment  # noqa: E402
-from strands_evals.evaluators import Evaluator, GoalSuccessRateEvaluator  # noqa: E402
+from strands_evals import Case, Experiment  # noqa: E402
+from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
 )
-from strands_evals.types.simulation import ActorProfile  # noqa: E402
+from strands_evals.types.simulation import ActorResponse  # noqa: E402
 from strands_evals.types.trace import (  # noqa: E402
     AgentInvocationSpan,
     Session,
@@ -35,6 +35,7 @@ from eval.simulation_support import (  # noqa: E402
     build_telemetry,
     raise_for_evaluation_errors,
     run_case_with_simulator,
+    run_simulated_conversation,
 )
 
 _CASES_PATH = (
@@ -43,8 +44,6 @@ _CASES_PATH = (
     / "test-cases.jsonl"
 )
 _RESULTS_DIR = _REPO_ROOT / "eval" / "results"
-_MODEL_ID_ENV = "NOVA_TOLL_EVAL_MODEL_ID"
-_DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 
 def load_rows() -> list[dict[str, Any]]:
@@ -79,26 +78,27 @@ def load_cases() -> list[Case[str, str]]:
     return cases
 
 
-def build_actor_profile(case: Case[str, str]) -> ActorProfile:
-    metadata = case.metadata or {}
-    missing = ", ".join(cast(list[str], metadata["missing_parameters"]))
-    reply = cast(str, metadata["actor_reply"])
-    return ActorProfile(
-        traits={
-            "communication_style": "concise and direct",
-            "domain_knowledge": "ordinary driver unfamiliar with tool parameter rules",
-        },
-        context=(
-            f"The immutable trip origin is {metadata['origin']} and destination is "
-            f"{metadata['destination']}. The initial request intentionally omits "
-            f"only {missing}. Do not change either endpoint or add a travel time."
-        ),
-        actor_goal=(
-            "Use exactly two turns and never stop after the first response. Always "
-            f"reply exactly {reply!r} after the agent's first response, even if its "
-            "request was wrong. Stop after the agent's second response."
-        ),
-    )
+class ScriptedUserSimulator:
+    """Supply one fixed clarification reply, then stop after the second turn."""
+
+    def __init__(self, reply: str) -> None:
+        self._reply = reply
+        self._remaining = 2
+
+    def has_next(self) -> bool:
+        return self._remaining > 0
+
+    def act(self, agent_message: str) -> object:
+        self._remaining -= 1
+        stop = self._remaining == 0
+        return SimpleNamespace(
+            structured_output=ActorResponse(
+                reasoning="scripted fixture",
+                stop=stop,
+                message=None if stop else self._reply,
+                stop_reason="goal_completed" if stop else None,
+            )
+        )
 
 
 def _output(passed: bool, reason: str, label: str) -> EvaluationOutput:
@@ -157,20 +157,23 @@ def evaluate_turns(
 
     first = turns[0]
     response = str(first["response"])
-    missing = cast(list[str], metadata["missing_parameters"])
-    request_passed = (
-        response.count("?") == 1
-        and response.strip().endswith("?")
-        and all(parameter.casefold() in response.casefold() for parameter in missing)
-        and "at_time" not in response.casefold()
-        and not first["calls"]
-    )
+    expected_questions: dict[tuple[str, ...], str] = {
+        ("origin",): "What is the origin?",
+        ("destination",): "What is the destination?",
+        ("origin", "destination"): "What are the origin and destination?",
+    }
+    missing = tuple(cast(list[str], metadata["missing_parameters"]))
+    expected_question = expected_questions.get(missing)
+    request_passed = response.strip() == expected_question and not first["calls"]
     outputs = [
         _output(
             request_passed,
-            "first turn asks one question for every missing parameter without tools"
+            "first turn asks the exact question for only the missing parameters"
             if request_passed
-            else f"unexpected first turn: response={response!r}, calls={first['calls']!r}",
+            else (
+                f"expected {expected_question!r}; got response={response!r}, "
+                f"calls={first['calls']!r}"
+            ),
             "parameter_request",
         )
     ]
@@ -218,17 +221,11 @@ class MissingParameterTraceEvaluator(Evaluator[str, str]):
 
 def main() -> None:
     configure_local_pricing_env()
-    model_id = os.environ.get(_MODEL_ID_ENV, _DEFAULT_MODEL_ID)
-    if not model_id:
-        raise ValueError(f"{_MODEL_ID_ENV} must not be empty")
     telemetry, mapper = build_telemetry()
 
     def task_function(case: Case[str, str]) -> dict[str, object]:
-        simulator = ActorSimulator(
-            actor_profile=build_actor_profile(case),
-            initial_query=str(case.input),
-            model=model_id,
-            max_turns=2,
+        simulator = ScriptedUserSimulator(
+            cast(str, (case.metadata or {})["actor_reply"])
         )
         return run_case_with_simulator(
             case.session_id,
@@ -241,10 +238,7 @@ def main() -> None:
 
     report = Experiment[str, str](
         cases=load_cases(),
-        evaluators=[
-            MissingParameterTraceEvaluator(),
-            GoalSuccessRateEvaluator(model=model_id),
-        ],
+        evaluators=[MissingParameterTraceEvaluator()],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
     report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
@@ -258,9 +252,14 @@ def _self_check() -> None:
     assert len(cases) == 3
     assert len({case.name for case in cases}) == 3
     assert all(case.expected_assertion for case in cases)
-    assert all(
-        "exactly two turns" in build_actor_profile(case).actor_goal for case in cases
+    calls: list[str] = []
+    scripted_output = run_simulated_conversation(
+        lambda message: calls.append(message) or "agent response",
+        ScriptedUserSimulator("fixed reply"),
+        "initial request",
     )
+    assert calls == ["initial request", "fixed reply"]
+    assert scripted_output == "agent response\n\nagent response"
 
     row = load_rows()[0]
     now = datetime.now(UTC)
@@ -284,7 +283,7 @@ def _self_check() -> None:
                     AgentInvocationSpan(
                         span_info=span_info("first"),
                         user_prompt=row["initial_message"],
-                        agent_response="What are your origin and destination?",
+                        agent_response="What are the origin and destination?",
                         available_tools=[],
                     ),
                     ToolExecutionSpan(
@@ -343,6 +342,16 @@ def _self_check() -> None:
         row,
     )
     assert not bad_request[0].test_pass
+    supplied_parameter_request = evaluate_turns(
+        [
+            {
+                "response": "What are the origin and destination?",
+                "calls": [],
+            }
+        ],
+        load_rows()[1],
+    )
+    assert not supplied_parameter_request[0].test_pass
     bad_trajectory = MissingParameterTraceEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )

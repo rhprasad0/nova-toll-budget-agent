@@ -10,8 +10,8 @@ using tools, then completes the fixed I-495 trip after the user answers.
 uv run python eval/simulated/simulated_user_missing_parameter_acquisition.py --check
 ```
 
-The check validates fixtures, actor profiles, and evaluator branches. It does
-not invoke TollChat, OpenAI, Bedrock, RDS, SSM, telemetry mapping, or the judge.
+The check validates fixtures, the scripted user, and evaluator branches. It does
+not invoke TollChat, OpenAI, RDS, SSM, or telemetry mapping.
 
 ## Live run
 
@@ -20,10 +20,10 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/simulated/simulated_user_missing_parameter_acquisition.py
 ```
 
-The runner uses OpenAI for TollChat, Bedrock for the explicit actors and
-goal-success judge, SSM-backed configuration, and read-only RDS pricing. It runs
-three cases with at most two agent turns each and writes a timestamped report to
-`eval/results/`. Simulations are stochastic; one observation is evidence, not a
-proof of future responses.
+The runner uses OpenAI for TollChat, a deterministic scripted user,
+SSM-backed configuration, and read-only RDS pricing. A deterministic trace
+evaluator is the only judge. It runs three cases with exactly two agent turns
+each and writes a timestamped report to `eval/results/`. The agent remains
+stochastic; one observation is evidence, not proof of future responses.
 
 Ordinary CI runs only `--check`. The paid live suite runs nightly.
