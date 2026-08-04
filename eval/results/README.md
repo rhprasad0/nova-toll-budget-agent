@@ -9,6 +9,9 @@ not curated.
 | [`20260802T171949Z.json`](20260802T171949Z.json) | Same four closures with fixed actor premises and scoped judges | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
 | [`20260803T214705Z.json`](20260803T214705Z.json) | Eight reciprocal single-leg cases, including distinct additive DTR fee lines on both Greenway mainline directions | Deterministic trace and hardened response grading | 1.0000 overall; 16/16 judgments passed; 0 execution errors |
 | [`20260803T215248Z.json`](20260803T215248Z.json) | Matching multi-turn single-leg conversations with neutral fee-attribution and arithmetic follow-ups | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 24/24 judgments passed; 0 execution errors |
+| [`20260804T153800Z.json`](20260804T153800Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
+| [`20260804T153830Z.json`](20260804T153830Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
+| [`20260804T153901Z.json`](20260804T153901Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 
 The repaired run found exactly one raw `i95_route` execution per case, kept
 every actor on its assigned route and time, and used response-only LLM
@@ -22,3 +25,9 @@ answers. Its Greenway cases returned `$5.80 + $2.00 = $7.80` eastbound and
 Dulles Toll Road. The simulated run preserved those tool results and totals
 through both Greenway conversations without giving the actor the expected
 facility or amount; every trace, goal-success, and helpfulness judgment passed.
+
+The three one-way-access runs each required `i95_access_options` before direct
+I-95 pricing, correctly explained both the southbound Quantico exit and the
+northbound Joplin entry restrictions without quoting a fare, and checked access
+before the supported control route's one `i95_route` call. This satisfies the
+three-perfect-run promotion criterion for the deterministic suite.
