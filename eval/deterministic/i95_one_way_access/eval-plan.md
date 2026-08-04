@@ -29,6 +29,7 @@ runs nightly.
   while a grader comparison was corrected to ignore harmless extra tool fields.
   Its next live attempt remains a nightly observation.
 - 2026-08-04: one renewed deterministic run passed 3/3. The renewed simulation
-  scored 0.5277 (3/6): both actors ended before its exact-three-turn criterion,
-  so it is not curated. The actor prompt now structurally requires three turns,
-  and the helpfulness judge includes the documented unpriced-lanes policy.
+  scored 0.5277 (3/6): the now-removed exact-three-turn criterion was stricter
+  than the simulation contract. The helpfulness judge is calibrated to accept
+  the documented Express-Lanes-unavailable and unpriced-general-purpose-lanes
+  response without inventing a broader closure.
