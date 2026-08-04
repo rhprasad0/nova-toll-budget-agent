@@ -50,7 +50,7 @@ from agent_tools.dulles_route import (
 )
 from agent_tools.dulles_route import dulles_route
 from agent_tools.i66_route import i66_route
-from agent_tools.i95_route import i95_junction_leg, i95_route
+from agent_tools.i95_route import i95_access_options, i95_junction_leg, i95_route
 from agent_tools.i495_route import i495_route
 
 _ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles"
@@ -61,21 +61,38 @@ _ORACLES: dict[str, _oracle_route.JsonObject] = {
 
 
 def _locations(
-    nodes: _oracle_route.Nodes, pairs: _oracle_route.Pairs
-) -> list[dict[str, str | bool]]:
+    nodes: _oracle_route.Nodes,
+    pairs: _oracle_route.Pairs,
+    *,
+    directional: bool = False,
+) -> list[dict[str, object]]:
     """Return the labels and roles a route tool can actually resolve."""
     entry_ids = {pair["entry"] for pair in pairs}
     exit_ids = {pair["exit"] for pair in pairs}
-    return [
-        {
+    locations: list[dict[str, object]] = []
+    for label in sorted({nodes[node_id]["label"] for node_id in entry_ids | exit_ids}):
+        location: dict[str, object] = {
             "label": label,
             "entry": any(nodes[node_id]["label"] == label for node_id in entry_ids),
             "exit": any(nodes[node_id]["label"] == label for node_id in exit_ids),
         }
-        for label in sorted(
-            {nodes[node_id]["label"] for node_id in entry_ids | exit_ids}
-        )
-    ]
+        if directional:
+            location["entry_directions"] = sorted(
+                {
+                    pair["direction"]
+                    for pair in pairs
+                    if nodes[pair["entry"]]["label"] == label
+                }
+            )
+            location["exit_directions"] = sorted(
+                {
+                    pair["direction"]
+                    for pair in pairs
+                    if nodes[pair["exit"]]["label"] == label
+                }
+            )
+        locations.append(location)
+    return locations
 
 
 def _load_priced_location_oracle() -> dict[str, _oracle_route.JsonObject]:
@@ -97,7 +114,10 @@ def _load_priced_location_oracle() -> dict[str, _oracle_route.JsonObject]:
     dulles_toll_road = _ORACLES["dulles_toll_road"]
     dulles_greenway = _ORACLES["dulles_greenway"]
     return {
-        "i95": {"tool": "i95_route", "locations": _locations(i95["nodes"], i95_pairs)},
+        "i95": {
+            "tool": "i95_route",
+            "locations": _locations(i95["nodes"], i95_pairs, directional=True),
+        },
         "i495": {
             "tool": "i495_route",
             "locations": _locations(i95["nodes"], i495_pairs),
@@ -157,8 +177,8 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.9.0"
-TOOLSET_VERSION = "1.1.0"
+SYSTEM_PROMPT_VERSION = "1.10.0"
+TOOLSET_VERSION = "1.2.0"
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -683,6 +703,7 @@ def plan_toll_route(
 
 _AGENT_TOOLS = (
     plan_toll_route,
+    i95_access_options,
     i95_junction_leg,
     i95_route,
     i495_route,

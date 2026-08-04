@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -73,7 +74,7 @@ _LABEL_INDEX = _oracle_route.label_index(_NODES)
 
 
 def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
-    return _oracle_route.lookup(
+    result = _oracle_route.lookup(
         origin,
         destination,
         nodes=_NODES,
@@ -82,6 +83,127 @@ def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
         oracle_name="i95",
         build_legs=lambda p: [{"od_pair_id": p["ods"][0]}],
     )
+    if result.get("error", "").startswith("no direct trip"):
+        result.update(_one_way_mismatch(origin, destination))
+    return result
+
+
+def _role_directions(location_ids: list[str], role: str) -> set[str]:
+    return {pair["direction"] for pair in _PAIRS if pair[role] in location_ids}
+
+
+def _latitude(location_ids: list[str]) -> float | None:
+    values = [float(_NODES[node_id]["latitude"]) for node_id in location_ids]
+    return sum(values) / len(values) if values else None
+
+
+def _distance(node_id: str, location_ids: list[str]) -> float:
+    latitude = math.radians(float(_NODES[node_id]["latitude"]))
+    longitude = math.radians(float(_NODES[node_id]["longitude"]))
+    distances: list[float] = []
+    for location_id in location_ids:
+        other_latitude = math.radians(float(_NODES[location_id]["latitude"]))
+        other_longitude = math.radians(float(_NODES[location_id]["longitude"]))
+        delta_latitude = other_latitude - latitude
+        delta_longitude = other_longitude - longitude
+        haversine = (
+            math.sin(delta_latitude / 2) ** 2
+            + math.cos(latitude)
+            * math.cos(other_latitude)
+            * math.sin(delta_longitude / 2) ** 2
+        )
+        distances.append(math.asin(math.sqrt(haversine)))
+    return min(distances)
+
+
+def _nearby_options(
+    location_ids: list[str],
+    role: str,
+    direction: str,
+    opposite_ids: list[str],
+    *,
+    require_direct_pair: bool,
+) -> list[str]:
+    if not location_ids:
+        return []
+    opposite_role = "exit" if role == "entry" else "entry"
+    candidates = [
+        pair[role]
+        for pair in _PAIRS
+        if pair["direction"] == direction
+        and (not require_direct_pair or pair[opposite_role] in opposite_ids)
+    ]
+    distances: dict[str, float] = {}
+    for node_id in candidates:
+        label = _NODES[node_id]["label"]
+        distance = _distance(node_id, location_ids)
+        distances[label] = min(distances.get(label, math.inf), distance)
+    return sorted(distances, key=lambda label: (distances[label], label))[:2]
+
+
+def _one_way_mismatch(origin: str, destination: str) -> _oracle_route.JsonObject:
+    origin_ids = _oracle_route.resolve(origin, nodes=_NODES, label_idx=_LABEL_INDEX)
+    destination_ids = _oracle_route.resolve(
+        destination, nodes=_NODES, label_idx=_LABEL_INDEX
+    )
+    origin_latitude = _latitude(origin_ids)
+    destination_latitude = _latitude(destination_ids)
+    if (
+        origin_latitude is None
+        or destination_latitude is None
+        or origin_latitude == destination_latitude
+    ):
+        return {}
+    direction = "Northbound" if destination_latitude > origin_latitude else "Southbound"
+    requested_roles = (
+        (origin, origin_ids, "entry", destination_ids),
+        (destination, destination_ids, "exit", origin_ids),
+    )
+    invalid_roles = [
+        (location, location_ids, role, opposite_ids)
+        for location, location_ids, role, opposite_ids in requested_roles
+        if direction not in _role_directions(location_ids, role)
+    ]
+    constraints = [
+        {
+            "location": location,
+            "role": role,
+            "required_direction": direction,
+            "available_directions": sorted(_role_directions(location_ids, role)),
+            "nearby_options": _nearby_options(
+                location_ids,
+                role,
+                direction,
+                opposite_ids,
+                require_direct_pair=len(invalid_roles) == 1,
+            ),
+        }
+        for location, location_ids, role, opposite_ids in invalid_roles
+    ]
+    return (
+        {
+            "status": "one_way_mismatch",
+            "direction": direction,
+            "constraints": constraints,
+        }
+        if constraints
+        else {}
+    )
+
+
+@tool
+def i95_access_options(origin: str, destination: str) -> _oracle_route.JsonObject:
+    """Check direct I-95/395 access before requesting a price.
+
+    Use for a direct I-95/395 request after resolving locations. This pure
+    oracle lookup never queries VDOT pricing data. A ``one_way_mismatch``
+    response names each invalid entry or exit and provides up to two nearby,
+    direction-compatible alternatives for the user to choose from.
+    """
+    result = _lookup(origin, destination)
+    if "error" in result:
+        return result
+    return {"status": "supported", "direction": result["direction"]}
 
 
 # Verified live against RDS (2026-07-26): these are the only corridor_name
