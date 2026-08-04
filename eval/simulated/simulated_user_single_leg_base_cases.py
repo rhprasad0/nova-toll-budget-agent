@@ -221,7 +221,22 @@ def _self_check() -> None:
         "input": expected["input"],
         "tool_result": row["expected_result"],
     }
-    assert evaluate_single_leg_calls([call], row)[0].label == "exact_result"
+    calls = [call]
+    if expected["tool"] == "i95_route":
+        calls.insert(
+            0,
+            {
+                "name": "i95_access_options",
+                "input": {
+                    key: expected["input"][key] for key in ("origin", "destination")
+                },
+                "tool_result": {
+                    "status": "supported",
+                    "direction": row["expected_result"]["direction"],
+                },
+            },
+        )
+    assert evaluate_single_leg_calls(calls, row)[0].label == "exact_result"
     print("self-check ok (8 case/profile shapes and bad-session guard; no network)")
 
 

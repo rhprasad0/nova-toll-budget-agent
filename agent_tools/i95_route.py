@@ -92,6 +92,17 @@ def _role_directions(location_ids: list[str], role: str) -> set[str]:
     return {pair["direction"] for pair in _PAIRS if pair[role] in location_ids}
 
 
+def _has_direct_pair(origin: str, destination: str) -> bool:
+    origin_ids = _oracle_route.resolve(origin, nodes=_NODES, label_idx=_LABEL_INDEX)
+    destination_ids = _oracle_route.resolve(
+        destination, nodes=_NODES, label_idx=_LABEL_INDEX
+    )
+    return any(
+        pair["entry"] in origin_ids and pair["exit"] in destination_ids
+        for pair in _PAIRS
+    )
+
+
 def _latitude(location_ids: list[str]) -> float | None:
     values = [float(_NODES[node_id]["latitude"]) for node_id in location_ids]
     return sum(values) / len(values) if values else None
@@ -164,21 +175,38 @@ def _one_way_mismatch(origin: str, destination: str) -> _oracle_route.JsonObject
         for location, location_ids, role, opposite_ids in requested_roles
         if direction not in _role_directions(location_ids, role)
     ]
+    nearby_by_role = {
+        role: _nearby_options(
+            location_ids,
+            role,
+            direction,
+            opposite_ids,
+            require_direct_pair=len(invalid_roles) == 1,
+        )
+        for _, location_ids, role, opposite_ids in invalid_roles
+    }
+    if len(invalid_roles) == 2:
+        entries = nearby_by_role["entry"]
+        exits = nearby_by_role["exit"]
+        nearby_by_role["entry"] = [
+            entry
+            for entry in entries
+            if any(_has_direct_pair(entry, exit) for exit in exits)
+        ]
+        nearby_by_role["exit"] = [
+            exit
+            for exit in exits
+            if any(_has_direct_pair(entry, exit) for entry in entries)
+        ]
     constraints = [
         {
             "location": location,
             "role": role,
             "required_direction": direction,
             "available_directions": sorted(_role_directions(location_ids, role)),
-            "nearby_options": _nearby_options(
-                location_ids,
-                role,
-                direction,
-                opposite_ids,
-                require_direct_pair=len(invalid_roles) == 1,
-            ),
+            "nearby_options": nearby_by_role[role],
         }
-        for location, location_ids, role, opposite_ids in invalid_roles
+        for location, location_ids, role, _ in invalid_roles
     ]
     return (
         {

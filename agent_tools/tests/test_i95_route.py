@@ -338,6 +338,32 @@ def test_access_options_returns_choices_for_both_invalid_endpoints():
     )
 
 
+def test_access_options_filters_unroutable_dual_mismatch_alternatives():
+    result = i95_access_options(
+        "Old Keene Mill Road/Route 644", "I-95 Near Fairfax County Parkway"
+    )
+
+    assert result["constraints"] == [
+        {
+            "location": "Old Keene Mill Road/Route 644",
+            "role": "entry",
+            "required_direction": "Southbound",
+            "available_directions": ["Northbound"],
+            "nearby_options": ["I-495 EB / I-95 NB"],
+        },
+        {
+            "location": "I-95 Near Fairfax County Parkway",
+            "role": "exit",
+            "required_direction": "Southbound",
+            "available_directions": [],
+            "nearby_options": [
+                "Franconia-Springfield Parkway/Route 289",
+                "I-95 Near Backlick Road",
+            ],
+        },
+    ]
+
+
 def test_access_options_tool_spec_matches_signature():
     assert i95_access_options.tool_spec["name"] == "i95_access_options"
     assert set(i95_access_options.tool_spec["inputSchema"]["json"]["required"]) == {
