@@ -182,7 +182,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.11.0"
+SYSTEM_PROMPT_VERSION = "1.12.0"
 TOOLSET_VERSION = "1.3.0"
 
 
@@ -364,7 +364,7 @@ NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
             "entry": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
             "node_id": "1819",
         },
-        "connector": "Dulles Airport Access Highway",
+        "connector": "Dulles Connector Road",
         "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 6 and 1819",
     },
     {
@@ -379,7 +379,7 @@ NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
             "entry": "Route 267 - Dulles Toll Road",
             "node_id": "6",
         },
-        "connector": "Dulles Airport Access Highway",
+        "connector": "Dulles Connector Road",
         "evidence": "curated connector confirmed by the user; oracle endpoints are nodes 1819 and 6",
     },
 ]
@@ -394,7 +394,7 @@ _CROSS_I95_HANDOFF = "Franconia-Springfield Parkway/Route 289"
 _I495_JUNCTION_ENTRY = "191NO"
 _I495_JUNCTION_EXIT = "191SD"
 _ROUTE_267_DETOUR_CONNECTORS = {
-    "Dulles Airport Access Highway",
+    "Dulles Connector Road",
     "I-495/Route 267 interchange",
 }
 
