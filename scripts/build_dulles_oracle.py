@@ -6,7 +6,7 @@ as an image and a JS-driven calculator respectively, neither machine
 readable. The facts below were hand-transcribed from public sources
 (Wikipedia's Dulles Toll Road / Dulles Greenway articles, dullestollroad.com,
 dullesgreenway.com, tollguru.com), cross-checked across sources where
-possible, retrieved 2026-07-26. Three items are documented *assumptions*,
+possible, retrieved 2026-08-04. Three items are documented *assumptions*,
 not quoted facts -- see the `notes` field each generated oracle carries:
 
   1. Exit 16 (SR 7)'s ramp toll applies to the eastbound exit only (fetch
@@ -169,7 +169,9 @@ def _dtr_oracle() -> JsonObject:
 # ---------------------------------------------------------------------------
 # Dulles Greenway -- Exit 1 (US 15/SR 7, Leesburg) through Exit 9A/9B (Rte
 # 28, the DTR boundary). Mile order west to east == EB direction of travel.
-# Sources: en.wikipedia.org/wiki/Dulles_Greenway, dullesgreenway.com/toll-calculator.
+# Sources: dullesgreenway.com/toll-calculator and operator-listed interchanges;
+# the calculator accepts Battlefield as both a start and destination, while
+# Compass Creek is a westbound exit with no entrance.
 # ---------------------------------------------------------------------------
 GW_MAINLINE_PEAK_USD = "5.80"
 GW_MAINLINE_OFFPEAK_USD = "5.25"
@@ -177,12 +179,11 @@ GW_DTR_MAINLINE_USD = "2.00"
 GW_SECONDARY_PEAK_USD = "5.10"
 GW_SECONDARY_OFFPEAK_USD = "4.55"
 
-# (node_id, label, entry_in, exit_in) -- Exit 2A/2B are genuinely one-way
-# ramps (real topology, not a toll-applicability quirk), so they're the only
-# nodes restricted here.
+# (node_id, label, entry_in, exit_in) -- Compass Creek is the only restricted
+# node. Directional topology is fixed and does not vary with peak pricing.
 GW_NODES: list[tuple[str, str, list[str], list[str]]] = [
     ("1", "Exit 1 - US 15/SR 7 (Leesburg Bypass)", ["EB", "WB"], ["EB", "WB"]),
-    ("2A", "Exit 2A - Battlefield Pkwy", [], ["EB"]),
+    ("2A", "Exit 2 - Battlefield Pkwy", ["EB", "WB"], ["EB", "WB"]),
     ("2B", "Exit 2B - Compass Creek Pkwy", [], ["WB"]),
     ("3", "Exit 3 - SR 653 (Shreve Mill Rd)", ["EB", "WB"], ["EB", "WB"]),
     ("4", "Exit 4 - SR 659 (Belmont Ridge Rd)", ["EB", "WB"], ["EB", "WB"]),
@@ -207,7 +208,7 @@ def _gw_pairs() -> list[JsonObject]:
             exit_id, _, _, exit_can_exit = GW_NODES[j]
             direction = "EB" if i < j else "WB"
             if direction not in entry_can_enter or direction not in exit_can_exit:
-                continue  # Exit 2A/2B are one-way ramps -- not every combination exists
+                continue  # Compass Creek cannot be used as an entrance.
             crosses_mainline = (i <= GW_MAINLINE_AFTER_INDEX) != (
                 j <= GW_MAINLINE_AFTER_INDEX
             )
@@ -249,7 +250,7 @@ def _gw_oracle() -> JsonObject:
     }
     return {
         "source_url": "https://www.dullesgreenway.com/toll-calculator/",
-        "retrieved_at": "2026-07-26",
+        "retrieved_at": "2026-08-04",
         "notes": (
             "2-axle E-ZPass rates only; pay-by-plate/3+ axle out of scope. "
             'Flat fare per trip, never summed across plazas -- "the Greenway '
@@ -262,6 +263,9 @@ def _gw_oracle() -> JsonObject:
             'assumed weekday-only -- "rush hour" framing and industry '
             "convention support this, but no source explicitly excluded "
             "weekends; verify before relying on this for a weekend trip."
+            " Ramp direction availability is fixed; only the toll rate "
+            "period depends on time. Battlefield Parkway is bidirectional; "
+            "Compass Creek is a westbound exit only with no entrance."
         ),
         "nodes": nodes,
         "pairs": _gw_pairs(),

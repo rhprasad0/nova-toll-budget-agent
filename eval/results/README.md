@@ -15,6 +15,8 @@ not curated.
 | [`20260804T191929Z.json`](20260804T191929Z.json) | Reciprocal I-66 / Dulles Toll Road handoffs through Dulles Connector Road | Code-graded live planner trajectory and response wording | 1.0000 overall; 2/2 cases passed; no airport wording |
 | [`20260804T192029Z.json`](20260804T192029Z.json) | Ambiguous McLean location resolved before pricing | Simulated user, goal-success and helpfulness judges | 0.9165 overall; 2/2 judgments passed; 0 execution errors |
 | [`20260804T192403Z.json`](20260804T192403Z.json) | Four historical I-95 closure conversations | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
+| [`20260804T200152Z.json`](20260804T200152Z.json) | Fixed directional access on I-66, I-495, the Greenway, and Westpark-to-Scott cross-corridor planning | Deterministic trace and response grading | 1.0000 overall; 4/4 cases passed; 0 execution errors |
+| [`20260804T201139Z.json`](20260804T201139Z.json) | Westpark-to-Scott and direct I-66 multi-turn alternative selection | Simulated-user trace grading plus goal-success and helpfulness judges | 0.9444 overall; 6/6 judgments passed; 0 execution errors |
 
 The repaired run found exactly one raw `i95_route` execution per case, kept
 every actor on its assigned route and time, and used response-only LLM
@@ -34,3 +36,10 @@ I-95 pricing, correctly explained both the southbound Quantico exit and the
 northbound Joplin entry restrictions without quoting a fare, and checked access
 before the supported control route's one `i95_route` call. This satisfies the
 three-perfect-run promotion criterion for the deterministic suite.
+
+The non-I-95 deterministic run rejected every wrong-direction endpoint before
+pricing, including Compass Creek as an eastbound Greenway entry and the
+Westpark-to-Scott request. The simulated drivers selected Fairfax Drive,
+retained their original starting points, and completed both a full
+cross-corridor replan and a direct I-66 recovery. I-495 and Greenway remain in
+the four-case deterministic coverage.

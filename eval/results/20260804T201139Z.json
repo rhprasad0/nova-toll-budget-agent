@@ -1,0 +1,3413 @@
+{
+  "overall_score": 0.9443333333333334,
+  "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.833,
+    0.833
+  ],
+  "cases": [
+    {
+      "input": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+      "actual_output": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**.\n\n\nYes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**\n",
+      "name": "westpark-to-scott-cross-corridor-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent explains the fixed wrong-way ramp, offers only compatible choices, and uses the selected recovery without inventing a fare or changing the other endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "a311ad46ad3fad1a",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "4a7ebe5d8e55428c",
+                  "start_time": "2026-08-04T20:10:24.367096Z",
+                  "end_time": "2026-08-04T20:10:27.247061Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "aacf0aa42729f840",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "4a7ebe5d8e55428c",
+                  "start_time": "2026-08-04T20:10:27.247492Z",
+                  "end_time": "2026-08-04T20:10:27.249227Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i495",
+                    "origin": "Westpark Drive",
+                    "destination_corridor": "i66_itb",
+                    "destination": "Lee Highway - Scott Street",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"no direct trip from '5' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                  "error": null,
+                  "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "3f302bc89cb84af6",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "f0e90659cc6bfbc2",
+                  "start_time": "2026-08-04T20:10:27.250029Z",
+                  "end_time": "2026-08-04T20:10:28.632018Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"no direct trip from '5' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                        "error": null,
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "5ce7ac4d4a02681d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "01f8489c72a27adb",
+                  "start_time": "2026-08-04T20:10:24.364465Z",
+                  "end_time": "2026-08-04T20:10:28.632985Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+                "agent_response": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "6cd6613fa85092ae",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "55b4a7ce53735b2b",
+                  "start_time": "2026-08-04T20:10:35.672743Z",
+                  "end_time": "2026-08-04T20:10:40.673988Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "f3e33023aeb2075d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "55b4a7ce53735b2b",
+                  "start_time": "2026-08-04T20:10:40.674793Z",
+                  "end_time": "2026-08-04T20:10:40.678389Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i495",
+                    "origin": "Westpark Drive",
+                    "destination_corridor": "i66_itb",
+                    "destination": "Fairfax Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "13884cae5a5c6abd",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "5b93285719da9b5c",
+                  "start_time": "2026-08-04T20:10:40.680735Z",
+                  "end_time": "2026-08-04T20:10:44.095088Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "1602d005e9362e68",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "5b93285719da9b5c",
+                  "start_time": "2026-08-04T20:10:44.095376Z",
+                  "end_time": "2026-08-04T20:10:44.685476Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "Westpark Drive",
+                    "destination": "187SD",
+                    "at_time": "2026-08-04T16:10:40.675982-04:00"
+                  },
+                  "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                  "error": null,
+                  "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "6aaaa7db44f246ac",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "c08e886ffcf31a57",
+                  "start_time": "2026-08-04T20:10:44.688160Z",
+                  "end_time": "2026-08-04T20:10:46.287786Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                        "error": null,
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "5",
+                          "destination": "Fairfax Drive",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "f7d11444f892a839",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "c08e886ffcf31a57",
+                  "start_time": "2026-08-04T20:10:46.288629Z",
+                  "end_time": "2026-08-04T20:10:46.593341Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "5",
+                    "destination": "Fairfax Drive",
+                    "at_time": "2026-08-04T16:10:40.675982-04:00"
+                  },
+                  "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"5\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"0.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "e81b5a93cb2ea623",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "59c42383ab9760bc",
+                  "start_time": "2026-08-04T20:10:46.596149Z",
+                  "end_time": "2026-08-04T20:10:49.888963Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                        "error": null,
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "5",
+                          "destination": "Fairfax Drive",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"5\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"0.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "c0af769d5fd23e5d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "01f8489c72a27adb",
+                  "start_time": "2026-08-04T20:10:35.670421Z",
+                  "end_time": "2026-08-04T20:10:49.890012Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?",
+                "agent_response": "Yes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+            "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd"
+          }
+        ],
+        "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd"
+      },
+      "metadata": {
+        "id": "westpark-to-scott-cross-corridor",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i495",
+                  "origin": "Westpark Drive",
+                  "destination_corridor": "i66_itb",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ],
+        "selected_alternative": "Fairfax Drive"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "RecoveryTraceEvaluator",
+      "evaluator_type": "RecoveryTraceEvaluator"
+    },
+    {
+      "input": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+      "actual_output": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue.\n\n\nYes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**\n",
+      "name": "i66-direct-wrong-way-exit-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent explains the fixed wrong-way ramp, offers only compatible choices, and uses the selected recovery without inventing a fare or changing the other endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "a6260935cdbc04b6",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "a7a7b6a0b5b0b9dc",
+                  "start_time": "2026-08-04T20:11:07.886554Z",
+                  "end_time": "2026-08-04T20:11:09.647168Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "d00f6d129d9cab0b",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "a7a7b6a0b5b0b9dc",
+                  "start_time": "2026-08-04T20:11:09.647965Z",
+                  "end_time": "2026-08-04T20:11:09.650636Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "I-495 N",
+                    "destination": "Lee Highway - Scott Street",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                  "error": null,
+                  "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "d087aff92aa3cce6",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "bc544bc3db515d27",
+                  "start_time": "2026-08-04T20:11:09.653013Z",
+                  "end_time": "2026-08-04T20:11:11.071076Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                        "error": null,
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "1fa2dcf24937c8dc",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "90b7975b1633af49",
+                  "start_time": "2026-08-04T20:11:07.884221Z",
+                  "end_time": "2026-08-04T20:11:11.071987Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+                "agent_response": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "ae7e55b4039a0626",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "48ecfafc0b794098",
+                  "start_time": "2026-08-04T20:11:18.415493Z",
+                  "end_time": "2026-08-04T20:11:20.066670Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "0a25825bcd613ffb",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "48ecfafc0b794098",
+                  "start_time": "2026-08-04T20:11:20.066955Z",
+                  "end_time": "2026-08-04T20:11:20.555652Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "I-495 N",
+                    "destination": "Fairfax Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"I-495 N\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"2\", \"label\": \"I-495 N\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3100, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:11:20.067363-04:00\", \"total_usd\": \"0.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "f2e9196d3056ba25",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "bfb76dadcfb63e2b",
+                  "start_time": "2026-08-04T20:11:20.558043Z",
+                  "end_time": "2026-08-04T20:11:22.680086Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"I-495 N\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"2\", \"label\": \"I-495 N\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3100, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:11:20.067363-04:00\", \"total_usd\": \"0.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "b55914c14a203c73",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "90b7975b1633af49",
+                  "start_time": "2026-08-04T20:11:18.413223Z",
+                  "end_time": "2026-08-04T20:11:22.681020Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?",
+                "agent_response": "Yes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+            "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97"
+          }
+        ],
+        "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97"
+      },
+      "metadata": {
+        "id": "i66-direct-wrong-way-exit",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "i66_route",
+                "input": {
+                  "origin": "I-495 N",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ],
+        "selected_alternative": "Fairfax Drive"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "RecoveryTraceEvaluator",
+      "evaluator_type": "RecoveryTraceEvaluator"
+    },
+    {
+      "input": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+      "actual_output": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**.\n\n\nYes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**\n",
+      "name": "westpark-to-scott-cross-corridor-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent explains the fixed wrong-way ramp, offers only compatible choices, and uses the selected recovery without inventing a fare or changing the other endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "a311ad46ad3fad1a",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "4a7ebe5d8e55428c",
+                  "start_time": "2026-08-04T20:10:24.367096Z",
+                  "end_time": "2026-08-04T20:10:27.247061Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "aacf0aa42729f840",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "4a7ebe5d8e55428c",
+                  "start_time": "2026-08-04T20:10:27.247492Z",
+                  "end_time": "2026-08-04T20:10:27.249227Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i495",
+                    "origin": "Westpark Drive",
+                    "destination_corridor": "i66_itb",
+                    "destination": "Lee Highway - Scott Street",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"no direct trip from '5' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                  "error": null,
+                  "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "3f302bc89cb84af6",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "f0e90659cc6bfbc2",
+                  "start_time": "2026-08-04T20:10:27.250029Z",
+                  "end_time": "2026-08-04T20:10:28.632018Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"no direct trip from '5' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                        "error": null,
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "5ce7ac4d4a02681d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "01f8489c72a27adb",
+                  "start_time": "2026-08-04T20:10:24.364465Z",
+                  "end_time": "2026-08-04T20:10:28.632985Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+                "agent_response": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "6cd6613fa85092ae",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "55b4a7ce53735b2b",
+                  "start_time": "2026-08-04T20:10:35.672743Z",
+                  "end_time": "2026-08-04T20:10:40.673988Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "f3e33023aeb2075d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "55b4a7ce53735b2b",
+                  "start_time": "2026-08-04T20:10:40.674793Z",
+                  "end_time": "2026-08-04T20:10:40.678389Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i495",
+                    "origin": "Westpark Drive",
+                    "destination_corridor": "i66_itb",
+                    "destination": "Fairfax Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "13884cae5a5c6abd",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "5b93285719da9b5c",
+                  "start_time": "2026-08-04T20:10:40.680735Z",
+                  "end_time": "2026-08-04T20:10:44.095088Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "1602d005e9362e68",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "5b93285719da9b5c",
+                  "start_time": "2026-08-04T20:10:44.095376Z",
+                  "end_time": "2026-08-04T20:10:44.685476Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "Westpark Drive",
+                    "destination": "187SD",
+                    "at_time": "2026-08-04T16:10:40.675982-04:00"
+                  },
+                  "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                  "error": null,
+                  "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "6aaaa7db44f246ac",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "c08e886ffcf31a57",
+                  "start_time": "2026-08-04T20:10:44.688160Z",
+                  "end_time": "2026-08-04T20:10:46.287786Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                        "error": null,
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "5",
+                          "destination": "Fairfax Drive",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "f7d11444f892a839",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "c08e886ffcf31a57",
+                  "start_time": "2026-08-04T20:10:46.288629Z",
+                  "end_time": "2026-08-04T20:10:46.593341Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "5",
+                    "destination": "Fairfax Drive",
+                    "at_time": "2026-08-04T16:10:40.675982-04:00"
+                  },
+                  "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"5\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"0.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "e81b5a93cb2ea623",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "59c42383ab9760bc",
+                  "start_time": "2026-08-04T20:10:46.596149Z",
+                  "end_time": "2026-08-04T20:10:49.888963Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                        "error": null,
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "5",
+                          "destination": "Fairfax Drive",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"5\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"0.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "c0af769d5fd23e5d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "01f8489c72a27adb",
+                  "start_time": "2026-08-04T20:10:35.670421Z",
+                  "end_time": "2026-08-04T20:10:49.890012Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?",
+                "agent_response": "Yes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+            "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd"
+          }
+        ],
+        "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd"
+      },
+      "metadata": {
+        "id": "westpark-to-scott-cross-corridor",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i495",
+                  "origin": "Westpark Drive",
+                  "destination_corridor": "i66_itb",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ],
+        "selected_alternative": "Fairfax Drive"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+      "actual_output": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue.\n\n\nYes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**\n",
+      "name": "i66-direct-wrong-way-exit-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent explains the fixed wrong-way ramp, offers only compatible choices, and uses the selected recovery without inventing a fare or changing the other endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "a6260935cdbc04b6",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "a7a7b6a0b5b0b9dc",
+                  "start_time": "2026-08-04T20:11:07.886554Z",
+                  "end_time": "2026-08-04T20:11:09.647168Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "d00f6d129d9cab0b",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "a7a7b6a0b5b0b9dc",
+                  "start_time": "2026-08-04T20:11:09.647965Z",
+                  "end_time": "2026-08-04T20:11:09.650636Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "I-495 N",
+                    "destination": "Lee Highway - Scott Street",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                  "error": null,
+                  "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "d087aff92aa3cce6",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "bc544bc3db515d27",
+                  "start_time": "2026-08-04T20:11:09.653013Z",
+                  "end_time": "2026-08-04T20:11:11.071076Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                        "error": null,
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "1fa2dcf24937c8dc",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "90b7975b1633af49",
+                  "start_time": "2026-08-04T20:11:07.884221Z",
+                  "end_time": "2026-08-04T20:11:11.071987Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+                "agent_response": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "ae7e55b4039a0626",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "48ecfafc0b794098",
+                  "start_time": "2026-08-04T20:11:18.415493Z",
+                  "end_time": "2026-08-04T20:11:20.066670Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "0a25825bcd613ffb",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "48ecfafc0b794098",
+                  "start_time": "2026-08-04T20:11:20.066955Z",
+                  "end_time": "2026-08-04T20:11:20.555652Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "I-495 N",
+                    "destination": "Fairfax Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"I-495 N\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"2\", \"label\": \"I-495 N\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3100, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:11:20.067363-04:00\", \"total_usd\": \"0.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "f2e9196d3056ba25",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "bfb76dadcfb63e2b",
+                  "start_time": "2026-08-04T20:11:20.558043Z",
+                  "end_time": "2026-08-04T20:11:22.680086Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"I-495 N\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"2\", \"label\": \"I-495 N\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3100, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:11:20.067363-04:00\", \"total_usd\": \"0.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "b55914c14a203c73",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "90b7975b1633af49",
+                  "start_time": "2026-08-04T20:11:18.413223Z",
+                  "end_time": "2026-08-04T20:11:22.681020Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?",
+                "agent_response": "Yes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+            "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97"
+          }
+        ],
+        "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97"
+      },
+      "metadata": {
+        "id": "i66-direct-wrong-way-exit",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "i66_route",
+                "input": {
+                  "origin": "I-495 N",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ],
+        "selected_alternative": "Fairfax Drive"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+      "actual_output": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**.\n\n\nYes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**\n",
+      "name": "westpark-to-scott-cross-corridor-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent explains the fixed wrong-way ramp, offers only compatible choices, and uses the selected recovery without inventing a fare or changing the other endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "a311ad46ad3fad1a",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "4a7ebe5d8e55428c",
+                  "start_time": "2026-08-04T20:10:24.367096Z",
+                  "end_time": "2026-08-04T20:10:27.247061Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "aacf0aa42729f840",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "4a7ebe5d8e55428c",
+                  "start_time": "2026-08-04T20:10:27.247492Z",
+                  "end_time": "2026-08-04T20:10:27.249227Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i495",
+                    "origin": "Westpark Drive",
+                    "destination_corridor": "i66_itb",
+                    "destination": "Lee Highway - Scott Street",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"no direct trip from '5' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                  "error": null,
+                  "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "3f302bc89cb84af6",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "f0e90659cc6bfbc2",
+                  "start_time": "2026-08-04T20:10:27.250029Z",
+                  "end_time": "2026-08-04T20:10:28.632018Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"no direct trip from '5' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                        "error": null,
+                        "tool_call_id": "call_PaPkQgIKZ5oRxpc5NdjkkKjl",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "5ce7ac4d4a02681d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "01f8489c72a27adb",
+                  "start_time": "2026-08-04T20:10:24.364465Z",
+                  "end_time": "2026-08-04T20:10:28.632985Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me.",
+                "agent_response": "Lee Highway - Scott Street is not a valid **eastbound exit** from I-66. You can instead exit at:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nChoose one, and I\u2019ll replan and price the trip from **Westpark Drive on I-495**.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "6cd6613fa85092ae",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "55b4a7ce53735b2b",
+                  "start_time": "2026-08-04T20:10:35.672743Z",
+                  "end_time": "2026-08-04T20:10:40.673988Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "f3e33023aeb2075d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "55b4a7ce53735b2b",
+                  "start_time": "2026-08-04T20:10:40.674793Z",
+                  "end_time": "2026-08-04T20:10:40.678389Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i495",
+                    "origin": "Westpark Drive",
+                    "destination_corridor": "i66_itb",
+                    "destination": "Fairfax Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "13884cae5a5c6abd",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "5b93285719da9b5c",
+                  "start_time": "2026-08-04T20:10:40.680735Z",
+                  "end_time": "2026-08-04T20:10:44.095088Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "1602d005e9362e68",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "5b93285719da9b5c",
+                  "start_time": "2026-08-04T20:10:44.095376Z",
+                  "end_time": "2026-08-04T20:10:44.685476Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "Westpark Drive",
+                    "destination": "187SD",
+                    "at_time": "2026-08-04T16:10:40.675982-04:00"
+                  },
+                  "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                  "error": null,
+                  "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "6aaaa7db44f246ac",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "c08e886ffcf31a57",
+                  "start_time": "2026-08-04T20:10:44.688160Z",
+                  "end_time": "2026-08-04T20:10:46.287786Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                        "error": null,
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "5",
+                          "destination": "Fairfax Drive",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "f7d11444f892a839",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "c08e886ffcf31a57",
+                  "start_time": "2026-08-04T20:10:46.288629Z",
+                  "end_time": "2026-08-04T20:10:46.593341Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "5",
+                    "destination": "Fairfax Drive",
+                    "at_time": "2026-08-04T16:10:40.675982-04:00"
+                  },
+                  "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"5\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"0.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "e81b5a93cb2ea623",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "59c42383ab9760bc",
+                  "start_time": "2026-08-04T20:10:46.596149Z",
+                  "end_time": "2026-08-04T20:10:49.888963Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i495",
+                          "origin": "Westpark Drive",
+                          "destination_corridor": "i66_itb",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"187SD\"}, {\"kind\": \"connector\", \"transfer_id\": \"i495_south_to_i66\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"5\", \"destination\": \"Fairfax Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_XewEqLmoTnkfD0BO6I3NGauy",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "Westpark Drive",
+                          "destination": "187SD",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"187SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"187SD\", \"label\": \"Interstate 66\"}, \"legs\": [{\"od_pair_id\": 1066, \"price_usd\": \"6.85\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:50:00-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"6.85\"}",
+                        "error": null,
+                        "tool_call_id": "call_jGh9h5Ca0rLTrhalpQs2gTIC",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "5",
+                          "destination": "Fairfax Drive",
+                          "at_time": "2026-08-04T16:10:40.675982-04:00"
+                        },
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"5\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3110, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:10:40.675982-04:00\", \"total_usd\": \"0.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_SHUlpL3Gl8ZzRGmUjdbc9LaL",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+                  "span_id": "c0af769d5fd23e5d",
+                  "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd",
+                  "parent_span_id": "01f8489c72a27adb",
+                  "start_time": "2026-08-04T20:10:35.670421Z",
+                  "end_time": "2026-08-04T20:10:49.890012Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Use Fairfax Drive instead. Did you keep Westpark Drive as my starting point?",
+                "agent_response": "Yes\u2014I kept **Westpark Drive** as your starting point and changed the destination to **Fairfax Drive/Glebe Road (Exit 71)**.\n\n## Route and fares\n\n- **Westpark Drive \u2192 Interstate 66** \u2014 Southbound, **I-495 Express Lanes**: **$6.85**\n  - VDOT observed at: 8/4/2026 3:50 PM ET\n- Untolled connector: **I-66/I-495 interchange**\n- **I-495 S \u2192 Fairfax Drive** \u2014 eastbound, **I-66 Inside-the-Beltway Express Lanes**: **$0.00**\n  - VDOT observed at: 8/4/2026 3:59 PM ET\n\n## Calculation\n\n**$6.85 + $0.00 = $6.85**\n\n## Final price\n\n**$6.85**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "7438e2e9bfcdcca8dc6fe81b522a4d50",
+            "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd"
+          }
+        ],
+        "session_id": "e5d28cfa-3936-489e-8a72-d33a27332abd"
+      },
+      "metadata": {
+        "id": "westpark-to-scott-cross-corridor",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the express lanes from Westpark Drive on I-495 to Lee Highway at Scott Street on I-66? Price it for me."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i495",
+                  "origin": "Westpark Drive",
+                  "destination_corridor": "i66_itb",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ],
+        "selected_alternative": "Fairfax Drive"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    },
+    {
+      "input": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+      "actual_output": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue.\n\n\nYes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**\n",
+      "name": "i66-direct-wrong-way-exit-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent explains the fixed wrong-way ramp, offers only compatible choices, and uses the selected recovery without inventing a fare or changing the other endpoint.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "a6260935cdbc04b6",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "a7a7b6a0b5b0b9dc",
+                  "start_time": "2026-08-04T20:11:07.886554Z",
+                  "end_time": "2026-08-04T20:11:09.647168Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "d00f6d129d9cab0b",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "a7a7b6a0b5b0b9dc",
+                  "start_time": "2026-08-04T20:11:09.647965Z",
+                  "end_time": "2026-08-04T20:11:09.650636Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "I-495 N",
+                    "destination": "Lee Highway - Scott Street",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF"
+                },
+                "tool_result": {
+                  "content": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                  "error": null,
+                  "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "d087aff92aa3cce6",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "bc544bc3db515d27",
+                  "start_time": "2026-08-04T20:11:09.653013Z",
+                  "end_time": "2026-08-04T20:11:11.071076Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Lee Highway - Scott Street",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"error\": \"no direct trip from 'I-495 N' to 'Lee Highway - Scott Street' in the i66 oracle\", \"valid_options\": [\"Exit 73 - Rosslyn\", \"Exit 75 - Pentagon/Alexandria\", \"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\", \"Route 7 - Leesburg Pike\", \"Washington\", \"Washington Blvd\", \"Westmoreland St\"], \"status\": \"one_way_mismatch\", \"direction\": \"EB\", \"constraints\": [{\"location\": \"Lee Highway - Scott Street\", \"role\": \"exit\", \"required_direction\": \"EB\", \"available_directions\": [], \"nearby_options\": [\"Fairfax Drive\", \"Lee Highway - Spout Run Parkway\"]}]}",
+                        "error": null,
+                        "tool_call_id": "call_PMxCp2AArYuW1y2FrPkPQVyF",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "1fa2dcf24937c8dc",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "90b7975b1633af49",
+                  "start_time": "2026-08-04T20:11:07.884221Z",
+                  "end_time": "2026-08-04T20:11:11.071987Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street.",
+                "agent_response": "The requested destination, **Lee Highway - Scott Street**, is not a valid eastbound exit for this trip.\n\nAvailable nearby eastbound alternatives:\n\n- **Fairfax Drive/Glebe Road (Exit 71)**\n- **Lee Highway - Spout Run Parkway**\n\nPlease choose one of these destinations to continue.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "ae7e55b4039a0626",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "48ecfafc0b794098",
+                  "start_time": "2026-08-04T20:11:18.415493Z",
+                  "end_time": "2026-08-04T20:11:20.066670Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "0a25825bcd613ffb",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "48ecfafc0b794098",
+                  "start_time": "2026-08-04T20:11:20.066955Z",
+                  "end_time": "2026-08-04T20:11:20.555652Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i66_route",
+                  "arguments": {
+                    "origin": "I-495 N",
+                    "destination": "Fairfax Drive",
+                    "at_time": ""
+                  },
+                  "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"I-495 N\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"2\", \"label\": \"I-495 N\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3100, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:11:20.067363-04:00\", \"total_usd\": \"0.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "f2e9196d3056ba25",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "bfb76dadcfb63e2b",
+                  "start_time": "2026-08-04T20:11:20.558043Z",
+                  "end_time": "2026-08-04T20:11:22.680086Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i66_route",
+                        "arguments": {
+                          "origin": "I-495 N",
+                          "destination": "Fairfax Drive",
+                          "at_time": ""
+                        },
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"I-495 N\", \"destination\": \"Fairfax Drive\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"2\", \"label\": \"I-495 N\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Fairfax Drive\"}, \"legs\": [{\"start_zone_id\": 3100, \"end_zone_id\": 3120, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 EB\", \"priced_as_of\": \"2026-08-04T16:00:00-04:00\", \"observed_at\": \"2026-08-04T15:59:17-04:00\"}], \"at_time\": \"2026-08-04T16:11:20.067363-04:00\", \"total_usd\": \"0.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_PTPsFqgrWvRx4OLge5VvdyG2",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+                  "span_id": "b55914c14a203c73",
+                  "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97",
+                  "parent_span_id": "90b7975b1633af49",
+                  "start_time": "2026-08-04T20:11:18.413223Z",
+                  "end_time": "2026-08-04T20:11:22.681020Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Use Fairfax Drive instead. Did you keep my starting point at I-495 North?",
+                "agent_response": "Yes\u2014I kept your starting point as **I-495 North**.\n\n## Route and fares\n\n- **I-495 N \u2192 Fairfax Drive** \u2014 eastbound, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: **8/4/2026 3:59 PM ET**\n\n## Calculation\n\n**$0.00 = $0.00**\n\n## Final price\n\n**$0.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "dca0efcd673a32f5a1eb66d484a38880",
+            "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97"
+          }
+        ],
+        "session_id": "dbf9c20c-a238-43e7-8b61-cfb54c527f97"
+      },
+      "metadata": {
+        "id": "i66-direct-wrong-way-exit",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price I-66 Express Lanes from I-495 North to Lee Highway at Scott Street."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "calls": [
+              {
+                "tool": "i66_route",
+                "input": {
+                  "origin": "I-495 N",
+                  "destination": "Lee Highway - Scott Street"
+                }
+              }
+            ]
+          }
+        ],
+        "expected_mismatch": {
+          "direction": "EB",
+          "constraint": {
+            "location": "Lee Highway - Scott Street",
+            "role": "exit",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+              "Fairfax Drive",
+              "Lee Highway - Spout Run Parkway"
+            ]
+          }
+        },
+        "response_terms": [
+          "Lee Highway",
+          "eastbound",
+          "Fairfax Drive",
+          "Glebe"
+        ],
+        "selected_alternative": "Fairfax Drive"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "selected fixed-ramp recovery was replanned",
+    "selected fixed-ramp recovery was replanned",
+    "The agent successfully addressed the user's request. It: (1) explained why \"Lee Highway - Scott Street\" was invalid (wrong-way ramp/not an EB exit), (2) offered only compatible alternatives (Fairfax Drive and Lee Highway - Spout Run Parkway), (3) used the user's selected recovery destination (Fairfax Drive) without deviation, (4) maintained the original starting point (Westpark Drive), and (5) provided the actual computed fare ($6.85) from the tool results without inventing prices. The route pricing is based on real tool data, not fabricated values.",
+    "The agent successfully addressed the user's request. When the original destination (Lee Highway at Scott Street) was invalid due to a one-way ramp issue, the agent: (1) explained the constraint by identifying it as an eastbound-only corridor with no westbound access at that location, (2) offered only compatible alternatives (Fairfax Drive and Lee Highway - Spout Run Parkway), (3) accepted the user's selection of Fairfax Drive as the replacement destination, and (4) maintained the original starting point (I-495 N) without modification. The final result ($0.00 fare) is based on actual tool data, not invented. All assertion requirements are satisfied.",
+    "The assistant directly answered both parts of the user's question: (1) confirmed that Westpark Drive was maintained as the starting point, and (2) provided a complete, priced toll route from Westpark Drive to Fairfax Drive. The response moves the user to their goal by delivering the pricing information they requested ($6.85 total) with clear breakdown and supporting details. The format is well-organized and easy to understand. The assistant successfully adapted to the user's course correction without requiring additional clarification.",
+    "The user asked two things: (1) confirmation that I-495 North was maintained as the starting point, and (2) the pricing for the route to Fairfax Drive instead of Lee Highway - Scott Street. The assistant's response directly addresses both questions. It confirms the starting point was kept, provides the destination and direction, states the price clearly ($0.00), and includes relevant metadata. The response is well-organized and easy to understand. While the \"Calculation\" section is somewhat redundant, it doesn't detract significantly from the overall helpfulness. The assistant successfully moved the user toward their goal of obtaining pricing information for their specified route."
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "selected fixed-ramp recovery was replanned",
+        "label": "recovered"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "selected fixed-ramp recovery was replanned",
+        "label": "recovered"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent successfully addressed the user's request. It: (1) explained why \"Lee Highway - Scott Street\" was invalid (wrong-way ramp/not an EB exit), (2) offered only compatible alternatives (Fairfax Drive and Lee Highway - Spout Run Parkway), (3) used the user's selected recovery destination (Fairfax Drive) without deviation, (4) maintained the original starting point (Westpark Drive), and (5) provided the actual computed fare ($6.85) from the tool results without inventing prices. The route pricing is based on real tool data, not fabricated values.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent successfully addressed the user's request. When the original destination (Lee Highway at Scott Street) was invalid due to a one-way ramp issue, the agent: (1) explained the constraint by identifying it as an eastbound-only corridor with no westbound access at that location, (2) offered only compatible alternatives (Fairfax Drive and Lee Highway - Spout Run Parkway), (3) accepted the user's selection of Fairfax Drive as the replacement destination, and (4) maintained the original starting point (I-495 N) without modification. The final result ($0.00 fare) is based on actual tool data, not invented. All assertion requirements are satisfied.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The assistant directly answered both parts of the user's question: (1) confirmed that Westpark Drive was maintained as the starting point, and (2) provided a complete, priced toll route from Westpark Drive to Fairfax Drive. The response moves the user to their goal by delivering the pricing information they requested ($6.85 total) with clear breakdown and supporting details. The format is well-organized and easy to understand. The assistant successfully adapted to the user's course correction without requiring additional clarification.",
+        "label": "Very helpful"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The user asked two things: (1) confirmation that I-495 North was maintained as the starting point, and (2) the pricing for the route to Fairfax Drive instead of Lee Highway - Scott Street. The assistant's response directly addresses both questions. It confirms the starting point was kept, provides the destination and direction, states the price clearly ($0.00), and includes relevant metadata. The response is well-organized and easy to understand. While the \"Calculation\" section is somewhat redundant, it doesn't detract significantly from the overall helpfulness. The assistant successfully moved the user toward their goal of obtaining pricing information for their specified route.",
+        "label": "Very helpful"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ]
+}

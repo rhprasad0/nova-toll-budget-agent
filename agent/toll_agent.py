@@ -49,12 +49,18 @@ from agent_tools.dulles_route import (
     _lookup as _dulles_lookup,  # pyright: ignore[reportPrivateUsage]
 )
 from agent_tools.dulles_route import dulles_route
+from agent_tools.i66_route import (
+    _lookup as _i66_lookup,  # pyright: ignore[reportPrivateUsage]
+)
 from agent_tools.i66_route import i66_route
 from agent_tools.i95_route import (
     i95_access_options,
     i95_endpoint_access_options,
     i95_junction_leg,
     i95_route,
+)
+from agent_tools.i495_route import (
+    _lookup as _i495_lookup,  # pyright: ignore[reportPrivateUsage]
 )
 from agent_tools.i495_route import i495_route
 
@@ -125,21 +131,23 @@ def _load_priced_location_oracle() -> dict[str, _oracle_route.JsonObject]:
         },
         "i495": {
             "tool": "i495_route",
-            "locations": _locations(i95["nodes"], i495_pairs),
+            "locations": _locations(i95["nodes"], i495_pairs, directional=True),
         },
         "i66_itb": {
             "tool": "i66_route",
-            "locations": _locations(i66["nodes"], i66["pairs"]),
+            "locations": _locations(i66["nodes"], i66["pairs"], directional=True),
         },
         "dulles_toll_road": {
             "tool": "dulles_route",
             "locations": _locations(
-                dulles_toll_road["nodes"], dulles_toll_road["pairs"]
+                dulles_toll_road["nodes"], dulles_toll_road["pairs"], directional=True
             ),
         },
         "dulles_greenway": {
             "tool": "dulles_route",
-            "locations": _locations(dulles_greenway["nodes"], dulles_greenway["pairs"]),
+            "locations": _locations(
+                dulles_greenway["nodes"], dulles_greenway["pairs"], directional=True
+            ),
         },
     }
 
@@ -182,8 +190,8 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.13.0"
-TOOLSET_VERSION = "1.3.0"
+SYSTEM_PROMPT_VERSION = "1.14.0"
+TOOLSET_VERSION = "1.4.0"
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -468,7 +476,7 @@ def _has_direct_pair(corridor: str, origin: str, destination: str) -> bool:
 
 
 def _validate_location(
-    corridor: str, label: str, role: str
+    corridor: str, label: str, role: str, *, check_role: bool = True
 ) -> _oracle_route.JsonObject | None:
     location = _LOCATION_BY_CORRIDOR.get(corridor, {}).get(label)
     if location is None:
@@ -476,7 +484,7 @@ def _validate_location(
             "error": f"unknown {role} {label!r} on {corridor}",
             "valid_options": sorted(_LOCATION_BY_CORRIDOR.get(corridor, {})),
         }
-    if not location[role]:
+    if check_role and not location[role]:
         return {
             "error": f"{label!r} is not a valid {role} on {corridor}",
             "valid_options": sorted(
@@ -501,11 +509,25 @@ def _can_price(
     destination_corridor: str,
     destination: str,
 ) -> bool:
+    result = _route_lookup(origin_corridor, origin, destination_corridor, destination)
+    return "error" not in result and result.get("status") != "one_way_mismatch"
+
+
+def _route_lookup(
+    origin_corridor: str,
+    origin: str,
+    destination_corridor: str,
+    destination: str,
+) -> _oracle_route.JsonObject:
     if {origin_corridor, destination_corridor} <= _DULLES_CORRIDORS:
-        return "error" not in _dulles_lookup(origin, destination)
-    return origin_corridor == destination_corridor and _has_direct_pair(
-        origin_corridor, origin, destination
-    )
+        return _dulles_lookup(origin, destination)
+    if origin_corridor != destination_corridor:
+        return {"error": "different corridors"}
+    if origin_corridor == "i66_itb":
+        return _i66_lookup(origin, destination)
+    if origin_corridor == "i495":
+        return _i495_lookup(origin, destination)
+    return {"ok": _has_direct_pair(origin_corridor, origin, destination)}
 
 
 def _priced_step(
@@ -543,18 +565,22 @@ def _planned_steps(
     origin: str,
     destination_corridor: str,
     destination: str,
-) -> list[_oracle_route.JsonObject] | None:
+) -> list[_oracle_route.JsonObject] | _oracle_route.JsonObject | None:
     frontier: list[tuple[str, str, list[_oracle_route.JsonObject]]] = [
         (origin_corridor, origin, [])
     ]
     visited = {(origin_corridor, origin)}
+    mismatch: _oracle_route.JsonObject | None = None
     while frontier:
         corridor, point, steps = frontier.pop(0)
         if corridor == destination_corridor and _same_location(
             corridor, destination, point
         ):
             return steps
-        if _can_price(corridor, point, destination_corridor, destination):
+        direct = _route_lookup(corridor, point, destination_corridor, destination)
+        if direct.get("status") == "one_way_mismatch":
+            mismatch = mismatch or direct
+        elif "error" not in direct and direct.get("ok", True):
             return [*steps, _priced_step(corridor, point, destination)]
         if (
             corridor == destination_corridor == "i495"
@@ -636,7 +662,7 @@ def _planned_steps(
                     ],
                 )
             )
-    return None
+    return mismatch
 
 
 @tool
@@ -672,9 +698,8 @@ def plan_toll_route(
     Returns:
         dict: ``{"at_time", "steps"}``, optionally with ``routing_note``;
         each step has a ``kind`` and its documented tool arguments. A
-        directionally invalid I-95 endpoint returns the same structured
-        ``one_way_mismatch`` result as ``i95_access_options``; other failures
-        return ``{"error": str}``.
+        directionally invalid endpoint returns the shared structured
+        ``one_way_mismatch`` result; other failures return ``{"error": str}``.
     """
     try:
         planned_at_time = _oracle_route.resolve_at_time(at_time).isoformat()
@@ -701,9 +726,16 @@ def plan_toll_route(
         access = i95_endpoint_access_options(destination, "exit", _CROSS_I95_HANDOFF)
         if access["status"] == "one_way_mismatch":
             return access
-    if error := _validate_location(origin_corridor, origin, "entry"):
+    if error := _validate_location(
+        origin_corridor, origin, "entry", check_role=origin_corridor == "i95"
+    ):
         return error
-    if error := _validate_location(destination_corridor, destination, "exit"):
+    if error := _validate_location(
+        destination_corridor,
+        destination,
+        "exit",
+        check_role=destination_corridor == "i95",
+    ):
         return error
 
     steps = _planned_steps(origin_corridor, origin, destination_corridor, destination)
@@ -715,6 +747,8 @@ def plan_toll_route(
                 f"{destination!r} on {destination_corridor}"
             )
         }
+    if isinstance(steps, dict):
+        return steps
     connector_labels = {step["label"] for step in steps if step["kind"] == "connector"}
     if connector_labels >= _ROUTE_267_DETOUR_CONNECTORS:
         return {

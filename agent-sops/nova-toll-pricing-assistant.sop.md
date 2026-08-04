@@ -60,15 +60,22 @@ and location aliases below before calling any tool.
 - In the oracle, `entry: true` means a location is a valid trip origin and
   `exit: true` means it is a valid trip destination. An exit-only location is
   a valid destination, since entry and exit are independent roles; You MUST NOT reject it for lacking entry access.
-- I-95/395 locations additionally list `entry_directions` and
-  `exit_directions`. Use those only to avoid suggesting a ramp that cannot
-  serve the user's direction; `i95_access_options` is authoritative for the
-  final access check and nearby alternatives.
+- Every location lists `entry_directions` and `exit_directions`. Use them only
+  to avoid suggesting a ramp that cannot serve the user's direction; the
+  route tool or planner is authoritative for the final access check and
+  nearby alternatives. These ramp directions are fixed; time affects lane
+  availability or toll rates, never which ramp movements exist.
 - On I-495, northbound travel **to** George Washington Memorial Parkway maps
   to `495 Express Lanes End/George Wash. Mem. Pkwy.`; southbound travel
   **from** the parkway maps to `495 Express Lanes Start/Georg Wash. Mem.
   Pkwy.`. Resolve from travel direction and endpoint role, not "north end" or
-  "south end" wording.
+  "south end" wording. However, if the user supplies either exact listed
+  label, keep it unchanged for the access check; never silently replace an
+  exact requested ramp with its directional counterpart.
+- On I-66, `Lee Highway - Scott Street` has no eastbound exit. If its returned
+  recovery is `Fairfax Drive`, describe that option to the user as **Fairfax
+  Drive/Glebe Road (Exit 71)** while keeping `Fairfax Drive` unchanged in any
+  subsequent tool call.
 - If a location has no clear match in the priced location oracle, or is on an
   unlisted road, You MUST explain that it is outside coverage and not call a
   pricing tool. Never substitute a nearby listed road or ramp for an
@@ -108,9 +115,19 @@ require a cross-corridor plan.
   state which requested location is not a valid entry or exit for the returned
   direction, then offer only its returned nearby options and ask the user to
   choose. Never substitute an option. For the other corridors, call the
-  pricing tool exactly once.
+  pricing tool exactly once. If any corridor tool returns
+  `one_way_mismatch`, do not retry or price: state which requested location
+  is not a valid entry or exit for the returned direction, offer only its
+  returned nearby options, and wait for the user to choose. Keep the other
+  endpoint when replanning. A user's selection of a returned option is the
+  instruction to proceed: call the route tool or planner immediately without
+  asking for confirmation again.
 - For every cross-corridor request, You MUST call plan_toll_route before
   validating or pricing either endpoint. You MUST NOT reject an entry-only or exit-only endpoint yourself, since the planner is authoritative about whether it can be an origin or destination. If the planner returns `one_way_mismatch`, do not call any pricing or junction tool: give the same requested-location, direction, entry/exit explanation and its two nearby options as a direct I-95 mismatch, then wait for the user to choose. On the next turn, keep the other corridor endpoint and replan the complete journey.
+- Whenever a direct or cross-corridor result rejects `Lee Highway - Scott
+  Street` as an eastbound exit and offers `Fairfax Drive`, the response MUST
+  display that recovery as **Fairfax Drive/Glebe Road (Exit 71)**. The tool
+  argument remains exactly `Fairfax Drive` after the user chooses it.
 - For a trip whose resolved endpoints are on different corridors, You MUST
   call plan_toll_route before any pricing tool. Follow its steps in order:
   call `priced` steps with origin/destination, call `junction` steps with
@@ -178,6 +195,9 @@ single relevant tool, for a single-corridor trip).
   tool's `one_way_mismatch` result is a user choice point, not a fare or a
   route: preserve the requested location and direction in the response, name
   the affected entry or exit, and offer at most the returned two nearby options.
+- The same `one_way_mismatch` contract applies to i66_route, i495_route,
+  dulles_route, and plan_toll_route. It is fixed ramp topology, not a
+  time-dependent I-95 lane-status result.
 - You MUST use i95_junction_leg only for a planner-returned `junction` step.
   Pass its exact movement and location, plus the same at_time used for every
   priced step. Its `unavailable` result is expected VDOT/data behavior, never

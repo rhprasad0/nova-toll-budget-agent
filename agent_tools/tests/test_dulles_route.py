@@ -249,10 +249,43 @@ def test_unknown_destination_returns_combined_valid_options():
     assert "Exit 17 - SR 684 (Spring Hill Rd)" in result["valid_options"]
 
 
-def test_exit_only_ramp_is_never_a_valid_origin():
-    result = dulles_route("Exit 2A - Battlefield Pkwy", "Exit 8 - SR 606 (Ox Rd)")
-    assert "error" in result
-    assert "Exit 2A - Battlefield Pkwy" not in result["valid_options"]
+def test_battlefield_parkway_is_bidirectional():
+    eastbound = dulles_route("Exit 2 - Battlefield Pkwy", "Exit 8 - SR 606 (Ox Rd)")
+    westbound = dulles_route("Exit 8 - SR 606 (Ox Rd)", "Exit 2 - Battlefield Pkwy")
+
+    assert eastbound["legs"][0]["direction"] == "EB"
+    assert westbound["legs"][0]["direction"] == "WB"
+
+
+def test_compass_creek_wrong_direction_entry_returns_recovery():
+    result = dulles_route("Exit 2B - Compass Creek Pkwy", "Exit 8 - SR 606 (Ox Rd)")
+
+    assert result["status"] == "one_way_mismatch"
+    assert result["direction"] == "EB"
+    assert result["constraints"] == [
+        {
+            "location": "Exit 2B - Compass Creek Pkwy",
+            "role": "entry",
+            "required_direction": "EB",
+            "available_directions": [],
+            "nearby_options": [
+                "Exit 2 - Battlefield Pkwy",
+                "Exit 3 - SR 653 (Shreve Mill Rd)",
+            ],
+        }
+    ]
+
+
+def test_compass_creek_cross_facility_trip_returns_the_same_recovery():
+    result = dulles_route(
+        "Exit 2B - Compass Creek Pkwy",
+        "Exit 12 - SR 602 (Reston Pkwy)",
+    )
+
+    assert result["status"] == "one_way_mismatch"
+    assert result["constraints"][0]["nearby_options"][0] == (
+        "Exit 2 - Battlefield Pkwy"
+    )
 
 
 def test_invalid_at_time_is_a_hard_error():

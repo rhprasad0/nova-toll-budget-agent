@@ -338,6 +338,25 @@ fetched at 00:23:31. Aligning the two feeds by key name manufactures a spurious
 30-minute lag. The measurement therefore aligned captures on S3
 `LastModified`.
 
+## 10. Fixed directional access outside I-95 (2026-08-04)
+
+Operator and VDOT interchange maps confirm that non-I-95 ramp topology does
+not switch by time. I-66's weekday windows change toll operation, not which
+ramps physically enter or exit; I-495's northbound/southbound ramps are fixed;
+and Greenway peak windows change only the fare. The committed route pairs are
+therefore the access authority at every `at_time`.
+
+- I-66: <https://vdot.virginia.gov/projects/major-projects/66expresslanes/about/>
+- I-495: <https://495next.vdot.virginia.gov/project-resources/project-maps/>
+- Dulles Toll Road: <https://www.dullestollroad.com/maps-interchanges>
+- Dulles Greenway: <https://www.dullesgreenway.com/toll-calculator/>
+
+The Greenway calculator lists Battlefield Parkway as both a start and an end,
+so it is modeled bidirectionally. Compass Creek remains a westbound exit with
+no entrance. On I-66, Scott Street cannot be an eastbound exit; the recovery
+shown to users is Fairfax Drive/Glebe Road (Exit 71), with the exact oracle
+argument remaining `Fairfax Drive`.
+
 ## What was deleted, and what remains
 
 The deleted surface was `db/graph.sql`, free-form SQL/schema tools, their

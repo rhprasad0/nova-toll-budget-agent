@@ -63,7 +63,7 @@ _LABEL_INDEX = _oracle_route.label_index(_NODES)
 
 
 def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
-    return _oracle_route.lookup(
+    result = _oracle_route.lookup(
         origin,
         destination,
         nodes=_NODES,
@@ -72,6 +72,20 @@ def _lookup(origin: str, destination: str) -> _oracle_route.JsonObject:
         oracle_name="i495",
         build_legs=lambda p: [{"od_pair_id": p["ods"][0]}],
     )
+    if result.get("error", "").startswith("no direct trip"):
+        result.update(
+            _oracle_route.directional_mismatch(
+                origin,
+                destination,
+                nodes=_NODES,
+                pairs=_PAIRS,
+                label_idx=_LABEL_INDEX,
+                position=lambda node_id: float(_NODES[node_id]["latitude"]),
+                increasing_direction="Northbound",
+                decreasing_direction="Southbound",
+            )
+        )
+    return result
 
 
 _CURRENT_I495_PRICE_SQL = """
@@ -149,7 +163,9 @@ def i495_route(
     Returns:
         dict: Success includes resolved ``entry``/``exit``, one ``legs`` item,
         decimal-string ``total_usd``, and VDOT ``priced_as_of`` and
-        ``observed_at`` timestamps. Failure is ``{"error", "valid_options"}``.
+        ``observed_at`` timestamps. A wrong-way endpoint returns
+        ``one_way_mismatch`` before pricing. Failure otherwise returns
+        ``{"error", "valid_options"}``.
     """
     return _oracle_route.run(
         "i495_route",

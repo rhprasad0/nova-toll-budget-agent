@@ -95,10 +95,12 @@ def _same_location(corridor, query, node_id):
 
 def _can_price(origin_corridor, origin, destination_corridor, destination):
     if {origin_corridor, destination_corridor} <= _DULLES_CORRIDORS:
-        return "error" not in _dulles_lookup(origin, destination)
-    return origin_corridor == destination_corridor and "error" not in _LOOKUPS[
-        origin_corridor
-    ](origin, destination)
+        result = _dulles_lookup(origin, destination)
+    elif origin_corridor == destination_corridor:
+        result = _LOOKUPS[origin_corridor](origin, destination)
+    else:
+        return False
+    return "error" not in result and result.get("status") != "one_way_mismatch"
 
 
 def _reference_reachable(origin_corridor, origin, destination_corridor, destination):
@@ -203,11 +205,13 @@ def test_system_prompt_contains_i95_i495_junction():
     assert "unpriced junction" in prompt.casefold()
 
 
-def test_system_prompt_requires_i95_direction_access_check():
+def test_system_prompt_requires_direction_access_checks_on_every_corridor():
     prompt = build_system_prompt()
     assert '"entry_directions"' in prompt
     assert "i95_access_options" in prompt
     assert "Never substitute an option" in prompt
+    assert "same `one_way_mismatch` contract applies" in prompt
+    assert "fixed ramp topology" in prompt
 
 
 def test_system_prompt_describes_curated_network_transfers():
@@ -434,6 +438,17 @@ def test_planner_covers_every_i66_i495_direction(
             actual.append((step["kind"], step["label"], step["transfer_id"]))
     assert actual == expected
     assert plan.get("routing_note") == routing_note
+
+
+def test_planner_rejects_westpark_to_scott_and_offers_eastbound_recovery():
+    plan = plan_toll_route(
+        "i495", "Westpark Drive", "i66_itb", "Lee Highway - Scott Street"
+    )
+
+    assert plan["status"] == "one_way_mismatch"
+    assert plan["direction"] == "EB"
+    assert plan["constraints"][0]["location"] == "Lee Highway - Scott Street"
+    assert plan["constraints"][0]["nearby_options"][0] == "Fairfax Drive"
 
 
 def test_planner_defaults_to_one_timezone_aware_timestamp():
@@ -739,7 +754,9 @@ def test_planner_rejects_routes_that_reuse_a_connector(
 ):
     plan = plan_toll_route(origin_corridor, origin, destination_corridor, destination)
 
-    assert plan["error"].startswith("no oracle-supported directed route connects")
+    assert plan.get("status") == "one_way_mismatch" or plan["error"].startswith(
+        "no oracle-supported directed route connects"
+    )
 
 
 def test_planner_matches_exhaustive_directed_oracle_reachability():
@@ -775,7 +792,6 @@ def test_planner_matches_exhaustive_directed_oracle_reachability():
                         destination,
                     )
                     if plan.get("status") == "one_way_mismatch":
-                        assert origin_corridor == "i95" or destination_corridor == "i95"
                         continue
                     assert ("error" not in plan) is expected, (
                         origin_corridor,
@@ -940,12 +956,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.14.0"
-    advanced["system_prompt"]["releases"]["1.14.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.15.0"
+    advanced["system_prompt"]["releases"]["1.15.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.13\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.14\.0"):
         validate_manifest_update(previous, advanced)
 
 

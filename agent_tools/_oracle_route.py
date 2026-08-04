@@ -142,6 +142,86 @@ def lookup(
     }
 
 
+def directional_mismatch(
+    origin: str,
+    destination: str,
+    *,
+    nodes: Nodes,
+    pairs: Pairs,
+    label_idx: dict[str, list[str]],
+    position: Callable[[str], float],
+    increasing_direction: str,
+    decreasing_direction: str,
+    preferred: Mapping[tuple[str, str, str], list[str]] | None = None,
+) -> JsonObject:
+    """Explain a known endpoint that cannot serve the requested direction."""
+    origin_ids = resolve(origin, nodes=nodes, label_idx=label_idx)
+    destination_ids = resolve(destination, nodes=nodes, label_idx=label_idx)
+    if not origin_ids or not destination_ids:
+        return {}
+    origin_position = sum(map(position, origin_ids)) / len(origin_ids)
+    destination_position = sum(map(position, destination_ids)) / len(destination_ids)
+    if origin_position == destination_position:
+        return {}
+    direction = (
+        increasing_direction
+        if destination_position > origin_position
+        else decreasing_direction
+    )
+
+    def role_directions(location_ids: list[str], role: str) -> set[str]:
+        return {pair["direction"] for pair in pairs if pair[role] in location_ids}
+
+    requested = (
+        (origin, origin_ids, "entry", destination_ids),
+        (destination, destination_ids, "exit", origin_ids),
+    )
+    invalid = [
+        item for item in requested if direction not in role_directions(item[1], item[2])
+    ]
+    constraints: list[JsonObject] = []
+    for location, location_ids, role, opposite_ids in invalid:
+        opposite_role = "exit" if role == "entry" else "entry"
+        candidates = {
+            pair[role]
+            for pair in pairs
+            if pair["direction"] == direction
+            and (len(invalid) != 1 or pair[opposite_role] in opposite_ids)
+        }
+        distances: dict[str, float] = {}
+        for node_id in candidates:
+            label = nodes[node_id]["label"]
+            distance = min(abs(position(node_id) - position(i)) for i in location_ids)
+            distances[label] = min(distances.get(label, float("inf")), distance)
+        favorites = (preferred or {}).get((location, role, direction), [])
+        nearby = sorted(
+            distances,
+            key=lambda label: (
+                favorites.index(label) if label in favorites else len(favorites),
+                distances[label],
+                label,
+            ),
+        )[:2]
+        constraints.append(
+            {
+                "location": location,
+                "role": role,
+                "required_direction": direction,
+                "available_directions": sorted(role_directions(location_ids, role)),
+                "nearby_options": nearby,
+            }
+        )
+    return (
+        {
+            "status": "one_way_mismatch",
+            "direction": direction,
+            "constraints": constraints,
+        }
+        if constraints
+        else {}
+    )
+
+
 def resolve_at_time(
     at_time: str | None, *, now: Callable[[], datetime] | None = None
 ) -> datetime:
@@ -240,6 +320,8 @@ def run(
     result = lookup_fn(origin, destination)
     if "error" in result:
         return _miss(tool_name, origin, destination, result)
+    if result.get("status") == "one_way_mismatch":
+        return result
 
     try:
         resolved_at_time = resolve_at_time(at_time)
