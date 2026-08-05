@@ -143,6 +143,20 @@ def test_reconcile_reports_request_errors_and_expiry_without_verdicts():
     ]
 
 
+def test_reconcile_rejects_malformed_structured_verdict():
+    request = _request("sample-suite:case-a:goal_success")
+
+    verdicts, failures = batch_judges.reconcile_batch(
+        [request],
+        [_result(request["custom_id"], {"reasoning": "ok", "verdict": "MAYBE"})],
+        [],
+        status="completed",
+    )
+
+    assert verdicts == []
+    assert failures[0]["error"] == "goal-success verdict is invalid"
+
+
 def test_submit_uploads_jsonl_and_writes_auditable_manifest(monkeypatch, tmp_path):
     request = _request("sample-suite:case-a:goal_success")
     uploads = []
