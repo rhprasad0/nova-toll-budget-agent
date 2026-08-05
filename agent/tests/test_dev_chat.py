@@ -5,6 +5,7 @@ import logging
 import os
 import threading
 import urllib.request
+from datetime import date
 
 import pytest
 
@@ -137,6 +138,18 @@ def test_chat_reuses_sessions_writes_raw_telemetry_and_resets(tmp_path):
 
     chat.reset("one")
     assert chat.chat("one", "fresh")["answer"] == "3: fresh"
+
+
+def test_chat_rebuilds_a_session_when_the_new_york_date_changes(tmp_path, monkeypatch):
+    dates = iter((date(2026, 8, 5), date(2026, 8, 5), date(2026, 8, 6)))
+    monkeypatch.setattr(dev_chat, "_new_york_date", lambda: next(dates))
+    factory = _Factory()
+    chat = DevChat(factory, tmp_path / "telemetry.jsonl")
+
+    assert chat.chat("one", "before midnight")["answer"] == "1: before midnight"
+    assert chat.chat("one", "still today")["answer"] == "1: still today"
+    assert chat.chat("one", "after midnight")["answer"] == "2: after midnight"
+    assert len(factory.agents) == 2
 
 
 @pytest.mark.parametrize(

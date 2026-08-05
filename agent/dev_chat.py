@@ -11,11 +11,12 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from strands.telemetry import StrandsTelemetry
 
@@ -27,7 +28,12 @@ _HTML_PATH = Path(__file__).with_suffix(".html")
 _CA_BUNDLE_PATH = _REPO_ROOT / "infra/build/loader/rds-ca-bundle.pem"
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _MAX_MESSAGE_CHARS = 8_000
+_EASTERN = ZoneInfo("America/New_York")
 logger = logging.getLogger(__name__)
+
+
+def _new_york_date() -> date:
+    return datetime.now(_EASTERN).date()
 
 
 def configure_local_pricing_env() -> None:
@@ -55,7 +61,7 @@ class DevChat:
     ) -> None:
         self.agent_factory = agent_factory
         self.telemetry_path = telemetry_path
-        self.sessions: dict[str, tuple[Any, threading.Lock]] = {}
+        self.sessions: dict[str, tuple[Any, threading.Lock, date]] = {}
         self.sessions_lock = threading.Lock()
         self.telemetry_lock = threading.Lock()
 
@@ -120,14 +126,17 @@ class DevChat:
 
     def _session(self, session_id: str) -> tuple[Any, threading.Lock]:
         with self.sessions_lock:
-            if session_id not in self.sessions:
+            today = _new_york_date()
+            if session_id not in self.sessions or self.sessions[session_id][2] != today:
                 self.sessions[session_id] = (
                     self.agent_factory(
                         trace_attributes={"tollchat.session_id": session_id}
                     ),
                     threading.Lock(),
+                    today,
                 )
-            return self.sessions[session_id]
+            agent, lock, _ = self.sessions[session_id]
+            return agent, lock
 
     def _append(self, record: dict[str, Any]) -> None:
         self.telemetry_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
