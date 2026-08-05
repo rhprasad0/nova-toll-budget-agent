@@ -25,13 +25,14 @@ _CASE = Case[str, str](
     name="ambiguous-alias-mclean-simulated",
     input="Price a trip from McLean to Westpark Drive.",
     metadata={
+        "batch_judge_suite": "fuzzy_location_matching",
         "task_description": (
             "Wants a toll price quote from McLean to Westpark Drive. McLean "
             "is ambiguous between two interchanges; the user means the "
             "I-495 one (Jones Branch Drive) and should say so plainly if "
             "asked which McLean they mean, without volunteering it "
             "unprompted."
-        )
+        ),
     },
     expected_assertion=(
         "The agent does not price any trip on its first response; it asks "

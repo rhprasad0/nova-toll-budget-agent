@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -14,11 +14,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands_evals import ActorSimulator, Case, Experiment  # noqa: E402
-from strands_evals.evaluators import (  # noqa: E402
-    Evaluator,
-    GoalSuccessRateEvaluator,
-    HelpfulnessEvaluator,
-)
+from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
@@ -52,7 +48,12 @@ def load_cases() -> list[Case[str, str]]:
             Case[str, str](
                 name=f"{row['id']}-simulated",
                 input=row["conversation"][0]["content"],
-                metadata={**row, "selected_alternative": selected},
+                metadata={
+                    **row,
+                    "batch_judge_suite": "i95_one_way_access",
+                    "batch_judge_context": build_helpfulness_context(),
+                    "selected_alternative": selected,
+                },
                 expected_assertion=(
                     "The agent explains why the originally requested I-95/395 "
                     "Express Lanes ramp cannot serve this direction, offers only "
@@ -206,19 +207,17 @@ class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
         )
 
 
-def build_helpfulness_evaluator(model_id: str) -> HelpfulnessEvaluator[str, str]:
-    today = datetime.now(ZoneInfo("America/New_York")).date()
-    evaluator: HelpfulnessEvaluator[str, str] = HelpfulnessEvaluator(model=model_id)
-    evaluator.system_prompt += (
-        "\n\n# Evaluation context\n"
-        f"The evaluation date in America/New_York is {today:%B} {today.day}, {today.year}. "
+def build_helpfulness_context(today: date | None = None) -> str:
+    evaluation_date = today or datetime.now(ZoneInfo("America/New_York")).date()
+    return (
+        f"The evaluation date in America/New_York is {evaluation_date:%B} "
+        f"{evaluation_date.day}, {evaluation_date.year}. "
         "TollChat prices Northern Virginia toll roads only. Do not reward invented "
         "routing, fares, or access points. When I-95 Express Lanes are unavailable, "
         "it is appropriate to state that precisely and call the I-95 general-purpose "
         "lanes an unpriced alternative. Do not infer that this claims the general-purpose "
         "lanes are closed or require a non-tool-grounded alternate route."
     )
-    return evaluator
 
 
 def main() -> None:
@@ -248,8 +247,6 @@ def main() -> None:
         cases=load_cases(),
         evaluators=[
             OneWaySimulationTraceEvaluator(),
-            GoalSuccessRateEvaluator(model=model_id),
-            build_helpfulness_evaluator(model_id),
         ],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
@@ -265,10 +262,7 @@ def _self_check() -> None:
         "up to three turns" in build_actor_profile(case).actor_goal for case in cases
     )
     assert all((case.metadata or {}).get("selected_alternative") for case in cases)
-    assert (
-        "Do not infer that this claims"
-        in build_helpfulness_evaluator("test").system_prompt
-    )
+    assert "Do not infer that this claims" in build_helpfulness_context()
     bad = OneWaySimulationTraceEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )

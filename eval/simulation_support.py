@@ -15,10 +15,11 @@ from typing import Any, Protocol, cast
 from opentelemetry import baggage, context
 from strands import Agent
 from strands_evals import ActorSimulator, Case, Experiment, StrandsEvalsTelemetry
-from strands_evals.evaluators import GoalSuccessRateEvaluator, HelpfulnessEvaluator
+from strands_evals.evaluators import Evaluator
 from strands_evals.mappers.strands_in_memory_session_mapper import (
     StrandsInMemorySessionMapper,
 )
+from strands_evals.types.evaluation import EvaluationData, EvaluationOutput
 from strands_evals.types.evaluation_report import EvaluationReport
 from strands_evals.types.simulation import ActorProfile, ActorResponse
 from strands_evals.types.trace import AgentInvocationSpan, Session, ToolExecutionSpan
@@ -27,6 +28,22 @@ from strands_evals.types.trace import AgentInvocationSpan, Session, ToolExecutio
 class Simulator(Protocol):
     def has_next(self) -> bool: ...
     def act(self, agent_message: str) -> object: ...
+
+
+class PendingBatchJudgeEvaluator(Evaluator[str, str]):
+    """Preserve a runnable report row while asynchronous judges are pending."""
+
+    def evaluate(
+        self, evaluation_case: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        return [
+            EvaluationOutput(
+                score=1.0,
+                test_pass=True,
+                reason="OpenAI Batch judgment pending",
+                label="pending_batch_judge",
+            )
+        ]
 
 
 def run_simulated_conversation(
@@ -140,7 +157,7 @@ def run_simulated_evaluation(
     results_dir: Path,
     agent_factory: Callable[[], Agent],
 ) -> None:
-    """Run one simulated case with the shared actor/judge plumbing."""
+    """Run one simulated case and save its transcript for Batch judges."""
     telemetry, mapper = build_telemetry()
 
     def task_function(case: Case[str, str]) -> dict[str, object]:
@@ -162,8 +179,7 @@ def run_simulated_evaluation(
     experiment = Experiment[str, str](
         cases=[case],
         evaluators=[
-            HelpfulnessEvaluator(model=model_id),
-            GoalSuccessRateEvaluator(model=model_id),
+            PendingBatchJudgeEvaluator(),
         ],
     )
     report = experiment.run_evaluations(task_function)

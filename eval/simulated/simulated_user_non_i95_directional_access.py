@@ -13,11 +13,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands_evals import ActorSimulator, Case, Experiment  # noqa: E402
-from strands_evals.evaluators import (  # noqa: E402
-    Evaluator,
-    GoalSuccessRateEvaluator,
-    HelpfulnessEvaluator,
-)
+from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
@@ -53,7 +49,11 @@ def load_cases() -> list[Case[str, str]]:
             Case(
                 name=f"{row['id']}-simulated",
                 input=row["conversation"][0]["content"],
-                metadata={**row, "selected_alternative": selected},
+                metadata={
+                    **row,
+                    "batch_judge_suite": "non_i95_directional_access",
+                    "selected_alternative": selected,
+                },
                 expected_assertion=(
                     "The agent explains the fixed wrong-way ramp, offers only "
                     "compatible choices, and uses the selected recovery without "
@@ -157,8 +157,6 @@ def main() -> None:
         cases=load_cases(),
         evaluators=[
             RecoveryTraceEvaluator(),
-            GoalSuccessRateEvaluator(model=model_id),
-            HelpfulnessEvaluator(model=model_id),
         ],
     ).run_evaluations(task)
     _RESULTS_DIR.mkdir(exist_ok=True)

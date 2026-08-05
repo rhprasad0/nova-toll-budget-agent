@@ -254,7 +254,7 @@ class _CachedResponsesModel(OpenAIResponsesModel):
         return chunk
 
 
-def _load_openai_api_key() -> str:
+def load_openai_api_key() -> str:
     ssm = cast(
         Any,
         boto3.client(  # pyright: ignore[reportUnknownMemberType]
@@ -268,6 +268,9 @@ def _load_openai_api_key() -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{_OPENAI_API_KEY_PARAMETER} is empty")
     return value
+
+
+_load_openai_api_key = load_openai_api_key
 
 
 def _build_model() -> _CachedResponsesModel:

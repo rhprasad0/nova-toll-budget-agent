@@ -44,6 +44,7 @@ def build_case_and_profile(
             "to Westpark Drive tomorrow afternoon, around 3?"
         ),
         metadata={
+            "batch_judge_suite": "ny_time_us_format",
             "task_description": (
                 "Wants a toll price quote for tomorrow afternoon around 3 "
                 f"o'clock ({tomorrow_label})."

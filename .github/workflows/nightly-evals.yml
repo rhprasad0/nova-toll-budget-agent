@@ -54,11 +54,19 @@ jobs:
           uv run --frozen python eval/simulated/simulated_user_missing_parameter_acquisition.py || failed=1
           NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_single_leg_base_cases.py || failed=1
           exit "$failed"
+      - name: Submit report-only Batch judges
+        if: always()
+        run: |
+          if ! uv run --frozen python eval/batch_judges.py submit; then
+            echo "::warning::OpenAI Batch judge submission failed; deterministic evaluation results remain authoritative."
+          fi
       - name: Save evaluation report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nightly-eval-${{ github.run_id }}-${{ github.run_attempt }}
-          path: eval/results/*.json
+          path: |
+            eval/results/*.json
+            eval/results/*.jsonl
           if-no-files-found: ignore
           retention-days: 90
