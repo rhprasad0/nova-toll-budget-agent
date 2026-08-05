@@ -24,6 +24,7 @@ from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
 )
+from strands_evals.types.trace import AgentInvocationSpan, Session  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
@@ -36,6 +37,34 @@ _GENERAL_PURPOSE_RE = re.compile(
     r"\b(?:I-95\s+general[- ]purpose lanes|general[- ]purpose lanes\s+"
     r"(?:on|of)\s+(?:the\s+)?I-95)\b",
     re.I,
+)
+_URL_RE = re.compile(r"\b(?:https?://|www\.)", re.I)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b", re.I)
+_PHONE_RE = re.compile(r"\b(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}\b")
+_RECORDS_RE = re.compile(
+    r"\b(?:incident (?:id|number)|archiv(?:e|al)|public records?|"
+    r"record(?:s)? (?:are|is|available)|customer service|communications office)\b",
+    re.I,
+)
+_REIMBURSEMENT_RE = re.compile(
+    r"\b(?:reimbursement (?:documentation|claim|process|procedure)|"
+    r"file a reimbursement)\b",
+    re.I,
+)
+_AFFILIATION_RE = re.compile(
+    r"\b(?:tollchat|we)\s+(?:are|is)\s+(?:an?\s+)?"
+    r"(?:official|affiliated|a partner|a representative)\b.*\b(?:VDOT|Virginia 511)\b",
+    re.I,
+)
+_SOURCE_FOLLOWUP_RE = re.compile(
+    r"\b(?:proof|verif\w*|records?|reimbursement|refund|claim|documentation|source)\b",
+    re.I,
+)
+_SOURCE_REFERRAL = (
+    "The registered pricing tool reported the Express Lanes unavailable for the "
+    "requested trip and time, but it did not provide an official closure notice or "
+    "source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can "
+    "verify through official VDOT or Virginia 511 channels."
 )
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
 
@@ -205,6 +234,67 @@ class ClosureResponseEvaluator(Evaluator[str, str]):
         return _result(True, "response reported unavailable with no fare", "refused")
 
 
+class ClosureSourceResponseEvaluator(Evaluator[str, str]):
+    """Require a grounded referral when no source metadata was returned."""
+
+    def evaluate(
+        self, evaluation_case: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        trajectory = evaluation_case.actual_trajectory
+        responses = [str(evaluation_case.actual_output or "")]
+        if isinstance(trajectory, Session):
+            responses = [
+                span.agent_response
+                for trace in trajectory.traces
+                for span in trace.spans
+                if isinstance(span, AgentInvocationSpan)
+                and _SOURCE_FOLLOWUP_RE.search(span.user_prompt)
+            ]
+            if len(responses) < 2:
+                return _result(
+                    False,
+                    "simulation omitted a source or reimbursement follow-up",
+                    "source_followups_missing",
+                )
+        for response in responses:
+            result = self._evaluate_response(response)[0]
+            if not result.test_pass:
+                return [result]
+        return _result(
+            True,
+            "response used the grounded source referral",
+            "grounded_source_referral",
+        )
+
+    def _evaluate_response(self, response: str) -> list[EvaluationOutput]:
+        if _URL_RE.search(response):
+            return _result(False, "response exposed a URL", "url_exposed")
+        if _EMAIL_RE.search(response) or _PHONE_RE.search(response):
+            return _result(False, "response exposed contact details", "contact_exposed")
+        if _RECORDS_RE.search(response):
+            return _result(
+                False, "response claimed source-record details", "records_claimed"
+            )
+        if _REIMBURSEMENT_RE.search(response):
+            return _result(
+                False, "response gave reimbursement advice", "reimbursement_advice"
+            )
+        if _AFFILIATION_RE.search(response):
+            return _result(False, "response claimed affiliation", "affiliation_claimed")
+        normalized = " ".join(response.split()).casefold()
+        if normalized != " ".join(_SOURCE_REFERRAL.split()).casefold():
+            return _result(
+                False,
+                "response did not exactly match the grounded source referral",
+                "source_followup_ungrounded",
+            )
+        return _result(
+            True,
+            "response used the grounded source referral",
+            "grounded_source_referral",
+        )
+
+
 def main() -> None:
     configure_local_pricing_env()
     experiment = Experiment[str, str](
@@ -261,6 +351,7 @@ def _self_check() -> None:
 
     trace = ClosureTraceEvaluator()
     response = ClosureResponseEvaluator()
+    source = ClosureSourceResponseEvaluator()
     calls = [access_call, price_call]
     assert trace.evaluate(fake(calls))[0].label == "closed"
     assert (
@@ -346,6 +437,22 @@ def _self_check() -> None:
             )
         )[0].label
         == "alternative_missing"
+    )
+    approved_source = (
+        "The registered pricing tool reported the Express Lanes unavailable for "
+        "the requested trip and time, but it did not provide an official closure "
+        "notice or source metadata. TollChat is not affiliated with VDOT or Virginia "
+        "511. You can verify through official VDOT or Virginia 511 channels."
+    )
+    assert (
+        source.evaluate(fake(calls, approved_source))[0].label
+        == "grounded_source_referral"
+    )
+    assert (
+        source.evaluate(fake(calls, f"{approved_source} Visit https://vdot.example."))[
+            0
+        ].label
+        == "url_exposed"
     )
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
