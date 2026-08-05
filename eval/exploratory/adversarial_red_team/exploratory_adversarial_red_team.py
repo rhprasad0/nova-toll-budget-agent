@@ -14,6 +14,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands import Agent  # noqa: E402
+from strands.handlers.callback_handler import null_callback_handler  # noqa: E402
 from strands_evals import Case, EvaluationReport  # noqa: E402
 from strands_evals.experimental.redteam import (  # noqa: E402
     AdversarialCaseGenerator,
@@ -32,7 +33,6 @@ from agent.toll_agent import build_agent  # noqa: E402
 from eval.deterministic.adversarial_regression.deterministic_adversarial_regression import (  # noqa: E402
     PROTECTED_CONFIG_TERMS,
     contains_prompt_excerpt,
-    extract_tool_calls,
     trace_messages,
 )
 
@@ -55,57 +55,78 @@ class MetricsAgentSession:
         self._agent = agent
         self._baseline = agent.take_snapshot(preset="session")
         self.trace: list[ToolUseEntry] = []
-        self._metric_calls: list[ToolUseEntry] = []
+        self._metric_call_ids: set[str] = set()
 
     def invoke(self, message: str) -> str:
         response = self._agent(message)
         summary: dict[str, Any] = response.metrics.get_summary()
         traces = cast(list[dict[str, Any]], summary.get("traces", []))
-        metric_calls: list[ToolUseEntry] = []
-        for call in extract_tool_calls(trace_messages(traces)):
-            call_input = call.get("input")
-            metric_calls.append(
-                {
-                    "name": str(call.get("name", "")),
-                    "input": cast(dict[str, Any], call_input)
-                    if isinstance(call_input, dict)
-                    else {},
-                }
-            )
-        new_calls = (
-            metric_calls[len(self._metric_calls) :]
-            if metric_calls[: len(self._metric_calls)] == self._metric_calls
-            else metric_calls
-        )
-        self.trace.extend(new_calls)
-        self._metric_calls = metric_calls
+        for call_id, call in _metric_tool_calls(traces):
+            if call_id not in self._metric_call_ids:
+                self.trace.append(call)
+                self._metric_call_ids.add(call_id)
         return str(response)
 
     def reset(self) -> None:
         self._agent.load_snapshot(self._baseline)
         self.trace.clear()
-        self._metric_calls.clear()
+        self._metric_call_ids.clear()
 
     def snapshot(self) -> TargetCheckpoint:
         return TargetCheckpoint(
             agent_snapshot=(
                 self._agent.take_snapshot(preset="session"),
-                list(self._metric_calls),
+                set(self._metric_call_ids),
             ),
             trace_len=len(self.trace),
         )
 
     def restore(self, checkpoint: TargetCheckpoint) -> None:
-        snapshot, metric_calls = cast(
-            tuple[Any, list[ToolUseEntry]], checkpoint.agent_snapshot
+        snapshot, metric_call_ids = cast(
+            tuple[Any, set[str]], checkpoint.agent_snapshot
         )
         self._agent.load_snapshot(snapshot)
-        self._metric_calls = metric_calls
+        self._metric_call_ids = metric_call_ids
         del self.trace[checkpoint.trace_len :]
 
 
+def _metric_tool_calls(
+    traces: list[dict[str, Any]],
+) -> list[tuple[str, ToolUseEntry]]:
+    calls: list[tuple[str, ToolUseEntry]] = []
+    for message in trace_messages(traces):
+        if message.get("role") != "assistant":
+            continue
+        for block in message.get("content") or []:
+            tool = block.get("toolUse")
+            if not isinstance(tool, dict):
+                continue
+            call_id = tool.get("toolUseId")
+            if not call_id:
+                raise RuntimeError("tool trace is missing toolUseId")
+            call_input = tool.get("input")
+            calls.append(
+                (
+                    call_id,
+                    {
+                        "name": str(tool.get("name", "")),
+                        "input": cast(dict[str, Any], call_input)
+                        if isinstance(call_input, dict)
+                        else {},
+                    },
+                )
+            )
+    return calls
+
+
+def _build_quiet_agent() -> Agent:
+    agent = build_agent()
+    agent.callback_handler = null_callback_handler
+    return agent
+
+
 def _build_target_session() -> MetricsAgentSession:
-    return MetricsAgentSession(build_agent())
+    return MetricsAgentSession(_build_quiet_agent())
 
 
 def annotate_disclosures(report: EvaluationReport) -> dict[str, list[str]]:
@@ -217,7 +238,7 @@ def sanitize_report(report: EvaluationReport) -> dict[str, Any]:
 
 
 def _build_experiment(model_id: str) -> RedTeamExperiment[str, str]:
-    target = build_agent()
+    target = _build_quiet_agent()
     generator = AdversarialCaseGenerator(model=model_id)
     cases = cast(
         list[Case[str, str]],

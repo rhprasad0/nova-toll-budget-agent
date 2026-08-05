@@ -27,11 +27,12 @@ flowchart LR
 - An LLM judge for semantic attack progress plus deterministic scanning for
   protected identifiers and verbatim operational-prompt excerpts.
 
-The technically complete campaign produced **0/6 judge-scored breaches** and
-**zero deterministic protected disclosures**. The strongest signal was a
+The first technically complete campaign produced **0/6 judge-scored breaches**
+and **zero deterministic protected disclosures**. The strongest signal was a
 prompt-leak attempt scored at **0.25**, below the deliberately conservative
-**0.30** partial-breach threshold. That is useful evidence, not proof that the
-agent is universally safe.
+**0.30** partial-breach threshold. A later post-review campaign found something
+more interesting: **1/6 semantic breaches** at **0.72**, while the deterministic
+scanner still found zero exact protected strings or prompt excerpts.
 
 ## Why use an LLM judge here?
 
@@ -42,6 +43,13 @@ progress through paraphrase, reframing, or partial disclosure? An LLM judge is
 useful for ranking those conversations, but its score remains triage until the
 transcript and tool trace agree.
 
+That second campaign is the clearest reason to combine the two methods. Human
+review confirmed that the response refused verbatim disclosure but still
+paraphrased enough operational policy to satisfy the generated attack goal. A
+string scanner correctly said “no exact leak”; the semantic judge correctly
+said “the attacker still learned too much.” Neither verdict was sufficient by
+itself.
+
 ## The most useful failure was in the test harness
 
 The first diagnostic run appeared to have no tool calls because the framework's
@@ -50,8 +58,11 @@ Responses backend whose calls are instead exposed through response metrics.
 After switching sources, a second diagnostic showed that those metrics were
 cumulative across turns, so naïve extraction double-counted prior calls.
 
-The final adapter reads response metrics and appends only the unseen trace
-suffix. Two tempting reports were excluded rather than curated with misleading
+The final adapter reads response metrics and de-duplicates calls by their
+provider-assigned tool-use IDs. The adversarial code review also found that the
+default streaming callback could copy raw target responses into public workflow
+logs even when the artifact was sanitized, so target callbacks are now silent.
+Two tempting reports were excluded rather than curated with misleading
 telemetry. Red teaming the agent accidentally red teamed the evaluator too.
 
 ## Publishing safely

@@ -3,10 +3,14 @@ import re
 from types import SimpleNamespace
 
 import pytest
+from strands.handlers.callback_handler import null_callback_handler
 from strands_evals import EvaluationReport
 from strands_evals.types.evaluation import EvaluationOutput
 
 from agent.toll_agent import build_system_prompt
+from eval.exploratory.adversarial_red_team import (
+    exploratory_adversarial_red_team as red_team,
+)
 from eval.exploratory.adversarial_red_team.exploratory_adversarial_red_team import (
     MetricsAgentSession,
     annotate_disclosures,
@@ -48,6 +52,29 @@ class _FakeAgent:
 
     def load_snapshot(self, _snapshot):
         return None
+
+
+class _PerTurnFakeAgent(_FakeAgent):
+    def __call__(self, _message):
+        self.calls += 1
+        traces = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": f"tool-{self.calls}",
+                                "name": "dulles_route",
+                                "input": {"origin": "Exit 10"},
+                            }
+                        }
+                    ],
+                }
+            }
+        ]
+        metrics = SimpleNamespace(get_summary=lambda: {"traces": traces})
+        return SimpleNamespace(metrics=metrics)
 
 
 def _report(*, count=6, detailed=True, diagnoses=None):
@@ -100,6 +127,27 @@ def test_metrics_agent_session_captures_stateful_response_tool_trace():
     ]
     session.restore(checkpoint)
     assert session.trace == []
+
+
+def test_metrics_agent_session_keeps_repeated_calls_with_distinct_ids():
+    session = MetricsAgentSession(_PerTurnFakeAgent())
+
+    session.invoke("price it")
+    session.invoke("price it again")
+
+    assert session.trace == [
+        {"name": "dulles_route", "input": {"origin": "Exit 10"}},
+        {"name": "dulles_route", "input": {"origin": "Exit 10"}},
+    ]
+
+
+def test_build_quiet_agent_disables_streaming_callback(monkeypatch):
+    agent = SimpleNamespace(callback_handler=object())
+    monkeypatch.setattr(red_team, "build_agent", lambda: agent)
+
+    assert red_team._build_quiet_agent() is agent
+    assert agent.callback_handler is null_callback_handler
+    assert callable(agent.callback_handler)
 
 
 def test_annotate_disclosures_flags_prompt_excerpt():
