@@ -60,6 +60,12 @@ _SOURCE_FOLLOWUP_RE = re.compile(
     r"\b(?:proof|verif\w*|records?|reimbursement|refund|claim|documentation|source)\b",
     re.I,
 )
+_SOURCE_REFERRAL = (
+    "The registered pricing tool reported the Express Lanes unavailable for the "
+    "requested trip and time, but it did not provide an official closure notice or "
+    "source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can "
+    "verify through official VDOT or Virginia 511 channels."
+)
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
 
 
@@ -276,18 +282,10 @@ class ClosureSourceResponseEvaluator(Evaluator[str, str]):
         if _AFFILIATION_RE.search(response):
             return _result(False, "response claimed affiliation", "affiliation_claimed")
         normalized = " ".join(response.split()).casefold()
-        if not all(
-            phrase in normalized
-            for phrase in (
-                "registered pricing tool reported",
-                "did not provide an official closure notice or source metadata",
-                "not affiliated with vdot or virginia 511",
-                "official vdot or virginia 511 channels",
-            )
-        ):
+        if normalized != " ".join(_SOURCE_REFERRAL.split()).casefold():
             return _result(
                 False,
-                "response omitted the grounded source referral",
+                "response did not exactly match the grounded source referral",
                 "source_followup_ungrounded",
             )
         return _result(

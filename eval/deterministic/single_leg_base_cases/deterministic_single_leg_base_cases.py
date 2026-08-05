@@ -230,6 +230,15 @@ def _route_line(response: str, origin: str, destination: str) -> str | None:
     return match.group(0) if match else None
 
 
+def _has_facility_heading_before(response: str, position: int, facility: str) -> bool:
+    """Allow a toll line immediately following its facility heading."""
+    lines = response[:position].splitlines()
+    if not lines:
+        return False
+    heading = lines[-1].strip().strip("-*_`# ")
+    return heading.casefold() == _FACILITY_LABELS[facility].casefold()
+
+
 def _route_term_present(response: str, term: str) -> bool:
     humanized = _ROUTE_ALIASES.get(term)
     if not humanized:
@@ -309,7 +318,13 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                     if label.casefold() in line
                 }
                 facility_matches = explicit_facilities == {expected_facility} or (
-                    not explicit_facilities and expected_facility == route_facility
+                    not explicit_facilities
+                    and (
+                        expected_facility == route_facility
+                        or _has_facility_heading_before(
+                            response, match.start(), expected_facility
+                        )
+                    )
                 )
                 if len(_MONEY_RE.findall(line)) != 1 or not facility_matches:
                     match = None
@@ -751,6 +766,16 @@ def _self_check() -> None:
     assert (
         response_label(metadata, call, implicit_route_facility) == "grounded_response"
     )
+    headed_dtr = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n",
+        "  - Dulles Toll Road\n    - Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, headed_dtr) == "grounded_response"
+    wrong_headed_dtr = headed_dtr.replace(
+        "  - Dulles Toll Road\n    - Mainline plaza: $2.00\n",
+        "  - Dulles Greenway\n    - Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, wrong_headed_dtr) == "route_missing"
     combined_tolls = good_output.replace(
         "  - Dulles Toll Road Mainline plaza: $2.00\n"
         "  - Dulles Greenway Mainline plaza: $5.80\n",

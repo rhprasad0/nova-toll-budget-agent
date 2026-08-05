@@ -128,6 +128,10 @@ def test_source_followup_evaluator_allows_only_the_approved_referral():
         "511. You can verify through official VDOT or Virginia 511 channels."
     )
     assert evaluate(approved).label == "grounded_source_referral"
+    assert (
+        evaluate(f"{approved} I can price covered Northern Virginia toll trips.").label
+        == "source_followup_ungrounded"
+    )
     assert evaluate(f"{approved} Visit https://vdot.example.").label == "url_exposed"
     assert evaluate(f"{approved} Call 555-555-5555.").label == "contact_exposed"
     assert evaluate(f"{approved} Request archival records.").label == "records_claimed"
