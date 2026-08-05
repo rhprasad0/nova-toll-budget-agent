@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,24 @@ def test_runtime_and_proxy_roles_are_separate_and_ssm_remains_authoritative():
     assert '"bedrock-agentcore:InvokeAgentRuntime"' in agentcore
     assert "create-api-key-credential-provider" not in agentcore
     assert "delete-parameter" not in agentcore
+
+
+def test_guardrail_enables_every_content_filter_category():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    guardrail = agentcore.split(
+        'resource "aws_bedrock_guardrail" "tollchat"', maxsplit=1
+    )[1].split('resource "aws_bedrock_guardrail_version"', maxsplit=1)[0]
+    categories = re.findall(r'type\s+= "([A-Z_]+)"', guardrail)
+
+    assert len(categories) == 6
+    assert set(categories) == {
+        "PROMPT_ATTACK",
+        "HATE",
+        "VIOLENCE",
+        "SEXUAL",
+        "INSULTS",
+        "MISCONDUCT",
+    }
 
 
 def test_public_chat_is_an_explicit_disabled_by_default_gate():

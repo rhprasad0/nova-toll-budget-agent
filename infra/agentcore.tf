@@ -355,6 +355,21 @@ resource "aws_bedrock_guardrail" "tollchat" {
       input_strength  = "MEDIUM"
       output_strength = "MEDIUM"
     }
+    filters_config {
+      type            = "SEXUAL"
+      input_strength  = "MEDIUM"
+      output_strength = "MEDIUM"
+    }
+    filters_config {
+      type            = "INSULTS"
+      input_strength  = "MEDIUM"
+      output_strength = "MEDIUM"
+    }
+    filters_config {
+      type            = "MISCONDUCT"
+      input_strength  = "MEDIUM"
+      output_strength = "MEDIUM"
+    }
   }
 }
 
