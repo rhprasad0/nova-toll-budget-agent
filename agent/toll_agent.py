@@ -34,8 +34,10 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal, cast, override
+from zoneinfo import ZoneInfo
 
 import boto3
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
@@ -190,8 +192,9 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.18.0"
+SYSTEM_PROMPT_VERSION = "1.19.0"
 TOOLSET_VERSION = "1.4.0"
+_EASTERN = ZoneInfo("America/New_York")
 
 
 class _CachedResponsesModel(OpenAIResponsesModel):
@@ -832,13 +835,13 @@ _AGENT_TOOLS = (
 )
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(*, current_date: date | None = None) -> str:
     """System prompt loaded from the Nova Toll Pricing Assistant Agent SOP.
 
     The SOP at agent-sops/nova-toll-pricing-assistant.sop.md is the literal
-    source of the runtime prompt text; the three data blocks below are the
-    only parts filled in dynamically. Pure function, no AWS calls -- callable
-    in a test with no network/creds.
+    source of the runtime prompt text; the oracle blocks and current New York
+    date are filled in dynamically. No AWS calls -- callable in a test with
+    no network/creds.
     """
     sop_path = (
         Path(__file__).resolve().parent.parent
@@ -849,6 +852,9 @@ def build_system_prompt() -> str:
         PRICED_LOCATION_ORACLE_JSON=_PRICED_LOCATION_ORACLE_JSON,
         LOCATION_ALIASES_JSON=_LOCATION_ALIASES_JSON,
         NETWORK_TRANSFERS_JSON=_NETWORK_TRANSFERS_JSON,
+        CURRENT_DATE=(current_date or datetime.now(_EASTERN).date()).strftime(
+            "%-m/%-d/%Y"
+        ),
     )
 
 

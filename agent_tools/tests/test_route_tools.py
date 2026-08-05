@@ -273,15 +273,18 @@ def test_at_time_is_passed_through_and_echoed(monkeypatch, case: Case):
     assert params["at_time"].isoformat() == "2026-01-15T09:00:00-05:00"
 
 
-def test_invalid_at_time_is_a_hard_error_before_any_db_call(monkeypatch, case: Case):
+@pytest.mark.parametrize("at_time", ("not-a-timestamp", "2030-01-01T00:00:00-05:00"))
+def test_invalid_or_future_at_time_is_a_hard_error_before_any_db_call(
+    monkeypatch, case: Case, at_time: str
+):
     def env_connect():
         raise AssertionError("must not connect to the DB for a malformed at_time")
 
     monkeypatch.setattr(_oracle_route, "env_connect", env_connect)
-    result = case.tool(case.origin, case.destination, at_time="not-a-timestamp")
+    result = case.tool(case.origin, case.destination, at_time=at_time)
     assert "error" in result
     assert result["valid_options"] == []
-    assert "not-a-timestamp" in result["error"]
+    assert at_time in result["error"]
 
 
 def test_unknown_origin_returns_only_origin_capable_labels(case: Case):

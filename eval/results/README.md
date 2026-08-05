@@ -20,6 +20,8 @@ not curated.
 | [`20260804T214919Z.json`](20260804T214919Z.json) | Missing origin, destination, or both before an I-495 quote | Scripted user with deterministic trace grading | 1.0000 overall; 6/6 verdicts passed; 0 execution errors |
 | [`20260805T114633Z.json`](20260805T114633Z.json) | Ambiguous McLean clarification plus lowercased direct I-95 labels | Code-graded live trajectory | 1.0000 overall; 2/2 verdicts passed; direct I-95 access checked before pricing |
 | [`20260805T114738Z.json`](20260805T114738Z.json) | Four historical I-95 closure requests after the mandatory access check | Code-graded live trajectory and response | 1.0000 overall; 8/8 verdicts passed; no unavailable route quoted a fare |
+| [`20260805T124340Z.json`](20260805T124340Z.json) | New York date/time interpretation across EDT, explicit Pacific conversion, and EST | Deterministic live trace and response grading | 1.0000 overall; 6/6 verdicts passed; 0 execution errors |
+| [`20260805T124420Z.json`](20260805T124420Z.json) | Relative future-date request (“tomorrow afternoon”) | Simulated user with goal-success and helpfulness judges | 0.8335 overall; 2/2 judgments passed; no pricing tool calls |
 
 The repaired closure run found exactly one supported `i95_access_options`
 execution followed by one `i95_route` execution per case, kept every actor on
@@ -51,3 +53,9 @@ junction stayed out of billing while mainline and ramp charges remained intact.
 The missing-parameter run asked the exact question for all and only the absent
 endpoints, then made one matching `i495_route` call per case after the scripted
 user supplied the missing values. No LLM actor or judge participated.
+
+The New York-time run resolved EDT, explicit Pacific, and EST requests to the
+expected instants and preserved the tool-returned timestamps in US format. The
+relative-future run refused “tomorrow afternoon” without calling a planner,
+access, junction, or pricing tool; its helpfulness judge's partial score reflects
+an unrelated request for alternative future-quote sources, not a failed refusal.

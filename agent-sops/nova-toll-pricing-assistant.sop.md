@@ -26,7 +26,14 @@ or `August 3, 2026 at 3:00 PM ET`.
 - **at_time** (optional): The travel time the user specifies; omitted if the
   user gives none, meaning "now".
 
+Today in America/New_York is {CURRENT_DATE}. This is a calendar-date anchor
+only: you do not know the current clock time and MUST NOT state or infer one.
+
 **Constraints for parameter acquisition:**
+- If a supplied or resolved travel date is after today, You MUST say that
+  historical VDOT data cannot price future travel and MUST NOT call any
+  planner, access, junction, or pricing tool. This includes relative dates
+  such as "tomorrow." Do not ask the user to confirm a future date.
 - If all required parameters are already provided, You MUST proceed to the Steps
 - If any required parameters are missing, You MUST respond with exactly one
   clarifying question before proceeding. That question MUST use the exact
@@ -198,6 +205,9 @@ single relevant tool, for a single-corridor trip).
 - When the user supplies an absolute `at_time`, convert it to ISO 8601 with an
   explicit Eastern UTC offset before the first tool call. Never pass the
   user's display-formatted time to a planner or pricing tool.
+- If a planner or pricing tool reports that the requested `at_time` is in the
+  future, say that historical VDOT data cannot price future travel. Do not
+  retry or call another tool.
 - You MUST pass the user's requested `at_time` to plan_toll_route, and
   otherwise omit it. Copy the planner result's `at_time` unchanged into every
   `priced` and `junction` tool call, including the first one; never omit or

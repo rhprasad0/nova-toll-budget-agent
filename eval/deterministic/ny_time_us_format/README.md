@@ -47,12 +47,11 @@ without blocking a merge.
 
 `simulated/simulated_user_ny_time_us_format.py` builds on
 `eval/simulation_support.py` (the same reusable `ActorSimulator` scaffolding
-the fuzzy-location suite uses) to cover relative/fuzzy date phrasing
-("tomorrow at 5pm", "next Monday morning") that this deterministic suite
-can't assert against, since the agent has no injected notion of "today."
-Unlike the suite above's code-based grading, the simulated user and both judges
-(`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`) are all LLMs, so results
-vary run to run.
+the fuzzy-location suite uses) to verify that the agent recognizes relative
+future dates such as "tomorrow" from its injected New York date and refuses
+without tools. Unlike the suite above's code-based grading, the simulated user
+and both judges (`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`) are all
+LLMs, so results vary run to run.
 
 ```bash
 uv run python eval/simulated/simulated_user_ny_time_us_format.py --check

@@ -5,7 +5,7 @@ import json
 import re
 from collections import deque
 from copy import deepcopy
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -203,6 +203,15 @@ def test_system_prompt_contains_i95_i495_junction():
     assert "Franconia-Springfield Parkway" in prompt
     assert "I-495 Near Braddock Road" in prompt
     assert "unpriced junction" in prompt.casefold()
+
+
+def test_system_prompt_embeds_only_the_current_new_york_date():
+    prompt = build_system_prompt(current_date=date(2026, 8, 5))
+
+    assert "Today in America/New_York is 8/5/2026." in prompt
+    assert "current clock time" in prompt
+    assert "after today" in prompt
+    assert "historical VDOT data cannot price future travel" in prompt
 
 
 def test_system_prompt_requires_direction_access_checks_on_every_corridor():
@@ -516,17 +525,18 @@ def test_planner_preserves_an_explicit_historical_timestamp():
     assert plan["at_time"] == at_time
 
 
-def test_planner_rejects_a_malformed_timestamp_before_planning():
+@pytest.mark.parametrize("at_time", ("not-a-time", "2030-01-01T00:00:00-05:00"))
+def test_planner_rejects_invalid_or_future_timestamps_before_planning(at_time):
     plan = plan_toll_route(
         "i66_itb",
         "Lee Highway - Scott Street",
         "i495",
         "Braddock Road",
-        "not-a-time",
+        at_time,
     )
 
     assert plan.keys() == {"error"}
-    assert plan["error"].startswith("invalid at_time 'not-a-time':")
+    assert plan["error"].startswith(f"invalid at_time {at_time!r}:")
 
 
 @pytest.mark.parametrize(
@@ -1039,18 +1049,21 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.19.0"
-    advanced["system_prompt"]["releases"]["1.19.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.20.0"
+    advanced["system_prompt"]["releases"]["1.20.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.18\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.19\.0"):
         validate_manifest_update(previous, advanced)
 
 
 def test_rendered_system_prompt_matches_its_versioned_digest():
     manifest = _contract_manifest()["system_prompt"]
-    assert _sha256(build_system_prompt()) == manifest["releases"][manifest["current"]]
+    assert (
+        _sha256(build_system_prompt(current_date=date(2026, 8, 5)))
+        == manifest["releases"][manifest["current"]]
+    )
 
 
 def test_registered_toolset_matches_its_versioned_digest():
