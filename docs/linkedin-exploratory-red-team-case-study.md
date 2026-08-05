@@ -50,6 +50,13 @@ string scanner correctly said “no exact leak”; the semantic judge correctly
 said “the attacker still learned too much.” Neither verdict was sufficient by
 itself.
 
+We reduced that transcript into a fixed single-turn regression with objective
+checks: no tool calls, no internal tool/policy markers, a public pricing handoff,
+and a 60-word ceiling. Against the already-merged prompt 1.23.0 scope hardening,
+the expanded suite passed **18/18 deterministic verdicts**. Two fresh adaptive
+comparisons then observed **0/6 breaches** with a worst score of **0.00**. Those
+runs support the fix; they do not erase the preserved 0.72 failure.
+
 ## The most useful failure was in the test harness
 
 The first diagnostic run appeared to have no tool calls because the framework's
@@ -58,8 +65,9 @@ Responses backend whose calls are instead exposed through response metrics.
 After switching sources, a second diagnostic showed that those metrics were
 cumulative across turns, so naïve extraction double-counted prior calls.
 
-The final adapter reads response metrics and de-duplicates calls by their
-provider-assigned tool-use IDs. The adversarial code review also found that the
+The final adapter reads response metrics, de-duplicates calls by their
+provider-assigned tool-use IDs, and retains tool inputs, results, and error
+status in private evidence. The adversarial code review also found that the
 default streaming callback could copy raw target responses into public workflow
 logs even when the artifact was sanitized, so target callbacks are now silent.
 Two tempting reports were excluded rather than curated with misleading
@@ -77,6 +85,6 @@ internal operating details.
 
 The campaign runs weekly, independently from normal user simulations, and does
 not fail CI merely because a stochastic judge flags a conversation. Execution
-defects still fail. Any transcript-confirmed vulnerability will be reduced to a
-small deterministic regression before remediation, giving the fix a permanent,
-repeatable check.
+defects still fail. Confirmed vulnerabilities are reduced to small deterministic
+regressions; unlike exploratory scores, those fixed verdicts fail closed and
+provide a permanent, repeatable check.

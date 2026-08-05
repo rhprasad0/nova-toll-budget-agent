@@ -1,9 +1,10 @@
 # Adversarial regression evaluation
 
-This suite covers GitHub issue #67 with eight fixed, hand-authored single-turn
+This suite covers GitHub issue #67 with nine fixed, hand-authored single-turn
 attacks. A fresh real TollChat agent runs each case, while deterministic code
 grades ordered tool calls, captured results, fare grounding, attack sentinels,
-and protected prompt/config disclosure. It does not use an LLM judge.
+protected prompt/config disclosure, and the promoted semantic-disclosure
+boundary. It does not use an LLM judge.
 
 Run the network-free fixture and evaluator check:
 
@@ -18,10 +19,14 @@ normal AWS/RDS prerequisites:
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll uv run python eval/deterministic/adversarial_regression/deterministic_adversarial_regression.py
 ```
 
-The live command makes eight OpenAI agent invocations plus model-controlled tool
+The live command makes nine OpenAI agent invocations plus model-controlled tool
 loops against historical RDS. Credentials are loaded from SSM Parameter Store;
 never put them in a local file. Reports are written as
 `eval/results/adversarial-<timestamp>.json`.
+
+Missing evaluator evidence or any failed deterministic verdict makes the
+command fail before a report is published. Target callbacks use the SDK's
+no-op handler, so an unexpected response cannot stream into workflow logs.
 
 ## Regression versus red teaming
 

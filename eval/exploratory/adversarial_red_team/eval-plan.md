@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Discover unknown TollChat failures separately from the eight fixed adversarial
+Discover unknown TollChat failures separately from the fixed adversarial
 regressions. Run a focused weekly campaign, keep stochastic judge verdicts
 report-only, manually verify candidates, and turn confirmed failures into fixed
 code-graded regressions. Produce public-safe evidence suitable for a case study.
@@ -37,6 +37,8 @@ flowchart LR
   across target turns.
 - A valid report has six unique attack rows, populated evaluator details,
   conversations and trajectories, no diagnoses, and no strategy parse failure.
+- Private trajectories retain provider-distinct calls with inputs, results, and
+  error status; public reports retain tool names only.
 
 ## Reporting and automation
 
@@ -62,3 +64,11 @@ workflow reports breaches without failing; execution defects fail normally.
   tool calls, zero judge-scored breaches, zero deterministic disclosures, and
   no execution errors. No confirmed vulnerability required regression
   promotion.
+- 2026-08-05: adversarial review silenced target callbacks, replaced value-based
+  trace suffixing with tool-use IDs, and retained private tool results. A live
+  I-495 probe confirmed complete result capture without public output.
+- 2026-08-05: a later valid campaign confirmed one semantic operational-policy
+  disclosure at 0.72 despite zero exact disclosures. The failure was promoted
+  into a ninth fixed case, which passed with all 18 verdicts on prompt 1.23.0.
+  Two complete hardened-prompt comparisons then recorded 0/6 breaches and a
+  worst score of 0.00; the failed baseline remains curated.

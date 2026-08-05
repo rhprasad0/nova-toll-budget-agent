@@ -43,6 +43,22 @@ class _FakeAgent:
                     }
                 }
             )
+            traces.append(
+                {
+                    "message": {
+                        "role": "user",
+                        "content": [
+                            {
+                                "toolResult": {
+                                    "toolUseId": f"tool-{index}",
+                                    "content": [{"text": f"result-{index}"}],
+                                    "status": "success",
+                                }
+                            }
+                        ],
+                    }
+                }
+            )
         metrics = SimpleNamespace(get_summary=lambda: {"traces": traces})
         return SimpleNamespace(metrics=metrics)
 
@@ -71,7 +87,21 @@ class _PerTurnFakeAgent(_FakeAgent):
                         }
                     ],
                 }
-            }
+            },
+            {
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "toolResult": {
+                                "toolUseId": f"tool-{self.calls}",
+                                "content": [{"text": "same result"}],
+                                "status": "success",
+                            }
+                        }
+                    ],
+                }
+            },
         ]
         metrics = SimpleNamespace(get_summary=lambda: {"traces": traces})
         return SimpleNamespace(metrics=metrics)
@@ -122,8 +152,20 @@ def test_metrics_agent_session_captures_stateful_response_tool_trace():
     session.invoke("price another")
 
     assert session.trace == [
-        {"name": "dulles_route", "input": {"origin": "Exit 10"}},
-        {"name": "dulles_route", "input": {"origin": "Exit 11"}},
+        {
+            "tool_use_id": "tool-0",
+            "name": "dulles_route",
+            "input": {"origin": "Exit 10"},
+            "tool_result": "result-0",
+            "is_error": False,
+        },
+        {
+            "tool_use_id": "tool-1",
+            "name": "dulles_route",
+            "input": {"origin": "Exit 11"},
+            "tool_result": "result-1",
+            "is_error": False,
+        },
     ]
     session.restore(checkpoint)
     assert session.trace == []
@@ -136,8 +178,20 @@ def test_metrics_agent_session_keeps_repeated_calls_with_distinct_ids():
     session.invoke("price it again")
 
     assert session.trace == [
-        {"name": "dulles_route", "input": {"origin": "Exit 10"}},
-        {"name": "dulles_route", "input": {"origin": "Exit 10"}},
+        {
+            "tool_use_id": "tool-1",
+            "name": "dulles_route",
+            "input": {"origin": "Exit 10"},
+            "tool_result": "same result",
+            "is_error": False,
+        },
+        {
+            "tool_use_id": "tool-2",
+            "name": "dulles_route",
+            "input": {"origin": "Exit 10"},
+            "tool_result": "same result",
+            "is_error": False,
+        },
     ]
 
 
@@ -196,7 +250,14 @@ def test_sanitize_report_removes_attack_response_and_tool_content():
                     {"role": "attacker", "content": secret},
                     {"role": "target", "content": secret},
                 ],
-                "actual_trajectory": [{"name": "tool", "input": secret}],
+                "actual_trajectory": [
+                    {
+                        "tool_use_id": secret,
+                        "name": "tool",
+                        "input": secret,
+                        "tool_result": secret,
+                    }
+                ],
                 "metadata": {
                     "risk_category": "system_prompt_leak",
                     "strategy": "pair",

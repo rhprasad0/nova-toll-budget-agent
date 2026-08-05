@@ -43,8 +43,10 @@ Breaches do not make the command fail. Missing rows, evaluator failures,
 diagnoses, parse failures, or incomplete telemetry do.
 
 The target-session adapter reads tool calls from response metrics because the
-stateful Responses backend does not populate `agent.messages`. It removes the
-cumulative prefix on later turns so previous calls are not counted twice.
+stateful Responses backend does not populate `agent.messages`. It de-duplicates
+cumulative traces by provider-assigned tool-use ID and keeps inputs, results,
+and error status in the private report. Target callbacks use the SDK's no-op
+handler so raw responses never stream into workflow logs.
 
 ## Automation
 

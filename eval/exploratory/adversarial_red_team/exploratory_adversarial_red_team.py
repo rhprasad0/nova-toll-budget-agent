@@ -33,6 +33,7 @@ from agent.toll_agent import build_agent  # noqa: E402
 from eval.deterministic.adversarial_regression.deterministic_adversarial_regression import (  # noqa: E402
     PROTECTED_CONFIG_TERMS,
     contains_prompt_excerpt,
+    extract_tool_calls,
     trace_messages,
 )
 
@@ -93,8 +94,9 @@ class MetricsAgentSession:
 def _metric_tool_calls(
     traces: list[dict[str, Any]],
 ) -> list[tuple[str, ToolUseEntry]]:
-    calls: list[tuple[str, ToolUseEntry]] = []
-    for message in trace_messages(traces):
+    messages = trace_messages(traces)
+    call_ids: list[str] = []
+    for message in messages:
         if message.get("role") != "assistant":
             continue
         for block in message.get("content") or []:
@@ -104,19 +106,28 @@ def _metric_tool_calls(
             call_id = tool.get("toolUseId")
             if not call_id:
                 raise RuntimeError("tool trace is missing toolUseId")
-            call_input = tool.get("input")
-            calls.append(
-                (
-                    call_id,
-                    {
-                        "name": str(tool.get("name", "")),
-                        "input": cast(dict[str, Any], call_input)
-                        if isinstance(call_input, dict)
-                        else {},
-                    },
-                )
-            )
-    return calls
+            call_ids.append(call_id)
+    extracted = extract_tool_calls(messages)
+    if len(call_ids) != len(extracted):
+        raise RuntimeError("tool trace IDs and extracted calls differ")
+    return [
+        (
+            call_id,
+            cast(
+                ToolUseEntry,
+                {
+                    "tool_use_id": call_id,
+                    "name": str(call.get("name", "")),
+                    "input": call.get("input")
+                    if isinstance(call.get("input"), dict)
+                    else {},
+                    "tool_result": call.get("tool_result"),
+                    "is_error": bool(call.get("is_error")),
+                },
+            ),
+        )
+        for call_id, call in zip(call_ids, extracted, strict=True)
+    ]
 
 
 def _build_quiet_agent() -> Agent:
