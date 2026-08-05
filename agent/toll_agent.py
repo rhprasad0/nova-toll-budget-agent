@@ -499,6 +499,7 @@ _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
 _CROSS_I95_HANDOFF = "Franconia-Springfield Parkway/Route 289"
 _I495_JUNCTION_ENTRY = "191NO"
 _I495_JUNCTION_EXIT = "191SD"
+_DCA_I95_HANDOFF = "Pentagon/Eads Street"
 _ROUTE_267_DETOUR_CONNECTORS = {
     "I-66 / Dulles Toll Road junction",
     "I-495/Route 267 interchange",
@@ -767,17 +768,33 @@ def _planned_steps(
                 )
             continue
 
-        if corridor == "i495" and destination_corridor == "i95":
+        if corridor == "i495" and destination_corridor in {"i95", "airport_dca"}:
             priced_steps = (
                 [_priced_step("i495", point, _I495_JUNCTION_EXIT)]
                 if _can_price("i495", point, "i495", _I495_JUNCTION_EXIT)
                 else []
             )
-            return [
+            steps_to_i95 = [
                 *steps,
                 *priced_steps,
-                _junction_step("i495_to_i95", destination),
+                _junction_step(
+                    "i495_to_i95",
+                    _DCA_I95_HANDOFF
+                    if destination_corridor == "airport_dca"
+                    else destination,
+                ),
             ]
+            if destination_corridor == "airport_dca":
+                return [
+                    *steps_to_i95,
+                    {
+                        "kind": "connector",
+                        "transfer_id": "i95_to_dca_northbound",
+                        "label": "Reagan airport access",
+                        "price_usd": "0.00",
+                    },
+                ]
+            return steps_to_i95
 
         for transfer in NETWORK_TRANSFERS:
             if any(

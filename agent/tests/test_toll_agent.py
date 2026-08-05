@@ -845,6 +845,29 @@ def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
     ]
 
 
+def test_planner_routes_leesburg_to_dca_through_the_i95_junction():
+    plan = plan_toll_route(
+        "dulles_greenway",
+        "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        "airport_dca",
+        "Ronald Reagan Washington National Airport (DCA)",
+    )
+    assert [step["kind"] for step in plan["steps"]] == [
+        "priced",
+        "connector",
+        "priced",
+        "junction",
+        "connector",
+    ]
+    assert plan["steps"][-2]["location"] == "Pentagon/Eads Street"
+    assert plan["steps"][-1] == {
+        "kind": "connector",
+        "transfer_id": "i95_to_dca_northbound",
+        "label": "Reagan airport access",
+        "price_usd": "0.00",
+    }
+
+
 def test_planner_reaches_the_greenway_from_i495():
     plan = plan_toll_route(
         "i495",
