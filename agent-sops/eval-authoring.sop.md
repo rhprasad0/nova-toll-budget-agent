@@ -212,6 +212,9 @@ job in `.github/workflows/ci.yml`. Add stochastic simulated-user runners to
 `.github/workflows/nightly-evals.yml`, which uploads reports as artifacts.
 Keep a scheduled fixed adversarial regression in its own nightly job and
 artifact when its issue requires isolation from normal user simulations.
+Run exploratory red-team campaigns in a separate, lower-cadence or manually
+dispatched workflow. Treat behavioral breaches as report-only discoveries, but
+fail the workflow for execution defects or incomplete evidence.
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
@@ -223,6 +226,10 @@ artifact when its issue requires isolation from normal user simulations.
   avoid exposing production connectivity.
 - You MUST update the suite README and eval plan when execution or CI coverage
   changes.
+- You MUST keep raw red-team prompts, responses, tool inputs/results, and judge
+  reasoning out of public repositories because they expose reusable attacks and
+  internal behavior. Keep raw reports in ignored private storage and upload or
+  curate only sanitized evidence.
 
 ## Examples
 
