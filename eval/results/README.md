@@ -22,6 +22,8 @@ not curated.
 | [`20260805T114738Z.json`](20260805T114738Z.json) | Four historical I-95 closure requests after the mandatory access check | Code-graded live trajectory and response | 1.0000 overall; 8/8 verdicts passed; no unavailable route quoted a fare |
 | [`20260805T124340Z.json`](20260805T124340Z.json) | New York date/time interpretation across EDT, explicit Pacific conversion, and EST | Deterministic live trace and response grading | 1.0000 overall; 6/6 verdicts passed; 0 execution errors |
 | [`20260805T124420Z.json`](20260805T124420Z.json) | Relative future-date request (“tomorrow afternoon”) | Simulated user with goal-success and helpfulness judges | 0.8335 overall; 2/2 judgments passed; no pricing tool calls |
+| [`20260805T134209Z.json`](20260805T134209Z.json) | IAD and DCA as directional endpoints, including normal Dulles Toll Road billing after IAD access and non-airport Access Highway refusal | Code-graded live planner trajectory and response | 1.0000 overall; 6/6 cases passed; airport access remained untolled but Toll Road billing remained intact |
+| [`20260805T134505Z.json`](20260805T134505Z.json) | Simulated IAD toll pricing, DCA arrival, and attempted Dulles Airport Access Highway misuse | Simulated-user trace grading plus goal-success and helpfulness judges | 0.9443 overall; 9/9 judgments passed; no free non-airport bypass |
 
 The repaired closure run found exactly one supported `i95_access_options`
 execution followed by one `i95_route` execution per case, kept every actor on
@@ -59,3 +61,9 @@ expected instants and preserved the tool-returned timestamps in US format. The
 relative-future run refused “tomorrow afternoon” without calling a planner,
 access, junction, or pricing tool; its helpfulness judge's partial score reflects
 an unrelated request for alternative future-quote sources, not a failed refusal.
+
+The airport runs resolved IAD and DCA as named endpoints rather than nearby
+interchanges. IAD used the untolled Dulles Airport Access Highway only at the
+airport boundary; a following Dulles Toll Road leg still itemized its `$4.00`
+mainline and `$2.00` exit charges. The misuse conversation declined a non-IAD
+bypass and warned that it can result in a ticket.

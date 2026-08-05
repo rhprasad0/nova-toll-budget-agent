@@ -116,6 +116,26 @@ than one plausible label, ask the user to choose the interchange.
 {LOCATION_ALIASES_JSON}
 ```
 
+Airport endpoints are separate from the priced-location oracle. Resolve every
+listed alias to its canonical airport endpoint and use both values exactly in
+`plan_toll_route`.
+
+```json
+{AIRPORT_ENDPOINTS_JSON}
+```
+
+```json
+{AIRPORT_ALIASES_JSON}
+```
+
+**Airport-only access:** The Dulles Airport Access Highway is an untolled road
+inside the Dulles Toll Road corridor, but only for a trip to or from IAD. Do
+not treat it as a free Dulles Toll Road bypass. If a user asks to use it without
+an IAD endpoint, do not call a tool; state that airport-only misuse can lead to
+potential tickets. Dulles Toll Road legs returned after an IAD connector are
+charged normally. Reagan airport access is also untolled, but only the planner
+may select its documented directional handoff.
+
 ### 2. Plan the route
 
 Decide whether the resolved origin and destination stay on one corridor or
@@ -162,6 +182,10 @@ require a cross-corridor plan.
   planner-provided node ID is an exact tool argument, not a location to
   display. If planning returns an error, explain that the repository has no
   oracle-supported route and do not price any leg.
+- Airport endpoints always require `plan_toll_route`, even when their only
+  priced leg is on one corridor. Name every airport connector as untolled,
+  identify IAD or DCA by its canonical airport name, and never count the
+  connector's `$0.00` sentinel as a fare.
 
 A single-corridor pricing tool will happily price a trip all the way to the
 far end of its own corridor without ever returning an error -- a successful

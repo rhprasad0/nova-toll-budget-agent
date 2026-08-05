@@ -14,6 +14,8 @@ from strands.models.openai_responses import OpenAIResponsesModel
 
 from agent import toll_agent as toll_agent_module
 from agent.toll_agent import (
+    _AIRPORT_ALIASES,
+    _AIRPORT_ENDPOINTS,
     _DIRECT_PAIR_ORACLES,
     _LOCATION_ALIASES,
     _PRICED_LOCATION_ORACLE_JSON,
@@ -233,7 +235,7 @@ def test_system_prompt_describes_curated_network_transfers():
     assert '"connector": "I-495/Route 267 interchange"' in prompt
     assert "explicitly labeled curated connector" in prompt
     assert "Do not infer a reverse edge" in prompt
-    assert "Dulles Airport Access Highway" not in prompt
+    assert '"connector": "Dulles Airport Access Highway"' in prompt
     assert "have no direct I-66/I-495 transfer" not in prompt
     assert "Route 267 detour; not a direct I-66/I-495" in prompt
     assert "Copy the planner result's `at_time` unchanged" in prompt
@@ -327,15 +329,23 @@ def test_network_transfers_have_directed_entry_and_exit_roles():
     for transfer in NETWORK_TRANSFERS:
         source = transfer["from"]
         target = transfer["to"]
-        source_oracle = json.loads(
-            (oracle_dir / filenames[source["corridor"]]).read_text()
-        )
+        if source["corridor"].startswith("airport_"):
+            assert source["node_id"] == source["exit"]
+        else:
+            source_oracle = json.loads(
+                (oracle_dir / filenames[source["corridor"]]).read_text()
+            )
+            assert source_oracle["nodes"][source["node_id"]]["label"] == source["exit"]
+            assert any(
+                pair["exit"] == source["node_id"] for pair in source_oracle["pairs"]
+            )
+        if target["corridor"].startswith("airport_"):
+            assert target["node_id"] == target["entry"]
+            continue
         target_oracle = json.loads(
             (oracle_dir / filenames[target["corridor"]]).read_text()
         )
-        assert source_oracle["nodes"][source["node_id"]]["label"] == source["exit"]
         assert target_oracle["nodes"][target["node_id"]]["label"] == target["entry"]
-        assert any(pair["exit"] == source["node_id"] for pair in source_oracle["pairs"])
         assert any(
             pair["entry"] == target["node_id"] for pair in target_oracle["pairs"]
         )
@@ -728,6 +738,71 @@ def test_planner_ends_and_starts_i66_dulles_legs_at_the_shared_junction():
     assert reverse["steps"][2]["origin"] == "6"
 
 
+def test_planner_treats_iad_as_an_access_highway_endpoint_not_a_free_toll_road():
+    outbound = plan_toll_route(
+        "airport_iad", "Dulles International Airport (IAD)", "i66_itb", "Fairfax Drive"
+    )
+    assert outbound["steps"] == [
+        {
+            "kind": "connector",
+            "transfer_id": "iad_to_i66",
+            "label": "Dulles Airport Access Highway",
+            "price_usd": "0.00",
+        },
+        {
+            "kind": "priced",
+            "corridor": "i66_itb",
+            "tool": "i66_route",
+            "origin": "6",
+            "destination": "Fairfax Drive",
+        },
+    ]
+
+    to_toll_road = plan_toll_route(
+        "airport_iad",
+        "Dulles International Airport (IAD)",
+        "dulles_toll_road",
+        "Exit 12 - SR 602 (Reston Pkwy)",
+    )
+    assert to_toll_road["steps"][-1] == {
+        "kind": "priced",
+        "corridor": "dulles_toll_road",
+        "tool": "dulles_route",
+        "origin": "66",
+        "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+    }
+
+
+def test_planner_treats_dca_as_a_directional_airport_endpoint():
+    outbound = plan_toll_route(
+        "airport_dca", "Ronald Reagan Washington National Airport (DCA)", "i95", "US-1"
+    )
+    assert outbound["steps"][:2] == [
+        {
+            "kind": "connector",
+            "transfer_id": "dca_to_i95",
+            "label": "Reagan airport access",
+            "price_usd": "0.00",
+        },
+        {
+            "kind": "priced",
+            "corridor": "i95",
+            "tool": "i95_route",
+            "origin": "2233SO",
+            "destination": "US-1",
+        },
+    ]
+    inbound = plan_toll_route(
+        "i95", "US-1", "airport_dca", "Ronald Reagan Washington National Airport (DCA)"
+    )
+    assert inbound["steps"][-1] == {
+        "kind": "connector",
+        "transfer_id": "i95_to_dca_northbound",
+        "label": "Reagan airport access",
+        "price_usd": "0.00",
+    }
+
+
 def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
     plan = plan_toll_route(
         "dulles_greenway",
@@ -768,6 +843,29 @@ def test_planner_routes_leesburg_to_reagan_without_an_i66_leg():
             "pricing": "unpriced between the selected 95 boundary and Braddock",
         },
     ]
+
+
+def test_planner_routes_leesburg_to_dca_through_the_i95_junction():
+    plan = plan_toll_route(
+        "dulles_greenway",
+        "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+        "airport_dca",
+        "Ronald Reagan Washington National Airport (DCA)",
+    )
+    assert [step["kind"] for step in plan["steps"]] == [
+        "priced",
+        "connector",
+        "priced",
+        "junction",
+        "connector",
+    ]
+    assert plan["steps"][-2]["location"] == "Pentagon/Eads Street"
+    assert plan["steps"][-1] == {
+        "kind": "connector",
+        "transfer_id": "i95_to_dca_northbound",
+        "label": "Reagan airport access",
+        "price_usd": "0.00",
+    }
 
 
 def test_planner_reaches_the_greenway_from_i495():
@@ -941,12 +1039,18 @@ def test_location_aliases_only_point_to_priced_labels():
     }
     assert "Tysons" in prompt
     assert "Gainesville" not in _LOCATION_ALIASES
-    assert _LOCATION_ALIASES["Dulles Airport"] == [
-        "Route 28 (Dulles Toll Road / Dulles Greenway)"
-    ]
+    assert "Dulles Airport" not in _LOCATION_ALIASES
     assert {
         label for labels in _LOCATION_ALIASES.values() for label in labels
     } <= priced_labels
+    assert _AIRPORT_ENDPOINTS == {
+        "airport_iad": "Dulles International Airport (IAD)",
+        "airport_dca": "Ronald Reagan Washington National Airport (DCA)",
+    }
+    assert _AIRPORT_ALIASES["IAD"] == "airport_iad"
+    assert _AIRPORT_ALIASES["DCA"] == "airport_dca"
+    assert "Airport-only access" in prompt
+    assert "potential tickets" in prompt
 
 
 def test_system_prompt_is_an_agent_sop():
@@ -1049,12 +1153,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.20.0"
-    advanced["system_prompt"]["releases"]["1.20.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.21.0"
+    advanced["system_prompt"]["releases"]["1.21.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.19\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.20\.0"):
         validate_manifest_update(previous, advanced)
 
 
@@ -1131,6 +1235,8 @@ def test_agent_tool_specs_are_concise_and_preserve_their_contracts():
         "i66_itb",
         "dulles_toll_road",
         "dulles_greenway",
+        "airport_iad",
+        "airport_dca",
     }
     assert set(
         i95_junction_leg.tool_spec["inputSchema"]["json"]["properties"]["movement"][
