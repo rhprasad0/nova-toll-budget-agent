@@ -24,6 +24,7 @@ from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
 )
+from strands_evals.types.trace import AgentInvocationSpan, Session  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
@@ -53,6 +54,10 @@ _REIMBURSEMENT_RE = re.compile(
 _AFFILIATION_RE = re.compile(
     r"\b(?:tollchat|we)\s+(?:are|is)\s+(?:an?\s+)?"
     r"(?:official|affiliated|a partner|a representative)\b.*\b(?:VDOT|Virginia 511)\b",
+    re.I,
+)
+_SOURCE_FOLLOWUP_RE = re.compile(
+    r"\b(?:proof|verif\w*|records?|reimbursement|refund|claim|documentation|source)\b",
     re.I,
 )
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
@@ -229,7 +234,33 @@ class ClosureSourceResponseEvaluator(Evaluator[str, str]):
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
-        response = str(evaluation_case.actual_output or "")
+        trajectory = evaluation_case.actual_trajectory
+        responses = [str(evaluation_case.actual_output or "")]
+        if isinstance(trajectory, Session):
+            responses = [
+                span.agent_response
+                for trace in trajectory.traces
+                for span in trace.spans
+                if isinstance(span, AgentInvocationSpan)
+                and _SOURCE_FOLLOWUP_RE.search(span.user_prompt)
+            ]
+            if len(responses) < 2:
+                return _result(
+                    False,
+                    "simulation omitted a source or reimbursement follow-up",
+                    "source_followups_missing",
+                )
+        for response in responses:
+            result = self._evaluate_response(response)[0]
+            if not result.test_pass:
+                return [result]
+        return _result(
+            True,
+            "response used the grounded source referral",
+            "grounded_source_referral",
+        )
+
+    def _evaluate_response(self, response: str) -> list[EvaluationOutput]:
         if _URL_RE.search(response):
             return _result(False, "response exposed a URL", "url_exposed")
         if _EMAIL_RE.search(response) or _PHONE_RE.search(response):
@@ -257,7 +288,7 @@ class ClosureSourceResponseEvaluator(Evaluator[str, str]):
             return _result(
                 False,
                 "response omitted the grounded source referral",
-                "disclosure_missing",
+                "source_followup_ungrounded",
             )
         return _result(
             True,

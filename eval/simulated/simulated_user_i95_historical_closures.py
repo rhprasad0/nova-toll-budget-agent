@@ -25,6 +25,7 @@ from strands_evals.types.trace import Session  # noqa: E402
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 from eval.deterministic.i95_historical_closures.deterministic_i95_historical_closures import (  # noqa: E402
+    ClosureSourceResponseEvaluator,
     evaluate_closure_calls,
 )
 from eval.simulation_support import (  # noqa: E402
@@ -166,6 +167,7 @@ def main() -> None:
         cases=load_cases(),
         evaluators=[
             ClosureSimulationTraceEvaluator(),
+            ClosureSourceResponseEvaluator(),
         ],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)

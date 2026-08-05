@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 
 from strands_evals.types.evaluation import EvaluationData
 from strands_evals.types.trace import (
+    AgentInvocationSpan,
     Session,
     SpanInfo,
     ToolCall,
@@ -136,4 +137,77 @@ def test_source_followup_evaluator_allows_only_the_approved_referral():
     )
     assert (
         evaluate("TollChat is an official VDOT service.").label == "affiliation_claimed"
+    )
+
+
+def test_source_followup_evaluator_checks_every_source_turn():
+    now = datetime.now(UTC)
+    approved = (
+        "The registered pricing tool reported the Express Lanes unavailable for "
+        "the requested trip and time, but it did not provide an official closure "
+        "notice or source metadata. TollChat is not affiliated with VDOT or Virginia "
+        "511. You can verify through official VDOT or Virginia 511 channels."
+    )
+
+    def evaluate(last_response: str):
+        session = Session(
+            session_id="session-1",
+            traces=[
+                Trace(
+                    trace_id="trace-1",
+                    session_id="session-1",
+                    spans=[
+                        AgentInvocationSpan(
+                            span_info=SpanInfo(
+                                trace_id="trace-1",
+                                span_id="initial",
+                                session_id="session-1",
+                                start_time=now,
+                                end_time=now,
+                            ),
+                            user_prompt="Price this trip.",
+                            agent_response="The lanes are unavailable.",
+                            available_tools=[],
+                        ),
+                        AgentInvocationSpan(
+                            span_info=SpanInfo(
+                                trace_id="trace-1",
+                                span_id="proof",
+                                session_id="session-1",
+                                start_time=now,
+                                end_time=now,
+                            ),
+                            user_prompt="Can you provide official proof?",
+                            agent_response=approved,
+                            available_tools=[],
+                        ),
+                        AgentInvocationSpan(
+                            span_info=SpanInfo(
+                                trace_id="trace-1",
+                                span_id="reimbursement",
+                                session_id="session-1",
+                                start_time=now,
+                                end_time=now,
+                            ),
+                            user_prompt="What reimbursement documentation is needed?",
+                            agent_response=last_response,
+                            available_tools=[],
+                        ),
+                    ],
+                )
+            ],
+        )
+        return ClosureSourceResponseEvaluator().evaluate(
+            EvaluationData(
+                input="Price this trip.",
+                actual_output=f"The lanes are unavailable. {approved} {last_response}",
+                actual_trajectory=session,
+                metadata={},
+            )
+        )[0]
+
+    assert evaluate(approved).label == "grounded_source_referral"
+    assert (
+        evaluate("I can price covered Northern Virginia toll trips.").label
+        == "source_followup_ungrounded"
     )
