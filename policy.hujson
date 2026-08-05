@@ -55,6 +55,9 @@
     // went private). Update if RDS's underlying host ever changes it.
     "hosts": {
         "nova-toll-rds": "172.31.83.200",
+        // Representative address in the private preview subnets. The ALB IPs
+        // are dynamic; this verifies the same CIDR/port policy without pinning one.
+        "tollchat-preview-test": "172.31.224.10",
     },
 
     // Checked on every push; Tailscale rejects the update if any fail, so
@@ -62,12 +65,12 @@
     "tests": [
         {
             "src":    "rhprasad0@github",
-            "accept": ["nova-toll-rds:5432"],
+            "accept": ["nova-toll-rds:5432", "tollchat-preview-test:443"],
         },
         {
             "src":    "tag:ci",
             "accept": ["nova-toll-rds:5432"],
-            "deny":   ["8.8.8.8:443"],
+            "deny":   ["8.8.8.8:443", "tollchat-preview-test:443"],
         },
     ],
 }

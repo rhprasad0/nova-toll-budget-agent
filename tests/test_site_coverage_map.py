@@ -199,3 +199,16 @@ def test_page_explains_congestion_pricing_problem() -> None:
     assert "I-95, I-495, and I-66" in page
     assert "dynamic pricing based on congestion" in page
     assert "difficult to plan and budget" in page
+
+
+def test_page_contains_a_config_gated_accessible_chat() -> None:
+    page = SITE.read_text()
+    assert 'id="tollchat-chat"' in page
+    assert 'id="chat-messages"' in page
+    assert 'aria-live="polite"' in page
+    assert 'maxlength="8000"' in page
+    assert 'fetch("/api/config"' in page
+    assert 'request("/api/chat"' in page
+    assert 'request("/api/reset"' in page
+    assert "status.textContent = errorMessage" in page
+    assert "Raw telemetry" not in page

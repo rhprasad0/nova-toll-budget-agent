@@ -65,7 +65,7 @@ data "aws_iam_policy_document" "audit_kms" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/nova-toll-audit"]
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/nova-toll-audit"]
     }
   }
 }

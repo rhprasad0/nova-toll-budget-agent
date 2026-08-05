@@ -82,6 +82,20 @@
   .links { font-size: .88rem; }
   .legal { color: var(--faint); font-size: .7rem; line-height: 1.65; text-align: right; }
   .fallback { margin: 1rem; color: var(--muted); font-size: .9rem; line-height: 1.5; }
+  .chat { padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); border-top: 1px solid var(--line); background: #081211; }
+  .chat-shell { display: grid; grid-template-columns: minmax(12rem, 20rem) minmax(0, 42rem); gap: clamp(1.5rem, 4vw, 4rem); max-width: 70rem; margin: auto; }
+  .chat h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); letter-spacing: -.045em; }
+  .chat-copy { margin: .8rem 0; color: var(--muted); line-height: 1.55; }
+  .chat-reset { padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .6rem; background: transparent; cursor: pointer; }
+  .chat-card { overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel-solid); }
+  .chat-messages { display: flex; min-height: 16rem; max-height: 28rem; flex-direction: column; gap: .7rem; overflow-y: auto; padding: 1rem; }
+  .chat-message { max-width: 88%; margin: 0; padding: .7rem .85rem; border-radius: .8rem; background: rgba(255,255,255,.07); line-height: 1.45; white-space: pre-wrap; }
+  .chat-message.user { align-self: flex-end; background: rgba(215,255,95,.13); }
+  .chat-form { display: flex; gap: .6rem; padding: .8rem; border-top: 1px solid var(--line); }
+  .chat-form input { min-width: 0; flex: 1; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: #07100f; color: var(--ink); }
+  .chat-form button { min-width: 5rem; border: 0; border-radius: .65rem; background: var(--accent); color: #101608; font-weight: 800; cursor: pointer; }
+  .chat-form button:disabled, .chat-reset:disabled { cursor: wait; opacity: .55; }
+  .chat-status { min-height: 1.2rem; margin: 0; padding: 0 .8rem .7rem; color: var(--muted); font-size: .75rem; }
   @media (max-width: 720px) {
     .hero { min-height: 58rem; }
     .map-shade { background: linear-gradient(180deg, rgba(3,9,9,.48), transparent 48%, rgba(3,9,9,.58)); }
@@ -96,6 +110,7 @@
     .reset-map { top: auto; right: .75rem; bottom: 14.5rem; min-height: 44px; }
     .maplibregl-ctrl-top-right { top: 35rem; right: .4rem; }
     .footer { grid-template-columns: 1fr; align-items: start; }
+    .chat-shell { grid-template-columns: 1fr; }
     .legal { text-align: left; }
   }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
@@ -136,6 +151,27 @@
       <strong>I-95 ↔ I-495 junction price unavailable.</strong>
       <p>We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available.</p>
     </aside>
+  </section>
+  <section id="tollchat-chat" class="chat" aria-labelledby="chat-title" hidden>
+    <div class="chat-shell">
+      <header>
+        <p class="eyebrow">Private preview</p>
+        <h2 id="chat-title">Ask TollChat</h2>
+        <p class="chat-copy">Describe your route, direction, date, and time. Estimates only—verify current rates with the toll operator before travel.</p>
+        <button id="chat-reset" class="chat-reset" type="button">New chat</button>
+      </header>
+      <div class="chat-card">
+        <div id="chat-messages" class="chat-messages" aria-live="polite" aria-label="Chat messages">
+          <p class="chat-message">Where are you entering and exiting?</p>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <label for="chat-input" hidden>Your toll question</label>
+          <input id="chat-input" name="message" maxlength="8000" autocomplete="off" placeholder="Dumfries to Westpark tomorrow at 8 AM" required>
+          <button type="submit">Send</button>
+        </form>
+        <p id="chat-status" class="chat-status" role="status"></p>
+      </div>
+    </div>
   </section>
   <footer class="footer">
     <p class="links"><a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a> &middot; <a href="https://github.com/rhprasad0/nova-toll-budget-agent">GitHub</a></p>
@@ -395,6 +431,81 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
   map.on("error", () => { if (!ready) showMapError(); });
   setTimeout(() => { if (!ready) showMapError(); }, 12000);
 }).catch(showMapError);
+</script>
+<script>
+(() => {
+  const chat = document.getElementById("tollchat-chat");
+  const messages = document.getElementById("chat-messages");
+  const form = document.getElementById("chat-form");
+  const input = document.getElementById("chat-input");
+  const status = document.getElementById("chat-status");
+  const reset = document.getElementById("chat-reset");
+  const submit = form.querySelector("button");
+  const preview = new URLSearchParams(location.search).has("preview");
+  const apiBase = preview ? "https://preview.tollchat.ai" : "";
+  let sessionId = sessionStorage.getItem("tollchat-session") || crypto.randomUUID();
+  sessionStorage.setItem("tollchat-session", sessionId);
+
+  const request = async (path, body) => {
+    const response = await fetch(apiBase + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || "TollChat is unavailable.");
+    return data;
+  };
+  const addMessage = (text, kind = "agent") => {
+    const message = document.createElement("p");
+    message.className = `chat-message ${kind}`;
+    message.textContent = text;
+    messages.append(message);
+    message.scrollIntoView({ block: "nearest" });
+  };
+  const setBusy = (busy) => {
+    input.disabled = busy;
+    submit.disabled = busy;
+    reset.disabled = busy;
+    status.textContent = busy ? "Checking current toll data…" : "";
+  };
+
+  const configRequest = preview ? fetch(apiBase + "/api/config") : fetch("/api/config", { cache: "no-store" });
+  configRequest.then((response) => response.ok ? response.json() : Promise.reject())
+    .then((config) => { if (config.chatEnabled) chat.hidden = false; })
+    .catch(() => {});
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = input.value.trim();
+    if (!message) return;
+    addMessage(message, "user");
+    input.value = "";
+    setBusy(true);
+    let errorMessage = "";
+    try {
+      const result = await request("/api/chat", { session_id: sessionId, message });
+      addMessage(result.answer);
+    } catch (error) {
+      errorMessage = error.message;
+    } finally {
+      setBusy(false);
+      status.textContent = errorMessage;
+      input.focus();
+    }
+  });
+
+  reset.addEventListener("click", async () => {
+    setBusy(true);
+    try { await request("/api/reset", { session_id: sessionId }); } catch (_) {}
+    sessionId = crypto.randomUUID();
+    sessionStorage.setItem("tollchat-session", sessionId);
+    messages.replaceChildren();
+    addMessage("Where are you entering and exiting?");
+    setBusy(false);
+    input.focus();
+  });
+})();
 </script>
 </body>
 </html>
