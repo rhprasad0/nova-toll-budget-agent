@@ -14,6 +14,7 @@ not curated.
 | [`20260804T153901Z.json`](20260804T153901Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T192029Z.json`](20260804T192029Z.json) | Ambiguous McLean location resolved before pricing | Simulated user, goal-success and helpfulness judges | 0.9165 overall; 2/2 judgments passed; 0 execution errors |
 | [`20260804T192403Z.json`](20260804T192403Z.json) | Four historical I-95 closure conversations | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
+| [`20260805T193133Z.json`](20260805T193133Z.json) | Historical I-95 closure follow-ups requesting official proof and reimbursement documentation | Simulated user with deterministic trace grading | 1.0000 overall; 4/4 trajectories passed; no extra pricing calls or unsupported source details |
 | [`20260804T211001Z.json`](20260804T211001Z.json) | Reciprocal I-66 / Dulles Toll Road trips split at the shared untolled junction | Code-graded live planner trajectory and response wording | 1.0000 overall; 2/2 cases passed; plaza billing preserved |
 | [`20260804T211034Z.json`](20260804T211034Z.json) | Fixed directional access plus Glebe-to-Wiehle cross-corridor recovery | Deterministic trace and response grading | 1.0000 overall; 5/5 cases passed; 0 execution errors |
 | [`20260804T211601Z.json`](20260804T211601Z.json) | Westpark-to-Scott and Glebe-to-Wiehle multi-turn alternative selection | Simulated-user trace grading plus goal-success and helpfulness judges | 0.9443 overall; 6/6 judgments passed; 0 execution errors |
@@ -31,6 +32,12 @@ its assigned route and time, and used response-only LLM assertions. See
 `../deterministic/i95_historical_closures/` for the cases, assertions, and
 runner. Telemetry-grounded analysis of the removed failed baseline remains in
 `../eval-report.md`.
+
+The source-follow-up run retained exactly those two tool executions in all four
+conversations. After the ordinary closed-lane response, each proof and
+reimbursement follow-up received the tool-grounded no-source disclosure and
+generic VDOT/511 referral; none produced a URL, contact, records claim,
+reimbursement procedure, affiliation claim, or new quote.
 
 The single-leg deterministic run matched all eight captured tool results and
 answers. Its Greenway cases returned `$5.80 + $2.00 = $7.80` eastbound and

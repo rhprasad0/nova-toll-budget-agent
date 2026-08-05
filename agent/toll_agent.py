@@ -206,7 +206,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.20.0"
+SYSTEM_PROMPT_VERSION = "1.22.0"
 TOOLSET_VERSION = "1.5.0"
 _EASTERN = ZoneInfo("America/New_York")
 

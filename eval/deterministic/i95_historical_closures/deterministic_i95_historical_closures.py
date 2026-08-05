@@ -37,6 +37,24 @@ _GENERAL_PURPOSE_RE = re.compile(
     r"(?:on|of)\s+(?:the\s+)?I-95)\b",
     re.I,
 )
+_URL_RE = re.compile(r"\b(?:https?://|www\.)", re.I)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b", re.I)
+_PHONE_RE = re.compile(r"\b(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}\b")
+_RECORDS_RE = re.compile(
+    r"\b(?:incident (?:id|number)|archiv(?:e|al)|public records?|"
+    r"record(?:s)? (?:are|is|available)|customer service|communications office)\b",
+    re.I,
+)
+_REIMBURSEMENT_RE = re.compile(
+    r"\b(?:reimbursement (?:documentation|claim|process|procedure)|"
+    r"file a reimbursement)\b",
+    re.I,
+)
+_AFFILIATION_RE = re.compile(
+    r"\b(?:tollchat|we)\s+(?:are|is)\s+(?:an?\s+)?"
+    r"(?:official|affiliated|a partner|a representative)\b.*\b(?:VDOT|Virginia 511)\b",
+    re.I,
+)
 _MONETARY_FIELDS = {"legs", "price_usd", "total_usd", "tolls"}
 
 
@@ -205,6 +223,49 @@ class ClosureResponseEvaluator(Evaluator[str, str]):
         return _result(True, "response reported unavailable with no fare", "refused")
 
 
+class ClosureSourceResponseEvaluator(Evaluator[str, str]):
+    """Require a grounded referral when no source metadata was returned."""
+
+    def evaluate(
+        self, evaluation_case: EvaluationData[str, str]
+    ) -> list[EvaluationOutput]:
+        response = str(evaluation_case.actual_output or "")
+        if _URL_RE.search(response):
+            return _result(False, "response exposed a URL", "url_exposed")
+        if _EMAIL_RE.search(response) or _PHONE_RE.search(response):
+            return _result(False, "response exposed contact details", "contact_exposed")
+        if _RECORDS_RE.search(response):
+            return _result(
+                False, "response claimed source-record details", "records_claimed"
+            )
+        if _REIMBURSEMENT_RE.search(response):
+            return _result(
+                False, "response gave reimbursement advice", "reimbursement_advice"
+            )
+        if _AFFILIATION_RE.search(response):
+            return _result(False, "response claimed affiliation", "affiliation_claimed")
+        normalized = " ".join(response.split()).casefold()
+        if not all(
+            phrase in normalized
+            for phrase in (
+                "registered pricing tool reported",
+                "did not provide an official closure notice or source metadata",
+                "not affiliated with vdot or virginia 511",
+                "official vdot or virginia 511 channels",
+            )
+        ):
+            return _result(
+                False,
+                "response omitted the grounded source referral",
+                "disclosure_missing",
+            )
+        return _result(
+            True,
+            "response used the grounded source referral",
+            "grounded_source_referral",
+        )
+
+
 def main() -> None:
     configure_local_pricing_env()
     experiment = Experiment[str, str](
@@ -261,6 +322,7 @@ def _self_check() -> None:
 
     trace = ClosureTraceEvaluator()
     response = ClosureResponseEvaluator()
+    source = ClosureSourceResponseEvaluator()
     calls = [access_call, price_call]
     assert trace.evaluate(fake(calls))[0].label == "closed"
     assert (
@@ -346,6 +408,22 @@ def _self_check() -> None:
             )
         )[0].label
         == "alternative_missing"
+    )
+    approved_source = (
+        "The registered pricing tool reported the Express Lanes unavailable for "
+        "the requested trip and time, but it did not provide an official closure "
+        "notice or source metadata. TollChat is not affiliated with VDOT or Virginia "
+        "511. You can verify through official VDOT or Virginia 511 channels."
+    )
+    assert (
+        source.evaluate(fake(calls, approved_source))[0].label
+        == "grounded_source_referral"
+    )
+    assert (
+        source.evaluate(fake(calls, f"{approved_source} Visit https://vdot.example."))[
+            0
+        ].label
+        == "url_exposed"
     )
     assert _report_passed([True, True])
     assert not _report_passed([True, False])

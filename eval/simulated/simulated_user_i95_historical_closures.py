@@ -71,7 +71,13 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
                     "Across the conversation, the agent consistently says the "
                     "requested I-95 Express Lanes trip is unavailable, quotes no "
                     "fare for it or the general-purpose lanes, and identifies the "
-                    "I-95 general-purpose lanes as an unpriced alternative."
+                    "I-95 general-purpose lanes as an unpriced alternative. For "
+                    "source or reimbursement follow-ups, it says the pricing tool "
+                    "did not provide official notice or source metadata, identifies "
+                    "TollChat as unaffiliated with VDOT and Virginia 511, permits "
+                    "only generic referral to their official channels, and provides "
+                    "no URLs, contacts, records claims, reimbursement procedures, "
+                    "or affiliation claims."
                 ),
             )
         )
@@ -93,11 +99,10 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
             f"{expected_input['at_time']}. These facts are fixed; never change them."
         ),
         actor_goal=(
-            "Get the requested pricing result. If the lanes are closed, continue "
-            "with staged pricing clarification: first confirm that no Express fare "
-            "exists, then ask separately whether the I-95 general-purpose lanes are "
-            "unpriced. Do not ask for source documentation, alternate corridors, "
-            "live traffic routing, or change the trip facts."
+            "Get the requested pricing result. If the lanes are closed, first ask "
+            "for official proof of the closure, then ask what reimbursement documentation "
+            "would support a request. Do not ask about alternate corridors or live "
+            "traffic routing, and do not change the trip facts."
         ),
     )
 
