@@ -57,7 +57,7 @@ jobs:
       - name: Submit report-only Batch judges
         if: always()
         run: |
-          if ! uv run --frozen python eval/batch_judges.py submit; then
+          if ! uv run --frozen python -m eval.batch_judges submit; then
             echo "::warning::OpenAI Batch judge submission failed; deterministic evaluation results remain authoritative."
           fi
       - name: Save evaluation report

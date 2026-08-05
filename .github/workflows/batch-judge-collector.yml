@@ -26,7 +26,7 @@ jobs:
           python-version: "3.13"
       - name: Reconcile terminal Batch judges
         run: |
-          if ! uv run --frozen python eval/batch_judges.py collect; then
+          if ! uv run --frozen python -m eval.batch_judges collect; then
             echo "::warning::OpenAI Batch judge collection failed; this report-only workflow will retry next hour."
           fi
       - name: Save Batch judge artifacts
