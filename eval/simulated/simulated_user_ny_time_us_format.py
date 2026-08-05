@@ -1,13 +1,7 @@
-"""Observational ActorSimulator evaluation for relative-date/time phrasing
-and US-format reporting.
+"""Observational ActorSimulator evaluation for future relative dates.
 
-Track 1 (eval/deterministic/ny_time_us_format/) only asserts against
-absolute dates, since the agent has no injected notion of "today" to
-resolve a relative phrase like "tomorrow afternoon" against. This scenario
-covers that relative phrasing instead, judged rather than exact-matched: does
-the agent request only the concrete calendar date needed to resolve
-"tomorrow," then report the returned VDOT timestamp in US Standard format
-(M/D/YYYY h:MM AM/PM ET) rather than the tool's raw ISO-8601 string.
+The agent receives today's New York calendar date in its prompt, so it must
+recognize "tomorrow" as future travel and decline without calling a tool.
 """
 
 from __future__ import annotations
@@ -38,12 +32,7 @@ _EASTERN = ZoneInfo("America/New_York")
 def build_case_and_profile(
     today: date | None = None,
 ) -> tuple[Case[str, str], ActorProfile]:
-    """ "Tomorrow" only means something relative to the real current date, so
-    the simulated user needs to know today's actual date to name a concrete
-    one if asked -- exactly what a real user would do without being handed
-    the answer. `today` is a fixed-date injection point for `--check`; a
-    live run always uses the real date.
-    """
+    """Build a relative-future request against a fixed or live New York date."""
     resolved_today = today or datetime.now(_EASTERN).date()
     tomorrow = resolved_today + timedelta(days=1)
     tomorrow_label = f"{tomorrow:%B} {tomorrow.day}, {tomorrow.year}"
@@ -57,26 +46,21 @@ def build_case_and_profile(
         metadata={
             "task_description": (
                 "Wants a toll price quote for tomorrow afternoon around 3 "
-                f"o'clock. If asked for the concrete calendar date, says "
-                f"{tomorrow_label}. Does not volunteer the date unless asked."
+                f"o'clock ({tomorrow_label})."
             )
         },
         expected_assertion=(
-            "The user supplied a relative travel time, and the agent has no "
-            "current-date anchor, so it may ask only for the concrete calendar "
-            "date needed to resolve 'tomorrow' -- not for the unambiguous "
-            "locations or for a travel time that was omitted. It then treats "
-            "around 3 in the afternoon as 3:00 PM America/New_York, prices the "
-            "trip, and reports the VDOT observed timestamp as "
-            "M/D/YYYY h:MM AM/PM ET, never raw ISO-8601."
+            "The user supplied a relative future travel date. The agent has a "
+            "current New York calendar-date anchor, recognizes 'tomorrow' as "
+            "future, clearly says historical VDOT data cannot price future "
+            "travel, and makes no planner, access, junction, or pricing tool call."
         ),
     )
     profile = ActorProfile(
         traits={
             "communication_style": "casual, gives relative time references",
             "domain_knowledge": "ordinary driver, thinks in local wall-clock time",
-            "disclosure": f"names {tomorrow_label} if asked for the concrete "
-            "calendar date, but never volunteers it upfront",
+            "disclosure": "does not provide extra details after a future-date refusal",
         },
         context=(
             f"Today is {resolved_today:%B} {resolved_today.day}, "
@@ -85,9 +69,8 @@ def build_case_and_profile(
             "Drive/Route 123 to Westpark Drive."
         ),
         actor_goal=(
-            f"Get an accurate toll quote for 3:00 PM Eastern Time on "
-            f"{tomorrow_label} from Jones Branch Drive/Route 123 to "
-            "Westpark Drive."
+            f"Ask for a toll quote on {tomorrow_label} from Jones Branch "
+            "Drive/Route 123 to Westpark Drive."
         ),
     )
     return case, profile

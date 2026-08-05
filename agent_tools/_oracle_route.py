@@ -255,8 +255,8 @@ def resolve_at_time(
     """Parse at_time, treating an omitted or empty value as now in Eastern time.
 
     A naive (no-offset) string is assumed America/New_York. Raises
-    ValueError on an unparseable string -- the caller turns that into an
-    error response before any DB connection opens. `now` is a zero-arg
+    ValueError on an unparseable or future string -- the caller turns that
+    into an error response before any DB connection opens. `now` is a zero-arg
     callable injection point for tests; production callers never pass it.
     """
     if not at_time:
@@ -264,6 +264,8 @@ def resolve_at_time(
     dt = datetime.fromisoformat(at_time)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=EASTERN)
+    if dt > (now or (lambda: datetime.now(EASTERN)))():
+        raise ValueError("future at_time is unavailable in historical pricing")
     return dt
 
 
