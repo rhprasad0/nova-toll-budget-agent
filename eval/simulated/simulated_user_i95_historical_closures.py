@@ -82,7 +82,11 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
 
 def build_actor_profile(case: Case[str, str]) -> ActorProfile:
     metadata = case.metadata or {}
-    expected_input = metadata["expected_trajectory"][0]["input"]
+    expected_input = next(
+        call["input"]
+        for call in metadata["expected_trajectory"][0]["calls"]
+        if call["tool"] == "i95_route"
+    )
     return ActorProfile(
         traits={"communication_style": "concise and direct"},
         context=(
@@ -183,6 +187,8 @@ def _self_check() -> None:
     assert all(case.expected_assertion for case in cases)
     assert all((case.metadata or {}).get("task_description") for case in cases)
     assert all((case.metadata or {}).get("expected_trajectory") for case in cases)
+    profile = build_actor_profile(cases[0])
+    assert "2026-07-29T15:40:00-04:00" in profile.context
     print(
         "self-check ok (Case shapes only; live simulator, telemetry, and judges excluded)"
     )
