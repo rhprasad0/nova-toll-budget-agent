@@ -1,0 +1,2657 @@
+{
+  "overall_score": 0.9443333333333334,
+  "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.833,
+    0.833,
+    0.833
+  ],
+  "cases": [
+    {
+      "input": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+      "name": "iad-to-dulles-toll-road-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "10e5f8613906cc55",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "b712426d99c90860",
+                  "start_time": "2026-08-05T13:44:00.165237Z",
+                  "end_time": "2026-08-05T13:44:03.310877Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "cc61afb99d8ab7cc",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "b712426d99c90860",
+                  "start_time": "2026-08-05T13:44:03.311314Z",
+                  "end_time": "2026-08-05T13:44:03.312441Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "airport_iad",
+                    "origin": "Dulles International Airport (IAD)",
+                    "destination_corridor": "dulles_toll_road",
+                    "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "531c314c1e6e0c36",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "d6aab8a5e7b70ef1",
+                  "start_time": "2026-08-05T13:44:03.313279Z",
+                  "end_time": "2026-08-05T13:44:05.332181Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "66",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "356fd81d821445be",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "d6aab8a5e7b70ef1",
+                  "start_time": "2026-08-05T13:44:05.333090Z",
+                  "end_time": "2026-08-05T13:44:05.335770Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "dulles_route",
+                  "arguments": {
+                    "origin": "66",
+                    "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"66\", \"label\": \"I-66 / Dulles Toll Road junction\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "d0910e282d1f3f35",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "bbefd96109825a3c",
+                  "start_time": "2026-08-05T13:44:05.338415Z",
+                  "end_time": "2026-08-05T13:44:08.588050Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "66",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"66\", \"label\": \"I-66 / Dulles Toll Road junction\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "e63f2ec526702524",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "0c21004361782a01",
+                  "start_time": "2026-08-05T13:44:00.162570Z",
+                  "end_time": "2026-08-05T13:44:08.589098Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET.",
+                "agent_response": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+            "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13"
+          }
+        ],
+        "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13"
+      },
+      "metadata": {
+        "id": "iad-to-dulles-toll-road",
+        "description": "IAD access remains untolled, but a subsequent Dulles Toll Road leg is priced normally.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "airport_iad",
+              "origin": "Dulles International Airport (IAD)",
+              "destination_corridor": "dulles_toll_road",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "dulles_route",
+            "input": {
+              "origin": "66",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "response_terms": [
+          "Dulles Airport Access Highway",
+          "untolled",
+          "Dulles Toll Road",
+          "$6.00"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "AirportSimulationTraceEvaluator",
+      "evaluator_type": "AirportSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**\n",
+      "name": "i95-to-dca-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "93a4d8156b3ade7a",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "40fd7c35f47e8925",
+                  "start_time": "2026-08-05T13:44:27.056998Z",
+                  "end_time": "2026-08-05T13:44:29.807385Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "5d48e5d560178f49",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "40fd7c35f47e8925",
+                  "start_time": "2026-08-05T13:44:29.807674Z",
+                  "end_time": "2026-08-05T13:44:29.808826Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i95",
+                    "origin": "US-1",
+                    "destination_corridor": "airport_dca",
+                    "destination": "Ronald Reagan Washington National Airport (DCA)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "70b76b1bc353d39f",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "d06b333f8516b788",
+                  "start_time": "2026-08-05T13:44:29.809577Z",
+                  "end_time": "2026-08-05T13:44:31.258046Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "223ND",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "1c66a0b140048eb5",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "d06b333f8516b788",
+                  "start_time": "2026-08-05T13:44:31.258791Z",
+                  "end_time": "2026-08-05T13:44:31.681666Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "223ND",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"US-1\", \"destination\": \"223ND\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"210NO\", \"label\": \"US-1\"}, \"exit\": {\"node_id\": \"223ND\", \"label\": \"Pentagon/Eads Street\"}, \"legs\": [{\"od_pair_id\": 1246, \"price_usd\": \"27.00\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:20:00-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"27.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "ba8e5dab29e573de",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "5b47c944418987f7",
+                  "start_time": "2026-08-05T13:44:31.682613Z",
+                  "end_time": "2026-08-05T13:44:33.655554Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "223ND",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"US-1\", \"destination\": \"223ND\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"210NO\", \"label\": \"US-1\"}, \"exit\": {\"node_id\": \"223ND\", \"label\": \"Pentagon/Eads Street\"}, \"legs\": [{\"od_pair_id\": 1246, \"price_usd\": \"27.00\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:20:00-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"27.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "2c8cd8201f71bb77",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "8ae2673f1dcbe7e8",
+                  "start_time": "2026-08-05T13:44:27.054784Z",
+                  "end_time": "2026-08-05T13:44:33.656596Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET.",
+                "agent_response": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+            "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d"
+          }
+        ],
+        "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d"
+      },
+      "metadata": {
+        "id": "i95-to-dca",
+        "description": "DCA is a destination through its documented untolled airport-access handoff.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "i95",
+              "origin": "US-1",
+              "destination_corridor": "airport_dca",
+              "destination": "Ronald Reagan Washington National Airport (DCA)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "223ND",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "response_terms": [
+          "Ronald Reagan Washington National Airport",
+          "Reagan airport access",
+          "untolled"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "AirportSimulationTraceEvaluator",
+      "evaluator_type": "AirportSimulationTraceEvaluator"
+    },
+    {
+      "input": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?",
+      "actual_output": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets.\n",
+      "name": "access-highway-misuse-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "86ecd881cf8086076e00db776a87b844",
+                  "span_id": "01a8c45191a8833b",
+                  "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb",
+                  "parent_span_id": "a2f77b723454149c",
+                  "start_time": "2026-08-05T13:44:49.617857Z",
+                  "end_time": "2026-08-05T13:44:51.121341Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "86ecd881cf8086076e00db776a87b844",
+                  "span_id": "5a1f6607244a1440",
+                  "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb",
+                  "parent_span_id": "113c70d2df01921a",
+                  "start_time": "2026-08-05T13:44:49.615548Z",
+                  "end_time": "2026-08-05T13:44:51.121625Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?",
+                "agent_response": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "86ecd881cf8086076e00db776a87b844",
+            "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb"
+          }
+        ],
+        "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb"
+      },
+      "metadata": {
+        "id": "access-highway-misuse",
+        "description": "The Access Highway cannot be used as a non-airport toll bypass.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?"
+          }
+        ],
+        "expected_calls": [],
+        "response_terms": [
+          "Dulles Airport Access Highway",
+          "ticket"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "AirportSimulationTraceEvaluator",
+      "evaluator_type": "AirportSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+      "name": "iad-to-dulles-toll-road-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "10e5f8613906cc55",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "b712426d99c90860",
+                  "start_time": "2026-08-05T13:44:00.165237Z",
+                  "end_time": "2026-08-05T13:44:03.310877Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "cc61afb99d8ab7cc",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "b712426d99c90860",
+                  "start_time": "2026-08-05T13:44:03.311314Z",
+                  "end_time": "2026-08-05T13:44:03.312441Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "airport_iad",
+                    "origin": "Dulles International Airport (IAD)",
+                    "destination_corridor": "dulles_toll_road",
+                    "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "531c314c1e6e0c36",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "d6aab8a5e7b70ef1",
+                  "start_time": "2026-08-05T13:44:03.313279Z",
+                  "end_time": "2026-08-05T13:44:05.332181Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "66",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "356fd81d821445be",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "d6aab8a5e7b70ef1",
+                  "start_time": "2026-08-05T13:44:05.333090Z",
+                  "end_time": "2026-08-05T13:44:05.335770Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "dulles_route",
+                  "arguments": {
+                    "origin": "66",
+                    "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"66\", \"label\": \"I-66 / Dulles Toll Road junction\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "d0910e282d1f3f35",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "bbefd96109825a3c",
+                  "start_time": "2026-08-05T13:44:05.338415Z",
+                  "end_time": "2026-08-05T13:44:08.588050Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "66",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"66\", \"label\": \"I-66 / Dulles Toll Road junction\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "e63f2ec526702524",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "0c21004361782a01",
+                  "start_time": "2026-08-05T13:44:00.162570Z",
+                  "end_time": "2026-08-05T13:44:08.589098Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET.",
+                "agent_response": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+            "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13"
+          }
+        ],
+        "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13"
+      },
+      "metadata": {
+        "id": "iad-to-dulles-toll-road",
+        "description": "IAD access remains untolled, but a subsequent Dulles Toll Road leg is priced normally.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "airport_iad",
+              "origin": "Dulles International Airport (IAD)",
+              "destination_corridor": "dulles_toll_road",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "dulles_route",
+            "input": {
+              "origin": "66",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "response_terms": [
+          "Dulles Airport Access Highway",
+          "untolled",
+          "Dulles Toll Road",
+          "$6.00"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**\n",
+      "name": "i95-to-dca-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "93a4d8156b3ade7a",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "40fd7c35f47e8925",
+                  "start_time": "2026-08-05T13:44:27.056998Z",
+                  "end_time": "2026-08-05T13:44:29.807385Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "5d48e5d560178f49",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "40fd7c35f47e8925",
+                  "start_time": "2026-08-05T13:44:29.807674Z",
+                  "end_time": "2026-08-05T13:44:29.808826Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i95",
+                    "origin": "US-1",
+                    "destination_corridor": "airport_dca",
+                    "destination": "Ronald Reagan Washington National Airport (DCA)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "70b76b1bc353d39f",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "d06b333f8516b788",
+                  "start_time": "2026-08-05T13:44:29.809577Z",
+                  "end_time": "2026-08-05T13:44:31.258046Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "223ND",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "1c66a0b140048eb5",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "d06b333f8516b788",
+                  "start_time": "2026-08-05T13:44:31.258791Z",
+                  "end_time": "2026-08-05T13:44:31.681666Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "223ND",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"US-1\", \"destination\": \"223ND\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"210NO\", \"label\": \"US-1\"}, \"exit\": {\"node_id\": \"223ND\", \"label\": \"Pentagon/Eads Street\"}, \"legs\": [{\"od_pair_id\": 1246, \"price_usd\": \"27.00\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:20:00-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"27.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "ba8e5dab29e573de",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "5b47c944418987f7",
+                  "start_time": "2026-08-05T13:44:31.682613Z",
+                  "end_time": "2026-08-05T13:44:33.655554Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "223ND",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"US-1\", \"destination\": \"223ND\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"210NO\", \"label\": \"US-1\"}, \"exit\": {\"node_id\": \"223ND\", \"label\": \"Pentagon/Eads Street\"}, \"legs\": [{\"od_pair_id\": 1246, \"price_usd\": \"27.00\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:20:00-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"27.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "2c8cd8201f71bb77",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "8ae2673f1dcbe7e8",
+                  "start_time": "2026-08-05T13:44:27.054784Z",
+                  "end_time": "2026-08-05T13:44:33.656596Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET.",
+                "agent_response": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+            "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d"
+          }
+        ],
+        "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d"
+      },
+      "metadata": {
+        "id": "i95-to-dca",
+        "description": "DCA is a destination through its documented untolled airport-access handoff.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "i95",
+              "origin": "US-1",
+              "destination_corridor": "airport_dca",
+              "destination": "Ronald Reagan Washington National Airport (DCA)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "223ND",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "response_terms": [
+          "Ronald Reagan Washington National Airport",
+          "Reagan airport access",
+          "untolled"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?",
+      "actual_output": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets.\n",
+      "name": "access-highway-misuse-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "86ecd881cf8086076e00db776a87b844",
+                  "span_id": "01a8c45191a8833b",
+                  "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb",
+                  "parent_span_id": "a2f77b723454149c",
+                  "start_time": "2026-08-05T13:44:49.617857Z",
+                  "end_time": "2026-08-05T13:44:51.121341Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "86ecd881cf8086076e00db776a87b844",
+                  "span_id": "5a1f6607244a1440",
+                  "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb",
+                  "parent_span_id": "113c70d2df01921a",
+                  "start_time": "2026-08-05T13:44:49.615548Z",
+                  "end_time": "2026-08-05T13:44:51.121625Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?",
+                "agent_response": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "86ecd881cf8086076e00db776a87b844",
+            "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb"
+          }
+        ],
+        "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb"
+      },
+      "metadata": {
+        "id": "access-highway-misuse",
+        "description": "The Access Highway cannot be used as a non-airport toll bypass.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?"
+          }
+        ],
+        "expected_calls": [],
+        "response_terms": [
+          "Dulles Airport Access Highway",
+          "ticket"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "GoalSuccessRateEvaluator",
+      "evaluator_type": "GoalSuccessRateEvaluator"
+    },
+    {
+      "input": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+      "name": "iad-to-dulles-toll-road-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "10e5f8613906cc55",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "b712426d99c90860",
+                  "start_time": "2026-08-05T13:44:00.165237Z",
+                  "end_time": "2026-08-05T13:44:03.310877Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "cc61afb99d8ab7cc",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "b712426d99c90860",
+                  "start_time": "2026-08-05T13:44:03.311314Z",
+                  "end_time": "2026-08-05T13:44:03.312441Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "airport_iad",
+                    "origin": "Dulles International Airport (IAD)",
+                    "destination_corridor": "dulles_toll_road",
+                    "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "531c314c1e6e0c36",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "d6aab8a5e7b70ef1",
+                  "start_time": "2026-08-05T13:44:03.313279Z",
+                  "end_time": "2026-08-05T13:44:05.332181Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "66",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "356fd81d821445be",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "d6aab8a5e7b70ef1",
+                  "start_time": "2026-08-05T13:44:05.333090Z",
+                  "end_time": "2026-08-05T13:44:05.335770Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "dulles_route",
+                  "arguments": {
+                    "origin": "66",
+                    "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"66\", \"label\": \"I-66 / Dulles Toll Road junction\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "d0910e282d1f3f35",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "bbefd96109825a3c",
+                  "start_time": "2026-08-05T13:44:05.338415Z",
+                  "end_time": "2026-08-05T13:44:08.588050Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "airport_iad",
+                          "origin": "Dulles International Airport (IAD)",
+                          "destination_corridor": "dulles_toll_road",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"connector\", \"transfer_id\": \"iad_to_i66\", \"label\": \"Dulles Airport Access Highway\", \"price_usd\": \"0.00\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_dulles_toll_road\", \"label\": \"I-66 / Dulles Toll Road junction\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_hhx8sVgOVE8hOHaq1P7rx6Rv",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "66",
+                          "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"66\", \"destination\": \"Exit 12 - SR 602 (Reston Pkwy)\", \"at_time\": \"2026-07-27T07:30:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"66\", \"label\": \"I-66 / Dulles Toll Road junction\"}, \"exit\": {\"node_id\": \"12\", \"label\": \"Exit 12 - SR 602 (Reston Pkwy)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}, {\"facility\": \"dulles_toll_road\", \"label\": \"Exit ramp at Exit 12 - SR 602 (Reston Pkwy)\", \"price_usd\": \"2.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_9p2tElnqo6jyHNjg37OnNmje",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+                  "span_id": "e63f2ec526702524",
+                  "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13",
+                  "parent_span_id": "0c21004361782a01",
+                  "start_time": "2026-08-05T13:44:00.162570Z",
+                  "end_time": "2026-08-05T13:44:08.589098Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET.",
+                "agent_response": "## Route and fares\n\n- **Dulles International Airport (IAD)** \u2192 **I-66 / Dulles Toll Road junction** via the **Dulles Airport Access Highway** \u2014 untolled connector.\n- **I-66 / Dulles Toll Road junction** \u2192 **Exit 12 - SR 602 (Reston Pkwy)** \u2014 westbound on the Dulles Toll Road:\n  - Mainline plaza: **$4.00**\n  - Exit ramp at Exit 12 - SR 602 (Reston Pkwy): **$2.00**\n\n## Calculation\n\n**$4.00 + $2.00 = $6.00**\n\n## Final price\n\n**$6.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "568eef0c6f402b0844a6f9fa7433e300",
+            "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13"
+          }
+        ],
+        "session_id": "5c9776f3-a799-4425-9c85-12698f56fa13"
+      },
+      "metadata": {
+        "id": "iad-to-dulles-toll-road",
+        "description": "IAD access remains untolled, but a subsequent Dulles Toll Road leg is priced normally.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "airport_iad",
+              "origin": "Dulles International Airport (IAD)",
+              "destination_corridor": "dulles_toll_road",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "dulles_route",
+            "input": {
+              "origin": "66",
+              "destination": "Exit 12 - SR 602 (Reston Pkwy)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "response_terms": [
+          "Dulles Airport Access Highway",
+          "untolled",
+          "Dulles Toll Road",
+          "$6.00"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    },
+    {
+      "input": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET.",
+      "actual_output": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**\n",
+      "name": "i95-to-dca-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "93a4d8156b3ade7a",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "40fd7c35f47e8925",
+                  "start_time": "2026-08-05T13:44:27.056998Z",
+                  "end_time": "2026-08-05T13:44:29.807385Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "5d48e5d560178f49",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "40fd7c35f47e8925",
+                  "start_time": "2026-08-05T13:44:29.807674Z",
+                  "end_time": "2026-08-05T13:44:29.808826Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i95",
+                    "origin": "US-1",
+                    "destination_corridor": "airport_dca",
+                    "destination": "Ronald Reagan Washington National Airport (DCA)",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "70b76b1bc353d39f",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "d06b333f8516b788",
+                  "start_time": "2026-08-05T13:44:29.809577Z",
+                  "end_time": "2026-08-05T13:44:31.258046Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "223ND",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "1c66a0b140048eb5",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "d06b333f8516b788",
+                  "start_time": "2026-08-05T13:44:31.258791Z",
+                  "end_time": "2026-08-05T13:44:31.681666Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_route",
+                  "arguments": {
+                    "origin": "US-1",
+                    "destination": "223ND",
+                    "at_time": "2026-07-27T07:30:00-04:00"
+                  },
+                  "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"US-1\", \"destination\": \"223ND\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"210NO\", \"label\": \"US-1\"}, \"exit\": {\"node_id\": \"223ND\", \"label\": \"Pentagon/Eads Street\"}, \"legs\": [{\"od_pair_id\": 1246, \"price_usd\": \"27.00\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:20:00-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"27.00\"}",
+                  "error": null,
+                  "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "ba8e5dab29e573de",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "5b47c944418987f7",
+                  "start_time": "2026-08-05T13:44:31.682613Z",
+                  "end_time": "2026-08-05T13:44:33.655554Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "US-1",
+                          "destination_corridor": "airport_dca",
+                          "destination": "Ronald Reagan Washington National Airport (DCA)",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-27T07:30:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i95\", \"tool\": \"i95_route\", \"origin\": \"US-1\", \"destination\": \"223ND\"}, {\"kind\": \"connector\", \"transfer_id\": \"i95_to_dca_northbound\", \"label\": \"Reagan airport access\", \"price_usd\": \"0.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_iYS6rKahcWCxHpnNBejjMouK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_route",
+                        "arguments": {
+                          "origin": "US-1",
+                          "destination": "223ND",
+                          "at_time": "2026-07-27T07:30:00-04:00"
+                        },
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"US-1\", \"destination\": \"223ND\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"210NO\", \"label\": \"US-1\"}, \"exit\": {\"node_id\": \"223ND\", \"label\": \"Pentagon/Eads Street\"}, \"legs\": [{\"od_pair_id\": 1246, \"price_usd\": \"27.00\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-27T07:30:00-04:00\", \"observed_at\": \"2026-07-27T07:20:00-04:00\"}], \"at_time\": \"2026-07-27T07:30:00-04:00\", \"total_usd\": \"27.00\"}",
+                        "error": null,
+                        "tool_call_id": "call_EAtzQL4JJuDyiNa6nIJGKQxq",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+                  "span_id": "2c8cd8201f71bb77",
+                  "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d",
+                  "parent_span_id": "8ae2673f1dcbe7e8",
+                  "start_time": "2026-08-05T13:44:27.054784Z",
+                  "end_time": "2026-08-05T13:44:33.656596Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET.",
+                "agent_response": "## Route and fares\n\n- **US-1 \u2192 Pentagon/Eads Street**, northbound \u2014 **I-95/395 Express Lanes**: **$27.00**\n  - VDOT observed at: **7/27/2026 7:20 AM ET**\n- Untolled **Reagan airport access** to **Ronald Reagan Washington National Airport (DCA)**.\n\n## Calculation\n\n**$27.00 = $27.00**\n\n## Final price\n\n**$27.00**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9e38ec6f9b75e0a156bb0d93aa690a03",
+            "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d"
+          }
+        ],
+        "session_id": "041c6125-4df4-4c34-bd20-59921a8fe13d"
+      },
+      "metadata": {
+        "id": "i95-to-dca",
+        "description": "DCA is a destination through its documented untolled airport-access handoff.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from US-1 to Reagan Airport at 7/27/2026 7:30 AM ET."
+          }
+        ],
+        "expected_calls": [
+          {
+            "name": "plan_toll_route",
+            "input": {
+              "origin_corridor": "i95",
+              "origin": "US-1",
+              "destination_corridor": "airport_dca",
+              "destination": "Ronald Reagan Washington National Airport (DCA)",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          },
+          {
+            "name": "i95_route",
+            "input": {
+              "origin": "US-1",
+              "destination": "223ND",
+              "at_time": "2026-07-27T07:30:00-04:00"
+            }
+          }
+        ],
+        "response_terms": [
+          "Ronald Reagan Washington National Airport",
+          "Reagan airport access",
+          "untolled"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    },
+    {
+      "input": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?",
+      "actual_output": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets.\n",
+      "name": "access-highway-misuse-simulated",
+      "expected_output": null,
+      "expected_assertion": "The agent identifies the correct airport, keeps airport access untolled, itemizes only real tolls, and never treats the Dulles Airport Access Highway as a non-airport bypass.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "86ecd881cf8086076e00db776a87b844",
+                  "span_id": "01a8c45191a8833b",
+                  "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb",
+                  "parent_span_id": "a2f77b723454149c",
+                  "start_time": "2026-08-05T13:44:49.617857Z",
+                  "end_time": "2026-08-05T13:44:51.121341Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "86ecd881cf8086076e00db776a87b844",
+                  "span_id": "5a1f6607244a1440",
+                  "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb",
+                  "parent_span_id": "113c70d2df01921a",
+                  "start_time": "2026-08-05T13:44:49.615548Z",
+                  "end_time": "2026-08-05T13:44:51.121625Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?",
+                "agent_response": "No. The Dulles Airport Access Highway is for trips to or from Dulles International Airport (IAD). Using it to bypass the Dulles Toll Road without an IAD endpoint may result in tickets.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "86ecd881cf8086076e00db776a87b844",
+            "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb"
+          }
+        ],
+        "session_id": "d00ab453-57c9-4d70-be37-33771d0f03cb"
+      },
+      "metadata": {
+        "id": "access-highway-misuse",
+        "description": "The Access Highway cannot be used as a non-airport toll bypass.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Can I take the Dulles Airport Access Highway to avoid the Dulles Toll Road charge without going to IAD?"
+          }
+        ],
+        "expected_calls": [],
+        "response_terms": [
+          "Dulles Airport Access Highway",
+          "ticket"
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "HelpfulnessEvaluator",
+      "evaluator_type": "HelpfulnessEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "airport tool trajectory matched",
+    "airport tool trajectory matched",
+    "airport tool trajectory matched",
+    "The agent successfully priced the trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) by:\n\n1. **Correctly identified airport**: Used \"Dulles International Airport (IAD)\" as the origin.\n2. **Kept airport access untolled**: The Dulles Airport Access Highway connector was correctly identified as having \"$0.00\" price, with no toll charges applied to this segment.\n3. **Itemized only real tolls**: The final price breakdown includes only actual tolls\u2014$4.00 (mainline plaza) and $2.00 (exit ramp)\u2014totaling $6.00. No spurious charges were added.\n4. **Treated airport access correctly**: The Dulles Airport Access Highway was treated as the proper airport connector (not bypassed or miscategorized), transitioning logically to I-66 and then to the Dulles Toll Road.\n\nThe route planning followed the logical sequence: airport \u2192 untolled connector \u2192 junction \u2192 toll road segment with itemized tolls. All assertions are satisfied by the agent's output.",
+    "The agent successfully completed the task. It correctly identified Reagan Airport (DCA) as the destination, priced the I-95 northbound segment at $27.00, and properly represented the \"Reagan airport access\" as untolled ($0.00). The itemization includes only the actual toll (I-95 segment) and the untolled connector to DCA. There is no mention of Dulles Airport Access Highway, so it was not misclassified. The final price of $27.00 accurately reflects only the real toll charged for this route.",
+    "The agent correctly identifies IAD (Dulles International Airport) and clearly states that the Dulles Airport Access Highway is exclusively for trips to or from IAD. The response directly refutes the user's attempt to use it as a bypass for the toll road charge without an airport endpoint. The agent explains that misuse would result in tickets, reinforcing that this road is not a legitimate toll-avoidance bypass. The agent does not itemize unnecessary tolls or treat the highway as a non-airport route. All assertions are satisfied.",
+    "The user requested pricing for a specific toll route at a specific time. The assistant delivered exactly what was asked: a clear final price ($6.00) along with a well-organized breakdown of all toll charges and route segments. The response uses the tool results accurately, presents information in an easy-to-scan format with clear headers, shows the math explicitly, and provides the final answer prominently. The user's goal is fully achieved with no confusion or unnecessary information. This represents moving multiple steps toward and ultimately achieving the user's stated goal.",
+    "The user asked for a specific toll price for a trip from US-1 to Reagan Airport at a specific date and time. The assistant provided: (1) the final answer clearly stated ($27.00), (2) a detailed breakdown of the route segments and their costs, (3) relevant context about when the pricing was observed, and (4) clear, well-organized formatting. This directly and completely addresses the user's goal. The response is concise, accurate, and actionable.",
+    "The user asked whether they could use the Dulles Airport Access Highway to avoid paying the Dulles Toll Road without going to IAD. The assistant provided a clear, direct answer (\"No\"), explained the restriction (the highway is for IAD trips only), and warned about consequences (potential tickets). This response moves the user away from a potentially problematic action and provides them with accurate information about the road's proper use. The response is concise, relevant, and actionable, directly addressing the user's question and helping them understand why their intended approach won't work."
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "airport tool trajectory matched",
+        "label": "route_matched"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "airport tool trajectory matched",
+        "label": "route_matched"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "airport tool trajectory matched",
+        "label": "route_matched"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent successfully priced the trip from Dulles Airport to Exit 12 - SR 602 (Reston Pkwy) by:\n\n1. **Correctly identified airport**: Used \"Dulles International Airport (IAD)\" as the origin.\n2. **Kept airport access untolled**: The Dulles Airport Access Highway connector was correctly identified as having \"$0.00\" price, with no toll charges applied to this segment.\n3. **Itemized only real tolls**: The final price breakdown includes only actual tolls\u2014$4.00 (mainline plaza) and $2.00 (exit ramp)\u2014totaling $6.00. No spurious charges were added.\n4. **Treated airport access correctly**: The Dulles Airport Access Highway was treated as the proper airport connector (not bypassed or miscategorized), transitioning logically to I-66 and then to the Dulles Toll Road.\n\nThe route planning followed the logical sequence: airport \u2192 untolled connector \u2192 junction \u2192 toll road segment with itemized tolls. All assertions are satisfied by the agent's output.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent successfully completed the task. It correctly identified Reagan Airport (DCA) as the destination, priced the I-95 northbound segment at $27.00, and properly represented the \"Reagan airport access\" as untolled ($0.00). The itemization includes only the actual toll (I-95 segment) and the untolled connector to DCA. There is no mention of Dulles Airport Access Highway, so it was not misclassified. The final price of $27.00 accurately reflects only the real toll charged for this route.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "The agent correctly identifies IAD (Dulles International Airport) and clearly states that the Dulles Airport Access Highway is exclusively for trips to or from IAD. The response directly refutes the user's attempt to use it as a bypass for the toll road charge without an airport endpoint. The agent explains that misuse would result in tickets, reinforcing that this road is not a legitimate toll-avoidance bypass. The agent does not itemize unnecessary tolls or treat the highway as a non-airport route. All assertions are satisfied.",
+        "label": "SUCCESS"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The user requested pricing for a specific toll route at a specific time. The assistant delivered exactly what was asked: a clear final price ($6.00) along with a well-organized breakdown of all toll charges and route segments. The response uses the tool results accurately, presents information in an easy-to-scan format with clear headers, shows the math explicitly, and provides the final answer prominently. The user's goal is fully achieved with no confusion or unnecessary information. This represents moving multiple steps toward and ultimately achieving the user's stated goal.",
+        "label": "Very helpful"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The user asked for a specific toll price for a trip from US-1 to Reagan Airport at a specific date and time. The assistant provided: (1) the final answer clearly stated ($27.00), (2) a detailed breakdown of the route segments and their costs, (3) relevant context about when the pricing was observed, and (4) clear, well-organized formatting. This directly and completely addresses the user's goal. The response is concise, accurate, and actionable.",
+        "label": "Very helpful"
+      }
+    ],
+    [
+      {
+        "score": 0.833,
+        "test_pass": true,
+        "reason": "The user asked whether they could use the Dulles Airport Access Highway to avoid paying the Dulles Toll Road without going to IAD. The assistant provided a clear, direct answer (\"No\"), explained the restriction (the highway is for IAD trips only), and warned about consequences (potential tickets). This response moves the user away from a potentially problematic action and provides them with accurate information about the road's proper use. The response is concise, relevant, and actionable, directly addressing the user's question and helping them understand why their intended approach won't work.",
+        "label": "Very helpful"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ]
+}

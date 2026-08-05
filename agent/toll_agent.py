@@ -182,18 +182,32 @@ _LOCATION_ALIASES = {
         "Exit 14 - SR 674 (Hunter Mill Rd)",
         "Exit 15 - SR 676 (Wolf Trap)",
     ],
-    "National Airport": ["Pentagon/Eads Street"],
-    "Reagan Airport": ["Pentagon/Eads Street"],
-    "Dulles Airport": ["Route 28 (Dulles Toll Road / Dulles Greenway)"],
 }
 _LOCATION_ALIASES_JSON = json.dumps(_LOCATION_ALIASES, indent=2)
+_AIRPORT_ENDPOINTS = {
+    "airport_iad": "Dulles International Airport (IAD)",
+    "airport_dca": "Ronald Reagan Washington National Airport (DCA)",
+}
+_AIRPORT_ALIASES = {
+    "IAD": "airport_iad",
+    "Dulles": "airport_iad",
+    "Dulles Airport": "airport_iad",
+    "Dulles International Airport": "airport_iad",
+    "DCA": "airport_dca",
+    "Reagan": "airport_dca",
+    "Reagan Airport": "airport_dca",
+    "National Airport": "airport_dca",
+    "Ronald Reagan Washington National Airport": "airport_dca",
+}
+_AIRPORT_ENDPOINTS_JSON = json.dumps(_AIRPORT_ENDPOINTS, indent=2)
+_AIRPORT_ALIASES_JSON = json.dumps(_AIRPORT_ALIASES, indent=2)
 
 _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _MODEL_BACKEND_ENV = "TOLLCHAT_MODEL_BACKEND"
-SYSTEM_PROMPT_VERSION = "1.19.0"
-TOOLSET_VERSION = "1.4.0"
+SYSTEM_PROMPT_VERSION = "1.20.0"
+TOOLSET_VERSION = "1.5.0"
 _EASTERN = ZoneInfo("America/New_York")
 
 
@@ -287,6 +301,81 @@ def _build_model() -> _CachedResponsesModel:
 
 
 NETWORK_TRANSFERS: list[_oracle_route.JsonObject] = [
+    {
+        "id": "iad_to_i66",
+        "from": {
+            "corridor": "airport_iad",
+            "exit": _AIRPORT_ENDPOINTS["airport_iad"],
+            "node_id": _AIRPORT_ENDPOINTS["airport_iad"],
+        },
+        "to": {
+            "corridor": "i66_itb",
+            "entry": "Route 267 - Dulles Toll Road",
+            "node_id": "6",
+        },
+        "connector": "Dulles Airport Access Highway",
+        "evidence": "airport-only untolled access confirmed by the user; I-66 node 6 is its priced-network handoff",
+    },
+    {
+        "id": "i66_to_iad",
+        "from": {
+            "corridor": "i66_itb",
+            "exit": "Route 267 - Dulles Toll Road",
+            "node_id": "6",
+        },
+        "to": {
+            "corridor": "airport_iad",
+            "entry": _AIRPORT_ENDPOINTS["airport_iad"],
+            "node_id": _AIRPORT_ENDPOINTS["airport_iad"],
+        },
+        "connector": "Dulles Airport Access Highway",
+        "evidence": "airport-only untolled access confirmed by the user; I-66 node 6 is its priced-network handoff",
+    },
+    {
+        "id": "dca_to_i95",
+        "from": {
+            "corridor": "airport_dca",
+            "exit": _AIRPORT_ENDPOINTS["airport_dca"],
+            "node_id": _AIRPORT_ENDPOINTS["airport_dca"],
+        },
+        "to": {
+            "corridor": "i95",
+            "entry": "Pentagon/Eads Street",
+            "node_id": "2233SO",
+        },
+        "connector": "Reagan airport access",
+        "evidence": "curated airport endpoint confirmed by the user; I-95 node 2233SO is the southbound entry",
+    },
+    {
+        "id": "i95_to_dca_northbound",
+        "from": {
+            "corridor": "i95",
+            "exit": "Pentagon/Eads Street",
+            "node_id": "223ND",
+        },
+        "to": {
+            "corridor": "airport_dca",
+            "entry": _AIRPORT_ENDPOINTS["airport_dca"],
+            "node_id": _AIRPORT_ENDPOINTS["airport_dca"],
+        },
+        "connector": "Reagan airport access",
+        "evidence": "curated airport endpoint confirmed by the user; I-95 node 223ND is the northbound exit",
+    },
+    {
+        "id": "i95_to_dca_southbound",
+        "from": {
+            "corridor": "i95",
+            "exit": "Pentagon/Eads Street",
+            "node_id": "2239ND",
+        },
+        "to": {
+            "corridor": "airport_dca",
+            "entry": _AIRPORT_ENDPOINTS["airport_dca"],
+            "node_id": _AIRPORT_ENDPOINTS["airport_dca"],
+        },
+        "connector": "Reagan airport access",
+        "evidence": "curated airport endpoint confirmed by the user; I-95 node 2239ND is the southbound exit",
+    },
     {
         "id": "i66_to_i495",
         "from": {"corridor": "i66_itb", "exit": "I-495 S", "node_id": "5"},
@@ -400,6 +489,12 @@ _LOCATION_BY_CORRIDOR = {
     corridor: {location["label"]: location for location in data["locations"]}
     for corridor, data in _PRICED_LOCATION_ORACLE.items()
 }
+_LOCATION_BY_CORRIDOR.update(
+    {
+        corridor: {label: {"label": label, "entry": True, "exit": True}}
+        for corridor, label in _AIRPORT_ENDPOINTS.items()
+    }
+)
 _DULLES_CORRIDORS = {"dulles_toll_road", "dulles_greenway"}
 _CROSS_I95_HANDOFF = "Franconia-Springfield Parkway/Route 289"
 _I495_JUNCTION_ENTRY = "191NO"
@@ -500,6 +595,8 @@ def _validate_location(
 
 
 def _same_location(corridor: str, query: str, node_id: str) -> bool:
+    if corridor in _AIRPORT_ENDPOINTS:
+        return query.casefold() == node_id.casefold()
     nodes, _ = _DIRECT_PAIR_ORACLES[corridor]
     return query == node_id or (
         node_id in nodes and nodes[node_id]["label"].casefold() == query.casefold()
@@ -526,6 +623,11 @@ def _route_lookup(
     destination_corridor: str,
     destination: str,
 ) -> _oracle_route.JsonObject:
+    if (
+        origin_corridor in _AIRPORT_ENDPOINTS
+        or destination_corridor in _AIRPORT_ENDPOINTS
+    ):
+        return {"error": "airport endpoints require a documented connector"}
     if {origin_corridor, destination_corridor} <= _DULLES_CORRIDORS:
         return _dulles_lookup(origin, destination)
     if origin_corridor != destination_corridor:
@@ -653,7 +755,7 @@ def _planned_steps(
                 },
             ]
 
-        if corridor == "i95" and destination_corridor != "i95":
+        if corridor == "i95" and destination_corridor not in {"i95", "airport_dca"}:
             state = ("i495", _I495_JUNCTION_ENTRY)
             if state not in visited:
                 visited.add(state)
@@ -733,11 +835,23 @@ def _planned_steps(
 @tool
 def plan_toll_route(
     origin_corridor: Literal[
-        "i95", "i495", "i66_itb", "dulles_toll_road", "dulles_greenway"
+        "i95",
+        "i495",
+        "i66_itb",
+        "dulles_toll_road",
+        "dulles_greenway",
+        "airport_iad",
+        "airport_dca",
     ],
     origin: str,
     destination_corridor: Literal[
-        "i95", "i495", "i66_itb", "dulles_toll_road", "dulles_greenway"
+        "i95",
+        "i495",
+        "i66_itb",
+        "dulles_toll_road",
+        "dulles_greenway",
+        "airport_iad",
+        "airport_dca",
     ],
     destination: str,
     at_time: str | None = None,
@@ -753,10 +867,10 @@ def plan_toll_route(
     directed route exists and no pricing tool should be called.
 
     Args:
-        origin_corridor: Exact origin corridor ID from the priced location oracle.
-        origin: Exact origin oracle label or node ID.
-        destination_corridor: Exact destination corridor ID from the priced location oracle.
-        destination: Exact destination oracle label or node ID.
+        origin_corridor: Exact origin corridor ID or airport endpoint ID.
+        origin: Exact origin oracle label, node ID, or canonical airport name.
+        destination_corridor: Exact destination corridor ID or airport endpoint ID.
+        destination: Exact destination oracle label, node ID, or canonical airport name.
         at_time: Optional ISO-8601 travel time; offset-less values use
             America/New_York. Omit for the current VDOT view.
 
@@ -851,6 +965,8 @@ def build_system_prompt(*, current_date: date | None = None) -> str:
     return sop_path.read_text().format(
         PRICED_LOCATION_ORACLE_JSON=_PRICED_LOCATION_ORACLE_JSON,
         LOCATION_ALIASES_JSON=_LOCATION_ALIASES_JSON,
+        AIRPORT_ENDPOINTS_JSON=_AIRPORT_ENDPOINTS_JSON,
+        AIRPORT_ALIASES_JSON=_AIRPORT_ALIASES_JSON,
         NETWORK_TRANSFERS_JSON=_NETWORK_TRANSFERS_JSON,
         CURRENT_DATE=(current_date or datetime.now(_EASTERN).date()).strftime(
             "%-m/%-d/%Y"
