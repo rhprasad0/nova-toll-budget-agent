@@ -12,6 +12,11 @@ Deterministic grading does not make the live agent deterministic. It means the
 grader applies repeatable rules to the observed agent response and trace.
 Simulated users and LLM judges remain stochastic and observational.
 
+Fixed adversarial prompts with objective code-based verdicts are a repeatable
+regression track. Exploratory red teaming instead generates or adapts attacks to
+discover unknown failures; keep it separately scoped and authorized, then reduce
+confirmed failures to fixed regression cases when practical.
+
 ## Parameters
 
 - **evaluation_name** (required): Snake-case name for the behavior under test.
@@ -71,6 +76,8 @@ conversation behavior that cannot be represented by a fixed script alone.
   from the deterministic track.
 - You MUST NOT create both tracks by habit because duplicate coverage adds cost
   without increasing confidence.
+- You MUST NOT describe a fixed adversarial regression corpus as exploratory red
+  teaming or claim that passing it measures the agent's complete attack surface.
 - You SHOULD begin with at most three cases unless the requirement names a
   larger finite set that must be covered.
 
@@ -203,6 +210,8 @@ Save each completed report as timestamped JSON under `eval/results/`.
 Add stable, code-graded live regressions to the trusted internal-PR integration
 job in `.github/workflows/ci.yml`. Add stochastic simulated-user runners to
 `.github/workflows/nightly-evals.yml`, which uploads reports as artifacts.
+Keep a scheduled fixed adversarial regression in its own nightly job and
+artifact when its issue requires isolation from normal user simulations.
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
