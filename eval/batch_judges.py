@@ -16,6 +16,7 @@ from agent.toll_agent import load_openai_api_key
 _MODEL = "gpt-5.6-luna"
 _ENDPOINT = "/v1/responses"
 _SOURCE = "tollchat-batch-judges-v1"
+_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 _GOAL_SYSTEM_PROMPT = """You are an evaluator for an LLM-based agent.
 
@@ -402,7 +403,7 @@ def requests_from_report(path: Path) -> list[dict[str, Any]]:
 
 
 def _client() -> OpenAI:
-    return OpenAI(api_key=load_openai_api_key())
+    return OpenAI(api_key=load_openai_api_key(), base_url=_OPENAI_BASE_URL)
 
 
 def submit(report_paths: list[Path], output_dir: Path) -> Path:

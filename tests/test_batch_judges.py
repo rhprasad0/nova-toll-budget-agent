@@ -59,6 +59,24 @@ def test_serializes_responses_batch_jsonl_with_stable_metadata():
     assert line["body"]["text"]["format"]["type"] == "json_schema"
 
 
+def test_client_pins_direct_openai_endpoint(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(batch_judges, "load_openai_api_key", lambda: "test-key")
+    monkeypatch.setattr(
+        batch_judges,
+        "OpenAI",
+        lambda **kwargs: captured.update(kwargs),
+    )
+
+    batch_judges._client()
+
+    assert captured == {
+        "api_key": "test-key",
+        "base_url": "https://api.openai.com/v1",
+    }
+
+
 def test_reconciles_unordered_results_by_custom_id():
     requests = [
         _request("sample-suite:case-a:goal_success"),
