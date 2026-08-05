@@ -315,10 +315,13 @@ def _conversation_lines(trajectory: dict[str, Any]) -> list[tuple[str, str]]:
     ]
     if not spans:
         raise ValueError("serialized telemetry session has no inference messages")
-    messages = cast(
-        list[dict[str, Any]],
-        max(spans, key=lambda span: len(span["messages"]))["messages"],
-    )
+    messages: list[dict[str, Any]] = []
+    for span in spans:
+        current = cast(list[dict[str, Any]], span["messages"])
+        overlap = min(len(messages), len(current))
+        while overlap and messages[-overlap:] != current[:overlap]:
+            overlap -= 1
+        messages.extend(current[overlap:])
     lines: list[tuple[str, str]] = []
     for message in messages:
         role = message.get("role")

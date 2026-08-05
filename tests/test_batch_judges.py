@@ -320,3 +320,67 @@ def test_report_requests_preserve_tool_grounded_conversation(tmp_path):
     goal_prompt = requests[0]["body"]["input"]
     assert "Action: price_route({'origin': 'A'})" in goal_prompt
     assert 'Tool: {"total_usd":"2.00"}' in goal_prompt
+
+
+def test_report_requests_merge_and_deduplicate_multi_turn_message_spans(tmp_path):
+    def text(value: str) -> dict[str, str]:
+        return {"content_type": "text", "text": value}
+
+    report = {
+        "cases": [
+            {
+                "name": "case-a",
+                "expected_assertion": "The agent obtains the missing endpoint.",
+                "actual_trajectory": {
+                    "traces": [
+                        {
+                            "spans": [
+                                {
+                                    "messages": [
+                                        {
+                                            "role": "user",
+                                            "content": [text("Need a quote.")],
+                                        },
+                                        {
+                                            "role": "assistant",
+                                            "content": [
+                                                text("Where are you starting?")
+                                            ],
+                                        },
+                                    ]
+                                },
+                                {
+                                    "messages": [
+                                        {
+                                            "role": "assistant",
+                                            "content": [
+                                                text("Where are you starting?")
+                                            ],
+                                        },
+                                        {
+                                            "role": "user",
+                                            "content": [text("At Tysons.")],
+                                        },
+                                        {
+                                            "role": "assistant",
+                                            "content": [
+                                                text("Thanks, I can price it now.")
+                                            ],
+                                        },
+                                    ]
+                                },
+                            ]
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(report))
+
+    goal_prompt = batch_judges.requests_from_report(path)[0]["body"]["input"]
+
+    assert "User: Need a quote." in goal_prompt
+    assert "User: At Tysons." in goal_prompt
+    assert goal_prompt.count("Assistant: Where are you starting?") == 1
