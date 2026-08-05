@@ -48,7 +48,7 @@ def build_case_and_profile(
             "task_description": (
                 "Wants a toll price quote for tomorrow afternoon around 3 "
                 f"o'clock ({tomorrow_label})."
-            )
+            ),
         },
         expected_assertion=(
             "The user supplied a relative future travel date. The agent has a "
