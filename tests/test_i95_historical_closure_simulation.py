@@ -13,7 +13,7 @@ from strands_evals.types.trace import (
 from eval.simulated.simulated_user_i95_historical_closures import (
     ClosureSimulationTraceEvaluator,
     build_actor_profile,
-    build_helpfulness_evaluator,
+    build_helpfulness_context,
     load_cases,
 )
 
@@ -96,11 +96,9 @@ def test_cases_use_response_only_assertions_and_immutable_actor_profiles():
         assert "source documentation" in profile.actor_goal.casefold()
 
 
-def test_helpfulness_prompt_has_evaluation_date_and_pricing_scope():
-    evaluator = build_helpfulness_evaluator(
-        "us.anthropic.example", today=date(2026, 8, 2)
-    )
+def test_helpfulness_context_has_evaluation_date_and_pricing_scope():
+    context = build_helpfulness_context(today=date(2026, 8, 2))
 
-    assert "August 2, 2026" in evaluator.system_prompt
-    assert "pricing-only" in evaluator.system_prompt
-    assert "live traffic" in evaluator.system_prompt.casefold()
+    assert "August 2, 2026" in context
+    assert "pricing-only" in context
+    assert "live traffic" in context.casefold()

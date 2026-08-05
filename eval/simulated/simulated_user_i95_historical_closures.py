@@ -14,11 +14,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands_evals import ActorSimulator, Case, Experiment  # noqa: E402
-from strands_evals.evaluators import (  # noqa: E402
-    Evaluator,
-    GoalSuccessRateEvaluator,
-    HelpfulnessEvaluator,
-)
+from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
@@ -62,6 +58,8 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
                 input=row["conversation"][0]["content"],
                 metadata={
                     **row,
+                    "batch_judge_suite": "i95_historical_closures",
+                    "batch_judge_context": build_helpfulness_context(),
                     "task_description": (
                         "The driver wants only the requested historical I-95 Express "
                         "Lanes fare. The origin, destination, and time are complete and "
@@ -104,20 +102,15 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
     )
 
 
-def build_helpfulness_evaluator(
-    model_id: str, today: date | None = None
-) -> HelpfulnessEvaluator[str, str]:
+def build_helpfulness_context(today: date | None = None) -> str:
     evaluation_date = today or datetime.now(ZoneInfo("America/New_York")).date()
-    evaluator: HelpfulnessEvaluator[str, str] = HelpfulnessEvaluator(model=model_id)
-    evaluator.system_prompt += (
-        "\n\n# Evaluation context\n"
+    return (
         f"The evaluation date in America/New_York is "
         f"{evaluation_date:%B} {evaluation_date.day}, {evaluation_date.year}. "
         "TollChat is a pricing-only assistant. Live traffic routing and source "
         "documentation are outside its scope; do not penalize the agent for not "
         "providing them, and do not reward unsupported facts."
     )
-    return evaluator
 
 
 class ClosureSimulationTraceEvaluator(Evaluator[str, str]):
@@ -168,8 +161,6 @@ def main() -> None:
         cases=load_cases(),
         evaluators=[
             ClosureSimulationTraceEvaluator(),
-            GoalSuccessRateEvaluator(model=model_id),
-            build_helpfulness_evaluator(model_id),
         ],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)

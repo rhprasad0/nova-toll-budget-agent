@@ -13,11 +13,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from strands_evals import ActorSimulator, Case, Experiment  # noqa: E402
-from strands_evals.evaluators import (  # noqa: E402
-    Evaluator,
-    GoalSuccessRateEvaluator,
-    HelpfulnessEvaluator,
-)
+from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.types.evaluation import (  # noqa: E402
     EvaluationData,
     EvaluationOutput,
@@ -78,6 +74,8 @@ def load_cases() -> list[Case[str, str]]:
                 input=row["conversation"][0]["content"],
                 metadata={
                     **row,
+                    "batch_judge_suite": "single_leg_base_cases",
+                    "batch_judge_context": build_helpfulness_context(),
                     "task_description": (
                         "The driver wants the exact price for one fixed toll-road "
                         "trip. The origin, destination, and time are complete and "
@@ -118,18 +116,15 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
     )
 
 
-def build_helpfulness_evaluator(model_id: str) -> HelpfulnessEvaluator[str, str]:
+def build_helpfulness_context() -> str:
     evaluation_date = datetime.now(ZoneInfo("America/New_York")).date()
-    evaluator: HelpfulnessEvaluator[str, str] = HelpfulnessEvaluator(model=model_id)
-    evaluator.system_prompt += (
-        "\n\n# Evaluation context\n"
+    return (
         f"The evaluation date in America/New_York is "
         f"{evaluation_date:%B} {evaluation_date.day}, {evaluation_date.year}. "
         "TollChat is a pricing-only assistant. The case's historical trip time is "
         "intentional. Live routing and source-document requests are out of scope; "
         "do not penalize the agent for omitting them or reward unsupported facts."
     )
-    return evaluator
 
 
 class SingleLegSimulationTraceEvaluator(Evaluator[str, str]):
@@ -180,8 +175,6 @@ def main() -> None:
         cases=load_cases(),
         evaluators=[
             SingleLegSimulationTraceEvaluator(),
-            GoalSuccessRateEvaluator(model=model_id),
-            build_helpfulness_evaluator(model_id),
         ],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
