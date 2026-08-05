@@ -18,12 +18,15 @@ not curated.
 | [`20260804T211034Z.json`](20260804T211034Z.json) | Fixed directional access plus Glebe-to-Wiehle cross-corridor recovery | Deterministic trace and response grading | 1.0000 overall; 5/5 cases passed; 0 execution errors |
 | [`20260804T211601Z.json`](20260804T211601Z.json) | Westpark-to-Scott and Glebe-to-Wiehle multi-turn alternative selection | Simulated-user trace grading plus goal-success and helpfulness judges | 0.9443 overall; 6/6 judgments passed; 0 execution errors |
 | [`20260804T214919Z.json`](20260804T214919Z.json) | Missing origin, destination, or both before an I-495 quote | Scripted user with deterministic trace grading | 1.0000 overall; 6/6 verdicts passed; 0 execution errors |
+| [`20260805T114633Z.json`](20260805T114633Z.json) | Ambiguous McLean clarification plus lowercased direct I-95 labels | Code-graded live trajectory | 1.0000 overall; 2/2 verdicts passed; direct I-95 access checked before pricing |
+| [`20260805T114738Z.json`](20260805T114738Z.json) | Four historical I-95 closure requests after the mandatory access check | Code-graded live trajectory and response | 1.0000 overall; 8/8 verdicts passed; no unavailable route quoted a fare |
 
-The repaired run found exactly one raw `i95_route` execution per case, kept
-every actor on its assigned route and time, and used response-only LLM
-assertions. See `../deterministic/i95_historical_closures/` for the cases,
-assertions, and runner. Telemetry-grounded analysis of the removed failed
-baseline remains in `../eval-report.md`.
+The repaired closure run found exactly one supported `i95_access_options`
+execution followed by one `i95_route` execution per case, kept every actor on
+its assigned route and time, and used response-only LLM assertions. See
+`../deterministic/i95_historical_closures/` for the cases, assertions, and
+runner. Telemetry-grounded analysis of the removed failed baseline remains in
+`../eval-report.md`.
 
 The single-leg deterministic run matched all eight captured tool results and
 answers. Its Greenway cases returned `$5.80 + $2.00 = $7.80` eastbound and

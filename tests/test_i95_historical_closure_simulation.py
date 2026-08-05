@@ -18,8 +18,21 @@ from eval.simulated.simulated_user_i95_historical_closures import (
 )
 
 
-def _tool_span(span_id: str) -> ToolExecutionSpan:
+def _tool_span(span_id: str, *, access: bool = False) -> ToolExecutionSpan:
     now = datetime.now(UTC)
+    arguments = {
+        "origin": "US-1",
+        "destination": "I-395 Near Edsall Road",
+        **({} if access else {"at_time": "2026-07-29T15:40:00-04:00"}),
+    }
+    content = (
+        '{"status":"supported","direction":"Northbound"}'
+        if access
+        else (
+            '{"error":"od_pair_id 1132 is not currently available: '
+            'link_status=\'CLOSED\'","valid_options":[]}'
+        )
+    )
     return ToolExecutionSpan(
         span_info=SpanInfo(
             trace_id="trace-1",
@@ -29,19 +42,12 @@ def _tool_span(span_id: str) -> ToolExecutionSpan:
             end_time=now,
         ),
         tool_call=ToolCall(
-            name="i95_route",
-            arguments={
-                "origin": "US-1",
-                "destination": "I-395 Near Edsall Road",
-                "at_time": "2026-07-29T15:40:00-04:00",
-            },
+            name="i95_access_options" if access else "i95_route",
+            arguments=arguments,
             tool_call_id=f"call-{span_id}",
         ),
         tool_result=ToolResult(
-            content=(
-                '{"error":"od_pair_id 1132 is not currently available: '
-                'link_status=\'CLOSED\'","valid_options":[]}'
-            ),
+            content=content,
             tool_call_id=f"call-{span_id}",
         ),
     )
@@ -64,10 +70,11 @@ def _evaluate(spans: list[ToolExecutionSpan]):
 
 
 def test_trace_evaluator_counts_unique_execution_spans():
-    span = _tool_span("span-1")
+    access = _tool_span("access", access=True)
+    price = _tool_span("price")
 
-    assert _evaluate([span, span]).label == "closed"
-    assert _evaluate([span, _tool_span("span-2")]).label == "tool_mismatch"
+    assert _evaluate([access, price, access, price]).label == "closed"
+    assert _evaluate([access, price, _tool_span("price-2")]).label == "tool_mismatch"
 
 
 def test_cases_use_response_only_assertions_and_immutable_actor_profiles():
@@ -77,7 +84,11 @@ def test_cases_use_response_only_assertions_and_immutable_actor_profiles():
         assert "calls i95_route" not in assertion
 
         metadata = case.metadata or {}
-        expected_input = metadata["expected_trajectory"][0]["input"]
+        expected_input = next(
+            call["input"]
+            for call in metadata["expected_trajectory"][0]["calls"]
+            if call["tool"] == "i95_route"
+        )
         profile = build_actor_profile(case)
         assert all(str(value) in profile.context for value in expected_input.values())
         assert "never change" in profile.context.casefold()

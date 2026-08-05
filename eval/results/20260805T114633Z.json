@@ -1,0 +1,190 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Price a trip from McLean to Westpark Drive.",
+      "actual_output": "**Route and fares**\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound**, I-495 Express Lanes: **$1.10**\n  - VDOT observed at: **8/5/2026 7:30 AM ET**\n\n**Calculation**\n\n$1.10 = $1.10\n\n**Final price**\n\n**$1.10**\n",
+      "name": "ambiguous-alias-mclean-multiturn",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "i495_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "Which McLean interchange do you mean: Route 123 - Dolley Madison Blvd or Jones Branch Drive/Route 123?\n",
+          "calls": []
+        },
+        {
+          "response": "**Route and fares**\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound**, I-495 Express Lanes: **$1.10**\n  - VDOT observed at: **8/5/2026 7:30 AM ET**\n\n**Calculation**\n\n$1.10 = $1.10\n\n**Final price**\n\n**$1.10**\n",
+          "calls": [
+            {
+              "name": "i495_route",
+              "input": {
+                "origin": "Jones Branch Drive/Route 123",
+                "destination": "Westpark Drive",
+                "at_time": ""
+              },
+              "tool_result": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.10\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-05T07:40:00-04:00\", \"observed_at\": \"2026-08-05T07:30:00-04:00\"}], \"at_time\": \"2026-08-05T07:46:25.768172-04:00\", \"total_usd\": \"1.10\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "ambiguous-alias-mclean-multiturn",
+        "description": "McLean alias fans out to two oracle labels on two different corridors (I-66 ITB entry-only vs I-495 entry+exit) -- agent must ask which interchange before calling any tool, then converge on the exact I-495 labels once the user picks one.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from McLean to Westpark Drive."
+          },
+          {
+            "role": "user",
+            "content": "I meant the I-495 one -- Jones Branch Drive."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": null,
+            "response_must_be_question": true,
+            "response_must_contain_any": [
+              "Route 123 - Dolley Madison Blvd",
+              "Jones Branch Drive/Route 123",
+              "I-66",
+              "I-495"
+            ],
+            "expected_behavior": "ask a clarifying question about which McLean interchange is meant (Route 123 - Dolley Madison Blvd on I-66 ITB vs Jones Branch Drive/Route 123 on I-495); no tool call"
+          },
+          {
+            "turn": 2,
+            "tool": "i495_route",
+            "input": {
+              "origin": "Jones Branch Drive/Route 123",
+              "destination": "Westpark Drive"
+            }
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    },
+    {
+      "input": "price a trip from pentagon/eads street to i-95 near dumfries road/route 234",
+      "actual_output": "The **I-95/395 Express Lanes are unavailable** for this southbound trip because the lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
+      "name": "unambiguous-case-insensitive-single-turn",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "i95_access_options",
+        "i95_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "The **I-95/395 Express Lanes are unavailable** for this southbound trip because the lanes are closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
+          "calls": [
+            {
+              "name": "i95_access_options",
+              "input": {
+                "origin": "Pentagon/Eads Street",
+                "destination": "I-95 Near Dumfries Road/Route 234"
+              },
+              "tool_result": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
+              "is_error": false
+            },
+            {
+              "name": "i95_route",
+              "input": {
+                "origin": "Pentagon/Eads Street",
+                "destination": "I-95 Near Dumfries Road/Route 234",
+                "at_time": ""
+              },
+              "tool_result": "{\"error\": \"od_pair_id 1212 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "unambiguous-case-insensitive-single-turn",
+        "description": "Lowercased input that already matches an exact oracle label case-insensitively -- SOP says this needs no confirmation, so the agent must resolve it, check I-95 access, and price it in the same turn.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "price a trip from pentagon/eads street to i-95 near dumfries road/route 234"
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "calls": [
+              {
+                "tool": "i95_access_options",
+                "input": {
+                  "origin": "Pentagon/Eads Street",
+                  "destination": "I-95 Near Dumfries Road/Route 234"
+                }
+              },
+              {
+                "tool": "i95_route",
+                "input": {
+                  "origin": "Pentagon/Eads Street",
+                  "destination": "I-95 Near Dumfries Road/Route 234"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true
+  ],
+  "reasons": [
+    "every turn matched its expected tool call (or absence)",
+    "every turn matched its expected tool call (or absence)"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null
+  ]
+}

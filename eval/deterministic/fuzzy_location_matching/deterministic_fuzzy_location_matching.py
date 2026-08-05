@@ -50,7 +50,10 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
             continue
         row: dict[str, Any] = json.loads(line)
         expected_tools = [
-            step["tool"] for step in row["expected_trajectory"] if step.get("tool")
+            call["tool"]
+            for step in row["expected_trajectory"]
+            for call in step.get("calls", [step])
+            if call.get("tool")
         ]
         cases.append(
             Case[str, str](
@@ -141,7 +144,7 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
                 else {}
             )
             actual_calls: list[dict[str, Any]] = turn.get("calls", [])
-            expected_tool = entry.get("tool")
+            expected_calls = entry.get("calls")
 
             response = str(turn.get("response", ""))
             expected_terms: list[str] = entry.get("response_must_contain_any", [])
@@ -157,6 +160,33 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
                     "response_mismatch",
                 )
 
+            if expected_calls is not None:
+                if len(actual_calls) != len(expected_calls) or [
+                    call.get("name") for call in actual_calls
+                ] != [expected["tool"] for expected in expected_calls]:
+                    return _result(
+                        False,
+                        f"turn {entry['turn']}: expected calls "
+                        f"{[expected['tool'] for expected in expected_calls]}, got "
+                        f"{[call.get('name') for call in actual_calls]}",
+                        "tool_mismatch",
+                    )
+                if any(
+                    not isinstance(call.get("input"), dict)
+                    or not all(
+                        call["input"].get(key) == value
+                        for key, value in expected["input"].items()
+                    )
+                    for call, expected in zip(actual_calls, expected_calls, strict=True)
+                ):
+                    return _result(
+                        False,
+                        f"turn {entry['turn']}: tool arguments did not match fixture",
+                        "label_mismatch",
+                    )
+                continue
+
+            expected_tool = entry.get("tool")
             if expected_tool is None:
                 if actual_calls:
                     return _result(
@@ -225,7 +255,7 @@ def _self_check() -> None:
         "ambiguous-alias-mclean-multiturn",
         "unambiguous-case-insensitive-single-turn",
     ]
-    assert cases[1].expected_trajectory == ["i95_route"]
+    assert cases[1].expected_trajectory == ["i95_access_options", "i95_route"]
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
 
@@ -250,6 +280,26 @@ def _self_check() -> None:
         "name": "i495_route",
         "input": {"origin": "A", "destination": "B", "at_time": None},
     }
+    expected_i95_route = {
+        "turn": 1,
+        "calls": [
+            {
+                "tool": "i95_access_options",
+                "input": {"origin": "A", "destination": "B"},
+            },
+            {
+                "tool": "i95_route",
+                "input": {"origin": "A", "destination": "B"},
+            },
+        ],
+    }
+    actual_i95_calls = [
+        {
+            "name": "i95_access_options",
+            "input": {"origin": "A", "destination": "B"},
+        },
+        {"name": "i95_route", "input": {"origin": "A", "destination": "B"}},
+    ]
     trace_calls = _extract_tool_calls(
         _trace_messages(
             [
@@ -297,6 +347,16 @@ def _self_check() -> None:
             {"expected_trajectory": [expected_route]},
             [{"response": "", "calls": [actual_route]}],
             "resolved",
+        ),
+        (
+            {"expected_trajectory": [expected_i95_route]},
+            [{"response": "", "calls": actual_i95_calls}],
+            "resolved",
+        ),
+        (
+            {"expected_trajectory": [expected_i95_route]},
+            [{"response": "", "calls": list(reversed(actual_i95_calls))}],
+            "tool_mismatch",
         ),
         (
             {

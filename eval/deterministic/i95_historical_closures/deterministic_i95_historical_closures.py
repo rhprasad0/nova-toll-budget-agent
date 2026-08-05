@@ -50,7 +50,9 @@ def load_cases(path: Path = _CASES_PATH) -> list[Case[str, str]]:
             Case[str, str](
                 name=row["id"],
                 input=row["conversation"][0]["content"],
-                expected_trajectory=[row["expected_trajectory"][0]["tool"]],
+                expected_trajectory=[
+                    call["tool"] for call in row["expected_trajectory"][0]["calls"]
+                ],
                 metadata=row,
             )
         )
@@ -112,7 +114,7 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
 
 
 class ClosureTraceEvaluator(Evaluator[str, str]):
-    """Require the one authorized call and its captured unavailable result."""
+    """Require the access check and its captured unavailable pricing result."""
 
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
@@ -131,28 +133,37 @@ def evaluate_closure_calls(
     calls: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
     """Grade captured calls against one historical closure fixture."""
-    expected = metadata["expected_trajectory"][0]
-    if len(calls) != 1 or calls[0].get("name") != expected["tool"]:
+    expected_calls = metadata["expected_trajectory"][0]["calls"]
+    if len(calls) != len(expected_calls) or [call.get("name") for call in calls] != [
+        expected["tool"] for expected in expected_calls
+    ]:
         return _result(
             False,
-            f"expected exactly one {expected['tool']} call, got "
+            f"expected calls {[expected['tool'] for expected in expected_calls]}, got "
             f"{[call.get('name') for call in calls]}",
             "tool_mismatch",
         )
-    expected_input: dict[str, Any] = expected["input"]
-    raw_input = calls[0].get("input")
-    actual_input = (
-        cast(dict[str, Any], raw_input) if isinstance(raw_input, dict) else {}
-    )
-    if not isinstance(raw_input, dict) or not all(
-        actual_input.get(key) == value for key, value in expected_input.items()
+    if any(
+        not isinstance(call.get("input"), dict)
+        or not all(
+            call["input"].get(key) == value for key, value in expected["input"].items()
+        )
+        for call, expected in zip(calls, expected_calls, strict=True)
     ):
         return _result(
             False,
-            f"tool input {actual_input} lacks required arguments {expected_input}",
+            "tool arguments did not match fixture",
             "input_mismatch",
         )
-    captured = _tool_result(calls[0])
+    access = _tool_result(calls[0])
+    if access is None:
+        return _result(False, "missing or invalid access result", "bad_access_result")
+    if access != expected_calls[0]["expected_result"]:
+        return _result(
+            False, f"unexpected access result: {access}", "wrong_access_result"
+        )
+
+    captured = _tool_result(calls[1])
     if captured is None:
         return _result(False, "missing or invalid captured tool result", "bad_result")
     error = str(captured.get("error", ""))
@@ -219,10 +230,15 @@ def _self_check() -> None:
     ]
 
     metadata = cast(dict[str, Any], cases[0].metadata)
-    expected = metadata["expected_trajectory"][0]
-    call = {
+    expected_access, expected_price = metadata["expected_trajectory"][0]["calls"]
+    access_call = {
+        "name": "i95_access_options",
+        "input": expected_access["input"],
+        "tool_result": expected_access["expected_result"],
+    }
+    price_call = {
         "name": "i95_route",
-        "input": expected["input"],
+        "input": expected_price["input"],
         "tool_result": json.dumps(
             {
                 "error": "od_pair_id 1132 is not currently available: "
@@ -245,47 +261,78 @@ def _self_check() -> None:
 
     trace = ClosureTraceEvaluator()
     response = ClosureResponseEvaluator()
-    assert trace.evaluate(fake([call]))[0].label == "closed"
+    calls = [access_call, price_call]
+    assert trace.evaluate(fake(calls))[0].label == "closed"
     assert (
-        trace.evaluate(fake([{**call, "input": {**expected["input"], "extra": True}}]))[
-            0
-        ].label
+        trace.evaluate(
+            fake(
+                [
+                    access_call,
+                    {**price_call, "input": {**expected_price["input"], "extra": True}},
+                ]
+            )
+        )[0].label
         == "closed"
     )
     assert trace.evaluate(fake([]))[0].label == "tool_mismatch"
-    assert trace.evaluate(fake([call, call]))[0].label == "tool_mismatch"
+    assert trace.evaluate(fake([price_call, access_call]))[0].label == "tool_mismatch"
     assert (
         trace.evaluate(
-            fake([{**call, "input": {**expected["input"], "origin": "US-17"}}])
+            fake(
+                [
+                    access_call,
+                    {
+                        **price_call,
+                        "input": {**expected_price["input"], "origin": "US-17"},
+                    },
+                ]
+            )
         )[0].label
         == "input_mismatch"
     )
     assert (
         trace.evaluate(
             fake(
-                [{**call, "tool_result": {"total_usd": "6.75", "error": "1132 CLOSED"}}]
+                [
+                    {**access_call, "tool_result": {"status": "one_way_mismatch"}},
+                    price_call,
+                ]
+            )
+        )[0].label
+        == "wrong_access_result"
+    )
+    assert (
+        trace.evaluate(
+            fake(
+                [
+                    access_call,
+                    {
+                        **price_call,
+                        "tool_result": {"total_usd": "6.75", "error": "1132 CLOSED"},
+                    },
+                ]
             )
         )[0].label
         == "fare_exposed"
     )
-    assert response.evaluate(fake([call]))[0].label == "refused"
+    assert response.evaluate(fake(calls))[0].label == "refused"
     assert (
-        response.evaluate(fake([call], "Lane is CLOSED and unavailable."))[0].label
+        response.evaluate(fake(calls, "Lane is CLOSED and unavailable."))[0].label
         == "alternative_missing"
     )
     assert (
-        response.evaluate(fake([call], "The fare is $6.75."))[0].label == "not_refused"
+        response.evaluate(fake(calls, "The fare is $6.75."))[0].label == "not_refused"
     )
     assert (
         response.evaluate(
-            fake([call], "Unavailable; I-95 general-purpose lanes cost $6.75.")
+            fake(calls, "Unavailable; I-95 general-purpose lanes cost $6.75.")
         )[0].label
         == "fare_quoted"
     )
     assert (
         response.evaluate(
             fake(
-                [call],
+                calls,
                 "The I-95 lanes are not closed; use the I-66 general-purpose lanes.",
             )
         )[0].label
@@ -294,7 +341,7 @@ def _self_check() -> None:
     assert (
         response.evaluate(
             fake(
-                [call],
+                calls,
                 "The I-95 Express Lanes are unavailable; use general-purpose lanes on I-66.",
             )
         )[0].label
