@@ -49,12 +49,10 @@ The public chat agent is not deployed yet. Its release gate is documented in
   Confirmed live: a direct public connection attempt now times out.
 - GitHub Actions authenticates to AWS via OIDC (`nova-toll-github-ci`,
   `infra/iam.tf`) rather than long-lived credentials, scoped to
-  `rds-db:connect` as the read-only `pricing_reader` role and
-  `rds:DescribeDBInstances` only. The trust policy's `sub` condition is
-  scoped to this repo's actual subjects, not a trailing wildcard, and the
-  CI job independently guards against fork PRs (a fork PR produces the same
-  `pull_request` subject shape as a same-repo PR, so the trust condition
-  alone can't distinguish them).
+  `ssm:GetParameter` for the OpenAI key, `rds-db:connect` as the read-only
+  `pricing_reader` role, and `rds:DescribeDBInstances`. Its workflow gate
+  and OIDC `sub` trust condition both allow only the exact `main` push, so
+  unreviewed branch and pull-request code cannot obtain these credentials.
 - The tailnet ACL (`policy.hujson`) is managed via GitOps
   (`.github/workflows/tailscale-acl.yml`, `tailscale/gitops-acl-action`)
   rather than hand-edited in the console: PRs run policy `tests` only, pushes

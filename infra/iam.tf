@@ -176,24 +176,13 @@ data "aws_iam_policy_document" "github_ci_assume" {
       values   = ["sts.amazonaws.com"]
     }
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      # Only these two subject shapes ever legitimately occur for this repo's
-      # triggers (push to any branch, pull_request) -- narrower than a
-      # trailing `:*`, which would also match environment/tag/workflow_call
-      # subjects this role has no reason to grant. Fork PRs also produce the
-      # `pull_request` shape, so this alone doesn't stop them -- see the
-      # `integration` job's `if:` guard in ci.yml for that.
-      #
-      # Subject includes GitHub's immutable owner/repo IDs (91573985 /
-      # 1306930324), not just names -- confirmed by decoding a real token
-      # from a live workflow run (a plain "repo:owner/repo:..." condition
-      # got "Not authorized", since that's not what GitHub actually issues
-      # for this repo). This form is also rename/transfer-proof, which a
-      # name-only condition isn't, so keep it rather than reverting to names.
+      # The integration workflow runs only for an already-reviewed main push.
+      # Immutable owner/repo IDs keep this condition valid across a rename or
+      # transfer without granting any branch, PR, tag, environment, or caller.
       values = [
-        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/*",
-        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:pull_request",
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
       ]
     }
   }
