@@ -22,14 +22,11 @@ resource "aws_ssm_parameter" "i66_token" {
   }
 }
 
-resource "aws_ssm_parameter" "cloudflare_api_token" {
-  name   = var.cloudflare_api_token_param_name
-  type   = "SecureString"
-  key_id = aws_kms_key.cloudflare_token.arn
-  value  = "REPLACE_OUT_OF_BAND"
+removed {
+  from = aws_ssm_parameter.cloudflare_api_token
 
   lifecycle {
-    ignore_changes = [value]
+    destroy = false
   }
 }
 

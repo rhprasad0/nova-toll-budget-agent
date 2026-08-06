@@ -16,12 +16,6 @@ variable "i66_token_param_name" {
   default     = "/nova-toll/i66-token"
 }
 
-variable "cloudflare_api_token_param_name" {
-  description = "SSM parameter name (SecureString) holding the Cloudflare API token used for Terraform operations. Value is set out-of-band via CLI, never through Terraform."
-  type        = string
-  default     = "/nova-toll/cloudflare-api-token"
-}
-
 variable "fetcher_package_path" {
   description = "Path to the toll-fetcher deployment zip. Empty falls back to the placeholder stub, which is what lets the credential-free `fmt-validate` CI job run `terraform validate` without building zips first (filebase64sha256 on a missing file is a hard error). Every real plan/apply passes the built artifact."
   type        = string

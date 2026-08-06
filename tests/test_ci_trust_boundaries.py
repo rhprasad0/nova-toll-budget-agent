@@ -39,3 +39,21 @@ def test_terraform_pr_checks_are_credential_free() -> None:
     assert "terraform_plan" not in iam
     assert MAIN_SUBJECT in apply_trust
     assert ":pull_request" not in apply_trust
+
+
+def test_cloudflare_token_is_handed_off_without_destroying_ssm_parameter() -> None:
+    ssm = (ROOT / "infra" / "ssm.tf").read_text()
+    variables = (ROOT / "infra" / "variables.tf").read_text()
+    terraform = "\n".join(path.read_text() for path in (ROOT / "infra").glob("*.tf"))
+    handoff = """removed {
+  from = aws_ssm_parameter.cloudflare_api_token
+
+  lifecycle {
+    destroy = false
+  }
+}"""
+
+    assert "/nova-toll/cloudflare-api-token" not in terraform
+    assert handoff in ssm
+    assert terraform.count("aws_ssm_parameter.cloudflare_api_token") == 1
+    assert "cloudflare_api_token_param_name" not in variables
