@@ -27,6 +27,16 @@ def test_provider_and_agentcore_resources_use_supported_native_shapes():
     assert "etag" not in artifact
 
 
+def test_runtime_can_read_the_pinned_agentcore_artifact_version():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    artifact_access = agentcore.split('sid       = "ReadArtifact"', maxsplit=1)[
+        1
+    ].split('sid       = "ReadOpenAiApiKey"', maxsplit=1)[0]
+
+    assert 'actions   = ["s3:GetObjectVersion"]' in artifact_access
+    assert '"s3:GetObject"' not in artifact_access
+
+
 def test_preview_edge_stays_private_and_closes_direct_runtime_access():
     agentcore = (ROOT / "infra/agentcore.tf").read_text()
     tailnet_policy = (ROOT / "policy.hujson").read_text()

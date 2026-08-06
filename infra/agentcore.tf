@@ -283,7 +283,7 @@ resource "aws_iam_role" "tollchat_runtime" {
 data "aws_iam_policy_document" "tollchat_runtime" {
   statement {
     sid       = "ReadArtifact"
-    actions   = ["s3:GetObject"]
+    actions   = ["s3:GetObjectVersion"]
     resources = [aws_s3_object.agentcore.arn]
   }
   statement {
