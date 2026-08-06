@@ -46,20 +46,10 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    # Skip PRs from forks: they'd still get an OIDC token whose sub claim
-    # matches nova-toll-github-ci's trust policy (repo:OWNER/REPO:pull_request
-    # is the same shape regardless of fork), so this check -- not the trust
-    # policy -- is what actually keeps a random fork PR from touching prod
-    # RDS. Dependabot has its own GitHub secret store, so it cannot receive
-    # the Tailscale OAuth credentials this job requires; regular CI still
-    # validates its dependency updates without exposing deployment access.
-    # Run paid integration once per SHA: feature branches use their internal
-    # PR event; main uses its push event. github.event.pull_request fields are
-    # event-payload data, not attacker-controlled string interpolation.
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login != 'dependabot[bot]')
+    # Checked-out code can reach RDS and retrieve the OpenAI key, so only
+    # merged main content may run this job. The workflow also runs
+    # for tags, but this exact ref guard keeps them credential-free.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       contents: read

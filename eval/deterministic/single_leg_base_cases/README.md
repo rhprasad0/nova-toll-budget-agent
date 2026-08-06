@@ -27,6 +27,6 @@ The live run invokes TollChat once per case using the OpenAI key from SSM and
 read-only historical RDS for VDOT-backed roads. `dulles_route` reads committed
 oracles. Results are written to `eval/results/<timestamp>.json`.
 
-Ordinary CI runs only `--check`. Trusted internal-PR integration runs the live
-deterministic suite. The matching three-turn user simulations live at
-`eval/simulated/simulated_user_single_leg_base_cases.py` and run nightly.
+Pull-request CI runs only `--check`. The live deterministic suite runs from
+trusted `main` integration after merge. The matching three-turn simulations
+live at `eval/simulated/simulated_user_single_leg_base_cases.py` and run nightly.

@@ -326,8 +326,10 @@ VPC that bridges the tailnet to RDS. That one box gives GitHub Actions CI
 (via the `nova-toll-github-ci` OIDC role and the `tailscale/github-action`,
 see `.github/workflows/ci.yml`), the dev laptop, and Tailscale exit-node use
 on public wifi a path in, without RDS ever being publicly addressable.
-CI's `integration` job exercises this path for real on every push/PR:
-join the tailnet, assume the OIDC role, `SELECT 1` over the bridge. Auth
+CI's `integration` job exercises this path for real only on pushes to `main`:
+join the tailnet, assume the OIDC role, `SELECT 1` over the bridge. Pull
+requests receive credential-free checks, so this live verification occurs
+after merge. Auth
 key, ACL policy (`policy.hujson`, applied via
 `.github/workflows/tailscale-acl.yml`), and route/exit-node approval are
 managed out-of-band in the Tailscale admin console and this repo's GitOps

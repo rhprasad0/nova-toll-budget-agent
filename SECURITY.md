@@ -49,34 +49,27 @@ The public chat agent is not deployed yet. Its release gate is documented in
   Confirmed live: a direct public connection attempt now times out.
 - GitHub Actions authenticates to AWS via OIDC (`nova-toll-github-ci`,
   `infra/iam.tf`) rather than long-lived credentials, scoped to
-  `rds-db:connect` as the read-only `pricing_reader` role and
-  `rds:DescribeDBInstances` only. The trust policy's `sub` condition is
-  scoped to this repo's actual subjects, not a trailing wildcard, and the
-  CI job independently guards against fork PRs (a fork PR produces the same
-  `pull_request` subject shape as a same-repo PR, so the trust condition
-  alone can't distinguish them).
+  `ssm:GetParameter` for the OpenAI key, `rds-db:connect` as the read-only
+  `pricing_reader` role, and `rds:DescribeDBInstances`. Its workflow gate
+  and OIDC `sub` trust condition both allow only the exact `main` push, so
+  unreviewed branch and pull-request code cannot obtain these credentials.
 - The tailnet ACL (`policy.hujson`) is managed via GitOps
   (`.github/workflows/tailscale-acl.yml`, `tailscale/gitops-acl-action`)
   rather than hand-edited in the console: PRs run policy `tests` only, pushes
   to `main` apply. The `tests` assert the owner's access and the RDS route
   survive any future edit, and that `tag:ci` can never reach the general
   internet through the subnet router's exit-node capability.
-- Terraform plan/apply now runs in CI (`.github/workflows/terraform.yml`),
-  same pattern: PRs get a read-only `plan`, pushes to `main` `apply`
-  automatically. Two dedicated OIDC roles, separate from
-  `nova-toll-github-ci`: `nova-toll-terraform-plan` (trust scoped to the
-  `pull_request` subject only; `ReadOnlyAccess` plus `kms:Decrypt` scoped to
-  the Terraform-state and Cloudflare-token KMS keys) and
-  `nova-toll-terraform-apply` (trust scoped to `ref:refs/heads/main` only;
-  `AdministratorAccess`). The apply role is admin-equivalent because this
-  repo's own Terraform manages IAM, including these two roles — a curated
-  set of service-scoped policies would still need `IAMFullAccess` to manage
-  `infra/iam.tf`, at which point it could attach `AdministratorAccess` to
-  anything anyway. The real boundary is the trust policy's branch
-  restriction, not the permission policy. The Cloudflare API token was moved
-  off the shared default `alias/aws/ssm` key onto its own dedicated key
-  (`infra/kms.tf`) specifically so the plan role's decrypt grant doesn't
-  also cover the VDOT feed tokens or Tailscale authkey.
+- Terraform CI (`.github/workflows/terraform.yml`) keeps pull-request
+  feedback credential-free (`fmt`, `init -backend=false`, and `validate`).
+  Only pushes to `main` run credentialed `apply` through the dedicated
+  `nova-toll-terraform-apply` role, whose trust is scoped to
+  `ref:refs/heads/main`. The apply role is admin-equivalent because this
+  repo's own Terraform manages IAM — a curated set of service-scoped policies
+  would still need `IAMFullAccess` to manage `infra/iam.tf`, at which point it
+  could attach `AdministratorAccess` to anything anyway. The real boundary is
+  the trust policy's branch restriction, not the permission policy. The
+  Cloudflare API token remains on its own dedicated KMS key (`infra/kms.tf`),
+  isolated from the VDOT feed tokens and Tailscale authkey.
 
 ## Implemented hardening (2026-08-01)
 
@@ -127,7 +120,7 @@ S3 objects and RDS rows must not be destroyed.
   `export CLOUDFLARE_API_TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)`
   Requires the identity running it to have `ssm:GetParameter` and
   `kms:Decrypt` on that parameter's key -- an account/SSO-level grant for
-  local use (`AWS_PROFILE=nova-toll`), or `nova-toll-terraform-plan`'s /
+  local use (`AWS_PROFILE=nova-toll`) or
   `nova-toll-terraform-apply`'s scoped grant in CI.
 - Set `AWS_PROFILE=nova-toll` before running Terraform locally.
   `infra/providers.tf` and the `infra/versions.tf` backend block no longer
