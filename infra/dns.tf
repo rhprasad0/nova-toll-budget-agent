@@ -15,7 +15,7 @@ data "cloudflare_zone" "tollchat" {
 
 resource "aws_acm_certificate" "site" {
   domain_name               = "tollchat.ai"
-  subject_alternative_names = ["www.tollchat.ai"]
+  subject_alternative_names = ["www.tollchat.ai", "preview.tollchat.ai"]
   validation_method         = "DNS"
 
   lifecycle {
@@ -40,6 +40,10 @@ resource "cloudflare_dns_record" "site_cert_validation" {
   content = each.value.value
   ttl     = 60
   proxied = false
+
+  lifecycle {
+    ignore_changes = [name, type, content]
+  }
 }
 
 resource "aws_acm_certificate_validation" "site" {

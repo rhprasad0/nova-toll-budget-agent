@@ -33,3 +33,21 @@ variable "loader_package_path" {
   type        = string
   default     = ""
 }
+
+variable "agentcore_package_path" {
+  description = "Path to the ARM64 AgentCore deployment zip. Empty uses the validation-only placeholder."
+  type        = string
+  default     = ""
+}
+
+variable "chat_proxy_package_path" {
+  description = "Path to the chat proxy Lambda zip. Empty uses the validation-only placeholder."
+  type        = string
+  default     = ""
+}
+
+variable "enable_public_chat" {
+  description = "Expose /api/* through CloudFront and WAF. Keep false until the public launch gate is approved."
+  type        = bool
+  default     = false
+}

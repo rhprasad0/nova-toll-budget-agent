@@ -146,3 +146,10 @@ S3 objects and RDS rows must not be destroyed.
 - Before a public agent launch, implement every control in the public-agent
   launch gate, including WAF throttling, concurrency/spend limits, a kill
   switch, output validation, and a dedicated read-only runtime role.
+- Agent deployment keeps the OpenAI key in SSM Parameter Store and restricts
+  the runtime to read that one parameter, connect to RDS only as
+  `pricing_reader`, and apply the designated Bedrock Guardrail. Private preview
+  traffic enters through the existing Tailscale subnet router and an internal
+  ALB; direct runtime invocation is restricted to the AgentCore VPC endpoint.
+- Public chat routing is present but disabled by default. Enabling it before
+  every launch-gate item has evidence is an operating-policy violation.

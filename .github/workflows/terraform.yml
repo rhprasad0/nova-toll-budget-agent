@@ -10,6 +10,12 @@ on:
         "infra/**",
         "scripts/build_zips.sh",
         "scripts/loader-requirements.txt",
+        "agent/**",
+        "agent_tools/**",
+        "agent-sops/**",
+        "oracles/**",
+        "pyproject.toml",
+        "uv.lock",
         "lambdas/**",
         "site/**",
       ]
@@ -19,6 +25,12 @@ on:
         "infra/**",
         "scripts/build_zips.sh",
         "scripts/loader-requirements.txt",
+        "agent/**",
+        "agent_tools/**",
+        "agent-sops/**",
+        "oracles/**",
+        "pyproject.toml",
+        "uv.lock",
         "lambdas/**",
         "site/**",
       ]
@@ -74,5 +86,7 @@ jobs:
       - run: |
           terraform apply -auto-approve \
             -var fetcher_package_path=build/fetcher.zip \
-            -var loader_package_path=build/loader.zip
+            -var loader_package_path=build/loader.zip \
+            -var agentcore_package_path=build/agentcore.zip \
+            -var chat_proxy_package_path=build/chat-proxy.zip
         working-directory: infra

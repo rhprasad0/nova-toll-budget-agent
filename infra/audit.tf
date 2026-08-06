@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "audit_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/nova-toll-audit"]
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/nova-toll-audit"]
     }
   }
 
@@ -56,7 +56,7 @@ data "aws_iam_policy_document" "audit_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/nova-toll-audit"]
+      values   = ["arn:aws:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/nova-toll-audit"]
     }
   }
 }
@@ -75,13 +75,43 @@ resource "aws_cloudtrail" "audit" {
   is_multi_region_trail         = true
   include_global_service_events = true
 
-  event_selector {
-    read_write_type           = "All"
-    include_management_events = true
+  advanced_event_selector {
+    name = "Management events"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Management"]
+    }
+  }
 
-    data_resource {
-      type   = "AWS::S3::Object"
-      values = ["${aws_s3_bucket.raw.arn}/", "${aws_s3_bucket.tfstate.arn}/"]
+  advanced_event_selector {
+    name = "Protected S3 objects"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = ["${aws_s3_bucket.raw.arn}/", "${aws_s3_bucket.tfstate.arn}/"]
+    }
+  }
+
+  advanced_event_selector {
+    name = "AgentCore runtime invocations"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::BedrockAgentCore::Runtime"]
+    }
+    field_selector {
+      field  = "resources.ARN"
+      equals = [aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn]
     }
   }
 

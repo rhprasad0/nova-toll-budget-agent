@@ -46,7 +46,7 @@ data "aws_iam_policy_document" "tailscale_router" {
   statement {
     sid       = "ReadAuthkey"
     actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${var.tailscale_authkey_param_name}"]
+    resources = ["arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter${var.tailscale_authkey_param_name}"]
   }
 }
 
@@ -79,6 +79,10 @@ data "aws_subnet" "tailscale_router" {
     name   = "availability-zone"
     values = ["us-east-1c"]
   }
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
 }
 
 resource "aws_instance" "tailscale_router" {
@@ -109,7 +113,7 @@ resource "aws_instance" "tailscale_router" {
       --with-decryption \
       --query Parameter.Value \
       --output text \
-      --region ${data.aws_region.current.name})
+      --region ${data.aws_region.current.region})
 
     tailscale up \
       --authkey="$AUTHKEY" \

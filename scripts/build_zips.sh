@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the two Lambda deployment zips into infra/build/.
+# Build the Lambda and AgentCore deployment zips into infra/build/.
 #
 #   fetcher.zip  handler.py only — boto3 ships in the python3.13 runtime.
 #   loader.zip   handler.py + parsers + rds-ca-bundle.pem + hash-verified psycopg.
@@ -15,6 +15,7 @@ CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 CA_SHA256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
 PY_VERSION="3.13"
 PY_PLATFORM="x86_64-manylinux2014"  # Lambda runtime arch
+AGENT_PLATFORM="aarch64-manylinux2014" # AgentCore direct-code architecture
 EPOCH="2020-01-01 00:00:00Z"        # deterministic zip mtime
 
 rm -rf "$BUILD"
@@ -47,6 +48,29 @@ uv pip install \
   --target "$loader_stage" \
   -r "$REPO/scripts/loader-requirements.txt"
 
+# --- chat proxy: boto3 is provided by Lambda ---
+proxy_stage="$BUILD/chat-proxy"
+mkdir -p "$proxy_stage"
+cp "$REPO/lambdas/chat_proxy/handler.py" "$proxy_stage/"
+
+# --- AgentCore direct code: application + locked ARM64 dependencies ---
+agent_stage="$BUILD/agentcore"
+mkdir -p "$agent_stage/agent" "$agent_stage/agent_tools" \
+  "$agent_stage/oracles" "$agent_stage/agent-sops"
+cp "$REPO"/agent/*.py "$agent_stage/agent/"
+cp "$REPO"/agent_tools/*.py "$agent_stage/agent_tools/"
+cp "$REPO"/oracles/*.json "$agent_stage/oracles/"
+cp "$REPO/agent-sops/nova-toll-pricing-assistant.sop.md" "$agent_stage/agent-sops/"
+cp "$loader_stage/rds-ca-bundle.pem" "$agent_stage/"
+uv export --frozen --no-dev --no-emit-project --no-header --no-annotate \
+  --output-file "$BUILD/agentcore-requirements.txt"
+uv pip install \
+  --python-platform "$AGENT_PLATFORM" \
+  --python-version "$PY_VERSION" \
+  --only-binary :all: \
+  --target "$agent_stage" \
+  -r "$BUILD/agentcore-requirements.txt"
+
 # --- zip both, deterministically ---
 zip_stage() {  # <stage_dir> <out.zip>
   local stage="$1" out="$2"
@@ -57,12 +81,18 @@ zip_stage() {  # <stage_dir> <out.zip>
 }
 zip_stage "$fetcher_stage" "$BUILD/fetcher.zip"
 zip_stage "$loader_stage" "$BUILD/loader.zip"
+zip_stage "$proxy_stage" "$BUILD/chat-proxy.zip"
+zip_stage "$agent_stage" "$BUILD/agentcore.zip"
 
 echo "built:"
 echo "  $BUILD/fetcher.zip          ($(unzip -l "$BUILD/fetcher.zip" | tail -1 | awk '{print $2}') files)"
 echo "  $BUILD/loader.zip           ($(unzip -l "$BUILD/loader.zip"  | tail -1 | awk '{print $2}') files)"
+echo "  $BUILD/chat-proxy.zip       ($(unzip -l "$BUILD/chat-proxy.zip" | tail -1 | awk '{print $2}') files)"
+echo "  $BUILD/agentcore.zip        ($(unzip -l "$BUILD/agentcore.zip" | tail -1 | awk '{print $2}') files)"
 echo
 echo "apply with:"
 echo "  cd infra && terraform apply \\"
 echo "    -var fetcher_package_path=build/fetcher.zip \\"
-echo "    -var loader_package_path=build/loader.zip"
+echo "    -var loader_package_path=build/loader.zip \\"
+echo "    -var agentcore_package_path=build/agentcore.zip \\"
+echo "    -var chat_proxy_package_path=build/chat-proxy.zip"

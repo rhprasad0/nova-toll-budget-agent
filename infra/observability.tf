@@ -126,3 +126,47 @@ resource "aws_cloudwatch_metric_alarm" "bucket_storage" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
+
+resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
+  alarm_name          = "tollchat-chat-proxy-errors"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
+  period              = 300
+  evaluation_periods  = 1
+  statistic           = "Sum"
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "tollchat_sessions" {
+  alarm_name          = "tollchat-agentcore-active-sessions"
+  namespace           = "AWS/Bedrock-AgentCore"
+  metric_name         = "ActiveSessionCount"
+  dimensions          = { Service = "AgentCore.Runtime" }
+  period              = 60
+  evaluation_periods  = 1
+  statistic           = "Maximum"
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "tollchat_waf_blocks" {
+  count = var.enable_public_chat ? 1 : 0
+
+  alarm_name          = "tollchat-waf-blocks"
+  namespace           = "AWS/WAFV2"
+  metric_name         = "BlockedRequests"
+  dimensions          = { WebACL = "nova-toll-public-chat", Region = "CloudFront", Rule = "ALL" }
+  period              = 300
+  evaluation_periods  = 1
+  statistic           = "Sum"
+  threshold           = 50
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}

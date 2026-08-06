@@ -3,6 +3,11 @@
 **Status:** blocked; this repository does not deploy a public agent.
 **Owner:** Ryan Prasad · **Last updated:** 2026-07-30
 
+The private-preview implementation now exists on branch
+`feat/agentcore-private-preview`, but no item below is complete until an
+authorized deployment produces reviewable evidence. Public routing remains
+disabled by Terraform default.
+
 This is the authoritative checklist for exposing TollChat to internet traffic.
 Every unchecked item blocks launch.
 
