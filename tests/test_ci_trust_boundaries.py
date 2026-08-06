@@ -22,9 +22,9 @@ def test_openai_ci_credentials_are_main_only() -> None:
 
 def test_claude_pr_review_has_no_secret_bearing_workflow() -> None:
     assert not (WORKFLOWS / "security-review.yml").exists()
-    assert "CLAUDE_API_KEY" not in "\n".join(
-        workflow.read_text() for workflow in WORKFLOWS.glob("*.yml")
-    )
+    workflows = "\n".join(workflow.read_text() for workflow in WORKFLOWS.glob("*.y*ml"))
+    assert "CLAUDE_API_KEY" not in workflows
+    assert "claude-code-security-review" not in workflows
 
 
 def test_terraform_pr_checks_are_credential_free() -> None:

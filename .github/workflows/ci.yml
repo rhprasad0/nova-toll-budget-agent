@@ -47,7 +47,7 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     # Checked-out code can reach RDS and retrieve the OpenAI key, so only
-    # already-reviewed main content may run this job. The workflow also runs
+    # merged main content may run this job. The workflow also runs
     # for tags, but this exact ref guard keeps them credential-free.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:

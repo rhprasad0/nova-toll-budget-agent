@@ -178,7 +178,7 @@ data "aws_iam_policy_document" "github_ci_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      # The integration workflow runs only for an already-reviewed main push.
+      # The integration workflow runs only for a main-branch push.
       # Immutable owner/repo IDs keep this condition valid across a rename or
       # transfer without granting any branch, PR, tag, environment, or caller.
       values = [
