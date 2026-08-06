@@ -213,7 +213,8 @@ resource "aws_cloudfront_distribution" "site" {
       domain_name = "preview.tollchat.ai"
       origin_id   = "tollchat-api"
       vpc_origin_config {
-        vpc_origin_id = aws_cloudfront_vpc_origin.tollchat[0].id
+        vpc_origin_id       = aws_cloudfront_vpc_origin.tollchat[0].id
+        origin_read_timeout = 60
       }
     }
   }

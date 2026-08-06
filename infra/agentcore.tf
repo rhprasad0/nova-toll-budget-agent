@@ -19,7 +19,10 @@ locals {
           Sid       = "AllowProxyFromPrivateEndpoint"
           Effect    = "Allow"
           Principal = { AWS = aws_iam_role.tollchat_proxy.arn }
-          Action    = "bedrock-agentcore:InvokeAgentRuntime"
+          Action = [
+            "bedrock-agentcore:InvokeAgentRuntime",
+            "bedrock-agentcore:StopRuntimeSession",
+          ]
           Resource  = arn
           Condition = { StringEquals = { "aws:SourceVpce" = aws_vpc_endpoint.agentcore.id } }
         },
@@ -27,7 +30,10 @@ locals {
           Sid       = "DenyOutsidePrivateEndpoint"
           Effect    = "Deny"
           Principal = "*"
-          Action    = "bedrock-agentcore:InvokeAgentRuntime"
+          Action = [
+            "bedrock-agentcore:InvokeAgentRuntime",
+            "bedrock-agentcore:StopRuntimeSession",
+          ]
           Resource  = arn
           Condition = { StringNotEquals = { "aws:SourceVpce" = aws_vpc_endpoint.agentcore.id } }
         },
@@ -472,8 +478,11 @@ data "aws_iam_policy_document" "tollchat_proxy" {
     ]
   }
   statement {
-    actions   = ["bedrock-agentcore:StopRuntimeSession"]
-    resources = [aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn]
+    actions = ["bedrock-agentcore:StopRuntimeSession"]
+    resources = [
+      aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
+      aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
+    ]
   }
 }
 
@@ -493,7 +502,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
   role                           = aws_iam_role.tollchat_proxy.arn
   runtime                        = "python3.13"
   handler                        = "handler.lambda_handler"
-  timeout                        = 120
+  timeout                        = 50
   memory_size                    = 256
   reserved_concurrent_executions = 5
 
@@ -512,6 +521,10 @@ resource "aws_lambda_function" "tollchat_proxy" {
     }
   }
 
+  lifecycle {
+    ignore_changes = [reserved_concurrent_executions]
+  }
+
   depends_on = [aws_cloudwatch_log_group.tollchat_proxy, aws_iam_role_policy_attachment.tollchat_proxy_vpc, aws_bedrockagentcore_resource_policy.tollchat]
 }
 
@@ -521,6 +534,7 @@ resource "aws_lb" "tollchat" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.tollchat_alb.id]
   subnets            = local.private_subnets
+  idle_timeout       = 55
 }
 
 resource "aws_lb_target_group" "tollchat" {

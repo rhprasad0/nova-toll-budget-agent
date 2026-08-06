@@ -80,6 +80,39 @@ def test_runtime_and_proxy_roles_are_separate_and_ssm_remains_authoritative():
     assert "delete-parameter" not in agentcore
 
 
+def test_reset_authorization_covers_runtime_endpoint_and_private_path():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    resource_policies = agentcore.split("agentcore_resource_policies = {", maxsplit=1)[
+        1
+    ].split("\n}\n\n# Two small private", maxsplit=1)[0]
+    proxy_policy = agentcore.split(
+        'data "aws_iam_policy_document" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "tollchat_proxy"', maxsplit=1)[0]
+
+    assert resource_policies.count('"bedrock-agentcore:StopRuntimeSession"') == 2
+    assert resource_policies.count("aws:SourceVpce") == 2
+    assert proxy_policy.count("agent_runtime_arn") == 2
+    assert proxy_policy.count("agent_runtime_endpoint_arn") == 2
+
+
+def test_proxy_kill_switch_and_request_deadlines_converge_safely():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    site = (ROOT / "infra/site.tf").read_text()
+    runbook = (ROOT / "docs/runbooks/kill-switch.md").read_text()
+    proxy = agentcore.split(
+        'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_lb" "tollchat"', maxsplit=1)[0]
+    load_balancer = agentcore.split('resource "aws_lb" "tollchat"', maxsplit=1)[
+        1
+    ].split('resource "aws_lb_target_group" "tollchat"', maxsplit=1)[0]
+
+    assert "timeout                        = 50" in proxy
+    assert "ignore_changes = [reserved_concurrent_executions]" in proxy
+    assert "idle_timeout       = 55" in load_balancer
+    assert "origin_read_timeout = 60" in site
+    assert "Terraform intentionally ignores concurrency drift" in runbook
+
+
 def test_guardrail_enables_every_content_filter_category():
     agentcore = (ROOT / "infra/agentcore.tf").read_text()
     guardrail = agentcore.split(
