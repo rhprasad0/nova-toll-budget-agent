@@ -3,6 +3,10 @@ locals {
   proxy_zip_path     = var.chat_proxy_package_path != "" ? var.chat_proxy_package_path : data.archive_file.placeholder.output_path
   proxy_zip_hash     = var.chat_proxy_package_path != "" ? filebase64sha256(var.chat_proxy_package_path) : data.archive_file.placeholder.output_base64sha256
   private_subnets    = [aws_subnet.tollchat_private_a.id, aws_subnet.tollchat_private_c.id]
+  private_subnets_by_az = {
+    us_east_1a = aws_subnet.tollchat_private_a.id
+    us_east_1c = aws_subnet.tollchat_private_c.id
+  }
   agentcore_policy_resources = {
     runtime  = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
     endpoint = aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn
@@ -70,7 +74,7 @@ resource "aws_route_table" "tollchat_private" {
 }
 
 resource "aws_route_table_association" "tollchat_private" {
-  for_each = toset(local.private_subnets)
+  for_each = local.private_subnets_by_az
 
   subnet_id      = each.value
   route_table_id = aws_route_table.tollchat_private.id
@@ -237,10 +241,10 @@ resource "aws_s3_bucket_policy" "agentcore_artifacts" {
 }
 
 resource "aws_s3_object" "agentcore" {
-  bucket = aws_s3_bucket.agentcore_artifacts.id
-  key    = "runtime/tollchat.zip"
-  source = local.agentcore_zip_path
-  etag   = filemd5(local.agentcore_zip_path)
+  bucket      = aws_s3_bucket.agentcore_artifacts.id
+  key         = "runtime/tollchat.zip"
+  source      = local.agentcore_zip_path
+  source_hash = filebase64sha256(local.agentcore_zip_path)
 
   depends_on = [aws_s3_bucket_versioning.agentcore_artifacts]
 }
@@ -524,8 +528,10 @@ resource "aws_lb_target_group" "tollchat" {
   target_type = "lambda"
 
   health_check {
-    enabled = true
-    path    = "/api/config"
+    enabled  = true
+    interval = 35
+    path     = "/api/config"
+    timeout  = 30
   }
 }
 

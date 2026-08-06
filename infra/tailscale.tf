@@ -79,6 +79,10 @@ data "aws_subnet" "tailscale_router" {
     name   = "availability-zone"
     values = ["us-east-1c"]
   }
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
 }
 
 resource "aws_instance" "tailscale_router" {

@@ -20,6 +20,11 @@ def test_provider_and_agentcore_resources_use_supported_native_shapes():
         '"com.amazonaws.${data.aws_region.current.region}.bedrock-agentcore"'
         in agentcore
     )
+    artifact = agentcore.split('resource "aws_s3_object" "agentcore"', maxsplit=1)[
+        1
+    ].split('data "aws_iam_policy_document" "agentcore_assume"', maxsplit=1)[0]
+    assert "source_hash = filebase64sha256(local.agentcore_zip_path)" in artifact
+    assert "etag" not in artifact
 
 
 def test_preview_edge_stays_private_and_closes_direct_runtime_access():
@@ -35,6 +40,32 @@ def test_preview_edge_stays_private_and_closes_direct_runtime_access():
     assert "aws_security_group.tailscale_router.id" in agentcore
     assert '"src":    "rhprasad0@github"' in tailnet_policy
     assert '"deny":   ["8.8.8.8:443", "tollchat-preview-test:443"]' in tailnet_policy
+
+
+def test_preview_network_uses_stable_route_association_keys():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    tailscale = (ROOT / "infra/tailscale.tf").read_text()
+
+    assert "private_subnets_by_az = {" in agentcore
+    assert "for_each = local.private_subnets_by_az" in agentcore
+    assert "for_each = toset(local.private_subnets)" not in agentcore
+    assert 'name   = "default-for-az"' in tailscale
+    assert 'values = ["true"]' in tailscale
+
+    target_group = agentcore.split(
+        'resource "aws_lb_target_group" "tollchat"', maxsplit=1
+    )[1].split('resource "aws_lambda_permission"', maxsplit=1)[0]
+    assert "interval = 35" in target_group
+    assert "timeout  = 30" in target_group
+
+
+def test_acm_reuses_existing_dns_validation_records_during_replacement():
+    dns = (ROOT / "infra/dns.tf").read_text()
+    validation = dns.split(
+        'resource "cloudflare_dns_record" "site_cert_validation"', maxsplit=1
+    )[1].split('resource "aws_acm_certificate_validation"', maxsplit=1)[0]
+
+    assert "ignore_changes = [name, type, content]" in validation
 
 
 def test_runtime_and_proxy_roles_are_separate_and_ssm_remains_authoritative():

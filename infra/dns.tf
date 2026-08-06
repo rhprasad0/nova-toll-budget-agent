@@ -40,6 +40,10 @@ resource "cloudflare_dns_record" "site_cert_validation" {
   content = each.value.value
   ttl     = 60
   proxied = false
+
+  lifecycle {
+    ignore_changes = [name, type, content]
+  }
 }
 
 resource "aws_acm_certificate_validation" "site" {
