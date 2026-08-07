@@ -14,27 +14,21 @@ SESSION_ID="$(cat /proc/sys/kernel/random/uuid)"
 START_TIME="$(date +%s)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-query_until_present() {
-  local group="$1" query="$2" output="$3" attempts=$((WAIT_SECONDS / 5)) query_id status
-  for ((attempt = 0; attempt <= attempts; attempt++)); do
-    query_id="$("${AWS[@]}" logs start-query --log-group-name "$group" \
-      --start-time "$START_TIME" --end-time "$(date +%s)" --query-string "$query" \
-      --query queryId --output text)"
-    while :; do
-      status="$("${AWS[@]}" logs get-query-results --query-id "$query_id" --query status --output text)"
-      [[ "$status" == "Complete" ]] && break
-      [[ "$status" == "Failed" || "$status" == "Cancelled" || "$status" == "Timeout" ]] && {
-        echo "trace query failed: $status" >&2
-        return 1
-      }
-      sleep 2
-    done
-    "${AWS[@]}" logs get-query-results --query-id "$query_id" --output json >"$output"
-    [[ "$(uv run python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$output")" != 0 ]] && return
-    sleep 5
+query_trace() {
+  local group="$1" query="$2" output="$3" query_id status
+  query_id="$("${AWS[@]}" logs start-query --log-group-name "$group" \
+    --start-time "$START_TIME" --end-time "$(date +%s)" --query-string "$query" \
+    --query queryId --output text)"
+  while :; do
+    status="$("${AWS[@]}" logs get-query-results --query-id "$query_id" --query status --output text)"
+    [[ "$status" == "Complete" ]] && break
+    [[ "$status" == "Failed" || "$status" == "Cancelled" || "$status" == "Timeout" ]] && {
+      echo "trace query failed: $status" >&2
+      return 1
+    }
+    sleep 2
   done
-  echo "no trace records for session $SESSION_ID in $group before timeout" >&2
-  return 1
+  "${AWS[@]}" logs get-query-results --query-id "$query_id" --output json >"$output"
 }
 
 curl --fail --silent --show-error --header 'content-type: application/json' \
@@ -42,16 +36,26 @@ curl --fail --silent --show-error --header 'content-type: application/json' \
   "$PREVIEW_URL/api/chat" >"$WORKDIR/response.json"
 grep -q '"answer"' "$WORKDIR/response.json"
 
-query_until_present "$RUNTIME_GROUP" \
-  "fields @timestamp, @message | filter @message like /tollchat.runtime_trace/ | filter @message like /$SESSION_ID/ | sort @timestamp asc" \
-  "$WORKDIR/runtime.json"
-query_until_present "$SPANS_GROUP" \
-  "fields @message | filter attributes.session.id = \"$SESSION_ID\" | sort @timestamp asc" \
-  "$WORKDIR/spans.json"
-
-uv run python -c 'import json,sys; json.dump({"runtime": json.load(open(sys.argv[1])), "spans": json.load(open(sys.argv[2]))}, open(sys.argv[3], "w"))' \
-  "$WORKDIR/runtime.json" "$WORKDIR/spans.json" "$WORKDIR/trace.json"
-uv run python scripts/verify_agentcore_trace.py "$WORKDIR/trace.json" >/dev/null
+deadline=$((START_TIME + WAIT_SECONDS))
+while :; do
+  query_trace "$RUNTIME_GROUP" \
+    "fields @timestamp, @message | filter @message like /tollchat.runtime_trace/ | filter @message like /$SESSION_ID/ | sort @timestamp asc" \
+    "$WORKDIR/runtime.json"
+  query_trace "$SPANS_GROUP" \
+    "fields @message | filter attributes.session.id = \"$SESSION_ID\" | sort @timestamp asc" \
+    "$WORKDIR/spans.json"
+  uv run python -c 'import json,sys; json.dump({"runtime": json.load(open(sys.argv[1])), "spans": json.load(open(sys.argv[2]))}, open(sys.argv[3], "w"))' \
+    "$WORKDIR/runtime.json" "$WORKDIR/spans.json" "$WORKDIR/trace.json"
+  if uv run python scripts/verify_agentcore_trace.py "$WORKDIR/trace.json" \
+    > /dev/null 2>"$WORKDIR/verify-error"; then
+    break
+  fi
+  if (( $(date +%s) >= deadline )); then
+    sed -n '1p' "$WORKDIR/verify-error" >&2
+    exit 1
+  fi
+  sleep 5
+done
 
 runtime_count="$(uv run python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$WORKDIR/runtime.json")"
 span_count="$(uv run python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$WORKDIR/spans.json")"
