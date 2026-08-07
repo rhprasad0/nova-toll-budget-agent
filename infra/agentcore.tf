@@ -435,7 +435,12 @@ resource "aws_bedrock_guardrail" "tollchat" {
 
 resource "aws_bedrock_guardrail_version" "tollchat" {
   guardrail_arn = aws_bedrock_guardrail.tollchat.guardrail_arn
-  description   = "Terraform-managed TollChat guardrail version"
+  description   = "Reviewed TollChat input/output safety policy"
+  skip_destroy  = true
+
+  lifecycle {
+    replace_triggered_by = [aws_bedrock_guardrail.tollchat]
+  }
 }
 
 resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
