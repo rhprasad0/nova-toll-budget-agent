@@ -135,7 +135,7 @@ def test_runtime_validates_applies_both_guardrails_and_adds_disclaimer():
     ]
 
 
-def test_runtime_emits_chunked_sanitized_correlated_trace_records(caplog, monkeypatch):
+def test_runtime_emits_chunked_sanitized_correlated_trace_records(monkeypatch):
     import agent.agentcore_entrypoint as entrypoint
 
     monkeypatch.setattr(entrypoint, "TRACE_CHUNK_BYTES", 64)

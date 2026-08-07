@@ -191,16 +191,6 @@ data "aws_iam_policy_document" "tollchat_trace_reviewer" {
     ]
     resources = ["*"]
   }
-  statement {
-    sid       = "DecryptTelemetryLogs"
-    actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.agentcore_telemetry.arn]
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["logs.${data.aws_region.current.region}.amazonaws.com"]
-    }
-  }
 }
 
 resource "aws_iam_role_policy" "tollchat_trace_reviewer" {

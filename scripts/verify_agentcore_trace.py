@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-# JSON exports are intentionally schema-flexible; validate their runtime shape below.
 # pyright: reportUnknownArgumentType=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportOperatorIssue=false
 import argparse
 import hashlib
@@ -73,90 +72,42 @@ def _unsafe(value: object) -> str | None:
     return None
 
 
-def _unsafe_chunk(payload: str) -> str | None:
-    """Catch obvious secrets before a corrupt chunk can hide them behind a bad hash."""
-    if bad := _unsafe(payload):
-        return bad
-    try:
-        return _unsafe(json.loads(payload))
-    except json.JSONDecodeError:
-        return None
-
-
-def _json_values(value: object) -> list[object]:
-    """Unwrap CloudWatch Transaction Search fields and normal JSON/JSONL exports."""
-    if isinstance(value, str):
+def _query_messages(document: object, section: str) -> list[dict[str, object]]:
+    if not isinstance(document, dict):
+        raise TraceVerificationError("trace export must be an object")
+    query = document.get(section)
+    if not isinstance(query, dict) or not isinstance(query.get("results"), list):
+        raise TraceVerificationError(f"trace export is missing {section} query results")
+    messages = []
+    for row in query["results"]:
+        if not isinstance(row, list):
+            raise TraceVerificationError(f"{section}: query result must be a row")
+        fields = {
+            str(item["field"]): item["value"]
+            for item in row
+            if isinstance(item, dict) and "field" in item and "value" in item
+        }
+        message = fields.get("@message")
+        if not isinstance(message, str):
+            raise TraceVerificationError(f"{section}: query result is missing @message")
         try:
-            return _json_values(json.loads(value))
-        except json.JSONDecodeError:
-            return []
-    if isinstance(value, list):
-        return [item for child in value for item in _json_values(child)]
-    if isinstance(value, dict):
-        if "record_type" in value:
-            return [value]
-        if "value" in value and len(value) <= 3:
-            return _json_values(value["value"])
-        return [item for child in value.values() for item in _json_values(child)]
-    return []
-
-
-def _objects(value: object) -> list[dict[str, object]]:
-    if isinstance(value, str):
-        try:
-            return _objects(json.loads(value))
-        except json.JSONDecodeError:
-            return []
-    if isinstance(value, list):
-        if all(
-            isinstance(item, dict) and "field" in item and "value" in item
-            for item in value
-        ):
-            row = {str(item["field"]): item["value"] for item in value}
-            return [row, *[item for child in row.values() for item in _objects(child)]]
-        return [item for child in value for item in _objects(child)]
-    if isinstance(value, dict):
-        return [value, *[item for child in value.values() for item in _objects(child)]]
-    return []
+            parsed = json.loads(message)
+        except json.JSONDecodeError as error:
+            raise TraceVerificationError(f"{section}: @message is not JSON") from error
+        if not isinstance(parsed, dict):
+            raise TraceVerificationError(f"{section}: @message must be an object")
+        messages.append(parsed)
+    return messages
 
 
 def _attribute(span: dict[str, object], key: str) -> object | None:
-    attributes = span.get("attributes", {})
-    if isinstance(attributes, dict):
-        return attributes.get(key)
-    if isinstance(attributes, list):
-        for attribute in attributes:
-            if not isinstance(attribute, dict) or attribute.get("key") != key:
-                continue
-            value = attribute.get("value")
-            if isinstance(value, dict):
-                return next(iter(value.values()), None)
-            return value
-    return None
+    attributes = span.get("attributes")
+    return attributes.get(key) if isinstance(attributes, dict) else None
 
 
 def _verify_native_spans(
-    document: object, correlations: dict[str, tuple[str, str]]
+    native: list[dict[str, object]], correlations: dict[str, tuple[str, str]]
 ) -> None:
-    native = []
-    for item in _objects(document):
-        name = item.get("name")
-        trace_id = item.get("trace_id", item.get("traceId"))
-        span_id = item.get("span_id", item.get("spanId"))
-        start = item.get(
-            "start_time_unix_nano", item.get("startTimeUnixNano", item.get("startTime"))
-        )
-        end = item.get(
-            "end_time_unix_nano", item.get("endTimeUnixNano", item.get("endTime"))
-        )
-        if (
-            isinstance(name, str)
-            and trace_id
-            and span_id
-            and start is not None
-            and end is not None
-        ):
-            native.append(item)
     required: dict[str, Callable[[str], bool]] = {
         "invoke": lambda name: "invoke_agent" in name or "invokeagent" in name,
         "model": lambda name: "model" in name or "chat" in name,
@@ -166,25 +117,20 @@ def _verify_native_spans(
         matching = [
             span
             for span in native
-            if str(span.get("trace_id", span.get("traceId"))) == trace_id
+            if str(span.get("traceId")) == trace_id
             and str(
                 _attribute(span, "tollchat.session_id")
                 or _attribute(span, "session.id")
-                or span.get("attributes.session.id")
             )
             == session_id
         ]
         found = set()
         for span in matching:
             name = str(span["name"]).lower()
-            start = span.get(
-                "start_time_unix_nano",
-                span.get("startTimeUnixNano", span.get("startTime")),
-            )
-            end = span.get(
-                "end_time_unix_nano",
-                span.get("endTimeUnixNano", span.get("endTime")),
-            )
+            start = span.get("startTimeUnixNano")
+            end = span.get("endTimeUnixNano")
+            if not span.get("spanId") or start is None or end is None:
+                raise TraceVerificationError("native span is missing required fields")
             if str(start) == str(end):
                 raise TraceVerificationError("native span has zero duration")
             found.update(kind for kind, matches in required.items() if matches(name))
@@ -269,14 +215,11 @@ def verify_trace(document: object) -> dict[str, int]:
     """Validate a parsed trace export and return a terse verified summary."""
     if bad := _unsafe(document):
         raise TraceVerificationError(f"trace export contains {bad}")
-    envelopes = [
-        item
-        for item in _json_values(document)
-        if isinstance(item, dict)
-        and item.get("record_type") == "tollchat.runtime_trace"
-    ]
+    envelopes = _query_messages(document, "runtime")
     if not envelopes:
         raise TraceVerificationError("no tollchat.runtime_trace records found")
+    if any(item.get("record_type") != "tollchat.runtime_trace" for item in envelopes):
+        raise TraceVerificationError("runtime query contains an unexpected record")
 
     grouped: dict[tuple[str, str, str], list[dict[str, object]]] = defaultdict(list)
     families: dict[tuple[str, str, str, str, str], set[str]] = defaultdict(set)
@@ -300,8 +243,6 @@ def verify_trace(document: object) -> dict[str, int]:
             )
         if not isinstance(record["payload"], str):
             raise TraceVerificationError("envelope: payload must be a string chunk")
-        if bad := _unsafe_chunk(record["payload"]):
-            raise TraceVerificationError(f"envelope contains {bad}")
         stage = str(record["stage"])
         trace_id, span_id = str(record["trace_id"]), str(record["span_id"])
         family = (
@@ -375,7 +316,7 @@ def verify_trace(document: object) -> dict[str, int]:
                 _agent(payload)
             else:
                 _invoke(payload)
-    _verify_native_spans(document, correlations)
+    _verify_native_spans(_query_messages(document, "spans"), correlations)
     return {
         "traces": len(complete),
         "records": sum(len(records) for records in complete.values()),
@@ -383,14 +324,10 @@ def verify_trace(document: object) -> dict[str, int]:
 
 
 def _load(path: Path) -> object:
-    text = path.read_text()
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        try:
-            return [json.loads(line) for line in text.splitlines() if line.strip()]
-        except json.JSONDecodeError as error:
-            raise TraceVerificationError(f"{path}: expected JSON or JSONL") from error
+        return json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise TraceVerificationError(f"{path}: expected JSON") from error
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -398,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "trace_json",
         type=Path,
-        help="exported/query JSON or JSONL; never an eval/results path",
+        help="combined CloudWatch query JSON; never an eval/results path",
     )
     path = parser.parse_args(argv).trace_json
     if "eval/results" in path.as_posix():

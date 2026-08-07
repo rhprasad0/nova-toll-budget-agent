@@ -244,7 +244,7 @@ def test_trace_reviewer_is_read_only_for_governed_telemetry():
     assert "xray:StartTraceRetrieval" in reviewer
     assert "xray:ListRetrievedTraces" in reviewer
     assert "xray:GetRetrievedTracesGraph" in reviewer
-    assert "kms:Decrypt" in reviewer
+    assert "kms:Decrypt" not in reviewer
     assert "logs:PutLogEvents" not in reviewer
     assert "logs:DeleteLogGroup" not in reviewer
 

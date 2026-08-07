@@ -55,7 +55,14 @@ class TraceClient(Protocol):
     def put_log_events(self, **kwargs: object) -> object: ...
 
 
+class ModelConfig(Protocol):
+    def get_config(self) -> Mapping[str, object]: ...
+
+
 class AgentCallable(Protocol):
+    @property
+    def model(self) -> ModelConfig: ...
+
     def __call__(self, prompt: str) -> object: ...
 
 
@@ -208,15 +215,7 @@ class TollChatRuntime:
                 return finish({"response": answer, "blocked": False})
         except Exception as error:  # noqa: BLE001 - runtime boundary
             logger.error("TollChat runtime invocation failed: %s", type(error).__name__)
-            return finish(
-                {
-                    "error": {
-                        "code": "agent_unavailable",
-                        "message": "TollChat could not complete that request. Please try again.",
-                    }
-                },
-                error,
-            )
+            return finish(_trace_unavailable(), error)
         finally:
             otel_context.detach(token)
 
@@ -377,7 +376,7 @@ def _tool_calls(messages: object) -> list[dict[str, object]]:
     if not isinstance(messages, Sequence):
         return []
     calls: list[dict[str, object]] = []
-    pending: dict[object, dict[str, object]] = {}
+    pending: dict[str, dict[str, object]] = {}
     for message in cast(Sequence[object], messages):
         if not isinstance(message, Mapping):
             continue
@@ -389,52 +388,36 @@ def _tool_calls(messages: object) -> list[dict[str, object]]:
             if not isinstance(block, Mapping):
                 continue
             block_data = cast(Mapping[str, object], block)
-            tool_use = block_data.get("toolUse", block_data.get("tool_use"))
+            tool_use = block_data.get("toolUse")
             if isinstance(tool_use, Mapping):
                 tool_use_data = cast(Mapping[str, object], tool_use)
+                tool_use_id = tool_use_data.get("toolUseId")
+                if not isinstance(tool_use_id, str):
+                    raise ValueError("tool use is missing toolUseId")
                 call = {
                     "name": tool_use_data.get("name"),
-                    "arguments": tool_use_data.get(
-                        "input", tool_use_data.get("arguments")
-                    ),
+                    "arguments": tool_use_data.get("input"),
                     "result": None,
                 }
                 calls.append(call)
-                tool_use_id = tool_use_data.get("toolUseId", tool_use_data.get("id"))
-                if isinstance(tool_use_id, str):
-                    pending[tool_use_id] = call
+                pending[tool_use_id] = call
                 continue
-            tool_result = block_data.get("toolResult", block_data.get("tool_result"))
+            tool_result = block_data.get("toolResult")
             if isinstance(tool_result, Mapping):
                 tool_result_data = cast(Mapping[str, object], tool_result)
-                tool_use_id = tool_result_data.get(
-                    "toolUseId", tool_result_data.get("id")
-                )
-                if isinstance(tool_use_id, str) and tool_use_id in pending:
-                    pending[tool_use_id]["result"] = tool_result_data.get("content")
-                else:
-                    calls.append(
-                        {
-                            "name": None,
-                            "arguments": None,
-                            "result": tool_result_data.get("content"),
-                        }
-                    )
+                tool_use_id = tool_result_data.get("toolUseId")
+                if not isinstance(tool_use_id, str) or tool_use_id not in pending:
+                    raise ValueError("tool result has no matching tool use")
+                pending[tool_use_id]["result"] = tool_result_data.get("content")
     return calls
 
 
-def _model_version(agent: object) -> object:
-    model = getattr(agent, "model", None)
-    get_config = getattr(model, "get_config", None)
-    if callable(get_config):
-        config = get_config()
-        if isinstance(config, Mapping):
-            return cast(Mapping[str, object], config).get("model_id")
-    return getattr(model, "model_id", None)
+def _model_version(agent: AgentCallable) -> object:
+    return agent.model.get_config().get("model_id")
 
 
 def _agent_payload(
-    agent: object,
+    agent: AgentCallable,
     result: object,
     prompt: str,
     answer: str,

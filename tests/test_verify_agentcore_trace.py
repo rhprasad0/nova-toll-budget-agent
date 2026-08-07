@@ -39,6 +39,15 @@ def _envelopes(
     ]
 
 
+def _query(messages: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "results": [
+            [{"field": "@message", "value": json.dumps(message)}]
+            for message in messages
+        ]
+    }
+
+
 def _trace() -> dict[str, object]:
     records: list[dict[str, object]] = []
     timing = {"started_at": "2026-08-07T00:00:00Z", "ended_at": "2026-08-07T00:00:01Z"}
@@ -101,121 +110,34 @@ def _trace() -> dict[str, object]:
         {"timing": timing, "result": {"response": "The toll is $2.00."}, "error": None},
         span_id="invoke",
     )
-    return {
-        "results": [
-            {"field": "@message", "value": json.dumps(record)} for record in records
-        ],
-        "resourceSpans": [
-            {
-                "scopeSpans": [
-                    {
-                        "spans": [
-                            {
-                                "traceId": "trace-1",
-                                "spanId": "native-invoke",
-                                "name": "invoke_agent",
-                                "startTimeUnixNano": "1",
-                                "endTimeUnixNano": "2",
-                                "attributes": [
-                                    {
-                                        "key": "tollchat.session_id",
-                                        "value": {"stringValue": "session-1"},
-                                    }
-                                ],
-                            },
-                            {
-                                "traceId": "trace-1",
-                                "spanId": "native-model",
-                                "name": "chat_model",
-                                "startTimeUnixNano": "1",
-                                "endTimeUnixNano": "2",
-                                "attributes": {"tollchat.session_id": "session-1"},
-                            },
-                            {
-                                "traceId": "trace-1",
-                                "spanId": "native-tool",
-                                "name": "execute_tool",
-                                "startTimeUnixNano": "1",
-                                "endTimeUnixNano": "2",
-                                "attributes": {"tollchat.session_id": "session-1"},
-                            },
-                        ]
-                    }
-                ]
-            }
-        ],
-    }
+    spans = [
+        {
+            "traceId": "trace-1",
+            "spanId": f"native-{kind}",
+            "name": name,
+            "startTimeUnixNano": "1",
+            "endTimeUnixNano": "2",
+            "attributes": {
+                "tollchat.session_id": "session-1",
+                "aws.parameter.name": "/nova-toll/openai_api_key",
+            },
+        }
+        for kind, name in (
+            ("invoke", "invoke_agent"),
+            ("model", "chat_model"),
+            ("tool", "execute_tool"),
+        )
+    ]
+    return {"runtime": _query(records), "spans": _query(spans)}
 
 
-def test_accepts_complete_chunked_transaction_search_export():
-    trace = _trace()
-    trace["resourceSpans"][0]["resource"] = {
-        "attributes": {"aws.parameter.name": "/nova-toll/openai_api_key"}
-    }
-
-    assert verifier.verify_trace(trace) == {"traces": 1, "records": 4}
-
-
-def test_accepts_direct_export_json():
-    query = _trace()
-    exported = {
-        "records": [json.loads(result["value"]) for result in query["results"]],
-        "resourceSpans": query["resourceSpans"],
-    }
-
-    assert verifier.verify_trace(exported) == {"traces": 1, "records": 4}
-
-
-def test_accepts_transaction_search_span_rows():
-    trace = _trace()
-    del trace["resourceSpans"]
-    trace["spans"] = {
-        "results": [
-            [
-                {"field": "traceId", "value": "trace-1"},
-                {"field": "spanId", "value": "native-invoke"},
-                {"field": "name", "value": "invoke_agent"},
-                {"field": "startTime", "value": "1"},
-                {"field": "endTime", "value": "2"},
-                {"field": "attributes.session.id", "value": "session-1"},
-            ],
-            [
-                {"field": "traceId", "value": "trace-1"},
-                {"field": "spanId", "value": "native-model"},
-                {"field": "name", "value": "chat_model"},
-                {"field": "startTime", "value": "1"},
-                {"field": "endTime", "value": "2"},
-                {"field": "attributes.session.id", "value": "session-1"},
-            ],
-            [
-                {"field": "traceId", "value": "trace-1"},
-                {"field": "spanId", "value": "native-tool"},
-                {"field": "name", "value": "execute_tool"},
-                {"field": "startTime", "value": "1"},
-                {"field": "endTime", "value": "2"},
-                {"field": "attributes.session.id", "value": "session-1"},
-            ],
-        ]
-    }
-
-    assert verifier.verify_trace(trace) == {"traces": 1, "records": 4}
-
-
-def test_accepts_transaction_search_raw_message_rows():
-    trace = _trace()
-    spans = trace.pop("resourceSpans")[0]["scopeSpans"][0]["spans"]
-    trace["spans"] = {
-        "results": [
-            [{"field": "@message", "value": json.dumps(span)}] for span in spans
-        ]
-    }
-
-    assert verifier.verify_trace(trace) == {"traces": 1, "records": 4}
+def test_accepts_complete_chunked_cloudwatch_query_export():
+    assert verifier.verify_trace(_trace()) == {"traces": 1, "records": 4}
 
 
 def test_rejects_trace_without_correlated_native_spans():
     trace = _trace()
-    del trace["resourceSpans"]
+    trace["spans"]["results"] = []
 
     with pytest.raises(verifier.TraceVerificationError, match="native span"):
         verifier.verify_trace(trace)
@@ -283,9 +205,10 @@ def test_rejects_trace_without_correlated_native_spans():
 )
 def test_rejects_incomplete_or_unsafe_trace(mutate, message):
     trace = _trace()
-    first = json.loads(trace["results"][0]["value"])
+    row = trace["runtime"]["results"][0]
+    first = json.loads(row[0]["value"])
     mutate(first)
-    trace["results"][0]["value"] = json.dumps(first)
+    row[0]["value"] = json.dumps(first)
 
     with pytest.raises(verifier.TraceVerificationError, match=message):
         verifier.verify_trace(trace)
