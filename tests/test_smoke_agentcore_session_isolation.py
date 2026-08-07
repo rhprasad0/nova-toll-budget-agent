@@ -184,6 +184,23 @@ def test_live_runtime_version_reads_the_preview_endpoint(monkeypatch):
     )
 
 
+def test_trace_query_stops_at_deadline(monkeypatch):
+    outputs = iter(["query-id", '{"status": "Running"}'])
+    monkeypatch.setattr(evaluator, "_aws", lambda *_args: next(outputs))
+    monkeypatch.setattr(evaluator.time, "time", lambda: 10.0)
+
+    with pytest.raises(evaluator.IsolationVerificationError, match="deadline"):
+        evaluator._query_records(["aws"], "log-group", 0, deadline=10.0)
+
+
+def test_trace_query_rejects_unknown_status(monkeypatch):
+    outputs = iter(["query-id", '{"status": "Unknown"}'])
+    monkeypatch.setattr(evaluator, "_aws", lambda *_args: next(outputs))
+
+    with pytest.raises(evaluator.IsolationVerificationError, match="Unknown"):
+        evaluator._query_records(["aws"], "log-group", 0, deadline=float("inf"))
+
+
 def test_verify_rejects_malformed_trace_records():
     with pytest.raises(evaluator.IsolationVerificationError, match="malformed"):
         evaluator.verify_isolation([{"session_id": SESSION_A}], SESSION_A, SESSION_B)

@@ -209,7 +209,7 @@ def _live_runtime_version(aws: list[str]) -> str:
 
 
 def _query_records(
-    aws: list[str], log_group: str, start_time: int
+    aws: list[str], log_group: str, start_time: int, *, deadline: float
 ) -> list[dict[str, str]]:
     query_id = _aws(
         aws,
@@ -230,7 +230,7 @@ def _query_records(
         "--output",
         "text",
     )
-    while True:
+    while time.time() < deadline:
         result = cast(
             dict[str, object],
             json.loads(_aws(aws, "logs", "get-query-results", "--query-id", query_id)),
@@ -238,9 +238,11 @@ def _query_records(
         status = result.get("status")
         if status == "Complete":
             break
-        if status in {"Failed", "Cancelled", "Timeout"}:
+        if status not in {"Scheduled", "Running"}:
             raise IsolationVerificationError(f"trace query failed: {status}")
-        time.sleep(2)
+        time.sleep(min(2, max(0, deadline - time.time())))
+    else:
+        raise IsolationVerificationError("trace query exceeded deadline")
 
     records: list[dict[str, str]] = []
     for raw_row in cast(list[object], result.get("results", [])):
@@ -293,7 +295,9 @@ def main() -> int:
     while time.time() < deadline:
         try:
             checks = verify_isolation(
-                _query_records(aws, log_group, started), session_a, session_b
+                _query_records(aws, log_group, started, deadline=deadline),
+                session_a,
+                session_b,
             )
             break
         except IsolationVerificationError as error:
