@@ -141,6 +141,114 @@ def test_guardrail_enables_every_content_filter_category():
     }
 
 
+def test_guardrail_blocks_common_credentials_before_they_reach_tracing():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    guardrail = agentcore.split(
+        'resource "aws_bedrock_guardrail" "tollchat"', maxsplit=1
+    )[1].split('resource "aws_bedrock_guardrail_version"', maxsplit=1)[0]
+
+    for name in (
+        "authorization_header",
+        "aws_access_key_id",
+        "api_key",
+        "connection_string",
+    ):
+        assert f'name           = "{name}"' in guardrail
+    assert guardrail.count('input_action   = "BLOCK"') >= 4
+    assert guardrail.count('output_action  = "BLOCK"') >= 4
+
+
+def test_agentcore_split_telemetry_is_fully_declared_and_governed():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    kms = (ROOT / "infra/kms.tf").read_text()
+    observability = (ROOT / "infra/observability.tf").read_text()
+
+    assert re.search(r'UNIFIED_TRACES_DESTINATION_ENABLED\s+= "false"', agentcore)
+    assert (
+        'entry_point = ["opentelemetry-instrument", "agent/agentcore_entrypoint.py"]'
+        in agentcore
+    )
+    assert re.search(r'OTEL_TRACES_SAMPLER\s+= "always_on"', agentcore)
+    assert re.search(r'OTEL_PYTHON_DISABLED_INSTRUMENTATIONS\s+= "botocore"', agentcore)
+    assert re.search(
+        r'OTEL_SEMCONV_STABILITY_OPT_IN\s+= "gen_ai_latest_experimental,gen_ai_unredacted_attributes="',
+        agentcore,
+    )
+    assert (
+        'resource "aws_xray_trace_segment_destination" "transaction_search"'
+        in observability
+    )
+    assert 'destination = "CloudWatchLogs"' in observability
+    assert (
+        'resource "aws_xray_indexing_rule" "transaction_search_default"'
+        in observability
+    )
+    assert "desired_sampling_percentage = 1.0" in observability
+    assert "TOLLCHAT_TRACE_LOG_GROUP" in agentcore
+    assert (
+        'resource "aws_cloudwatch_log_group" "tollchat_trace_records"' in observability
+    )
+    assert 'name              = "/aws/nova-toll/agentcore/traces"' in observability
+    assert (
+        "removed {\n  from = aws_cloudwatch_log_group.agentcore_spans" in observability
+    )
+    assert 'resource "terraform_data" "agentcore_spans_log_group"' in observability
+    assert "configure_agentcore_spans_log_group.sh" in observability
+    assert 'agentcore_spans_log_group_name = "aws/spans"' in observability
+    assert (
+        "depends_on = [aws_cloudwatch_log_resource_policy.transaction_search]"
+        in observability
+    )
+    assert "retention_in_days = 30" in observability
+    assert 'retention   = "30"' in observability
+    assert "kms_key_id        = aws_kms_key.agentcore_telemetry.arn" in observability
+    assert "kms_key_arn = aws_kms_key.agentcore_telemetry.arn" in observability
+    assert (
+        'resource "aws_cloudwatch_log_delivery_source" "tollchat_runtime_traces"'
+        in observability
+    )
+    assert 'log_type     = "TRACES"' in observability
+    assert 'delivery_destination_type = "XRAY"' in observability
+    assert 'log_type     = "APPLICATION_LOGS"' not in observability
+    assert (
+        'resource "aws_cloudwatch_log_resource_policy" "transaction_search"'
+        in observability
+    )
+    assert (
+        'resource "aws_cloudwatch_log_data_protection_policy" "agentcore_telemetry"'
+        in observability
+    )
+    assert 'resource "aws_kms_key" "agentcore_telemetry"' in kms
+    assert 'resource "aws_kms_alias" "agentcore_telemetry"' in kms
+    runtime_policy = agentcore.split(
+        'data "aws_iam_policy_document" "tollchat_runtime"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "tollchat_runtime"', maxsplit=1)[0]
+    assert "WriteSanitizedTraceRecords" in runtime_policy
+    assert "aws_cloudwatch_log_group.tollchat_trace_records.arn}:*" in runtime_policy
+
+
+def test_trace_reviewer_is_read_only_for_governed_telemetry():
+    observability = (ROOT / "infra/observability.tf").read_text()
+
+    reviewer = observability.split(
+        'data "aws_iam_policy_document" "tollchat_trace_reviewer"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "tollchat_trace_reviewer"', maxsplit=1)[
+        0
+    ]
+    assert 'resource "aws_iam_role" "tollchat_trace_reviewer"' in observability
+    assert "logs:GetLogEvents" in reviewer
+    assert "logs:Unmask" in reviewer
+    assert "logs:FilterLogEvents" in reviewer
+    assert "logs:StartQuery" in reviewer
+    assert "logs:GetQueryResults" in reviewer
+    assert "xray:StartTraceRetrieval" in reviewer
+    assert "xray:ListRetrievedTraces" in reviewer
+    assert "xray:GetRetrievedTracesGraph" in reviewer
+    assert "kms:Decrypt" in reviewer
+    assert "logs:PutLogEvents" not in reviewer
+    assert "logs:DeleteLogGroup" not in reviewer
+
+
 def test_public_chat_is_an_explicit_disabled_by_default_gate():
     variables = (ROOT / "infra/variables.tf").read_text()
     site = (ROOT / "infra/site.tf").read_text()

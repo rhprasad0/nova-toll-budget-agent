@@ -6,6 +6,7 @@ not curated.
 
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |
+| [`20260807T162433Z-agentcore-tracing.json`](20260807T162433Z-agentcore-tracing.json) | Private-preview route request plus synthetic-credential block | Metadata-only live AgentCore trace verification | Passed; 4 governed stages, 37 correlated native spans, and 2 redacted blocked-request records; native credential scan passed and no prompt, response, session, account, endpoint, or key data was curated |
 | [`20260802T171949Z.json`](20260802T171949Z.json) | Same four closures with fixed actor premises and scoped judges | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
 | [`20260804T214058Z.json`](20260804T214058Z.json) | Eight reciprocal single-leg cases with explicit facility attribution for both Greenway mainline charges | Deterministic trace and hardened response grading | 1.0000 overall; 16/16 judgments passed; 0 execution errors |
 | [`20260803T215248Z.json`](20260803T215248Z.json) | Matching multi-turn single-leg conversations with neutral fee-attribution and arithmetic follow-ups | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 24/24 judgments passed; 0 execution errors |

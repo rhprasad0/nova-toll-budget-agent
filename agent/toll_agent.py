@@ -993,7 +993,11 @@ def build_system_prompt(*, current_date: date | None = None) -> str:
     )
 
 
-def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
+def build_agent(
+    *,
+    trace_attributes: dict[str, str] | None = None,
+    hooks: list[object] | None = None,
+) -> Agent:
     trace_attributes = {
         **(trace_attributes or {}),
         "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
@@ -1003,7 +1007,9 @@ def build_agent(*, trace_attributes: dict[str, str] | None = None) -> Agent:
         model=_build_model(),
         tools=list(_AGENT_TOOLS),
         system_prompt=build_system_prompt(),
+        callback_handler=None,
         trace_attributes=trace_attributes,
+        hooks=cast(Any, hooks),
     )
 
 

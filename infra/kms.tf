@@ -79,3 +79,52 @@ resource "aws_kms_alias" "audit" {
   name          = "alias/nova-toll-audit"
   target_key_id = aws_kms_key.audit.key_id
 }
+
+data "aws_iam_policy_document" "agentcore_telemetry_kms" {
+  statement {
+    sid       = "EnableAccountIamPolicies"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid = "AllowCloudWatchLogs"
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey",
+      "kms:Encrypt",
+      "kms:GenerateDataKey*",
+      "kms:ReEncrypt*",
+    ]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${data.aws_region.current.region}.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "kms:EncryptionContext:aws:logs:arn"
+      values = [
+        "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/nova-toll/agentcore/traces",
+        "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:aws/spans",
+      ]
+    }
+  }
+}
+
+resource "aws_kms_key" "agentcore_telemetry" {
+  description             = "Nova Toll AgentCore telemetry"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.agentcore_telemetry_kms.json
+}
+
+resource "aws_kms_alias" "agentcore_telemetry" {
+  name          = "alias/nova-toll-agentcore-telemetry"
+  target_key_id = aws_kms_key.agentcore_telemetry.key_id
+}

@@ -8,6 +8,207 @@ resource "aws_sns_topic_subscription" "alerts_email" {
   endpoint  = "bills@ryanprasad.ai"
 }
 
+# Runtime records are application-sanitized; vended APPLICATION_LOGS would
+# duplicate raw InvokeRuntimeOperation payloads before that sanitization.
+resource "aws_cloudwatch_log_group" "tollchat_trace_records" {
+  name              = "/aws/nova-toll/agentcore/traces"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.agentcore_telemetry.arn
+}
+
+removed {
+  from = aws_cloudwatch_log_group.agentcore_spans
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+resource "aws_xray_trace_segment_destination" "transaction_search" {
+  destination = "CloudWatchLogs"
+
+  depends_on = [aws_cloudwatch_log_resource_policy.transaction_search]
+}
+
+# X-Ray creates the reserved aws/spans group; CloudWatch rejects direct CreateLogGroup
+# calls for aws/* names. Configure the service-owned group after the destination is active.
+resource "terraform_data" "agentcore_spans_log_group" {
+  triggers_replace = {
+    kms_key_arn = aws_kms_key.agentcore_telemetry.arn
+    retention   = "30"
+  }
+
+  provisioner "local-exec" {
+    command = "${path.module}/../scripts/configure_agentcore_spans_log_group.sh '${local.agentcore_spans_log_group_name}' '${aws_kms_key.agentcore_telemetry.arn}' 30"
+  }
+
+  depends_on = [aws_xray_trace_segment_destination.transaction_search]
+}
+
+# Transaction Search indexes a representative 1% while every sampled span is
+# retained in aws/spans; OTEL_TRACES_SAMPLER=always_on supplies the capture rate.
+resource "aws_xray_indexing_rule" "transaction_search_default" {
+  name = "Default"
+
+  rule {
+    probabilistic {
+      desired_sampling_percentage = 1.0
+    }
+  }
+}
+
+# Runtime tracing is a CloudWatch delivery, separate from vended
+# APPLICATION_LOGS. The latter stays disabled because it duplicates raw
+# invocation request/response payloads before application sanitization.
+resource "aws_cloudwatch_log_delivery_source" "tollchat_runtime_traces" {
+  name         = "nova-toll-runtime-traces"
+  log_type     = "TRACES"
+  resource_arn = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
+}
+
+resource "aws_cloudwatch_log_delivery_destination" "tollchat_runtime_traces" {
+  name                      = "nova-toll-runtime-traces"
+  delivery_destination_type = "XRAY"
+}
+
+resource "aws_cloudwatch_log_delivery" "tollchat_runtime_traces" {
+  delivery_source_name     = aws_cloudwatch_log_delivery_source.tollchat_runtime_traces.name
+  delivery_destination_arn = aws_cloudwatch_log_delivery_destination.tollchat_runtime_traces.arn
+
+  depends_on = [aws_xray_trace_segment_destination.transaction_search]
+}
+
+data "aws_iam_policy_document" "transaction_search" {
+  statement {
+    sid     = "TransactionSearchXRayAccess"
+    actions = ["logs:PutLogEvents"]
+    resources = [
+      "${local.agentcore_spans_log_group_arn}:*",
+      "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/application-signals/data:*",
+    ]
+    principals {
+      type        = "Service"
+      identifiers = ["xray.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:xray:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_cloudwatch_log_resource_policy" "transaction_search" {
+  policy_name     = "nova-toll-transaction-search"
+  policy_document = data.aws_iam_policy_document.transaction_search.json
+}
+
+locals {
+  agentcore_spans_log_group_name = "aws/spans"
+  agentcore_spans_log_group_arn  = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:${local.agentcore_spans_log_group_name}"
+  agentcore_telemetry_log_groups = {
+    trace_records = aws_cloudwatch_log_group.tollchat_trace_records.name
+    spans         = local.agentcore_spans_log_group_name
+  }
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "agentcore_telemetry" {
+  for_each = local.agentcore_telemetry_log_groups
+
+  log_group_name = each.value
+  policy_document = jsonencode({
+    Name    = "nova-toll-agentcore-telemetry"
+    Version = "2021-06-01"
+    Statement = [
+      {
+        Sid = "AuditSensitiveData"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+        ]
+        Operation = { Audit = { FindingsDestination = {} } }
+      },
+      {
+        Sid = "MaskSensitiveData"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+        ]
+        Operation = { Deidentify = { MaskConfig = {} } }
+      },
+    ]
+  })
+
+  depends_on = [terraform_data.agentcore_spans_log_group]
+}
+
+data "aws_iam_policy_document" "tollchat_trace_reviewer_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+}
+
+resource "aws_iam_role" "tollchat_trace_reviewer" {
+  name               = "nova-toll-trace-reviewer"
+  assume_role_policy = data.aws_iam_policy_document.tollchat_trace_reviewer_assume.json
+}
+
+data "aws_iam_policy_document" "tollchat_trace_reviewer" {
+  statement {
+    sid = "ReadTelemetryLogs"
+    actions = [
+      "logs:DescribeLogStreams",
+      "logs:FilterLogEvents",
+      "logs:GetLogEvents",
+      "logs:StartQuery",
+      "logs:Unmask",
+    ]
+    resources = [
+      "${aws_cloudwatch_log_group.tollchat_trace_records.arn}:*",
+      "${local.agentcore_spans_log_group_arn}:*",
+    ]
+  }
+  statement {
+    sid       = "ReadQueryResults"
+    actions   = ["logs:GetQueryResults"]
+    resources = ["*"]
+  }
+  statement {
+    sid = "RetrieveTransactionSearchTraces"
+    actions = [
+      "xray:GetRetrievedTracesGraph",
+      "xray:ListRetrievedTraces",
+      "xray:StartTraceRetrieval",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "DecryptTelemetryLogs"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.agentcore_telemetry.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["logs.${data.aws_region.current.region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "tollchat_trace_reviewer" {
+  name   = "nova-toll-trace-reviewer"
+  role   = aws_iam_role.tollchat_trace_reviewer.id
+  policy = data.aws_iam_policy_document.tollchat_trace_reviewer.json
+}
+
 # Loader logs "LOAD_OK <feed>" (space-delimited, not JSON — see spec) after
 # each committed upsert; this turns that into NovaToll/LoadSuccess{feed}.
 resource "aws_cloudwatch_log_metric_filter" "load_success" {
