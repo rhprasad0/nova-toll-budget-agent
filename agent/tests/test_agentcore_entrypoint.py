@@ -215,7 +215,12 @@ def test_runtime_emits_chunked_sanitized_correlated_trace_records(monkeypatch):
 
 @pytest.mark.parametrize(
     "credential",
-    ("ASIA" + "ABCDEFGHIJKLMNOP", "gho_" + "abcdefghijklmnopqrst"),
+    (
+        "ASIA" + "ABCDEFGHIJKLMNOP",
+        "gho_" + "abcdefghijklmnopqrst",
+        "password=hunter2",
+        "api_key=opaque-value",
+    ),
 )
 def test_blocked_credential_families_are_redacted_from_trace(credential):
     trace = FakeTraceClient()

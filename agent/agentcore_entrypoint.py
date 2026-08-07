@@ -36,7 +36,7 @@ _CREDENTIAL_KEY = re.compile(
     re.IGNORECASE,
 )
 _CREDENTIAL_VALUE = re.compile(
-    r"(?:basic\s+\S+|bearer\s+\S+|(?:AKIA|ASIA)[0-9A-Z]{16}|(?:sk|rk|pk)[_-][A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_-]{8,}|(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://\S+)",
+    r"(?:(?:access[_-]?key|api[_-]?key|authorization|credential|password|private[_-]?key|secret|session[_-]?token|token)\s*[=:]\s*\S+|basic\s+\S+|bearer\s+\S+|(?:AKIA|ASIA)[0-9A-Z]{16}|(?:sk|rk|pk)[_-][A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_-]{8,}|(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://\S+)",
     re.IGNORECASE,
 )
 _SYSTEM_PROMPT_KEY = re.compile(r"(?:system|developer)[_-]?prompt\Z", re.IGNORECASE)

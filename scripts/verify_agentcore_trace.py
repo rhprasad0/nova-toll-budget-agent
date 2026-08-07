@@ -108,10 +108,20 @@ def _attribute(span: dict[str, object], key: str) -> object | None:
 def _verify_native_spans(
     native: list[dict[str, object]], correlations: dict[str, tuple[str, str]]
 ) -> None:
-    required: dict[str, Callable[[str], bool]] = {
-        "invoke": lambda name: "invoke_agent" in name or "invokeagent" in name,
-        "model": lambda name: "model" in name or "chat" in name,
-        "tool": lambda name: "execute_tool" in name or "executetool" in name,
+    required: dict[str, Callable[[dict[str, object]], bool]] = {
+        "invoke": lambda span: (
+            "invoke_agent" in str(span["name"]).lower()
+            or "invokeagent" in str(span["name"]).lower()
+        ),
+        "model": lambda span: (
+            _attribute(span, "aws.genai.span_kind") == "LLM"
+            and _attribute(span, "gen_ai.operation.name") == "chat"
+            and bool(_attribute(span, "gen_ai.request.model"))
+        ),
+        "tool": lambda span: (
+            "execute_tool" in str(span["name"]).lower()
+            or "executetool" in str(span["name"]).lower()
+        ),
     }
     for trace_id, (session_id, _) in correlations.items():
         matching = [
@@ -126,14 +136,13 @@ def _verify_native_spans(
         ]
         found = set()
         for span in matching:
-            name = str(span["name"]).lower()
             start = span.get("startTimeUnixNano")
             end = span.get("endTimeUnixNano")
             if not span.get("spanId") or start is None or end is None:
                 raise TraceVerificationError("native span is missing required fields")
             if str(start) == str(end):
                 raise TraceVerificationError("native span has zero duration")
-            found.update(kind for kind, matches in required.items() if matches(name))
+            found.update(kind for kind, matches in required.items() if matches(span))
         if missing := set(required) - found:
             raise TraceVerificationError(
                 f"{trace_id}: missing correlated native span(s): {', '.join(sorted(missing))}"

@@ -120,12 +120,21 @@ def _trace() -> dict[str, object]:
             "attributes": {
                 "tollchat.session_id": "session-1",
                 "aws.parameter.name": "/nova-toll/openai_api_key",
+                **attributes,
             },
         }
-        for kind, name in (
-            ("invoke", "invoke_agent"),
-            ("model", "chat_model"),
-            ("tool", "execute_tool"),
+        for kind, name, attributes in (
+            ("invoke", "invoke_agent", {}),
+            (
+                "model",
+                "chat",
+                {
+                    "aws.genai.span_kind": "LLM",
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.request.model": "gpt-5",
+                },
+            ),
+            ("tool", "execute_tool", {}),
         )
     ]
     return {"runtime": _query(records), "spans": _query(spans)}
@@ -140,6 +149,18 @@ def test_rejects_trace_without_correlated_native_spans():
     trace["spans"]["results"] = []
 
     with pytest.raises(verifier.TraceVerificationError, match="native span"):
+        verifier.verify_trace(trace)
+
+
+def test_rejects_manual_tollchat_span_without_instrumented_model_span():
+    trace = _trace()
+    model_row = trace["spans"]["results"][1]
+    model = json.loads(model_row[0]["value"])
+    model["name"] = "tollchat.agent"
+    model["attributes"] = {"tollchat.session_id": "session-1"}
+    model_row[0]["value"] = json.dumps(model)
+
+    with pytest.raises(verifier.TraceVerificationError, match="model"):
         verifier.verify_trace(trace)
 
 
