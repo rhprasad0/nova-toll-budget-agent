@@ -112,16 +112,24 @@ S3 objects and RDS rows must not be destroyed.
 - Both OpenAI and Bedrock Mantle use stateful Responses, so provider-side
   retention must be reviewed before public launch. Local tool auditing uses
   the response `metrics.traces`, not Strands' empty stateful message history.
-- Keep the Cloudflare API token in SSM Parameter Store
-  (`var.cloudflare_api_token_param_name`, `infra/ssm.tf`), same as the VDOT
-  feed tokens, but on its own dedicated KMS key rather than the shared
-  default -- see the hardening note above for why. Never in a file. Fetch it
+- Keep the Cloudflare API token in SSM Parameter Store at
+  `/nova-toll/cloudflare-api-token`, on its dedicated KMS key. Terraform does
+  not manage this parameter or its value; provision and overwrite it
+  out-of-band through the AWS console. Never put it in a file. Fetch it
   immediately before a Terraform operation and let it die with the shell:
   `export CLOUDFLARE_API_TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)`
   Requires the identity running it to have `ssm:GetParameter` and
   `kms:Decrypt` on that parameter's key -- an account/SSO-level grant for
   local use (`AWS_PROFILE=nova-toll`) or
   `nova-toll-terraform-apply`'s scoped grant in CI.
+- `infra/ssm.tf` retains a non-destructive `removed` block only to hand off
+  the existing parameter from Terraform state. After a trusted-main apply has
+  completed that handoff, create a new least-privilege Cloudflare token,
+  overwrite the existing SSM parameter, validate a trusted Terraform plan,
+  then revoke the old token. Treat every retained Terraform-state version as
+  potentially exposed; do not inspect secret-bearing state just to audit it.
+  Review and restrict S3 state-bucket readers and its KMS decrypt principals
+  to the least privilege needed.
 - Set `AWS_PROFILE=nova-toll` before running Terraform locally.
   `infra/providers.tf` and the `infra/versions.tf` backend block no longer
   hardcode a profile, so both local runs and CI rely on ambient credentials
