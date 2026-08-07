@@ -123,7 +123,9 @@ def main() -> None:
         "status": "passed" if passed else "failed",
         "scenario": "Bedrock Guardrail input/output boundary regression",
         "evidence_type": "Metadata-only live ApplyGuardrail evaluation",
+        "guardrail_id": args.guardrail_id,
         "guardrail_version": args.guardrail_version,
+        "aws_region": args.region,
         "cases": results,
         "summary": {
             "passed": sum(result["passed"] for result in results),

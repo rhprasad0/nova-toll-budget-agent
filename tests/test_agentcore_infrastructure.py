@@ -141,7 +141,7 @@ def test_guardrail_enables_every_content_filter_category():
     }
 
 
-def test_guardrail_policy_changes_create_and_retain_numbered_versions():
+def test_guardrail_policy_changes_create_candidates_without_promoting_them():
     agentcore = (ROOT / "infra/agentcore.tf").read_text()
     version = agentcore.split(
         'resource "aws_bedrock_guardrail_version" "tollchat"', maxsplit=1
@@ -158,8 +158,18 @@ def test_guardrail_policy_changes_create_and_retain_numbered_versions():
     assert 'description   = "Reviewed TollChat input/output safety policy"' in version
     assert "skip_destroy  = true" in version
     assert "replace_triggered_by = [aws_bedrock_guardrail.tollchat]" in version
+    assert "prevent_destroy = true" in agentcore
+    assert 'approved_guardrail_version = "2"' in agentcore
+    assert (
+        "TOLLCHAT_GUARDRAIL_VERSION            = local.approved_guardrail_version"
+        in runtime
+    )
     assert (
         "TOLLCHAT_GUARDRAIL_VERSION            = aws_bedrock_guardrail_version.tollchat.version"
+        not in runtime
+    )
+    assert (
+        "tonumber(aws_bedrock_guardrail_version.tollchat.version) >= tonumber(local.approved_guardrail_version)"
         in runtime
     )
     assert 'actions   = ["bedrock:ApplyGuardrail"]' in policy

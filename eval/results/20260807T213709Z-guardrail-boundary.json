@@ -1,10 +1,12 @@
 {
-  "timestamp": "2026-08-07T21:25:32.974509Z",
+  "timestamp": "2026-08-07T21:37:09.408951Z",
   "issue": 69,
   "status": "passed",
   "scenario": "Bedrock Guardrail input/output boundary regression",
   "evidence_type": "Metadata-only live ApplyGuardrail evaluation",
+  "guardrail_id": "26tr6s26ry0y",
   "guardrail_version": "2",
+  "aws_region": "us-east-1",
   "cases": [
     {
       "id": "prompt-attack-input",

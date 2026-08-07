@@ -1,8 +1,9 @@
 locals {
-  agentcore_zip_path = var.agentcore_package_path != "" ? var.agentcore_package_path : data.archive_file.placeholder.output_path
-  proxy_zip_path     = var.chat_proxy_package_path != "" ? var.chat_proxy_package_path : data.archive_file.placeholder.output_path
-  proxy_zip_hash     = var.chat_proxy_package_path != "" ? filebase64sha256(var.chat_proxy_package_path) : data.archive_file.placeholder.output_base64sha256
-  private_subnets    = [aws_subnet.tollchat_private_a.id, aws_subnet.tollchat_private_c.id]
+  approved_guardrail_version = "2"
+  agentcore_zip_path         = var.agentcore_package_path != "" ? var.agentcore_package_path : data.archive_file.placeholder.output_path
+  proxy_zip_path             = var.chat_proxy_package_path != "" ? var.chat_proxy_package_path : data.archive_file.placeholder.output_path
+  proxy_zip_hash             = var.chat_proxy_package_path != "" ? filebase64sha256(var.chat_proxy_package_path) : data.archive_file.placeholder.output_base64sha256
+  private_subnets            = [aws_subnet.tollchat_private_a.id, aws_subnet.tollchat_private_c.id]
   private_subnets_by_az = {
     us_east_1a = aws_subnet.tollchat_private_a.id
     us_east_1c = aws_subnet.tollchat_private_c.id
@@ -431,6 +432,10 @@ resource "aws_bedrock_guardrail" "tollchat" {
       output_enabled = true
     }
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_bedrock_guardrail_version" "tollchat" {
@@ -482,7 +487,7 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
     DB_USER                               = "pricing_reader"
     DB_CA_BUNDLE_PATH                     = "/var/task/rds-ca-bundle.pem"
     TOLLCHAT_GUARDRAIL_ID                 = aws_bedrock_guardrail.tollchat.guardrail_id
-    TOLLCHAT_GUARDRAIL_VERSION            = aws_bedrock_guardrail_version.tollchat.version
+    TOLLCHAT_GUARDRAIL_VERSION            = local.approved_guardrail_version
     TOLLCHAT_TRACE_LOG_GROUP              = aws_cloudwatch_log_group.tollchat_trace_records.name
     AGENT_OBSERVABILITY_ENABLED           = "true"
     OTEL_PYTHON_DISTRO                    = "aws_distro"
@@ -499,6 +504,10 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
     precondition {
       condition     = var.agentcore_package_path != ""
       error_message = "AgentCore deployment requires the real ARM64 runtime package."
+    }
+    precondition {
+      condition     = tonumber(aws_bedrock_guardrail_version.tollchat.version) >= tonumber(local.approved_guardrail_version)
+      error_message = "The approved Guardrail version must exist on the managed Guardrail before promotion."
     }
   }
 }
