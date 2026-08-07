@@ -8,6 +8,7 @@
 - **Credentials:** `/nova-toll/openai_api_key` remains a SecureString in SSM Parameter Store. It is read at runtime by the dedicated AgentCore role and is never copied into Terraform state or an AgentCore credential provider.
 - **Sessions:** state exists only in the AgentCore microVM. Sessions allow five turns, idle after 15 minutes, and expire after 60 minutes. AgentCore Memory is not enabled.
 - **Availability:** two private subnets support the ALB and runtime. One NAT gateway is intentional for the private preview; add one per AZ before an availability SLO requires it.
+- **Private-preview traces:** retain every invocation for 30 days using split AgentCore telemetry. Native spans redact message/system content; correlated application records contain sanitized prompts, responses, model messages, tools, and full Guardrail assessments. System-prompt text is excluded and represented only by its version.
 - **IaC:** Terraform owns AWS resources. The one provider gap—AgentCore resource policies—is reconciled by `terraform_data` using the documented control-plane CLI command.
 - **Frontend:** the existing dependency-free map page contains a progressively disclosed, accessible chat. It stays hidden unless `/api/config` succeeds.
 

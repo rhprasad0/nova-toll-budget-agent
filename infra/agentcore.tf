@@ -321,6 +321,13 @@ data "aws_iam_policy_document" "tollchat_runtime" {
     ]
   }
   statement {
+    sid     = "WriteSanitizedTraceRecords"
+    actions = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = [
+      "${aws_cloudwatch_log_group.tollchat_trace_records.arn}:*",
+    ]
+  }
+  statement {
     sid       = "WriteRuntimeTraces"
     actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
     resources = ["*"]
@@ -381,6 +388,49 @@ resource "aws_bedrock_guardrail" "tollchat" {
       output_strength = "MEDIUM"
     }
   }
+
+  sensitive_information_policy_config {
+    regexes_config {
+      name           = "authorization_header"
+      description    = "Authorization bearer or basic credentials"
+      pattern        = "(?i)\\b(?:authorization|x-api-key)\\s*[:=]\\s*(?:bearer|basic)\\s+[A-Za-z0-9._~+/=-]{8,}"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
+    }
+    regexes_config {
+      name           = "aws_access_key_id"
+      description    = "AWS access key identifiers"
+      pattern        = "\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
+    }
+    regexes_config {
+      name           = "api_key"
+      description    = "OpenAI, Anthropic, and GitHub API keys"
+      pattern        = "\\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\\b"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
+    }
+    regexes_config {
+      name           = "connection_string"
+      description    = "Database and cache URI connection strings"
+      pattern        = "\\b(?:postgres(?:ql)?|mysql|mongodb(?:\\+srv)?|redis)://[^\\s\"']+"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
+    }
+  }
 }
 
 resource "aws_bedrock_guardrail_version" "tollchat" {
@@ -395,7 +445,7 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
 
   agent_runtime_artifact {
     code_configuration {
-      entry_point = ["agent/agentcore_entrypoint.py"]
+      entry_point = ["opentelemetry-instrument", "agent/agentcore_entrypoint.py"]
       runtime     = "PYTHON_3_13"
       code {
         s3 {
@@ -421,18 +471,23 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
   }
 
   environment_variables = {
-    DB_HOST                              = aws_db_instance.main.address
-    DB_PORT                              = tostring(aws_db_instance.main.port)
-    DB_NAME                              = aws_db_instance.main.db_name
-    DB_USER                              = "pricing_reader"
-    DB_CA_BUNDLE_PATH                    = "/var/task/rds-ca-bundle.pem"
-    TOLLCHAT_GUARDRAIL_ID                = aws_bedrock_guardrail.tollchat.guardrail_id
-    TOLLCHAT_GUARDRAIL_VERSION           = aws_bedrock_guardrail_version.tollchat.version
-    AGENT_OBSERVABILITY_ENABLED          = "true"
-    OTEL_PYTHON_DISTRO                   = "aws_distro"
-    OTEL_PYTHON_CONFIGURATOR             = "aws_configurator"
-    OTEL_EXPORTER_OTLP_PROTOCOL          = "http/protobuf"
-    OTEL_AWS_APPLICATION_SIGNALS_ENABLED = "false"
+    DB_HOST                               = aws_db_instance.main.address
+    DB_PORT                               = tostring(aws_db_instance.main.port)
+    DB_NAME                               = aws_db_instance.main.db_name
+    DB_USER                               = "pricing_reader"
+    DB_CA_BUNDLE_PATH                     = "/var/task/rds-ca-bundle.pem"
+    TOLLCHAT_GUARDRAIL_ID                 = aws_bedrock_guardrail.tollchat.guardrail_id
+    TOLLCHAT_GUARDRAIL_VERSION            = aws_bedrock_guardrail_version.tollchat.version
+    TOLLCHAT_TRACE_LOG_GROUP              = aws_cloudwatch_log_group.tollchat_trace_records.name
+    AGENT_OBSERVABILITY_ENABLED           = "true"
+    OTEL_PYTHON_DISTRO                    = "aws_distro"
+    OTEL_PYTHON_CONFIGURATOR              = "aws_configurator"
+    OTEL_EXPORTER_OTLP_PROTOCOL           = "http/protobuf"
+    OTEL_PYTHON_DISABLED_INSTRUMENTATIONS = "botocore"
+    OTEL_SEMCONV_STABILITY_OPT_IN         = "gen_ai_latest_experimental,gen_ai_unredacted_attributes="
+    OTEL_TRACES_SAMPLER                   = "always_on"
+    OTEL_AWS_APPLICATION_SIGNALS_ENABLED  = "false"
+    UNIFIED_TRACES_DESTINATION_ENABLED    = "false"
   }
 
   lifecycle {
