@@ -148,6 +148,53 @@ def test_exercise_fails_if_a_turn_limit_or_reset_affects_b(fail_on_b_call):
         evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
 
 
+def test_exercise_retries_a_transient_post_reset_failure(monkeypatch):
+    a_calls = 0
+    post_reset_attempts = 0
+    reset = False
+    sleeps: list[int] = []
+
+    def post(path: str, body: dict[str, object]):
+        nonlocal a_calls, post_reset_attempts, reset
+        if path == "/api/reset":
+            reset = True
+            return _response()
+        if body["session_id"] != SESSION_A:
+            return _response()
+        if reset:
+            post_reset_attempts += 1
+            if post_reset_attempts < 3:
+                return _response(502, "agent_unavailable")
+            return _response()
+        a_calls += 1
+        return _response(422, "turn_limit") if a_calls == 6 else _response()
+
+    monkeypatch.setattr(evaluator.time, "sleep", sleeps.append)
+
+    evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
+
+    assert post_reset_attempts == 3
+    assert sleeps == [1, 2]
+
+
+def test_live_runtime_version_reads_the_preview_endpoint(monkeypatch):
+    outputs = iter(["runtime-id", "13"])
+    calls: list[tuple[str, ...]] = []
+
+    def aws(_command: list[str], *arguments: str) -> str:
+        calls.append(arguments)
+        return next(outputs)
+
+    monkeypatch.setattr(evaluator, "_aws", aws)
+
+    assert evaluator._live_runtime_version(["aws"]) == "13"
+    assert calls[0][:2] == ("bedrock-agentcore-control", "list-agent-runtimes")
+    assert calls[1][:2] == (
+        "bedrock-agentcore-control",
+        "get-agent-runtime-endpoint",
+    )
+
+
 def test_verify_rejects_malformed_trace_records():
     observations, _ = _successful_exercise()
 

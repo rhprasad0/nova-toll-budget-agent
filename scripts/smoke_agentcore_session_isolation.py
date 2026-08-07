@@ -29,28 +29,39 @@ def _expect(
     body: dict[str, object],
     status: int,
     error_code: str | None = None,
+    retries: int = 0,
 ) -> None:
-    actual_status, response = post(path, body)
-    error = response.get("error")
-    error = cast(dict[str, object], error) if isinstance(error, dict) else None
-    actual_code = error.get("code") if error else None
-    if actual_status != status or actual_code != error_code:
-        raise IsolationVerificationError(
-            f"{path} returned status={actual_status} code={actual_code!r}; "
-            f"expected status={status} code={error_code!r}"
-        )
+    for attempt in range(retries + 1):
+        actual_status, response = post(path, body)
+        error = response.get("error")
+        error = cast(dict[str, object], error) if isinstance(error, dict) else None
+        actual_code = error.get("code") if error else None
+        if actual_status == status and actual_code == error_code:
+            return
+        if actual_status != 502 or attempt == retries:
+            raise IsolationVerificationError(
+                f"{path} returned status={actual_status} code={actual_code!r}; "
+                f"expected status={status} code={error_code!r}"
+            )
+        time.sleep(2**attempt)
 
 
 def exercise_sessions(post: Post, session_a: str, session_b: str) -> dict[str, object]:
     prompt = "Price a trip from Dumfries to Westpark."
 
-    def chat(session_id: str, status: int = 200, code: str | None = None) -> None:
+    def chat(
+        session_id: str,
+        status: int = 200,
+        code: str | None = None,
+        retries: int = 0,
+    ) -> None:
         _expect(
             post,
             "/api/chat",
             {"session_id": session_id, "message": prompt},
             status,
             code,
+            retries,
         )
 
     chat(session_a)
@@ -61,7 +72,7 @@ def exercise_sessions(post: Post, session_a: str, session_b: str) -> dict[str, o
     chat(session_a, 422, "turn_limit")
     _expect(post, "/api/reset", {"session_id": session_a}, 200)
     chat(session_b)
-    chat(session_a)
+    chat(session_a, retries=3)
     return {
         "session_a": session_a,
         "session_b": session_b,
@@ -185,6 +196,36 @@ def _aws(aws: list[str], *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def _live_runtime_version(aws: list[str]) -> str:
+    runtime_id = _aws(
+        aws,
+        "bedrock-agentcore-control",
+        "list-agent-runtimes",
+        "--query",
+        "agentRuntimes[?agentRuntimeName=='nova_toll'].agentRuntimeId | [0]",
+        "--output",
+        "text",
+    )
+    if not runtime_id or runtime_id == "None":
+        raise IsolationVerificationError("could not identify the live runtime version")
+    version = _aws(
+        aws,
+        "bedrock-agentcore-control",
+        "get-agent-runtime-endpoint",
+        "--agent-runtime-id",
+        runtime_id,
+        "--endpoint-name",
+        "preview",
+        "--query",
+        "liveVersion",
+        "--output",
+        "text",
+    )
+    if not version.isdigit():
+        raise IsolationVerificationError("could not identify the live runtime version")
+    return version
+
+
 def _query_records(
     aws: list[str], log_group: str, start_time: int
 ) -> list[dict[str, str]]:
@@ -260,6 +301,7 @@ def main() -> int:
     log_group = os.environ.get("RUNTIME_LOG_GROUP", "/aws/nova-toll/agentcore/traces")
     wait_seconds = int(os.environ.get("TRACE_WAIT_SECONDS", "600"))
     aws = ["aws", "--profile", profile, "--region", region]
+    runtime_version = _live_runtime_version(aws)
     session_a, session_b = str(uuid.uuid4()), str(uuid.uuid4())
     started = int(time.time()) - 1
     observations = exercise_sessions(_http_post(preview_url), session_a, session_b)
@@ -284,6 +326,7 @@ def main() -> int:
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "issue": 97,
         "status": "passed",
+        "agent_runtime_version": runtime_version,
         "scenario": "Two interleaved private-preview AgentCore sessions with turn exhaustion and reset",
         "evidence_type": "Metadata-only live AgentCore session-isolation verification",
         "checks": checks,

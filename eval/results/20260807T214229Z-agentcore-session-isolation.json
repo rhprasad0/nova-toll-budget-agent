@@ -1,7 +1,8 @@
 {
-  "timestamp": "2026-08-07T21:15:50.698083Z",
+  "timestamp": "2026-08-07T21:42:29.718246Z",
   "issue": 97,
   "status": "passed",
+  "agent_runtime_version": "13",
   "scenario": "Two interleaved private-preview AgentCore sessions with turn exhaustion and reset",
   "evidence_type": "Metadata-only live AgentCore session-isolation verification",
   "checks": {
