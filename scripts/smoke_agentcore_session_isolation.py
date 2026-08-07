@@ -46,7 +46,7 @@ def _expect(
         time.sleep(2**attempt)
 
 
-def exercise_sessions(post: Post, session_a: str, session_b: str) -> dict[str, object]:
+def exercise_sessions(post: Post, session_a: str, session_b: str) -> None:
     prompt = "Price a trip from Dumfries to Westpark."
 
     def chat(
@@ -73,15 +73,6 @@ def exercise_sessions(post: Post, session_a: str, session_b: str) -> dict[str, o
     _expect(post, "/api/reset", {"session_id": session_a}, 200)
     chat(session_b)
     chat(session_a, retries=3)
-    return {
-        "session_a": session_a,
-        "session_b": session_b,
-        "successful_a_before_reset": 5,
-        "successful_b": 3,
-        "a_turn_limit_observed": True,
-        "a_reset_observed": True,
-        "a_restarted": True,
-    }
 
 
 def _stage_counts(
@@ -98,10 +89,8 @@ def _stage_counts(
 
 
 def verify_isolation(
-    records: list[dict[str, str]], observations: dict[str, object]
+    records: list[dict[str, str]], session_a: str, session_b: str
 ) -> dict[str, object]:
-    session_a = cast(str, observations["session_a"])
-    session_b = cast(str, observations["session_b"])
     stream_sessions: dict[str, set[str]] = defaultdict(set)
     for record in records:
         if any(
@@ -118,19 +107,22 @@ def verify_isolation(
 
     a_streams = _stage_counts(records, session_a)
     b_streams = _stage_counts(records, session_b)
-    a_before = [
-        counts
-        for counts in a_streams.values()
-        if counts.get("agent") == 5 and counts.get("invoke") == 6
-    ]
-    if len(a_before) != 1:
+    if (
+        sum(
+            counts.get("agent") == 5 and counts.get("invoke") == 6
+            for counts in a_streams.values()
+        )
+        != 1
+    ):
         raise IsolationVerificationError("missing session A pre-reset turn evidence")
-    a_after = [
-        counts
-        for counts in a_streams.values()
-        if counts.get("agent") == 1 and counts.get("invoke") == 1
-    ]
-    if len(a_streams) != 2 or len(a_after) != 1:
+    if (
+        len(a_streams) != 2
+        or sum(
+            counts.get("agent") == 1 and counts.get("invoke") == 1
+            for counts in a_streams.values()
+        )
+        != 1
+    ):
         raise IsolationVerificationError("session A did not receive a fresh runtime")
     if len(b_streams) != 1:
         raise IsolationVerificationError(
@@ -139,16 +131,6 @@ def verify_isolation(
     [b_counts] = b_streams.values()
     if b_counts.get("agent") != 3 or b_counts.get("invoke") != 3:
         raise IsolationVerificationError("session B turn evidence is incomplete")
-    if not all(
-        observations.get(key) is expected
-        for key, expected in (
-            ("a_turn_limit_observed", True),
-            ("a_reset_observed", True),
-            ("a_restarted", True),
-        )
-    ):
-        raise IsolationVerificationError("HTTP observations are incomplete")
-
     return {
         "interleaved_sessions": 2,
         "session_a_pre_reset_agent_invocations": 5,
@@ -304,14 +286,14 @@ def main() -> int:
     runtime_version = _live_runtime_version(aws)
     session_a, session_b = str(uuid.uuid4()), str(uuid.uuid4())
     started = int(time.time()) - 1
-    observations = exercise_sessions(_http_post(preview_url), session_a, session_b)
+    exercise_sessions(_http_post(preview_url), session_a, session_b)
 
     deadline = time.time() + wait_seconds
     last_error: Exception | None = None
     while time.time() < deadline:
         try:
             checks = verify_isolation(
-                _query_records(aws, log_group, started), observations
+                _query_records(aws, log_group, started), session_a, session_b
             )
             break
         except IsolationVerificationError as error:

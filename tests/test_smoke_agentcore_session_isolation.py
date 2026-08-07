@@ -41,8 +41,8 @@ def _successful_exercise():
                 return _response(422, "turn_limit")
         return _response()
 
-    observations = evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
-    return observations, calls
+    evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
+    return calls
 
 
 def _records(
@@ -83,17 +83,8 @@ def _passing_records() -> list[dict[str, str]]:
 
 
 def test_exercise_interleaves_sessions_exhausts_a_and_resets_only_a():
-    observations, calls = _successful_exercise()
+    calls = _successful_exercise()
 
-    assert observations == {
-        "session_a": SESSION_A,
-        "session_b": SESSION_B,
-        "successful_a_before_reset": 5,
-        "successful_b": 3,
-        "a_turn_limit_observed": True,
-        "a_reset_observed": True,
-        "a_restarted": True,
-    }
     assert [body["session_id"] for path, body in calls[:2] if path == "/api/chat"] == [
         SESSION_A,
         SESSION_B,
@@ -104,9 +95,7 @@ def test_exercise_interleaves_sessions_exhausts_a_and_resets_only_a():
 
 
 def test_verify_accepts_isolated_turns_and_reset_streams():
-    observations, _ = _successful_exercise()
-
-    report = evaluator.verify_isolation(_passing_records(), observations)
+    report = evaluator.verify_isolation(_passing_records(), SESSION_A, SESSION_B)
 
     assert report == {
         "interleaved_sessions": 2,
@@ -196,10 +185,8 @@ def test_live_runtime_version_reads_the_preview_endpoint(monkeypatch):
 
 
 def test_verify_rejects_malformed_trace_records():
-    observations, _ = _successful_exercise()
-
     with pytest.raises(evaluator.IsolationVerificationError, match="malformed"):
-        evaluator.verify_isolation([{"session_id": SESSION_A}], observations)
+        evaluator.verify_isolation([{"session_id": SESSION_A}], SESSION_A, SESSION_B)
 
 
 @pytest.mark.parametrize(
@@ -240,7 +227,5 @@ def test_verify_rejects_malformed_trace_records():
     ],
 )
 def test_verify_fails_closed_on_invalid_isolation_evidence(records, match):
-    observations, _ = _successful_exercise()
-
     with pytest.raises(evaluator.IsolationVerificationError, match=match):
-        evaluator.verify_isolation(records, observations)
+        evaluator.verify_isolation(records, SESSION_A, SESSION_B)
