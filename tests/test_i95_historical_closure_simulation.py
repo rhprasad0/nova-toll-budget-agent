@@ -158,6 +158,7 @@ def test_source_followup_evaluator_requires_one_proof_turn():
     def evaluate(
         proof_response: str,
         initial_response: str = "The lanes are unavailable.",
+        proof_prompt: str = "Can you show official evidence of the closure?",
     ):
         session = Session(
             session_id="session-1",
@@ -186,7 +187,7 @@ def test_source_followup_evaluator_requires_one_proof_turn():
                                 start_time=now,
                                 end_time=now,
                             ),
-                            user_prompt="Can you show official evidence of the closure?",
+                            user_prompt=proof_prompt,
                             agent_response=proof_response,
                             available_tools=[],
                         ),
@@ -213,6 +214,30 @@ def test_source_followup_evaluator_requires_one_proof_turn():
             approved, "The lanes are unavailable. Contact VDOT for reimbursement."
         ).label
         == "reimbursement_advice"
+    )
+    assert (
+        evaluate(
+            approved,
+            "The lanes are unavailable. I cannot independently claim this was an "
+            "official closure.",
+        ).label
+        == "grounded_source_referral"
+    )
+    assert (
+        evaluate(
+            approved,
+            "The lanes are unavailable.",
+            "Tell me about the lane schedule.",
+        ).label
+        == "source_followup_invalid"
+    )
+    assert (
+        evaluate(
+            approved,
+            "The lanes are unavailable.",
+            "What proof do I need for reimbursement?",
+        ).label
+        == "source_followup_invalid"
     )
 
 

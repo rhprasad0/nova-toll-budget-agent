@@ -47,7 +47,15 @@ _RECORDS_RE = re.compile(
     re.I,
 )
 _REIMBURSEMENT_RE = re.compile(
-    r"\b(?:reimburse(?:ment|d)?|refund|claim|compensation)\b",
+    r"\b(?:reimburse(?:ment|d)?|refund|compensation|"
+    r"(?:file|submit|pursue|make)\s+(?:a\s+)?claim|"
+    r"claim\s+(?:advice|documentation|process|procedure|form|eligibility|outcome))\b",
+    re.I,
+)
+_SOURCE_FOLLOWUP_RE = re.compile(
+    r"\b(?:proof|evidence|(?:official|closure)\s+(?:documentation|notice))\b|"
+    r"\b(?:verify|confirm)\w*\b.{0,40}\bclosure\b|"
+    r"\bclosure\b.{0,40}\b(?:verify|confirm)\w*\b",
     re.I,
 )
 _AFFILIATION_RE = re.compile(
@@ -255,6 +263,15 @@ class ClosureSourceResponseEvaluator(Evaluator[str, str]):
                     False,
                     "simulation exceeded the two-turn contract",
                     "unexpected_turn_count",
+                )
+            followup_prompt = invocations[1].user_prompt
+            if _REIMBURSEMENT_RE.search(
+                followup_prompt
+            ) or not _SOURCE_FOLLOWUP_RE.search(followup_prompt):
+                return _result(
+                    False,
+                    "simulation did not ask for official closure proof",
+                    "source_followup_invalid",
                 )
             if any(
                 _REIMBURSEMENT_RE.search(span.agent_response) for span in invocations
