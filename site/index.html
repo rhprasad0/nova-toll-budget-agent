@@ -167,7 +167,7 @@
     <aside id="map-detail" class="map-detail" aria-live="polite">
       <span class="detail-kicker">Coverage break</span>
       <strong>I-95 ↔ I-495 junction price unavailable.</strong>
-      <p>We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available.</p>
+      <p>Movement and open-lane direction select Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. We add known fares but exclude the unpriced gap.</p>
     </aside>
   </section>
   <section id="tollchat-chat" class="chat" aria-labelledby="chat-title" hidden>
@@ -359,7 +359,7 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
     setDetail(
       "Coverage break",
       "I-95 ↔ I-495 junction price unavailable.",
-      "We price I-95 to Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. Known fares stay separate; no complete trip total is available."
+      "Movement and open-lane direction select Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. We add known fares but exclude the unpriced gap."
     );
   };
 

@@ -1,0 +1,2234 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026.",
+      "actual_output": "## Known segment prices\n\n- **Dulles Toll Road:** Exit 15 - SR 676 (Wolf Trap) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway), eastbound  \n  - Mainline plaza: **$4.00**\n- **I-495 Express Lanes:** Route 267 \u2192 I-495 Near Braddock Road, southbound: **$21.45**  \n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n- **I-95/395 Express Lanes:** Franconia-Springfield Parkway/Route 289 \u2192 I-95 Near Dumfries Road/Route 234, southbound: **$15.90**  \n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n\nThe I-495/Route 267 interchange connector is untolled.\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **Franconia-Springfield Parkway/Route 289** and **I-495 Near Braddock Road**. This junction is not treated as free.\n\n## Calculation\n\n**$4.00 + $21.45 + $15.90 = $41.35**\n\n## Known toll total\n\n**$41.35.** This known toll total excludes the unpriced junction and is not a complete operator-issued fare.\n\n\nYes. For this **southbound** trip, the I-95 leg starts at **Franconia-Springfield Parkway/Route 289**, not Edsall. The returned I-95 segment was:\n\n- Franconia-Springfield Parkway/Route 289 \u2192 I-95 Near Dumfries Road/Route 234: **$15.90**\n\nThe unpriced junction is the road between **I-495 Near Braddock Road** and **Franconia-Springfield Parkway/Route 289**. Edsall applies to the opposite boundary/movement, not this returned southbound segment.\n\nIncluding every known fare:\n\n**$4.00 Dulles Toll Road + $21.45 I-495 + $15.90 I-95 = $41.35**\n\nThe **$41.35** total excludes the unpriced junction and is not a complete operator-issued fare.\n",
+      "name": "wolf-trap-dumfries-southbound-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across at most three turns, TollChat keeps the fixed trip, uses the fixture's movement-specific I-95 boundary or unavailable status, sums all successfully returned fares, and clearly excludes the unpriced junction without calling it free.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "f22b6933e96ef4ef",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "a9244765b0ddb775",
+                  "start_time": "2026-08-08T17:32:07.521333Z",
+                  "end_time": "2026-08-08T17:32:10.672370Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "eebb7e71bf81c391",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "a9244765b0ddb775",
+                  "start_time": "2026-08-08T17:32:10.672837Z",
+                  "end_time": "2026-08-08T17:32:10.674034Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "dulles_toll_road",
+                    "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                    "destination_corridor": "i95",
+                    "destination": "I-95 Near Dumfries Road/Route 234",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "a640ce46cf282437",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "2a853b0172a37f8c",
+                  "start_time": "2026-08-08T17:32:10.674874Z",
+                  "end_time": "2026-08-08T17:32:12.182121Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "b8e0640a80581bae",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "2a853b0172a37f8c",
+                  "start_time": "2026-08-08T17:32:12.182955Z",
+                  "end_time": "2026-08-08T17:32:12.185226Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "dulles_route",
+                  "arguments": {
+                    "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                    "destination": "1819",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "ffe0142873e7a005",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "cb97644a4a24e4aa",
+                  "start_time": "2026-08-08T17:32:12.187592Z",
+                  "end_time": "2026-08-08T17:32:16.311538Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "182SO",
+                          "destination": "191SD",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "cfac7ebbbc63ce69",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "cb97644a4a24e4aa",
+                  "start_time": "2026-08-08T17:32:16.311829Z",
+                  "end_time": "2026-08-08T17:32:16.848999Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "182SO",
+                    "destination": "191SD",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"182SO\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"182SO\", \"label\": \"Route 267\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1049, \"price_usd\": \"21.45\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"at_time\": \"2026-07-29T18:50:00-04:00\", \"total_usd\": \"21.45\"}",
+                  "error": null,
+                  "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "6f829a27bff45673",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "f21a241b58d7f2d7",
+                  "start_time": "2026-08-08T17:32:16.850118Z",
+                  "end_time": "2026-08-08T17:32:18.223783Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "182SO",
+                          "destination": "191SD",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"182SO\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"182SO\", \"label\": \"Route 267\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1049, \"price_usd\": \"21.45\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"at_time\": \"2026-07-29T18:50:00-04:00\", \"total_usd\": \"21.45\"}",
+                        "error": null,
+                        "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "I-95 Near Dumfries Road/Route 234",
+                          "movement": "i495_to_i95",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_C6qQxm2t15MEvsauy5CRYxhi",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "394750d91fe9e775",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "f21a241b58d7f2d7",
+                  "start_time": "2026-08-08T17:32:18.224117Z",
+                  "end_time": "2026-08-08T17:32:19.055115Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_junction_leg",
+                  "arguments": {
+                    "location": "I-95 Near Dumfries Road/Route 234",
+                    "movement": "i495_to_i95",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_C6qQxm2t15MEvsauy5CRYxhi"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Franconia-Springfield Parkway/Route 289\", \"destination\": \"I-95 Near Dumfries Road/Route 234\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"206SO\", \"label\": \"Franconia-Springfield Parkway/Route 289\"}, \"exit\": {\"node_id\": \"217SD\", \"label\": \"I-95 Near Dumfries Road/Route 234\"}, \"legs\": [{\"od_pair_id\": 1172, \"price_usd\": \"15.90\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"Franconia-Springfield Parkway/Route 289\", \"direction\": \"Southbound\"}, \"total_usd\": \"15.90\"}",
+                  "error": null,
+                  "tool_call_id": "call_C6qQxm2t15MEvsauy5CRYxhi"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "f5348f613bd19c80",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "c14125aaea5623aa",
+                  "start_time": "2026-08-08T17:32:19.056108Z",
+                  "end_time": "2026-08-08T17:32:23.235554Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_X7Qzidg0QDoiwLOVelRFlZ0q",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_oShMQVuqyyK9buYKPKwIZGQl",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "182SO",
+                          "destination": "191SD",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"182SO\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"182SO\", \"label\": \"Route 267\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1049, \"price_usd\": \"21.45\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"at_time\": \"2026-07-29T18:50:00-04:00\", \"total_usd\": \"21.45\"}",
+                        "error": null,
+                        "tool_call_id": "call_AVrqG5UoWvLkhUgQ07DTw3yV",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "I-95 Near Dumfries Road/Route 234",
+                          "movement": "i495_to_i95",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_C6qQxm2t15MEvsauy5CRYxhi",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Franconia-Springfield Parkway/Route 289\", \"destination\": \"I-95 Near Dumfries Road/Route 234\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"206SO\", \"label\": \"Franconia-Springfield Parkway/Route 289\"}, \"exit\": {\"node_id\": \"217SD\", \"label\": \"I-95 Near Dumfries Road/Route 234\"}, \"legs\": [{\"od_pair_id\": 1172, \"price_usd\": \"15.90\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"Franconia-Springfield Parkway/Route 289\", \"direction\": \"Southbound\"}, \"total_usd\": \"15.90\"}",
+                        "error": null,
+                        "tool_call_id": "call_C6qQxm2t15MEvsauy5CRYxhi",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Known segment prices\n\n- **Dulles Toll Road:** Exit 15 - SR 676 (Wolf Trap) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway), eastbound  \n  - Mainline plaza: **$4.00**\n- **I-495 Express Lanes:** Route 267 \u2192 I-495 Near Braddock Road, southbound: **$21.45**  \n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n- **I-95/395 Express Lanes:** Franconia-Springfield Parkway/Route 289 \u2192 I-95 Near Dumfries Road/Route 234, southbound: **$15.90**  \n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n\nThe I-495/Route 267 interchange connector is untolled.\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **Franconia-Springfield Parkway/Route 289** and **I-495 Near Braddock Road**. This junction is not treated as free.\n\n## Calculation\n\n**$4.00 + $21.45 + $15.90 = $41.35**\n\n## Known toll total\n\n**$41.35.** This known toll total excludes the unpriced junction and is not a complete operator-issued fare."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "8a852d10f536df0f",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "f3224cb41579963d",
+                  "start_time": "2026-08-08T17:32:07.518743Z",
+                  "end_time": "2026-08-08T17:32:23.236660Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026.",
+                "agent_response": "## Known segment prices\n\n- **Dulles Toll Road:** Exit 15 - SR 676 (Wolf Trap) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway), eastbound  \n  - Mainline plaza: **$4.00**\n- **I-495 Express Lanes:** Route 267 \u2192 I-495 Near Braddock Road, southbound: **$21.45**  \n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n- **I-95/395 Express Lanes:** Franconia-Springfield Parkway/Route 289 \u2192 I-95 Near Dumfries Road/Route 234, southbound: **$15.90**  \n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n\nThe I-495/Route 267 interchange connector is untolled.\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **Franconia-Springfield Parkway/Route 289** and **I-495 Near Braddock Road**. This junction is not treated as free.\n\n## Calculation\n\n**$4.00 + $21.45 + $15.90 = $41.35**\n\n## Known toll total\n\n**$41.35.** This known toll total excludes the unpriced junction and is not a complete operator-issued fare.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "3ecc0d23ff453bd2",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "2649db021281b31c",
+                  "start_time": "2026-08-08T17:32:36.758293Z",
+                  "end_time": "2026-08-08T17:32:46.519318Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "I need to clarify\u2014your I-95 leg starts at Edsall, but shouldn't it start at Springfield/Franconia instead? Also, what's the actual sum when you include every known fare you've mentioned?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. For this **southbound** trip, the I-95 leg starts at **Franconia-Springfield Parkway/Route 289**, not Edsall. The returned I-95 segment was:\n\n- Franconia-Springfield Parkway/Route 289 \u2192 I-95 Near Dumfries Road/Route 234: **$15.90**\n\nThe unpriced junction is the road between **I-495 Near Braddock Road** and **Franconia-Springfield Parkway/Route 289**. Edsall applies to the opposite boundary/movement, not this returned southbound segment.\n\nIncluding every known fare:\n\n**$4.00 Dulles Toll Road + $21.45 I-495 + $15.90 I-95 = $41.35**\n\nThe **$41.35** total excludes the unpriced junction and is not a complete operator-issued fare."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+                  "span_id": "fa0b951e626cfa69",
+                  "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f",
+                  "parent_span_id": "f3224cb41579963d",
+                  "start_time": "2026-08-08T17:32:36.756218Z",
+                  "end_time": "2026-08-08T17:32:46.520230Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "I need to clarify\u2014your I-95 leg starts at Edsall, but shouldn't it start at Springfield/Franconia instead? Also, what's the actual sum when you include every known fare you've mentioned?",
+                "agent_response": "Yes. For this **southbound** trip, the I-95 leg starts at **Franconia-Springfield Parkway/Route 289**, not Edsall. The returned I-95 segment was:\n\n- Franconia-Springfield Parkway/Route 289 \u2192 I-95 Near Dumfries Road/Route 234: **$15.90**\n\nThe unpriced junction is the road between **I-495 Near Braddock Road** and **Franconia-Springfield Parkway/Route 289**. Edsall applies to the opposite boundary/movement, not this returned southbound segment.\n\nIncluding every known fare:\n\n**$4.00 Dulles Toll Road + $21.45 I-495 + $15.90 I-95 = $41.35**\n\nThe **$41.35** total excludes the unpriced junction and is not a complete operator-issued fare.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "9e21c2f6bbbc9ccd4985895737a0a1a6",
+            "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f"
+          }
+        ],
+        "session_id": "c4e0ac49-d611-4aaf-8b79-44b1cfac9d0f"
+      },
+      "metadata": {
+        "id": "wolf-trap-dumfries-southbound",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Wolf Trap to Dumfries at 6:50 PM Eastern on July 29, 2026."
+          }
+        ],
+        "at_time": "2026-07-29T18:50:00-04:00",
+        "expected_calls": [
+          {
+            "tool": "plan_toll_route",
+            "input": {
+              "origin_corridor": "dulles_toll_road",
+              "origin": "Exit 15 - SR 676 (Wolf Trap)",
+              "destination_corridor": "i95",
+              "destination": "I-95 Near Dumfries Road/Route 234",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          },
+          {
+            "tool": "dulles_route",
+            "input": {
+              "origin": "Exit 15 - SR 676 (Wolf Trap)",
+              "destination": "1819",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          },
+          {
+            "tool": "i495_route",
+            "input": {
+              "origin": "182SO",
+              "destination": "191SD",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          },
+          {
+            "tool": "i95_junction_leg",
+            "input": {
+              "location": "I-95 Near Dumfries Road/Route 234",
+              "movement": "i495_to_i95",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          }
+        ],
+        "expected_junction": {
+          "pricing_status": "priced",
+          "direction": "Southbound",
+          "boundary_label": "Franconia-Springfield Parkway/Route 289",
+          "lane_statuses": {
+            "Northbound": "CLOSED",
+            "Southbound": "SOUTHBOUND_OPEN"
+          },
+          "node_role": "entry",
+          "node_id": "206SO",
+          "od_pair_id": 1172
+        },
+        "expected_i495": {
+          "node_role": "exit",
+          "node_id": "191SD"
+        },
+        "actor_challenge": "First challenge any claim that the I-95 leg starts at Edsall: it must start at Springfield/Franconia. Then ask for the sum of every known fare.",
+        "batch_judge_suite": "i95_i495_junctions",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is pricing-only. A known toll total should add every returned fare while excluding the unpriced I-95/I-495 junction; that sum is not a complete operator-issued fare.",
+        "task_description": "Keep the assigned route and historical time fixed. Verify the movement-aware I-95 boundary and known toll total."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "JunctionSimulationTraceEvaluator",
+      "evaluator_type": "JunctionSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026.",
+      "actual_output": "## Known segment prices\n\n- Pentagon/Eads Street \u2192 I-395 Near Edsall Road \u2014 **I-95/395 Express Lanes, southbound:** **$10.05**\n  - VDOT observed at: 7/29/2026 6:40 PM ET\n- I-495 Near Braddock Road \u2192 Westpark Drive \u2014 **I-495 Express Lanes, northbound:** **$8.70**\n  - VDOT observed at: 7/29/2026 6:40 PM ET\n\nThe I-95/395 Express Lanes were unavailable northbound at the requested travel time; the general-purpose lanes are an unpriced alternative. The requested southbound segment was priced.\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **I-395 Near Edsall Road** and **I-495 Near Braddock Road**. This junction is not treated as free.\n\n## Calculation\n\n**$10.05 + $8.70 = $18.75**\n\n## Known toll total\n\n**$18.75.** This sum excludes the unpriced junction and is not a complete operator-issued fare.\n",
+      "name": "pentagon-westpark-southbound-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across at most three turns, TollChat keeps the fixed trip, uses the fixture's movement-specific I-95 boundary or unavailable status, sums all successfully returned fares, and clearly excludes the unpriced junction without calling it free.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "5b11944edc119275",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "e551e6ffb8b0cbd3",
+                  "start_time": "2026-08-08T17:32:58.253853Z",
+                  "end_time": "2026-08-08T17:33:00.094308Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "Pentagon/Eads Street",
+                          "destination_corridor": "i495",
+                          "destination": "Westpark Drive",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "2f0f1b8728870f31",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "e551e6ffb8b0cbd3",
+                  "start_time": "2026-08-08T17:33:00.095119Z",
+                  "end_time": "2026-08-08T17:33:00.098228Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "i95",
+                    "origin": "Pentagon/Eads Street",
+                    "destination_corridor": "i495",
+                    "destination": "Westpark Drive",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "8fa9e12dcf879a33",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "7273126d6c8abba8",
+                  "start_time": "2026-08-08T17:33:00.100588Z",
+                  "end_time": "2026-08-08T17:33:01.868057Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "Pentagon/Eads Street",
+                          "destination_corridor": "i495",
+                          "destination": "Westpark Drive",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "Pentagon/Eads Street",
+                          "movement": "i95_to_i495",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "31fd552eefb562a1",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "7273126d6c8abba8",
+                  "start_time": "2026-08-08T17:33:01.868870Z",
+                  "end_time": "2026-08-08T17:33:02.283994Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_junction_leg",
+                  "arguments": {
+                    "location": "Pentagon/Eads Street",
+                    "movement": "i95_to_i495",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Pentagon/Eads Street\", \"destination\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"2233SO\", \"label\": \"Pentagon/Eads Street\"}, \"exit\": {\"node_id\": \"227SD\", \"label\": \"I-395 Near Edsall Road\"}, \"legs\": [{\"od_pair_id\": 1203, \"price_usd\": \"10.05\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\"}, \"total_usd\": \"10.05\"}",
+                  "error": null,
+                  "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "acf09d5c9b65ab3e",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "e0c006bf3c2e3754",
+                  "start_time": "2026-08-08T17:33:02.286549Z",
+                  "end_time": "2026-08-08T17:33:03.754424Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "Pentagon/Eads Street",
+                          "destination_corridor": "i495",
+                          "destination": "Westpark Drive",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "Pentagon/Eads Street",
+                          "movement": "i95_to_i495",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Pentagon/Eads Street\", \"destination\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"2233SO\", \"label\": \"Pentagon/Eads Street\"}, \"exit\": {\"node_id\": \"227SD\", \"label\": \"I-395 Near Edsall Road\"}, \"legs\": [{\"od_pair_id\": 1203, \"price_usd\": \"10.05\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\"}, \"total_usd\": \"10.05\"}",
+                        "error": null,
+                        "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "191NO",
+                          "destination": "Westpark Drive",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_FCXZjpZ6YeuWraAnnhhPm0VQ",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "bb65367dd85c4e76",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "e0c006bf3c2e3754",
+                  "start_time": "2026-08-08T17:33:03.755248Z",
+                  "end_time": "2026-08-08T17:33:04.166559Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "191NO",
+                    "destination": "Westpark Drive",
+                    "at_time": "2026-07-29T18:50:00-04:00"
+                  },
+                  "tool_call_id": "call_FCXZjpZ6YeuWraAnnhhPm0VQ"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"191NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"191NO\", \"label\": \"I-495 Near Braddock Road\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1012, \"price_usd\": \"8.70\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"at_time\": \"2026-07-29T18:50:00-04:00\", \"total_usd\": \"8.70\"}",
+                  "error": null,
+                  "tool_call_id": "call_FCXZjpZ6YeuWraAnnhhPm0VQ"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "51d1322659c02e61",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "a35658b436bb98cb",
+                  "start_time": "2026-08-08T17:33:04.169363Z",
+                  "end_time": "2026-08-08T17:33:07.814077Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "i95",
+                          "origin": "Pentagon/Eads Street",
+                          "destination_corridor": "i495",
+                          "destination": "Westpark Drive",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_cSARHNHWWqfqy4mB2qiDkspb",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "Pentagon/Eads Street",
+                          "movement": "i95_to_i495",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Pentagon/Eads Street\", \"destination\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"2233SO\", \"label\": \"Pentagon/Eads Street\"}, \"exit\": {\"node_id\": \"227SD\", \"label\": \"I-395 Near Edsall Road\"}, \"legs\": [{\"od_pair_id\": 1203, \"price_usd\": \"10.05\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\"}, \"total_usd\": \"10.05\"}",
+                        "error": null,
+                        "tool_call_id": "call_RCgUo5CrDsq4BgJNXE2gODSR",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "191NO",
+                          "destination": "Westpark Drive",
+                          "at_time": "2026-07-29T18:50:00-04:00"
+                        },
+                        "tool_call_id": "call_FCXZjpZ6YeuWraAnnhhPm0VQ",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"191NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"191NO\", \"label\": \"I-495 Near Braddock Road\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1012, \"price_usd\": \"8.70\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"at_time\": \"2026-07-29T18:50:00-04:00\", \"total_usd\": \"8.70\"}",
+                        "error": null,
+                        "tool_call_id": "call_FCXZjpZ6YeuWraAnnhhPm0VQ",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "## Known segment prices\n\n- Pentagon/Eads Street \u2192 I-395 Near Edsall Road \u2014 **I-95/395 Express Lanes, southbound:** **$10.05**\n  - VDOT observed at: 7/29/2026 6:40 PM ET\n- I-495 Near Braddock Road \u2192 Westpark Drive \u2014 **I-495 Express Lanes, northbound:** **$8.70**\n  - VDOT observed at: 7/29/2026 6:40 PM ET\n\nThe I-95/395 Express Lanes were unavailable northbound at the requested travel time; the general-purpose lanes are an unpriced alternative. The requested southbound segment was priced.\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **I-395 Near Edsall Road** and **I-495 Near Braddock Road**. This junction is not treated as free.\n\n## Calculation\n\n**$10.05 + $8.70 = $18.75**\n\n## Known toll total\n\n**$18.75.** This sum excludes the unpriced junction and is not a complete operator-issued fare."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+                  "span_id": "dbba4f7a19b822e7",
+                  "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389",
+                  "parent_span_id": "ae9ca84d8ff6b856",
+                  "start_time": "2026-08-08T17:32:58.251534Z",
+                  "end_time": "2026-08-08T17:33:07.815091Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026.",
+                "agent_response": "## Known segment prices\n\n- Pentagon/Eads Street \u2192 I-395 Near Edsall Road \u2014 **I-95/395 Express Lanes, southbound:** **$10.05**\n  - VDOT observed at: 7/29/2026 6:40 PM ET\n- I-495 Near Braddock Road \u2192 Westpark Drive \u2014 **I-495 Express Lanes, northbound:** **$8.70**\n  - VDOT observed at: 7/29/2026 6:40 PM ET\n\nThe I-95/395 Express Lanes were unavailable northbound at the requested travel time; the general-purpose lanes are an unpriced alternative. The requested southbound segment was priced.\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **I-395 Near Edsall Road** and **I-495 Near Braddock Road**. This junction is not treated as free.\n\n## Calculation\n\n**$10.05 + $8.70 = $18.75**\n\n## Known toll total\n\n**$18.75.** This sum excludes the unpriced junction and is not a complete operator-issued fare.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "dd3d6e0e83ba4bcdc55e5d757f54e8d1",
+            "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389"
+          }
+        ],
+        "session_id": "2a5a51ea-55ed-4d56-938a-19ee3e4ee389"
+      },
+      "metadata": {
+        "id": "pentagon-westpark-southbound",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026."
+          }
+        ],
+        "at_time": "2026-07-29T18:50:00-04:00",
+        "expected_calls": [
+          {
+            "tool": "plan_toll_route",
+            "input": {
+              "origin_corridor": "i95",
+              "origin": "Pentagon/Eads Street",
+              "destination_corridor": "i495",
+              "destination": "Westpark Drive",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          },
+          {
+            "tool": "i95_junction_leg",
+            "input": {
+              "location": "Pentagon/Eads Street",
+              "movement": "i95_to_i495",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          },
+          {
+            "tool": "i495_route",
+            "input": {
+              "origin": "191NO",
+              "destination": "Westpark Drive",
+              "at_time": "2026-07-29T18:50:00-04:00"
+            }
+          }
+        ],
+        "expected_junction": {
+          "pricing_status": "priced",
+          "direction": "Southbound",
+          "boundary_label": "I-395 Near Edsall Road",
+          "lane_statuses": {
+            "Northbound": "CLOSED",
+            "Southbound": "SOUTHBOUND_OPEN"
+          },
+          "node_role": "exit",
+          "node_id": "227SD",
+          "od_pair_id": 1203
+        },
+        "expected_i495": {
+          "node_role": "entry",
+          "node_id": "191NO"
+        },
+        "actor_challenge": "First challenge any claim that this southbound I-95 leg ends at Springfield: it must end at Edsall. Then ask for the sum of every known fare.",
+        "batch_judge_suite": "i95_i495_junctions",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is pricing-only. A known toll total should add every returned fare while excluding the unpriced I-95/I-495 junction; that sum is not a complete operator-issued fare.",
+        "task_description": "Keep the assigned route and historical time fixed. Verify the movement-aware I-95 boundary and known toll total."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "JunctionSimulationTraceEvaluator",
+      "evaluator_type": "JunctionSimulationTraceEvaluator"
+    },
+    {
+      "input": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026.",
+      "actual_output": "**Known segment prices**\n\n- Exit 15 - SR 676 (Wolf Trap) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway) \u2014 Dulles Toll Road, eastbound:\n  - Mainline plaza: **$4.00**\n- Route 267 \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$7.55**\n  - VDOT observed at: **7/29/2026 10:40 AM ET**\n- The I-95 Express Lanes were unavailable for the requested trip because neither direction had exactly one fully open direction. The I-95 general-purpose lanes are an unpriced alternative.\n\nThe I-495/Route 267 interchange between the priced segments is an untolled connector.\n\n**Unpriced junction**\n\nVDOT does not provide a price for the road between **I-495 Near Braddock Road** and **I-95 Near Dumfries Road/Route 234**. This junction is not treated as free.\n\n**Calculation**\n\n$4.00 + $7.55 = **$11.55**\n\n**Known toll total**\n\n**$11.55.** This sum excludes the unpriced junction and is not a complete operator-issued fare.\n\n\nNo. You can sum the two known priced fares:\n\n**$4.00 + $7.55 = $11.55**\n\nBut **$11.55 is not the actual complete toll amount for the trip**. It excludes the unpriced road between I-495 Near Braddock Road and I-95 Near Dumfries Road/Route 234, for which VDOT did not provide a fare. The total is therefore a **known toll subtotal**, not a complete operator-issued fare.\n\n\nNo. **Unpriced does not mean free.** It means VDOT did not provide a fare for that junction, so the **$11.55** is only the known toll subtotal and cannot be treated as the complete trip amount.\n",
+      "name": "wolf-trap-dumfries-both-closed-simulated",
+      "expected_output": null,
+      "expected_assertion": "Across at most three turns, TollChat keeps the fixed trip, uses the fixture's movement-specific I-95 boundary or unavailable status, sums all successfully returned fares, and clearly excludes the unpriced junction without calling it free.",
+      "expected_trajectory": null,
+      "actual_trajectory": {
+        "traces": [
+          {
+            "spans": [
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "5a524ad77ee72f07",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "0b6ba3923694ee22",
+                  "start_time": "2026-08-08T17:33:17.146992Z",
+                  "end_time": "2026-08-08T17:33:19.273225Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "ef007a5493ac5051",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "0b6ba3923694ee22",
+                  "start_time": "2026-08-08T17:33:19.274015Z",
+                  "end_time": "2026-08-08T17:33:19.277302Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "plan_toll_route",
+                  "arguments": {
+                    "origin_corridor": "dulles_toll_road",
+                    "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                    "destination_corridor": "i95",
+                    "destination": "I-95 Near Dumfries Road/Route 234",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd"
+                },
+                "tool_result": {
+                  "content": "{\"at_time\": \"2026-07-29T10:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "8e07061d90ba035a",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "fdf8e9c021870999",
+                  "start_time": "2026-08-08T17:33:19.279616Z",
+                  "end_time": "2026-08-08T17:33:21.180833Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T10:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "10c3e8bf1d2b4fd1",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "fdf8e9c021870999",
+                  "start_time": "2026-08-08T17:33:21.181598Z",
+                  "end_time": "2026-08-08T17:33:21.184089Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "dulles_route",
+                  "arguments": {
+                    "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                    "destination": "1819",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T10:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                  "error": null,
+                  "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "3b28a489e1432a3e",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "4a8cbc11e86e9a26",
+                  "start_time": "2026-08-08T17:33:21.186566Z",
+                  "end_time": "2026-08-08T17:33:22.492157Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T10:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T10:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "182SO",
+                          "destination": "191SD",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "bca1a1a6fa0b633f",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "4a8cbc11e86e9a26",
+                  "start_time": "2026-08-08T17:33:22.492959Z",
+                  "end_time": "2026-08-08T17:33:22.869961Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i495_route",
+                  "arguments": {
+                    "origin": "182SO",
+                    "destination": "191SD",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU"
+                },
+                "tool_result": {
+                  "content": "{\"origin\": \"182SO\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"182SO\", \"label\": \"Route 267\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1049, \"price_usd\": \"7.55\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-29T10:50:00-04:00\", \"observed_at\": \"2026-07-29T10:40:00-04:00\"}], \"at_time\": \"2026-07-29T10:50:00-04:00\", \"total_usd\": \"7.55\"}",
+                  "error": null,
+                  "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "1dab6d3716653918",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "0160fd43ab6b646c",
+                  "start_time": "2026-08-08T17:33:22.872750Z",
+                  "end_time": "2026-08-08T17:33:24.300380Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T10:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T10:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "182SO",
+                          "destination": "191SD",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"182SO\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"182SO\", \"label\": \"Route 267\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1049, \"price_usd\": \"7.55\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-29T10:50:00-04:00\", \"observed_at\": \"2026-07-29T10:40:00-04:00\"}], \"at_time\": \"2026-07-29T10:50:00-04:00\", \"total_usd\": \"7.55\"}",
+                        "error": null,
+                        "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "I-95 Near Dumfries Road/Route 234",
+                          "movement": "i495_to_i95",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_cHk0rk8KaLwcRZleKDyQWasK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "dab31d5addd55189",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "0160fd43ab6b646c",
+                  "start_time": "2026-08-08T17:33:24.301198Z",
+                  "end_time": "2026-08-08T17:33:24.674505Z"
+                },
+                "metadata": {},
+                "span_type": "execute_tool",
+                "tool_call": {
+                  "name": "i95_junction_leg",
+                  "arguments": {
+                    "location": "I-95 Near Dumfries Road/Route 234",
+                    "movement": "i495_to_i95",
+                    "at_time": "2026-07-29T10:50:00-04:00"
+                  },
+                  "tool_call_id": "call_cHk0rk8KaLwcRZleKDyQWasK"
+                },
+                "tool_result": {
+                  "content": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"at_time\": \"2026-07-29T10:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"CLOSED\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"I-95 does not have exactly one fully open direction\"}",
+                  "error": null,
+                  "tool_call_id": "call_cHk0rk8KaLwcRZleKDyQWasK"
+                }
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "b1c5528d6b8bd9fa",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "3dde0dc9d0475c23",
+                  "start_time": "2026-08-08T17:33:24.677514Z",
+                  "end_time": "2026-08-08T17:33:28.040466Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026."
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "plan_toll_route",
+                        "arguments": {
+                          "origin_corridor": "dulles_toll_road",
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination_corridor": "i95",
+                          "destination": "I-95 Near Dumfries Road/Route 234",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"at_time\": \"2026-07-29T10:50:00-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"dulles_toll_road\", \"tool\": \"dulles_route\", \"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\"}, {\"kind\": \"connector\", \"transfer_id\": \"dulles_toll_road_to_i495\", \"label\": \"I-495/Route 267 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"182SO\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_8XwTlFmmsbgHo2TXuNrRd6gd",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "dulles_route",
+                        "arguments": {
+                          "origin": "Exit 15 - SR 676 (Wolf Trap)",
+                          "destination": "1819",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"Exit 15 - SR 676 (Wolf Trap)\", \"destination\": \"1819\", \"at_time\": \"2026-07-29T10:50:00-04:00\", \"legs\": [{\"facility\": \"dulles_toll_road\", \"direction\": \"EB\", \"entry\": {\"node_id\": \"15\", \"label\": \"Exit 15 - SR 676 (Wolf Trap)\"}, \"exit\": {\"node_id\": \"1819\", \"label\": \"Exit 18/19 - I-495 / SR 123 (Capital Beltway)\"}, \"rate_period\": null}], \"tolls\": [{\"facility\": \"dulles_toll_road\", \"label\": \"Mainline plaza\", \"price_usd\": \"4.00\"}]}",
+                        "error": null,
+                        "tool_call_id": "call_w1RWiCAeETbVA5zU8wRQOBEV",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i495_route",
+                        "arguments": {
+                          "origin": "182SO",
+                          "destination": "191SD",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"origin\": \"182SO\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"182SO\", \"label\": \"Route 267\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1049, \"price_usd\": \"7.55\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-29T10:50:00-04:00\", \"observed_at\": \"2026-07-29T10:40:00-04:00\"}], \"at_time\": \"2026-07-29T10:50:00-04:00\", \"total_usd\": \"7.55\"}",
+                        "error": null,
+                        "tool_call_id": "call_VCkxJmbfhm7Bz5yOql21kJrU",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "name": "i95_junction_leg",
+                        "arguments": {
+                          "location": "I-95 Near Dumfries Road/Route 234",
+                          "movement": "i495_to_i95",
+                          "at_time": "2026-07-29T10:50:00-04:00"
+                        },
+                        "tool_call_id": "call_cHk0rk8KaLwcRZleKDyQWasK",
+                        "content_type": "tool_use"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"at_time\": \"2026-07-29T10:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"CLOSED\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"I-95 does not have exactly one fully open direction\"}",
+                        "error": null,
+                        "tool_call_id": "call_cHk0rk8KaLwcRZleKDyQWasK",
+                        "content_type": "tool_result"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "**Known segment prices**\n\n- Exit 15 - SR 676 (Wolf Trap) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway) \u2014 Dulles Toll Road, eastbound:\n  - Mainline plaza: **$4.00**\n- Route 267 \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$7.55**\n  - VDOT observed at: **7/29/2026 10:40 AM ET**\n- The I-95 Express Lanes were unavailable for the requested trip because neither direction had exactly one fully open direction. The I-95 general-purpose lanes are an unpriced alternative.\n\nThe I-495/Route 267 interchange between the priced segments is an untolled connector.\n\n**Unpriced junction**\n\nVDOT does not provide a price for the road between **I-495 Near Braddock Road** and **I-95 Near Dumfries Road/Route 234**. This junction is not treated as free.\n\n**Calculation**\n\n$4.00 + $7.55 = **$11.55**\n\n**Known toll total**\n\n**$11.55.** This sum excludes the unpriced junction and is not a complete operator-issued fare."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "d60392655838e419",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "97aaf468ba2fb6b7",
+                  "start_time": "2026-08-08T17:33:17.144657Z",
+                  "end_time": "2026-08-08T17:33:28.041563Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026.",
+                "agent_response": "**Known segment prices**\n\n- Exit 15 - SR 676 (Wolf Trap) \u2192 Exit 18/19 - I-495 / SR 123 (Capital Beltway) \u2014 Dulles Toll Road, eastbound:\n  - Mainline plaza: **$4.00**\n- Route 267 \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$7.55**\n  - VDOT observed at: **7/29/2026 10:40 AM ET**\n- The I-95 Express Lanes were unavailable for the requested trip because neither direction had exactly one fully open direction. The I-95 general-purpose lanes are an unpriced alternative.\n\nThe I-495/Route 267 interchange between the priced segments is an untolled connector.\n\n**Unpriced junction**\n\nVDOT does not provide a price for the road between **I-495 Near Braddock Road** and **I-95 Near Dumfries Road/Route 234**. This junction is not treated as free.\n\n**Calculation**\n\n$4.00 + $7.55 = **$11.55**\n\n**Known toll total**\n\n**$11.55.** This sum excludes the unpriced junction and is not a complete operator-issued fare.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "6007172f11716948",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "6bc127b48eb5701e",
+                  "start_time": "2026-08-08T17:33:38.080512Z",
+                  "end_time": "2026-08-08T17:33:40.049366Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Can I still sum those two priced fares together to get the actual toll amount for my trip?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "No. You can sum the two known priced fares:\n\n**$4.00 + $7.55 = $11.55**\n\nBut **$11.55 is not the actual complete toll amount for the trip**. It excludes the unpriced road between I-495 Near Braddock Road and I-95 Near Dumfries Road/Route 234, for which VDOT did not provide a fare. The total is therefore a **known toll subtotal**, not a complete operator-issued fare."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "62d23272c57211b6",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "97aaf468ba2fb6b7",
+                  "start_time": "2026-08-08T17:33:38.078226Z",
+                  "end_time": "2026-08-08T17:33:40.050229Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "Can I still sum those two priced fares together to get the actual toll amount for my trip?",
+                "agent_response": "No. You can sum the two known priced fares:\n\n**$4.00 + $7.55 = $11.55**\n\nBut **$11.55 is not the actual complete toll amount for the trip**. It excludes the unpriced road between I-495 Near Braddock Road and I-95 Near Dumfries Road/Route 234, for which VDOT did not provide a fare. The total is therefore a **known toll subtotal**, not a complete operator-issued fare.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "b8f0a9c8693770e6",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "3ea76c07764b3f8b",
+                  "start_time": "2026-08-08T17:33:50.819419Z",
+                  "end_time": "2026-08-08T17:33:52.273757Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "So does that mean the unpriced junction is free?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "No. **Unpriced does not mean free.** It means VDOT did not provide a fare for that junction, so the **$11.55** is only the known toll subtotal and cannot be treated as the complete trip amount."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+                  "span_id": "19a1a0710554c5c8",
+                  "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874",
+                  "parent_span_id": "97aaf468ba2fb6b7",
+                  "start_time": "2026-08-08T17:33:50.818336Z",
+                  "end_time": "2026-08-08T17:33:52.274743Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "So does that mean the unpriced junction is free?",
+                "agent_response": "No. **Unpriced does not mean free.** It means VDOT did not provide a fare for that junction, so the **$11.55** is only the known toll subtotal and cannot be treated as the complete trip amount.\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              }
+            ],
+            "trace_id": "7a7729ec267aea45ad8b6885ae62c4a3",
+            "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874"
+          }
+        ],
+        "session_id": "034670a8-32ed-4bc2-97b2-6cb4a0d9a874"
+      },
+      "metadata": {
+        "id": "wolf-trap-dumfries-both-closed",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Wolf Trap to Dumfries at 10:50 AM Eastern on July 29, 2026."
+          }
+        ],
+        "at_time": "2026-07-29T10:50:00-04:00",
+        "expected_calls": [
+          {
+            "tool": "plan_toll_route",
+            "input": {
+              "origin_corridor": "dulles_toll_road",
+              "origin": "Exit 15 - SR 676 (Wolf Trap)",
+              "destination_corridor": "i95",
+              "destination": "I-95 Near Dumfries Road/Route 234",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          },
+          {
+            "tool": "dulles_route",
+            "input": {
+              "origin": "Exit 15 - SR 676 (Wolf Trap)",
+              "destination": "1819",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          },
+          {
+            "tool": "i495_route",
+            "input": {
+              "origin": "182SO",
+              "destination": "191SD",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          },
+          {
+            "tool": "i95_junction_leg",
+            "input": {
+              "location": "I-95 Near Dumfries Road/Route 234",
+              "movement": "i495_to_i95",
+              "at_time": "2026-07-29T10:50:00-04:00"
+            }
+          }
+        ],
+        "expected_junction": {
+          "pricing_status": "unavailable",
+          "lane_statuses": {
+            "Northbound": "CLOSED",
+            "Southbound": "CLOSED"
+          }
+        },
+        "expected_i495": {
+          "node_role": "exit",
+          "node_id": "191SD"
+        },
+        "actor_challenge": "Ask whether the remaining successfully priced fares can still be summed. Then ask whether that means the unpriced junction is free.",
+        "batch_judge_suite": "i95_i495_junctions",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is pricing-only. A known toll total should add every returned fare while excluding the unpriced I-95/I-495 junction; that sum is not a complete operator-issued fare.",
+        "task_description": "Keep the assigned route and historical time fixed. Verify the movement-aware I-95 boundary and known toll total."
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "JunctionSimulationTraceEvaluator",
+      "evaluator_type": "JunctionSimulationTraceEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "movement-aware junction trajectory matched",
+    "movement-aware junction trajectory matched",
+    "movement-aware junction trajectory matched"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "movement-aware junction trajectory matched",
+        "label": "junction_ok"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "movement-aware junction trajectory matched",
+        "label": "junction_ok"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "movement-aware junction trajectory matched",
+        "label": "junction_ok"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null
+  ]
+}

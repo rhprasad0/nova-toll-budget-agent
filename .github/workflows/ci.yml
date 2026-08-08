@@ -46,6 +46,7 @@ jobs:
       - run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py --check
       - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py --check
       - run: uv run python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py --check
+      - run: uv run python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py --check
       - run: uv run python eval/deterministic/guardrail_boundary/deterministic_guardrail_boundary.py --check
       - run: uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
       - run: uv run python eval/simulated/simulated_user_i95_one_way_access.py --check
@@ -53,6 +54,7 @@ jobs:
       - run: uv run python eval/simulated/simulated_user_non_i95_directional_access.py --check
       - run: uv run python eval/simulated/simulated_user_missing_parameter_acquisition.py --check
       - run: uv run python eval/simulated/simulated_user_single_leg_base_cases.py --check
+      - run: uv run python eval/simulated/simulated_user_i95_i495_junctions.py --check
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 
   integration:
@@ -102,8 +104,12 @@ jobs:
         run: rm -f eval/results/*.json
       - id: i95_one_way_eval
         run: uv run python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py
+      - name: Clear previous live evaluation report
+        run: rm -f eval/results/*.json
+      - id: i95_i495_junction_eval
+        run: uv run python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py
       - name: Save failed live evaluation report
-        if: failure() && (steps.single_leg_eval.outcome == 'failure' || steps.i95_one_way_eval.outcome == 'failure')
+        if: failure() && (steps.single_leg_eval.outcome == 'failure' || steps.i95_one_way_eval.outcome == 'failure' || steps.i95_i495_junction_eval.outcome == 'failure')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ci-live-eval-${{ github.run_id }}-${{ github.run_attempt }}

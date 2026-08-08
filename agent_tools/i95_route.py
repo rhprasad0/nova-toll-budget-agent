@@ -195,8 +195,14 @@ _REQUIRED_LINK_STATUS = {
 }
 
 _JUNCTION_BOUNDARIES = {
-    "Northbound": "Franconia-Springfield Parkway/Route 289",
-    "Southbound": "I-395 Near Edsall Road",
+    "i95_to_i495": {
+        "Northbound": "Franconia-Springfield Parkway/Route 289",
+        "Southbound": "I-395 Near Edsall Road",
+    },
+    "i495_to_i95": {
+        "Northbound": "I-395 Near Edsall Road",
+        "Southbound": "Franconia-Springfield Parkway/Route 289",
+    },
 }
 _JUNCTION_MOVEMENTS = {"i95_to_i495", "i495_to_i95"}
 _STATUS_OD_PAIR_IDS = {"Northbound": 1132, "Southbound": 1151}
@@ -285,7 +291,7 @@ def _price_i95_leg(
 def _junction_lookup(
     location: str, movement: str, direction: str
 ) -> _oracle_route.JsonObject | None:
-    boundary = _JUNCTION_BOUNDARIES[direction]
+    boundary = _JUNCTION_BOUNDARIES[movement][direction]
     origin, destination = (
         (location, boundary) if movement == "i95_to_i495" else (boundary, location)
     )
@@ -311,8 +317,10 @@ def i95_junction_leg(
     """Price the I-95/395 leg beside an unpriced I-95/I-495 junction.
 
     Call only for a ``junction`` step from ``plan_toll_route``. The returned
-    boundary is priced only when exactly one reversible direction is open;
-    this tool never prices the gap to I-495 Near Braddock Road.
+    boundary depends on movement as well as the one open reversible direction:
+    leaving I-95 uses Franconia-Springfield northbound or Edsall southbound;
+    entering I-95 uses Edsall northbound or Franconia-Springfield southbound.
+    This tool never prices the gap to I-495 Near Braddock Road.
 
     Args:
         location: Non-junction I-95/395 ramp label or raw oracle node ID.
@@ -443,7 +451,7 @@ def i95_junction_leg(
         **route,
         **common,
         "junction_boundary": {
-            "label": _JUNCTION_BOUNDARIES[open_directions[0]],
+            "label": _JUNCTION_BOUNDARIES[movement][open_directions[0]],
             "direction": open_directions[0],
         },
         "legs": [priced_leg],

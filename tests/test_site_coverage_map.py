@@ -166,7 +166,7 @@ def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
     )
     assert "Edsall or Franconia-Springfield" in page
     assert "I-495 pricing begins or ends at Braddock" in page
-    assert "no complete trip total is available" in page
+    assert "We add known fares but exclude the unpriced gap" in page
 
 
 def test_map_keeps_filtered_controls_and_responsive_camera_in_sync() -> None:

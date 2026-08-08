@@ -384,52 +384,102 @@ def test_access_options_tool_spec_matches_signature():
     }
 
 
-@pytest.mark.parametrize("at_time", [None, ""])
-def test_junction_leg_selects_northbound_franconia(monkeypatch, at_time):
+@pytest.mark.parametrize(
+    (
+        "location",
+        "movement",
+        "direction",
+        "boundary_label",
+        "boundary_role",
+        "boundary_node_id",
+        "od_pair_id",
+    ),
+    [
+        (
+            "I-95 Near Dumfries Road/Route 234",
+            "i95_to_i495",
+            "Northbound",
+            "Franconia-Springfield Parkway/Route 289",
+            "exit",
+            "206ND",
+            1103,
+        ),
+        (
+            "Pentagon/Eads Street",
+            "i495_to_i95",
+            "Northbound",
+            "I-395 Near Edsall Road",
+            "entry",
+            "221NO",
+            1267,
+        ),
+        (
+            "Pentagon/Eads Street",
+            "i95_to_i495",
+            "Southbound",
+            "I-395 Near Edsall Road",
+            "exit",
+            "227SD",
+            1203,
+        ),
+        (
+            "I-95 Near Dumfries Road/Route 234",
+            "i495_to_i95",
+            "Southbound",
+            "Franconia-Springfield Parkway/Route 289",
+            "entry",
+            "206SO",
+            1172,
+        ),
+    ],
+)
+def test_junction_leg_selects_boundary_by_movement_and_direction(
+    monkeypatch,
+    location,
+    movement,
+    direction,
+    boundary_label,
+    boundary_role,
+    boundary_node_id,
+    od_pair_id,
+):
+    northbound = direction == "Northbound"
     conn = FakeConnection(
         [
-            _row(1132, "I-95-NB", "NORTHBOUND_OPEN"),
-            _row(1151, "I-95-SB", "CLOSED"),
-            _row(1130, "I-95-NB", "NORTHBOUND_OPEN", "2.70"),
+            _row(
+                1132,
+                "I-95-NB",
+                "NORTHBOUND_OPEN" if northbound else "CLOSED",
+            ),
+            _row(
+                1151,
+                "I-95-SB",
+                "CLOSED" if northbound else "SOUTHBOUND_OPEN",
+            ),
+            _row(
+                od_pair_id,
+                "I-95-NB" if northbound else "I-95-SB",
+                "NORTHBOUND_OPEN" if northbound else "SOUTHBOUND_OPEN",
+                "2.70",
+            ),
         ]
     )
     monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
 
-    result = i95_junction_leg("US-1", "i95_to_i495", at_time)
+    result = i95_junction_leg(location, movement)
 
     assert result["pricing_status"] == "priced"
-    assert result["direction"] == "Northbound"
-    assert result["exit"]["node_id"] == "206ND"
+    assert result["direction"] == direction
+    assert result[boundary_role]["node_id"] == boundary_node_id
     assert result["junction_boundary"] == {
-        "label": "Franconia-Springfield Parkway/Route 289",
-        "direction": "Northbound",
+        "label": boundary_label,
+        "direction": direction,
     }
-    assert result["i495_boundary"]["entry_node_id"] == "191NO"
+    assert result["legs"][0]["od_pair_id"] == od_pair_id
+    assert result["i495_boundary"][
+        "entry_node_id" if movement == "i95_to_i495" else "exit_node_id"
+    ] == ("191NO" if movement == "i95_to_i495" else "191SD")
     assert result["total_usd"] == "2.70"
-    assert all("trip_pricing_i95_live" not in sql for sql, _ in conn.cur.queries)
-
-
-def test_junction_leg_selects_southbound_edsall_in_reverse(monkeypatch):
-    conn = FakeConnection(
-        [
-            _row(1132, "I-95-NB", "CLOSED"),
-            _row(1151, "I-95-SB", "SOUTHBOUND_OPEN"),
-            _row(1151, "I-95-SB", "SOUTHBOUND_OPEN", "9.05"),
-        ]
-    )
-    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
-
-    result = i95_junction_leg("US-1", "i495_to_i95")
-
-    assert result["pricing_status"] == "priced"
-    assert result["direction"] == "Southbound"
-    assert result["entry"]["node_id"] == "200SO"
-    assert result["junction_boundary"] == {
-        "label": "I-395 Near Edsall Road",
-        "direction": "Southbound",
-    }
-    assert result["i495_boundary"]["exit_node_id"] == "191SD"
-    assert result["total_usd"] == "9.05"
 
 
 @pytest.mark.parametrize(

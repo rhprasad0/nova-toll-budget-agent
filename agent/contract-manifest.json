@@ -1,6 +1,6 @@
 {
   "system_prompt": {
-    "current": "1.24.0",
+    "current": "1.25.0",
     "releases": {
       "1.0.0": "fb8d9b5d78a8da76835812c415f283e34e6412b591ae742beca0fb9a1dfbd633",
       "1.1.0": "28f4007a8d558addc4360ed4d5e9d6738394234ae2080fc42dbf28022249591e",
@@ -25,18 +25,20 @@
       "1.20.0": "e9c40f7ecad6f73fb663a33aa463a31872a38875d39ea35f60d9b4613b894063",
       "1.22.0": "88b16d94dd9e5bc461f35d2561dc1ee566c3090d901768e5054ac3a207f2374f",
       "1.23.0": "c1d46084ab4c69cbce52cf86aa7092b44f27ec6a82f70686e9773c6bde2968af",
-      "1.24.0": "c809c72f4e4190fa1b8ccbab0e3e32a2f29fda81d21aa1af576141e0d6b63f4f"
+      "1.24.0": "c809c72f4e4190fa1b8ccbab0e3e32a2f29fda81d21aa1af576141e0d6b63f4f",
+      "1.25.0": "3f2ddcc24e50287bd280c6bc3ab12f4da21dec4606696d69e99b4e225960b2ac"
     }
   },
   "toolset": {
-    "current": "1.5.0",
+    "current": "1.6.0",
     "releases": {
       "1.0.0": "f24c895c6a73bbd50f4958731dffacf3887f0d5e6b15de2d953dec70144f85ab",
       "1.1.0": "ec664b71665059f59dd95d3ac2114d43954f48815453833c5222845e65f62ed3",
       "1.2.0": "25076aef5d8fae5de66fd48b25b09d48ccfce4b6f2e7fcd3ecda8eecca0b7cad",
       "1.3.0": "e3d2f25e2fdb1155b522e86365305325f791bb8f23e9479e066e6ccf801648a9",
       "1.4.0": "3e99ce1df66f24c0e2aba252bd9a4edfd25f57e7dc1eec0a80e3eba85a3b6049",
-      "1.5.0": "0d94502cf32882bde1cbe2680bbcd91436c3c247f13509d32467ac43dcf2eb6f"
+      "1.5.0": "0d94502cf32882bde1cbe2680bbcd91436c3c247f13509d32467ac43dcf2eb6f",
+      "1.6.0": "3f844cc98c7650a4dc7e20afe4df0398213976587b8de5b2314336477d5ef203"
     }
   }
 }
