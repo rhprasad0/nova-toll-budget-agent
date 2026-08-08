@@ -32,7 +32,7 @@ SSM Parameter Store remains the source of truth for every credential. Public
 traffic receives only the validated event contract and guarded answer; it never
 receives model, tool, database, provider, or infrastructure details.
 
-## Gate 1 - Public edge and spend boundary
+## [Gate 1 - Public edge and spend boundary](https://github.com/rhprasad0/nova-toll-budget-agent/issues/122)
 
 - [ ] Add a separately switchable CloudFront `/api/*` origin without weakening
       the existing private preview.
@@ -57,7 +57,7 @@ receives model, tool, database, provider, or infrastructure details.
 - [ ] Verify the dedicated runtime and proxy roles still have only the existing
       read-only pricing, Guardrail, trace, and invocation permissions.
 
-## Gate 2 - Session ownership
+## [Gate 2 - Session ownership](https://github.com/rhprasad0/nova-toll-budget-agent/issues/123)
 
 - [ ] Complete [#108](https://github.com/rhprasad0/nova-toll-budget-agent/issues/108):
       issue the anonymous session credential from the backend instead of
@@ -73,7 +73,7 @@ receives model, tool, database, provider, or infrastructure details.
 - [ ] Do not add user accounts unless beta evidence or an approved privacy
       requirement makes them necessary.
 
-## Gate 3 - Trace policy, terms, and user notice
+## [Gate 3 - Trace policy, terms, and user notice](https://github.com/rhprasad0/nova-toll-budget-agent/issues/124)
 
 - [ ] Complete the launch-critical decisions in
       [#96](https://github.com/rhprasad0/nova-toll-budget-agent/issues/96),
@@ -100,7 +100,7 @@ receives model, tool, database, provider, or infrastructure details.
       [#90](https://github.com/rhprasad0/nova-toll-budget-agent/issues/90)
       until a concrete retention, lookup, or deletion requirement needs it.
 
-## Gate 4 - Operational readiness
+## [Gate 4 - Operational readiness](https://github.com/rhprasad0/nova-toll-budget-agent/issues/125)
 
 - [ ] Complete the deployed kill-switch drill in
       [#93](https://github.com/rhprasad0/nova-toll-budget-agent/issues/93),
@@ -124,7 +124,7 @@ receives model, tool, database, provider, or infrastructure details.
       rollback runbook restores approved proxy concurrency before the private
       smoke test, then exercise it before enabling public traffic.
 
-## Gate 5 - Beta feedback and ownership
+## [Gate 5 - Beta feedback and ownership](https://github.com/rhprasad0/nova-toll-budget-agent/issues/126)
 
 - [ ] Label the product **Open Beta** and state that behavior may change and no
       availability commitment is offered.
