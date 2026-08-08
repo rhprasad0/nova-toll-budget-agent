@@ -88,15 +88,10 @@ ${"x".repeat(300)}
   await expect(assistant).toContainText("<script>window.markdownAttack = true</script>");
   await expect(assistant).toContainText("**unterminated emphasis");
   await expect(assistant.locator("a")).toHaveCount(4);
-  await expect(assistant.locator('a[href="https://example.com/empty"]')).toHaveText(
-    "https://example.com/empty"
-  );
-  await expect(
-    assistant.locator('a[href="https://example.com/whitespace"]')
-  ).toHaveText("https://example.com/whitespace");
-  await expect(assistant.locator('a[href="https://example.com/zero-width"]')).toHaveText(
-    "https://example.com/zero-width"
-  );
+  for (const slug of ["empty", "whitespace", "zero-width"]) {
+    const url = `https://example.com/${slug}`;
+    await expect(assistant.locator(`a[href="${url}"]`)).toHaveText(url);
+  }
   const link = assistant.getByRole("link", { name: "safe documentation" });
   await expect(link).toHaveAttribute("href", "https://www.vdot.virginia.gov/");
   await expect(link).toHaveAttribute("target", "_blank");

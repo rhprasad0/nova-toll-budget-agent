@@ -7,8 +7,7 @@ import markdownit from "./markdown-it-15.0.0/markdown-it.esm.min.mjs";
  */
 const markdown = markdownit({
   html: false,
-  linkify: false,
-  typographer: false
+  linkify: false
 });
 
 markdown.validateLink = (url) => {
