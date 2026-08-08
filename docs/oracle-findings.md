@@ -274,14 +274,18 @@ live-fallback source.
 
 ### Direction-aware junction pricing boundary (2026-07-29)
 
-The split remains, but the agent no longer treats Springfield/Van Dorn as a
-free connector or adds the two ordinary boundary fares. A dedicated
-`i95_junction_leg` reads both VDOT reversible-lane states at one requested
-time. Southbound 95 pricing ends or begins at Edsall; northbound pricing ends
-or begins at Franconia-Springfield. I-495 pricing independently begins or
-ends at I-495 Near Braddock Road. The road between those boundaries is
-unpriced, so cross-junction answers list known segment prices without a
-subtotal or complete total.
+The split remains, and the agent never treats Springfield/Van Dorn as a free
+connector. A dedicated `i95_junction_leg` reads both VDOT reversible-lane
+states at one requested time and combines direction with movement. Northbound
+I-95→I-495 ends at Franconia-Springfield, while northbound I-495→I-95 begins at
+Edsall. Southbound I-95→I-495 ends at Edsall, while southbound I-495→I-95
+begins at Franconia-Springfield. I-495 pricing independently begins or ends at
+I-495 Near Braddock Road. The road between those boundaries is unpriced;
+cross-junction answers add the returned fares into a known toll total that
+explicitly excludes the gap and is not a complete operator-issued fare.
+When the requested I-95 endpoint is already the selected boundary, there is no
+I-95 leg to price; the junction tool reports that fact without a zero-dollar
+fare or an unavailable-lane claim.
 
 ## 9. VDOT republishes Transurban's price on a 10-minute delay
 

@@ -290,7 +290,8 @@ mistaken for the final story.
   `I-95-NB`/`I-95-SB` row each hard-erroring, an unrecognized
   `corridor_name` hard-erroring) and a label-shared-by-multiple-node-ids
   case. It also covers `i95_junction_leg` selecting Edsall or
-  Franconia-Springfield, and failing safe for closed, transitional,
+  Franconia-Springfield from both movement and direction, returning no priced
+  leg when the requested endpoint is already that boundary, and failing safe for closed, transitional,
   ambiguous, missing, or misaligned status rows. `test_oracle_route.py` covers `resolve_at_time`'s
   parsing/defaulting once, where the one implementation lives.
   Pricing tests use a duck-typed fake connection/cursor

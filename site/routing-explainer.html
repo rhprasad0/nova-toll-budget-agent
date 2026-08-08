@@ -471,9 +471,9 @@
       <p class="section-copy">The planner is conservative by design. Missing evidence produces an error, not an imaginative detour or a suspiciously convenient fare.</p>
     </div>
     <div class="guardrails">
-      <article class="guardrail"><span class="icon">↔</span><h3>Direction selects the boundary</h3><p>VDOT lane status selects Edsall southbound or Franconia-Springfield northbound; I‑495 pricing resumes at Braddock node 191NO.</p></article>
+      <article class="guardrail"><span class="icon">↔</span><h3>Movement and direction select the boundary</h3><p>Northbound I‑95→I‑495 ends at Franconia-Springfield while I‑495→I‑95 begins at Edsall; southbound uses the reverse boundaries.</p></article>
       <article class="guardrail"><span class="icon">×</span><h3>No unsupported edge</h3><p>If neither a direct oracle pair nor a committed transfer reaches the destination, the result is an explicit “no supported directed route” error.</p></article>
-      <article class="guardrail"><span class="icon">$</span><h3>No invented price</h3><p>The junction is unpriced, never $0. Known segment fares remain separate and never become a complete trip total.</p></article>
+      <article class="guardrail"><span class="icon">$</span><h3>No invented price</h3><p>The junction is unpriced, never $0. Known segment fares add to a known toll total that excludes the gap.</p></article>
     </div>
 
     <details>
@@ -532,7 +532,7 @@ return "no oracle-supported directed route"</pre>
     },
     i95: {
       title: "I‑95 / 395 Express Lanes",
-      copy: "A dynamically priced corridor with reversible availability. A dedicated junction tool selects Edsall southbound or Franconia-Springfield northbound.",
+      copy: "A dynamically priced corridor with reversible availability. A dedicated junction tool combines the open direction with the movement to select Edsall or Franconia-Springfield.",
       items: ["Pricing tools: i95_route and i95_junction_leg", "Junction: explicitly unpriced", "Availability: checked from VDOT"]
     }
   };

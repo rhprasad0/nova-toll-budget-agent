@@ -1017,9 +1017,11 @@ def test_system_prompt_states_the_overshoot_anti_example():
     assert "even while" in prompt and "assume it is free" in prompt
     assert "**Known segment prices**" in prompt
     assert "**Unpriced junction**" in prompt
-    assert "**Complete price unavailable**" in prompt
-    assert "Never calculate a subtotal or complete total" in prompt
-    assert "Do not repeat a user's proposed amount" in prompt
+    assert "**Known toll total**" in prompt
+    assert "exact decimal addition of every successfully returned fare" in prompt
+    assert "not a complete operator-issued fare" in prompt
+    assert "**Complete price unavailable**" not in prompt
+    assert re.search(r"Do not repeat a user's\s+proposed amount", prompt)
     assert "requires exactly one" in prompt
     assert "Never skip it" in prompt
 
@@ -1135,6 +1137,9 @@ def test_system_prompt_requires_auditable_price_reporting():
     assert "calculated Dulles total" in prompt
     assert "empty dulles_route tolls list means no toll applies" in prompt
     assert "never list its $0.00 sentinel as a billed fare" in prompt
+    assert "Northbound `i95_to_i495`" in prompt
+    assert "Southbound `i95_to_i495`" in prompt
+    assert '`pricing_status: "not_applicable"`' in prompt
     assert "private reasoning or narrate tool-call deliberation" in prompt
 
 
@@ -1177,12 +1182,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.25.0"
-    advanced["system_prompt"]["releases"]["1.25.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.27.0"
+    advanced["system_prompt"]["releases"]["1.27.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.24\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.26\.0"):
         validate_manifest_update(previous, advanced)
 
 

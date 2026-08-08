@@ -19,7 +19,7 @@ price source.
 | Path | What |
 |---|---|
 | `agent/toll_agent.py` | the GPT-5.6 Luna agent that orchestrates the route and junction tools below into an answer — never touches RDS or SQL directly |
-| `agent_tools/` | Separate route tools price I-66, 95/395, 495, and Dulles. `i95_junction_leg` selects the open 95 direction and its Edsall or Franconia-Springfield boundary; 495 pricing resumes at Braddock, while the junction remains explicitly unpriced. |
+| `agent_tools/` | Separate route tools price I-66, 95/395, 495, and Dulles. `i95_junction_leg` selects the open 95 direction and the movement-specific Edsall or Franconia-Springfield boundary; 495 pricing resumes at Braddock, while the junction remains explicitly unpriced. |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
 | `db/` | the per-feed schema and the `loader_writer` role |
 | `infra/` | Terraform for the fetcher/loader Lambdas, S3, RDS, observability, and the tollchat.ai coming-soon site (DNS records in Cloudflare, static page on CloudFront) |

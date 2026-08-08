@@ -195,8 +195,14 @@ _REQUIRED_LINK_STATUS = {
 }
 
 _JUNCTION_BOUNDARIES = {
-    "Northbound": "Franconia-Springfield Parkway/Route 289",
-    "Southbound": "I-395 Near Edsall Road",
+    "i95_to_i495": {
+        "Northbound": "Franconia-Springfield Parkway/Route 289",
+        "Southbound": "I-395 Near Edsall Road",
+    },
+    "i495_to_i95": {
+        "Northbound": "I-395 Near Edsall Road",
+        "Southbound": "Franconia-Springfield Parkway/Route 289",
+    },
 }
 _JUNCTION_MOVEMENTS = {"i95_to_i495", "i495_to_i95"}
 _STATUS_OD_PAIR_IDS = {"Northbound": 1132, "Southbound": 1151}
@@ -285,7 +291,7 @@ def _price_i95_leg(
 def _junction_lookup(
     location: str, movement: str, direction: str
 ) -> _oracle_route.JsonObject | None:
-    boundary = _JUNCTION_BOUNDARIES[direction]
+    boundary = _JUNCTION_BOUNDARIES[movement][direction]
     origin, destination = (
         (location, boundary) if movement == "i95_to_i495" else (boundary, location)
     )
@@ -311,8 +317,10 @@ def i95_junction_leg(
     """Price the I-95/395 leg beside an unpriced I-95/I-495 junction.
 
     Call only for a ``junction`` step from ``plan_toll_route``. The returned
-    boundary is priced only when exactly one reversible direction is open;
-    this tool never prices the gap to I-495 Near Braddock Road.
+    boundary depends on movement as well as the one open reversible direction:
+    leaving I-95 uses Franconia-Springfield northbound or Edsall southbound;
+    entering I-95 uses Edsall northbound or Franconia-Springfield southbound.
+    This tool never prices the gap to I-495 Near Braddock Road.
 
     Args:
         location: Non-junction I-95/395 ramp label or raw oracle node ID.
@@ -322,8 +330,9 @@ def i95_junction_leg(
 
     Returns:
         dict: ``pricing_status: "priced"`` includes the I-95 fare fields;
-        ``"unavailable"`` has no monetary fields. Invalid input returns
-        ``{"error", "valid_options"}``.
+        ``"not_applicable"`` means the location is already the selected boundary;
+        ``"unavailable"`` means VDOT cannot price the needed leg. The latter two
+        have no monetary fields. Invalid input returns ``{"error", "valid_options"}``.
     """
     if movement not in _JUNCTION_MOVEMENTS:
         return {
@@ -354,6 +363,8 @@ def i95_junction_leg(
             "valid_options": [],
         }
 
+    location_labels = {_NODES[node_id]["label"] for node_id in location_ids}
+    at_boundary = False
     conn = _oracle_route.env_connect()
     try:
         with conn.cursor() as cur:
@@ -389,19 +400,23 @@ def i95_junction_leg(
             elif len(open_directions) != 1:
                 reason = "I-95 does not have exactly one fully open direction"
 
+            boundary_label = (
+                None if reason else _JUNCTION_BOUNDARIES[movement][open_directions[0]]
+            )
+            at_boundary = boundary_label in location_labels
             route = (
                 None
-                if reason
+                if reason or at_boundary
                 else _junction_lookup(location, movement, open_directions[0])
             )
-            if reason is None and route is None:
+            if reason is None and not at_boundary and route is None:
                 reason = (
                     f"{location!r} has no {open_directions[0].lower()} "
                     "95/395 segment to the junction boundary"
                 )
 
             priced_leg = None
-            if reason is None:
+            if reason is None and not at_boundary:
                 assert route is not None
                 try:
                     priced_leg = _price_i95_leg(
@@ -421,7 +436,9 @@ def i95_junction_leg(
         conn.close()
 
     common = {
-        "pricing_status": "unavailable" if reason else "priced",
+        "pricing_status": (
+            "unavailable" if reason else "not_applicable" if at_boundary else "priced"
+        ),
         "movement": movement,
         "location": location,
         "at_time": resolved_at_time.isoformat(),
@@ -438,14 +455,30 @@ def i95_junction_leg(
         )
         return response
 
+    boundary = {
+        "label": _JUNCTION_BOUNDARIES[movement][open_directions[0]],
+        "direction": open_directions[0],
+    }
+    if at_boundary:
+        response = {
+            **common,
+            "direction": open_directions[0],
+            "junction_boundary": boundary,
+            "reason": "location is the selected boundary; no priced I-95/395 leg is needed",
+        }
+        logger.info(
+            "i95_junction_leg not_applicable location=%r movement=%s direction=%s",
+            location,
+            movement,
+            open_directions[0],
+        )
+        return response
+
     assert route is not None and priced_leg is not None
     response = {
         **route,
         **common,
-        "junction_boundary": {
-            "label": _JUNCTION_BOUNDARIES[open_directions[0]],
-            "direction": open_directions[0],
-        },
+        "junction_boundary": boundary,
         "legs": [priced_leg],
         "total_usd": priced_leg["price_usd"],
     }
