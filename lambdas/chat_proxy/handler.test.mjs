@@ -96,6 +96,24 @@ test("chat replaces malformed or internal upstream data with a safe error", asyn
   assert.doesNotMatch(body, /password|hunter2|raw secret/);
 });
 
+test("chat requires exactly one terminal upstream event", async () => {
+  const terminal = 'data: {"type":"answer","text":"The toll is $4.25.","blocked":false}\n\n';
+  const tool = 'data: {"type":"tool","index":0,"label":"Checking I-495 tolls","status":"completed"}\n\n';
+
+  for (const response of [chunks(tool), chunks(terminal, tool)]) {
+    const client = { async send() { return { contentType: "text/event-stream", response }; } };
+    const result = await route(
+      event("POST", "/api/chat", { session_id: sessionId, message: "hello" }),
+      { client, runtimeArn: "runtime-arn", previewHtml: "" },
+    );
+    const body = await bodyText(result.body);
+
+    assert.match(body, /temporarily unavailable/);
+    assert.doesNotMatch(body, /The toll is/);
+    assert.equal(body.match(/"type":"(?:answer|error)"/g)?.length, 1);
+  }
+});
+
 test("validation, page, config, and reset keep their small contracts", async () => {
   const calls = [];
   const dependencies = {

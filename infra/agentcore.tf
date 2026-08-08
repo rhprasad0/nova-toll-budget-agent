@@ -667,10 +667,32 @@ resource "aws_api_gateway_integration" "tollchat_proxy" {
 resource "aws_api_gateway_deployment" "tollchat" {
   rest_api_id = aws_api_gateway_rest_api.tollchat.id
   triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_integration.tollchat_root.id,
-      aws_api_gateway_integration.tollchat_proxy.id,
-    ]))
+    redeployment = sha1(jsonencode({
+      policy     = aws_api_gateway_rest_api.tollchat.policy
+      proxy_path = aws_api_gateway_resource.tollchat_proxy.path_part
+      root_method = {
+        authorization = aws_api_gateway_method.tollchat_root.authorization
+        http_method   = aws_api_gateway_method.tollchat_root.http_method
+      }
+      proxy_method = {
+        authorization = aws_api_gateway_method.tollchat_proxy.authorization
+        http_method   = aws_api_gateway_method.tollchat_proxy.http_method
+      }
+      root_integration = {
+        integration_http_method = aws_api_gateway_integration.tollchat_root.integration_http_method
+        response_transfer_mode  = aws_api_gateway_integration.tollchat_root.response_transfer_mode
+        timeout_milliseconds    = aws_api_gateway_integration.tollchat_root.timeout_milliseconds
+        type                    = aws_api_gateway_integration.tollchat_root.type
+        uri                     = aws_api_gateway_integration.tollchat_root.uri
+      }
+      proxy_integration = {
+        integration_http_method = aws_api_gateway_integration.tollchat_proxy.integration_http_method
+        response_transfer_mode  = aws_api_gateway_integration.tollchat_proxy.response_transfer_mode
+        timeout_milliseconds    = aws_api_gateway_integration.tollchat_proxy.timeout_milliseconds
+        type                    = aws_api_gateway_integration.tollchat_proxy.type
+        uri                     = aws_api_gateway_integration.tollchat_proxy.uri
+      }
+    }))
   }
   lifecycle { create_before_destroy = true }
 }

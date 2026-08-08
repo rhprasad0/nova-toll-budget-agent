@@ -77,6 +77,7 @@ const validEvent = (value) => {
 async function* ndjsonFromSse(stream) {
   const decoder = new TextDecoder();
   let buffer = "";
+  let terminal;
   try {
     for await (const chunk of stream) {
       buffer += decoder.decode(chunk, { stream: true }).replaceAll("\r", "");
@@ -89,10 +90,14 @@ async function* ndjsonFromSse(stream) {
         if (lines.some((line) => !line.startsWith("data: "))) throw new Error("invalid SSE frame");
         const value = JSON.parse(lines.map((line) => line.slice(6)).join("\n"));
         if (!validEvent(value)) throw new Error("invalid stream event");
-        yield `${JSON.stringify(value)}\n`;
+        if (terminal) throw new Error("event after terminal");
+        if (value.type === "answer" || value.type === "error") terminal = value;
+        else yield `${JSON.stringify(value)}\n`;
       }
     }
     if (buffer.trim()) throw new Error("incomplete SSE frame");
+    if (!terminal) throw new Error("missing terminal event");
+    yield `${JSON.stringify(terminal)}\n`;
   } catch {
     yield `${JSON.stringify(SAFE_ERROR)}\n`;
   }
