@@ -669,7 +669,7 @@ resource "aws_api_gateway_deployment" "tollchat" {
   rest_api_id = aws_api_gateway_rest_api.tollchat.id
   triggers = {
     redeployment = sha1(jsonencode({
-      policy     = aws_api_gateway_rest_api.tollchat.policy
+      policy     = local.private_api_policy
       proxy_path = aws_api_gateway_resource.tollchat_proxy.path_part
       root_method = {
         authorization = aws_api_gateway_method.tollchat_root.authorization

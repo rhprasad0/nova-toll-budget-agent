@@ -20,6 +20,23 @@ def test_openai_ci_credentials_are_main_only() -> None:
     assert "refs/heads/*" not in trust
 
 
+def test_failed_live_eval_reports_are_preserved_without_curated_baselines() -> None:
+    workflow = (WORKFLOWS / "ci.yml").read_text()
+
+    assert (
+        "- name: Clear curated evaluation reports\n        run: rm -f eval/results/*.json"
+        in workflow
+    )
+    assert "if: failure()" in workflow
+    assert (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
+    )
+    assert (
+        "name: ci-live-eval-${{ github.run_id }}-${{ github.run_attempt }}" in workflow
+    )
+    assert "retention-days: 7" in workflow
+
+
 def test_claude_pr_review_has_no_secret_bearing_workflow() -> None:
     assert not (WORKFLOWS / "security-review.yml").exists()
     workflows = "\n".join(workflow.read_text() for workflow in WORKFLOWS.glob("*.y*ml"))
