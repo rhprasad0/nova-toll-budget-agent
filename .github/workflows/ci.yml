@@ -94,5 +94,19 @@ jobs:
           DB_USER: pricing_reader
           DB_NAME: nova_toll
           DB_CA_BUNDLE_PATH: infra/build/loader/rds-ca-bundle.pem
-      - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py
-      - run: uv run python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py
+      - name: Clear curated evaluation reports
+        run: rm -f eval/results/*.json
+      - id: single_leg_eval
+        run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py
+      - name: Clear previous live evaluation report
+        run: rm -f eval/results/*.json
+      - id: i95_one_way_eval
+        run: uv run python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py
+      - name: Save failed live evaluation report
+        if: failure() && (steps.single_leg_eval.outcome == 'failure' || steps.i95_one_way_eval.outcome == 'failure')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-live-eval-${{ github.run_id }}-${{ github.run_attempt }}
+          path: eval/results/*.json
+          if-no-files-found: ignore
+          retention-days: 7

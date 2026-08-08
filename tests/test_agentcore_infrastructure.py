@@ -79,7 +79,7 @@ def test_api_deployment_hashes_the_complete_stage_snapshot():
     ].split('resource "aws_api_gateway_stage" "tollchat"')[0]
 
     for snapshot_input in (
-        "aws_api_gateway_rest_api.tollchat.policy",
+        "local.private_api_policy",
         "aws_api_gateway_resource.tollchat_proxy.path_part",
         "aws_api_gateway_method.tollchat_root.authorization",
         "aws_api_gateway_method.tollchat_proxy.authorization",
@@ -91,6 +91,7 @@ def test_api_deployment_hashes_the_complete_stage_snapshot():
         "aws_api_gateway_integration.tollchat_proxy.timeout_milliseconds",
     ):
         assert snapshot_input in deployment
+    assert "aws_api_gateway_rest_api.tollchat.policy" not in deployment
     assert "aws_api_gateway_integration.tollchat_root.id" not in deployment
     assert "aws_api_gateway_integration.tollchat_proxy.id" not in deployment
 
