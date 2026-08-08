@@ -51,6 +51,7 @@ export async function consumeNdjson(stream, onEvent) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let terminal = false;
   while (true) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
@@ -61,11 +62,14 @@ export async function consumeNdjson(stream, onEvent) {
       if (!line) continue;
       const event = JSON.parse(line);
       if (!validEvent(event)) throw new Error("invalid stream event");
+      if (terminal) throw new Error("event after terminal");
+      terminal = event.type === "answer" || event.type === "error";
       onEvent(event);
     }
     if (done) break;
   }
   if (buffer.trim()) throw new Error("incomplete stream event");
+  if (!terminal) throw new Error("missing terminal event");
 }
 
 export async function runRequest(request, onEvent, setBusy) {

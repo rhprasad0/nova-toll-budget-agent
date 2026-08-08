@@ -98,3 +98,25 @@ test("NDJSON parser handles split chunks and rejects unknown envelopes", async (
   });
   await assert.rejects(() => consumeNdjson(invalid, () => {}), /invalid stream event/);
 });
+
+test("NDJSON parser requires exactly one terminal event", async () => {
+  const encoder = new TextEncoder();
+  const stream = (...events) => new ReadableStream({
+    start(controller) {
+      for (const event of events) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      controller.close();
+    },
+  });
+
+  await assert.rejects(
+    () => consumeNdjson(stream({ type: "tool", index: 0, label: "Planning toll route", status: "running" }), () => {}),
+    /missing terminal event/,
+  );
+  await assert.rejects(
+    () => consumeNdjson(stream(
+      { type: "answer", text: "Done", blocked: false },
+      { type: "error", code: "agent_unavailable", message: "Unavailable" },
+    ), () => {}),
+    /event after terminal/,
+  );
+});
