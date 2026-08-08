@@ -28,6 +28,7 @@ from agent.toll_agent import build_agent, plan_toll_route  # noqa: E402
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 _MONEY_RE = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)")
+_ZERO_MONEY_RE = re.compile(r"\$\s*0(?:\.0{1,2})?\b")
 _FREE_RE = re.compile(
     r"\b(?:junction|gap)\s+(?:is|was|costs?)\s+(?:free|nothing)\b|"
     r"\btreat(?:ed|ing)?\s+(?:the\s+)?(?:junction|gap)\s+as\s+free\b",
@@ -204,6 +205,11 @@ def evaluate_junction_response(
         return _result(False, f"missing response section from {required}", "sections")
     if _FREE_RE.search(response):
         return _result(False, "response called the junction free", "free_gap")
+    unpriced_section = folded.split("unpriced junction", 1)[-1].split("calculation", 1)[
+        0
+    ]
+    if _ZERO_MONEY_RE.search(unpriced_section):
+        return _result(False, "response priced the junction at zero", "zero_gap")
 
     wanted = cast(dict[str, Any], metadata["expected_junction"])
     if wanted["pricing_status"] == "priced":
@@ -352,7 +358,7 @@ def _synthetic_calls(row: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _self_check() -> None:
     rows = load_rows()
-    assert len(rows) == 3
+    assert len(rows) == 5
     for row in rows:
         calls = _synthetic_calls(row)
         assert evaluate_junction_calls(calls, row)[0].label == "junction_ok"
@@ -384,8 +390,13 @@ def _self_check() -> None:
         "Calculation. Known toll total."
     )
     assert evaluate_junction_response(good, calls, row)[0].label == "free_gap"
+    zero_gap = (
+        "Known segment prices. Unpriced junction at Braddock: $0.00, not free. "
+        "Calculation. Known toll total."
+    )
+    assert evaluate_junction_response(zero_gap, calls, row)[0].label == "zero_gap"
     print(
-        "self-check ok (3 cases, exact trajectories, boundaries, and known-total math)"
+        "self-check ok (5 cases, exact trajectories, boundaries, and known-total math)"
     )
 
 
