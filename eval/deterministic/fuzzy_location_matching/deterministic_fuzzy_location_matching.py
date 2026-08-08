@@ -270,6 +270,8 @@ def _self_check() -> None:
         "ambiguous-washington-destination-i395-followup",
         "explicit-washington-i66",
         "explicit-washington-i395",
+        "endpoint-context-washington-origin-i66",
+        "endpoint-context-washington-destination-i395",
     ]
     assert cases[1].expected_trajectory == ["i95_access_options", "i95_route"]
     assert _report_passed([True, True])

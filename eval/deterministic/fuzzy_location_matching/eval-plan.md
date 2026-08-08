@@ -60,8 +60,8 @@ flowchart LR
 
 - **Ambiguous alias, multi-turn convergence**: `"McLean"` maps to two oracle labels on two different corridors (`Route 123 - Dolley Madison Blvd` on I-66 ITB, entry-only; `Jones Branch Drive/Route 123` on I-495, entry+exit). Turn 1 must produce a clarifying question and no tool call; turn 2, after the user picks the I-495 interchange, must call `i495_route` with the exact labels `"Jones Branch Drive/Route 123"` → `"Westpark Drive"` (verified as a direct oracle pair).
 - **Unambiguous case-insensitive match, single turn**: `"pentagon/eads street"` → `"i-95 near dumfries road/route 234"` (lowercased, verified as a direct oracle pair in this direction) is an exact label modulo case — the SOP says this needs no confirmation. Turn 1 must call `i95_route` immediately with the correctly-cased labels, no clarifying question.
-- **Washington ambiguity and controls**: Two multi-turn cases cover Washington as origin and destination with opposite corridor choices; two single-turn controls cover explicit I-66 and I-395 context.
-- **Total number of test cases**: 6
+- **Washington ambiguity and controls**: Two multi-turn cases cover Washington as origin and destination with opposite corridor choices; four single-turn controls cover explicit corridor names and disambiguation from the other endpoint alone on I-66 and I-395.
+- **Total number of test cases**: 8
 
 ---
 
@@ -115,7 +115,7 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | 2026-08-01 18:20 | eval-plan.md   | Completed | Plan drafted from `agent/toll_agent.py`, `agent-sops/nova-toll-pricing-assistant.sop.md` Step 1, and live oracle queries confirming the McLean and Pentagon scenarios are grounded in real data (not assumed). A prior, now-stale `eval/tollchat-i95-single-leg` branch (pre-dates the SOP rewrite) supplied a bug-fixed reference for the Strands Evals API surface but was not merged — its `strands_evals` import pattern was re-verified against the currently installed package instead. |
 | 2026-08-01 18:20 | test-cases.jsonl | Completed | 2 cases; all origin/destination hard labels and the McLean/Pentagon-Dumfries direct-pair claims verified against `_LOCATION_BY_CORRIDOR` / `_has_direct_pair` before being written to the file, not assumed. |
 | 2026-08-01 18:20 | deterministic_fuzzy_location_matching.py | Completed | One code-based evaluator only — no LLM-judge half exists or is claimed. Requires `AWS_PROFILE=nova-toll` (OpenAI key via SSM) and tailnet RDS access to actually invoke the agent; not run live as part of this session, so results reflect the self-test only, not a real agent trajectory. `--check` self-test covers response requirements, expected/absent tool calls, and exact hard labels against synthetic trajectories with no network calls. Per-turn call extraction walks the response's `metrics.traces` and feeds those messages into `tools_use_extractor.extract_agent_tools_used_from_messages`, because stateful Responses leave `agent.messages` empty. |
-| 2026-08-08 | Issue #88 fixtures | Completed | Added origin/destination Washington clarification, I-66/I-395 follow-up convergence, explicit corridor controls, and two matching simulated drivers. Offline checks and full validation passed; deterministic live grading passed 6/6, and all three simulated executions produced populated, premise-faithful trajectories. |
+| 2026-08-08 | Issue #88 fixtures | Completed | Added origin/destination Washington clarification, I-66/I-395 follow-up convergence, explicit and endpoint-only controls, and two matching simulated drivers. Offline checks and full validation passed; post-review deterministic live grading passed 8/8, and all three simulated executions produced populated, premise-faithful trajectories. |
 
 ## Track 2: simulated-user conversations
 

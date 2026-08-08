@@ -4,7 +4,7 @@ Tests Step 1 of `agent-sops/nova-toll-pricing-assistant.sop.md` — does the
 agent ask before guessing an ambiguous location, converge on the exact
 oracle label once the user clarifies, resolve an unambiguous case-insensitive
 match without asking, and distinguish Washington's I-66 and I-395 endpoints.
-See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 6 cases.
+See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 8 cases.
 
 ## Self-check (no network)
 

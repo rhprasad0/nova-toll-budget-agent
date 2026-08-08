@@ -16,7 +16,7 @@ not curated.
 | [`20260804T153830Z.json`](20260804T153830Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T153901Z.json`](20260804T153901Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T192029Z.json`](20260804T192029Z.json) | Ambiguous McLean location resolved before pricing | Simulated user, goal-success and helpfulness judges | 0.9165 overall; 2/2 judgments passed; 0 execution errors |
-| [`20260808T132512Z.json`](20260808T132512Z.json) | Washington as ambiguous origin/destination plus explicit I-66/I-395 controls | Deterministic per-turn response and exact tool-trajectory grading | 1.0000 overall; 6/6 cases passed; no premature pricing calls |
+| [`20260808T133347Z.json`](20260808T133347Z.json) | Washington as ambiguous origin/destination plus explicit and endpoint-only corridor controls | Deterministic per-turn response and exact tool-trajectory grading | 1.0000 overall; 8/8 cases passed; no premature or unnecessary clarification |
 | [`20260808T132652Z.json`](20260808T132652Z.json) | Simulated McLean and Washington corridor clarification | Simulated users with report-only Batch judgments pending | 3/3 technically valid executions; observed Washington trajectories selected the intended corridors |
 | [`20260804T192403Z.json`](20260804T192403Z.json) | Four historical I-95 closure conversations | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
 | [`20260805T194729Z.json`](20260805T194729Z.json) | Historical I-95 closure follow-ups requesting official proof and reimbursement documentation | Simulated user with deterministic trajectory and per-turn source-response grading | 1.0000 overall; 8/8 verdicts passed; no extra pricing calls or unsupported source details |
@@ -71,7 +71,7 @@ user supplied the missing values. No LLM actor or judge participated.
 The Washington deterministic run asked I-66 versus I-395 before every ambiguous
 origin or destination and made no first-turn tool call. Follow-ups preserved
 Westpark Drive and planned with `Washington` on `i66_itb` or `Washington D.C.`
-on `i95`; explicit-corridor controls proceeded directly. In the simulated run,
+on `i95`; explicit-corridor and endpoint-only controls proceeded directly. In the simulated run,
 both Washington actors withheld their corridor until asked, then produced the
 same canonical planner inputs. Its placeholder verdicts record pending Batch
 judgment, not completed qualitative scores.
