@@ -115,3 +115,25 @@ test("does not download the Markdown renderer when chat is disabled", async ({ p
   await expect(page.locator("#tollchat-chat")).toBeHidden();
   expect(rendererRequests).toEqual([]);
 });
+
+test("private preview renders streamed assistant Markdown safely", async ({ page }) => {
+  await page.route("**/api/chat", (route) =>
+    route.fulfill({
+      contentType: "application/x-ndjson",
+      body: `${JSON.stringify({
+        type: "answer",
+        text: "## Fare\n\n**$4.25** <script>window.previewAttack=true</script> ![tracker](https://example.com/a.png)",
+        blocked: false,
+      })}\n`,
+    })
+  );
+  await page.goto("/preview.html");
+  await page.locator("#message").fill("Price my trip");
+  await page.getByRole("button", { name: "Estimate tolls" }).click();
+
+  const answer = page.locator(".assistant-answer");
+  await expect(answer.getByRole("heading", { name: "Fare" })).toBeVisible();
+  await expect(answer.locator("strong")).toHaveText("$4.25");
+  await expect(answer.locator("script, img")).toHaveCount(0);
+  expect(await page.evaluate(() => window.previewAttack)).toBeUndefined();
+});

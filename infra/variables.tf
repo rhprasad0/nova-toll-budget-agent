@@ -39,9 +39,3 @@ variable "chat_proxy_package_path" {
   type        = string
   default     = ""
 }
-
-variable "enable_public_chat" {
-  description = "Expose /api/* through CloudFront and WAF. Keep false until the public launch gate is approved."
-  type        = bool
-  default     = false
-}

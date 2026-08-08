@@ -10,7 +10,7 @@ AWS_PROFILE=nova-toll aws lambda put-function-concurrency \
 
 Terraform intentionally ignores concurrency drift for this function so a normal apply cannot undo the kill switch during an incident.
 
-Confirm `/api/config` no longer succeeds and record the incident time. For a public incident, also set `enable_public_chat = false` and apply Terraform so CloudFront removes `/api/*`; this restores the declared state.
+Confirm `https://preview.tollchat.ai/api/config` no longer succeeds through Tailscale and record the incident time. The public static site has no chat origin to disable.
 
 Restore only after approval:
 

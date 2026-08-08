@@ -41,15 +41,58 @@ def test_preview_edge_stays_private_and_closes_direct_runtime_access():
     agentcore = (ROOT / "infra/agentcore.tf").read_text()
     tailnet_policy = (ROOT / "policy.hujson").read_text()
 
-    assert "internal           = true" in agentcore
-    assert 'target_type = "lambda"' in agentcore
-    assert "aws:SourceVpce" in agentcore
+    assert 'types            = ["PRIVATE"]' in agentcore
+    assert 'response_transfer_mode  = "STREAM"' in agentcore
+    assert "response_streaming_invoke_arn" in agentcore
+    assert agentcore.count("aws:SourceVpce") >= 4
     assert "DenyOutsidePrivateEndpoint" in agentcore
     assert 'resource "aws_bedrockagentcore_resource_policy" "tollchat"' in agentcore
+    assert (
+        'resource "aws_api_gateway_domain_name_access_association" "tollchat"'
+        in agentcore
+    )
     assert "agent_runtime_endpoint_arn" in agentcore
-    assert "aws_security_group.tailscale_router.id" in agentcore
+    assert (
+        'service_name        = "com.amazonaws.${data.aws_region.current.region}.execute-api"'
+        in agentcore
+    )
+    assert (
+        'service_name        = "com.amazonaws.${data.aws_region.current.region}.bedrock-agentcore"'
+        in agentcore
+    )
+    assert 'runtime                        = "nodejs24.x"' in agentcore
+    assert 'handler                        = "handler.handler"' in agentcore
+    assert (
+        'cidr_ipv4         = "${aws_instance.tailscale_router.private_ip}/32"'
+        in agentcore
+    )
     assert '"src":    "rhprasad0@github"' in tailnet_policy
     assert '"deny":   ["8.8.8.8:443", "tollchat-preview-test:443"]' in tailnet_policy
+    assert 'resource "aws_lb" "tollchat"' not in agentcore
+    assert 'resource "aws_lb_target_group" "tollchat"' not in agentcore
+
+
+def test_api_deployment_hashes_the_complete_stage_snapshot():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    deployment = agentcore.split('resource "aws_api_gateway_deployment" "tollchat"')[
+        1
+    ].split('resource "aws_api_gateway_stage" "tollchat"')[0]
+
+    for snapshot_input in (
+        "aws_api_gateway_rest_api.tollchat.policy",
+        "aws_api_gateway_resource.tollchat_proxy.path_part",
+        "aws_api_gateway_method.tollchat_root.authorization",
+        "aws_api_gateway_method.tollchat_proxy.authorization",
+        "aws_api_gateway_integration.tollchat_root.uri",
+        "aws_api_gateway_integration.tollchat_root.response_transfer_mode",
+        "aws_api_gateway_integration.tollchat_root.timeout_milliseconds",
+        "aws_api_gateway_integration.tollchat_proxy.uri",
+        "aws_api_gateway_integration.tollchat_proxy.response_transfer_mode",
+        "aws_api_gateway_integration.tollchat_proxy.timeout_milliseconds",
+    ):
+        assert snapshot_input in deployment
+    assert "aws_api_gateway_integration.tollchat_root.id" not in deployment
+    assert "aws_api_gateway_integration.tollchat_proxy.id" not in deployment
 
 
 def test_preview_network_uses_stable_route_association_keys():
@@ -62,11 +105,8 @@ def test_preview_network_uses_stable_route_association_keys():
     assert 'name   = "default-for-az"' in tailscale
     assert 'values = ["true"]' in tailscale
 
-    target_group = agentcore.split(
-        'resource "aws_lb_target_group" "tollchat"', maxsplit=1
-    )[1].split('resource "aws_lambda_permission"', maxsplit=1)[0]
-    assert "interval = 35" in target_group
-    assert "timeout  = 30" in target_group
+    assert 'resource "aws_vpc_endpoint" "tollchat_api"' in agentcore
+    assert "private_dns_enabled = false" in agentcore
 
 
 def test_acm_reuses_existing_dns_validation_records_during_replacement():
@@ -111,15 +151,12 @@ def test_proxy_kill_switch_and_request_deadlines_converge_safely():
     runbook = (ROOT / "docs/runbooks/kill-switch.md").read_text()
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
-    )[1].split('resource "aws_lb" "tollchat"', maxsplit=1)[0]
-    load_balancer = agentcore.split('resource "aws_lb" "tollchat"', maxsplit=1)[
-        1
-    ].split('resource "aws_lb_target_group" "tollchat"', maxsplit=1)[0]
+    )[1].split('resource "aws_api_gateway_rest_api" "tollchat"', maxsplit=1)[0]
 
     assert "timeout                        = 50" in proxy
     assert "ignore_changes = [reserved_concurrent_executions]" in proxy
-    assert "idle_timeout       = 55" in load_balancer
-    assert "origin_read_timeout = 60" in site
+    assert "timeout_milliseconds    = 55000" in agentcore
+    assert "aws_cloudfront_vpc_origin" not in site
     assert "Terraform intentionally ignores concurrency drift" in runbook
 
 
@@ -284,15 +321,14 @@ def test_trace_reviewer_is_read_only_for_governed_telemetry():
     assert "logs:DeleteLogGroup" not in reviewer
 
 
-def test_public_chat_is_an_explicit_disabled_by_default_gate():
+def test_main_site_has_no_public_chat_gate_or_origin():
     variables = (ROOT / "infra/variables.tf").read_text()
     site = (ROOT / "infra/site.tf").read_text()
     dns = (ROOT / "infra/dns.tf").read_text()
 
-    assert 'variable "enable_public_chat"' in variables
-    assert "default     = false" in variables
-    assert 'resource "aws_cloudfront_vpc_origin" "tollchat"' in site
-    assert 'path_pattern           = "/api/*"' in site
-    assert 'resource "aws_wafv2_web_acl" "tollchat"' in site
-    assert 'domain_name = "preview.tollchat.ai"' in site
+    assert "enable_public_chat" not in variables
+    assert "aws_cloudfront_vpc_origin" not in site
+    assert 'path_pattern           = "/api/*"' not in site
+    assert "aws_wafv2_web_acl" not in site
+    assert 'domain_name = "preview.tollchat.ai"' not in site
     assert '"preview.tollchat.ai"' in dns

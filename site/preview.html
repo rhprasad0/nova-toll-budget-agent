@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TollChat private preview</title>
+  <style>
+    :root { color-scheme: dark; --road:#121512; --panel:#1b201c; --line:#394139; --lime:#c6f36b; --text:#f3f5ef; --muted:#aab2a8; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--road); color:var(--text); font:16px/1.5 ui-sans-serif,system-ui,sans-serif; }
+    main { width:min(760px,calc(100% - 32px)); margin:auto; padding:48px 0 24px; }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); padding-bottom:24px; }
+    h1 { margin:0; font-size:clamp(2rem,8vw,4rem); letter-spacing:-.06em; line-height:.95; }
+    .eyebrow { margin:0 0 8px; color:var(--lime); font-size:.75rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    .lede { max-width:36rem; margin:12px 0 0; color:var(--muted); }
+    button { min-height:44px; border:1px solid var(--line); border-radius:4px; background:transparent; color:var(--text); font:inherit; font-weight:700; padding:8px 16px; cursor:pointer; }
+    button[type=submit] { border-color:var(--lime); background:var(--lime); color:#151a12; }
+    button:focus-visible,textarea:focus-visible { outline:3px solid var(--lime); outline-offset:3px; }
+    #transcript { display:grid; gap:20px; padding:32px 0; }
+    .user-turn { justify-self:end; max-width:80%; margin:0; border:1px solid var(--line); border-radius:12px 12px 2px 12px; padding:12px 16px; }
+    .assistant-turn { max-width:92%; border-left:3px solid var(--lime); padding-left:16px; }
+    .activities { display:grid; gap:6px; margin:0 0 12px; padding:0; list-style:none; color:var(--muted); font-size:.875rem; }
+    .activities li { display:flex; justify-content:space-between; gap:20px; }
+    .activities li::before { content:""; width:8px; height:8px; margin:7px 8px 0 0; border:1px solid var(--lime); border-radius:50%; }
+    .activities li span:first-child { flex:1; }
+    .activities [data-status=completed]::before { background:var(--lime); }
+    .activities [data-status=failed]::before { border-color:#ff8e7c; background:#ff8e7c; }
+    .activity-status { font-variant-numeric:tabular-nums; }
+    .assistant-answer { margin:0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .assistant-answer > :first-child { margin-top:0; }
+    .assistant-answer > :last-child { margin-bottom:0; }
+    .assistant-answer h1,.assistant-answer h2,.assistant-answer h3,.assistant-answer h4,.assistant-answer h5,.assistant-answer h6 { margin:16px 0 6px; line-height:1.2; }
+    .assistant-answer h1,.assistant-answer h2 { font-size:1.15rem; }
+    .assistant-answer h3,.assistant-answer h4,.assistant-answer h5,.assistant-answer h6 { font-size:1rem; }
+    .assistant-answer p,.assistant-answer ul,.assistant-answer ol,.assistant-answer blockquote,.assistant-answer pre,.assistant-answer table { margin:8px 0; }
+    .assistant-answer ul,.assistant-answer ol { padding-left:22px; }
+    .assistant-answer blockquote { padding-left:12px; border-left:3px solid var(--line); color:var(--muted); }
+    .assistant-answer code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.9em; }
+    .assistant-answer :not(pre)>code { padding:2px 4px; border-radius:3px; background:#080b08; }
+    .assistant-answer pre,.assistant-answer table { max-width:100%; overflow-x:auto; }
+    .assistant-answer pre { padding:10px; border-radius:4px; background:#080b08; white-space:pre; }
+    .assistant-answer table { display:block; border-collapse:collapse; }
+    .assistant-answer th,.assistant-answer td { padding:6px 8px; border:1px solid var(--line); text-align:left; }
+    .assistant-answer hr { margin:12px 0; border:0; border-top:1px solid var(--line); }
+    .assistant-answer a { color:var(--lime); }
+    .assistant-answer a:focus-visible { outline:2px solid var(--lime); outline-offset:2px; }
+    .assistant-answer--notice { color:var(--muted); }
+    form { position:sticky; bottom:0; display:grid; grid-template-columns:1fr auto; gap:8px; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); box-shadow:0 -16px 32px var(--road); }
+    label { grid-column:1/-1; color:var(--muted); font-size:.875rem; }
+    textarea { width:100%; min-height:88px; resize:vertical; border:1px solid var(--line); border-radius:4px; background:#101310; color:var(--text); font:inherit; padding:12px; }
+    form[aria-busy=true] { opacity:.72; }
+    footer { padding:20px 0; color:var(--muted); font-size:.8rem; }
+    @media (max-width:560px) { main{padding-top:24px} header{display:block} #reset{margin-top:20px} form{grid-template-columns:1fr} label{grid-column:1} }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">Private preview</p><h1>TollChat</h1><p class="lede">Estimate Northern Virginia express-lane tolls and watch each lookup happen.</p></div>
+      <button id="reset" type="button">New chat</button>
+    </header>
+    <section id="transcript" aria-live="polite" aria-label="Conversation"></section>
+    <form aria-busy="false">
+      <label for="message">Where are you going, and when?</label>
+      <textarea id="message" maxlength="8000" required placeholder="Dumfries to Tysons tomorrow at 8 AM"></textarea>
+      <button type="submit">Estimate tolls</button>
+    </form>
+    <footer>Estimates only. Verify current rates with the toll operator before travel.</footer>
+  </main>
+  <script type="module" src="/preview.mjs"></script>
+</body>
+</html>
