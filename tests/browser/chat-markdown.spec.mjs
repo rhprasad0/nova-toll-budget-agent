@@ -65,6 +65,9 @@ test("hostile Markdown stays inert while HTTPS links remain accessible", async (
 [unsafe](javascript:window.markdownAttack=true)
 [data](data:text/html,boom)
 [relative](/admin)
+[](https://example.com/empty)
+[   ](https://example.com/whitespace)
+[&#x200B;](https://example.com/zero-width)
 [safe documentation](https://www.vdot.virginia.gov/)
 
 **unterminated emphasis
@@ -84,7 +87,16 @@ ${"x".repeat(300)}
   expect(await page.evaluate(() => window.markdownAttack)).toBeUndefined();
   await expect(assistant).toContainText("<script>window.markdownAttack = true</script>");
   await expect(assistant).toContainText("**unterminated emphasis");
-  await expect(assistant.locator("a")).toHaveCount(1);
+  await expect(assistant.locator("a")).toHaveCount(4);
+  await expect(assistant.locator('a[href="https://example.com/empty"]')).toHaveText(
+    "https://example.com/empty"
+  );
+  await expect(
+    assistant.locator('a[href="https://example.com/whitespace"]')
+  ).toHaveText("https://example.com/whitespace");
+  await expect(assistant.locator('a[href="https://example.com/zero-width"]')).toHaveText(
+    "https://example.com/zero-width"
+  );
   const link = assistant.getByRole("link", { name: "safe documentation" });
   await expect(link).toHaveAttribute("href", "https://www.vdot.virginia.gov/");
   await expect(link).toHaveAttribute("target", "_blank");
@@ -92,4 +104,19 @@ ${"x".repeat(300)}
   await link.focus();
   await expect(link).toBeFocused();
   await expect(assistant.locator("pre")).toHaveCSS("overflow-x", "auto");
+});
+
+test("does not download the Markdown renderer when chat is disabled", async ({ page }) => {
+  const rendererRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("chat-markdown")) rendererRequests.push(request.url());
+  });
+  await page.route("**/api/config", (route) =>
+    route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
+  );
+
+  await page.goto("/");
+
+  await expect(page.locator("#tollchat-chat")).toBeHidden();
+  expect(rendererRequests).toEqual([]);
 });

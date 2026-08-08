@@ -25,6 +25,9 @@ def test_pinned_markdown_assets_are_licensed_and_published() -> None:
     terraform = TERRAFORM.read_text()
     assert '"assets/markdown-it-15.0.0/markdown-it.esm.min.mjs"' in terraform
     assert '"assets/chat-markdown-v1.mjs"' in terraform
+    assert "depends_on = [aws_s3_object.site_assets]" in terraform
+    assert "default_cache_behavior {" in terraform
+    assert "compress               = true" in terraform
 
 
 def test_renderer_documents_and_enforces_the_untrusted_markdown_subset() -> None:
@@ -40,10 +43,8 @@ def test_renderer_documents_and_enforces_the_untrusted_markdown_subset() -> None
 
 def test_chat_renders_only_assistant_messages_as_markdown() -> None:
     page = SITE.read_text()
-    assert (
-        'import { renderAssistantMarkdown } from "/assets/chat-markdown-v1.mjs";'
-        in page
-    )
+    assert 'await import("/assets/chat-markdown-v1.mjs")' in page
+    assert "if (!config.chatEnabled) return;" in page
     assert 'document.createElement(kind === "user" ? "p" : "article")' in page
     assert "message.textContent = text;" in page
     assert "message.innerHTML = renderAssistantMarkdown(text);" in page

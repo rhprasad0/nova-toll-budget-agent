@@ -451,8 +451,6 @@ import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs").then((maplibregl) => {
 }).catch(showMapError);
 </script>
 <script type="module">
-import { renderAssistantMarkdown } from "/assets/chat-markdown-v1.mjs";
-
 (() => {
   const chat = document.getElementById("tollchat-chat");
   const messages = document.getElementById("chat-messages");
@@ -463,6 +461,7 @@ import { renderAssistantMarkdown } from "/assets/chat-markdown-v1.mjs";
   const submit = form.querySelector("button");
   const preview = new URLSearchParams(location.search).has("preview");
   const apiBase = preview ? "https://preview.tollchat.ai" : "";
+  let renderAssistantMarkdown;
   let sessionId = sessionStorage.getItem("tollchat-session") || crypto.randomUUID();
   sessionStorage.setItem("tollchat-session", sessionId);
 
@@ -494,7 +493,11 @@ import { renderAssistantMarkdown } from "/assets/chat-markdown-v1.mjs";
 
   const configRequest = preview ? fetch(apiBase + "/api/config") : fetch("/api/config", { cache: "no-store" });
   configRequest.then((response) => response.ok ? response.json() : Promise.reject())
-    .then((config) => { if (config.chatEnabled) chat.hidden = false; })
+    .then(async (config) => {
+      if (!config.chatEnabled) return;
+      ({ renderAssistantMarkdown } = await import("/assets/chat-markdown-v1.mjs"));
+      chat.hidden = false;
+    })
     .catch(() => {});
 
   form.addEventListener("submit", async (event) => {
