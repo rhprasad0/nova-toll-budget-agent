@@ -108,7 +108,7 @@ function start() {
   const transcript = document.querySelector("#transcript");
   let session = crypto.randomUUID();
   import("./assets/coverage-map-v1.mjs")
-    .then(({ mountCoverageMap }) => mountCoverageMap({ mode: "passive" }))
+    .then(({ mountCoverageMap }) => mountCoverageMap({ mode: "preview" }))
     .catch(() => {
       document.querySelector("#map-loading").hidden = true;
       document.querySelector("#map-error").hidden = false;

@@ -20,6 +20,11 @@
       --muted:#a5b5ae;
       --faint:#6f837a;
       --gap:#fbbf24;
+      --i66:#67d4ff;
+      --i95:#ff7085;
+      --i495:#ffd05a;
+      --dulles:#55dda8;
+      --greenway:#c99cff;
     }
     * { box-sizing:border-box; }
     html { background:var(--asphalt); }
@@ -69,41 +74,60 @@
     form[aria-busy=true] { opacity:.72; }
     footer { grid-area:footer; padding:20px clamp(24px,4vw,56px); color:var(--faint); font-size:.8rem; }
 
-    .map-panel { position:sticky; top:0; grid-area:map; display:grid; grid-template-rows:auto 1fr; height:100svh; min-height:36rem; border-left:1px solid var(--line); background:var(--road); }
-    .map-copy { position:relative; z-index:2; padding:24px; border-bottom:1px solid var(--line); background:rgba(7,16,15,.92); }
+    .map-panel { position:sticky; top:0; grid-area:map; display:grid; grid-template-rows:auto 1fr; height:100svh; min-height:36rem; overflow:hidden; border-left:1px solid var(--line); background:var(--road); isolation:isolate; }
+    .map-copy { position:relative; z-index:2; min-width:0; padding:24px; border-bottom:1px solid var(--line); background:rgba(7,16,15,.92); }
     .map-copy h2 { margin:0; font-size:1.12rem; letter-spacing:-.025em; }
     .map-legend { margin:8px 0 0; color:var(--muted); font-size:.78rem; line-height:1.5; text-wrap:pretty; }
     .map-legend strong { color:var(--text); }
+    .map-tools { display:flex; min-width:0; align-items:stretch; gap:8px; margin-top:12px; }
+    .filters { display:flex; width:0; min-width:0; flex:1; gap:6px; overflow-x:auto; scrollbar-width:none; }
+    .filters::-webkit-scrollbar { display:none; }
+    .filter,.reset-map { flex:0 0 auto; min-height:44px; padding:8px 10px; border-radius:6px; color:var(--muted); font-size:.68rem; }
+    .filter { display:inline-flex; align-items:center; gap:6px; }
+    .filter::before { width:7px; height:7px; border-radius:50%; background:var(--facility,var(--lime)); box-shadow:0 0 8px color-mix(in srgb,var(--facility,var(--lime)) 55%,transparent); content:""; }
+    .filter:hover,.filter:focus-visible,.filter[aria-pressed=true],.reset-map:hover,.reset-map:focus-visible { border-color:color-mix(in srgb,var(--lime) 50%,transparent); background:rgba(215,255,95,.08); color:var(--text); }
     .map-frame { position:relative; min-height:0; overflow:hidden; }
     #coverage-map { position:absolute; inset:0; }
     .map-state { position:absolute; top:50%; left:50%; z-index:4; width:min(20rem,calc(100% - 32px)); padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--muted); font-size:.8rem; line-height:1.45; text-align:center; transform:translate(-50%,-50%); }
     .map-state strong { display:block; margin-bottom:4px; color:var(--text); }
-    .map-pin,.junction-pin { position:absolute; top:0; left:0; pointer-events:none; }
-    .preview-map-pin { display:grid; width:12px; height:12px; place-items:center; border:2px solid var(--pin); border-radius:50%; background:#0b1715; box-shadow:0 0 0 3px rgba(4,12,11,.4),0 0 10px color-mix(in srgb,var(--pin) 50%,transparent); }
-    .ramp-badge { position:absolute; display:grid; min-width:34px; padding:3px 5px; border:1px solid color-mix(in srgb,var(--pin) 68%,white); border-left:3px solid var(--pin); border-radius:5px; background:rgba(7,16,15,.95); box-shadow:0 3px 10px rgba(0,0,0,.42); color:var(--text); line-height:1; text-align:center; }
-    [data-direction=NB] .ramp-badge { bottom:16px; left:50%; transform:translateX(-50%); }
-    [data-direction=SB] .ramp-badge { top:16px; left:50%; transform:translateX(-50%); }
-    [data-direction=EB] .ramp-badge { top:50%; left:16px; transform:translateY(-50%); }
-    [data-direction=WB] .ramp-badge { top:50%; right:16px; transform:translateY(-50%); }
+    .map-pin,.junction-pin { position:absolute; top:0; left:0; display:grid; width:44px; height:44px; min-height:44px; padding:0; place-items:center; border:0; border-radius:50%; background:transparent; color:#fff; cursor:pointer; font-size:8px; font-weight:850; outline:none; }
+    .preview-map-pin::before,.preview-junction-pin::before { position:absolute; z-index:-1; width:15px; height:15px; border:2px solid var(--pin); border-radius:50%; background:#0b1715; box-shadow:0 0 0 4px rgba(4,12,11,.38),0 0 12px color-mix(in srgb,var(--pin) 55%,transparent); content:""; transition:background-color .16s ease,transform .16s ease; }
+    .preview-map-pin:hover::before,.preview-map-pin:focus-visible::before,.preview-map-pin.selected::before,.preview-junction-pin:hover::before,.preview-junction-pin:focus-visible::before { background:color-mix(in srgb,var(--pin) 25%,#0b1715); transform:scale(1.28); }
+    .preview-map-pin:focus-visible,.preview-junction-pin:focus-visible { box-shadow:inset 0 0 0 2px var(--text); }
+    .ramp-badge { position:absolute; z-index:2; display:grid; min-width:34px; padding:3px 5px; border:1px solid color-mix(in srgb,var(--pin) 68%,white); border-left:3px solid var(--pin); border-radius:5px; background:rgba(7,16,15,.95); box-shadow:0 3px 10px rgba(0,0,0,.42); color:var(--text); line-height:1; text-align:center; pointer-events:none; }
+    [data-direction=NB] .ramp-badge { bottom:32px; left:50%; transform:translateX(-50%); }
+    [data-direction=SB] .ramp-badge { top:32px; left:50%; transform:translateX(-50%); }
+    [data-direction=EB] .ramp-badge { top:50%; left:32px; transform:translateY(-50%); }
+    [data-direction=WB] .ramp-badge { top:50%; right:32px; transform:translateY(-50%); }
     .ramp-badge strong { font-size:9px; letter-spacing:.06em; }
     .ramp-badge span { color:var(--muted); font-size:6px; font-weight:800; letter-spacing:.05em; }
-    .preview-junction-pin { display:grid; width:24px; height:24px; place-items:center; border:2px dashed var(--gap); border-radius:50%; background:#17150b; color:#fff7d6; font-size:11px; font-weight:900; }
+    .preview-junction-pin { --pin:var(--gap); color:#fff7d6; font-size:11px; }
+    .preview-junction-pin::before { width:21px; height:21px; border-style:dashed; }
+    .map-detail { position:absolute; right:16px; bottom:64px; left:16px; z-index:3; min-height:112px; padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(27,32,28,.96); box-shadow:0 16px 36px rgba(0,0,0,.32); }
+    .detail-kicker { display:block; margin-bottom:6px; color:var(--gap); font-size:.65rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .map-detail strong { display:block; font-size:.92rem; line-height:1.3; }
+    .map-detail p { margin:6px 0 0; color:var(--muted); font-size:.75rem; line-height:1.45; }
+    .maplibregl-ctrl-top-right { top:8px; right:8px; }
+    .maplibregl-ctrl-group { overflow:hidden; border:1px solid var(--line); border-radius:7px; background:var(--panel); }
+    .maplibregl-ctrl-group button { width:44px; height:44px; min-height:44px; padding:0; }
+    .maplibregl-ctrl button .maplibregl-ctrl-icon { filter:invert(1) opacity(.8); }
     .maplibregl-ctrl-attrib { background:rgba(5,13,12,.8)!important; color:var(--muted); font-size:10px; }
     .maplibregl-ctrl-attrib a { color:var(--muted); }
-    .sr-only { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
     [hidden] { display:none!important; }
     @media (max-width:760px) {
-      main { grid-template: "header" auto "map" 20rem "transcript" minmax(16rem,auto) "composer" auto "footer" auto / 1fr; }
+      main { grid-template: "header" auto "map" auto "transcript" minmax(16rem,auto) "composer" auto "footer" auto / 1fr; }
       header { padding:24px 16px 20px; }
       h1 { font-size:clamp(2.6rem,14vw,4rem); }
       #reset { margin-top:4px; padding-inline:12px; }
-      .map-panel { position:relative; height:20rem; min-height:0; border-top:1px solid var(--line); border-right:0; border-bottom:1px solid var(--line); border-left:0; }
+      .map-panel { position:relative; grid-template-rows:auto 20rem auto; height:auto; min-height:0; border-top:1px solid var(--line); border-right:0; border-bottom:1px solid var(--line); border-left:0; }
       .map-copy { padding:12px 16px; }
       .map-copy .eyebrow { display:none; }
       .map-copy h2 { font-size:.95rem; }
       .map-legend { margin-top:4px; font-size:.7rem; }
+      .map-tools { margin-top:8px; }
+      .map-detail { position:static; min-height:0; border-right:0; border-bottom:0; border-left:0; border-radius:0; box-shadow:none; }
       #transcript { padding:24px 16px; }
-      form { grid-template-columns:1fr; margin:0 16px; }
+      form { position:static; grid-template-columns:1fr; margin:0 16px; }
       label { grid-column:1; }
       footer { padding:18px 16px; }
     }
@@ -127,13 +151,28 @@
         <p class="eyebrow">Ramp access</p>
         <h2 id="map-title">Coverage at a glance</h2>
         <p class="map-legend"><strong>Labels identify one-way ramps and their allowed use.</strong> Unlabelled ramps serve both directions. The amber mark is the unpriced I-95 ↔ I-495 junction.</p>
+        <div class="map-tools">
+          <nav id="route-filters" class="filters" aria-label="Filter toll facilities">
+            <button class="filter" type="button" data-facility="all" aria-pressed="true" disabled>All</button>
+            <button class="filter" type="button" data-facility="i66" aria-pressed="false" style="--facility:var(--i66)" disabled>I-66</button>
+            <button class="filter" type="button" data-facility="i95" aria-pressed="false" style="--facility:var(--i95)" disabled>95/395</button>
+            <button class="filter" type="button" data-facility="i495" aria-pressed="false" style="--facility:var(--i495)" disabled>495</button>
+            <button class="filter" type="button" data-facility="dulles" aria-pressed="false" style="--facility:var(--dulles)" disabled>Dulles Toll Road</button>
+            <button class="filter" type="button" data-facility="greenway" aria-pressed="false" style="--facility:var(--greenway)" disabled>Greenway</button>
+          </nav>
+          <button id="reset-map" class="reset-map" type="button" disabled>Reset coverage</button>
+        </div>
       </div>
       <div class="map-frame">
-        <div id="coverage-map" role="region" aria-label="Passive TollChat coverage map. Labelled ramps show travel direction and whether they are entries, exits, or both; unlabelled ramps serve both directions."></div>
+        <div id="coverage-map" role="region" aria-label="Interactive TollChat coverage map. Labelled ramps show travel direction and whether they are entries, exits, or both; unlabelled ramps serve both directions."></div>
         <div id="map-loading" class="map-state" role="status"><strong>Drawing the toll map…</strong>Loading road and ramp coverage.</div>
         <div id="map-error" class="map-state" role="alert" hidden><strong>The map could not load.</strong>Chat remains available. Coverage includes I-66, 95/395, 495, the Dulles Toll Road, and the Dulles Greenway.</div>
       </div>
-      <ul id="directional-ramps" class="sr-only" aria-label="One-way ramp directions"></ul>
+      <aside id="map-detail" class="map-detail" aria-live="polite">
+        <span class="detail-kicker">Coverage break</span>
+        <strong>I-95 ↔ I-495 junction price unavailable.</strong>
+        <p>Movement and open-lane direction select Edsall or Franconia-Springfield; I-495 pricing begins or ends at Braddock. We add known fares but exclude the unpriced gap.</p>
+      </aside>
     </section>
     <section id="transcript" aria-live="polite" aria-label="Conversation"></section>
     <form aria-busy="false">

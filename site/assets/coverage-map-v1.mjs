@@ -92,7 +92,7 @@ const junctionCoordinates = [[-77.205606,38.799890],[-77.149552,38.810914],[-77.
 const junction = { type:"Feature", properties:{}, geometry:{ type:"Polygon", coordinates:[junctionCoordinates] } };
 
 const padding = (mode) => {
-  if (mode === "passive") {
+  if (mode === "preview") {
     return innerWidth <= 720
       ? { top:32, right:32, bottom:72, left:32 }
       : { top:48, right:48, bottom:96, left:48 };
@@ -110,15 +110,6 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
     error.hidden = false;
   };
 
-  if (mode === "passive") {
-    const items = coveragePins.filter((pin) => pin.oneWay).map((pin) => {
-      const item = document.createElement("li");
-      item.textContent = `${pin.label}: ${pin.oneWay.direction} ${pin.oneWay.role}`;
-      return item;
-    });
-    document.getElementById("directional-ramps").replaceChildren(...items);
-  }
-
   try {
     const maplibregl = await import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs");
     const detail = document.getElementById("map-detail");
@@ -131,6 +122,7 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
     let junctionMarker;
     let activeFacility = "all";
     let ready = false;
+    const preview = mode === "preview";
 
     const map = new maplibregl.Map({
       container: "coverage-map",
@@ -138,27 +130,18 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       bounds: coverageBounds,
       fitBoundsOptions: { padding: padding(mode), duration: 0 },
       maxBounds: [[-78.05,38.05],[-76.7,39.42]],
-      interactive: mode !== "passive",
-      cooperativeGestures: mode !== "passive",
+      interactive: true,
+      cooperativeGestures: true,
       dragRotate: false,
       attributionControl: false
     });
-    if (mode !== "passive") {
-      map.touchPitch.disable();
-      map.keyboard.disableRotation();
-      map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "top-right");
-    }
+    map.touchPitch.disable();
+    map.keyboard.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "top-right");
     map.addControl(new maplibregl.AttributionControl({ customAttribution:'Basemap © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> · Road geometry: <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.2019.html">U.S. Census Bureau TIGER/Line 2019</a>', compact:true }), "bottom-right");
 
-    const mountMarker = (element, coordinates) => {
-      const marker = new maplibregl.Marker({ element, anchor:"center" });
-      marker.setLngLat(coordinates).addTo(map);
-      if (mode === "passive") {
-        element.removeAttribute("role");
-        element.removeAttribute("aria-label");
-        element.setAttribute("aria-hidden", "true");
-      }
-    };
+    const mountMarker = (element, coordinates) =>
+      new maplibregl.Marker({ element, anchor:"center" }).setLngLat(coordinates).addTo(map);
 
     const setDetail = (kicker, titleText, descriptionText) => {
       detail.replaceChildren();
@@ -186,10 +169,13 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       selectedMarker?.classList.remove("selected");
       selectedMarker = markerButton;
       selectedMarker.classList.add("selected");
+      const access = !preview ? "" : pin.oneWay
+        ? `${pin.oneWay.direction} ${pin.oneWay.role.toLowerCase().replace("/", " and ")} only. `
+        : "Serves both directions. ";
       setDetail(
         names[pin.facility],
         pin.label,
-        `${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "entry/exit" : "entries/exits"} (${pin.nodeIds.join(", ")})`
+        `${access}${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "entry/exit" : "entries/exits"} (${pin.nodeIds.join(", ")})`
       );
     };
 
@@ -225,10 +211,8 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       ready = true;
       loading.hidden = true;
       error.hidden = true;
-      if (mode !== "passive") {
-        filters.forEach((button) => { button.disabled = false; });
-        reset.disabled = false;
-      }
+      filters.forEach((button) => { button.disabled = false; });
+      reset.disabled = false;
       map.addSource("toll-routes", { type:"geojson", data:routeData });
       map.addLayer({ id:"toll-route-casing", type:"line", source:"toll-routes", paint:{ "line-color":"#06100f", "line-width":["interpolate",["linear"],["zoom"],7,16,12,26], "line-opacity":.82 }, layout:{ "line-cap":"round", "line-join":"round" } });
       map.addLayer({ id:"toll-routes", type:"line", source:"toll-routes", paint:{ "line-color":["match",["get","facility"],"i66",colors.i66,"i95",colors.i95,"i495",colors.i495,"dulles",colors.dulles,"greenway",colors.greenway,"#ffffff"], "line-width":["interpolate",["linear"],["zoom"],7,3.5,12,6], "line-opacity":.95 }, layout:{ "line-cap":"round", "line-join":"round" } });
@@ -237,54 +221,51 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       map.addLayer({ id:"junction-outline", type:"line", source:"excluded-junction", paint:{ "line-color":"#fbbf24", "line-width":3, "line-dasharray":[2,2] } });
 
       coveragePins.forEach((pin) => {
-        const marker = document.createElement(mode === "passive" ? "div" : "button");
-        marker.className = mode === "passive" ? "map-pin preview-map-pin" : "map-pin";
+        const marker = document.createElement("button");
+        marker.className = preview ? "map-pin preview-map-pin" : "map-pin";
         marker.style.setProperty("--pin", colors[pin.facility]);
-        if (mode === "passive") {
-          if (pin.oneWay) {
-            marker.dataset.direction = pin.oneWay.direction;
-            marker.dataset.role = pin.oneWay.role;
-            const badge = document.createElement("span");
-            const direction = document.createElement("strong");
-            const role = document.createElement("span");
-            badge.className = "ramp-badge";
-            direction.textContent = pin.oneWay.direction;
-            role.textContent = pin.oneWay.role;
-            badge.append(direction, role);
-            marker.append(badge);
-          }
-        } else {
-          marker.type = "button";
-          marker.setAttribute("aria-label", `${pin.label}: ${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "entry or exit" : "entries or exits"}`);
-          if (pin.nodeIds.length > 1) marker.textContent = pin.nodeIds.length;
-          marker.addEventListener("click", () => showPin(pin, marker));
-          marker.addEventListener("focus", () => showPin(pin, marker));
+        marker.type = "button";
+        const access = !preview ? "" : pin.oneWay
+          ? `${pin.oneWay.direction} ${pin.oneWay.role} only; `
+          : "serves both directions; ";
+        marker.setAttribute("aria-label", `${pin.label}: ${access}${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "entry or exit" : "entries or exits"}`);
+        if (pin.nodeIds.length > 1) marker.textContent = pin.nodeIds.length;
+        if (preview && pin.oneWay) {
+          marker.dataset.direction = pin.oneWay.direction;
+          marker.dataset.role = pin.oneWay.role;
+          const badge = document.createElement("span");
+          const direction = document.createElement("strong");
+          const role = document.createElement("span");
+          badge.className = "ramp-badge";
+          badge.setAttribute("aria-hidden", "true");
+          direction.textContent = pin.oneWay.direction;
+          role.textContent = pin.oneWay.role;
+          badge.append(direction, role);
+          marker.append(badge);
         }
+        marker.addEventListener("click", () => showPin(pin, marker));
+        marker.addEventListener("focus", () => showPin(pin, marker));
         mountMarker(marker, [pin.lon,pin.lat]);
         markers.push({ facility:pin.facility, element:marker });
       });
 
-      junctionMarker = document.createElement(mode === "passive" ? "div" : "button");
-      junctionMarker.className = mode === "passive" ? "junction-pin preview-junction-pin" : "junction-pin";
+      junctionMarker = document.createElement("button");
+      junctionMarker.className = preview ? "junction-pin preview-junction-pin" : "junction-pin";
       junctionMarker.dataset.junction = "true";
       junctionMarker.textContent = "!";
-      if (mode !== "passive") {
-        junctionMarker.type = "button";
-        junctionMarker.setAttribute("aria-label", "I-95 to I-495 junction: price unavailable");
-        junctionMarker.addEventListener("click", showJunction);
-        junctionMarker.addEventListener("focus", showJunction);
-      }
+      junctionMarker.type = "button";
+      junctionMarker.setAttribute("aria-label", "I-95 to I-495 junction: price unavailable");
+      junctionMarker.addEventListener("click", showJunction);
+      junctionMarker.addEventListener("focus", showJunction);
       mountMarker(junctionMarker, [-77.17925,38.79375]);
     });
 
-    if (mode !== "passive") {
-      filters.forEach((button) => button.addEventListener("click", () => selectFacility(button.dataset.facility)));
-      reset.addEventListener("click", () => selectFacility("all"));
-    }
+    filters.forEach((button) => button.addEventListener("click", () => selectFacility(button.dataset.facility)));
+    reset.addEventListener("click", () => selectFacility("all"));
     addEventListener("resize", () => {
       if (!ready) return;
       map.resize();
-      const bounds = mode === "passive" || activeFacility === "all" ? coverageBounds : facilityBounds(activeFacility);
+      const bounds = activeFacility === "all" ? coverageBounds : facilityBounds(activeFacility);
       map.fitBounds(bounds, { padding:padding(mode), duration:0 });
     });
     map.on("error", () => { if (!ready) showMapError(); });

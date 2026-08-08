@@ -181,7 +181,7 @@ test("private preview blocks submission while a new chat is resetting", async ({
   await expect(page.locator("#message")).toBeEnabled();
 });
 
-test("shared coverage map stays interactive publicly and passive privately", async ({ page }) => {
+test("shared coverage map stays interactive publicly and direction-aware privately", async ({ page }) => {
   await page.route("https://tiles.openfreemap.org/styles/dark", (route) =>
     route.fulfill({ json: { version: 8, sources: {}, layers: [] } })
   );
@@ -198,21 +198,34 @@ test("shared coverage map stays interactive publicly and passive privately", asy
   await page.goto("/preview.html");
 
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
-  await expect(page.getByRole("region", { name: /Passive TollChat coverage map/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: /Interactive TollChat coverage map/ })).toBeVisible();
   await expect(page.locator(".map-legend")).toContainText("Unlabelled ramps serve both directions.");
+  await expect(page.locator(".preview-map-pin")).toHaveCount(82);
   await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
   await expect(page.locator(".ramp-badge")).toHaveCount(20);
-  await expect(page.getByRole("list", { name: "One-way ramp directions" })).toHaveCount(1);
-  await expect(page.locator("#directional-ramps > li")).toHaveCount(20);
-  await expect(page.locator("#directional-ramps")).toContainText("I-95 Near Cardinal Drive: NB ENTRY");
-  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(0);
+  await expect(page.locator("#directional-ramps")).toHaveCount(0);
+  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(1);
+  await expect(page.locator("#route-filters button")).toHaveCount(6);
+  await expect(page.locator("#route-filters button:enabled")).toHaveCount(6);
+  await expect(page.locator("#reset-map")).toBeEnabled();
   expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
-    pins.every((pin) => pin.tagName === "DIV" && pin.tabIndex < 0 &&
-      pin.getAttribute("aria-hidden") === "true" && !pin.hasAttribute("role") &&
-      !pin.hasAttribute("aria-label"))
+    pins.every((pin) => pin.tagName === "BUTTON" && pin.tabIndex === 0 &&
+      pin.hasAttribute("aria-label"))
   )).toBe(true);
-  await expect(page.locator(".preview-junction-pin")).toHaveAttribute("aria-hidden", "true");
-  await expect(page.locator(".preview-junction-pin")).not.toHaveAttribute("role", /.+/);
+  await expect(page.getByRole("button", { name: /I-95 Near Cardinal Drive: NB ENTRY only/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /I-66 West: serves both directions/ })).toHaveCount(1);
+
+  await page.getByRole("button", { name: "I-66", exact: true }).click();
+  await expect(page.getByRole("button", { name: "I-66", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".preview-map-pin:visible")).toHaveCount(17);
+  await page.getByRole("button", { name: /I-495 N: EB ENTRY only/ }).focus();
+  await expect(page.locator("#map-detail")).toContainText("EB entry only.");
+
+  await page.getByRole("button", { name: /I-66 West: serves both directions/ }).focus();
+  await expect(page.locator("#map-detail")).toContainText("Serves both directions.");
+  await page.getByRole("button", { name: "Reset coverage" }).click();
+  await expect(page.locator(".preview-map-pin:visible")).toHaveCount(82);
+  await expect(page.locator("#map-detail")).toContainText("Coverage break");
 });
 
 test("private preview stacks map before transcript on mobile", async ({ page }) => {
@@ -221,7 +234,14 @@ test("private preview stacks map before transcript on mobile", async ({ page }) 
 
   const header = await page.locator("header").boundingBox();
   const map = await page.locator(".map-panel").boundingBox();
+  const frame = await page.locator(".map-frame").boundingBox();
+  const detail = await page.locator("#map-detail").boundingBox();
   const transcript = await page.locator("#transcript").boundingBox();
+  const reset = await page.locator("#reset-map").boundingBox();
   expect(header.y + header.height).toBeLessThanOrEqual(map.y);
-  expect(map.y + map.height).toBeLessThanOrEqual(transcript.y);
+  expect(frame.y + frame.height).toBeLessThanOrEqual(detail.y);
+  expect(detail.y + detail.height).toBeLessThanOrEqual(transcript.y);
+  expect(reset.x + reset.width).toBeLessThanOrEqual(390);
+  await expect(page.locator("form")).toHaveCSS("position", "static");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
