@@ -214,7 +214,7 @@ def test_i95_route_refuses_historical_both_lanes_closure():
     "location,movement,at_time,direction,boundary_node_id,od_pair_id,statuses",
     [
         (
-            "Courthouse Road/Route 630",
+            "I-95 Near Dumfries Road/Route 234",
             "i95_to_i495",
             "2026-07-29T10:10:00-04:00",
             "Northbound",
@@ -241,7 +241,7 @@ def test_i95_route_refuses_historical_both_lanes_closure():
             ("NORTHBOUND_OPEN", "CLOSED"),
         ),
         (
-            "Courthouse Road/Route 630",
+            "I-95 Near Dumfries Road/Route 234",
             "i495_to_i95",
             "2026-07-29T18:50:00-04:00",
             "Southbound",
