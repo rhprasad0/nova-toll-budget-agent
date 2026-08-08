@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from agent.agentcore_entrypoint import (
     BLOCKED_MESSAGE,
     DISCLAIMER,
@@ -88,10 +90,20 @@ def tool_result(tool_id: str, status: str = "success") -> dict[str, object]:
     }
 
 
-def test_stream_emits_sanitized_tool_lifecycle_before_guarded_answer():
+@pytest.mark.parametrize(
+    ("tool_name", "label"),
+    [
+        ("i95_access_options", "Checking I-95/395 Express Lanes access"),
+        ("i95_junction_leg", "Checking I-95/395 Express Lanes tolls"),
+        ("i95_route", "Checking I-95/395 Express Lanes tolls"),
+    ],
+)
+def test_stream_emits_sanitized_tool_lifecycle_before_guarded_answer(
+    tool_name: str, label: str
+):
     agent = StreamingAgent(
         [
-            tool_use("secret-tool-id", "i95_route"),
+            tool_use("secret-tool-id", tool_name),
             tool_result("secret-tool-id"),
             {"data": "unapproved partial answer"},
             {"result": "The toll is $4.25."},
@@ -105,13 +117,13 @@ def test_stream_emits_sanitized_tool_lifecycle_before_guarded_answer():
         {
             "type": "tool",
             "index": 0,
-            "label": "Checking I-95/395 tolls",
+            "label": label,
             "status": "running",
         },
         {
             "type": "tool",
             "index": 0,
-            "label": "Checking I-95/395 tolls",
+            "label": label,
             "status": "completed",
         },
         {

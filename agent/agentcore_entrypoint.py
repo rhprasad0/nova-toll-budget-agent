@@ -502,7 +502,9 @@ def _public_event(result: dict[str, object]) -> dict[str, object]:
 _TOOL_LABELS = {
     "plan_toll_route": "Planning toll route",
     "i66_route": "Checking I-66 tolls",
-    "i95_route": "Checking I-95/395 tolls",
+    "i95_access_options": "Checking I-95/395 Express Lanes access",
+    "i95_junction_leg": "Checking I-95/395 Express Lanes tolls",
+    "i95_route": "Checking I-95/395 Express Lanes tolls",
     "i495_route": "Checking I-495 tolls",
     "dulles_route": "Checking Dulles tolls",
 }

@@ -31,9 +31,9 @@ test("chat forwards validated AgentCore SSE as ordered NDJSON", async () => {
       return {
         contentType: "text/event-stream",
         response: chunks(
-          'data: {"type":"tool","index":0,"label":"Checking I-95/395 tolls",',
+          'data: {"type":"tool","index":0,"label":"Checking I-95/395 Express Lanes tolls",',
           '"status":"running"}\n\n',
-          'data: {"type":"tool","index":0,"label":"Checking I-95/395 tolls","status":"completed"}\n\n',
+          'data: {"type":"tool","index":0,"label":"Checking I-95/395 Express Lanes tolls","status":"completed"}\n\n',
           'data: {"type":"answer","text":"The toll is $4.25.","blocked":false}\n\n',
         ),
       };
@@ -63,8 +63,8 @@ test("chat forwards validated AgentCore SSE as ordered NDJSON", async () => {
   assert.equal(
     await bodyText(response.body),
     [
-      '{"type":"tool","index":0,"label":"Checking I-95/395 tolls","status":"running"}',
-      '{"type":"tool","index":0,"label":"Checking I-95/395 tolls","status":"completed"}',
+      '{"type":"tool","index":0,"label":"Checking I-95/395 Express Lanes tolls","status":"running"}',
+      '{"type":"tool","index":0,"label":"Checking I-95/395 Express Lanes tolls","status":"completed"}',
       '{"type":"answer","text":"The toll is $4.25.","blocked":false}',
       "",
     ].join("\n"),

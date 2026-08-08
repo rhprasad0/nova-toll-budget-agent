@@ -15,6 +15,8 @@ const LABELS = new Set([
   "Planning toll route",
   "Checking I-66 tolls",
   "Checking I-95/395 tolls",
+  "Checking I-95/395 Express Lanes access",
+  "Checking I-95/395 Express Lanes tolls",
   "Checking I-495 tolls",
   "Checking Dulles tolls",
   "Checking toll data",
