@@ -84,7 +84,7 @@ export async function runRequest(request, onEvent, setBusy) {
 }
 
 export const shouldSubmitOnEnter = (event, busy) =>
-  event.key === "Enter" && !event.shiftKey && !event.isComposing && !busy;
+  event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && !busy;
 
 function newTurn(container) {
   const article = document.createElement("article");

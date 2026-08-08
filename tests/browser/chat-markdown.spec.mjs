@@ -185,9 +185,12 @@ test("shared coverage map stays interactive publicly and passive privately", asy
   await expect(map).toBeVisible();
   await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
   await expect(page.locator(".ramp-badge")).toHaveCount(20);
+  await expect(page.getByRole("list", { name: "One-way ramp directions" })).toHaveCount(1);
+  await expect(page.locator("#directional-ramps > li")).toHaveCount(20);
+  await expect(page.locator("#directional-ramps")).toContainText("I-95 Near Cardinal Drive: NB ENTRY");
   await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(0);
   expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
-    pins.every((pin) => pin.tabIndex < 0)
+    pins.every((pin) => pin.tabIndex < 0 && pin.getAttribute("aria-hidden") === "true")
   )).toBe(true);
 
   await page.locator("#message").fill("Can I still chat?");

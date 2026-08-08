@@ -125,6 +125,7 @@ test("Enter submits unless the user wants a newline or is still composing", () =
   assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: false }, false), true);
   assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: true, isComposing: false }, false), false);
   assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: true }, false), false);
+  assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: false, keyCode: 229 }, false), false);
   assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: false }, true), false);
   assert.equal(shouldSubmitOnEnter({ key: "a", shiftKey: false, isComposing: false }, false), false);
 });

@@ -89,6 +89,7 @@
     .preview-junction-pin { display:grid; width:24px; height:24px; place-items:center; border:2px dashed var(--gap); border-radius:50%; background:#17150b; color:#fff7d6; font-size:11px; font-weight:900; }
     .maplibregl-ctrl-attrib { background:rgba(5,13,12,.8)!important; color:var(--muted); font-size:10px; }
     .maplibregl-ctrl-attrib a { color:var(--muted); }
+    .sr-only { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
     [hidden] { display:none!important; }
     @media (max-width:760px) {
       main { grid-template: "header" auto "map" 20rem "transcript" minmax(16rem,auto) "composer" auto "footer" auto / 1fr; }
@@ -131,6 +132,7 @@
         <div id="map-loading" class="map-state" role="status"><strong>Drawing the toll map…</strong>Loading road and ramp coverage.</div>
         <div id="map-error" class="map-state" role="alert" hidden><strong>The map could not load.</strong>Chat remains available. Coverage includes I-66, 95/395, 495, the Dulles Toll Road, and the Dulles Greenway.</div>
       </div>
+      <ul id="directional-ramps" class="sr-only" aria-label="One-way ramp directions"></ul>
     </section>
     <section id="transcript" aria-live="polite" aria-label="Conversation"></section>
     <form aria-busy="false">

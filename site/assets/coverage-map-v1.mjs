@@ -110,6 +110,15 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
     error.hidden = false;
   };
 
+  if (mode === "passive") {
+    const items = coveragePins.filter((pin) => pin.oneWay).map((pin) => {
+      const item = document.createElement("li");
+      item.textContent = `${pin.label}: ${pin.oneWay.direction} ${pin.oneWay.role}`;
+      return item;
+    });
+    document.getElementById("directional-ramps").replaceChildren(...items);
+  }
+
   try {
     const maplibregl = await import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs");
     const detail = document.getElementById("map-detail");
@@ -223,10 +232,7 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
         marker.style.setProperty("--pin", colors[pin.facility]);
         if (mode === "passive") {
           marker.tabIndex = -1;
-          marker.setAttribute("role", "img");
-          marker.setAttribute("aria-label", pin.oneWay
-            ? `${pin.label}: one-way ${pin.oneWay.direction} ${pin.oneWay.role.toLowerCase().replace("/", " and ")}`
-            : `${pin.label}: serves both directions`);
+          marker.setAttribute("aria-hidden", "true");
           if (pin.oneWay) {
             marker.dataset.direction = pin.oneWay.direction;
             marker.dataset.role = pin.oneWay.role;
@@ -254,12 +260,12 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       junctionMarker.className = mode === "passive" ? "junction-pin preview-junction-pin" : "junction-pin";
       junctionMarker.dataset.junction = "true";
       junctionMarker.textContent = "!";
-      junctionMarker.setAttribute("aria-label", "I-95 to I-495 junction: price unavailable");
       if (mode === "passive") {
         junctionMarker.tabIndex = -1;
-        junctionMarker.setAttribute("role", "img");
+        junctionMarker.setAttribute("aria-hidden", "true");
       } else {
         junctionMarker.type = "button";
+        junctionMarker.setAttribute("aria-label", "I-95 to I-495 junction: price unavailable");
         junctionMarker.addEventListener("click", showJunction);
         junctionMarker.addEventListener("focus", showJunction);
       }

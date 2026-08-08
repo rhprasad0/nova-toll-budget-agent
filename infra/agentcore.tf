@@ -709,7 +709,7 @@ resource "aws_api_gateway_method_settings" "tollchat" {
   stage_name  = aws_api_gateway_stage.tollchat.stage_name
   method_path = "*/*"
   settings {
-    throttling_burst_limit = 5
+    throttling_burst_limit = 12
     throttling_rate_limit  = 2
   }
 }
