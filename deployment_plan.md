@@ -1,83 +1,147 @@
-# TollChat AgentCore deployment plan
+# TollChat open-beta launch plan
 
-**Status:** implementation complete; AWS deployment and public launch are not authorized by this change.
+**Status:** blocked until every launch gate below has reviewable evidence.
 
-This plan replaces the Amazon Q draft with an AWS-supported design. A private API Gateway streams a small Lambda proxy, which validates requests and makes IAM-signed `InvokeAgentRuntime` calls through the AgentCore data-plane VPC endpoint.
+**Goal:** expose TollChat to a deliberately small public audience, collect useful
+feedback and governed traces, and preserve a fast path back to the private
+preview. Open beta is a learning stage: it carries no availability promise and
+does not relax privacy, security, or toll-accuracy requirements.
 
-## Target architecture
+This document is the delivery plan. `docs/public-agent-launch-gate.md` remains
+the authorization record and must be reconciled with this plan before public
+chat is enabled.
+
+## Launch shape
 
 ```text
 Private preview
-Owner → Tailscale subnet router → execute-api VPC endpoint → private API Gateway
-      → streaming Lambda proxy
-      → AgentCore data-plane VPC endpoint → AgentCore Runtime → RDS / OpenAI
+Owner -> Tailscale -> private API Gateway -> Lambda proxy -> AgentCore
 
-Public site
-Browser → CloudFront → static S3 page (no chat origin)
+Open beta
+Browser -> CloudFront + WAF -> Lambda proxy -> AgentCore -> RDS / OpenAI
+            |                                  |
+            + rate and size limits             + governed 30-day traces
+
+Rollback
+Disable public route -> set proxy concurrency to 0 only for service-wide harm
+-> restore the last reviewed artifact -> restore approved proxy concurrency
+-> verify the private preview
 ```
 
-SSM Parameter Store remains the credential source of truth. The public site remains unchanged static S3/CloudFront content; chat exists only at `preview.tollchat.ai`.
+SSM Parameter Store remains the source of truth for every credential. Public
+traffic receives only the validated event contract and guarded answer; it never
+receives model, tool, database, provider, or infrastructure details.
 
-## Phase 1 — Review and package
+## [Gate 1 - Public edge and spend boundary](https://github.com/rhprasad0/nova-toll-budget-agent/issues/122)
 
-- [x] Add `bedrock-agentcore` and ADOT 0.18+ dependencies; lock them with `uv.lock`.
-- [x] Package direct code for `aarch64-manylinux2014`, including the agent, tools, oracle data, SOP, CA bundle, and locked dependencies.
-- [x] Package the Node.js streaming Lambda proxy and its locked AWS SDK separately.
-- [x] Keep validation-only placeholder zips, but reject a real runtime deployment unless the ARM64 artifact path is provided.
-- [x] Verify the reproducible package locally: 42.5 MiB compressed, 103.1 MiB expanded, SHA-256 `d25654b47de6c122e9e28cb54cb833dd2aa827794a7c3b9017eeb139d52e22a5`, below the 250 MB/750 MB AgentCore limits. Re-record the deployed digest with deployment evidence.
+- [ ] Add a separately switchable CloudFront `/api/*` origin without weakening
+      the existing private preview.
+- [ ] Prevent callers from bypassing CloudFront and WAF through the origin's
+      hostname, or apply equivalent controls at that origin. Prove a direct
+      origin request cannot invoke chat.
+- [ ] Keep public chat disabled by default in Terraform and verify disabling it
+      removes the public API behavior.
+- [ ] Attach AWS WAF before the proxy. Enforce per-source request throttling and
+      reject oversized bodies at the edge; retain the proxy's validation as the
+      trust boundary.
+- [ ] Preserve the five-turn session cap, five reserved proxy executions, safe
+      dependency timeouts, and fixed response contract.
+- [ ] Bound model output and total model/tool calls per invocation. An ordinary
+      timeout is the final brake, not the primary cost control.
+- [ ] Configure an OpenAI project budget alert and notification path; do not
+      describe it as a hard ceiling unless current provider behavior proves it
+      stops requests. AWS Budgets does not control spend billed by OpenAI.
+- [ ] Before launch, verify either a hard provider/org limit or an automated
+      public-off response whose request bounds, concurrency, and alert delay
+      produce an explicit, owner-approved maximum cost exposure.
+- [ ] Verify the dedicated runtime and proxy roles still have only the existing
+      read-only pricing, Guardrail, trace, and invocation permissions.
 
-## Phase 2 — Private runtime foundation
+## [Gate 2 - Session ownership](https://github.com/rhprasad0/nova-toll-budget-agent/issues/123)
 
-- [x] Create two non-overlapping private subnets (`172.31.224.0/24` and `172.31.225.0/24`) in the existing default VPC.
-- [x] Add one NAT gateway for OpenAI HTTPS egress and private route-table associations.
-- [x] Extend the existing S3 gateway endpoint to the private route table.
-- [x] Create separate security groups for the runtime, data-plane endpoint, Lambda proxy, and execute-api endpoint.
-- [x] Permit runtime-to-RDS only on TCP 5432 and HTTPS egress for SSM, OpenAI, and AWS telemetry.
-- [x] Create `com.amazonaws.us-east-1.bedrock-agentcore` as a private interface endpoint; accept 443 only from the proxy security group.
-- [x] Create a private, encrypted, public-blocked artifact bucket.
+- [ ] Complete [#108](https://github.com/rhprasad0/nova-toll-budget-agent/issues/108):
+      issue the anonymous session credential from the backend instead of
+      accepting a browser-created UUID as proof of ownership.
+- [ ] Bind chat and reset requests to that credential, with secure expiry and
+      rotation matching the AgentCore session lifecycle. For an anonymous beta,
+      prefer an `HttpOnly`, `Secure`, `SameSite` cookie and reject cross-site
+      state-changing requests.
+- [ ] Prove that browser-supplied or guessed runtime IDs, cross-site requests,
+      and credentials invalidated by reset or expiry cannot continue or reset
+      another session. Do not claim an ordinary bearer cookie resists deliberate
+      token copying.
+- [ ] Do not add user accounts unless beta evidence or an approved privacy
+      requirement makes them necessary.
 
-**Availability note:** one NAT is an accepted preview limitation. Add one NAT and route table per AZ before committing to a multi-AZ public availability objective.
+## [Gate 3 - Trace policy, terms, and user notice](https://github.com/rhprasad0/nova-toll-budget-agent/issues/124)
 
-## Phase 3 — Runtime security and application boundary
+- [ ] Complete the launch-critical decisions in
+      [#96](https://github.com/rhprasad0/nova-toll-budget-agent/issues/96),
+      [#117](https://github.com/rhprasad0/nova-toll-budget-agent/issues/117),
+      and [#114](https://github.com/rhprasad0/nova-toll-budget-agent/issues/114).
+- [ ] Inventory the exact content, processors, readers, region, retention, and
+      deletion limits of the existing AgentCore and application trace paths.
+- [ ] Record owner and legal/privacy approval for the beta collection purpose,
+      applicable user choice, toll-data terms, disclaimer, and non-affiliation
+      language. Do not encode an unreviewed legal conclusion in application
+      behavior.
+- [ ] Publish effective, versioned terms and a privacy notice. Add an accessible
+      just-in-time notice beside the composer before the first submission.
+- [ ] State plainly that trip text, answers, tool activity, and safety-filter
+      results may be retained for 30 days; identify processors and the privacy
+      request contact; warn against submitting sensitive information.
+- [ ] Separate mandatory operational telemetry from optional feedback use. If
+      approval requires a choice for full-content product improvement, enforce
+      that choice before capture and support withdrawal prospectively.
+- [ ] Use the approved 30-day AWS trace destinations already implemented and
+      document their different content and deletion behavior plus the stateful
+      model provider's storage and processing. Do not add the durable
+      product-record system in
+      [#90](https://github.com/rhprasad0/nova-toll-budget-agent/issues/90)
+      until a concrete retention, lookup, or deletion requirement needs it.
 
-- [x] Create a dedicated AgentCore role trusted by `bedrock-agentcore.amazonaws.com`, constrained by source account and runtime ARN.
-- [x] Grant only artifact read, one SSM parameter read, `pricing_reader` RDS IAM connect, the designated Guardrail, and telemetry writes.
-- [x] Create a versioned Bedrock Guardrail with high prompt-attack filtering and content safety filters.
-- [x] Implement the native `BedrockAgentCoreApp` entrypoint rather than a custom HTTP server.
-- [x] Validate 1–8000 character prompts, cap a microVM session at five turns, guard both input and output, append the estimates disclaimer, and return stable safe errors.
-- [x] Create the native `aws_bedrockagentcore_agent_runtime` and a `preview` endpoint using AWS provider 6.47+ with VPC mode, 15-minute idle timeout, and 60-minute lifetime. AgentCore owns the automatically created `DEFAULT` endpoint, so Terraform does not try to recreate it.
-- [x] Manage native `aws_bedrockagentcore_resource_policy` resources on both runtime and preview endpoint, explicitly denying invocation unless `aws:SourceVpce` matches.
-- [x] Keep `/nova-toll/openai_api_key` in SSM. Do not create an AgentCore credential provider or delete the parameter.
+## [Gate 4 - Operational readiness](https://github.com/rhprasad0/nova-toll-budget-agent/issues/125)
 
-## Phase 4 — Tailscale-only preview
+- [ ] Complete the deployed kill-switch drill in
+      [#93](https://github.com/rhprasad0/nova-toll-budget-agent/issues/93),
+      including recovery of the private preview and confirmation that ingestion
+      and RDS remain healthy.
+- [ ] Run one stable deployed toll-query smoke test from
+      [#99](https://github.com/rhprasad0/nova-toll-budget-agent/issues/99).
+- [ ] Exercise one representative dependency failure from
+      [#98](https://github.com/rhprasad0/nova-toll-budget-agent/issues/98)
+      and prove the browser receives only the safe error contract.
+- [ ] Add actionable alarms for proxy failures and latency, AgentCore sessions,
+      toll-data freshness, RDS CPU/free memory/connections/CPU credits, and
+      provider spend. Confirm the SNS recipient actually receives them.
+- [ ] Run a short private load test with ingestion active. Set alert and rollout
+      thresholds from that baseline; resize RDS only if the evidence requires it.
+- [ ] Implement the launch-critical slice of
+      [#104](https://github.com/rhprasad0/nova-toll-budget-agent/issues/104):
+      check expected feed/corridor row coverage and plausible rate changes before
+      publication, and preserve the last-known-good snapshot when a check fails.
+- [ ] Retain the last reviewed packages and record their digests. Verify the
+      rollback runbook restores approved proxy concurrency before the private
+      smoke test, then exercise it before enabling public traffic.
 
-- [x] Create a Lambda proxy with a separate role allowed only to invoke the one runtime and preview endpoint, and stop sessions on that runtime.
-- [x] Validate UUID sessions and request bodies before invoking AgentCore; expose only fixed tool labels/statuses and the guarded final answer.
-- [x] Reserve five Lambda executions and retain proxy logs for 30 days.
-- [x] Create an execute-api interface endpoint whose security group accepts port 443 only from the existing Tailscale router.
-- [x] Keep the tailnet grant owner-only (`rhprasad0@github`) and add a policy test proving the CI identity cannot reach preview HTTPS.
-- [x] Create a private REST API and custom domain with independent `aws:SourceVpce` allow/deny policies, Lambda response streaming, and same-origin preview assets.
-- [x] Add `preview.tollchat.ai` to the ACM certificate and create an unproxied DNS record for the execute-api endpoint.
-- [ ] Apply Terraform, approve the advertised VPC route in Tailscale if needed, and verify that a tailnet client succeeds while a non-tailnet client times out.
+## [Gate 5 - Beta feedback and ownership](https://github.com/rhprasad0/nova-toll-budget-agent/issues/126)
 
-## Phase 5 — Frontend
+- [ ] Label the product **Open Beta** and state that behavior may change and no
+      availability commitment is offered.
+- [ ] Link to the monitored feedback contact without automatically attaching the
+      conversation. If structured ratings or free text are added later, first
+      define their destination, fields, validation, access, retention, deletion,
+      disclosure, and abuse controls in Gate 3.
+- [ ] Route privacy, security, incorrect-price, and availability reports to a
+      monitored owner. Define the first-response expectation for the beta.
+- [ ] Review aggregate health and a bounded sample of approved traces daily for
+      the first week; record decisions without copying user content into issues
+      or evaluation reports.
 
-- [x] Keep `site/index.html` byte-for-byte unchanged and build a dedicated accessible `preview.html` page.
-- [x] Use `crypto.randomUUID()`, render all model content with `textContent`, expose activity/errors via live regions, enforce the 8000-character client limit, and provide a new-chat action.
-- [x] Consume validated NDJSON incrementally so tool lifecycle states render before the final answer.
+## Release evidence
 
-## Phase 6 — Public path (not implemented)
-
-- [x] Remove the dormant CloudFront chat origin, WAF, and `enable_public_chat` scaffold so the main page cannot expose preview accidentally.
-- [x] Alarm on proxy errors and active sessions through the existing SNS topic.
-- [x] Extend the existing CloudTrail advanced selectors to capture AgentCore runtime data events without losing protected S3 object events.
-- [ ] Configure and verify an OpenAI-side daily/project budget. AWS Budgets does not control spend billed by OpenAI.
-- [ ] Complete and approve every item in `docs/public-agent-launch-gate.md`, including privacy/retention, legal text, IAM simulation, alarm delivery, kill switch, rollback, and end-to-end eval evidence.
-- [ ] Design and authorize a separate public path only after the launch gate is complete.
-
-## Phase 7 — Verification and evidence
-
-Run locally and in CI:
+Run the normal repository checks and preserve only successful, non-sensitive
+evidence:
 
 ```bash
 uv sync --locked
@@ -93,30 +157,46 @@ terraform -chdir=infra validate
 gitleaks git --redact
 ```
 
-After an authorized private deployment, add only successful, technically representative evidence to `eval/results/` and update its README. Required evidence: package digest/size, Terraform plan, private/non-private reachability, known-route response and disclaimer, blocked prompt injection, oversized input, five-turn cutoff, IAM simulation, alarm delivery, kill-switch drill, and rollback drill. Failed or superseded runs stay out of the curated directory.
+Before launch, the authorization record must link to evidence for WAF limits,
+direct-origin denial, public-off behavior, cross-session isolation, terms and
+privacy approval, trace/provider retention, IAM simulation, feed-quality
+rejection, alarms, bounded cost exposure, the canonical query, the safe failure,
+the kill switch, and rollback. Curate representative reports in `eval/results/`
+according to its README; failed or superseded runs stay out.
 
-## Phase 8 — Public operations
+## Rollout
 
-- Review AgentCore and proxy error/session metrics daily during the first week.
-- Review API Gateway and proxy metrics without copying user content into tickets.
-- Run the existing deterministic and simulated suites before every runtime version promotion; do not create duplicate evaluator implementations unless a measured gap requires one.
-- Retain the previous reviewed artifact for rollback.
-- When Bedrock Mantle is approved and passes the full suite, switch the model backend, remove OpenAI/SSM permission, and remove the NAT only after confirming every remaining runtime dependency has a private AWS path.
+1. **Private rehearsal:** deploy the exact candidate, run all release evidence,
+   and record explicit go/no-go approval.
+2. **Quiet public beta:** enable the public route for directly invited testers
+   without broad promotion. Supervise it for at least one normal ingestion
+   cycle and review every alert and safe failure.
+3. **Open announcement:** widen discovery without raising the established
+   concurrency or spending boundaries. Change one limit at a time only when
+   observed demand and health justify it.
 
-## Rollback and kill switch
+Disable the public route immediately for suspected data exposure, session
+crossover, credential leakage, unsafe browser output, or materially incorrect
+toll behavior. Pause expansion for breached health, capacity, or spend
+thresholds; restore the known-good state before diagnosing.
 
-The immediate kill switch sets the proxy Lambda reserved concurrency to zero. The public static site has no chat route. Rollback deploys the last reviewed AgentCore artifact and then exercises the private smoke/evaluation suite. Exact commands are in `docs/runbooks/kill-switch.md` and `docs/runbooks/rollback.md`.
+## Deferred until beta evidence
 
-## AWS references
+The following are not launch blockers unless rehearsal or beta telemetry exposes
+the risk they address: the durable product store (#90), managed AgentCore
+Evaluations (#91), speculative RDS resizing (#95), expanded lifecycle testing
+(#100), comprehensive dashboards (#102), VPC Flow Logs and network
+defense-in-depth (#103, #105, #107), restore drills (#106), feed-quality
+monitoring beyond the publication gate above (#104), equivalent-call loop
+detection beyond the hard per-invocation cap (#112), and the portfolio video
+(#113).
 
-- [Deploy AgentCore Runtime from source code](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-code-deploy.html)
-- [AgentCore Runtime versioning and endpoints](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agent-runtime-versioning.html)
-- [Configure AgentCore Runtime for VPC access](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-vpc.html)
-- [AgentCore Runtime IAM permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html)
-- [Invoke an AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-invoke-agent.html)
-- [AgentCore resource-based policies](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/resource-based-policies.html)
-- [AgentCore generated observability data](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-runtime-metrics.html)
-- [CloudTrail data-event resource types](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-data-events-with-cloudtrail.html)
-- [Private REST APIs](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-private-apis.html)
-- [Private custom domain names](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-private-custom-domains.html)
-- [REST API response streaming](https://docs.aws.amazon.com/apigateway/latest/developerguide/response-streaming.html)
+## Practice references
+
+- [Google SRE: progressive rollouts](https://sre.google/sre-book/service-best-practices/)
+- [AWS operational-readiness review](https://docs.aws.amazon.com/wellarchitected/latest/operational-readiness-reviews/appendix-b-example-orr-questions.html)
+- [AWS automated testing and rollback](https://docs.aws.amazon.com/wellarchitected/latest/framework/ops_mit_deploy_risks_auto_testing_and_rollback.html)
+- [GitHub public-preview lifecycle](https://docs.github.com/en/get-started/using-github/exploring-early-access-releases-with-feature-preview)
+- [NIST Generative AI Risk Management Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence)
+- [OWASP: LLM unbounded consumption](https://owasp.org/www-project-top-10-for-large-language-model-applications/2_0_vulns/LLM10_UnboundedConsumption)
+- [ICO: privacy in the product lifecycle](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/designing-products-that-protect-privacy/privacy-in-the-product-design-lifecycle/)
