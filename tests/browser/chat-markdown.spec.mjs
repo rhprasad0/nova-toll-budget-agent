@@ -208,18 +208,29 @@ test("shared coverage map stays interactive publicly and direction-aware private
   await expect(page.locator("#route-filters button")).toHaveCount(6);
   await expect(page.locator("#route-filters button:enabled")).toHaveCount(6);
   await expect(page.locator("#reset-map")).toBeEnabled();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "New chat" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip map and ask a question" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#message")).toBeFocused();
   expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
     pins.every((pin) => pin.tagName === "BUTTON" && pin.tabIndex === 0 &&
       pin.hasAttribute("aria-label"))
   )).toBe(true);
-  await expect(page.getByRole("button", { name: /I-95 Near Cardinal Drive: NB ENTRY only/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /I-66 West: serves both directions/ })).toHaveCount(1);
+  expect(await page.locator(".preview-map-pin").evaluateAll((pins) => {
+    const labels = pins.map((pin) => pin.getAttribute("aria-label"));
+    return new Set(labels).size === labels.length;
+  })).toBe(true);
+  await expect(page.getByRole("button", { name: /95\/395 Express Lanes — I-95 Near Cardinal Drive: NB ENTRY only/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /I-66 — I-66 West: serves both directions/ })).toHaveCount(1);
 
   await page.getByRole("button", { name: "I-66", exact: true }).click();
   await expect(page.getByRole("button", { name: "I-66", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".preview-map-pin:visible")).toHaveCount(17);
-  await page.getByRole("button", { name: /I-495 N: EB ENTRY only/ }).focus();
-  await expect(page.locator("#map-detail")).toContainText("EB entry only.");
+  await page.getByRole("button", { name: /I-495 S: serves both directions/ }).click();
+  await page.getByRole("button", { name: /I-495 N: EB ENTRY only/ }).click();
+  await expect(page.locator("#map-detail")).toContainText("EB entry only. 1 supported node (2)");
 
   await page.getByRole("button", { name: /I-66 West: serves both directions/ }).focus();
   await expect(page.locator("#map-detail")).toContainText("Serves both directions.");

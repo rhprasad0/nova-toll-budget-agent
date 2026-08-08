@@ -1,4 +1,4 @@
-"""Contracts for the interactive directional map in the private preview."""
+"""Contracts for the directional map in the private preview."""
 
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v1.mjs"
 HANDLER = ROOT / "lambdas" / "chat_proxy" / "handler.mjs"
 BUILD = ROOT / "scripts" / "build_zips.sh"
 INFRA = ROOT / "infra" / "site.tf"
-PREVIEW = ROOT / "site" / "preview.html"
-PREVIEW_JS = ROOT / "site" / "preview.mjs"
 
 
 def _exported_json(name: str) -> object:
@@ -84,17 +82,3 @@ def test_private_bundle_serves_the_shared_pinned_map_assets() -> None:
     assert "site/assets/maplibre-gl-6.0.0" in build
     assert '"assets/coverage-map-v1.mjs"' in infra
     assert 'path.endsWith(".css") ? "text/css; charset=utf-8"' in handler
-
-
-def test_private_preview_mounts_the_full_active_map_surface() -> None:
-    page = PREVIEW.read_text()
-    script = PREVIEW_JS.read_text()
-
-    assert 'mountCoverageMap({ mode: "preview" })' in script
-    assert 'aria-label="Interactive TollChat coverage map' in page
-    assert 'id="route-filters"' in page
-    for facility in ("all", "i66", "i95", "i495", "dulles", "greenway"):
-        assert f'data-facility="{facility}"' in page
-    assert 'id="reset-map"' in page
-    assert 'id="map-detail"' in page
-    assert 'id="directional-ramps"' not in page

@@ -130,7 +130,6 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       bounds: coverageBounds,
       fitBoundsOptions: { padding: padding(mode), duration: 0 },
       maxBounds: [[-78.05,38.05],[-76.7,39.42]],
-      interactive: true,
       cooperativeGestures: true,
       dragRotate: false,
       attributionControl: false
@@ -169,14 +168,23 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       selectedMarker?.classList.remove("selected");
       selectedMarker = markerButton;
       selectedMarker.classList.add("selected");
-      const access = !preview ? "" : pin.oneWay
+      const access = pin.oneWay
         ? `${pin.oneWay.direction} ${pin.oneWay.role.toLowerCase().replace("/", " and ")} only. `
         : "Serves both directions. ";
       setDetail(
         names[pin.facility],
         pin.label,
-        `${access}${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "entry/exit" : "entries/exits"} (${pin.nodeIds.join(", ")})`
+        preview
+          ? `${access}${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "node" : "nodes"} (${pin.nodeIds.join(", ")})`
+          : `${pin.nodeIds.length} supported ${pin.nodeIds.length === 1 ? "entry/exit" : "entries/exits"} (${pin.nodeIds.join(", ")})`
       );
+    };
+
+    const activatePin = (pin, marker) => {
+      showPin(pin, marker);
+      if (preview && map.getZoom() < 15) {
+        map.easeTo({ center:[pin.lon,pin.lat], zoom:15, duration:reducedMotion ? 0 : 350 });
+      }
     };
 
     const facilityBounds = (facility) => routeLines[facility].flat().reduce(
@@ -225,10 +233,12 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
         marker.className = preview ? "map-pin preview-map-pin" : "map-pin";
         marker.style.setProperty("--pin", colors[pin.facility]);
         marker.type = "button";
-        const access = !preview ? "" : pin.oneWay
+        const access = pin.oneWay
           ? `${pin.oneWay.direction} ${pin.oneWay.role} only; `
           : "serves both directions; ";
-        marker.setAttribute("aria-label", `${pin.label}: ${access}${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "entry or exit" : "entries or exits"}`);
+        marker.setAttribute("aria-label", preview
+          ? `${names[pin.facility]} — ${pin.label}: ${access}${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "node" : "nodes"}`
+          : `${pin.label}: ${pin.nodeIds.length} covered ${pin.nodeIds.length === 1 ? "entry or exit" : "entries or exits"}`);
         if (pin.nodeIds.length > 1) marker.textContent = pin.nodeIds.length;
         if (preview && pin.oneWay) {
           marker.dataset.direction = pin.oneWay.direction;
@@ -243,7 +253,7 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
           badge.append(direction, role);
           marker.append(badge);
         }
-        marker.addEventListener("click", () => showPin(pin, marker));
+        marker.addEventListener("click", () => activatePin(pin, marker));
         marker.addEventListener("focus", () => showPin(pin, marker));
         mountMarker(marker, [pin.lon,pin.lat]);
         markers.push({ facility:pin.facility, element:marker });
