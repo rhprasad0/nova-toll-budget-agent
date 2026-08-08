@@ -27,7 +27,24 @@
     .activities [data-status=completed]::before { background:var(--lime); }
     .activities [data-status=failed]::before { border-color:#ff8e7c; background:#ff8e7c; }
     .activity-status { font-variant-numeric:tabular-nums; }
-    .assistant-answer { margin:0; white-space:pre-wrap; }
+    .assistant-answer { margin:0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .assistant-answer > :first-child { margin-top:0; }
+    .assistant-answer > :last-child { margin-bottom:0; }
+    .assistant-answer h1,.assistant-answer h2,.assistant-answer h3,.assistant-answer h4,.assistant-answer h5,.assistant-answer h6 { margin:16px 0 6px; line-height:1.2; }
+    .assistant-answer h1,.assistant-answer h2 { font-size:1.15rem; }
+    .assistant-answer h3,.assistant-answer h4,.assistant-answer h5,.assistant-answer h6 { font-size:1rem; }
+    .assistant-answer p,.assistant-answer ul,.assistant-answer ol,.assistant-answer blockquote,.assistant-answer pre,.assistant-answer table { margin:8px 0; }
+    .assistant-answer ul,.assistant-answer ol { padding-left:22px; }
+    .assistant-answer blockquote { padding-left:12px; border-left:3px solid var(--line); color:var(--muted); }
+    .assistant-answer code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.9em; }
+    .assistant-answer :not(pre)>code { padding:2px 4px; border-radius:3px; background:#080b08; }
+    .assistant-answer pre,.assistant-answer table { max-width:100%; overflow-x:auto; }
+    .assistant-answer pre { padding:10px; border-radius:4px; background:#080b08; white-space:pre; }
+    .assistant-answer table { display:block; border-collapse:collapse; }
+    .assistant-answer th,.assistant-answer td { padding:6px 8px; border:1px solid var(--line); text-align:left; }
+    .assistant-answer hr { margin:12px 0; border:0; border-top:1px solid var(--line); }
+    .assistant-answer a { color:var(--lime); }
+    .assistant-answer a:focus-visible { outline:2px solid var(--lime); outline-offset:2px; }
     .assistant-answer--notice { color:var(--muted); }
     form { position:sticky; bottom:0; display:grid; grid-template-columns:1fr auto; gap:8px; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); box-shadow:0 -16px 32px var(--road); }
     label { grid-column:1/-1; color:var(--muted); font-size:.875rem; }

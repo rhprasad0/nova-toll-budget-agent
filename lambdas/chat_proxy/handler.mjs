@@ -97,7 +97,7 @@ async function* ndjsonFromSse(stream) {
 }
 
 export async function route(event, dependencies) {
-  const { client, runtimeArn, previewHtml, previewJs = "" } = dependencies;
+  const { client, runtimeArn, previewHtml, previewJs = "", previewAssets = {} } = dependencies;
   const method = event.httpMethod;
   const path = event.path;
   if (method === "GET" && path === "/") {
@@ -105,6 +105,9 @@ export async function route(event, dependencies) {
   }
   if (method === "GET" && path === "/preview.mjs") {
     return { statusCode: 200, headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" }, body: previewJs };
+  }
+  if (method === "GET" && Object.hasOwn(previewAssets, path)) {
+    return { statusCode: 200, headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable" }, body: previewAssets[path] };
   }
   if (method === "GET" && path === "/api/config") {
     return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 5 });
@@ -152,6 +155,10 @@ const dependencies = deployed ? {
   runtimeArn: process.env.AGENTCORE_RUNTIME_ARN,
   previewHtml: readFileSync(new URL("./preview.html", import.meta.url), "utf8"),
   previewJs: readFileSync(new URL("./preview.mjs", import.meta.url), "utf8"),
+  previewAssets: {
+    "/assets/chat-markdown-v1.mjs": readFileSync(new URL("./assets/chat-markdown-v1.mjs", import.meta.url), "utf8"),
+    "/assets/markdown-it-15.0.0/markdown-it.esm.min.mjs": readFileSync(new URL("./assets/markdown-it-15.0.0/markdown-it.esm.min.mjs", import.meta.url), "utf8"),
+  },
 } : {};
 
 export const handler = deployed ? globalThis.awslambda.streamifyResponse(async (event, responseStream) => {

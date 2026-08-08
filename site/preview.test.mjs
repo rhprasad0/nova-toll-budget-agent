@@ -7,6 +7,7 @@ const element = (tagName = "div") => ({
   tagName,
   className: "",
   textContent: "",
+  innerHTML: "",
   children: [],
   dataset: {},
   append(...children) { this.children.push(...children); },
@@ -32,8 +33,26 @@ test("tool events render in order and the answer stays distinct", () => {
   assert.equal(view.activities.children[0].children[0].textContent, "Planning toll route");
   assert.equal(view.activities.children[0].children[1].textContent, "Completed");
   assert.equal(view.activities.children[1].children[0].textContent, "Checking I-495 tolls");
-  assert.equal(view.answer.textContent, "The toll is $8.10.");
+  assert.match(view.answer.innerHTML, /<p>The toll is \$8\.10\.<\/p>/);
   assert.equal(view.answer.className, "assistant-answer");
+});
+
+test("assistant Markdown renders safely while errors remain literal", () => {
+  const view = turn();
+
+  applyEvent(view, {
+    type: "answer",
+    text: "## Fare\n\n**$4.25** <script>window.attack=true</script> ![tracker](https://example.com/a.png)",
+    blocked: false,
+  });
+
+  assert.match(view.answer.innerHTML, /<h2>Fare<\/h2>/);
+  assert.match(view.answer.innerHTML, /<strong>\$4\.25<\/strong>/);
+  assert.doesNotMatch(view.answer.innerHTML, /<script|<img/i);
+  assert.match(view.answer.innerHTML, /&lt;script&gt;/);
+
+  applyEvent(view, { type: "error", code: "agent_unavailable", message: "**literal**" });
+  assert.equal(view.answer.textContent, "**literal**");
 });
 
 test("failed tools expose text and status semantics without removing the composer", async () => {

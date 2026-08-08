@@ -50,7 +50,7 @@ uv pip install \
 
 # --- chat proxy: locked AWS SDK + private preview page ---
 proxy_stage="$BUILD/chat-proxy"
-mkdir -p "$proxy_stage"
+mkdir -p "$proxy_stage/assets"
 npm ci --omit=dev --prefix "$REPO/lambdas/chat_proxy"
 cp "$REPO/lambdas/chat_proxy/handler.mjs" \
    "$REPO/lambdas/chat_proxy/package.json" \
@@ -59,6 +59,8 @@ cp "$REPO/lambdas/chat_proxy/handler.mjs" \
    "$REPO/site/preview.mjs" \
    "$proxy_stage/"
 cp -R "$REPO/lambdas/chat_proxy/node_modules" "$proxy_stage/"
+cp "$REPO/site/assets/chat-markdown-v1.mjs" "$proxy_stage/assets/"
+cp -R "$REPO/site/assets/markdown-it-15.0.0" "$proxy_stage/assets/"
 
 # --- AgentCore direct code: application + locked ARM64 dependencies ---
 agent_stage="$BUILD/agentcore"

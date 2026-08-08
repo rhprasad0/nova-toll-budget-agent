@@ -1,3 +1,5 @@
+import { renderAssistantMarkdown } from "./assets/chat-markdown-v1.mjs";
+
 const SAFE_ERROR = {
   type: "error",
   code: "agent_unavailable",
@@ -41,7 +43,8 @@ export function applyEvent(view, event) {
   view.answer.className = event.type === "answer" && !event.blocked
     ? "assistant-answer"
     : "assistant-answer assistant-answer--notice";
-  view.answer.textContent = event.text ?? event.message;
+  if (event.type === "answer") view.answer.innerHTML = renderAssistantMarkdown(event.text);
+  else view.answer.textContent = event.message;
 }
 
 export async function consumeNdjson(stream, onEvent) {

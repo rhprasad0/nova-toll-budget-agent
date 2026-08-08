@@ -109,6 +109,13 @@ test("validation, page, config, and reset keep their small contracts", async () 
     await bodyText((await route(event("GET", "/"), dependencies)).body),
     dependencies.previewHtml,
   );
+  const asset = await route(event("GET", "/assets/chat-markdown-v1.mjs"), {
+    ...dependencies,
+    previewAssets: { "/assets/chat-markdown-v1.mjs": "export const safe = true;" },
+  });
+  assert.equal(asset.statusCode, 200);
+  assert.equal(asset.headers["Content-Type"], "text/javascript; charset=utf-8");
+  assert.equal(await bodyText(asset.body), "export const safe = true;");
   assert.deepEqual(
     JSON.parse(await bodyText((await route(event("GET", "/api/config"), dependencies)).body)),
     { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 },

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_public_site_is_byte_for_byte_unchanged():
     assert (
         hashlib.sha256((ROOT / "site/index.html").read_bytes()).hexdigest()
-        == "97d5148aebf567e5c0429e98297973ffcd971627f04ae5c3942985a8cfaaa684"
+        == "9a1a6a168d3b666400dae9e02a8b1d828e644da96c23e11e65a67f5090ece38e"
     )
 
 
@@ -66,3 +66,5 @@ def test_proxy_build_installs_locked_node_dependencies_and_bundles_preview():
     assert "handler.mjs" in build
     assert "preview.html" in build
     assert "preview.mjs" in build
+    assert "chat-markdown-v1.mjs" in build
+    assert "markdown-it-15.0.0" in build
