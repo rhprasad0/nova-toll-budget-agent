@@ -143,7 +143,7 @@ def test_rendered_pins_use_precomputed_fixed_positions() -> None:
     module = MAP_MODULE.read_text()
     assert ".map-pin, .junction-pin { position: absolute;" in page
     assert "snapToRoute" not in page
-    assert ".setLngLat([pin.lon,pin.lat])" in module
+    assert "mountMarker(marker, [pin.lon,pin.lat])" in module
     assert "move = true" not in module
     assert "if (move)" not in module
 

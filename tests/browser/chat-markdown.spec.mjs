@@ -161,6 +161,26 @@ test("private preview submits with Enter and keeps Shift+Enter as a newline", as
   expect(requests).toBe(1);
 });
 
+test("private preview blocks submission while a new chat is resetting", async ({ page }) => {
+  let finishReset;
+  const resetPending = new Promise((resolve) => { finishReset = resolve; });
+  await page.route("**/api/reset", async (route) => {
+    await resetPending;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/preview.html");
+
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator("form")).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("#message")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Estimate tolls" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "New chat" })).toBeDisabled();
+
+  finishReset();
+  await expect(page.locator("form")).toHaveAttribute("aria-busy", "false");
+  await expect(page.locator("#message")).toBeEnabled();
+});
+
 test("shared coverage map stays interactive publicly and passive privately", async ({ page }) => {
   await page.route("https://tiles.openfreemap.org/styles/dark", (route) =>
     route.fulfill({ json: { version: 8, sources: {}, layers: [] } })
@@ -169,6 +189,7 @@ test("shared coverage map stays interactive publicly and passive privately", asy
     route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
   );
   await page.goto("/");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
   await expect(page.locator(".map-pin")).toHaveCount(82);
   await expect(page.locator(".ramp-badge")).toHaveCount(0);
   await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(1);
@@ -176,7 +197,8 @@ test("shared coverage map stays interactive publicly and passive privately", asy
 
   await page.goto("/preview.html");
 
-  await expect(page.getByRole("img", { name: /Passive TollChat coverage map/ })).toBeVisible();
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
+  await expect(page.getByRole("region", { name: /Passive TollChat coverage map/ })).toBeVisible();
   await expect(page.locator(".map-legend")).toContainText("Unlabelled ramps serve both directions.");
   await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
   await expect(page.locator(".ramp-badge")).toHaveCount(20);
@@ -185,8 +207,12 @@ test("shared coverage map stays interactive publicly and passive privately", asy
   await expect(page.locator("#directional-ramps")).toContainText("I-95 Near Cardinal Drive: NB ENTRY");
   await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(0);
   expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
-    pins.every((pin) => pin.tagName === "DIV" && pin.tabIndex < 0)
+    pins.every((pin) => pin.tagName === "DIV" && pin.tabIndex < 0 &&
+      pin.getAttribute("aria-hidden") === "true" && !pin.hasAttribute("role") &&
+      !pin.hasAttribute("aria-label"))
   )).toBe(true);
+  await expect(page.locator(".preview-junction-pin")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.locator(".preview-junction-pin")).not.toHaveAttribute("role", /.+/);
 });
 
 test("private preview stacks map before transcript on mobile", async ({ page }) => {

@@ -150,6 +150,16 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
     }
     map.addControl(new maplibregl.AttributionControl({ customAttribution:'Basemap © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> · Road geometry: <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.2019.html">U.S. Census Bureau TIGER/Line 2019</a>', compact:true }), "bottom-right");
 
+    const mountMarker = (element, coordinates) => {
+      const marker = new maplibregl.Marker({ element, anchor:"center" });
+      marker.setLngLat(coordinates).addTo(map);
+      if (mode === "passive") {
+        element.removeAttribute("role");
+        element.removeAttribute("aria-label");
+        element.setAttribute("aria-hidden", "true");
+      }
+    };
+
     const setDetail = (kicker, titleText, descriptionText) => {
       detail.replaceChildren();
       const detailKicker = document.createElement("span");
@@ -250,7 +260,7 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
           marker.addEventListener("click", () => showPin(pin, marker));
           marker.addEventListener("focus", () => showPin(pin, marker));
         }
-        new maplibregl.Marker({ element:marker, anchor:"center" }).setLngLat([pin.lon,pin.lat]).addTo(map);
+        mountMarker(marker, [pin.lon,pin.lat]);
         markers.push({ facility:pin.facility, element:marker });
       });
 
@@ -264,7 +274,7 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
         junctionMarker.addEventListener("click", showJunction);
         junctionMarker.addEventListener("focus", showJunction);
       }
-      new maplibregl.Marker({ element:junctionMarker, anchor:"center" }).setLngLat([-77.17925,38.79375]).addTo(map);
+      mountMarker(junctionMarker, [-77.17925,38.79375]);
     });
 
     if (mode !== "passive") {

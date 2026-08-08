@@ -116,6 +116,7 @@ function start() {
   const setBusy = (busy) => {
     submit.disabled = busy;
     input.disabled = busy;
+    reset.disabled = busy;
     form.setAttribute("aria-busy", String(busy));
   };
 
@@ -147,14 +148,19 @@ function start() {
   });
 
   reset.addEventListener("click", async () => {
-    await fetch("/api/reset", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ session_id: session }),
-    }).catch(() => {});
-    session = crypto.randomUUID();
-    transcript.replaceChildren();
-    input.focus();
+    setBusy(true);
+    try {
+      await fetch("/api/reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session_id: session }),
+      }).catch(() => {});
+    } finally {
+      session = crypto.randomUUID();
+      transcript.replaceChildren();
+      setBusy(false);
+      input.focus();
+    }
   });
 }
 

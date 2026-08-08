@@ -148,6 +148,9 @@ export async function route(event, dependencies) {
       body: ndjsonFromSse(result.response),
     };
   } catch (error) {
+    if (path === "/api/reset" && error?.name === "ResourceNotFoundException") {
+      return json(200, { ok: true });
+    }
     console.error("AgentCore request failed", error?.name ?? "Error");
     return json(502, { error: SAFE_ERROR });
   }

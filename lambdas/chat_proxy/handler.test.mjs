@@ -173,3 +173,18 @@ test("AgentCore invocation failures return no internal detail", async () => {
   assert.match(body, /temporarily unavailable/);
   assert.doesNotMatch(body, /credential-shaped/);
 });
+
+test("reset is idempotent when its runtime session does not exist", async () => {
+  const client = { async send() {
+    const error = new Error("missing session");
+    error.name = "ResourceNotFoundException";
+    throw error;
+  } };
+  const response = await route(
+    event("POST", "/api/reset", { session_id: sessionId }),
+    { client, runtimeArn: "runtime-arn", previewHtml: "" },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(JSON.parse(await bodyText(response.body)), { ok: true });
+});
