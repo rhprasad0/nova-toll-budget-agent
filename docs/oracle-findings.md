@@ -283,6 +283,9 @@ begins at Franconia-Springfield. I-495 pricing independently begins or ends at
 I-495 Near Braddock Road. The road between those boundaries is unpriced;
 cross-junction answers add the returned fares into a known toll total that
 explicitly excludes the gap and is not a complete operator-issued fare.
+When the requested I-95 endpoint is already the selected boundary, there is no
+I-95 leg to price; the junction tool reports that fact without a zero-dollar
+fare or an unavailable-lane claim.
 
 ## 9. VDOT republishes Transurban's price on a 10-minute delay
 

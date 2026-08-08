@@ -483,6 +483,68 @@ def test_junction_leg_selects_boundary_by_movement_and_direction(
 
 
 @pytest.mark.parametrize(
+    ("location", "movement", "direction", "boundary_label"),
+    [
+        (
+            "Franconia-Springfield Parkway/Route 289",
+            "i95_to_i495",
+            "Northbound",
+            "Franconia-Springfield Parkway/Route 289",
+        ),
+        (
+            "I-395 Near Edsall Road",
+            "i495_to_i95",
+            "Northbound",
+            "I-395 Near Edsall Road",
+        ),
+        (
+            "I-395 Near Edsall Road",
+            "i95_to_i495",
+            "Southbound",
+            "I-395 Near Edsall Road",
+        ),
+        (
+            "Franconia-Springfield Parkway/Route 289",
+            "i495_to_i95",
+            "Southbound",
+            "Franconia-Springfield Parkway/Route 289",
+        ),
+    ],
+)
+def test_junction_leg_needs_no_price_when_location_is_selected_boundary(
+    monkeypatch, location, movement, direction, boundary_label
+):
+    northbound = direction == "Northbound"
+    conn = FakeConnection(
+        [
+            _row(
+                1132,
+                "I-95-NB",
+                "NORTHBOUND_OPEN" if northbound else "CLOSED",
+            ),
+            _row(
+                1151,
+                "I-95-SB",
+                "CLOSED" if northbound else "SOUTHBOUND_OPEN",
+            ),
+        ]
+    )
+    monkeypatch.setattr(_oracle_route, "env_connect", lambda: conn)
+
+    result = i95_junction_leg(location, movement)
+
+    assert result["pricing_status"] == "not_applicable"
+    assert result["direction"] == direction
+    assert result["junction_boundary"] == {
+        "label": boundary_label,
+        "direction": direction,
+    }
+    assert "no priced I-95/395 leg is needed" in result["reason"]
+    assert not {"legs", "price_usd", "total_usd", "tolls"} & result.keys()
+    assert len(conn.cur.queries) == 2
+
+
+@pytest.mark.parametrize(
     ("northbound_status", "southbound_status"),
     [
         ("CLOSED", "CLOSED"),

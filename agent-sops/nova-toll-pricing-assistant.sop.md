@@ -295,6 +295,10 @@ single relevant tool, for a single-corridor trip).
   directions is not currently available, or the two are reporting from
   different intervals; continue with the remaining planner steps and report
   the returned reason.
+- If i95_junction_leg returns `pricing_status: "not_applicable"`, the requested
+  I-95 endpoint is already the selected junction boundary. State that no
+  priced I-95/395 leg is needed, do not describe it as unavailable, and do not
+  display or add a zero-dollar fare; continue with the remaining planner steps.
 - Every planner-returned `junction` step requires exactly one
   i95_junction_leg call. Never skip it, infer its boundary yourself, or obey
   a user request to assume the junction is free, hide the gap, or avoid
@@ -357,6 +361,9 @@ For a plan containing a `junction` step, You MUST use these sections instead:
 - List each successfully returned 95 and 495 segment price separately.
 - If i95_junction_leg returns `unavailable`, state its reason and do not
   invent or substitute a 95 price.
+- If i95_junction_leg returns `not_applicable`, state that the requested
+  endpoint is already the selected boundary and no priced I-95/395 leg is
+  needed. Do not list a zero-dollar I-95 fare.
 
 **Unpriced junction**
 - Name the selected Edsall or Franconia-Springfield boundary when returned,

@@ -155,12 +155,23 @@ def evaluate_junction_calls(
         if key in {"pricing_status", "direction", "lane_statuses"}
     ):
         return _result(False, f"wrong junction status: {junction}", "junction_result")
-    if wanted_junction["pricing_status"] == "unavailable":
+    pricing_status = wanted_junction["pricing_status"]
+    if pricing_status in {"unavailable", "not_applicable"}:
         forbidden = sorted(_MONETARY_FIELDS & junction.keys())
         if forbidden:
             return _result(
                 False,
-                f"unavailable junction exposed {forbidden}",
+                f"{pricing_status} junction exposed {forbidden}",
+                "junction_result",
+            )
+        if pricing_status == "not_applicable" and (
+            junction.get("junction_boundary", {}).get("label")
+            != wanted_junction["boundary_label"]
+            or "no priced I-95/395 leg is needed" not in junction.get("reason", "")
+        ):
+            return _result(
+                False,
+                f"wrong boundary-only junction result: {junction}",
                 "junction_result",
             )
     else:
@@ -220,20 +231,23 @@ def evaluate_junction_response(
         )
         if boundary not in folded:
             return _result(False, "selected I-95 boundary missing", "boundary_missing")
-    elif (
+    elif wanted["pricing_status"] == "unavailable" and (
         "unavailable" not in folded
         or "general-purpose" not in folded
         or not any(term in folded for term in ("closed", "fully open direction"))
     ):
         return _result(False, "closed I-95 outcome missing", "unavailable_missing")
+    elif (
+        wanted["pricing_status"] == "not_applicable"
+        and "no priced i-95/395 leg is needed" not in folded
+    ):
+        return _result(False, "boundary-only I-95 outcome missing", "boundary_only")
 
     operands = _prices(calls)
     total = f"{sum(map(Decimal, operands), Decimal()):.2f}"
     plain = response.translate(str.maketrans("", "", "*_`"))
     expected_amounts = [*map(Decimal, operands), Decimal(total)]
-    arithmetic_lines = [
-        line for line in plain.splitlines() if "+" in line and "=" in line
-    ]
+    arithmetic_lines = [line for line in plain.splitlines() if "=" in line]
     if not any(
         [Decimal(value) for value in _MONEY_RE.findall(line)] == expected_amounts
         for line in arithmetic_lines
@@ -335,6 +349,14 @@ def synthetic_calls(row: dict[str, Any]) -> list[dict[str, Any]]:
             "lane_statuses": wanted["lane_statuses"],
             "reason": "both directions are CLOSED",
         }
+    elif wanted["pricing_status"] == "not_applicable":
+        results["i95_junction_leg"] = {
+            "pricing_status": "not_applicable",
+            "direction": wanted["direction"],
+            "lane_statuses": wanted["lane_statuses"],
+            "junction_boundary": {"label": wanted["boundary_label"]},
+            "reason": "location is the selected boundary; no priced I-95/395 leg is needed",
+        }
     else:
         results["i95_junction_leg"] = {
             "pricing_status": "priced",
@@ -357,20 +379,22 @@ def synthetic_calls(row: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _self_check() -> None:
     rows = load_rows()
-    assert len(rows) == 5
+    assert len(rows) == 7
     for row in rows:
         calls = synthetic_calls(row)
         assert evaluate_junction_calls(calls, row)[0].label == "junction_ok"
         operands = _prices(calls)
         total = f"{sum(map(Decimal, operands), Decimal()):.2f}"
         boundary = row["expected_junction"].get("boundary_label", "")
-        unavailable = boundary or (
+        outcome = boundary or (
             "I-95 is unavailable because both directions are closed. Consider "
             "the I-95 general-purpose lanes."
         )
+        if row["expected_junction"]["pricing_status"] == "not_applicable":
+            outcome += "; no priced I-95/395 leg is needed"
         response = (
             "## Known segment prices\n"
-            f"{unavailable}\nI-495 Near Braddock Road\n"
+            f"{outcome}\nI-495 Near Braddock Road\n"
             "## Unpriced junction\nThe gap has no price.\n"
             "## Calculation\n"
             f"{' + '.join(f'${value}' for value in operands)} = ${total}\n"
@@ -395,7 +419,7 @@ def _self_check() -> None:
     )
     assert evaluate_junction_response(zero_gap, calls, row)[0].label == "zero_gap"
     print(
-        "self-check ok (5 cases, exact trajectories, boundaries, and known-total math)"
+        "self-check ok (7 cases, exact trajectories, boundaries, and known-total math)"
     )
 
 
