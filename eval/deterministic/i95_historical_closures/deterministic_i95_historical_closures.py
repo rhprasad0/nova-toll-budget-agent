@@ -47,17 +47,12 @@ _RECORDS_RE = re.compile(
     re.I,
 )
 _REIMBURSEMENT_RE = re.compile(
-    r"\b(?:reimbursement (?:documentation|claim|process|procedure)|"
-    r"file a reimbursement)\b",
+    r"\b(?:reimburse(?:ment|d)?|refund|claim|compensation)\b",
     re.I,
 )
 _AFFILIATION_RE = re.compile(
     r"\b(?:tollchat|we)\s+(?:are|is)\s+(?:an?\s+)?"
     r"(?:official|affiliated|a partner|a representative)\b.*\b(?:VDOT|Virginia 511)\b",
-    re.I,
-)
-_SOURCE_FOLLOWUP_RE = re.compile(
-    r"\b(?:proof|verif\w*|records?|reimbursement|refund|claim|documentation|source)\b",
     re.I,
 )
 _SOURCE_REFERRAL = (
@@ -243,19 +238,31 @@ class ClosureSourceResponseEvaluator(Evaluator[str, str]):
         trajectory = evaluation_case.actual_trajectory
         responses = [str(evaluation_case.actual_output or "")]
         if isinstance(trajectory, Session):
-            responses = [
-                span.agent_response
+            invocations = [
+                span
                 for trace in trajectory.traces
                 for span in trace.spans
                 if isinstance(span, AgentInvocationSpan)
-                and _SOURCE_FOLLOWUP_RE.search(span.user_prompt)
             ]
-            if len(responses) < 2:
+            if len(invocations) < 2:
                 return _result(
                     False,
-                    "simulation omitted a source or reimbursement follow-up",
-                    "source_followups_missing",
+                    "simulation omitted the source follow-up",
+                    "source_followup_missing",
                 )
+            if len(invocations) > 2:
+                return _result(
+                    False,
+                    "simulation exceeded the two-turn contract",
+                    "unexpected_turn_count",
+                )
+            if any(
+                _REIMBURSEMENT_RE.search(span.agent_response) for span in invocations
+            ):
+                return _result(
+                    False, "response gave reimbursement advice", "reimbursement_advice"
+                )
+            responses = [invocations[1].agent_response]
         for response in responses:
             result = self._evaluate_response(response)[0]
             if not result.test_pass:

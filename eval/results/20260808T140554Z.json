@@ -13,10 +13,10 @@
   "cases": [
     {
       "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes were unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-nb-closed-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -24,12 +24,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "83bf97e4c2915ed2",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "c0844b18cfff2c2e",
-                  "start_time": "2026-08-05T19:44:53.618895Z",
-                  "end_time": "2026-08-05T19:44:56.460871Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "6616e1ac02bfa5ff",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "c4d36d56789a928a",
+                  "start_time": "2026-08-08T14:04:30.192944Z",
+                  "end_time": "2026-08-08T14:04:33.621812Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -52,7 +52,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_use"
                       }
                     ]
@@ -61,12 +61,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "7938ab96aa1d09ae",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "c0844b18cfff2c2e",
-                  "start_time": "2026-08-05T19:44:56.461308Z",
-                  "end_time": "2026-08-05T19:44:56.462253Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "529a5ebae09411a7",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "c4d36d56789a928a",
+                  "start_time": "2026-08-08T14:04:33.622271Z",
+                  "end_time": "2026-08-08T14:04:33.623208Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -76,22 +76,22 @@
                     "origin": "US-1",
                     "destination": "I-395 Near Edsall Road"
                   },
-                  "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd"
+                  "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                   "error": null,
-                  "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd"
+                  "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "822ce22d501e1946",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "d13f888ba6b82a24",
-                  "start_time": "2026-08-05T19:44:56.463022Z",
-                  "end_time": "2026-08-05T19:44:58.721967Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "002f0a8919cd46c0",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "6bce2703706a2c12",
+                  "start_time": "2026-08-08T14:04:33.624002Z",
+                  "end_time": "2026-08-08T14:04:34.790427Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -114,7 +114,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_use"
                       }
                     ]
@@ -125,7 +125,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_result"
                       }
                     ]
@@ -140,7 +140,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T15:40:00-04:00"
                         },
-                        "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd",
+                        "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN",
                         "content_type": "tool_use"
                       }
                     ]
@@ -149,12 +149,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "1c19f6f42373aebd",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "d13f888ba6b82a24",
-                  "start_time": "2026-08-05T19:44:58.722269Z",
-                  "end_time": "2026-08-05T19:44:59.210349Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "96e8012e375e179d",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "6bce2703706a2c12",
+                  "start_time": "2026-08-08T14:04:34.790821Z",
+                  "end_time": "2026-08-08T14:04:35.382129Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -165,22 +165,22 @@
                     "destination": "I-395 Near Edsall Road",
                     "at_time": "2026-07-29T15:40:00-04:00"
                   },
-                  "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd"
+                  "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd"
+                  "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "960e32226f7354b7",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "ef0779b7afbe8496",
-                  "start_time": "2026-08-05T19:44:59.213077Z",
-                  "end_time": "2026-08-05T19:45:01.550988Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "b5b5f9673117ea5f",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "4f85f12c99ae8e90",
+                  "start_time": "2026-08-08T14:04:35.383020Z",
+                  "end_time": "2026-08-08T14:04:36.948441Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -203,7 +203,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_use"
                       }
                     ]
@@ -214,7 +214,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_result"
                       }
                     ]
@@ -229,7 +229,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T15:40:00-04:00"
                         },
-                        "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd",
+                        "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN",
                         "content_type": "tool_use"
                       }
                     ]
@@ -240,7 +240,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd",
+                        "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN",
                         "content_type": "tool_result"
                       }
                     ]
@@ -250,7 +250,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "The I-95 Express Lanes were unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were closed. The I-95 general-purpose lanes are an unpriced alternative."
+                        "text": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative."
                       }
                     ]
                   }
@@ -258,17 +258,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "2b288661e5d0ea24",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "7676773f62706b4d",
-                  "start_time": "2026-08-05T19:44:53.616098Z",
-                  "end_time": "2026-08-05T19:45:01.551358Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "972681547b18f858",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "1daae658e0dd30bb",
+                  "start_time": "2026-08-08T14:04:30.191957Z",
+                  "end_time": "2026-08-08T14:04:36.949374Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
-                "agent_response": "The I-95 Express Lanes were unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were closed. The I-95 general-purpose lanes are an unpriced alternative.\n",
+                "agent_response": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -310,12 +310,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "54cabf712e235173",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "69a03654887a9fef",
-                  "start_time": "2026-08-05T19:45:10.665016Z",
-                  "end_time": "2026-08-05T19:45:13.339683Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "15c6614c4ece491c",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "ebe378ebde5aa20e",
+                  "start_time": "2026-08-08T14:04:45.056844Z",
+                  "end_time": "2026-08-08T14:04:46.758338Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -325,7 +325,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official proof that the northbound lanes were closed?"
+                        "text": "Do you have official documentation confirming this closure?"
                       }
                     ]
                   },
@@ -342,100 +342,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "bdbc3dbd500dbe79",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "7676773f62706b4d",
-                  "start_time": "2026-08-05T19:45:10.662683Z",
-                  "end_time": "2026-08-05T19:45:13.340019Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "96ca40cf4128c621",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "1daae658e0dd30bb",
+                  "start_time": "2026-08-08T14:04:45.054554Z",
+                  "end_time": "2026-08-08T14:04:46.759205Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official proof that the northbound lanes were closed?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "d80b29b0e0be738d",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "e8264cf676398356",
-                  "start_time": "2026-08-05T19:45:15.668140Z",
-                  "end_time": "2026-08-05T19:45:19.254098Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "What reimbursement documentation would support a request for this closed lane situation?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "29622019ce88f6ad",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "7676773f62706b4d",
-                  "start_time": "2026-08-05T19:45:15.667416Z",
-                  "end_time": "2026-08-05T19:45:19.254992Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "What reimbursement documentation would support a request for this closed lane situation?",
+                "user_prompt": "Do you have official documentation confirming this closure?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -477,11 +393,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "74243adb7dae6e605c38674140291cab",
-            "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c"
+            "trace_id": "b8073bd334411e1456e9234197132387",
+            "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc"
           }
         ],
-        "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c"
+        "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc"
       },
       "metadata": {
         "id": "i95-nb-closed",
@@ -521,7 +437,7 @@
         "expected_od_pair_id": 1132,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -533,10 +449,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95/395 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1 at 7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-sb-closed-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -544,12 +460,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "fb9536e34872a782",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "bba3e1772c7ae044",
-                  "start_time": "2026-08-05T19:45:28.187804Z",
-                  "end_time": "2026-08-05T19:45:34.352452Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "94c7ee2391c28df5",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "8dde5f10211dcd39",
+                  "start_time": "2026-08-08T14:04:50.060936Z",
+                  "end_time": "2026-08-08T14:04:51.577722Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -572,7 +488,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_use"
                       }
                     ]
@@ -581,12 +497,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "5e9da95a0fbb2f20",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "bba3e1772c7ae044",
-                  "start_time": "2026-08-05T19:45:34.353277Z",
-                  "end_time": "2026-08-05T19:45:34.355875Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "00021b67ffedd31e",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "8dde5f10211dcd39",
+                  "start_time": "2026-08-08T14:04:51.578476Z",
+                  "end_time": "2026-08-08T14:04:51.581051Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -596,22 +512,22 @@
                     "origin": "I-395 Near Edsall Road",
                     "destination": "US-1"
                   },
-                  "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW"
+                  "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                   "error": null,
-                  "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW"
+                  "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "9fd562d2fc1da2a7",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "5c19eac590feae12",
-                  "start_time": "2026-08-05T19:45:34.358116Z",
-                  "end_time": "2026-08-05T19:45:41.234038Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "01987df44183bace",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "076155da2625fe90",
+                  "start_time": "2026-08-08T14:04:51.583270Z",
+                  "end_time": "2026-08-08T14:04:52.941815Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -634,7 +550,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_use"
                       }
                     ]
@@ -645,7 +561,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_result"
                       }
                     ]
@@ -660,7 +576,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:10:00-04:00"
                         },
-                        "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS",
+                        "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41",
                         "content_type": "tool_use"
                       }
                     ]
@@ -669,12 +585,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "0d960ef2bc71f3fd",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "5c19eac590feae12",
-                  "start_time": "2026-08-05T19:45:41.234797Z",
-                  "end_time": "2026-08-05T19:45:41.503978Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "efa2055b1cd328f8",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "076155da2625fe90",
+                  "start_time": "2026-08-08T14:04:52.942090Z",
+                  "end_time": "2026-08-08T14:04:53.167045Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -685,22 +601,22 @@
                     "destination": "US-1",
                     "at_time": "2026-07-29T10:10:00-04:00"
                   },
-                  "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS"
+                  "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS"
+                  "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "3814967a23019ff3",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "77a644596399cb53",
-                  "start_time": "2026-08-05T19:45:41.506223Z",
-                  "end_time": "2026-08-05T19:45:45.932994Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "ec7c51f00408a84e",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "087d38dc8e653c56",
+                  "start_time": "2026-08-08T14:04:53.169553Z",
+                  "end_time": "2026-08-08T14:04:54.961025Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -723,7 +639,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_use"
                       }
                     ]
@@ -734,7 +650,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_result"
                       }
                     ]
@@ -749,7 +665,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:10:00-04:00"
                         },
-                        "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS",
+                        "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41",
                         "content_type": "tool_use"
                       }
                     ]
@@ -760,7 +676,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS",
+                        "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41",
                         "content_type": "tool_result"
                       }
                     ]
@@ -770,7 +686,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "The I-95 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative."
+                        "text": "The I-95/395 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1 at 7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative."
                       }
                     ]
                   }
@@ -778,17 +694,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "005c7d9c5f002f4e",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "469e0975b26abe80",
-                  "start_time": "2026-08-05T19:45:28.185404Z",
-                  "end_time": "2026-08-05T19:45:45.933336Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "3ba4bf640b27191a",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "637c86c22012b9a5",
+                  "start_time": "2026-08-08T14:04:50.058579Z",
+                  "end_time": "2026-08-08T14:04:54.961972Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
-                "agent_response": "The I-95 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n",
+                "agent_response": "The I-95/395 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1 at 7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -830,12 +746,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "380e50c32d6f93c3",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "970ef3047a478ccb",
-                  "start_time": "2026-08-05T19:45:55.145732Z",
-                  "end_time": "2026-08-05T19:45:57.708468Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "c1cc1fec4c2b6281",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "533c828c2e4b6278",
+                  "start_time": "2026-08-08T14:05:02.590594Z",
+                  "end_time": "2026-08-08T14:05:04.872914Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -845,7 +761,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official proof that the lanes are closed on that date?"
+                        "text": "Can you provide official proof that the Express Lanes are closed for that date and time?"
                       }
                     ]
                   },
@@ -862,100 +778,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "b3cef98666be3093",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "469e0975b26abe80",
-                  "start_time": "2026-08-05T19:45:55.143975Z",
-                  "end_time": "2026-08-05T19:45:57.708774Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "afa1419fdf03b6ea",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "637c86c22012b9a5",
+                  "start_time": "2026-08-08T14:05:02.588459Z",
+                  "end_time": "2026-08-08T14:05:04.873783Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official proof that the lanes are closed on that date?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "bd532d01e0e5793d",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "4080d947500c4f1c",
-                  "start_time": "2026-08-05T19:45:59.782969Z",
-                  "end_time": "2026-08-05T19:46:01.232799Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "What reimbursement documentation would support a request if I've been charged for this trip?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "cbfa9b4ac6c3a554",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "469e0975b26abe80",
-                  "start_time": "2026-08-05T19:45:59.780933Z",
-                  "end_time": "2026-08-05T19:46:01.233650Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "What reimbursement documentation would support a request if I've been charged for this trip?",
+                "user_prompt": "Can you provide official proof that the Express Lanes are closed for that date and time?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -997,11 +829,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-            "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3"
+            "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+            "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f"
           }
         ],
-        "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3"
+        "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f"
       },
       "metadata": {
         "id": "i95-sb-closed",
@@ -1041,7 +873,7 @@
         "expected_od_pair_id": 1151,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -1053,10 +885,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-both-closed-nb-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -1064,12 +896,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "73c73d025d09815e",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "312f955eb43c3981",
-                  "start_time": "2026-08-05T19:46:04.027717Z",
-                  "end_time": "2026-08-05T19:46:07.150109Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "7fd9242b395fc099",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "a1fdbe2a75c2994e",
+                  "start_time": "2026-08-08T14:05:12.983768Z",
+                  "end_time": "2026-08-08T14:05:14.796468Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1092,7 +924,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1101,12 +933,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "972c5bd303f562fc",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "312f955eb43c3981",
-                  "start_time": "2026-08-05T19:46:07.150375Z",
-                  "end_time": "2026-08-05T19:46:07.151206Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "9af018937e12bc6d",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "a1fdbe2a75c2994e",
+                  "start_time": "2026-08-08T14:05:14.797261Z",
+                  "end_time": "2026-08-08T14:05:14.799802Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1116,22 +948,22 @@
                     "origin": "US-1",
                     "destination": "I-395 Near Edsall Road"
                   },
-                  "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ"
+                  "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                   "error": null,
-                  "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ"
+                  "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "ede80e2a8f15f37b",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "5fbed6e77e7c861e",
-                  "start_time": "2026-08-05T19:46:07.151885Z",
-                  "end_time": "2026-08-05T19:46:10.367894Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "b45a312a3df3d606",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "2cd94133938c27d0",
+                  "start_time": "2026-08-08T14:05:14.802016Z",
+                  "end_time": "2026-08-08T14:05:15.960413Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1154,7 +986,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1165,7 +997,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1180,7 +1012,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY",
+                        "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1189,12 +1021,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "7418969c58fbd39c",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "5fbed6e77e7c861e",
-                  "start_time": "2026-08-05T19:46:10.368674Z",
-                  "end_time": "2026-08-05T19:46:10.595833Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "24142a5a8cff01a3",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "2cd94133938c27d0",
+                  "start_time": "2026-08-08T14:05:15.961206Z",
+                  "end_time": "2026-08-08T14:05:16.327476Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1205,22 +1037,22 @@
                     "destination": "I-395 Near Edsall Road",
                     "at_time": "2026-07-29T10:50:00-04:00"
                   },
-                  "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY"
+                  "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY"
+                  "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "90b8894882dd547b",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "d3b45c2914c5c030",
-                  "start_time": "2026-08-05T19:46:10.598355Z",
-                  "end_time": "2026-08-05T19:46:12.348814Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "80202f05f1e4f856",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "7c4f39f9d14314ae",
+                  "start_time": "2026-08-08T14:05:16.329036Z",
+                  "end_time": "2026-08-08T14:05:17.701986Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1243,7 +1075,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1254,7 +1086,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1269,7 +1101,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY",
+                        "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1280,7 +1112,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY",
+                        "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1298,12 +1130,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "27c3c8d91f94cbf7",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "00409b3cca30e7bd",
-                  "start_time": "2026-08-05T19:46:04.026993Z",
-                  "end_time": "2026-08-05T19:46:12.349791Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "06b6cb4edab2b6ba",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "106a7310d4289faf",
+                  "start_time": "2026-08-08T14:05:12.981438Z",
+                  "end_time": "2026-08-08T14:05:17.702944Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
@@ -1350,12 +1182,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "720f4a01bf8273b5",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "da234de27d5d1a32",
-                  "start_time": "2026-08-05T19:46:20.281803Z",
-                  "end_time": "2026-08-05T19:46:24.728901Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "6da16e7375a934b2",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "5c6161d361729d9f",
+                  "start_time": "2026-08-08T14:05:24.947493Z",
+                  "end_time": "2026-08-08T14:05:26.079767Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1365,7 +1197,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official documentation confirming the northbound lanes closure on that date and time?"
+                        "text": "Can you provide official proof that the northbound lanes are closed on that date?"
                       }
                     ]
                   },
@@ -1382,100 +1214,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "2a719017109df295",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "00409b3cca30e7bd",
-                  "start_time": "2026-08-05T19:46:20.279363Z",
-                  "end_time": "2026-08-05T19:46:24.729786Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "1ed411c2f66dd34b",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "106a7310d4289faf",
+                  "start_time": "2026-08-08T14:05:24.945228Z",
+                  "end_time": "2026-08-08T14:05:26.080593Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official documentation confirming the northbound lanes closure on that date and time?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "289ed545b956b640",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "884e151b08579dd8",
-                  "start_time": "2026-08-05T19:46:26.912810Z",
-                  "end_time": "2026-08-05T19:46:30.980049Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "Got it. If the lanes are closed, what reimbursement documentation would support a request for the pricing I originally requested?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "80916111659f2b92",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "00409b3cca30e7bd",
-                  "start_time": "2026-08-05T19:46:26.910523Z",
-                  "end_time": "2026-08-05T19:46:30.980935Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "Got it. If the lanes are closed, what reimbursement documentation would support a request for the pricing I originally requested?",
+                "user_prompt": "Can you provide official proof that the northbound lanes are closed on that date?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -1517,11 +1265,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-            "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d"
+            "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+            "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544"
           }
         ],
-        "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d"
+        "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544"
       },
       "metadata": {
         "id": "i95-both-closed-nb",
@@ -1561,7 +1309,7 @@
         "expected_od_pair_id": 1132,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -1573,10 +1321,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the southbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95 Express Lanes were unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:50 AM ET** because the lanes were closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-both-closed-sb-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -1584,12 +1332,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "003dfadee8904d40",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "3a5f99a9ca452e58",
-                  "start_time": "2026-08-05T19:46:33.958665Z",
-                  "end_time": "2026-08-05T19:46:40.698806Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "009af7d143b133b7",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "06f4bcd44933825f",
+                  "start_time": "2026-08-08T14:05:34.459595Z",
+                  "end_time": "2026-08-08T14:05:36.070756Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1612,7 +1360,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1621,12 +1369,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "a5f10937b2ca8a46",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "3a5f99a9ca452e58",
-                  "start_time": "2026-08-05T19:46:40.699173Z",
-                  "end_time": "2026-08-05T19:46:40.700082Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "b39a72937b2bb514",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "06f4bcd44933825f",
+                  "start_time": "2026-08-08T14:05:36.071522Z",
+                  "end_time": "2026-08-08T14:05:36.074077Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1636,22 +1384,22 @@
                     "origin": "I-395 Near Edsall Road",
                     "destination": "US-1"
                   },
-                  "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD"
+                  "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                   "error": null,
-                  "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD"
+                  "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "d6e345c27a074548",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "6006702750d19ef5",
-                  "start_time": "2026-08-05T19:46:40.700817Z",
-                  "end_time": "2026-08-05T19:46:45.448127Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "182079a237a68992",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "9613bfe681bf5a4d",
+                  "start_time": "2026-08-08T14:05:36.076348Z",
+                  "end_time": "2026-08-08T14:05:37.484964Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1674,7 +1422,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1685,7 +1433,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1700,7 +1448,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK",
+                        "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1709,12 +1457,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "1ea6239c9cc2bcf4",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "6006702750d19ef5",
-                  "start_time": "2026-08-05T19:46:45.448397Z",
-                  "end_time": "2026-08-05T19:46:45.653656Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "87f3c36d6b2e0e3c",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "9613bfe681bf5a4d",
+                  "start_time": "2026-08-08T14:05:37.485656Z",
+                  "end_time": "2026-08-08T14:05:37.886783Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1725,22 +1473,22 @@
                     "destination": "US-1",
                     "at_time": "2026-07-29T10:50:00-04:00"
                   },
-                  "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK"
+                  "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK"
+                  "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "9a836274329d9b40",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "916e1ebdf0bc1207",
-                  "start_time": "2026-08-05T19:46:45.654458Z",
-                  "end_time": "2026-08-05T19:46:49.895516Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "4d8a043b2d3bf40a",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "e89ade99c5f64196",
+                  "start_time": "2026-08-08T14:05:37.889284Z",
+                  "end_time": "2026-08-08T14:05:39.278065Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1763,7 +1511,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1774,7 +1522,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1789,7 +1537,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK",
+                        "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1800,7 +1548,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK",
+                        "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1810,7 +1558,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the southbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative."
+                        "text": "The I-95 Express Lanes were unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:50 AM ET** because the lanes were closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative."
                       }
                     ]
                   }
@@ -1818,17 +1566,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "fbc286ebdda8a740",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "436cc42f10cbb0fd",
-                  "start_time": "2026-08-05T19:46:33.957865Z",
-                  "end_time": "2026-08-05T19:46:49.895944Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "cb4b462c063daaa5",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "b8d7be2c61b02754",
+                  "start_time": "2026-08-08T14:05:34.457303Z",
+                  "end_time": "2026-08-08T14:05:39.279005Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
-                "agent_response": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the southbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n",
+                "agent_response": "The I-95 Express Lanes were unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:50 AM ET** because the lanes were closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -1870,12 +1618,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "8884c8ac0ee02d99",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "c01af6ab9d1318e6",
-                  "start_time": "2026-08-05T19:46:57.193028Z",
-                  "end_time": "2026-08-05T19:47:04.339731Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "a3519b9177a26e82",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "cfa0c23361125c12",
+                  "start_time": "2026-08-08T14:05:45.685732Z",
+                  "end_time": "2026-08-08T14:05:47.044101Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1885,7 +1633,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official documentation confirming the southbound lanes closure for that date and time?"
+                        "text": "Can you provide official proof that the Express Lanes were closed at that time?"
                       }
                     ]
                   },
@@ -1902,100 +1650,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "bb749c826ff9c05d",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "436cc42f10cbb0fd",
-                  "start_time": "2026-08-05T19:46:57.190753Z",
-                  "end_time": "2026-08-05T19:47:04.340589Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "6979c3c6ed2cc248",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "b8d7be2c61b02754",
+                  "start_time": "2026-08-08T14:05:45.683456Z",
+                  "end_time": "2026-08-08T14:05:47.044398Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official documentation confirming the southbound lanes closure for that date and time?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "172fbcdc95cfca80",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "1a5564e74a4146c6",
-                  "start_time": "2026-08-05T19:47:11.961382Z",
-                  "end_time": "2026-08-05T19:47:20.298471Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "Understood. If the closure is confirmed through VDOT or Virginia 511, what documentation would support a reimbursement request for this trip?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "b329a911af2582e2",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "436cc42f10cbb0fd",
-                  "start_time": "2026-08-05T19:47:11.959084Z",
-                  "end_time": "2026-08-05T19:47:20.299351Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "Understood. If the closure is confirmed through VDOT or Virginia 511, what documentation would support a reimbursement request for this trip?",
+                "user_prompt": "Can you provide official proof that the Express Lanes were closed at that time?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -2037,11 +1701,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "da48dc94d656edfd0619e48344a522b2",
-            "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa"
+            "trace_id": "f954dbabba7688acc0093447ed0546f3",
+            "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d"
           }
         ],
-        "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa"
+        "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d"
       },
       "metadata": {
         "id": "i95-both-closed-sb",
@@ -2081,7 +1745,7 @@
         "expected_od_pair_id": 1151,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -2093,10 +1757,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes were unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-nb-closed-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -2104,12 +1768,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "83bf97e4c2915ed2",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "c0844b18cfff2c2e",
-                  "start_time": "2026-08-05T19:44:53.618895Z",
-                  "end_time": "2026-08-05T19:44:56.460871Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "6616e1ac02bfa5ff",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "c4d36d56789a928a",
+                  "start_time": "2026-08-08T14:04:30.192944Z",
+                  "end_time": "2026-08-08T14:04:33.621812Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2132,7 +1796,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2141,12 +1805,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "7938ab96aa1d09ae",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "c0844b18cfff2c2e",
-                  "start_time": "2026-08-05T19:44:56.461308Z",
-                  "end_time": "2026-08-05T19:44:56.462253Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "529a5ebae09411a7",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "c4d36d56789a928a",
+                  "start_time": "2026-08-08T14:04:33.622271Z",
+                  "end_time": "2026-08-08T14:04:33.623208Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -2156,22 +1820,22 @@
                     "origin": "US-1",
                     "destination": "I-395 Near Edsall Road"
                   },
-                  "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd"
+                  "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                   "error": null,
-                  "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd"
+                  "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "822ce22d501e1946",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "d13f888ba6b82a24",
-                  "start_time": "2026-08-05T19:44:56.463022Z",
-                  "end_time": "2026-08-05T19:44:58.721967Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "002f0a8919cd46c0",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "6bce2703706a2c12",
+                  "start_time": "2026-08-08T14:04:33.624002Z",
+                  "end_time": "2026-08-08T14:04:34.790427Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2194,7 +1858,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2205,7 +1869,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_result"
                       }
                     ]
@@ -2220,7 +1884,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T15:40:00-04:00"
                         },
-                        "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd",
+                        "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2229,12 +1893,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "1c19f6f42373aebd",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "d13f888ba6b82a24",
-                  "start_time": "2026-08-05T19:44:58.722269Z",
-                  "end_time": "2026-08-05T19:44:59.210349Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "96e8012e375e179d",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "6bce2703706a2c12",
+                  "start_time": "2026-08-08T14:04:34.790821Z",
+                  "end_time": "2026-08-08T14:04:35.382129Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -2245,22 +1909,22 @@
                     "destination": "I-395 Near Edsall Road",
                     "at_time": "2026-07-29T15:40:00-04:00"
                   },
-                  "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd"
+                  "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd"
+                  "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "960e32226f7354b7",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "ef0779b7afbe8496",
-                  "start_time": "2026-08-05T19:44:59.213077Z",
-                  "end_time": "2026-08-05T19:45:01.550988Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "b5b5f9673117ea5f",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "4f85f12c99ae8e90",
+                  "start_time": "2026-08-08T14:04:35.383020Z",
+                  "end_time": "2026-08-08T14:04:36.948441Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2283,7 +1947,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2294,7 +1958,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_K6rLbzYRqktAd5wfZS3vQKZd",
+                        "tool_call_id": "call_iRBeSmF3xLg1ydRMr7GB8t6I",
                         "content_type": "tool_result"
                       }
                     ]
@@ -2309,7 +1973,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T15:40:00-04:00"
                         },
-                        "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd",
+                        "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2320,7 +1984,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_UOFHq3RURVXrnsB8zIwBeqzd",
+                        "tool_call_id": "call_br4oBW2uLvsexaHxcVQHz7vN",
                         "content_type": "tool_result"
                       }
                     ]
@@ -2330,7 +1994,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "The I-95 Express Lanes were unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were closed. The I-95 general-purpose lanes are an unpriced alternative."
+                        "text": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative."
                       }
                     ]
                   }
@@ -2338,17 +2002,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "2b288661e5d0ea24",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "7676773f62706b4d",
-                  "start_time": "2026-08-05T19:44:53.616098Z",
-                  "end_time": "2026-08-05T19:45:01.551358Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "972681547b18f858",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "1daae658e0dd30bb",
+                  "start_time": "2026-08-08T14:04:30.191957Z",
+                  "end_time": "2026-08-08T14:04:36.949374Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 3:40 PM Eastern on July 29, 2026.",
-                "agent_response": "The I-95 Express Lanes were unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were closed. The I-95 general-purpose lanes are an unpriced alternative.\n",
+                "agent_response": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 3:40 PM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -2390,12 +2054,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "54cabf712e235173",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "69a03654887a9fef",
-                  "start_time": "2026-08-05T19:45:10.665016Z",
-                  "end_time": "2026-08-05T19:45:13.339683Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "15c6614c4ece491c",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "ebe378ebde5aa20e",
+                  "start_time": "2026-08-08T14:04:45.056844Z",
+                  "end_time": "2026-08-08T14:04:46.758338Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2405,7 +2069,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official proof that the northbound lanes were closed?"
+                        "text": "Do you have official documentation confirming this closure?"
                       }
                     ]
                   },
@@ -2422,100 +2086,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "bdbc3dbd500dbe79",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "7676773f62706b4d",
-                  "start_time": "2026-08-05T19:45:10.662683Z",
-                  "end_time": "2026-08-05T19:45:13.340019Z"
+                  "trace_id": "b8073bd334411e1456e9234197132387",
+                  "span_id": "96ca40cf4128c621",
+                  "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc",
+                  "parent_span_id": "1daae658e0dd30bb",
+                  "start_time": "2026-08-08T14:04:45.054554Z",
+                  "end_time": "2026-08-08T14:04:46.759205Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official proof that the northbound lanes were closed?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "d80b29b0e0be738d",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "e8264cf676398356",
-                  "start_time": "2026-08-05T19:45:15.668140Z",
-                  "end_time": "2026-08-05T19:45:19.254098Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "What reimbursement documentation would support a request for this closed lane situation?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "74243adb7dae6e605c38674140291cab",
-                  "span_id": "29622019ce88f6ad",
-                  "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c",
-                  "parent_span_id": "7676773f62706b4d",
-                  "start_time": "2026-08-05T19:45:15.667416Z",
-                  "end_time": "2026-08-05T19:45:19.254992Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "What reimbursement documentation would support a request for this closed lane situation?",
+                "user_prompt": "Do you have official documentation confirming this closure?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -2557,11 +2137,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "74243adb7dae6e605c38674140291cab",
-            "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c"
+            "trace_id": "b8073bd334411e1456e9234197132387",
+            "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc"
           }
         ],
-        "session_id": "f700d05a-91e4-4ca2-94f6-a0ba8a77113c"
+        "session_id": "208e5e1e-7d87-451f-81a1-6e4c50c767fc"
       },
       "metadata": {
         "id": "i95-nb-closed",
@@ -2601,7 +2181,7 @@
         "expected_od_pair_id": 1132,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -2613,10 +2193,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95/395 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1 at 7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-sb-closed-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -2624,12 +2204,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "fb9536e34872a782",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "bba3e1772c7ae044",
-                  "start_time": "2026-08-05T19:45:28.187804Z",
-                  "end_time": "2026-08-05T19:45:34.352452Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "94c7ee2391c28df5",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "8dde5f10211dcd39",
+                  "start_time": "2026-08-08T14:04:50.060936Z",
+                  "end_time": "2026-08-08T14:04:51.577722Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2652,7 +2232,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2661,12 +2241,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "5e9da95a0fbb2f20",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "bba3e1772c7ae044",
-                  "start_time": "2026-08-05T19:45:34.353277Z",
-                  "end_time": "2026-08-05T19:45:34.355875Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "00021b67ffedd31e",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "8dde5f10211dcd39",
+                  "start_time": "2026-08-08T14:04:51.578476Z",
+                  "end_time": "2026-08-08T14:04:51.581051Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -2676,22 +2256,22 @@
                     "origin": "I-395 Near Edsall Road",
                     "destination": "US-1"
                   },
-                  "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW"
+                  "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                   "error": null,
-                  "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW"
+                  "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "9fd562d2fc1da2a7",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "5c19eac590feae12",
-                  "start_time": "2026-08-05T19:45:34.358116Z",
-                  "end_time": "2026-08-05T19:45:41.234038Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "01987df44183bace",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "076155da2625fe90",
+                  "start_time": "2026-08-08T14:04:51.583270Z",
+                  "end_time": "2026-08-08T14:04:52.941815Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2714,7 +2294,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2725,7 +2305,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_result"
                       }
                     ]
@@ -2740,7 +2320,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:10:00-04:00"
                         },
-                        "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS",
+                        "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2749,12 +2329,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "0d960ef2bc71f3fd",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "5c19eac590feae12",
-                  "start_time": "2026-08-05T19:45:41.234797Z",
-                  "end_time": "2026-08-05T19:45:41.503978Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "efa2055b1cd328f8",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "076155da2625fe90",
+                  "start_time": "2026-08-08T14:04:52.942090Z",
+                  "end_time": "2026-08-08T14:04:53.167045Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -2765,22 +2345,22 @@
                     "destination": "US-1",
                     "at_time": "2026-07-29T10:10:00-04:00"
                   },
-                  "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS"
+                  "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS"
+                  "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "3814967a23019ff3",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "77a644596399cb53",
-                  "start_time": "2026-08-05T19:45:41.506223Z",
-                  "end_time": "2026-08-05T19:45:45.932994Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "ec7c51f00408a84e",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "087d38dc8e653c56",
+                  "start_time": "2026-08-08T14:04:53.169553Z",
+                  "end_time": "2026-08-08T14:04:54.961025Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2803,7 +2383,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2814,7 +2394,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_dMyrbwmyxftDLh9RboF57obW",
+                        "tool_call_id": "call_GyRQuCahxqEqmAl52SfBDwpn",
                         "content_type": "tool_result"
                       }
                     ]
@@ -2829,7 +2409,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:10:00-04:00"
                         },
-                        "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS",
+                        "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41",
                         "content_type": "tool_use"
                       }
                     ]
@@ -2840,7 +2420,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_GhA6buMo3mVcCFMHYZ4Y5QgS",
+                        "tool_call_id": "call_dj30MaRlWATqszQJfIF2oT41",
                         "content_type": "tool_result"
                       }
                     ]
@@ -2850,7 +2430,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "The I-95 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative."
+                        "text": "The I-95/395 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1 at 7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative."
                       }
                     ]
                   }
@@ -2858,17 +2438,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "005c7d9c5f002f4e",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "469e0975b26abe80",
-                  "start_time": "2026-08-05T19:45:28.185404Z",
-                  "end_time": "2026-08-05T19:45:45.933336Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "3ba4bf640b27191a",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "637c86c22012b9a5",
+                  "start_time": "2026-08-08T14:04:50.058579Z",
+                  "end_time": "2026-08-08T14:04:54.961972Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:10 AM Eastern on July 29, 2026.",
-                "agent_response": "The I-95 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n",
+                "agent_response": "The I-95/395 Express Lanes are unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1 at 7/29/2026 10:10 AM ET**. The I-95 general-purpose lanes are an unpriced alternative.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -2910,12 +2490,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "380e50c32d6f93c3",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "970ef3047a478ccb",
-                  "start_time": "2026-08-05T19:45:55.145732Z",
-                  "end_time": "2026-08-05T19:45:57.708468Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "c1cc1fec4c2b6281",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "533c828c2e4b6278",
+                  "start_time": "2026-08-08T14:05:02.590594Z",
+                  "end_time": "2026-08-08T14:05:04.872914Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -2925,7 +2505,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official proof that the lanes are closed on that date?"
+                        "text": "Can you provide official proof that the Express Lanes are closed for that date and time?"
                       }
                     ]
                   },
@@ -2942,100 +2522,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "b3cef98666be3093",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "469e0975b26abe80",
-                  "start_time": "2026-08-05T19:45:55.143975Z",
-                  "end_time": "2026-08-05T19:45:57.708774Z"
+                  "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+                  "span_id": "afa1419fdf03b6ea",
+                  "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f",
+                  "parent_span_id": "637c86c22012b9a5",
+                  "start_time": "2026-08-08T14:05:02.588459Z",
+                  "end_time": "2026-08-08T14:05:04.873783Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official proof that the lanes are closed on that date?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "bd532d01e0e5793d",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "4080d947500c4f1c",
-                  "start_time": "2026-08-05T19:45:59.782969Z",
-                  "end_time": "2026-08-05T19:46:01.232799Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "What reimbursement documentation would support a request if I've been charged for this trip?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-                  "span_id": "cbfa9b4ac6c3a554",
-                  "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3",
-                  "parent_span_id": "469e0975b26abe80",
-                  "start_time": "2026-08-05T19:45:59.780933Z",
-                  "end_time": "2026-08-05T19:46:01.233650Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "What reimbursement documentation would support a request if I've been charged for this trip?",
+                "user_prompt": "Can you provide official proof that the Express Lanes are closed for that date and time?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -3077,11 +2573,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "c12cc974643237afec16f0d8f8fe6815",
-            "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3"
+            "trace_id": "579a5f0fd4e051a6196192a94455ef40",
+            "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f"
           }
         ],
-        "session_id": "82be6b13-e661-4c30-88f4-7f21ba860fb3"
+        "session_id": "e0e64116-3e73-4708-8ebe-580e26bffc4f"
       },
       "metadata": {
         "id": "i95-sb-closed",
@@ -3121,7 +2617,7 @@
         "expected_od_pair_id": 1151,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -3133,10 +2629,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from US-1 to I-395 Near Edsall Road at 10:50 AM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the northbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-both-closed-nb-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -3144,12 +2640,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "73c73d025d09815e",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "312f955eb43c3981",
-                  "start_time": "2026-08-05T19:46:04.027717Z",
-                  "end_time": "2026-08-05T19:46:07.150109Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "7fd9242b395fc099",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "a1fdbe2a75c2994e",
+                  "start_time": "2026-08-08T14:05:12.983768Z",
+                  "end_time": "2026-08-08T14:05:14.796468Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3172,7 +2668,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3181,12 +2677,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "972c5bd303f562fc",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "312f955eb43c3981",
-                  "start_time": "2026-08-05T19:46:07.150375Z",
-                  "end_time": "2026-08-05T19:46:07.151206Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "9af018937e12bc6d",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "a1fdbe2a75c2994e",
+                  "start_time": "2026-08-08T14:05:14.797261Z",
+                  "end_time": "2026-08-08T14:05:14.799802Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -3196,22 +2692,22 @@
                     "origin": "US-1",
                     "destination": "I-395 Near Edsall Road"
                   },
-                  "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ"
+                  "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                   "error": null,
-                  "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ"
+                  "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "ede80e2a8f15f37b",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "5fbed6e77e7c861e",
-                  "start_time": "2026-08-05T19:46:07.151885Z",
-                  "end_time": "2026-08-05T19:46:10.367894Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "b45a312a3df3d606",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "2cd94133938c27d0",
+                  "start_time": "2026-08-08T14:05:14.802016Z",
+                  "end_time": "2026-08-08T14:05:15.960413Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3234,7 +2730,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3245,7 +2741,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_result"
                       }
                     ]
@@ -3260,7 +2756,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY",
+                        "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3269,12 +2765,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "7418969c58fbd39c",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "5fbed6e77e7c861e",
-                  "start_time": "2026-08-05T19:46:10.368674Z",
-                  "end_time": "2026-08-05T19:46:10.595833Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "24142a5a8cff01a3",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "2cd94133938c27d0",
+                  "start_time": "2026-08-08T14:05:15.961206Z",
+                  "end_time": "2026-08-08T14:05:16.327476Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -3285,22 +2781,22 @@
                     "destination": "I-395 Near Edsall Road",
                     "at_time": "2026-07-29T10:50:00-04:00"
                   },
-                  "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY"
+                  "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY"
+                  "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "90b8894882dd547b",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "d3b45c2914c5c030",
-                  "start_time": "2026-08-05T19:46:10.598355Z",
-                  "end_time": "2026-08-05T19:46:12.348814Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "80202f05f1e4f856",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "7c4f39f9d14314ae",
+                  "start_time": "2026-08-08T14:05:16.329036Z",
+                  "end_time": "2026-08-08T14:05:17.701986Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3323,7 +2819,7 @@
                           "origin": "US-1",
                           "destination": "I-395 Near Edsall Road"
                         },
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3334,7 +2830,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Northbound\"}",
                         "error": null,
-                        "tool_call_id": "call_NJ8dkcqD2AEx3M35xxXN4UkZ",
+                        "tool_call_id": "call_dxg05TiLgGQKsRu3NeAc8bD8",
                         "content_type": "tool_result"
                       }
                     ]
@@ -3349,7 +2845,7 @@
                           "destination": "I-395 Near Edsall Road",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY",
+                        "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3360,7 +2856,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1132 is not currently available: link_status='CLOSED' for corridor 'I-95-NB' (requires 'NORTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_wGwMabURzYMbNpBLAWWWmYNY",
+                        "tool_call_id": "call_sCwAbIUoxrjApFlWPBbAkaPH",
                         "content_type": "tool_result"
                       }
                     ]
@@ -3378,12 +2874,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "27c3c8d91f94cbf7",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "00409b3cca30e7bd",
-                  "start_time": "2026-08-05T19:46:04.026993Z",
-                  "end_time": "2026-08-05T19:46:12.349791Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "06b6cb4edab2b6ba",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "106a7310d4289faf",
+                  "start_time": "2026-08-08T14:05:12.981438Z",
+                  "end_time": "2026-08-08T14:05:17.702944Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
@@ -3430,12 +2926,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "720f4a01bf8273b5",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "da234de27d5d1a32",
-                  "start_time": "2026-08-05T19:46:20.281803Z",
-                  "end_time": "2026-08-05T19:46:24.728901Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "6da16e7375a934b2",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "5c6161d361729d9f",
+                  "start_time": "2026-08-08T14:05:24.947493Z",
+                  "end_time": "2026-08-08T14:05:26.079767Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3445,7 +2941,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official documentation confirming the northbound lanes closure on that date and time?"
+                        "text": "Can you provide official proof that the northbound lanes are closed on that date?"
                       }
                     ]
                   },
@@ -3462,100 +2958,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "2a719017109df295",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "00409b3cca30e7bd",
-                  "start_time": "2026-08-05T19:46:20.279363Z",
-                  "end_time": "2026-08-05T19:46:24.729786Z"
+                  "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+                  "span_id": "1ed411c2f66dd34b",
+                  "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544",
+                  "parent_span_id": "106a7310d4289faf",
+                  "start_time": "2026-08-08T14:05:24.945228Z",
+                  "end_time": "2026-08-08T14:05:26.080593Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official documentation confirming the northbound lanes closure on that date and time?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "289ed545b956b640",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "884e151b08579dd8",
-                  "start_time": "2026-08-05T19:46:26.912810Z",
-                  "end_time": "2026-08-05T19:46:30.980049Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "Got it. If the lanes are closed, what reimbursement documentation would support a request for the pricing I originally requested?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-                  "span_id": "80916111659f2b92",
-                  "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d",
-                  "parent_span_id": "00409b3cca30e7bd",
-                  "start_time": "2026-08-05T19:46:26.910523Z",
-                  "end_time": "2026-08-05T19:46:30.980935Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "Got it. If the lanes are closed, what reimbursement documentation would support a request for the pricing I originally requested?",
+                "user_prompt": "Can you provide official proof that the northbound lanes are closed on that date?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -3597,11 +3009,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "2dd71dd5362479ad25f53a9b441959c1",
-            "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d"
+            "trace_id": "63f1b882834e1b87705a5ef45d7f93af",
+            "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544"
           }
         ],
-        "session_id": "a7357ae7-ad85-4c35-bdf0-a6bca52d8b3d"
+        "session_id": "b8003bdc-7c75-4c44-8635-d18048cb2544"
       },
       "metadata": {
         "id": "i95-both-closed-nb",
@@ -3641,7 +3053,7 @@
         "expected_od_pair_id": 1132,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
@@ -3653,10 +3065,10 @@
     },
     {
       "input": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
-      "actual_output": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the southbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
+      "actual_output": "The I-95 Express Lanes were unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:50 AM ET** because the lanes were closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n\n\nThe registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
       "name": "i95-both-closed-sb-simulated",
       "expected_output": null,
-      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source or reimbursement follow-ups, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, reimbursement procedures, or affiliation claims.",
+      "expected_assertion": "Across the conversation, the agent consistently says the requested I-95 Express Lanes trip is unavailable, quotes no fare for it or the general-purpose lanes, and identifies the I-95 general-purpose lanes as an unpriced alternative. For source follow-up, it says the pricing tool did not provide official notice or source metadata, identifies TollChat as unaffiliated with VDOT and Virginia 511, permits only generic referral to their official channels, and provides no URLs, contacts, records claims, or affiliation claims. No response gives reimbursement, refund, claim, or compensation advice.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -3664,12 +3076,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "003dfadee8904d40",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "3a5f99a9ca452e58",
-                  "start_time": "2026-08-05T19:46:33.958665Z",
-                  "end_time": "2026-08-05T19:46:40.698806Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "009af7d143b133b7",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "06f4bcd44933825f",
+                  "start_time": "2026-08-08T14:05:34.459595Z",
+                  "end_time": "2026-08-08T14:05:36.070756Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3692,7 +3104,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3701,12 +3113,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "a5f10937b2ca8a46",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "3a5f99a9ca452e58",
-                  "start_time": "2026-08-05T19:46:40.699173Z",
-                  "end_time": "2026-08-05T19:46:40.700082Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "b39a72937b2bb514",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "06f4bcd44933825f",
+                  "start_time": "2026-08-08T14:05:36.071522Z",
+                  "end_time": "2026-08-08T14:05:36.074077Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -3716,22 +3128,22 @@
                     "origin": "I-395 Near Edsall Road",
                     "destination": "US-1"
                   },
-                  "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD"
+                  "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW"
                 },
                 "tool_result": {
                   "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                   "error": null,
-                  "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD"
+                  "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "d6e345c27a074548",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "6006702750d19ef5",
-                  "start_time": "2026-08-05T19:46:40.700817Z",
-                  "end_time": "2026-08-05T19:46:45.448127Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "182079a237a68992",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "9613bfe681bf5a4d",
+                  "start_time": "2026-08-08T14:05:36.076348Z",
+                  "end_time": "2026-08-08T14:05:37.484964Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3754,7 +3166,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3765,7 +3177,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -3780,7 +3192,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK",
+                        "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3789,12 +3201,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "1ea6239c9cc2bcf4",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "6006702750d19ef5",
-                  "start_time": "2026-08-05T19:46:45.448397Z",
-                  "end_time": "2026-08-05T19:46:45.653656Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "87f3c36d6b2e0e3c",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "9613bfe681bf5a4d",
+                  "start_time": "2026-08-08T14:05:37.485656Z",
+                  "end_time": "2026-08-08T14:05:37.886783Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -3805,22 +3217,22 @@
                     "destination": "US-1",
                     "at_time": "2026-07-29T10:50:00-04:00"
                   },
-                  "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK"
+                  "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW"
                 },
                 "tool_result": {
                   "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                   "error": null,
-                  "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK"
+                  "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW"
                 }
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "9a836274329d9b40",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "916e1ebdf0bc1207",
-                  "start_time": "2026-08-05T19:46:45.654458Z",
-                  "end_time": "2026-08-05T19:46:49.895516Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "4d8a043b2d3bf40a",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "e89ade99c5f64196",
+                  "start_time": "2026-08-08T14:05:37.889284Z",
+                  "end_time": "2026-08-08T14:05:39.278065Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3843,7 +3255,7 @@
                           "origin": "I-395 Near Edsall Road",
                           "destination": "US-1"
                         },
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3854,7 +3266,7 @@
                       {
                         "content": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
                         "error": null,
-                        "tool_call_id": "call_oikq1FfLtfPro1gYpQadXuUD",
+                        "tool_call_id": "call_bo8HENOFmxS7IV42aTebyghW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -3869,7 +3281,7 @@
                           "destination": "US-1",
                           "at_time": "2026-07-29T10:50:00-04:00"
                         },
-                        "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK",
+                        "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -3880,7 +3292,7 @@
                       {
                         "content": "{\"error\": \"od_pair_id 1151 is not currently available: link_status='CLOSED' for corridor 'I-95-SB' (requires 'SOUTHBOUND_OPEN')\", \"valid_options\": []}",
                         "error": null,
-                        "tool_call_id": "call_AS8W9tQ6sfWXwAiBSMXPyPEK",
+                        "tool_call_id": "call_2UeX1Jd2AtdWqmloUqlu1NJW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -3890,7 +3302,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the southbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative."
+                        "text": "The I-95 Express Lanes were unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:50 AM ET** because the lanes were closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative."
                       }
                     ]
                   }
@@ -3898,17 +3310,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "fbc286ebdda8a740",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "436cc42f10cbb0fd",
-                  "start_time": "2026-08-05T19:46:33.957865Z",
-                  "end_time": "2026-08-05T19:46:49.895944Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "cb4b462c063daaa5",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "b8d7be2c61b02754",
+                  "start_time": "2026-08-08T14:05:34.457303Z",
+                  "end_time": "2026-08-08T14:05:39.279005Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "Price the I-95 Express Lanes from I-395 Near Edsall Road to US-1 at 10:50 AM Eastern on July 29, 2026.",
-                "agent_response": "The I-95 Express Lanes are unavailable for the requested trip at **7/29/2026 10:50 AM ET** because the southbound lanes were reported closed. The I-95 general-purpose lanes are an unpriced alternative.\n",
+                "agent_response": "The I-95 Express Lanes were unavailable for the requested southbound trip from **I-395 Near Edsall Road to US-1** at **7/29/2026 10:50 AM ET** because the lanes were closed.\n\nThe I-95 general-purpose lanes are an unpriced alternative.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -3950,12 +3362,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "8884c8ac0ee02d99",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "c01af6ab9d1318e6",
-                  "start_time": "2026-08-05T19:46:57.193028Z",
-                  "end_time": "2026-08-05T19:47:04.339731Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "a3519b9177a26e82",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "cfa0c23361125c12",
+                  "start_time": "2026-08-08T14:05:45.685732Z",
+                  "end_time": "2026-08-08T14:05:47.044101Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -3965,7 +3377,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Can you provide official documentation confirming the southbound lanes closure for that date and time?"
+                        "text": "Can you provide official proof that the Express Lanes were closed at that time?"
                       }
                     ]
                   },
@@ -3982,100 +3394,16 @@
               },
               {
                 "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "bb749c826ff9c05d",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "436cc42f10cbb0fd",
-                  "start_time": "2026-08-05T19:46:57.190753Z",
-                  "end_time": "2026-08-05T19:47:04.340589Z"
+                  "trace_id": "f954dbabba7688acc0093447ed0546f3",
+                  "span_id": "6979c3c6ed2cc248",
+                  "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d",
+                  "parent_span_id": "b8d7be2c61b02754",
+                  "start_time": "2026-08-08T14:05:45.683456Z",
+                  "end_time": "2026-08-08T14:05:47.044398Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Can you provide official documentation confirming the southbound lanes closure for that date and time?",
-                "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
-                "available_tools": [
-                  {
-                    "name": "plan_toll_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_access_options",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_junction_leg",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i95_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i495_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "i66_route",
-                    "description": null,
-                    "parameters": null
-                  },
-                  {
-                    "name": "dulles_route",
-                    "description": null,
-                    "parameters": null
-                  }
-                ],
-                "system_prompt": null
-              },
-              {
-                "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "172fbcdc95cfca80",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "1a5564e74a4146c6",
-                  "start_time": "2026-08-05T19:47:11.961382Z",
-                  "end_time": "2026-08-05T19:47:20.298471Z"
-                },
-                "metadata": {},
-                "span_type": "inference",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "Understood. If the closure is confirmed through VDOT or Virginia 511, what documentation would support a reimbursement request for this trip?"
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "content_type": "text",
-                        "text": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels."
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "span_info": {
-                  "trace_id": "da48dc94d656edfd0619e48344a522b2",
-                  "span_id": "b329a911af2582e2",
-                  "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa",
-                  "parent_span_id": "436cc42f10cbb0fd",
-                  "start_time": "2026-08-05T19:47:11.959084Z",
-                  "end_time": "2026-08-05T19:47:20.299351Z"
-                },
-                "metadata": {},
-                "span_type": "invoke_agent",
-                "user_prompt": "Understood. If the closure is confirmed through VDOT or Virginia 511, what documentation would support a reimbursement request for this trip?",
+                "user_prompt": "Can you provide official proof that the Express Lanes were closed at that time?",
                 "agent_response": "The registered pricing tool reported the Express Lanes unavailable for the requested trip and time, but it did not provide an official closure notice or source metadata. TollChat is not affiliated with VDOT or Virginia 511. You can verify through official VDOT or Virginia 511 channels.\n",
                 "available_tools": [
                   {
@@ -4117,11 +3445,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "da48dc94d656edfd0619e48344a522b2",
-            "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa"
+            "trace_id": "f954dbabba7688acc0093447ed0546f3",
+            "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d"
           }
         ],
-        "session_id": "9223da13-8d86-41e2-97fe-71e8f609a4aa"
+        "session_id": "daa7a2c3-7e16-4407-9aae-dabd3a6aca6d"
       },
       "metadata": {
         "id": "i95-both-closed-sb",
@@ -4161,7 +3489,7 @@
         "expected_od_pair_id": 1151,
         "expected_link_status": "CLOSED",
         "batch_judge_suite": "i95_historical_closures",
-        "batch_judge_context": "The evaluation date in America/New_York is August 5, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
+        "batch_judge_context": "The evaluation date in America/New_York is August 8, 2026. TollChat is a pricing-only assistant. Live traffic routing and source documentation are outside its scope; do not penalize the agent for not providing them, and do not reward unsupported facts.",
         "task_description": "The driver wants only the requested historical I-95 Express Lanes fare. The origin, destination, and time are complete and must not be changed. If those lanes are closed, they need a safe alternative suggestion without an invented toll quote."
       },
       "actual_interactions": null,
