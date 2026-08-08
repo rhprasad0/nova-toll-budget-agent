@@ -6,6 +6,7 @@ not curated.
 
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |
+| [`20260808T140554Z.json`](20260808T140554Z.json) and [Batch verdicts](batch-judges-batch_6a7737dfbd388190a78681ff30118b13-verdicts.json) | Four historical I-95 closures followed by one official-proof request; reimbursement excluded as out of scope | Live simulated user with deterministic trace/source grading and report-only OpenAI Batch judges | 1.0000; 8/8 deterministic verdicts, 4/4 goal success, helpfulness: 3 `Somewhat helpful` and 1 `Very helpful`; 0 execution errors |
 | [`20260807T213709Z-guardrail-boundary.json`](20260807T213709Z-guardrail-boundary.json) | Prompt-attack and harmful-content block/pass behavior at both Guardrail boundaries | Metadata-only live `ApplyGuardrail` evaluation bound to the TollChat Guardrail identity, `us-east-1`, and immutable version 2 | Passed 6/6; prompt attack, harmful input, and harmful output blocked with the expected categories; benign input and clean toll input/output allowed |
 | [`20260807T214229Z-agentcore-session-isolation.json`](20260807T214229Z-agentcore-session-isolation.json) | Two interleaved private-preview sessions through turn exhaustion and reset | Metadata-only live AgentCore session-isolation verification | Passed on AgentCore runtime version 13; disjoint runtime streams, isolated turn budgets, reset isolation, and runtime rotation verified |
 | [`20260807T162433Z-agentcore-tracing.json`](20260807T162433Z-agentcore-tracing.json) | Private-preview route request plus synthetic-credential block | Metadata-only live AgentCore trace verification | Passed; 4 governed stages, 37 correlated native spans, and 2 redacted blocked-request records; native credential scan passed and no prompt, response, session, account, endpoint, or key data was curated |
@@ -19,7 +20,6 @@ not curated.
 | [`20260808T133347Z.json`](20260808T133347Z.json) | Washington as ambiguous origin/destination plus explicit and endpoint-only corridor controls | Deterministic per-turn response and exact tool-trajectory grading | 1.0000 overall; 8/8 cases passed; no premature or unnecessary clarification |
 | [`20260808T132652Z.json`](20260808T132652Z.json) | Simulated McLean and Washington corridor clarification | Simulated users with report-only Batch judgments pending | 3/3 technically valid executions; observed Washington trajectories selected the intended corridors |
 | [`20260804T192403Z.json`](20260804T192403Z.json) | Four historical I-95 closure conversations | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
-| [`20260805T194729Z.json`](20260805T194729Z.json) | Historical I-95 closure follow-ups requesting official proof and reimbursement documentation | Simulated user with deterministic trajectory and per-turn source-response grading | 1.0000 overall; 8/8 verdicts passed; no extra pricing calls or unsupported source details |
 | [`20260804T211001Z.json`](20260804T211001Z.json) | Reciprocal I-66 / Dulles Toll Road trips split at the shared untolled junction | Code-graded live planner trajectory and response wording | 1.0000 overall; 2/2 cases passed; plaza billing preserved |
 | [`20260804T211034Z.json`](20260804T211034Z.json) | Fixed directional access plus Glebe-to-Wiehle cross-corridor recovery | Deterministic trace and response grading | 1.0000 overall; 5/5 cases passed; 0 execution errors |
 | [`20260804T211601Z.json`](20260804T211601Z.json) | Westpark-to-Scott and Glebe-to-Wiehle multi-turn alternative selection | Simulated-user trace grading plus goal-success and helpfulness judges | 0.9443 overall; 6/6 judgments passed; 0 execution errors |
@@ -38,11 +38,11 @@ its assigned route and time, and used response-only LLM assertions. See
 runner. Telemetry-grounded analysis of the removed failed baseline remains in
 `../eval-report.md`.
 
-The source-follow-up run retained exactly those two tool executions in all four
-conversations. After the ordinary closed-lane response, both proof and
-reimbursement follow-ups received the tool-grounded no-source disclosure and
-generic VDOT/511 referral; none produced a URL, contact, records claim,
-reimbursement procedure, affiliation claim, or new quote.
+The calibrated proof-only run retained those two tool executions and exactly two
+agent turns in all four conversations. No actor requested reimbursement. Every
+agent used the grounded no-source disclosure and generic VDOT/511 referral; all
+goal judges passed and every helpfulness judge rated the response at least
+`Somewhat helpful`.
 
 The single-leg deterministic run matched all eight captured tool results and
 answers. Its Greenway cases returned `$5.80 + $2.00 = $7.80` eastbound and

@@ -112,6 +112,7 @@ eval/
 | 2026-08-02 | Remediation | Use three-turn simulations, make execution errors fail the command, harden adversarial response grading, and curate representative evaluation evidence for recruiters. |
 | 2026-08-02 | Analysis | Analyze the curated three-turn simulation, separating agent behavior from actor, judge, and telemetry artifacts. |
 | 2026-08-02 | Repair | Make simulated tool grading deterministic, constrain actors to immutable trip facts and pricing clarification, and give helpfulness judges the runtime date and pricing-only scope. Preserve the original run as a baseline and perform one live comparison run. |
+| 2026-08-08 | Calibration | Remove reimbursement requests from the pricing-only simulation; retain one official-proof follow-up and grounded referral grading. Run live simulation and report-only Batch judges before curation. |
 
 ### 6.2 Evaluation Progress
 
@@ -124,3 +125,4 @@ eval/
 | 2026-08-02 | Three-turn simulated live evaluation | Superseded | The failed 3/8 baseline report was removed from curated results; its telemetry-grounded findings remain in `eval/eval-report.md`. |
 | 2026-08-02 | Results analysis | Completed | Manual telemetry review found 4/4 correct initial closure responses; raw goal scores were distorted by cumulative trace duplication and actor premise drift. Follow-up source guidance remains a genuine grounding risk. See `eval/eval-report.md`. |
 | 2026-08-02 | Repaired simulated live evaluation | Completed | One authorized run produced 12/12 passing verdicts and 0.9167 overall with no execution errors. Raw telemetry contains exactly one correct `i95_route` execution per case; all actor turns retained the assigned route and time. Preserved in `eval/results/20260802T171949Z.json`. |
+| 2026-08-08 | Reimbursement calibration | Completed | Two-turn actors stop after the in-scope official-proof request. The live run passed 8/8 deterministic verdicts; Batch judges returned 4/4 goal success and helpfulness of three `Somewhat helpful` plus one `Very helpful`. |

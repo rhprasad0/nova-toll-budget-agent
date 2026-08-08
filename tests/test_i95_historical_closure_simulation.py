@@ -86,6 +86,8 @@ def test_cases_use_response_only_assertions_and_immutable_actor_profiles():
         assertion = case.expected_assertion or ""
         assert "exactly once" not in assertion
         assert "calls i95_route" not in assertion
+        assert "reimbursement follow-up" not in assertion.casefold()
+        assert "no response gives reimbursement" in assertion.casefold()
 
         metadata = case.metadata or {}
         expected_input = next(
@@ -97,7 +99,7 @@ def test_cases_use_response_only_assertions_and_immutable_actor_profiles():
         assert all(str(value) in profile.context for value in expected_input.values())
         assert "never change" in profile.context.casefold()
         assert "official proof" in profile.actor_goal.casefold()
-        assert "reimbursement documentation" in profile.actor_goal.casefold()
+        assert "reimbursement" not in profile.actor_goal.casefold()
 
 
 def test_helpfulness_context_has_evaluation_date_and_pricing_scope():
@@ -144,7 +146,7 @@ def test_source_followup_evaluator_allows_only_the_approved_referral():
     )
 
 
-def test_source_followup_evaluator_checks_every_source_turn():
+def test_source_followup_evaluator_requires_one_proof_turn():
     now = datetime.now(UTC)
     approved = (
         "The registered pricing tool reported the Express Lanes unavailable for "
@@ -153,7 +155,11 @@ def test_source_followup_evaluator_checks_every_source_turn():
         "511. You can verify through official VDOT or Virginia 511 channels."
     )
 
-    def evaluate(last_response: str):
+    def evaluate(
+        proof_response: str,
+        initial_response: str = "The lanes are unavailable.",
+        proof_prompt: str = "Can you show official evidence of the closure?",
+    ):
         session = Session(
             session_id="session-1",
             traces=[
@@ -170,7 +176,7 @@ def test_source_followup_evaluator_checks_every_source_turn():
                                 end_time=now,
                             ),
                             user_prompt="Price this trip.",
-                            agent_response="The lanes are unavailable.",
+                            agent_response=initial_response,
                             available_tools=[],
                         ),
                         AgentInvocationSpan(
@@ -181,20 +187,8 @@ def test_source_followup_evaluator_checks_every_source_turn():
                                 start_time=now,
                                 end_time=now,
                             ),
-                            user_prompt="Can you provide official proof?",
-                            agent_response=approved,
-                            available_tools=[],
-                        ),
-                        AgentInvocationSpan(
-                            span_info=SpanInfo(
-                                trace_id="trace-1",
-                                span_id="reimbursement",
-                                session_id="session-1",
-                                start_time=now,
-                                end_time=now,
-                            ),
-                            user_prompt="What reimbursement documentation is needed?",
-                            agent_response=last_response,
+                            user_prompt=proof_prompt,
+                            agent_response=proof_response,
                             available_tools=[],
                         ),
                     ],
@@ -204,7 +198,7 @@ def test_source_followup_evaluator_checks_every_source_turn():
         return ClosureSourceResponseEvaluator().evaluate(
             EvaluationData(
                 input="Price this trip.",
-                actual_output=f"The lanes are unavailable. {approved} {last_response}",
+                actual_output=f"{initial_response} {proof_response}",
                 actual_trajectory=session,
                 metadata={},
             )
@@ -215,3 +209,71 @@ def test_source_followup_evaluator_checks_every_source_turn():
         evaluate("I can price covered Northern Virginia toll trips.").label
         == "source_followup_ungrounded"
     )
+    assert (
+        evaluate(
+            approved, "The lanes are unavailable. Contact VDOT for reimbursement."
+        ).label
+        == "reimbursement_advice"
+    )
+    assert (
+        evaluate(
+            approved,
+            "The lanes are unavailable. I cannot independently claim this was an "
+            "official closure.",
+        ).label
+        == "grounded_source_referral"
+    )
+    assert (
+        evaluate(
+            approved,
+            "The lanes are unavailable.",
+            "Tell me about the lane schedule.",
+        ).label
+        == "source_followup_invalid"
+    )
+    assert (
+        evaluate(
+            approved,
+            "The lanes are unavailable.",
+            "What proof do I need for reimbursement?",
+        ).label
+        == "source_followup_invalid"
+    )
+
+
+def test_source_followup_evaluator_rejects_missing_proof_turn():
+    now = datetime.now(UTC)
+    session = Session(
+        session_id="session-1",
+        traces=[
+            Trace(
+                trace_id="trace-1",
+                session_id="session-1",
+                spans=[
+                    AgentInvocationSpan(
+                        span_info=SpanInfo(
+                            trace_id="trace-1",
+                            span_id="initial",
+                            session_id="session-1",
+                            start_time=now,
+                            end_time=now,
+                        ),
+                        user_prompt="Price this trip.",
+                        agent_response="The lanes are unavailable.",
+                        available_tools=[],
+                    )
+                ],
+            )
+        ],
+    )
+
+    result = ClosureSourceResponseEvaluator().evaluate(
+        EvaluationData(
+            input="Price this trip.",
+            actual_output="The lanes are unavailable.",
+            actual_trajectory=session,
+            metadata={},
+        )
+    )[0]
+
+    assert result.label == "source_followup_missing"
