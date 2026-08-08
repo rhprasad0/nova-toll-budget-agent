@@ -43,7 +43,7 @@ locals {
   }
 }
 
-# Two small private subnets are enough for the internal ALB, proxy, and runtime.
+# Two small private subnets are enough for the private API, proxy, and runtime.
 # One NAT keeps the preview cheap; add a second only when public availability warrants it.
 resource "aws_subnet" "tollchat_private_a" {
   vpc_id            = data.aws_vpc.default.id
@@ -87,34 +87,19 @@ resource "aws_route_table_association" "tollchat_private" {
   route_table_id = aws_route_table.tollchat_private.id
 }
 
-resource "aws_security_group" "tollchat_alb" {
-  name        = "nova-toll-preview-alb"
-  description = "Internal TollChat preview ALB"
+resource "aws_security_group" "tollchat_api_endpoint" {
+  name        = "nova-toll-preview-api-endpoint"
+  description = "TollChat private API Gateway endpoint"
   vpc_id      = data.aws_vpc.default.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "tollchat_alb_from_tailscale" {
-  security_group_id            = aws_security_group.tollchat_alb.id
+resource "aws_vpc_security_group_ingress_rule" "tollchat_api_from_tailscale" {
+  security_group_id            = aws_security_group.tollchat_api_endpoint.id
   referenced_security_group_id = aws_security_group.tailscale_router.id
   description                  = "Owner access through the Tailscale subnet router"
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
-}
-
-resource "aws_vpc_security_group_ingress_rule" "tollchat_alb_from_cloudfront" {
-  count = var.enable_public_chat ? 1 : 0
-
-  security_group_id = aws_security_group.tollchat_alb.id
-  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
-  description       = "CloudFront origin-facing network"
-  from_port         = 443
-  to_port           = 443
-  ip_protocol       = "tcp"
-}
-
-data "aws_ec2_managed_prefix_list" "cloudfront" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
 }
 
 resource "aws_security_group" "tollchat_proxy" {
@@ -182,6 +167,15 @@ resource "aws_vpc_endpoint" "agentcore" {
   subnet_ids          = local.private_subnets
   security_group_ids  = [aws_security_group.agentcore_endpoint.id]
   private_dns_enabled = true
+}
+
+resource "aws_vpc_endpoint" "tollchat_api" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.execute-api"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.private_subnets
+  security_group_ids  = [aws_security_group.tollchat_api_endpoint.id]
+  private_dns_enabled = false
 }
 
 resource "aws_s3_bucket" "agentcore_artifacts" {
@@ -569,8 +563,8 @@ resource "aws_cloudwatch_log_group" "tollchat_proxy" {
 resource "aws_lambda_function" "tollchat_proxy" {
   function_name                  = "tollchat-chat-proxy"
   role                           = aws_iam_role.tollchat_proxy.arn
-  runtime                        = "python3.13"
-  handler                        = "handler.lambda_handler"
+  runtime                        = "nodejs24.x"
+  handler                        = "handler.handler"
   timeout                        = 50
   memory_size                    = 256
   reserved_concurrent_executions = 5
@@ -597,86 +591,166 @@ resource "aws_lambda_function" "tollchat_proxy" {
   depends_on = [aws_cloudwatch_log_group.tollchat_proxy, aws_iam_role_policy_attachment.tollchat_proxy_vpc, aws_bedrockagentcore_resource_policy.tollchat]
 }
 
-resource "aws_lb" "tollchat" {
-  name               = "nova-toll-preview"
-  internal           = true
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.tollchat_alb.id]
-  subnets            = local.private_subnets
-  idle_timeout       = 55
+resource "aws_api_gateway_rest_api" "tollchat" {
+  name = "nova-toll-preview"
+
+  endpoint_configuration {
+    types            = ["PRIVATE"]
+    vpc_endpoint_ids = [aws_vpc_endpoint.tollchat_api.id]
+  }
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "execute-api:/*"
+        Condition = { StringEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
+      },
+      {
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "execute-api:/*"
+        Condition = { StringNotEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
+      },
+    ]
+  })
 }
 
-resource "aws_lb_target_group" "tollchat" {
-  name        = "nova-toll-chat-proxy"
-  target_type = "lambda"
+resource "aws_api_gateway_resource" "tollchat_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.tollchat.id
+  parent_id   = aws_api_gateway_rest_api.tollchat.root_resource_id
+  path_part   = "{proxy+}"
+}
 
-  health_check {
-    enabled  = true
-    interval = 35
-    path     = "/api/config"
-    timeout  = 30
+resource "aws_api_gateway_method" "tollchat_root" {
+  rest_api_id   = aws_api_gateway_rest_api.tollchat.id
+  resource_id   = aws_api_gateway_rest_api.tollchat.root_resource_id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_method" "tollchat_proxy" {
+  rest_api_id   = aws_api_gateway_rest_api.tollchat.id
+  resource_id   = aws_api_gateway_resource.tollchat_proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "tollchat_root" {
+  rest_api_id             = aws_api_gateway_rest_api.tollchat.id
+  resource_id             = aws_api_gateway_rest_api.tollchat.root_resource_id
+  http_method             = aws_api_gateway_method.tollchat_root.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.tollchat_proxy.response_streaming_invoke_arn
+  response_transfer_mode  = "STREAM"
+  timeout_milliseconds    = 55000
+}
+
+resource "aws_api_gateway_integration" "tollchat_proxy" {
+  rest_api_id             = aws_api_gateway_rest_api.tollchat.id
+  resource_id             = aws_api_gateway_resource.tollchat_proxy.id
+  http_method             = aws_api_gateway_method.tollchat_proxy.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.tollchat_proxy.response_streaming_invoke_arn
+  response_transfer_mode  = "STREAM"
+  timeout_milliseconds    = 55000
+}
+
+resource "aws_api_gateway_deployment" "tollchat" {
+  rest_api_id = aws_api_gateway_rest_api.tollchat.id
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_integration.tollchat_root.id,
+      aws_api_gateway_integration.tollchat_proxy.id,
+    ]))
+  }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_api_gateway_stage" "tollchat" {
+  rest_api_id   = aws_api_gateway_rest_api.tollchat.id
+  deployment_id = aws_api_gateway_deployment.tollchat.id
+  stage_name    = "preview"
+}
+
+resource "aws_api_gateway_method_settings" "tollchat" {
+  rest_api_id = aws_api_gateway_rest_api.tollchat.id
+  stage_name  = aws_api_gateway_stage.tollchat.stage_name
+  method_path = "*/*"
+  settings {
+    throttling_burst_limit = 5
+    throttling_rate_limit  = 2
   }
 }
 
-resource "aws_lambda_permission" "tollchat_alb" {
-  statement_id  = "AllowInternalAlb"
+resource "aws_lambda_permission" "tollchat_api" {
+  statement_id  = "AllowPrivateApiGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.tollchat_proxy.function_name
-  principal     = "elasticloadbalancing.amazonaws.com"
-  source_arn    = aws_lb_target_group.tollchat.arn
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.tollchat.execution_arn}/*/*"
 }
 
-resource "aws_lb_target_group_attachment" "tollchat" {
-  target_group_arn = aws_lb_target_group.tollchat.arn
-  target_id        = aws_lambda_function.tollchat_proxy.arn
+resource "aws_api_gateway_domain_name" "tollchat" {
+  domain_name     = "preview.tollchat.ai"
+  certificate_arn = aws_acm_certificate_validation.site.certificate_arn
+  security_policy = "TLS_1_2"
 
-  depends_on = [aws_lambda_permission.tollchat_alb]
+  endpoint_configuration {
+    types           = ["PRIVATE"]
+    ip_address_type = "dualstack"
+  }
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "execute-api:/*"
+        Condition = { StringEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
+      },
+      {
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "execute-api:/*"
+        Condition = { StringNotEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
+      },
+    ]
+  })
 }
 
-resource "aws_lb_listener" "tollchat" {
-  load_balancer_arn = aws_lb.tollchat.arn
-  port              = 443
-  protocol          = "HTTPS"
-  certificate_arn   = aws_acm_certificate_validation.site.certificate_arn
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      host        = "tollchat.ai"
-      path        = "/"
-      query       = "preview=1"
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_302"
-    }
-  }
+resource "aws_api_gateway_domain_name_access_association" "tollchat" {
+  access_association_source      = aws_vpc_endpoint.tollchat_api.id
+  access_association_source_type = "VPCE"
+  domain_name_arn                = aws_api_gateway_domain_name.tollchat.arn
 }
 
-resource "aws_lb_listener_rule" "tollchat_api" {
-  listener_arn = aws_lb_listener.tollchat.arn
-  priority     = 10
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tollchat.arn
-  }
-
-  condition {
-    path_pattern { values = ["/api/*"] }
-  }
+resource "aws_api_gateway_base_path_mapping" "tollchat" {
+  api_id         = aws_api_gateway_rest_api.tollchat.id
+  stage_name     = aws_api_gateway_stage.tollchat.stage_name
+  domain_name    = aws_api_gateway_domain_name.tollchat.domain_name
+  domain_name_id = aws_api_gateway_domain_name.tollchat.domain_name_id
 }
 
 resource "cloudflare_dns_record" "preview" {
   zone_id = data.cloudflare_zone.tollchat.id
   name    = "preview.tollchat.ai"
   type    = "CNAME"
-  content = aws_lb.tollchat.dns_name
+  content = aws_vpc_endpoint.tollchat_api.dns_entry[0].dns_name
   ttl     = 60
   proxied = false
 }
 
 output "tailscale_preview_url" {
   description = "Private preview URL; resolvable publicly but reachable only through the tailnet route."
-  value       = "https://preview.tollchat.ai/api/config"
+  value       = "https://preview.tollchat.ai/"
 }

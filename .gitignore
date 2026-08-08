@@ -3,6 +3,7 @@
 .envrc
 .venv/
 __pycache__/
+node_modules/
 .DS_Store
 *.log
 .claude/settings.local.json

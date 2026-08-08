@@ -345,19 +345,3 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_sessions" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
-
-resource "aws_cloudwatch_metric_alarm" "tollchat_waf_blocks" {
-  count = var.enable_public_chat ? 1 : 0
-
-  alarm_name          = "tollchat-waf-blocks"
-  namespace           = "AWS/WAFV2"
-  metric_name         = "BlockedRequests"
-  dimensions          = { WebACL = "nova-toll-public-chat", Region = "CloudFront", Rule = "ALL" }
-  period              = 300
-  evaluation_periods  = 1
-  statistic           = "Sum"
-  threshold           = 50
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  alarm_actions       = [aws_sns_topic.alerts.arn]
-}

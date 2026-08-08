@@ -7,7 +7,7 @@ import os
 import re
 import time
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Protocol, cast
@@ -63,7 +63,7 @@ class AgentCallable(Protocol):
     @property
     def model(self) -> ModelConfig: ...
 
-    def __call__(self, prompt: str) -> object: ...
+    def stream_async(self, prompt: str) -> AsyncIterator[dict[str, object]]: ...
 
 
 class TollChatRuntime:
@@ -113,9 +113,9 @@ class TollChatRuntime:
             )
         return response.get("action") == "GUARDRAIL_INTERVENED"
 
-    def invoke(
+    async def stream(
         self, payload: object, context: object | None = None
-    ) -> dict[str, object]:
+    ) -> AsyncIterator[dict[str, object]]:
         correlation = _correlation(context)
         started_at = _timestamp()
         baggage_context = baggage.set_baggage(
@@ -125,6 +125,7 @@ class TollChatRuntime:
             "tollchat.aws_request_id", correlation["aws_request_id"], baggage_context
         )
         token = otel_context.attach(baggage_context)
+        activities: dict[str, dict[str, object]] = {}
 
         def finish(
             result: dict[str, object], error: Exception | None = None
@@ -144,8 +145,8 @@ class TollChatRuntime:
                     "TollChat trace write failed stage=invoke type=%s",
                     type(trace_error).__name__,
                 )
-                return _trace_unavailable()
-            return result
+                return _public_event(_trace_unavailable())
+            return _public_event(result)
 
         try:
             with _TRACER.start_as_current_span("tollchat.runtime.invoke"):
@@ -153,15 +154,18 @@ class TollChatRuntime:
                 if span_context.is_valid:
                     correlation["trace_id"] = f"{span_context.trace_id:032x}"
                 if not isinstance(payload, dict):
-                    return finish(_invalid_request())
+                    yield finish(_invalid_request())
+                    return
                 prompt = cast(dict[str, object], payload).get("prompt")
                 if not isinstance(prompt, str) or not prompt.strip():
-                    return finish(_invalid_request())
+                    yield finish(_invalid_request())
+                    return
                 prompt = prompt.strip()
                 if len(prompt) > MAX_MESSAGE_CHARS:
-                    return finish(_invalid_request())
+                    yield finish(_invalid_request())
+                    return
                 if self._turns >= MAX_TURNS:
-                    return finish(
+                    yield finish(
                         {
                             "error": {
                                 "code": "turn_limit",
@@ -169,11 +173,13 @@ class TollChatRuntime:
                             }
                         }
                     )
+                    return
 
                 if self._is_blocked(
                     prompt, "INPUT", correlation
                 ) or _looks_like_credential(prompt):
-                    return finish({"response": BLOCKED_MESSAGE, "blocked": True})
+                    yield finish({"response": BLOCKED_MESSAGE, "blocked": True})
+                    return
 
                 if self._agent is None:
                     self._agent = self._agent_factory(
@@ -193,7 +199,18 @@ class TollChatRuntime:
                 agent_started_at = _timestamp()
                 self._model_messages.clear()
                 with _TRACER.start_as_current_span("tollchat.agent"):
-                    result = agent(prompt)
+                    result: object | None = None
+                    async for event in agent.stream_async(prompt):
+                        message = event.get("message")
+                        if isinstance(message, Mapping):
+                            for activity in _activity_events(
+                                cast(Mapping[object, object], message), activities
+                            ):
+                                yield activity
+                        if "result" in event:
+                            result = event["result"]
+                    if result is None:
+                        raise RuntimeError("agent stream ended without a result")
                     answer = str(result).strip()
                     self._emit_trace(
                         "agent",
@@ -209,13 +226,18 @@ class TollChatRuntime:
                     )
 
                 if self._is_blocked(answer, "OUTPUT", correlation):
-                    return finish({"response": BLOCKED_MESSAGE, "blocked": True})
+                    yield finish({"response": BLOCKED_MESSAGE, "blocked": True})
+                    return
                 if DISCLAIMER not in answer:
                     answer = f"{answer}\n\n{DISCLAIMER}"
-                return finish({"response": answer, "blocked": False})
+                yield finish({"response": answer, "blocked": False})
         except Exception as error:  # noqa: BLE001 - runtime boundary
             logger.error("TollChat runtime invocation failed: %s", type(error).__name__)
-            return finish(_trace_unavailable(), error)
+            for activity in activities.values():
+                if activity["status"] == "running":
+                    activity["status"] = "failed"
+                    yield dict(activity)
+            yield finish(_trace_unavailable(), error)
         finally:
             otel_context.detach(token)
 
@@ -466,12 +488,73 @@ def _trace_unavailable() -> dict[str, object]:
     }
 
 
+def _public_event(result: dict[str, object]) -> dict[str, object]:
+    error = result.get("error")
+    if isinstance(error, Mapping):
+        return {"type": "error", **error}
+    return {
+        "type": "answer",
+        "text": result["response"],
+        "blocked": result["blocked"],
+    }
+
+
+_TOOL_LABELS = {
+    "plan_toll_route": "Planning toll route",
+    "i66_route": "Checking I-66 tolls",
+    "i95_route": "Checking I-95/395 tolls",
+    "i495_route": "Checking I-495 tolls",
+    "dulles_route": "Checking Dulles tolls",
+}
+
+
+def _activity_events(
+    message: Mapping[object, object], activities: dict[str, dict[str, object]]
+) -> list[dict[str, object]]:
+    content = message.get("content", [])
+    if not isinstance(content, Sequence):
+        return []
+    events: list[dict[str, object]] = []
+    for block in cast(Sequence[object], content):
+        if not isinstance(block, Mapping):
+            continue
+        block_data = cast(Mapping[str, object], block)
+        tool_use = block_data.get("toolUse")
+        if isinstance(tool_use, Mapping):
+            tool_use_data = cast(Mapping[str, object], tool_use)
+            tool_id = tool_use_data.get("toolUseId")
+            name = tool_use_data.get("name")
+            if isinstance(tool_id, str) and tool_id not in activities:
+                activity: dict[str, object] = {
+                    "type": "tool",
+                    "index": len(activities),
+                    "label": _TOOL_LABELS.get(str(name), "Checking toll data"),
+                    "status": "running",
+                }
+                activities[tool_id] = activity
+                events.append(dict(activity))
+            continue
+        tool_result = block_data.get("toolResult")
+        if isinstance(tool_result, Mapping):
+            tool_result_data = cast(Mapping[str, object], tool_result)
+            tool_id = tool_result_data.get("toolUseId")
+            if isinstance(tool_id, str) and tool_id in activities:
+                activity = activities[tool_id]
+                activity["status"] = (
+                    "failed"
+                    if tool_result_data.get("status") == "error"
+                    else "completed"
+                )
+                events.append(dict(activity))
+    return events
+
+
 app = BedrockAgentCoreApp()
 _runtime: TollChatRuntime | None = None
 
 
 @app.entrypoint  # pyright: ignore[reportUnknownMemberType]
-def invoke(payload: object, context: object) -> dict[str, object]:
+async def invoke(payload: object, context: object) -> AsyncIterator[dict[str, object]]:
     global _runtime
     if _runtime is None:
         _runtime = TollChatRuntime(
@@ -482,7 +565,8 @@ def invoke(payload: object, context: object) -> dict[str, object]:
             cast(TraceClient, boto3.client("logs")),  # pyright: ignore[reportUnknownMemberType]
             os.environ["TOLLCHAT_TRACE_LOG_GROUP"],
         )
-    return _runtime.invoke(payload, context)
+    async for event in _runtime.stream(payload, context):
+        yield event
 
 
 if __name__ == "__main__":

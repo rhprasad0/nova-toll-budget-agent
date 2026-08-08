@@ -1,0 +1,11 @@
+{
+  "name": "tollchat-chat-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test handler.test.mjs ../../site/preview.test.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "3.1106.0"
+  }
+}

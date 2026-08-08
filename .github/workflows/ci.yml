@@ -37,6 +37,8 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest
+      - run: npm ci && npm test
+        working-directory: lambdas/chat_proxy
       - run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py --check
       - run: uv run python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py --check
       - run: uv run python eval/deterministic/non_i95_directional_access/deterministic_non_i95_directional_access.py --check
