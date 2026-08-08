@@ -23,18 +23,20 @@ def test_openai_ci_credentials_are_main_only() -> None:
 def test_failed_live_eval_reports_are_preserved_without_curated_baselines() -> None:
     workflow = (WORKFLOWS / "ci.yml").read_text()
 
-    assert workflow.count("run: rm -f eval/results/*.json") == 2
+    assert workflow.count("run: rm -f eval/results/*.json") == 3
     ordered_steps = (
         "name: Clear curated evaluation reports",
         "id: single_leg_eval",
         "name: Clear previous live evaluation report",
         "id: i95_one_way_eval",
+        "name: Clear previous live junction evaluation report",
+        "id: i95_i495_junction_eval",
         "name: Save failed live evaluation report",
     )
     positions = [workflow.index(step) for step in ordered_steps]
     assert positions == sorted(positions)
     assert (
-        "if: failure() && (steps.single_leg_eval.outcome == 'failure' || steps.i95_one_way_eval.outcome == 'failure')"
+        "if: failure() && (steps.single_leg_eval.outcome == 'failure' || steps.i95_one_way_eval.outcome == 'failure' || steps.i95_i495_junction_eval.outcome == 'failure')"
         in workflow
     )
     assert (
