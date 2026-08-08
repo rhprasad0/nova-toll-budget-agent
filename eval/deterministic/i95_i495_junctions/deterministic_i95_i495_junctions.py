@@ -312,8 +312,9 @@ def main() -> None:
         raise SystemExit("I-95/I-495 junction evaluation failed")
 
 
-def _synthetic_calls(row: dict[str, Any]) -> list[dict[str, Any]]:
+def synthetic_calls(row: dict[str, Any]) -> list[dict[str, Any]]:
     plan = plan_toll_route(**row["expected_calls"][0]["input"])
+    wanted_i495 = row["expected_i495"]
     results: dict[str, dict[str, Any]] = {
         "dulles_route": {
             "tolls": [
@@ -323,9 +324,7 @@ def _synthetic_calls(row: dict[str, Any]) -> list[dict[str, Any]]:
             "total_usd": "3.25",
         },
         "i495_route": {
-            "entry": {"node_id": "182SO" if "182SO" in str(row) else "191NO"},
-            "exit": {"node_id": "191SD" if "191SD" in str(row) else "999"},
-            "legs": [{}],
+            wanted_i495["node_role"]: {"node_id": wanted_i495["node_id"]},
             "total_usd": "5.00",
         },
     }
@@ -360,7 +359,7 @@ def _self_check() -> None:
     rows = load_rows()
     assert len(rows) == 5
     for row in rows:
-        calls = _synthetic_calls(row)
+        calls = synthetic_calls(row)
         assert evaluate_junction_calls(calls, row)[0].label == "junction_ok"
         operands = _prices(calls)
         total = f"{sum(map(Decimal, operands), Decimal()):.2f}"
@@ -383,7 +382,7 @@ def _self_check() -> None:
             == "grounded_response"
         )
     row = rows[0]
-    calls = _synthetic_calls(row)
+    calls = synthetic_calls(row)
     assert evaluate_junction_calls(calls + calls[-1:], row)[0].label == "tool_mismatch"
     good = (
         "Known segment prices. Unpriced junction at Braddock: the gap is free. "

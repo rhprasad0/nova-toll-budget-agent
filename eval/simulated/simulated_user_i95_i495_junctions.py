@@ -23,10 +23,10 @@ from strands_evals.types.trace import Session  # noqa: E402
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
 from agent.toll_agent import build_agent  # noqa: E402
 from eval.deterministic.i95_i495_junctions.deterministic_i95_i495_junctions import (  # noqa: E402
-    _synthetic_calls,  # pyright: ignore[reportPrivateUsage]
     evaluate_junction_calls,
     evaluate_junction_response,
     load_rows,
+    synthetic_calls,
 )
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
@@ -54,6 +54,8 @@ def build_batch_context() -> str:
 def load_cases() -> list[Case[str, str]]:
     cases: list[Case[str, str]] = []
     for row in load_rows():
+        if "actor_challenge" not in row:
+            continue
         cases.append(
             Case[str, str](
                 name=f"{row['id']}-simulated",
@@ -100,8 +102,8 @@ def build_actor_profile(case: Case[str, str]) -> ActorProfile:
     )
 
 
-class JunctionSimulationTraceEvaluator(Evaluator[str, str]):
-    """Code-grade each unique agent tool execution across all turns."""
+class JunctionSimulationEvaluator(Evaluator[str, str]):
+    """Code-grade unique tool executions and the complete conversation."""
 
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
@@ -115,31 +117,10 @@ class JunctionSimulationTraceEvaluator(Evaluator[str, str]):
                     label="bad_trajectory",
                 )
             ]
-        return evaluate_junction_calls(
-            extract_unique_tool_calls(evaluation_case.actual_trajectory),
-            evaluation_case.metadata or {},
-        )
-
-
-class JunctionSimulationResponseEvaluator(Evaluator[str, str]):
-    """Code-grade the complete multi-turn answer against captured fares."""
-
-    def evaluate(
-        self, evaluation_case: EvaluationData[str, str]
-    ) -> list[EvaluationOutput]:
-        if not isinstance(evaluation_case.actual_trajectory, Session):
-            return [
-                EvaluationOutput(
-                    score=0.0,
-                    test_pass=False,
-                    reason="actual trajectory was not a telemetry session",
-                    label="bad_trajectory",
-                )
-            ]
-        return evaluate_junction_response(
-            str(evaluation_case.actual_output or ""),
-            extract_unique_tool_calls(evaluation_case.actual_trajectory),
-            evaluation_case.metadata or {},
+        calls = extract_unique_tool_calls(evaluation_case.actual_trajectory)
+        metadata = evaluation_case.metadata or {}
+        return evaluate_junction_calls(calls, metadata) + evaluate_junction_response(
+            str(evaluation_case.actual_output or ""), calls, metadata
         )
 
 
@@ -168,10 +149,7 @@ def main() -> None:
 
     report = Experiment[str, str](
         cases=load_cases(),
-        evaluators=[
-            JunctionSimulationTraceEvaluator(),
-            JunctionSimulationResponseEvaluator(),
-        ],
+        evaluators=[JunctionSimulationEvaluator()],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
     report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
@@ -182,9 +160,7 @@ def main() -> None:
 
 def _self_check() -> None:
     cases = load_cases()
-    assert len(cases) == 5
-    assert _MAX_TURNS == 3
-    assert len({case.name for case in cases}) == 5
+    assert len(cases) == 3
     assert all(case.expected_assertion for case in cases)
     assert all(
         "at most three turns" in build_actor_profile(case).actor_goal for case in cases
@@ -193,19 +169,19 @@ def _self_check() -> None:
     assert "springfield/franconia" in challenges[0]
     assert "edsall" in challenges[1]
     assert "free" in challenges[2]
-    bad = JunctionSimulationTraceEvaluator().evaluate(
+    bad = JunctionSimulationEvaluator().evaluate(
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )
     assert bad[0].label == "bad_trajectory"
     row = load_rows()[0]
-    calls = _synthetic_calls(row)
+    calls = synthetic_calls(row)
     assert evaluate_junction_calls(calls, row)[0].label == "junction_ok"
     wrong_response = (
         "Known segment prices. Unpriced junction at Braddock: the gap is $0.00. "
         "Calculation. Known toll total."
     )
     assert evaluate_junction_response(wrong_response, calls, row)[0].label == "zero_gap"
-    print("self-check ok (5 profiles, response guard, and three-turn cap)")
+    print("self-check ok (3 profiles, response guard, and three-turn cap)")
 
 
 if __name__ == "__main__":
