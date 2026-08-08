@@ -53,8 +53,6 @@ proxy_stage="$BUILD/chat-proxy"
 mkdir -p "$proxy_stage/assets"
 npm ci --omit=dev --prefix "$REPO/lambdas/chat_proxy"
 cp "$REPO/lambdas/chat_proxy/handler.mjs" \
-   "$REPO/lambdas/chat_proxy/package.json" \
-   "$REPO/lambdas/chat_proxy/package-lock.json" \
    "$REPO/site/preview.html" \
    "$REPO/site/preview.mjs" \
    "$proxy_stage/"

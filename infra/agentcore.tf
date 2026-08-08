@@ -8,6 +8,25 @@ locals {
     us_east_1a = aws_subnet.tollchat_private_a.id
     us_east_1c = aws_subnet.tollchat_private_c.id
   }
+  private_api_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "execute-api:/*"
+        Condition = { StringEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
+      },
+      {
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "execute-api:/*"
+        Condition = { StringNotEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
+      },
+    ]
+  })
   agentcore_policy_resources = {
     runtime  = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
     endpoint = aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn
@@ -601,25 +620,7 @@ resource "aws_api_gateway_rest_api" "tollchat" {
     vpc_endpoint_ids = [aws_vpc_endpoint.tollchat_api.id]
   }
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "execute-api:Invoke"
-        Resource  = "execute-api:/*"
-        Condition = { StringEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
-      },
-      {
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "execute-api:Invoke"
-        Resource  = "execute-api:/*"
-        Condition = { StringNotEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
-      },
-    ]
-  })
+  policy = local.private_api_policy
 }
 
 resource "aws_api_gateway_resource" "tollchat_proxy" {
@@ -731,25 +732,7 @@ resource "aws_api_gateway_domain_name" "tollchat" {
     ip_address_type = "dualstack"
   }
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "execute-api:Invoke"
-        Resource  = "execute-api:/*"
-        Condition = { StringEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
-      },
-      {
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "execute-api:Invoke"
-        Resource  = "execute-api:/*"
-        Condition = { StringNotEquals = { "aws:SourceVpce" = aws_vpc_endpoint.tollchat_api.id } }
-      },
-    ]
-  })
+  policy = local.private_api_policy
 }
 
 resource "aws_api_gateway_domain_name_access_association" "tollchat" {

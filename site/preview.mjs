@@ -79,8 +79,6 @@ export async function runRequest(request, onEvent, setBusy) {
   }
 }
 
-const sessionId = () => crypto.randomUUID();
-
 function newTurn(container) {
   const article = document.createElement("article");
   article.className = "assistant-turn";
@@ -101,7 +99,7 @@ function start() {
   const submit = form.querySelector("button");
   const reset = document.querySelector("#reset");
   const transcript = document.querySelector("#transcript");
-  let session = sessionId();
+  let session = crypto.randomUUID();
   const setBusy = (busy) => {
     submit.disabled = busy;
     input.disabled = busy;
@@ -135,7 +133,7 @@ function start() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ session_id: session }),
     }).catch(() => {});
-    session = sessionId();
+    session = crypto.randomUUID();
     transcript.replaceChildren();
     input.focus();
   });

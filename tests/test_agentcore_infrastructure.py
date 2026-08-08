@@ -43,16 +43,56 @@ def test_preview_edge_stays_private_and_closes_direct_runtime_access():
 
     assert 'types            = ["PRIVATE"]' in agentcore
     assert 'response_transfer_mode  = "STREAM"' in agentcore
-    assert "aws:SourceVpce" in agentcore
+    assert "response_streaming_invoke_arn" in agentcore
+    assert agentcore.count("aws:SourceVpce") >= 4
     assert "DenyOutsidePrivateEndpoint" in agentcore
     assert 'resource "aws_bedrockagentcore_resource_policy" "tollchat"' in agentcore
+    assert (
+        'resource "aws_api_gateway_domain_name_access_association" "tollchat"'
+        in agentcore
+    )
     assert "agent_runtime_endpoint_arn" in agentcore
+    assert (
+        'service_name        = "com.amazonaws.${data.aws_region.current.region}.execute-api"'
+        in agentcore
+    )
+    assert (
+        'service_name        = "com.amazonaws.${data.aws_region.current.region}.bedrock-agentcore"'
+        in agentcore
+    )
+    assert 'runtime                        = "nodejs24.x"' in agentcore
+    assert 'handler                        = "handler.handler"' in agentcore
     assert (
         'cidr_ipv4         = "${aws_instance.tailscale_router.private_ip}/32"'
         in agentcore
     )
     assert '"src":    "rhprasad0@github"' in tailnet_policy
     assert '"deny":   ["8.8.8.8:443", "tollchat-preview-test:443"]' in tailnet_policy
+    assert 'resource "aws_lb" "tollchat"' not in agentcore
+    assert 'resource "aws_lb_target_group" "tollchat"' not in agentcore
+
+
+def test_api_deployment_hashes_the_complete_stage_snapshot():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    deployment = agentcore.split('resource "aws_api_gateway_deployment" "tollchat"')[
+        1
+    ].split('resource "aws_api_gateway_stage" "tollchat"')[0]
+
+    for snapshot_input in (
+        "aws_api_gateway_rest_api.tollchat.policy",
+        "aws_api_gateway_resource.tollchat_proxy.path_part",
+        "aws_api_gateway_method.tollchat_root.authorization",
+        "aws_api_gateway_method.tollchat_proxy.authorization",
+        "aws_api_gateway_integration.tollchat_root.uri",
+        "aws_api_gateway_integration.tollchat_root.response_transfer_mode",
+        "aws_api_gateway_integration.tollchat_root.timeout_milliseconds",
+        "aws_api_gateway_integration.tollchat_proxy.uri",
+        "aws_api_gateway_integration.tollchat_proxy.response_transfer_mode",
+        "aws_api_gateway_integration.tollchat_proxy.timeout_milliseconds",
+    ):
+        assert snapshot_input in deployment
+    assert "aws_api_gateway_integration.tollchat_root.id" not in deployment
+    assert "aws_api_gateway_integration.tollchat_proxy.id" not in deployment
 
 
 def test_preview_network_uses_stable_route_association_keys():
