@@ -114,7 +114,8 @@ export async function route(event, dependencies) {
     return { statusCode: 200, headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" }, body: previewJs };
   }
   if (method === "GET" && Object.hasOwn(previewAssets, path)) {
-    return { statusCode: 200, headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable" }, body: previewAssets[path] };
+    const contentType = path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
+    return { statusCode: 200, headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" }, body: previewAssets[path] };
   }
   if (method === "GET" && path === "/api/config") {
     return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 5 });
@@ -164,7 +165,12 @@ const dependencies = deployed ? {
   previewJs: readFileSync(new URL("./preview.mjs", import.meta.url), "utf8"),
   previewAssets: {
     "/assets/chat-markdown-v1.mjs": readFileSync(new URL("./assets/chat-markdown-v1.mjs", import.meta.url), "utf8"),
+    "/assets/coverage-map-v1.mjs": readFileSync(new URL("./assets/coverage-map-v1.mjs", import.meta.url), "utf8"),
     "/assets/markdown-it-15.0.0/markdown-it.esm.min.mjs": readFileSync(new URL("./assets/markdown-it-15.0.0/markdown-it.esm.min.mjs", import.meta.url), "utf8"),
+    "/assets/maplibre-gl-6.0.0/maplibre-gl.css": readFileSync(new URL("./assets/maplibre-gl-6.0.0/maplibre-gl.css", import.meta.url), "utf8"),
+    "/assets/maplibre-gl-6.0.0/maplibre-gl.mjs": readFileSync(new URL("./assets/maplibre-gl-6.0.0/maplibre-gl.mjs", import.meta.url), "utf8"),
+    "/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs": readFileSync(new URL("./assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs", import.meta.url), "utf8"),
+    "/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs": readFileSync(new URL("./assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs", import.meta.url), "utf8"),
   },
 } : {};
 

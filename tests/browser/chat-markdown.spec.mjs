@@ -137,3 +137,71 @@ test("private preview renders streamed assistant Markdown safely", async ({ page
   await expect(answer.locator("script, img")).toHaveCount(0);
   expect(await page.evaluate(() => window.previewAttack)).toBeUndefined();
 });
+
+test("private preview submits with Enter and keeps Shift+Enter as a newline", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/api/chat", (route) => {
+    requests += 1;
+    return route.fulfill({
+      contentType: "application/x-ndjson",
+      body: `${JSON.stringify({ type: "answer", text: "Done", blocked: false })}\n`,
+    });
+  });
+  await page.goto("/preview.html");
+
+  await page.locator("#message").fill("First line");
+  await page.locator("#message").press("Shift+Enter");
+  await page.locator("#message").type("Second line");
+  await expect(page.locator("#message")).toHaveValue("First line\nSecond line");
+  expect(requests).toBe(0);
+
+  await page.locator("#message").press("Enter");
+  await expect(page.locator(".user-turn")).toHaveText("First line\nSecond line");
+  await expect(page.locator(".assistant-answer")).toHaveText("Done");
+  expect(requests).toBe(1);
+});
+
+test("shared coverage map stays interactive publicly and passive privately", async ({ page }) => {
+  await page.route("https://tiles.openfreemap.org/styles/dark", (route) =>
+    route.fulfill({ json: { version: 8, sources: {}, layers: [] } })
+  );
+  await page.route("**/api/config", (route) =>
+    route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
+  );
+  await page.route("**/api/chat", (route) => route.fulfill({
+    contentType: "application/x-ndjson",
+    body: `${JSON.stringify({ type: "answer", text: "Map-independent answer", blocked: false })}\n`,
+  }));
+
+  await page.goto("/");
+  await expect(page.locator(".map-pin")).toHaveCount(82);
+  await expect(page.locator(".ramp-badge")).toHaveCount(0);
+  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(1);
+  await expect(page.locator("#reset-map")).toBeEnabled();
+
+  await page.goto("/preview.html");
+
+  const map = page.locator("#coverage-map");
+  await expect(map).toBeVisible();
+  await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
+  await expect(page.locator(".ramp-badge")).toHaveCount(20);
+  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(0);
+  expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
+    pins.every((pin) => pin.tabIndex < 0)
+  )).toBe(true);
+
+  await page.locator("#message").fill("Can I still chat?");
+  await page.locator("#message").press("Enter");
+  await expect(page.locator(".assistant-answer")).toHaveText("Map-independent answer");
+});
+
+test("private preview stacks map before transcript on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview.html");
+
+  const header = await page.locator("header").boundingBox();
+  const map = await page.locator(".map-panel").boundingBox();
+  const transcript = await page.locator("#transcript").boundingBox();
+  expect(header.y + header.height).toBeLessThanOrEqual(map.y);
+  expect(map.y + map.height).toBeLessThanOrEqual(transcript.y);
+});

@@ -134,6 +134,12 @@ test("validation, page, config, and reset keep their small contracts", async () 
   assert.equal(asset.statusCode, 200);
   assert.equal(asset.headers["Content-Type"], "text/javascript; charset=utf-8");
   assert.equal(await bodyText(asset.body), "export const safe = true;");
+  const stylesheet = await route(event("GET", "/assets/maplibre-gl-6.0.0/maplibre-gl.css"), {
+    ...dependencies,
+    previewAssets: { "/assets/maplibre-gl-6.0.0/maplibre-gl.css": ".map{}" },
+  });
+  assert.equal(stylesheet.statusCode, 200);
+  assert.equal(stylesheet.headers["Content-Type"], "text/css; charset=utf-8");
   assert.deepEqual(
     JSON.parse(await bodyText((await route(event("GET", "/api/config"), dependencies)).body)),
     { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 },
