@@ -30,14 +30,18 @@ resource "aws_s3_object" "index" {
   # Revalidate on every hit so a site edit goes live with the apply, no
   # CloudFront invalidation needed. One page, so the origin hits are free.
   cache_control = "no-cache"
+
+  depends_on = [aws_s3_object.site_assets]
 }
 
 locals {
   site_assets = {
-    "assets/maplibre-gl-6.0.0/maplibre-gl.css"        = "text/css"
-    "assets/maplibre-gl-6.0.0/maplibre-gl.mjs"        = "text/javascript"
-    "assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs" = "text/javascript"
-    "assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs" = "text/javascript"
+    "assets/maplibre-gl-6.0.0/maplibre-gl.css"          = "text/css"
+    "assets/maplibre-gl-6.0.0/maplibre-gl.mjs"          = "text/javascript"
+    "assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs"   = "text/javascript"
+    "assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs"   = "text/javascript"
+    "assets/markdown-it-15.0.0/markdown-it.esm.min.mjs" = "text/javascript"
+    "assets/chat-markdown-v1.mjs"                       = "text/javascript"
   }
 }
 
@@ -224,6 +228,7 @@ resource "aws_cloudfront_distribution" "site" {
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "site"
     viewer_protocol_policy = "redirect-to-https"
+    compress               = true
     # AWS managed "CachingOptimized" policy -- a static page needs nothing custom.
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   }

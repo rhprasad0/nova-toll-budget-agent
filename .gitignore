@@ -12,6 +12,8 @@ __pycache__/
 .mcp.json
 /.agents/
 /.codex/
+node_modules/
+test-results/
 
 # Terraform
 infra/.terraform/
