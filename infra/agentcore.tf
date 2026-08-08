@@ -93,13 +93,15 @@ resource "aws_security_group" "tollchat_api_endpoint" {
   vpc_id      = data.aws_vpc.default.id
 }
 
+# Forwarded subnet-router traffic is matched by its SNAT address, not by an SG
+# reference to the middlebox ENI.
 resource "aws_vpc_security_group_ingress_rule" "tollchat_api_from_tailscale" {
-  security_group_id            = aws_security_group.tollchat_api_endpoint.id
-  referenced_security_group_id = aws_security_group.tailscale_router.id
-  description                  = "Owner access through the Tailscale subnet router"
-  from_port                    = 443
-  to_port                      = 443
-  ip_protocol                  = "tcp"
+  security_group_id = aws_security_group.tollchat_api_endpoint.id
+  cidr_ipv4         = "${aws_instance.tailscale_router.private_ip}/32"
+  description       = "Forwarded owner traffic from the Tailscale subnet router"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
 }
 
 resource "aws_security_group" "tollchat_proxy" {

@@ -35,7 +35,10 @@ def test_preview_remains_tailnet_only_and_agentcore_stays_on_privatelink():
     policy = (ROOT / "policy.hujson").read_text()
 
     assert 'description = "TollChat private API Gateway endpoint"' in agentcore
-    assert "aws_security_group.tailscale_router.id" in agentcore
+    assert (
+        'cidr_ipv4         = "${aws_instance.tailscale_router.private_ip}/32"'
+        in agentcore
+    )
     assert (
         'service_name        = "com.amazonaws.${data.aws_region.current.region}.bedrock-agentcore"'
         in agentcore

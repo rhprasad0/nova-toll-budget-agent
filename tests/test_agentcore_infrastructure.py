@@ -47,7 +47,10 @@ def test_preview_edge_stays_private_and_closes_direct_runtime_access():
     assert "DenyOutsidePrivateEndpoint" in agentcore
     assert 'resource "aws_bedrockagentcore_resource_policy" "tollchat"' in agentcore
     assert "agent_runtime_endpoint_arn" in agentcore
-    assert "aws_security_group.tailscale_router.id" in agentcore
+    assert (
+        'cidr_ipv4         = "${aws_instance.tailscale_router.private_ip}/32"'
+        in agentcore
+    )
     assert '"src":    "rhprasad0@github"' in tailnet_policy
     assert '"deny":   ["8.8.8.8:443", "tollchat-preview-test:443"]' in tailnet_policy
 
