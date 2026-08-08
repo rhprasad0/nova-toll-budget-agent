@@ -1,0 +1,601 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Price a trip from McLean to Westpark Drive.",
+      "actual_output": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.10**\n  - VDOT observed at: **8/8/2026 9:10 AM ET**\n\n## Calculation\n\n**$1.10 = $1.10**\n\n## Final price\n\n**$1.10**\n",
+      "name": "ambiguous-alias-mclean-multiturn",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "i495_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "Which McLean location do you mean: **Route 123 - Dolley Madison Blvd** or **Jones Branch Drive/Route 123**?\n",
+          "calls": []
+        },
+        {
+          "response": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound, I-495 Express Lanes: $1.10**\n  - VDOT observed at: **8/8/2026 9:10 AM ET**\n\n## Calculation\n\n**$1.10 = $1.10**\n\n## Final price\n\n**$1.10**\n",
+          "calls": [
+            {
+              "name": "i495_route",
+              "input": {
+                "origin": "Jones Branch Drive/Route 123",
+                "destination": "Westpark Drive",
+                "at_time": ""
+              },
+              "tool_result": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.10\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:24:38.676649-04:00\", \"total_usd\": \"1.10\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "ambiguous-alias-mclean-multiturn",
+        "description": "McLean alias fans out to two oracle labels on two different corridors (I-66 ITB entry-only vs I-495 entry+exit) -- agent must ask which interchange before calling any tool, then converge on the exact I-495 labels once the user picks one.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from McLean to Westpark Drive."
+          },
+          {
+            "role": "user",
+            "content": "I meant the I-495 one -- Jones Branch Drive."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": null,
+            "response_must_be_question": true,
+            "response_must_contain_any": [
+              "Route 123 - Dolley Madison Blvd",
+              "Jones Branch Drive/Route 123",
+              "I-66",
+              "I-495"
+            ],
+            "expected_behavior": "ask a clarifying question about which McLean interchange is meant (Route 123 - Dolley Madison Blvd on I-66 ITB vs Jones Branch Drive/Route 123 on I-495); no tool call"
+          },
+          {
+            "turn": 2,
+            "tool": "i495_route",
+            "input": {
+              "origin": "Jones Branch Drive/Route 123",
+              "destination": "Westpark Drive"
+            }
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    },
+    {
+      "input": "price a trip from pentagon/eads street to i-95 near dumfries road/route 234",
+      "actual_output": "## Route and fares\n\n- Pentagon/Eads Street \u2192 I-95 Near Dumfries Road/Route 234 \u2014 **Southbound, I-95/395 Express Lanes: $19.45**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n## Calculation\n\n$19.45 = $19.45\n\n## Final price\n\n**$19.45**\n",
+      "name": "unambiguous-case-insensitive-single-turn",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "i95_access_options",
+        "i95_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "## Route and fares\n\n- Pentagon/Eads Street \u2192 I-95 Near Dumfries Road/Route 234 \u2014 **Southbound, I-95/395 Express Lanes: $19.45**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n## Calculation\n\n$19.45 = $19.45\n\n## Final price\n\n**$19.45**\n",
+          "calls": [
+            {
+              "name": "i95_access_options",
+              "input": {
+                "origin": "Pentagon/Eads Street",
+                "destination": "I-95 Near Dumfries Road/Route 234"
+              },
+              "tool_result": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
+              "is_error": false
+            },
+            {
+              "name": "i95_route",
+              "input": {
+                "origin": "Pentagon/Eads Street",
+                "destination": "I-95 Near Dumfries Road/Route 234",
+                "at_time": ""
+              },
+              "tool_result": "{\"origin\": \"Pentagon/Eads Street\", \"destination\": \"I-95 Near Dumfries Road/Route 234\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"2233SO\", \"label\": \"Pentagon/Eads Street\"}, \"exit\": {\"node_id\": \"217SD\", \"label\": \"I-95 Near Dumfries Road/Route 234\"}, \"legs\": [{\"od_pair_id\": 1212, \"price_usd\": \"19.45\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:24:43.890612-04:00\", \"total_usd\": \"19.45\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "unambiguous-case-insensitive-single-turn",
+        "description": "Lowercased input that already matches an exact oracle label case-insensitively -- SOP says this needs no confirmation, so the agent must resolve it, check I-95 access, and price it in the same turn.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "price a trip from pentagon/eads street to i-95 near dumfries road/route 234"
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "calls": [
+              {
+                "tool": "i95_access_options",
+                "input": {
+                  "origin": "Pentagon/Eads Street",
+                  "destination": "I-95 Near Dumfries Road/Route 234"
+                }
+              },
+              {
+                "tool": "i95_route",
+                "input": {
+                  "origin": "Pentagon/Eads Street",
+                  "destination": "I-95 Near Dumfries Road/Route 234"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    },
+    {
+      "input": "Price a trip from Washington to Westpark Drive.",
+      "actual_output": "**Route and fares**\n\n- Washington \u2192 I-495 S \u2014 **I-66 Inside-the-Beltway Express Lanes**, westbound: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n- Untolled connector: **I-66/I-495 interchange**\n- Interstate 66 \u2192 Westpark Drive \u2014 **I-495 Express Lanes**, northbound: **$2.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n**Calculation**\n\n$0.00 + $2.05 = **$2.05**\n\n**Final price**\n\n**$2.05**\n",
+      "name": "ambiguous-washington-origin-i66-followup",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "plan_toll_route",
+        "i66_route",
+        "i495_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "Do you mean I-66 or I-395?\n",
+          "calls": []
+        },
+        {
+          "response": "**Route and fares**\n\n- Washington \u2192 I-495 S \u2014 **I-66 Inside-the-Beltway Express Lanes**, westbound: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n- Untolled connector: **I-66/I-495 interchange**\n- Interstate 66 \u2192 Westpark Drive \u2014 **I-495 Express Lanes**, northbound: **$2.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n**Calculation**\n\n$0.00 + $2.05 = **$2.05**\n\n**Final price**\n\n**$2.05**\n",
+          "calls": [
+            {
+              "name": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i66_itb",
+                "origin": "Washington",
+                "destination_corridor": "i495",
+                "destination": "Westpark Drive",
+                "at_time": ""
+              },
+              "tool_result": "{\"at_time\": \"2026-08-08T09:24:49.173685-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
+              "is_error": false
+            },
+            {
+              "name": "i66_route",
+              "input": {
+                "origin": "Washington",
+                "destination": "5",
+                "at_time": "2026-08-08T09:24:49.173685-04:00"
+              },
+              "tool_result": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-08T09:24:00-04:00\", \"observed_at\": \"2026-08-08T09:19:59-04:00\"}], \"at_time\": \"2026-08-08T09:24:49.173685-04:00\", \"total_usd\": \"0.00\"}",
+              "is_error": false
+            },
+            {
+              "name": "i495_route",
+              "input": {
+                "origin": "187NO",
+                "destination": "Westpark Drive",
+                "at_time": "2026-08-08T09:24:49.173685-04:00"
+              },
+              "tool_result": "{\"origin\": \"187NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"187NO\", \"label\": \"Interstate 66\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1031, \"price_usd\": \"2.05\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:24:49.173685-04:00\", \"total_usd\": \"2.05\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "ambiguous-washington-origin-i66-followup",
+        "description": "Bare Washington can mean the I-66 or I-395 endpoint; retain Westpark Drive and use the canonical I-66 endpoint after clarification.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Washington to Westpark Drive."
+          },
+          {
+            "role": "user",
+            "content": "I-66."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": null,
+            "response_must_be_question": true,
+            "response_must_contain_all": [
+              "I-66",
+              "I-395"
+            ]
+          },
+          {
+            "turn": 2,
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i66_itb",
+                  "origin": "Washington",
+                  "destination_corridor": "i495",
+                  "destination": "Westpark Drive"
+                }
+              },
+              {
+                "tool": "i66_route",
+                "input": {
+                  "origin": "Washington",
+                  "destination": "5"
+                }
+              },
+              {
+                "tool": "i495_route",
+                "input": {
+                  "origin": "187NO",
+                  "destination": "Westpark Drive"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    },
+    {
+      "input": "Price a trip from Westpark Drive to Washington.",
+      "actual_output": "**Known segment prices**\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$6.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n- The I-95/395 junction leg was unavailable. Reason: \u201cWashington D.C.\u201d has no southbound 95/395 segment to the junction boundary.\n\n**Unpriced junction**\n\nVDOT does not provide a price for the road between the selected 95 boundary and I-495 Near Braddock Road.\n\n**Complete price unavailable**\n\nThe junction is unpriced, so a complete trip price cannot be provided.\n",
+      "name": "ambiguous-washington-destination-i395-followup",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "plan_toll_route",
+        "i495_route",
+        "i95_junction_leg"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "Do you mean I-66 or I-395?\n",
+          "calls": []
+        },
+        {
+          "response": "**Known segment prices**\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$6.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n- The I-95/395 junction leg was unavailable. Reason: \u201cWashington D.C.\u201d has no southbound 95/395 segment to the junction boundary.\n\n**Unpriced junction**\n\nVDOT does not provide a price for the road between the selected 95 boundary and I-495 Near Braddock Road.\n\n**Complete price unavailable**\n\nThe junction is unpriced, so a complete trip price cannot be provided.\n",
+          "calls": [
+            {
+              "name": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i495",
+                "origin": "Westpark Drive",
+                "destination_corridor": "i95",
+                "destination": "Washington D.C.",
+                "at_time": ""
+              },
+              "tool_result": "{\"at_time\": \"2026-08-08T09:24:57.703057-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+              "is_error": false
+            },
+            {
+              "name": "i495_route",
+              "input": {
+                "origin": "Westpark Drive",
+                "destination": "191SD",
+                "at_time": "2026-08-08T09:24:57.703057-04:00"
+              },
+              "tool_result": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"6.05\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:24:57.703057-04:00\", \"total_usd\": \"6.05\"}",
+              "is_error": false
+            },
+            {
+              "name": "i95_junction_leg",
+              "input": {
+                "location": "Washington D.C.",
+                "movement": "i495_to_i95",
+                "at_time": "2026-08-08T09:24:57.703057-04:00"
+              },
+              "tool_result": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"at_time\": \"2026-08-08T09:24:57.703057-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"'Washington D.C.' has no southbound 95/395 segment to the junction boundary\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "ambiguous-washington-destination-i395-followup",
+        "description": "Bare Washington can mean the I-66 or I-395 endpoint; retain Westpark Drive and use the canonical I-395 endpoint after clarification.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Westpark Drive to Washington."
+          },
+          {
+            "role": "user",
+            "content": "I-395."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "tool": null,
+            "response_must_be_question": true,
+            "response_must_contain_all": [
+              "I-66",
+              "I-395"
+            ]
+          },
+          {
+            "turn": 2,
+            "calls": [
+              {
+                "tool": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i495",
+                  "origin": "Westpark Drive",
+                  "destination_corridor": "i95",
+                  "destination": "Washington D.C."
+                }
+              },
+              {
+                "tool": "i495_route",
+                "input": {
+                  "origin": "Westpark Drive",
+                  "destination": "191SD"
+                }
+              },
+              {
+                "tool": "i95_junction_leg",
+                "input": {
+                  "movement": "i495_to_i95",
+                  "location": "Washington D.C."
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    },
+    {
+      "input": "Price the I-66 Express Lanes from Washington to I-66 West.",
+      "actual_output": "**Route and fares**\n\n- Washington \u2192 I-66 West \u2014 WB, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n\n**Calculation**\n\n$0.00 = $0.00\n\n**Final price**\n\n**$0.00**\n",
+      "name": "explicit-washington-i66",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "i66_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "**Route and fares**\n\n- Washington \u2192 I-66 West \u2014 WB, I-66 Express Lanes: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n\n**Calculation**\n\n$0.00 = $0.00\n\n**Final price**\n\n**$0.00**\n",
+          "calls": [
+            {
+              "name": "i66_route",
+              "input": {
+                "origin": "Washington",
+                "destination": "I-66 West",
+                "at_time": ""
+              },
+              "tool_result": "{\"origin\": \"Washington\", \"destination\": \"I-66 West\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"1\", \"label\": \"I-66 West\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-08T09:24:00-04:00\", \"observed_at\": \"2026-08-08T09:19:59-04:00\"}], \"at_time\": \"2026-08-08T09:25:05.613650-04:00\", \"total_usd\": \"0.00\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "explicit-washington-i66",
+        "description": "Explicit I-66 context disambiguates Washington without a clarification turn.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-66 Express Lanes from Washington to I-66 West."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "calls": [
+              {
+                "tool": "i66_route",
+                "input": {
+                  "origin": "Washington",
+                  "destination": "I-66 West"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    },
+    {
+      "input": "Price the I-395 Express Lanes from Washington to I-395 Near Edsall Road.",
+      "actual_output": "**Route and fares**\n\n- Washington D.C. \u2192 I-395 Near Edsall Road \u2014 Southbound, **I-95/395 Express Lanes**: **$3.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n**Calculation**\n\n$3.05 = $3.05\n\n**Final price**\n\n**$3.05**\n",
+      "name": "explicit-washington-i395",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": [
+        "i95_access_options",
+        "i95_route"
+      ],
+      "actual_trajectory": [
+        {
+          "response": "**Route and fares**\n\n- Washington D.C. \u2192 I-395 Near Edsall Road \u2014 Southbound, **I-95/395 Express Lanes**: **$3.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n**Calculation**\n\n$3.05 = $3.05\n\n**Final price**\n\n**$3.05**\n",
+          "calls": [
+            {
+              "name": "i95_access_options",
+              "input": {
+                "origin": "Washington D.C.",
+                "destination": "I-395 Near Edsall Road"
+              },
+              "tool_result": "{\"status\": \"supported\", \"direction\": \"Southbound\"}",
+              "is_error": false
+            },
+            {
+              "name": "i95_route",
+              "input": {
+                "origin": "Washington D.C.",
+                "destination": "I-395 Near Edsall Road",
+                "at_time": ""
+              },
+              "tool_result": "{\"origin\": \"Washington D.C.\", \"destination\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"2232SO\", \"label\": \"Washington D.C.\"}, \"exit\": {\"node_id\": \"227SD\", \"label\": \"I-395 Near Edsall Road\"}, \"legs\": [{\"od_pair_id\": 1203, \"price_usd\": \"3.05\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:25:10.754525-04:00\", \"total_usd\": \"3.05\"}",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "explicit-washington-i395",
+        "description": "Explicit I-395 context disambiguates Washington to the canonical Washington D.C. endpoint without a clarification turn.",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price the I-395 Express Lanes from Washington to I-395 Near Edsall Road."
+          }
+        ],
+        "expected_trajectory": [
+          {
+            "turn": 1,
+            "calls": [
+              {
+                "tool": "i95_access_options",
+                "input": {
+                  "origin": "Washington D.C.",
+                  "destination": "I-395 Near Edsall Road"
+                }
+              },
+              {
+                "tool": "i95_route",
+                "input": {
+                  "origin": "Washington D.C.",
+                  "destination": "I-395 Near Edsall Road"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "LocationResolutionEvaluator",
+      "evaluator_type": "LocationResolutionEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "every turn matched its expected tool call (or absence)",
+    "every turn matched its expected tool call (or absence)",
+    "every turn matched its expected tool call (or absence)",
+    "every turn matched its expected tool call (or absence)",
+    "every turn matched its expected tool call (or absence)",
+    "every turn matched its expected tool call (or absence)"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "every turn matched its expected tool call (or absence)",
+        "label": "resolved"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ]
+}

@@ -1051,6 +1051,7 @@ def test_location_aliases_only_point_to_priced_labels():
         for location in corridor["locations"]
     }
     assert "Tysons" in prompt
+    assert _LOCATION_ALIASES["Washington"] == ["Washington", "Washington D.C."]
     assert "Gainesville" not in _LOCATION_ALIASES
     assert "Dulles Airport" not in _LOCATION_ALIASES
     assert {
@@ -1064,6 +1065,16 @@ def test_location_aliases_only_point_to_priced_labels():
     assert _AIRPORT_ALIASES["DCA"] == "airport_dca"
     assert "Airport-only access" in prompt
     assert "potential tickets" in prompt
+
+
+def test_system_prompt_clarifies_the_ambiguous_washington_corridor():
+    prompt = " ".join(build_system_prompt().split())
+    assert "Washington" in prompt
+    assert "I-66 or I-395" in prompt
+    assert "Washington D.C." in prompt
+    assert "without calling any tool" in prompt
+    assert "retain the other endpoint" in prompt
+    assert "corridor or the other resolved endpoint" in prompt
 
 
 def test_system_prompt_is_an_agent_sop():
@@ -1166,12 +1177,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.24.0"
-    advanced["system_prompt"]["releases"]["1.24.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.25.0"
+    advanced["system_prompt"]["releases"]["1.25.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.23\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.24\.0"):
         validate_manifest_update(previous, advanced)
 
 

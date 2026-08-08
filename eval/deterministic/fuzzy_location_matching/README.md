@@ -3,8 +3,8 @@
 Tests Step 1 of `agent-sops/nova-toll-pricing-assistant.sop.md` — does the
 agent ask before guessing an ambiguous location, converge on the exact
 oracle label once the user clarifies, resolve an unambiguous case-insensitive
-match without asking. See `eval-plan.md` for the full plan and
-`test-cases.jsonl` for the 2 cases.
+match without asking, and distinguish Washington's I-66 and I-395 endpoints.
+See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 6 cases.
 
 ## Self-check (no network)
 
@@ -40,11 +40,12 @@ without blocking a merge.
 `simulation_support.py` is reusable scaffolding for future evals that need
 an LLM-simulated user (`strands_evals.ActorSimulator`) instead of a
 scripted conversation turn — import it directly, same as the deterministic
-suite imports its own helpers. `simulated_user_fuzzy_location_matching.py` is
-the observational fuzzy-location scenario built on it. Unlike Track 1's
-code-based grading, the simulated user and both judges
-(`HelpfulnessEvaluator`, `GoalSuccessRateEvaluator`) are all LLMs, so results
-vary run to run. See `eval-plan.md`'s "Track 2" section for the full design.
+suite imports its own helpers. `simulated_user_fuzzy_location_matching.py`
+contains the observational McLean, Washington-origin, and
+Washington-destination scenarios built on it. Unlike Track 1's code-based
+grading, the simulated user is an LLM and the report records Batch judging as
+pending, so results vary run to run. See `eval-plan.md`'s "Track 2" section for
+the full design.
 
 ```bash
 uv run python eval/simulation_support.py --check
@@ -59,10 +60,11 @@ mapping and both judges only run live and are not covered by `--check`.
 AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_fuzzy_location_matching.py
 ```
 
-A live run spends across three billed surfaces for the one simulated case:
-OpenAI (the agent under test), Bedrock (the simulator's conversational turns
-and both judges), and RDS (the agent's pricing tools). The simulator and judges
-use Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
+A live run spends across three billed surfaces for the three simulated cases:
+OpenAI (the agent under test), Bedrock (the simulator's conversational turns),
+and RDS (the agent's pricing tools). Later report-only Batch judges use OpenAI.
+The simulator uses Claude Haiku 4.5
+(`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
 `NOVA_TOLL_EVAL_MODEL_ID` overrides that model for automated runs.
 
 ## Nightly run

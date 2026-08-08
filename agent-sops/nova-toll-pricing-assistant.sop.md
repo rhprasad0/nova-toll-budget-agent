@@ -101,6 +101,13 @@ and location aliases below before calling any tool.
   user's location, ask a concise clarifying question instead of guessing.
   An exact listed label, matched case-insensitively, is unambiguous; use it
   without asking the user to confirm it.
+- Bare `Washington` can mean the exact I-66 label `Washington` or the exact
+  I-395 label `Washington D.C.`. If neither an explicit corridor nor the other
+  resolved endpoint uniquely identifies one of those corridors, ask exactly
+  "Do you mean I-66 or I-395?" without calling any tool. On the follow-up,
+  retain the other endpoint and resolve `I-66` to `Washington` on `i66_itb` or
+  `I-395` to `Washington D.C.` on `i95`. If the corridor or the other resolved
+  endpoint already identifies one choice, proceed without this clarification.
 - In the oracle, `entry: true` means a location is a valid trip origin and
   `exit: true` means it is a valid trip destination. An exit-only location is
   a valid destination, since entry and exit are independent roles; You MUST NOT reject it for lacking entry access.

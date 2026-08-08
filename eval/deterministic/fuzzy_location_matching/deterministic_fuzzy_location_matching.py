@@ -148,12 +148,24 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
 
             response = str(turn.get("response", ""))
             expected_terms: list[str] = entry.get("response_must_contain_any", [])
+            required_terms: list[str] = entry.get("response_must_contain_all", [])
             if (
-                expected_terms
-                and not any(
-                    term.casefold() in response.casefold() for term in expected_terms
+                (
+                    expected_terms
+                    and not any(
+                        term.casefold() in response.casefold()
+                        for term in expected_terms
+                    )
                 )
-            ) or (entry.get("response_must_be_question") and "?" not in response):
+                or (
+                    required_terms
+                    and not all(
+                        term.casefold() in response.casefold()
+                        for term in required_terms
+                    )
+                )
+                or (entry.get("response_must_be_question") and "?" not in response)
+            ):
                 return _result(
                     False,
                     f"turn {entry['turn']}: response did not match expected behavior",
@@ -254,6 +266,10 @@ def _self_check() -> None:
     assert [case.name for case in cases] == [
         "ambiguous-alias-mclean-multiturn",
         "unambiguous-case-insensitive-single-turn",
+        "ambiguous-washington-origin-i66-followup",
+        "ambiguous-washington-destination-i395-followup",
+        "explicit-washington-i66",
+        "explicit-washington-i395",
     ]
     assert cases[1].expected_trajectory == ["i95_access_options", "i95_route"]
     assert _report_passed([True, True])
@@ -342,6 +358,12 @@ def _self_check() -> None:
         "response_must_be_question": True,
         "response_must_contain_any": ["I-495", "I-66"],
     }
+    washington_clarification = {
+        "turn": 1,
+        "tool": None,
+        "response_must_be_question": True,
+        "response_must_contain_all": ["I-66", "I-395"],
+    }
     resolver_checks: list[tuple[dict[str, Any], list[dict[str, Any]], str]] = [
         (
             {"expected_trajectory": [expected_route]},
@@ -371,6 +393,16 @@ def _self_check() -> None:
             },
             [{"response": "Did you mean I-495 or I-66?", "calls": []}],
             "resolved",
+        ),
+        (
+            {"expected_trajectory": [washington_clarification]},
+            [{"response": "Do you mean I-66 or I-395?", "calls": []}],
+            "resolved",
+        ),
+        (
+            {"expected_trajectory": [washington_clarification]},
+            [{"response": "Do you mean I-66?", "calls": []}],
+            "response_mismatch",
         ),
         (
             {"expected_trajectory": [{"turn": 1, "tool": None}]},
