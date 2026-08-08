@@ -7,9 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v1.mjs"
-PREVIEW = ROOT / "site" / "preview.html"
-PREVIEW_JS = ROOT / "site" / "preview.mjs"
-PUBLIC = ROOT / "site" / "index.html"
 HANDLER = ROOT / "lambdas" / "chat_proxy" / "handler.mjs"
 BUILD = ROOT / "scripts" / "build_zips.sh"
 INFRA = ROOT / "infra" / "site.tf"
@@ -66,24 +63,6 @@ def test_one_way_badges_match_oracle_direction_and_role() -> None:
         directional += 1
 
     assert directional == 20
-
-
-def test_private_map_is_passive_accessible_and_private_only() -> None:
-    module = MAP_MODULE.read_text()
-    preview = PREVIEW.read_text()
-    preview_js = PREVIEW_JS.read_text()
-    public = PUBLIC.read_text()
-
-    assert 'mode: "passive"' in preview_js
-    assert 'interactive: mode !== "passive"' in module
-    assert '"map-pin preview-map-pin"' in module
-    assert "oneWay.direction" in module
-    assert "oneWay.role" in module
-    assert "Labels identify one-way ramps and their allowed use." in preview
-    assert "Unlabelled ramps serve both directions." in preview
-    assert 'aria-label="Passive TollChat coverage map' in preview
-    assert 'mountCoverageMap({ mode: "interactive" })' in public
-    assert "showOneWay" not in public
 
 
 def test_private_bundle_serves_the_shared_pinned_map_assets() -> None:

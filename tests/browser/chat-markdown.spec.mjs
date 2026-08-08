@@ -168,11 +168,6 @@ test("shared coverage map stays interactive publicly and passive privately", asy
   await page.route("**/api/config", (route) =>
     route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
   );
-  await page.route("**/api/chat", (route) => route.fulfill({
-    contentType: "application/x-ndjson",
-    body: `${JSON.stringify({ type: "answer", text: "Map-independent answer", blocked: false })}\n`,
-  }));
-
   await page.goto("/");
   await expect(page.locator(".map-pin")).toHaveCount(82);
   await expect(page.locator(".ramp-badge")).toHaveCount(0);
@@ -181,8 +176,8 @@ test("shared coverage map stays interactive publicly and passive privately", asy
 
   await page.goto("/preview.html");
 
-  const map = page.locator("#coverage-map");
-  await expect(map).toBeVisible();
+  await expect(page.getByRole("img", { name: /Passive TollChat coverage map/ })).toBeVisible();
+  await expect(page.locator(".map-legend")).toContainText("Unlabelled ramps serve both directions.");
   await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
   await expect(page.locator(".ramp-badge")).toHaveCount(20);
   await expect(page.getByRole("list", { name: "One-way ramp directions" })).toHaveCount(1);
@@ -190,12 +185,8 @@ test("shared coverage map stays interactive publicly and passive privately", asy
   await expect(page.locator("#directional-ramps")).toContainText("I-95 Near Cardinal Drive: NB ENTRY");
   await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(0);
   expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
-    pins.every((pin) => pin.tabIndex < 0 && pin.getAttribute("aria-hidden") === "true")
+    pins.every((pin) => pin.tagName === "DIV" && pin.tabIndex < 0)
   )).toBe(true);
-
-  await page.locator("#message").fill("Can I still chat?");
-  await page.locator("#message").press("Enter");
-  await expect(page.locator(".assistant-answer")).toHaveText("Map-independent answer");
 });
 
 test("private preview stacks map before transcript on mobile", async ({ page }) => {

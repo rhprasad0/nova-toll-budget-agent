@@ -231,8 +231,6 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
         marker.className = mode === "passive" ? "map-pin preview-map-pin" : "map-pin";
         marker.style.setProperty("--pin", colors[pin.facility]);
         if (mode === "passive") {
-          marker.tabIndex = -1;
-          marker.setAttribute("aria-hidden", "true");
           if (pin.oneWay) {
             marker.dataset.direction = pin.oneWay.direction;
             marker.dataset.role = pin.oneWay.role;
@@ -260,10 +258,7 @@ export async function mountCoverageMap({ mode = "interactive" } = {}) {
       junctionMarker.className = mode === "passive" ? "junction-pin preview-junction-pin" : "junction-pin";
       junctionMarker.dataset.junction = "true";
       junctionMarker.textContent = "!";
-      if (mode === "passive") {
-        junctionMarker.tabIndex = -1;
-        junctionMarker.setAttribute("aria-hidden", "true");
-      } else {
+      if (mode !== "passive") {
         junctionMarker.type = "button";
         junctionMarker.setAttribute("aria-label", "I-95 to I-495 junction: price unavailable");
         junctionMarker.addEventListener("click", showJunction);
