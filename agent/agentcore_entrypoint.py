@@ -53,8 +53,13 @@ _CREDENTIAL_VALUE = re.compile(
 _SYSTEM_PROMPT_KEY = re.compile(r"(?:system|developer)[_-]?prompt\Z", re.IGNORECASE)
 _INVOCATION_LIMIT_STATE_KEY = "tollchat_invocation_limits"
 _TRACER = trace.get_tracer(__name__)
+_RUNTIME_FAILURE_MODE = "runtime_exception_v1"
 
 logger = logging.getLogger(__name__)
+
+
+class DeployedFailureDrill(RuntimeError):
+    """Deterministic private-preview failure at the runtime boundary."""
 
 
 @dataclass
@@ -220,7 +225,8 @@ class TollChatRuntime:
                 if not isinstance(payload, dict):
                     yield finish(_invalid_request())
                     return
-                prompt = cast(dict[str, object], payload).get("prompt")
+                request_payload = cast(dict[str, object], payload)
+                prompt = request_payload.get("prompt")
                 if not isinstance(prompt, str) or not prompt.strip():
                     yield finish(_invalid_request())
                     return
@@ -244,6 +250,8 @@ class TollChatRuntime:
                 ) or _looks_like_credential(prompt):
                     yield finish({"response": BLOCKED_MESSAGE, "blocked": True})
                     return
+                if request_payload.get("failure_mode") == _RUNTIME_FAILURE_MODE:
+                    raise DeployedFailureDrill
 
                 if self._agent is None:
                     self._agent = self._agent_factory(

@@ -13,6 +13,7 @@ const MAX_SESSION_SECONDS = 60 * 60;
 const LEASE_SECONDS = 60;
 const COOKIE = "__Host-tollchat-session";
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const DRILL_MODE = "runtime_exception_v1";
 const ALLOWED_ORIGINS = new Set([
   "https://tollchat.ai",
   "https://www.tollchat.ai",
@@ -301,7 +302,14 @@ export async function route(event, dependencies) {
       agentRuntimeArn: runtimeArn,
       runtimeSessionId,
       qualifier: "preview",
-      payload: new TextEncoder().encode(JSON.stringify({ prompt: body.message.trim() })),
+      payload: new TextEncoder().encode(JSON.stringify({
+        prompt: body.message.trim(),
+        ...(event.requestContext?.domainName === "preview.tollchat.ai"
+          && header(event, "origin") === "https://preview.tollchat.ai"
+          && header(event, "x-tollchat-drill") === "runtime-exception-v1"
+          ? { failure_mode: DRILL_MODE }
+          : {}),
+      })),
     }));
     if (!result.contentType?.includes("text/event-stream") || !result.response?.[Symbol.asyncIterator]) throw new Error("invalid upstream response");
     return {

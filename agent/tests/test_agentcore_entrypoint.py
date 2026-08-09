@@ -491,3 +491,43 @@ def test_runtime_returns_a_safe_error_for_agent_failures(caplog):
     assert "secret internal failure" not in str(result)
     assert "secret internal failure" not in caplog.text
     assert "RuntimeError" in caplog.text
+
+
+def test_deployed_failure_drill_preserves_the_session_for_recovery(caplog):
+    builds: list[dict[str, object]] = []
+    guardrail = FakeGuardrail()
+    agent = FakeAgent()
+    app = TollChatRuntime(
+        lambda **kwargs: builds.append(kwargs) or agent,
+        guardrail,
+    )
+
+    failed = response(
+        app,
+        {
+            "prompt": "failure marker verify-deployed-runtime",
+            "failure_mode": "runtime_exception_v1",
+        },
+    )
+    recovered = response(app, {"prompt": "Price my trip"})
+
+    assert failed == {
+        "error": {
+            "code": "agent_unavailable",
+            "message": "TollChat could not complete that request. Please try again.",
+        }
+    }
+    assert recovered == {
+        "response": f"The toll is $4.25.\n\n{DISCLAIMER}",
+        "blocked": False,
+    }
+    assert guardrail.calls == [
+        ("INPUT", "failure marker verify-deployed-runtime"),
+        ("INPUT", "Price my trip"),
+        ("OUTPUT", "The toll is $4.25."),
+    ]
+    assert len(builds) == 1
+    assert agent.prompts == ["Price my trip"]
+    assert app._turns == 1
+    assert "DeployedFailureDrill" in caplog.text
+    assert "runtime_exception_v1" not in caplog.text
