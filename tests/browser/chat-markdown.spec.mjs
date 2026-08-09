@@ -457,6 +457,42 @@ test("shared coverage map stays interactive publicly and direction-aware private
   await expect(page.locator("#map-detail")).toContainText("Coverage break");
 });
 
+test("private 95/395 geometry stops at the Van Dorn ramp", async ({ page }) => {
+  await page.goto("/preview.html");
+  const geometry = await page.evaluate(async () => {
+    const { coveragePins, routeData, routeDataForMode } = await import("/assets/coverage-map-v1.mjs?v=2");
+    const i95Lines = (data) => data.features.find(
+      (feature) => feature.properties.facility === "i95"
+    ).geometry.coordinates;
+    const eastOfVanDorn = (line) => line.every(
+      ([longitude, latitude]) => longitude > -77.1 && latitude < 38.81
+    );
+    const publicLines = i95Lines(routeData);
+    const previewData = routeDataForMode("preview");
+    const previewLines = i95Lines(previewData);
+
+    return {
+      publicUnchanged: routeDataForMode("interactive") === routeData,
+      publicEastFragments: publicLines.filter(eastOfVanDorn).length,
+      previewEastFragments: previewLines.filter(eastOfVanDorn).length,
+      publicLineCount: publicLines.length,
+      previewLineCount: previewLines.length,
+      previewStarts: previewLines.map(([start]) => start),
+      hasVanDornPin: coveragePins.some(
+        (pin) => pin.label === "I-495/I-95 Near Van Dorn Street"
+      ),
+    };
+  });
+
+  expect(geometry.publicUnchanged).toBe(true);
+  expect(geometry.publicEastFragments).toBe(8);
+  expect(geometry.previewEastFragments).toBe(0);
+  expect(geometry.previewLineCount).toBe(geometry.publicLineCount - 8);
+  expect(geometry.previewStarts).toContainEqual([-77.153219, 38.793384]);
+  expect(geometry.previewStarts).toContainEqual([-77.154508, 38.793504]);
+  expect(geometry.hasVanDornPin).toBe(true);
+});
+
 test("private preview stacks map before transcript on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/preview.html");
