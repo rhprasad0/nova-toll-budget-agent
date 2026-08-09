@@ -60,18 +60,18 @@ receives model, tool, database, provider, or infrastructure details.
 
 ## [Gate 2 - Session ownership](https://github.com/rhprasad0/nova-toll-budget-agent/issues/123)
 
-- [ ] Complete [#108](https://github.com/rhprasad0/nova-toll-budget-agent/issues/108):
+- [x] Complete [#108](https://github.com/rhprasad0/nova-toll-budget-agent/issues/108):
       issue the anonymous session credential from the backend instead of
       accepting a browser-created UUID as proof of ownership.
-- [ ] Bind chat and reset requests to that credential, with secure expiry and
+- [x] Bind chat and reset requests to that credential, with secure expiry and
       rotation matching the AgentCore session lifecycle. For an anonymous beta,
       prefer an `HttpOnly`, `Secure`, `SameSite` cookie and reject cross-site
       state-changing requests.
-- [ ] Prove that browser-supplied or guessed runtime IDs, cross-site requests,
+- [x] Prove that browser-supplied or guessed runtime IDs, cross-site requests,
       and credentials invalidated by reset or expiry cannot continue or reset
       another session. Do not claim an ordinary bearer cookie resists deliberate
       token copying.
-- [ ] Do not add user accounts unless beta evidence or an approved privacy
+- [x] Do not add user accounts unless beta evidence or an approved privacy
       requirement makes them necessary.
 
 ## [Gate 3 - Trace policy, terms, and user notice](https://github.com/rhprasad0/nova-toll-budget-agent/issues/124)

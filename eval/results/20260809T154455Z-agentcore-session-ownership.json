@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-08-09T15:44:55.088116Z",
+  "issues": [108, 123],
+  "status": "passed",
+  "implementation_commit": "408bdf7a6e1c8d6d3f94b2c864a734074dd552d6",
+  "agent_runtime_version": "19",
+  "scenario": "Anonymous browser credential ownership, expiry, rejection, reset, and runtime isolation",
+  "evidence_type": "Metadata-only automated and live session-ownership verification",
+  "automated_checks": {
+    "proxy_tests_passed": 21,
+    "python_tests_passed": 34,
+    "focused_browser_tests_passed": 6,
+    "backend_issued_secure_cookie": true,
+    "browser_runtime_id_rejected": true,
+    "cross_site_state_change_rejected": true,
+    "unknown_duplicate_and_revoked_credentials_rejected": true,
+    "idle_and_absolute_expiry_enforced": true,
+    "expired_browser_session_recovers_safely": true,
+    "cross_tab_ownership_rotates_safely": true
+  },
+  "live_checks": {
+    "interleaved_browser_sessions": 2,
+    "session_a_pre_reset_agent_invocations": 5,
+    "session_a_turn_limit_invocations": 1,
+    "session_a_post_reset_agent_invocations": 1,
+    "session_b_agent_invocations": 3,
+    "runtime_streams_disjoint": true,
+    "turn_budget_isolated": true,
+    "reset_isolated": true,
+    "reset_rotated_runtime": true
+  },
+  "notes": "Raw responses, cookies, prompts, trace records, session identifiers, runtime identifiers, and log-stream identifiers were used only in memory and were not curated. A copied cookie remains a bearer credential until reset or expiry, as documented in the privacy notice."
+}
