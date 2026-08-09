@@ -257,7 +257,7 @@ test("private preview presents the open beta and its source limitations", async 
   await expect(page.getByText("Open beta · AI toll assistant", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Plan with the tolls we know." })).toBeVisible();
   await expect(page.locator("header .lede")).toHaveText(
-    "TollChat shows what supported Northern Virginia toll trips cost at specific recorded times—real observations to inform your planning, not predictions of what you’ll pay."
+    "TollChat shows what supported Northern Virginia toll trips cost at specific recorded times - real observations to inform your planning, not predictions of what you’ll pay."
   );
 
   await expect(page.locator("header").getByRole("link", { name: "TollChat CI status" })).toHaveCount(0);
