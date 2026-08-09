@@ -204,6 +204,52 @@ test("an expired cookie is a successful page-load rotation", async ({ page }) =>
   await expect(page.locator("#message")).toBeEnabled();
 });
 
+test("an expired cookie is a successful user reset", async ({ page }) => {
+  await page.route("**/api/config", (route) =>
+    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
+  );
+  let publicResets = 0;
+  await page.route("**/api/reset", (route) => {
+    publicResets += 1;
+    return publicResets === 1
+      ? route.fulfill({ json: { ok: true } })
+      : route.fulfill({
+          status: 401,
+          json: { error: { code: "session_expired", message: "Your chat expired." } },
+        });
+  });
+  await page.goto("/");
+  await page.locator("#chat-messages").evaluate((node) => {
+    const turn = document.createElement("p");
+    turn.className = "chat-message user";
+    turn.textContent = "clear me";
+    node.append(turn);
+  });
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator(".chat-message.user")).toHaveCount(0);
+  await expect(page.locator(".chat-message.agent")).toHaveText("Where are you entering and exiting?");
+
+  let privateResets = 0;
+  await page.route("**/api/reset", (route) => {
+    privateResets += 1;
+    return privateResets === 1
+      ? route.fulfill({ json: { ok: true } })
+      : route.fulfill({
+          status: 401,
+          json: { error: { code: "session_expired", message: "Your chat expired." } },
+        });
+  });
+  await page.goto("/preview.html");
+  await page.locator("#transcript").evaluate((node) => {
+    const turn = document.createElement("p");
+    turn.className = "user-turn";
+    turn.textContent = "clear me";
+    node.append(turn);
+  });
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator("#transcript")).toBeEmpty();
+});
+
 test("hostile Markdown stays inert while HTTPS links remain accessible", async ({ page }) => {
   await enableChat(page, `# Safety
 

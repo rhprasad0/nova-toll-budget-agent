@@ -208,9 +208,11 @@ function start() {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        const error = new Error(data.error?.message || "request failed");
-        error.code = data.error?.code;
-        throw error;
+        if (data.error?.code !== "session_expired") {
+          const error = new Error(data.error?.message || "request failed");
+          error.code = data.error?.code;
+          throw error;
+        }
       }
       transcript.replaceChildren();
     } catch (error) {

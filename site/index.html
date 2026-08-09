@@ -350,11 +350,13 @@ mountCoverageMap({ mode: "interactive" });
     let resetError = "";
     try {
       await request("/api/reset", {});
-      messages.replaceChildren();
-      addMessage("Where are you entering and exiting?");
     } catch (error) {
-      resetError = error.message;
+      if (error.code !== "session_expired") resetError = error.message;
     } finally {
+      if (!resetError) {
+        messages.replaceChildren();
+        addMessage("Where are you entering and exiting?");
+      }
       setBusy(false);
       status.textContent = resetError;
       input.focus();
