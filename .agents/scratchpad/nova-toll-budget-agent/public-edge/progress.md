@@ -20,3 +20,9 @@
   `npm ci` dependencies before behavior can execute.
 - GREEN: 377 non-live Python tests and eight Node tests pass; Pyright, Ruff,
   Terraform validation, Gitleaks, and dedicated-role IAM simulations pass.
+- RED: adversarial browser tests showed public POSTs omitted Lambda OAC's body
+  hash and the public client could not consume the proxy's NDJSON stream.
+- GREEN: public chat/reset hash their exact request payloads, chat parses tool
+  and terminal NDJSON events, and focused Playwright coverage passes.
+- REVIEW: the adversarial follow-up found both P1 fixes complete with no
+  remaining actionable findings.

@@ -21,3 +21,9 @@
 5. Run focused tests, formatting, type checks, full non-live tests, Terraform
    validation, pre-commit checks, and gitleaks.
 6. Commit locally; do not push or open a PR.
+
+## Adversarial follow-up
+
+- Public POST requests hash the exact serialized body for Lambda OAC signing.
+- Public chat consumes both tool-plus-answer and answer-only NDJSON streams.
+- Browser regression coverage verifies both client contracts.

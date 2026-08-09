@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createHash } from "node:crypto";
 
 const answer = `## Route and fares
 
@@ -24,19 +25,37 @@ const answer = `## Route and fares
 
 *Estimate only.*`;
 
-const enableChat = async (page, assistantAnswer = answer) => {
+const enableChat = async (page, assistantAnswer = answer, includeTool = true) => {
+  const requests = [];
   await page.route("**/api/config", (route) =>
     route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
   );
-  await page.route("**/api/chat", (route) =>
-    route.fulfill({ json: { answer: assistantAnswer } })
-  );
+  const recordRequest = (route) => {
+    const payload = route.request().postData();
+    requests.push({ payload, hash: route.request().headers()["x-amz-content-sha256"] });
+  };
+  await page.route("**/api/chat", (route) => {
+    recordRequest(route);
+    const events = [
+      ...(includeTool ? [{ type: "tool", index: 0, label: "Checking tolls", status: "completed" }] : []),
+      { type: "answer", text: assistantAnswer, blocked: false },
+    ];
+    return route.fulfill({
+      contentType: "application/x-ndjson",
+      body: `${events.map(JSON.stringify).join("\n")}\n`,
+    });
+  });
+  await page.route("**/api/reset", (route) => {
+    recordRequest(route);
+    return route.fulfill({ json: { ok: true } });
+  });
   await page.goto("/");
   await expect(page.locator("#tollchat-chat")).toBeVisible();
+  return requests;
 };
 
-test("renders assistant Markdown and keeps user input literal", async ({ page }) => {
-  await enableChat(page);
+test("renders streamed assistant Markdown and signs public POST bodies", async ({ page }) => {
+  const requests = await enableChat(page);
   await page.locator("#chat-input").fill("**Dumfries** <img src=x onerror=alert(1)>");
   await page.locator("#chat-form").getByRole("button", { name: "Send" }).click();
 
@@ -52,6 +71,12 @@ test("renders assistant Markdown and keeps user input literal", async ({ page })
   await expect(assistant.locator("blockquote")).toHaveText("Estimates can change.");
   await expect(assistant.locator("hr")).toHaveCount(1);
   await expect(assistant.locator("em")).toHaveText("Estimate only.");
+
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  for (const request of requests) {
+    expect(request.hash).toBe(createHash("sha256").update(request.payload).digest("hex"));
+  }
 });
 
 test("hostile Markdown stays inert while HTTPS links remain accessible", async ({ page }) => {
@@ -78,7 +103,7 @@ test("hostile Markdown stays inert while HTTPS links remain accessible", async (
 
 \`\`\`text
 ${"x".repeat(300)}
-\`\`\``);
+\`\`\``, false);
   await page.locator("#chat-input").fill("test");
   await page.locator("#chat-form").getByRole("button", { name: "Send" }).click();
 
