@@ -21,6 +21,40 @@ confirmed, treat it as a **soft provider-spend warning**, not a hard cutoff. On
 receipt, review provider usage and disable the public WAF route if spend is
 unexpected; never claim that an AWS Budget controls OpenAI billing.
 
+## Private load baseline and rollout limits
+
+The 2026-08-09 private ceiling test ran five browser sessions for three requests
+each while both feeds fetched and loaded. One validated alarm-recovery canary was
+still active, so the observed AgentCore peak of six comprises that canary plus
+the five load workers.
+
+| Signal | Observed ceiling baseline | Rollout pause threshold |
+| :-- | --: | --: |
+| Client p99 latency | 15.47 seconds | 45 seconds |
+| Proxy p99 duration | 15.19 seconds | 45 seconds |
+| AgentCore active sessions | 6 | 10 |
+| RDS CPU | 5.43% | 70% |
+| RDS freeable memory | 83.16 MiB minimum | 64 MiB minimum |
+| RDS connections | 0 sampled | 60 |
+| RDS CPU credits | 288 minimum | 72 minimum |
+| RDS read/write latency | 0.75 / 0.18 ms maximum | Baseline comparison only |
+| RDS disk queue depth | 0.011 maximum | Baseline comparison only |
+| Proxy, AgentCore, fetcher, and loader failures | 0 | Any failure |
+
+Keep proxy reserved concurrency at **5** for the initial rollout. Pause expansion
+on any alarm or threshold breach, and do not raise concurrency until a new
+private test at the proposed ceiling passes the same gates. The baseline does
+not justify an RDS resize; reassess through issue #95 only if later evidence
+shows sustained pressure.
+
+Run the repeatable check from an approved Tailscale client and curate its output
+only when it exits successfully:
+
+```bash
+PREVIEW_URL=https://preview.tollchat.ai/ \
+  uv run --frozen python scripts/load_test_private.py
+```
+
 ## Delivery verification
 
 Run `scripts/smoke.sh` to require a confirmed email subscription, publish a
