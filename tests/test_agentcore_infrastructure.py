@@ -405,3 +405,24 @@ def test_public_waf_has_only_the_bounded_metrics_only_controls():
     assert "sampled_requests_enabled   = false" in waf
     assert "managed_rule_group_statement" not in waf
     assert "aws_wafv2_web_acl_logging_configuration" not in site
+
+
+def test_proxy_session_store_is_private_ephemeral_and_least_privilege():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+
+    assert 'resource "aws_dynamodb_table" "tollchat_sessions"' in agentcore
+    assert 'billing_mode = "PAY_PER_REQUEST"' in agentcore
+    assert 'hash_key     = "credential_hash"' in agentcore
+    assert 'attribute_name = "expires_at"' in agentcore
+    assert 'resource "aws_vpc_endpoint" "dynamodb"' in agentcore
+    assert 'vpc_endpoint_type = "Gateway"' in agentcore
+    assert "prefix_list_id    = data.aws_prefix_list.dynamodb.id" in agentcore
+    proxy_policy = agentcore.split(
+        'data "aws_iam_policy_document" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "tollchat_proxy"', maxsplit=1)[0]
+    assert '"dynamodb:PutItem"' in proxy_policy
+    assert '"dynamodb:UpdateItem"' in proxy_policy
+    assert "aws_dynamodb_table.tollchat_sessions.arn" in proxy_policy
+    assert "dynamodb:GetItem" not in proxy_policy
+    assert "SESSION_TABLE_NAME" in agentcore
+    assert "aws_vpc_endpoint.dynamodb" in agentcore

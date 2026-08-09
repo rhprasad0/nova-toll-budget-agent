@@ -75,6 +75,23 @@ test("failed tools expose text and status semantics without removing the compose
   assert.doesNotMatch(view.answer.textContent, /network detail/);
 });
 
+test("session expiry uses the restart path without rendering a generic failure", async () => {
+  const events = [];
+  const expired = [];
+  const error = new Error("Your chat expired. Please send your question again.");
+  error.code = "session_expired";
+
+  await runRequest(
+    async () => { throw error; },
+    (event) => events.push(event),
+    () => {},
+    (value) => expired.push(value),
+  );
+
+  assert.equal(events.length, 0);
+  assert.deepEqual(expired, [error]);
+});
+
 test("NDJSON parser handles split chunks and rejects unknown envelopes", async () => {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

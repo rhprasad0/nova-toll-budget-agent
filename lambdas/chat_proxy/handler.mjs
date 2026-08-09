@@ -1,11 +1,23 @@
 import { readFileSync } from "node:fs";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand,
   StopRuntimeSessionCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
+import { DynamoDBClient, PutItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 
 const MAX_MESSAGE_CHARS = 8_000;
+const IDLE_SECONDS = 15 * 60;
+const MAX_SESSION_SECONDS = 60 * 60;
+const LEASE_SECONDS = 60;
+const COOKIE = "__Host-tollchat-session";
+const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const ALLOWED_ORIGINS = new Set([
+  "https://tollchat.ai",
+  "https://www.tollchat.ai",
+  "https://preview.tollchat.ai",
+]);
 const SAFE_ERROR = {
   type: "error",
   code: "agent_unavailable",
@@ -29,14 +41,26 @@ const ERROR_MESSAGES = new Set([
   "TollChat could not complete that request. Please try again.",
 ]);
 
-const json = (statusCode, value) => ({
+const json = (statusCode, value, headers = {}) => ({
   statusCode,
-  headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers },
   body: JSON.stringify(value),
 });
 
 const invalid = () => json(400, {
-  error: { code: "invalid_request", message: "Provide a valid chat session and message." },
+  error: { code: "invalid_request", message: "Provide a valid message." },
+});
+
+const forbidden = () => json(403, {
+  error: { code: "forbidden", message: "Request not allowed." },
+});
+
+const clearCookie = `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
+const expired = () => json(401, {
+  error: { code: "session_expired", message: "Your chat expired. Please send your question again." },
+}, { "Set-Cookie": clearCookie });
+const busy = () => json(409, {
+  error: { code: "session_busy", message: "Wait for the current response to finish." },
 });
 
 const parseBody = (event) => {
@@ -52,11 +76,115 @@ const parseBody = (event) => {
   }
 };
 
-const validSession = (value) =>
-  typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-
 const exactKeys = (value, keys) =>
   Object.keys(value).sort().join(",") === [...keys].sort().join(",");
+
+const header = (event, name) => Object.entries(event.headers ?? {})
+  .find(([key]) => key.toLowerCase() === name)?.[1];
+
+const validPost = (event) => {
+  const contentType = header(event, "content-type")?.split(";", 1)[0].trim().toLowerCase();
+  return contentType === "application/json"
+    && ALLOWED_ORIGINS.has(header(event, "origin"))
+    && header(event, "sec-fetch-site") === "same-origin";
+};
+
+const credential = (event) => {
+  const values = [];
+  for (const source of [...(event.cookies ?? []), header(event, "cookie") ?? ""].filter(Boolean)) {
+    for (const part of source.split(";")) {
+      const [name, ...raw] = part.trim().split("=");
+      if (name === COOKIE) values.push(raw.join("="));
+    }
+  }
+  if (!values.length) return { kind: "missing" };
+  if (values.length !== 1 || !TOKEN.test(values[0])) return { kind: "invalid" };
+  return { kind: "valid", token: values[0] };
+};
+
+const tokenHash = (token) => createHash("sha256").update(token).digest("hex");
+const sessionCookie = (token) =>
+  `${COOKIE}=${token}; Path=/; Max-Age=${MAX_SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict`;
+
+const conditionalFailure = (error) => error?.name === "ConditionalCheckFailedException";
+
+const createSession = async (dependencies, leaseId) => {
+  const now = Math.floor(dependencies.now() / 1000);
+  const token = dependencies.randomBytes(32).toString("base64url");
+  const runtimeSessionId = dependencies.randomUUID();
+  await dependencies.sessionClient.send(new PutItemCommand({
+    TableName: dependencies.sessionTable,
+    Item: {
+      credential_hash: { S: tokenHash(token) },
+      runtime_session_id: { S: runtimeSessionId },
+      created_at: { N: String(now) },
+      last_seen_at: { N: String(now) },
+      expires_at: { N: String(now + MAX_SESSION_SECONDS) },
+      lease_id: { S: leaseId },
+      lease_until: { N: String(now + LEASE_SECONDS) },
+    },
+    ConditionExpression: "attribute_not_exists(credential_hash)",
+  }));
+  return { runtimeSessionId, token, cookie: sessionCookie(token) };
+};
+
+const updateSession = async (dependencies, token, update, leaseId) => {
+  const now = Math.floor(dependencies.now() / 1000);
+  const acquiring = update === "last_seen_at";
+  try {
+    const result = await dependencies.sessionClient.send(new UpdateItemCommand({
+      TableName: dependencies.sessionTable,
+      Key: { credential_hash: { S: tokenHash(token) } },
+      UpdateExpression: acquiring
+        ? "SET last_seen_at = :now, lease_id = :lease_id, lease_until = :lease_until"
+        : "SET revoked_at = :now",
+      ConditionExpression: [
+        "attribute_exists(credential_hash)",
+        "attribute_not_exists(revoked_at)",
+        "expires_at > :now",
+        "last_seen_at > :idle_cutoff",
+        "(attribute_not_exists(lease_until) OR lease_until <= :now)",
+      ].join(" AND "),
+      ExpressionAttributeValues: {
+        ":now": { N: String(now) },
+        ":idle_cutoff": { N: String(now - IDLE_SECONDS) },
+        ...(acquiring ? {
+          ":lease_id": { S: leaseId },
+          ":lease_until": { N: String(now + LEASE_SECONDS) },
+        } : {}),
+      },
+      ReturnValues: "ALL_NEW",
+      ReturnValuesOnConditionCheckFailure: "ALL_OLD",
+    }));
+    const runtimeSessionId = result.Attributes?.runtime_session_id?.S;
+    if (!runtimeSessionId) throw new Error("session record missing runtime id");
+    return { kind: "ok", runtimeSessionId };
+  } catch (error) {
+    if (conditionalFailure(error)) {
+      const item = error.Item;
+      const activeLease = Number(item?.lease_until?.N) > now;
+      const current = Number(item?.expires_at?.N) > now
+        && Number(item?.last_seen_at?.N) > now - IDLE_SECONDS
+        && !item?.revoked_at;
+      return { kind: current && activeLease ? "busy" : "expired" };
+    }
+    throw error;
+  }
+};
+
+const releaseSession = async (dependencies, token, leaseId) => {
+  try {
+    await dependencies.sessionClient.send(new UpdateItemCommand({
+      TableName: dependencies.sessionTable,
+      Key: { credential_hash: { S: tokenHash(token) } },
+      UpdateExpression: "REMOVE lease_id, lease_until",
+      ConditionExpression: "lease_id = :lease_id",
+      ExpressionAttributeValues: { ":lease_id": { S: leaseId } },
+    }));
+  } catch (error) {
+    if (!conditionalFailure(error)) console.error("Session lease release failed", error?.name ?? "Error");
+  }
+};
 
 const validEvent = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -74,7 +202,7 @@ const validEvent = (value) => {
     && ERROR_CODES.has(value.code) && ERROR_MESSAGES.has(value.message);
 };
 
-async function* ndjsonFromSse(stream) {
+async function* ndjsonFromSse(stream, release = async () => {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   let terminal;
@@ -100,6 +228,8 @@ async function* ndjsonFromSse(stream) {
     yield `${JSON.stringify(terminal)}\n`;
   } catch {
     yield `${JSON.stringify(SAFE_ERROR)}\n`;
+  } finally {
+    await release();
   }
 }
 
@@ -124,36 +254,73 @@ export async function route(event, dependencies) {
   if (method !== "POST" || !["/api/chat", "/api/reset"].includes(path)) {
     return json(404, { error: { code: "not_found" } });
   }
+  if (!validPost(event)) return forbidden();
   const body = parseBody(event);
-  if (!body || !validSession(body.session_id)) return invalid();
+  if (!body || (path === "/api/chat" ? !exactKeys(body, ["message"]) : !exactKeys(body, []))) return invalid();
+  const supplied = credential(event);
+  if (supplied.kind === "invalid") return expired();
+  let cookie;
+  let release = async () => {};
   try {
     if (path === "/api/reset") {
+      if (supplied.kind === "missing") return json(200, { ok: true }, { "Set-Cookie": clearCookie });
+      const session = await updateSession(dependencies, supplied.token, "revoked_at");
+      if (session.kind === "busy") return busy();
+      if (session.kind === "expired") return expired();
+      cookie = clearCookie;
       await client.send(new StopRuntimeSessionCommand({
         agentRuntimeArn: runtimeArn,
-        runtimeSessionId: body.session_id,
+        runtimeSessionId: session.runtimeSessionId,
         qualifier: "preview",
       }));
-      return json(200, { ok: true });
+      return json(200, { ok: true }, { "Set-Cookie": cookie });
     }
     if (typeof body.message !== "string" || !body.message.trim() || body.message.trim().length > MAX_MESSAGE_CHARS) return invalid();
+    let runtimeSessionId;
+    const leaseId = dependencies.randomUUID();
+    let sessionToken;
+    if (supplied.kind === "missing") {
+      const created = await createSession(dependencies, leaseId);
+      runtimeSessionId = created.runtimeSessionId;
+      sessionToken = created.token;
+      cookie = created.cookie;
+    } else {
+      const session = await updateSession(dependencies, supplied.token, "last_seen_at", leaseId);
+      if (session.kind === "busy") return busy();
+      if (session.kind === "expired") return expired();
+      runtimeSessionId = session.runtimeSessionId;
+      sessionToken = supplied.token;
+    }
+    let leaseHeld = true;
+    release = async () => {
+      if (!leaseHeld) return;
+      leaseHeld = false;
+      await releaseSession(dependencies, sessionToken, leaseId);
+    };
     const result = await client.send(new InvokeAgentRuntimeCommand({
       agentRuntimeArn: runtimeArn,
-      runtimeSessionId: body.session_id,
+      runtimeSessionId,
       qualifier: "preview",
       payload: new TextEncoder().encode(JSON.stringify({ prompt: body.message.trim() })),
     }));
     if (!result.contentType?.includes("text/event-stream") || !result.response?.[Symbol.asyncIterator]) throw new Error("invalid upstream response");
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
-      body: ndjsonFromSse(result.response),
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        ...(cookie ? { "Set-Cookie": cookie } : {}),
+      },
+      body: ndjsonFromSse(result.response, release),
     };
   } catch (error) {
     if (path === "/api/reset" && error?.name === "ResourceNotFoundException") {
-      return json(200, { ok: true });
+      return json(200, { ok: true }, { "Set-Cookie": clearCookie });
     }
-    console.error("AgentCore request failed", error?.name ?? "Error");
-    return json(502, { error: SAFE_ERROR });
+    await release();
+    console.error("Chat proxy request failed", error?.name ?? "Error");
+    return json(502, { error: SAFE_ERROR }, cookie ? { "Set-Cookie": cookie } : {});
   }
 }
 
@@ -161,9 +328,15 @@ const client = new BedrockAgentCoreClient({
   region: process.env.AWS_REGION,
   endpoint: process.env.AGENTCORE_VPCE_URL,
 });
+const sessionClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const deployed = Boolean(process.env.AWS_LAMBDA_RUNTIME_API);
 const dependencies = deployed ? {
   client,
+  sessionClient,
+  sessionTable: process.env.SESSION_TABLE_NAME,
+  now: Date.now,
+  randomBytes,
+  randomUUID,
   runtimeArn: process.env.AGENTCORE_RUNTIME_ARN,
   previewHtml: readFileSync(new URL("./preview.html", import.meta.url), "utf8"),
   previewJs: readFileSync(new URL("./preview.mjs", import.meta.url), "utf8"),

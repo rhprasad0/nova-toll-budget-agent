@@ -72,12 +72,13 @@ export async function consumeNdjson(stream, onEvent) {
   if (!terminal) throw new Error("missing terminal event");
 }
 
-export async function runRequest(request, onEvent, setBusy) {
+export async function runRequest(request, onEvent, setBusy, onSessionExpired = () => {}) {
   setBusy(true);
   try {
     await request(onEvent);
-  } catch {
-    onEvent(SAFE_ERROR);
+  } catch (error) {
+    if (error?.code === "session_expired") onSessionExpired(error);
+    else onEvent(SAFE_ERROR);
   } finally {
     setBusy(false);
   }
@@ -106,7 +107,6 @@ function start() {
   const submit = form.querySelector("button");
   const reset = document.querySelector("#reset");
   const transcript = document.querySelector("#transcript");
-  let session = crypto.randomUUID();
   import("./assets/coverage-map-v1.mjs?v=2")
     .then(({ mountCoverageMap }) => mountCoverageMap({ mode: "preview" }))
     .catch(() => {
@@ -119,6 +119,48 @@ function start() {
     reset.disabled = busy;
     form.setAttribute("aria-busy", String(busy));
   };
+  if (!navigator.locks) {
+    setBusy(true);
+    const view = newTurn(transcript);
+    applyEvent(view, {
+      type: "error",
+      code: "unsupported_browser",
+      message: "This browser cannot securely open TollChat.",
+    });
+  } else {
+    setBusy(true);
+    void navigator.locks.request("tollchat-active-session", { ifAvailable: true }, async (lock) => {
+      if (!lock) {
+        const view = newTurn(transcript);
+        applyEvent(view, {
+          type: "error",
+          code: "session_busy",
+          message: "TollChat is open in another tab.",
+        });
+        return;
+      }
+      const response = await fetch("/api/reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }).catch(() => null);
+      if (!response?.ok) {
+        const data = response ? await response.json().catch(() => ({})) : {};
+        if (data?.error?.code !== "session_expired") {
+          const view = newTurn(transcript);
+          applyEvent(view, {
+            type: "error",
+            code: data?.error?.code || "agent_unavailable",
+            message: data?.error?.message || SAFE_ERROR.message,
+          });
+          return;
+        }
+      }
+      transcript.replaceChildren();
+      setBusy(false);
+      await new Promise(() => {});
+    });
+  }
 
   input.addEventListener("keydown", (event) => {
     if (!shouldSubmitOnEnter(event, form.getAttribute("aria-busy") === "true")) return;
@@ -140,24 +182,47 @@ function start() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session_id: session, message }),
+        body: JSON.stringify({ message }),
       });
-      if (!response.ok || !response.body) throw new Error("request failed");
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
+        const error = new Error(data.error?.message || "request failed");
+        error.code = data.error?.code;
+        throw error;
+      }
       await consumeNdjson(response.body, onEvent);
-    }, (item) => applyEvent(view, item), setBusy);
+    }, (item) => applyEvent(view, item), setBusy, (error) => {
+      transcript.replaceChildren();
+      const expiredView = newTurn(transcript);
+      applyEvent(expiredView, { type: "error", code: error.code, message: error.message });
+    });
   });
 
   reset.addEventListener("click", async () => {
     setBusy(true);
     try {
-      await fetch("/api/reset", {
+      const response = await fetch("/api/reset", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session_id: session }),
-      }).catch(() => {});
-    } finally {
-      session = crypto.randomUUID();
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        if (data.error?.code !== "session_expired") {
+          const error = new Error(data.error?.message || "request failed");
+          error.code = data.error?.code;
+          throw error;
+        }
+      }
       transcript.replaceChildren();
+    } catch (error) {
+      const view = newTurn(transcript);
+      applyEvent(view, {
+        type: "error",
+        code: error.code || "agent_unavailable",
+        message: error.message || SAFE_ERROR.message,
+      });
+    } finally {
       setBusy(false);
       input.focus();
     }

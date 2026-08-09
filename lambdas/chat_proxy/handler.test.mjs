@@ -4,12 +4,28 @@ import test from "node:test";
 import { route } from "./handler.mjs";
 
 const sessionId = "9fd83bc2-6d8b-4d85-b270-f49aa73e41b4";
+const sessionToken = "a".repeat(43);
+const sessionDependencies = {
+  sessionClient: { async send() {
+    return { Attributes: { runtime_session_id: { S: sessionId } } };
+  } },
+  sessionTable: "sessions",
+  now: () => 1_700_000_000_000,
+  randomBytes: () => Buffer.alloc(32, 7),
+  randomUUID: () => sessionId,
+};
 
 const event = (method, path, body) => ({
   httpMethod: method,
   path,
   body: body === undefined ? null : JSON.stringify(body),
   isBase64Encoded: false,
+  headers: {
+    "content-type": "application/json",
+    origin: "https://preview.tollchat.ai",
+    "sec-fetch-site": "same-origin",
+    cookie: `__Host-tollchat-session=${sessionToken}`,
+  },
 });
 
 const functionUrlEvent = (method, path, body) => ({
@@ -17,6 +33,22 @@ const functionUrlEvent = (method, path, body) => ({
   rawPath: path,
   body: body === undefined ? null : JSON.stringify(body),
   isBase64Encoded: false,
+  headers: {
+    "content-type": "application/json",
+    origin: "https://tollchat.ai",
+    "sec-fetch-site": "same-origin",
+    cookie: `__Host-tollchat-session=${sessionToken}`,
+  },
+});
+
+const browserEvent = (method, path, body, cookie) => ({
+  ...functionUrlEvent(method, path, body),
+  headers: {
+    "content-type": "application/json",
+    origin: "https://tollchat.ai",
+    "sec-fetch-site": "same-origin",
+    ...(cookie ? { cookie } : {}),
+  },
 });
 
 const chunks = async function* (...values) {
@@ -49,10 +81,9 @@ test("chat forwards validated AgentCore SSE as ordered NDJSON", async () => {
 
   const response = await route(
     event("POST", "/api/chat", {
-      session_id: sessionId,
       message: "  Price Dumfries to Westpark  ",
     }),
-    { client, runtimeArn: "runtime-arn", previewHtml: "<html></html>" },
+    { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "<html></html>" },
   );
 
   assert.equal(response.statusCode, 200);
@@ -91,8 +122,8 @@ test("chat replaces malformed or internal upstream data with a safe error", asyn
   };
 
   const response = await route(
-    event("POST", "/api/chat", { session_id: sessionId, message: "hello" }),
-    { client, runtimeArn: "runtime-arn", previewHtml: "" },
+    event("POST", "/api/chat", { message: "hello" }),
+    { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
   );
   const body = await bodyText(response.body);
 
@@ -110,8 +141,8 @@ test("chat requires exactly one terminal upstream event", async () => {
   for (const response of [chunks(tool), chunks(terminal, tool)]) {
     const client = { async send() { return { contentType: "text/event-stream", response }; } };
     const result = await route(
-      event("POST", "/api/chat", { session_id: sessionId, message: "hello" }),
-      { client, runtimeArn: "runtime-arn", previewHtml: "" },
+      event("POST", "/api/chat", { message: "hello" }),
+      { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
     );
     const body = await bodyText(result.body);
 
@@ -124,6 +155,7 @@ test("chat requires exactly one terminal upstream event", async () => {
 test("validation, page, config, and reset keep their small contracts", async () => {
   const calls = [];
   const dependencies = {
+    ...sessionDependencies,
     client: { async send(command) { calls.push(command.input); return {}; } },
     runtimeArn: "runtime-arn",
     previewHtml: "<!doctype html><title>TollChat preview</title>",
@@ -163,7 +195,7 @@ test("validation, page, config, and reset keep their small contracts", async () 
     400,
   );
   assert.equal(
-    (await route(event("POST", "/api/reset", { session_id: sessionId }), dependencies)).statusCode,
+    (await route(event("POST", "/api/reset", {}), dependencies)).statusCode,
     200,
   );
   assert.deepEqual(calls, [
@@ -178,8 +210,8 @@ test("validation, page, config, and reset keep their small contracts", async () 
 test("AgentCore invocation failures return no internal detail", async () => {
   const client = { async send() { throw new Error("credential-shaped detail"); } };
   const response = await route(
-    event("POST", "/api/chat", { session_id: sessionId, message: "hello" }),
-    { client, runtimeArn: "runtime-arn", previewHtml: "" },
+    event("POST", "/api/chat", { message: "hello" }),
+    { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
   );
 
   assert.equal(response.statusCode, 502);
@@ -195,8 +227,8 @@ test("reset is idempotent when its runtime session does not exist", async () => 
     throw error;
   } };
   const response = await route(
-    event("POST", "/api/reset", { session_id: sessionId }),
-    { client, runtimeArn: "runtime-arn", previewHtml: "" },
+    event("POST", "/api/reset", {}),
+    { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
   );
 
   assert.equal(response.statusCode, 200);
@@ -206,6 +238,7 @@ test("reset is idempotent when its runtime session does not exist", async () => 
 test("Lambda Function URL events keep the existing API contract", async () => {
   const calls = [];
   const dependencies = {
+    ...sessionDependencies,
     client: { async send(command) { calls.push(command.input); return {}; } },
     runtimeArn: "runtime-arn",
     previewHtml: "",
@@ -220,7 +253,7 @@ test("Lambda Function URL events keep the existing API contract", async () => {
   });
 
   const reset = await route(
-    functionUrlEvent("POST", "/api/reset", { session_id: sessionId }),
+    functionUrlEvent("POST", "/api/reset", {}),
     dependencies,
   );
   assert.equal(reset.statusCode, 200);
@@ -229,4 +262,240 @@ test("Lambda Function URL events keep the existing API contract", async () => {
     runtimeSessionId: sessionId,
     qualifier: "preview",
   }]);
+});
+
+test("first chat creates a backend-owned session and sets a secure cookie", async () => {
+  const calls = [];
+  const dependencies = {
+    client: { async send(command) {
+      calls.push([command.constructor.name, command.input]);
+      return command.constructor.name === "InvokeAgentRuntimeCommand"
+        ? {
+            contentType: "text/event-stream",
+            response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+          }
+        : {};
+    } },
+    sessionClient: { async send(command) { calls.push([command.constructor.name, command.input]); return {}; } },
+    sessionTable: "sessions",
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+    now: () => 1_700_000_000_000,
+    randomBytes: () => Buffer.alloc(32, 7),
+    randomUUID: () => sessionId,
+  };
+
+  const response = await route(browserEvent("POST", "/api/chat", { message: "hello" }), dependencies);
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["Set-Cookie"], /^__Host-tollchat-session=/);
+  for (const attribute of ["Path=/", "Max-Age=3600", "HttpOnly", "Secure", "SameSite=Strict"]) {
+    assert.match(response.headers["Set-Cookie"], new RegExp(attribute));
+  }
+  assert.equal(calls[0][0], "PutItemCommand");
+  assert.equal(calls[1][0], "InvokeAgentRuntimeCommand");
+  assert.equal(calls[1][1].runtimeSessionId, sessionId);
+});
+
+test("browser-selected runtime IDs and cross-site posts are rejected before dependencies", async () => {
+  const dependencies = {
+    client: { async send() { assert.fail("AgentCore must not be called"); } },
+    sessionClient: { async send() { assert.fail("DynamoDB must not be called"); } },
+    sessionTable: "sessions",
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+  const supplied = await route(
+    browserEvent("POST", "/api/chat", { session_id: sessionId, message: "hello" }),
+    dependencies,
+  );
+  assert.equal(supplied.statusCode, 400);
+
+  const crossSite = browserEvent("POST", "/api/chat", { message: "hello" });
+  crossSite.headers.origin = "https://evil.example";
+  crossSite.headers["sec-fetch-site"] = "cross-site";
+  assert.equal((await route(crossSite, dependencies)).statusCode, 403);
+});
+
+test("unknown, duplicate, and revoked credentials fail alike without invoking AgentCore", async () => {
+  const conditional = new Error("not found");
+  conditional.name = "ConditionalCheckFailedException";
+  const dependencies = {
+    ...sessionDependencies,
+    client: { async send() { assert.fail("AgentCore must not be called"); } },
+    sessionClient: { async send() { throw conditional; } },
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+
+  for (const request of [
+    browserEvent("POST", "/api/chat", { message: "hello" }, `__Host-tollchat-session=${sessionToken}`),
+    browserEvent("POST", "/api/reset", {}, `__Host-tollchat-session=${sessionToken}`),
+  ]) {
+    const response = await route(request, dependencies);
+    assert.equal(response.statusCode, 401);
+    assert.equal(JSON.parse(response.body).error.code, "session_expired");
+    assert.match(response.headers["Set-Cookie"], /Max-Age=0/);
+  }
+
+  const duplicate = browserEvent(
+    "POST",
+    "/api/chat",
+    { message: "hello" },
+    `__Host-tollchat-session=${sessionToken}; __Host-tollchat-session=${"b".repeat(43)}`,
+  );
+  assert.equal((await route(duplicate, dependencies)).statusCode, 401);
+});
+
+test("reset revokes before stopping and a stop failure leaves the cookie cleared", async () => {
+  const calls = [];
+  const dependencies = {
+    ...sessionDependencies,
+    sessionClient: { async send(command) {
+      calls.push(command.constructor.name);
+      return { Attributes: { runtime_session_id: { S: sessionId } } };
+    } },
+    client: { async send(command) {
+      calls.push(command.constructor.name);
+      throw new Error("upstream failed");
+    } },
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+
+  const response = await route(browserEvent(
+    "POST",
+    "/api/reset",
+    {},
+    `__Host-tollchat-session=${sessionToken}`,
+  ), dependencies);
+
+  assert.deepEqual(calls, ["UpdateItemCommand", "StopRuntimeSessionCommand"]);
+  assert.equal(response.statusCode, 502);
+  assert.match(response.headers["Set-Cookie"], /Max-Age=0/);
+});
+
+test("conditional session updates enforce idle, absolute expiry, and revocation", async () => {
+  const updates = [];
+  const dependencies = {
+    ...sessionDependencies,
+    sessionClient: { async send(command) {
+      updates.push(command.input);
+      return { Attributes: { runtime_session_id: { S: sessionId } } };
+    } },
+    client: { async send() {
+      return {
+        contentType: "text/event-stream",
+        response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+      };
+    } },
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+
+  const response = await route(browserEvent(
+    "POST",
+    "/api/chat",
+    { message: "hello" },
+    `__Host-tollchat-session=${sessionToken}`,
+  ), dependencies);
+  await bodyText(response.body);
+
+  const update = updates[0];
+  assert.match(update.ConditionExpression, /attribute_not_exists\(revoked_at\)/);
+  assert.match(update.ConditionExpression, /expires_at > :now/);
+  assert.match(update.ConditionExpression, /last_seen_at > :idle_cutoff/);
+  assert.match(update.ConditionExpression, /attribute_not_exists\(lease_until\)/);
+  assert.match(update.UpdateExpression, /lease_id = :lease_id/);
+  assert.equal(update.ExpressionAttributeValues[":idle_cutoff"].N, "1699999100");
+  assert.equal(updates[1].UpdateExpression, "REMOVE lease_id, lease_until");
+});
+
+test("a newly-created credential survives an AgentCore failure for safe retry", async () => {
+  const dependencies = {
+    ...sessionDependencies,
+    sessionClient: { async send() { return {}; } },
+    client: { async send() { throw new Error("unavailable"); } },
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+  const response = await route(browserEvent("POST", "/api/chat", { message: "hello" }), dependencies);
+
+  assert.equal(response.statusCode, 502);
+  assert.match(response.headers["Set-Cookie"], /^__Host-tollchat-session=/);
+  assert.doesNotMatch(response.body, /unavailable$/);
+});
+
+test("reset cannot succeed between chat authorization and invocation", async () => {
+  let leaseHeld = false;
+  let continueInvoke;
+  let invocationStarted;
+  const started = new Promise((resolve) => { invocationStarted = resolve; });
+  const sessionClient = { async send(command) {
+    if (command.input.UpdateExpression?.startsWith("SET last_seen_at")) {
+      leaseHeld = true;
+      return { Attributes: { runtime_session_id: { S: sessionId } } };
+    }
+    if (command.input.UpdateExpression === "REMOVE lease_id, lease_until") {
+      leaseHeld = false;
+      return {};
+    }
+    if (leaseHeld) {
+      const error = new Error("leased");
+      error.name = "ConditionalCheckFailedException";
+      error.Item = {
+        runtime_session_id: { S: sessionId },
+        expires_at: { N: "1700003600" },
+        last_seen_at: { N: "1700000000" },
+        lease_until: { N: "1700000060" },
+      };
+      throw error;
+    }
+    return { Attributes: { runtime_session_id: { S: sessionId } } };
+  } };
+  const client = { async send(command) {
+    if (command.constructor.name === "InvokeAgentRuntimeCommand") {
+      invocationStarted();
+      await new Promise((resolve) => { continueInvoke = resolve; });
+      return {
+        contentType: "text/event-stream",
+        response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+      };
+    }
+    return {};
+  } };
+  const dependencies = {
+    ...sessionDependencies,
+    sessionClient,
+    client,
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+
+  const chat = route(browserEvent(
+    "POST",
+    "/api/chat",
+    { message: "hello" },
+    `__Host-tollchat-session=${sessionToken}`,
+  ), dependencies);
+  await started;
+  const racedReset = await route(browserEvent(
+    "POST",
+    "/api/reset",
+    {},
+    `__Host-tollchat-session=${sessionToken}`,
+  ), dependencies);
+
+  assert.equal(racedReset.statusCode, 409);
+  assert.equal(JSON.parse(racedReset.body).error.code, "session_busy");
+  continueInvoke();
+  const chatResponse = await chat;
+  await bodyText(chatResponse.body);
+  assert.equal(leaseHeld, false);
+  assert.equal((await route(browserEvent(
+    "POST",
+    "/api/reset",
+    {},
+    `__Host-tollchat-session=${sessionToken}`,
+  ), dependencies)).statusCode, 200);
 });

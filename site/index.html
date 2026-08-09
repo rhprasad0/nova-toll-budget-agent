@@ -219,16 +219,15 @@ mountCoverageMap({ mode: "interactive" });
   const preview = new URLSearchParams(location.search).has("preview");
   const apiBase = preview ? "https://preview.tollchat.ai" : "";
   let renderAssistantMarkdown;
-  let sessionId = sessionStorage.getItem("tollchat-session") || crypto.randomUUID();
-  sessionStorage.setItem("tollchat-session", sessionId);
-
   const bodyHash = async (body) => Array.from(
     new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))),
     (byte) => byte.toString(16).padStart(2, "0")
   ).join("");
   const responseError = async (response) => {
     const data = await response.json().catch(() => ({}));
-    return new Error(data.error?.message || "TollChat is unavailable.");
+    const error = new Error(data.error?.message || "TollChat is unavailable.");
+    error.code = data.error?.code;
+    return error;
   };
   const readChat = async (response) => {
     if (!response.body) throw new Error("TollChat is unavailable.");
@@ -292,8 +291,32 @@ mountCoverageMap({ mode: "interactive" });
   configRequest.then((response) => response.ok ? response.json() : Promise.reject())
     .then(async (config) => {
       if (!config.chatEnabled) return;
-      ({ renderAssistantMarkdown } = await import("/assets/chat-markdown-v1.mjs"));
-      chat.hidden = false;
+      const activate = async () => {
+        ({ renderAssistantMarkdown } = await import("/assets/chat-markdown-v1.mjs"));
+        chat.hidden = false;
+      };
+      const unavailable = (message) => {
+        chat.hidden = false;
+        setBusy(true);
+        status.textContent = message;
+      };
+      if (!navigator.locks) return unavailable("This browser cannot securely open TollChat.");
+      void navigator.locks.request("tollchat-active-session", { ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          unavailable("TollChat is open in another tab.");
+          return;
+        }
+        try {
+          await request("/api/reset", {});
+        } catch (error) {
+          if (error.code !== "session_expired") {
+            unavailable(error.message);
+            return;
+          }
+        }
+        await activate();
+        await new Promise(() => {});
+      });
     })
     .catch(() => {});
 
@@ -306,10 +329,15 @@ mountCoverageMap({ mode: "interactive" });
     setBusy(true);
     let errorMessage = "";
     try {
-      const answer = await request("/api/chat", { session_id: sessionId, message });
+      const answer = await request("/api/chat", { message });
       addMessage(answer);
     } catch (error) {
-      errorMessage = error.message;
+      if (error.code === "session_expired") {
+        messages.replaceChildren();
+        addMessage(error.message);
+      } else {
+        errorMessage = error.message;
+      }
     } finally {
       setBusy(false);
       status.textContent = errorMessage;
@@ -319,13 +347,20 @@ mountCoverageMap({ mode: "interactive" });
 
   reset.addEventListener("click", async () => {
     setBusy(true);
-    try { await request("/api/reset", { session_id: sessionId }); } catch (_) {}
-    sessionId = crypto.randomUUID();
-    sessionStorage.setItem("tollchat-session", sessionId);
-    messages.replaceChildren();
-    addMessage("Where are you entering and exiting?");
-    setBusy(false);
-    input.focus();
+    let resetError = "";
+    try {
+      await request("/api/reset", {});
+    } catch (error) {
+      if (error.code !== "session_expired") resetError = error.message;
+    } finally {
+      if (!resetError) {
+        messages.replaceChildren();
+        addMessage("Where are you entering and exiting?");
+      }
+      setBusy(false);
+      status.textContent = resetError;
+      input.focus();
+    }
   });
 })();
 </script>
