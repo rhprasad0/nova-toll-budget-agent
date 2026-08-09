@@ -308,6 +308,14 @@ resource "aws_wafv2_web_acl" "public_chat" {
   }
 }
 
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "all_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
 resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   default_root_object = "index.html"
@@ -359,8 +367,8 @@ resource "aws_cloudfront_distribution" "site" {
       path_pattern             = "/api/*"
       viewer_protocol_policy   = "https-only"
       compress                 = false
-      cache_policy_id          = "413f1603-3b9c-4ea9-bf45-8c6a2e83ef45"
-      origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
+      cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+      origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_except_host.id
 
       function_association {
         event_type   = "viewer-request"
