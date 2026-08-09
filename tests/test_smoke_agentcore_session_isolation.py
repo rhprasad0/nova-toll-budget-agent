@@ -30,18 +30,21 @@ def _successful_exercise():
     calls: list[tuple[str, dict[str, object]]] = []
     a_chats = 0
 
-    def post(path: str, body: dict[str, object]):
+    def post_a(path: str, body: dict[str, object]):
         nonlocal a_chats
         calls.append((path, body))
         if path == "/api/reset":
             return _response()
-        if body["session_id"] == SESSION_A:
-            a_chats += 1
-            if a_chats == 6:
-                return _response(422, "turn_limit")
+        a_chats += 1
+        if a_chats == 6:
+            return _response(422, "turn_limit")
         return _response()
 
-    evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
+    def post_b(path: str, body: dict[str, object]):
+        calls.append((path, body))
+        return _response()
+
+    evaluator.exercise_sessions(post_a, post_b)
     return calls
 
 
@@ -85,13 +88,13 @@ def _passing_records() -> list[dict[str, str]]:
 def test_exercise_interleaves_sessions_exhausts_a_and_resets_only_a():
     calls = _successful_exercise()
 
-    assert [body["session_id"] for path, body in calls[:2] if path == "/api/chat"] == [
-        SESSION_A,
-        SESSION_B,
-    ]
+    assert all(
+        set(body) == ({"message"} if path == "/api/chat" else set())
+        for path, body in calls
+    )
     assert calls[-3][0] == "/api/reset"
-    assert calls[-2][1]["session_id"] == SESSION_B
-    assert calls[-1][1]["session_id"] == SESSION_A
+    assert "marker-b" in calls[-2][1]["message"]
+    assert "marker-a" in calls[-1][1]["message"]
 
 
 def test_verify_accepts_isolated_turns_and_reset_streams():
@@ -119,22 +122,26 @@ def test_exercise_fails_if_a_turn_limit_or_reset_affects_b(fail_on_b_call):
     a_calls = 0
     b_calls = 0
 
-    def post(path: str, body: dict[str, object]):
+    def post_a(path: str, body: dict[str, object]):
         nonlocal a_calls, b_calls
-        if path == "/api/chat" and body["session_id"] == SESSION_B:
-            b_calls += 1
-            if b_calls == fail_on_b_call:
-                return _response(422, "turn_limit")
-        if path == "/api/chat" and body["session_id"] == SESSION_A:
+        if path == "/api/chat":
             a_calls += 1
             if a_calls == 6:
+                return _response(422, "turn_limit")
+        return _response()
+
+    def post_b(path: str, body: dict[str, object]):
+        nonlocal b_calls
+        if path == "/api/chat":
+            b_calls += 1
+            if b_calls == fail_on_b_call:
                 return _response(422, "turn_limit")
         return _response()
 
     with pytest.raises(
         evaluator.IsolationVerificationError, match="expected status=200"
     ):
-        evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
+        evaluator.exercise_sessions(post_a, post_b)
 
 
 def test_exercise_retries_a_transient_post_reset_failure(monkeypatch):
@@ -143,12 +150,10 @@ def test_exercise_retries_a_transient_post_reset_failure(monkeypatch):
     reset = False
     sleeps: list[int] = []
 
-    def post(path: str, body: dict[str, object]):
+    def post_a(path: str, body: dict[str, object]):
         nonlocal a_calls, post_reset_attempts, reset
         if path == "/api/reset":
             reset = True
-            return _response()
-        if body["session_id"] != SESSION_A:
             return _response()
         if reset:
             post_reset_attempts += 1
@@ -158,9 +163,12 @@ def test_exercise_retries_a_transient_post_reset_failure(monkeypatch):
         a_calls += 1
         return _response(422, "turn_limit") if a_calls == 6 else _response()
 
+    def post_b(_path: str, _body: dict[str, object]):
+        return _response()
+
     monkeypatch.setattr(evaluator.time, "sleep", sleeps.append)
 
-    evaluator.exercise_sessions(post, SESSION_A, SESSION_B)
+    evaluator.exercise_sessions(post_a, post_b)
 
     assert post_reset_attempts == 3
     assert sleeps == [1, 2]
@@ -199,6 +207,17 @@ def test_trace_query_rejects_unknown_status(monkeypatch):
 
     with pytest.raises(evaluator.IsolationVerificationError, match="Unknown"):
         evaluator._query_records(["aws"], "log-group", 0, deadline=float("inf"))
+
+
+def test_session_for_marker_requires_one_runtime():
+    records = [
+        {"session_id": SESSION_A, "payload": "verify-a"},
+        {"session_id": SESSION_B, "payload": "verify-b"},
+    ]
+
+    assert evaluator._session_for_marker(records, "verify-a") == SESSION_A
+    with pytest.raises(evaluator.IsolationVerificationError, match="correlate"):
+        evaluator._session_for_marker(records, "missing")
 
 
 def test_verify_rejects_malformed_trace_records():

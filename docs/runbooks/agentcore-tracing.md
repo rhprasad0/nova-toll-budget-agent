@@ -7,7 +7,7 @@ TollChat's private preview captures every invocation for evaluation and debuggin
 - `aws/spans`: Transaction Search spans, including `session.id`, trace/span identifiers, model and tool span structure, and timing.
 - `/aws/nova-toll/agentcore/traces`: application-sanitized, versioned `tollchat.runtime_trace` records written directly by the runtime.
 - Both groups use the AgentCore telemetry CMK and expire after 30 days. CloudWatch Logs retention deletes expired events asynchronously and does not support deleting one session from an otherwise retained log stream.
-- No trace archive is created. Durable product records and per-user deletion belong to issue #90; disclosure and approval before public use belong to issue #96.
+- No trace archive is created and no individualized trace lookup or deletion is offered. Fixed retention controls and disclosure approval before public use remain tracked in issues #90 and #96.
 
 Record version 1 is JSON Lines with `stage` (`input_guardrail`, `agent`, `output_guardrail`, or `invoke`), trace/span/session/AWS request identifiers, chunk index/count, SHA-256, and a sanitized JSON payload. The payload holds prompts, application-visible model messages, tool calls and results, full Guardrail assessments, final responses, errors, timings, and deployed model/prompt/toolset versions. System-prompt text and provider-hidden reasoning are never included.
 

@@ -8,11 +8,13 @@ import os
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime
+from http.cookiejar import CookieJar
 from typing import cast
 
 
@@ -46,11 +48,13 @@ def _expect(
         time.sleep(2**attempt)
 
 
-def exercise_sessions(post: Post, session_a: str, session_b: str) -> None:
-    prompt = "Price a trip from Dumfries to Westpark."
+def exercise_sessions(
+    post_a: Post, post_b: Post, marker_a: str = "marker-a", marker_b: str = "marker-b"
+) -> None:
 
     def chat(
-        session_id: str,
+        post: Post,
+        marker: str,
         status: int = 200,
         code: str | None = None,
         retries: int = 0,
@@ -58,21 +62,21 @@ def exercise_sessions(post: Post, session_a: str, session_b: str) -> None:
         _expect(
             post,
             "/api/chat",
-            {"session_id": session_id, "message": prompt},
+            {"message": f"Price a trip from Dumfries to Westpark. {marker}"},
             status,
             code,
             retries,
         )
 
-    chat(session_a)
-    chat(session_b)
+    chat(post_a, marker_a)
+    chat(post_b, marker_b)
     for _ in range(4):
-        chat(session_a)
-    chat(session_b)
-    chat(session_a, 422, "turn_limit")
-    _expect(post, "/api/reset", {"session_id": session_a}, 200)
-    chat(session_b)
-    chat(session_a, retries=3)
+        chat(post_a, marker_a)
+    chat(post_b, marker_b)
+    chat(post_a, marker_a, 422, "turn_limit")
+    _expect(post_a, "/api/reset", {}, 200)
+    chat(post_b, marker_b)
+    chat(post_a, marker_a, retries=3)
 
 
 def _stage_counts(
@@ -145,6 +149,12 @@ def verify_isolation(
 
 
 def _http_post(base_url: str) -> Post:
+    origin = urllib.parse.urlsplit(base_url)
+    origin_header = f"{origin.scheme}://{origin.netloc}"
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(CookieJar())
+    )
+
     def json_object(raw: bytes) -> dict[str, object]:
         value = cast(object, json.loads(raw))
         if not isinstance(value, dict):
@@ -155,11 +165,15 @@ def _http_post(base_url: str) -> Post:
         request = urllib.request.Request(
             f"{base_url.rstrip('/')}{path}",
             data=json.dumps(body).encode(),
-            headers={"content-type": "application/json"},
+            headers={
+                "content-type": "application/json",
+                "origin": origin_header,
+                "sec-fetch-site": "same-origin",
+            },
             method="POST",
         )
         try:
-            response = urllib.request.urlopen(request, timeout=60)
+            response = opener.open(request, timeout=60)
         except urllib.error.HTTPError as error:
             return error.code, json_object(error.read())
         with response:
@@ -265,15 +279,31 @@ def _query_records(
         message = cast(dict[str, object], message)
         if message.get("record_type") != "tollchat.runtime_trace":
             continue
-        values = {
+        values: dict[str, object] = {
             "session_id": message.get("session_id"),
             "trace_id": message.get("trace_id"),
             "stage": message.get("stage"),
             "log_stream": row.get("@logStream"),
         }
         if all(isinstance(value, str) and value for value in values.values()):
-            records.append({key: cast(str, value) for key, value in values.items()})
+            record = {key: cast(str, value) for key, value in values.items()}
+            if isinstance(message.get("payload"), str):
+                record["payload"] = cast(str, message["payload"])
+            records.append(record)
     return records
+
+
+def _session_for_marker(records: list[dict[str, str]], marker: str) -> str:
+    matches = {
+        record["session_id"]
+        for record in records
+        if marker in record.get("payload", "")
+    }
+    if len(matches) != 1:
+        raise IsolationVerificationError(
+            f"could not correlate one runtime session for {marker}"
+        )
+    return matches.pop()
 
 
 def main() -> int:
@@ -286,18 +316,21 @@ def main() -> int:
     wait_seconds = int(os.environ.get("TRACE_WAIT_SECONDS", "600"))
     aws = ["aws", "--profile", profile, "--region", region]
     runtime_version = _live_runtime_version(aws)
-    session_a, session_b = str(uuid.uuid4()), str(uuid.uuid4())
+    marker_a, marker_b = f"verify-{uuid.uuid4().hex}", f"verify-{uuid.uuid4().hex}"
     started = int(time.time()) - 1
-    exercise_sessions(_http_post(preview_url), session_a, session_b)
+    exercise_sessions(
+        _http_post(preview_url), _http_post(preview_url), marker_a, marker_b
+    )
 
     deadline = time.time() + wait_seconds
     last_error: Exception | None = None
     while time.time() < deadline:
         try:
+            records = _query_records(aws, log_group, started, deadline=deadline)
             checks = verify_isolation(
-                _query_records(aws, log_group, started, deadline=deadline),
-                session_a,
-                session_b,
+                records,
+                _session_for_marker(records, marker_a),
+                _session_for_marker(records, marker_b),
             )
             break
         except IsolationVerificationError as error:

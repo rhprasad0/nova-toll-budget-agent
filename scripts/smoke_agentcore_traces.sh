@@ -10,7 +10,7 @@ SPANS_GROUP="${SPANS_LOG_GROUP:-aws/spans}"
 WAIT_SECONDS="${TRACE_WAIT_SECONDS:-600}"
 AWS=(aws --profile "$PROFILE" --region "$REGION")
 WORKDIR="$(mktemp -d)"
-SESSION_ID="$(cat /proc/sys/kernel/random/uuid)"
+MARKER="verify-$(cat /proc/sys/kernel/random/uuid)"
 START_TIME="$(date +%s)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -31,12 +31,25 @@ query_trace() {
   "${AWS[@]}" logs get-query-results --query-id "$query_id" --output json >"$output"
 }
 
-curl --fail --silent --show-error --header 'content-type: application/json' \
-  --data "{\"session_id\":\"$SESSION_ID\",\"message\":\"Price a trip from Dumfries to Westpark using the toll route tool.\"}" \
+curl --fail --silent --show-error --cookie-jar "$WORKDIR/cookies" \
+  --header 'content-type: application/json' --header "origin: ${PREVIEW_URL%/}" \
+  --header 'sec-fetch-site: same-origin' \
+  --data "{\"message\":\"Price a trip from Dumfries to Westpark using the toll route tool. $MARKER\"}" \
   "$PREVIEW_URL/api/chat" >"$WORKDIR/response.json"
 grep -q '"answer"' "$WORKDIR/response.json"
 
 deadline=$((START_TIME + WAIT_SECONDS))
+while :; do
+  query_trace "$RUNTIME_GROUP" \
+    "fields @message | filter @message like /tollchat.runtime_trace/ | filter @message like /$MARKER/ | limit 2" \
+    "$WORKDIR/marker.json"
+  if SESSION_ID="$(uv run python -c 'import json,sys; rows=json.load(open(sys.argv[1]))["results"]; ids={json.loads(next(x["value"] for x in row if x["field"]=="@message"))["session_id"] for row in rows}; assert len(ids)==1; print(ids.pop())' "$WORKDIR/marker.json" 2>/dev/null)"; then
+    break
+  fi
+  (( $(date +%s) >= deadline )) && { echo "session marker was not ingested" >&2; exit 1; }
+  sleep 5
+done
+
 while :; do
   query_trace "$RUNTIME_GROUP" \
     "fields @timestamp, @message | filter @message like /tollchat.runtime_trace/ | filter @message like /$SESSION_ID/ | sort @timestamp asc" \
@@ -59,5 +72,5 @@ done
 
 runtime_count="$(uv run python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$WORKDIR/runtime.json")"
 span_count="$(uv run python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$WORKDIR/spans.json")"
-printf '{"status":"ok","session_id":"%s","runtime_records":%s,"native_spans":%s}\n' \
-  "$SESSION_ID" "$runtime_count" "$span_count"
+printf '{"status":"ok","runtime_records":%s,"native_spans":%s}\n' \
+  "$runtime_count" "$span_count"

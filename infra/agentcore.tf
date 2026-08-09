@@ -151,6 +151,19 @@ resource "aws_vpc_security_group_egress_rule" "proxy_https" {
   ip_protocol       = "tcp"
 }
 
+data "aws_prefix_list" "dynamodb" {
+  name = "com.amazonaws.${data.aws_region.current.region}.dynamodb"
+}
+
+resource "aws_vpc_security_group_egress_rule" "proxy_to_dynamodb" {
+  security_group_id = aws_security_group.tollchat_proxy.id
+  description       = "DynamoDB session store gateway endpoint"
+  prefix_list_id    = data.aws_prefix_list.dynamodb.id
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
 resource "aws_security_group" "tollchat_runtime" {
   name        = "nova-toll-agentcore-runtime"
   description = "AgentCore runtime egress"
@@ -197,6 +210,42 @@ resource "aws_vpc_endpoint" "tollchat_api" {
   subnet_ids          = local.private_subnets
   security_group_ids  = [aws_security_group.tollchat_api_endpoint.id]
   private_dns_enabled = false
+}
+
+resource "aws_dynamodb_table" "tollchat_sessions" {
+  name         = "tollchat-anonymous-sessions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "credential_hash"
+
+  attribute {
+    name = "credential_hash"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+}
+
+resource "aws_vpc_endpoint" "dynamodb" {
+  vpc_id            = data.aws_vpc.default.id
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.tollchat_private.id]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+      Resource  = aws_dynamodb_table.tollchat_sessions.arn
+    }]
+  })
 }
 
 resource "aws_s3_bucket" "agentcore_artifacts" {
@@ -568,6 +617,10 @@ data "aws_iam_policy_document" "tollchat_proxy" {
       aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
     ]
   }
+  statement {
+    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+    resources = [aws_dynamodb_table.tollchat_sessions.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "tollchat_proxy" {
@@ -602,6 +655,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
     variables = {
       AGENTCORE_RUNTIME_ARN = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
       AGENTCORE_VPCE_URL    = "https://${aws_vpc_endpoint.agentcore.dns_entry[0].dns_name}"
+      SESSION_TABLE_NAME    = aws_dynamodb_table.tollchat_sessions.name
     }
   }
 
@@ -609,7 +663,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
     ignore_changes = [reserved_concurrent_executions]
   }
 
-  depends_on = [aws_cloudwatch_log_group.tollchat_proxy, aws_iam_role_policy_attachment.tollchat_proxy_vpc, aws_bedrockagentcore_resource_policy.tollchat]
+  depends_on = [aws_cloudwatch_log_group.tollchat_proxy, aws_iam_role_policy_attachment.tollchat_proxy_vpc, aws_bedrockagentcore_resource_policy.tollchat, aws_vpc_endpoint.dynamodb]
 }
 
 resource "aws_api_gateway_rest_api" "tollchat" {
