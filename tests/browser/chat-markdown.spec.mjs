@@ -272,6 +272,8 @@ test("private preview presents the open beta and its source limitations", async 
     "https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml/badge.svg"
   );
   await expect(badge).toHaveAttribute("referrerpolicy", "no-referrer");
+  await expect(badge).toHaveAttribute("target", "_blank");
+  await expect(badge).toHaveAttribute("rel", "noopener noreferrer");
 
   await expect(footer).toContainText("Found a bug or have another comment? Email contact@tollchat.ai.");
   await expect(footer.getByRole("link", { name: "contact@tollchat.ai" })).toHaveAttribute(
@@ -279,10 +281,13 @@ test("private preview presents the open beta and its source limitations", async 
     "mailto:contact@tollchat.ai"
   );
   await expect(footer.getByRole("link", { name: "GitHub", exact: true })).toHaveCount(0);
-  await expect(footer.getByRole("link", { name: "VDOT SmarterRoads terms" })).toHaveAttribute(
+  const terms = footer.getByRole("link", { name: "VDOT SmarterRoads terms" });
+  await expect(terms).toHaveAttribute(
     "href",
     "https://smarterroads.vdot.virginia.gov/termsOfService"
   );
+  await expect(terms).toHaveAttribute("target", "_blank");
+  await expect(terms).toHaveAttribute("rel", "noopener noreferrer");
   await expect(footer).toContainText("not affiliated with the Virginia Department of Transportation");
   await expect(footer).toContainText("as is and as available");
   await expect(footer).toContainText("may be inaccurate, delayed, changed, or unavailable");
