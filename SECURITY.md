@@ -29,8 +29,8 @@ The public chat agent is not deployed yet. Its release gate is documented in
   identifier, and toll-value limits. XML uses `defusedxml` to reject entity
   expansion and related parser attacks.
 - A multi-region CloudTrail trail records S3 object read/write events for raw
-  data and Terraform state, with log-file validation in a dedicated audit
-  bucket.
+  data, Terraform state, and deployment artifacts, with log-file validation in
+  a dedicated audit bucket.
 - CI actions are pinned to immutable SHAs with read-only repository
   permissions. Secret scanning runs in CI (`gitleaks.yml`, full history on
   every push/PR) and locally in `.githooks/pre-commit` (staged files, any
@@ -40,6 +40,14 @@ The public chat agent is not deployed yet. Its release gate is documented in
   fast-fail courtesy that only applies to clones that have opted in.
 - The Lambda build verifies the downloaded RDS CA bundle SHA-256 before
   packaging it.
+- Successful trusted-main deployments retain all four reviewed package ZIPs
+  and their SHA-256 manifest in the private, versioned AgentCore artifact
+  bucket. Release prefixes include the Git commit and manifest digest; the
+  workflow uploads and downloads-verifies the complete set before apply, then
+  advances `reviewed/latest` only after apply succeeds. Reviewed versions never
+  expire, CloudTrail supplies an independently validated publication record,
+  and rollback requires an explicitly approved prior release ID. It rejects
+  missing or mismatched packages instead of rebuilding them.
 
 ## Implemented hardening (2026-07-27)
 
