@@ -131,10 +131,12 @@ def test_event_selects_which_feeds_to_poll(monkeypatch, stub_aws):
         lambda url, timeout=None: io.BytesIO(b"<opt/>"),
     )
 
-    handler.handler({"feeds": ["i66"]}, None)
+    result = handler.handler({"feeds": ["i66"], "drill_id": "0123456789abcdef"}, None)
 
     stub_aws["s3"].put_object.assert_called_once()
-    assert "feed=i66" in stub_aws["s3"].put_object.call_args.kwargs["Key"]
+    key = stub_aws["s3"].put_object.call_args.kwargs["Key"]
+    assert key.endswith("-0123456789abcdef.xml")
+    assert result == {"keys": [key]}
 
 
 def test_empty_event_still_polls_every_feed(monkeypatch, stub_aws):
@@ -154,6 +156,12 @@ def test_empty_event_still_polls_every_feed(monkeypatch, stub_aws):
 def test_unknown_feed_is_rejected(stub_aws):
     with pytest.raises(RuntimeError, match="unknown feed"):
         handler.handler({"feeds": ["i495"]}, None)
+
+
+@pytest.mark.parametrize("drill_id", ["", "ABCDEF0123456789", "../not-a-key"])
+def test_drill_id_is_strictly_validated(stub_aws, drill_id):
+    with pytest.raises(RuntimeError, match="drill_id"):
+        handler.handler({"feeds": ["i66"], "drill_id": drill_id}, None)
 
 
 @pytest.mark.parametrize("feeds", ["i95", [1]])

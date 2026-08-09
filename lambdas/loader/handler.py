@@ -23,7 +23,8 @@ logger.setLevel(logging.INFO)
 
 MAX_RAW_OBJECT_BYTES = 5 * 1024 * 1024
 _RAW_KEY_PATTERN = re.compile(
-    r"raw/feed=(?P<feed>i95|i66)/date=\d{4}-\d{2}-\d{2}/\d{4}Z\.(?:csv|xml)\Z"
+    r"raw/feed=(?P<feed>i95|i66)/date=\d{4}-\d{2}-\d{2}/\d{4}Z"
+    r"(?:-[a-f0-9]{16})?\.(?:csv|xml)\Z"
 )
 
 # RDS CA bundle is dropped into the deployment zip next to this file by the
@@ -213,6 +214,7 @@ def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
     # filter that derives NovaToll/LoadSuccess{feed} only extracts dimensions
     # from JSON or space-delimited log lines.
     logger.info("LOAD_OK %s", feed)
+    logger.info("LOAD_OBJECT_OK %s %s", feed, s3_key)
 
 
 def handler(event: dict[str, Any], _context: object) -> None:
