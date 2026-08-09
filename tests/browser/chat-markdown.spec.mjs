@@ -250,6 +250,18 @@ test("an expired cookie is a successful user reset", async ({ page }) => {
   await expect(page.locator("#transcript")).toBeEmpty();
 });
 
+test("private preview discloses retention before message entry", async ({ page }) => {
+  await page.goto("/preview.html");
+
+  const notice = page.locator("#privacy-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("retained in AWS for 30 days");
+  await expect(notice).toContainText("OpenAI also processes and stores response data for at least 30 days");
+  await expect(notice).toContainText("Do not submit personal, confidential, payment, credential, or unnecessarily precise location information");
+  await expect(page.locator("#message")).toHaveAttribute("aria-describedby", "privacy-notice");
+  expect(await notice.evaluate((node) => Boolean(node.compareDocumentPosition(document.querySelector("#message")) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+});
+
 test("hostile Markdown stays inert while HTTPS links remain accessible", async ({ page }) => {
   await enableChat(page, `# Safety
 

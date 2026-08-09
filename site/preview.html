@@ -69,6 +69,8 @@
     .assistant-answer a:focus-visible { outline:2px solid var(--lime); outline-offset:2px; }
     .assistant-answer--notice { color:var(--muted); }
     form { position:sticky; bottom:0; z-index:4; grid-area:composer; display:grid; grid-template-columns:1fr auto; gap:8px; margin:0 clamp(24px,4vw,56px); padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(27,32,28,.97); box-shadow:0 -18px 36px var(--asphalt); }
+    .privacy-notice { grid-column:1/-1; margin:0; color:var(--muted); font-size:.75rem; line-height:1.45; text-wrap:pretty; }
+    .privacy-notice strong { color:var(--text); }
     label { grid-column:1/-1; color:var(--muted); font-size:.875rem; }
     textarea { width:100%; min-height:72px; resize:vertical; border:1px solid var(--line); border-radius:6px; background:var(--inset); color:var(--text); font:inherit; padding:12px; }
     form[aria-busy=true] { opacity:.72; }
@@ -179,8 +181,9 @@
     </section>
     <section id="transcript" aria-live="polite" aria-label="Conversation"></section>
     <form aria-busy="false">
+      <p id="privacy-notice" class="privacy-notice"><strong>Privacy:</strong> Your message, TollChat’s answer, tool activity, and safety-check results are retained in AWS for 30 days to operate, secure, debug, and improve TollChat. OpenAI also processes and stores response data for at least 30 days. TollChat does not use this content to train models. Do not submit personal, confidential, payment, credential, or unnecessarily precise location information.</p>
       <label for="message">Where are you going, and when? <span aria-hidden="true">Shift+Enter adds a line.</span></label>
-      <textarea id="message" maxlength="8000" required placeholder="Dumfries to Tysons tomorrow at 8 AM"></textarea>
+      <textarea id="message" maxlength="8000" required aria-describedby="privacy-notice" placeholder="Dumfries to Tysons tomorrow at 8 AM"></textarea>
       <button type="submit">Estimate tolls</button>
     </form>
     <footer>Estimates only. Verify current rates with the toll operator before travel.</footer>
