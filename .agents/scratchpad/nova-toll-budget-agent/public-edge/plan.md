@@ -27,3 +27,10 @@
 - Public POST requests hash the exact serialized body for Lambda OAC signing.
 - Public chat consumes both tool-plus-answer and answer-only NDJSON streams.
 - Browser regression coverage verifies both client contracts.
+
+## PR feedback
+
+- Reproduce parallel tool callbacks inheriting copied context-variable values.
+- Keep counters in shared Strands invocation state while retaining request-local
+  completion status.
+- Run focused and full validation before pushing the fix.

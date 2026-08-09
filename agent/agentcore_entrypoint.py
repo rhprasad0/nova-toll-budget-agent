@@ -10,6 +10,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextvars import ContextVar
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol, cast
 
@@ -50,22 +51,31 @@ _CREDENTIAL_VALUE = re.compile(
     re.IGNORECASE,
 )
 _SYSTEM_PROMPT_KEY = re.compile(r"(?:system|developer)[_-]?prompt\Z", re.IGNORECASE)
+_INVOCATION_LIMIT_STATE_KEY = "tollchat_invocation_limits"
 _TRACER = trace.get_tracer(__name__)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _InvocationLimitState:
+    model_calls: int = 0
+    tool_calls: int = 0
+    exceeded: bool = False
 
 
 class InvocationLimits(HookProvider):
     """Stop one request before it can exceed its model or tool budget."""
 
     def __init__(self) -> None:
-        self._model_calls = ContextVar("tollchat_model_calls", default=0)
-        self._tool_calls = ContextVar("tollchat_tool_calls", default=0)
-        self._exceeded = ContextVar("tollchat_invocation_limit_exceeded", default=False)
+        self._state = ContextVar[_InvocationLimitState | None](
+            "tollchat_invocation_limits", default=None
+        )
 
     @property
     def exceeded(self) -> bool:
-        return self._exceeded.get()
+        state = self._state.get()
+        return state.exceeded if state else False
 
     def register_hooks(self, registry: HookRegistry, **kwargs: object) -> None:
         registry.add_callback(BeforeInvocationEvent, self.before_invocation)
@@ -73,22 +83,28 @@ class InvocationLimits(HookProvider):
         registry.add_callback(BeforeToolCallEvent, self.before_tool)
 
     def before_invocation(self, event: BeforeInvocationEvent) -> None:
-        self._model_calls.set(0)
-        self._tool_calls.set(0)
-        self._exceeded.set(False)
+        state = _InvocationLimitState()
+        event.invocation_state[_INVOCATION_LIMIT_STATE_KEY] = state
+        self._state.set(state)
 
     def before_model(self, event: BeforeModelCallEvent) -> None:
-        model_calls = self._model_calls.get() + 1
-        self._model_calls.set(model_calls)
-        if model_calls > MAX_MODEL_CALLS:
-            self._exceeded.set(True)
+        state = cast(
+            _InvocationLimitState,
+            event.invocation_state[_INVOCATION_LIMIT_STATE_KEY],
+        )
+        state.model_calls += 1
+        if state.model_calls > MAX_MODEL_CALLS:
+            state.exceeded = True
             event.cancel = "TollChat model-call limit reached."
 
     def before_tool(self, event: BeforeToolCallEvent) -> None:
-        tool_calls = self._tool_calls.get() + 1
-        self._tool_calls.set(tool_calls)
-        if tool_calls > MAX_TOOL_CALLS:
-            self._exceeded.set(True)
+        state = cast(
+            _InvocationLimitState,
+            event.invocation_state[_INVOCATION_LIMIT_STATE_KEY],
+        )
+        state.tool_calls += 1
+        if state.tool_calls > MAX_TOOL_CALLS:
+            state.exceeded = True
             event.cancel_tool = "TollChat tool-call limit reached."
 
 

@@ -323,25 +323,34 @@ def test_runtime_enforces_five_turns_in_the_microvm_session():
 def test_invocation_limits_cancel_calls_over_the_approved_caps_and_reset():
     limits = InvocationLimits()
     fake_agent = FakeAgent()
-    limits.before_invocation(BeforeInvocationEvent(agent=fake_agent))
+    invocation_state = {}
+    limits.before_invocation(
+        BeforeInvocationEvent(agent=fake_agent, invocation_state=invocation_state)
+    )
 
     for _ in range(MAX_MODEL_CALLS):
-        event = BeforeModelCallEvent(agent=fake_agent)
+        event = BeforeModelCallEvent(
+            agent=fake_agent, invocation_state=invocation_state
+        )
         limits.before_model(event)
         assert event.cancel is False
-    rejected_model = BeforeModelCallEvent(agent=fake_agent)
+    rejected_model = BeforeModelCallEvent(
+        agent=fake_agent, invocation_state=invocation_state
+    )
     limits.before_model(rejected_model)
     assert rejected_model.cancel
     assert limits.exceeded is True
 
-    limits.before_invocation(BeforeInvocationEvent(agent=fake_agent))
+    limits.before_invocation(
+        BeforeInvocationEvent(agent=fake_agent, invocation_state=invocation_state)
+    )
     assert limits.exceeded is False
     for index in range(MAX_TOOL_CALLS):
         event = BeforeToolCallEvent(
             agent=fake_agent,
             selected_tool=None,
             tool_use={"toolUseId": f"tool-{index}", "name": "i95_route", "input": {}},
-            invocation_state={},
+            invocation_state=invocation_state,
         )
         limits.before_tool(event)
         assert event.cancel_tool is False
@@ -349,10 +358,41 @@ def test_invocation_limits_cancel_calls_over_the_approved_caps_and_reset():
         agent=fake_agent,
         selected_tool=None,
         tool_use={"toolUseId": "tool-over", "name": "i95_route", "input": {}},
-        invocation_state={},
+        invocation_state=invocation_state,
     )
     limits.before_tool(rejected_tool)
     assert rejected_tool.cancel_tool
+    assert limits.exceeded is True
+
+
+def test_invocation_limits_share_the_tool_count_across_parallel_callbacks():
+    limits = InvocationLimits()
+    fake_agent = FakeAgent()
+    invocation_state = {}
+    limits.before_invocation(
+        BeforeInvocationEvent(agent=fake_agent, invocation_state=invocation_state)
+    )
+
+    async def call_tool(index):
+        event = BeforeToolCallEvent(
+            agent=fake_agent,
+            selected_tool=None,
+            tool_use={
+                "toolUseId": f"parallel-{index}",
+                "name": "i95_route",
+                "input": {},
+            },
+            invocation_state=invocation_state,
+        )
+        limits.before_tool(event)
+        return event
+
+    async def call_tools():
+        return await asyncio.gather(*(call_tool(index) for index in range(6)))
+
+    events = asyncio.run(call_tools())
+
+    assert sum(bool(event.cancel_tool) for event in events) == 1
     assert limits.exceeded is True
 
 
@@ -366,9 +406,14 @@ def test_runtime_returns_safe_error_after_an_invocation_limit_is_reached():
 
         async def stream_async(self, prompt: str):
             self.prompts.append(prompt)
-            self.limits.before_invocation(BeforeInvocationEvent(agent=self))
+            invocation_state = {}
+            self.limits.before_invocation(
+                BeforeInvocationEvent(agent=self, invocation_state=invocation_state)
+            )
             for _ in range(MAX_MODEL_CALLS + 1):
-                self.limits.before_model(BeforeModelCallEvent(agent=self))
+                self.limits.before_model(
+                    BeforeModelCallEvent(agent=self, invocation_state=invocation_state)
+                )
             yield {"result": self.result}
 
     def factory(**kwargs):

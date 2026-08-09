@@ -26,3 +26,7 @@
   and terminal NDJSON events, and focused Playwright coverage passes.
 - REVIEW: the adversarial follow-up found both P1 fixes complete with no
   remaining actionable findings.
+- RED: six parallel tool callbacks inherited the same context-variable count;
+  none was cancelled, so the five-tool cap could be bypassed.
+- GREEN: callbacks mutate one typed state object stored in shared Strands
+  invocation state; exactly the sixth parallel callback is now cancelled.
