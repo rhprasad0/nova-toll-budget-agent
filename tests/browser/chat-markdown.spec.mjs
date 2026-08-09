@@ -250,6 +250,53 @@ test("an expired cookie is a successful user reset", async ({ page }) => {
   await expect(page.locator("#transcript")).toBeEmpty();
 });
 
+test("private preview presents the open beta and its source limitations", async ({ page }) => {
+  await page.goto("/preview.html");
+
+  await expect(page).toHaveTitle("TollChat: Plan with the tolls we know");
+  await expect(page.getByText("Open beta · AI toll assistant", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan with the tolls we know." })).toBeVisible();
+  await expect(page.locator("header .lede")).toHaveText(
+    "TollChat shows what supported Northern Virginia toll trips cost at specific recorded times - real observations to inform your planning, not predictions of what you’ll pay."
+  );
+
+  await expect(page.locator("header").getByRole("link", { name: "TollChat CI status" })).toHaveCount(0);
+  const footer = page.locator("footer");
+  const badge = footer.getByRole("link", { name: "TollChat CI status" });
+  await expect(badge).toHaveAttribute(
+    "href",
+    "https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml"
+  );
+  await expect(badge.locator("img")).toHaveAttribute(
+    "src",
+    "https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml/badge.svg"
+  );
+  await expect(badge).toHaveAttribute("referrerpolicy", "no-referrer");
+  await expect(badge).toHaveAttribute("target", "_blank");
+  await expect(badge).toHaveAttribute("rel", "noopener noreferrer");
+
+  await expect(footer).toContainText("Found a bug or have another comment? Email contact@tollchat.ai.");
+  await expect(footer.getByRole("link", { name: "contact@tollchat.ai" })).toHaveAttribute(
+    "href",
+    "mailto:contact@tollchat.ai"
+  );
+  await expect(footer.getByRole("link", { name: "GitHub", exact: true })).toHaveCount(0);
+  const terms = footer.getByRole("link", { name: "VDOT SmarterRoads terms" });
+  await expect(terms).toHaveAttribute(
+    "href",
+    "https://smarterroads.vdot.virginia.gov/termsOfService"
+  );
+  await expect(terms).toHaveAttribute("target", "_blank");
+  await expect(terms).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(footer).toContainText("not affiliated with the Virginia Department of Transportation");
+  await expect(footer).toContainText("as is and as available");
+  await expect(footer).toContainText("may be inaccurate, delayed, changed, or unavailable");
+  await expect(footer).toContainText("TollChat uses VDOT’s public toll pricing data.");
+  await expect(footer).not.toContainText("and we’re fans");
+  await expect(footer).toContainText("behavior may change, and no availability commitment is offered");
+  await expect(footer).toContainText("Estimates only. Verify current rates with the toll operator before travel.");
+});
+
 test("private preview discloses retention before message entry", async ({ page }) => {
   await page.goto("/preview.html");
 
