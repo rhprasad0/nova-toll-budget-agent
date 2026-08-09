@@ -9,8 +9,8 @@ historical RDS result, and prints only metadata suitable for review.
 report="$(mktemp)"
 trap 'rm -f "$report"' EXIT
 PREVIEW_URL=https://preview.tollchat.ai/ \
-  uv run --frozen python scripts/smoke_agentcore_canonical.py >"$report"
-mv "$report" "eval/results/$(date -u +%Y%m%dT%H%M%SZ)-agentcore-canonical-smoke.json"
+  uv run --frozen python scripts/smoke_agentcore_canonical.py >"$report" &&
+  mv "$report" "eval/results/$(date -u +%Y%m%dT%H%M%SZ)-agentcore-canonical-smoke.json"
 ```
 
 The command exits nonzero for any browser, AgentCore, tool, RDS, trace, or
