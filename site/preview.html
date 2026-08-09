@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>TollChat private preview</title>
+  <meta name="description" content="TollChat helps Northern Virginia drivers know their toll before they drive.">
+  <title>TollChat: Know your toll before you drive</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/assets/maplibre-gl-6.0.0/maplibre-gl.css">
   <style>
@@ -31,9 +32,16 @@
     body { margin:0; min-width:320px; min-height:100vh; background:var(--asphalt); color:var(--text); font:16px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
     main { display:grid; grid-template: "header map" auto "transcript map" minmax(16rem,1fr) "composer map" auto "footer map" auto / minmax(0,58fr) minmax(24rem,42fr); min-height:100svh; }
     header { grid-area:header; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding:32px clamp(24px,4vw,56px) 24px; border-bottom:1px solid var(--line); }
-    h1 { margin:0; font-size:clamp(2.6rem,6vw,4.4rem); letter-spacing:-.065em; line-height:.9; text-wrap:balance; }
+    header > div:first-child { min-width:0; }
+    h1 { max-width:11ch; margin:0; font-size:clamp(2.6rem,6vw,4.4rem); letter-spacing:-.065em; line-height:.9; text-wrap:balance; }
     .eyebrow { margin:0 0 8px; color:var(--lime); font-size:.72rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
     .lede { max-width:38rem; margin:14px 0 0; color:var(--muted); text-wrap:pretty; }
+    a { color:var(--lime); text-underline-offset:3px; }
+    a:hover { text-decoration-thickness:2px; }
+    .header-actions { display:grid; flex:0 0 auto; gap:10px; justify-items:end; }
+    .ci-badge { display:inline-flex; border-radius:3px; }
+    .ci-badge:focus-visible { outline:3px solid var(--lime); outline-offset:3px; }
+    .ci-badge img { display:block; width:auto; height:20px; }
     button { min-height:44px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--text); font:inherit; font-weight:700; padding:8px 16px; cursor:pointer; }
     button[type=submit] { border-color:var(--lime); background:var(--lime); color:#101608; }
     button:active { transform:scale(.97); }
@@ -74,7 +82,10 @@
     label { grid-column:1/-1; color:var(--muted); font-size:.875rem; }
     textarea { width:100%; min-height:72px; resize:vertical; border:1px solid var(--line); border-radius:6px; background:var(--inset); color:var(--text); font:inherit; padding:12px; }
     form[aria-busy=true] { opacity:.72; }
-    footer { grid-area:footer; padding:20px clamp(24px,4vw,56px); color:var(--faint); font-size:.8rem; }
+    footer { grid-area:footer; display:grid; gap:12px; padding:20px clamp(24px,4vw,56px); border-top:1px solid var(--line); color:var(--faint); font-size:.75rem; line-height:1.55; }
+    footer p { margin:0; text-wrap:pretty; }
+    .footer-links { color:var(--muted); font-size:.85rem; }
+    .footer-legal { display:grid; gap:4px; }
 
     .map-panel { position:sticky; top:0; grid-area:map; display:grid; grid-template-rows:auto 1fr; height:100svh; min-height:36rem; overflow:hidden; border-left:1px solid var(--line); background:var(--road); isolation:isolate; }
     .map-copy { position:relative; z-index:2; min-width:0; padding:24px; border-bottom:1px solid var(--line); background:rgba(7,16,15,.92); }
@@ -122,6 +133,8 @@
       main { grid-template: "header" auto "map" auto "transcript" minmax(16rem,auto) "composer" auto "footer" auto / 1fr; }
       header { padding:24px 16px 20px; }
       h1 { font-size:clamp(2.6rem,14vw,4rem); }
+      .header-actions { width:100%; display:flex; align-items:center; justify-content:space-between; }
+      header { flex-direction:column; }
       #reset { margin-top:4px; padding-inline:12px; }
       .map-panel { position:relative; grid-template-rows:auto 20rem auto; height:auto; min-height:0; border-top:1px solid var(--line); border-right:0; border-bottom:1px solid var(--line); border-left:0; }
       .map-copy { padding:12px 16px; }
@@ -144,11 +157,14 @@
   <main>
     <header>
       <div>
-        <p class="eyebrow">Private preview</p>
-        <h1>TollChat</h1>
-        <p class="lede">Estimate Northern Virginia express-lane tolls and watch each lookup happen.</p>
+        <p class="eyebrow">Open beta · AI toll assistant</p>
+        <h1>Know your toll before you drive.</h1>
+        <p class="lede">Tolls on I-95, I-495, and I-66 use dynamic pricing based on congestion, making trips difficult to plan and budget. TollChat turns a trip into a clear price before you merge, not after.</p>
       </div>
-      <button id="reset" type="button">New chat</button>
+      <div class="header-actions">
+        <button id="reset" type="button">New chat</button>
+        <a class="ci-badge" href="https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml" aria-label="TollChat CI status" referrerpolicy="no-referrer"><img src="https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml/badge.svg" alt="" width="90" height="20" referrerpolicy="no-referrer"></a>
+      </div>
     </header>
     <section class="map-panel" aria-labelledby="map-title">
       <div class="map-copy">
@@ -186,7 +202,17 @@
       <textarea id="message" maxlength="8000" required aria-describedby="privacy-notice" placeholder="Dumfries to Tysons tomorrow at 8 AM"></textarea>
       <button type="submit">Estimate tolls</button>
     </form>
-    <footer>Estimates only. Verify current rates with the toll operator before travel.</footer>
+    <footer>
+      <p class="footer-links"><a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a> &middot; <a href="https://github.com/rhprasad0/nova-toll-budget-agent">GitHub</a></p>
+      <div class="footer-legal">
+        <p>Open beta: behavior may change, and no availability commitment is offered.</p>
+        <p>Estimates only. Verify current rates with the toll operator before travel.</p>
+        <p>&copy; 2026 Benevolent Clankers LLC. All rights reserved.</p>
+        <p>TollChat is not affiliated with the Virginia Department of Transportation (VDOT). We use VDOT’s public toll pricing data - and we’re fans.</p>
+        <p>SmarterRoads toll data is provided as is and as available and may be inaccurate, delayed, changed, or unavailable. See the <a href="https://smarterroads.vdot.virginia.gov/termsOfService">VDOT SmarterRoads terms</a>.</p>
+        <p>We support American AI innovation <span role="img" aria-label="United States flag">&#127482;&#127480;</span></p>
+      </div>
+    </footer>
   </main>
   <script type="module" src="/preview.mjs"></script>
 </body>

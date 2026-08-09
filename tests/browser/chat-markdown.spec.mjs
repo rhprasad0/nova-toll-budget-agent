@@ -250,6 +250,41 @@ test("an expired cookie is a successful user reset", async ({ page }) => {
   await expect(page.locator("#transcript")).toBeEmpty();
 });
 
+test("private preview presents the open beta and its source limitations", async ({ page }) => {
+  await page.goto("/preview.html");
+
+  await expect(page.getByText("Open beta · AI toll assistant", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Know your toll before you drive." })).toBeVisible();
+  await expect(page.locator("header .lede")).toHaveText(
+    "Tolls on I-95, I-495, and I-66 use dynamic pricing based on congestion, making trips difficult to plan and budget. TollChat turns a trip into a clear price before you merge, not after."
+  );
+
+  const badge = page.getByRole("link", { name: "TollChat CI status" });
+  await expect(badge).toHaveAttribute(
+    "href",
+    "https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml"
+  );
+  await expect(badge.locator("img")).toHaveAttribute(
+    "src",
+    "https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml/badge.svg"
+  );
+  await expect(badge).toHaveAttribute("referrerpolicy", "no-referrer");
+
+  await expect(page.getByRole("link", { name: "contact@tollchat.ai" })).toHaveAttribute(
+    "href",
+    "mailto:contact@tollchat.ai"
+  );
+  await expect(page.getByRole("link", { name: "VDOT SmarterRoads terms" })).toHaveAttribute(
+    "href",
+    "https://smarterroads.vdot.virginia.gov/termsOfService"
+  );
+  await expect(page.locator("footer")).toContainText("not affiliated with the Virginia Department of Transportation");
+  await expect(page.locator("footer")).toContainText("as is and as available");
+  await expect(page.locator("footer")).toContainText("may be inaccurate, delayed, changed, or unavailable");
+  await expect(page.locator("footer")).toContainText("behavior may change, and no availability commitment is offered");
+  await expect(page.locator("footer")).toContainText("Estimates only. Verify current rates with the toll operator before travel.");
+});
+
 test("private preview discloses retention before message entry", async ({ page }) => {
   await page.goto("/preview.html");
 
@@ -428,6 +463,8 @@ test("shared coverage map stays interactive publicly and direction-aware private
   await expect(page.locator("#reset-map")).toBeEnabled();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "New chat" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "TollChat CI status" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip map and ask a question" })).toBeFocused();
   await page.keyboard.press("Enter");
