@@ -12,6 +12,13 @@ const event = (method, path, body) => ({
   isBase64Encoded: false,
 });
 
+const functionUrlEvent = (method, path, body) => ({
+  requestContext: { http: { method } },
+  rawPath: path,
+  body: body === undefined ? null : JSON.stringify(body),
+  isBase64Encoded: false,
+});
+
 const chunks = async function* (...values) {
   for (const value of values) yield new TextEncoder().encode(value);
 };
@@ -194,4 +201,32 @@ test("reset is idempotent when its runtime session does not exist", async () => 
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(JSON.parse(await bodyText(response.body)), { ok: true });
+});
+
+test("Lambda Function URL events keep the existing API contract", async () => {
+  const calls = [];
+  const dependencies = {
+    client: { async send(command) { calls.push(command.input); return {}; } },
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+
+  const config = await route(functionUrlEvent("GET", "/api/config"), dependencies);
+  assert.equal(config.statusCode, 200);
+  assert.deepEqual(JSON.parse(await bodyText(config.body)), {
+    chatEnabled: true,
+    maxMessageChars: 8000,
+    maxTurns: 5,
+  });
+
+  const reset = await route(
+    functionUrlEvent("POST", "/api/reset", { session_id: sessionId }),
+    dependencies,
+  );
+  assert.equal(reset.statusCode, 200);
+  assert.deepEqual(calls, [{
+    agentRuntimeArn: "runtime-arn",
+    runtimeSessionId: sessionId,
+    qualifier: "preview",
+  }]);
 });

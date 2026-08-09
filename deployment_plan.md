@@ -51,9 +51,10 @@ receives model, tool, database, provider, or infrastructure details.
 - [ ] Configure an OpenAI project budget alert and notification path; do not
       describe it as a hard ceiling unless current provider behavior proves it
       stops requests. AWS Budgets does not control spend billed by OpenAI.
-- [ ] Before launch, verify either a hard provider/org limit or an automated
-      public-off response whose request bounds, concurrency, and alert delay
-      produce an explicit, owner-approved maximum cost exposure.
+- [ ] Record owner approval for the open beta's prepaid soft budget, manual
+      monitoring, spend alerts, and public-only WAF shutoff. Do not claim a hard
+      maximum; revisit automated enforcement when OpenAI models are approved
+      through Bedrock or observed traffic justifies it.
 - [ ] Verify the dedicated runtime and proxy roles still have only the existing
       read-only pricing, Guardrail, trace, and invocation permissions.
 
