@@ -222,15 +222,55 @@ mountCoverageMap({ mode: "interactive" });
   let sessionId = sessionStorage.getItem("tollchat-session") || crypto.randomUUID();
   sessionStorage.setItem("tollchat-session", sessionId);
 
+  const bodyHash = async (body) => Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))),
+    (byte) => byte.toString(16).padStart(2, "0")
+  ).join("");
+  const responseError = async (response) => {
+    const data = await response.json().catch(() => ({}));
+    return new Error(data.error?.message || "TollChat is unavailable.");
+  };
+  const readChat = async (response) => {
+    if (!response.body) throw new Error("TollChat is unavailable.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let answer;
+    let terminal = false;
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let newline;
+      while ((newline = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (!line) continue;
+        if (terminal) throw new Error("TollChat is unavailable.");
+        const item = JSON.parse(line);
+        if (item.type === "tool") continue;
+        if (item.type === "error" && typeof item.message === "string") throw new Error(item.message);
+        if (item.type !== "answer" || typeof item.text !== "string" || typeof item.blocked !== "boolean") {
+          throw new Error("TollChat is unavailable.");
+        }
+        answer = item.text;
+        terminal = true;
+      }
+      if (done) break;
+    }
+    if (buffer.trim() || !terminal) throw new Error("TollChat is unavailable.");
+    return answer;
+  };
   const request = async (path, body) => {
+    const payload = JSON.stringify(body);
+    const headers = { "Content-Type": "application/json" };
+    if (!preview) headers["x-amz-content-sha256"] = await bodyHash(payload);
     const response = await fetch(apiBase + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      headers,
+      body: payload
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || "TollChat is unavailable.");
-    return data;
+    if (!response.ok) throw await responseError(response);
+    return path === "/api/chat" ? readChat(response) : response.json();
   };
   const addMessage = (text, kind = "agent") => {
     const message = document.createElement(kind === "user" ? "p" : "article");
@@ -266,8 +306,8 @@ mountCoverageMap({ mode: "interactive" });
     setBusy(true);
     let errorMessage = "";
     try {
-      const result = await request("/api/chat", { session_id: sessionId, message });
-      addMessage(result.answer);
+      const answer = await request("/api/chat", { session_id: sessionId, message });
+      addMessage(answer);
     } catch (error) {
       errorMessage = error.message;
     } finally {

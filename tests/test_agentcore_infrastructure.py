@@ -336,14 +336,72 @@ def test_trace_reviewer_is_read_only_for_governed_telemetry():
     assert "logs:DeleteLogGroup" not in reviewer
 
 
-def test_main_site_has_no_public_chat_gate_or_origin():
+def test_public_chat_edge_is_default_off_and_uses_cloudfront_oac():
     variables = (ROOT / "infra/variables.tf").read_text()
     site = (ROOT / "infra/site.tf").read_text()
-    dns = (ROOT / "infra/dns.tf").read_text()
 
-    assert "enable_public_chat" not in variables
-    assert "aws_cloudfront_vpc_origin" not in site
-    assert 'path_pattern           = "/api/*"' not in site
-    assert "aws_wafv2_web_acl" not in site
-    assert 'domain_name = "preview.tollchat.ai"' not in site
-    assert '"preview.tollchat.ai"' in dns
+    public_switch = variables.split('variable "enable_public_chat"', maxsplit=1)[1]
+    assert "type        = bool" in public_switch
+    assert "default     = false" in public_switch
+    assert 'resource "aws_lambda_function_url" "public_chat"' in site
+    assert 'authorization_type = "AWS_IAM"' in site
+    assert re.search(r'invoke_mode\s+= "RESPONSE_STREAM"', site)
+    assert 'origin_access_control_origin_type = "lambda"' in site
+    assert 'resource "aws_cloudfront_function" "public_chat_routes"' in site
+    assert 'code    = file("${path.module}/../site/public-api-gate.js")' in site
+    assert 'event_type   = "viewer-request"' in site
+    assert site.count("var.enable_public_chat ? 1 : 0") >= 5
+    assert site.count("var.enable_public_chat ? [1] : []") >= 2
+    assert re.search(r'path_pattern\s+= "/api/\*"', site)
+    assert "source_arn             = aws_cloudfront_distribution.site.arn" in site
+    assert 'function_url_auth_type = "AWS_IAM"' in site
+    assert "invoked_via_function_url = true" in site
+
+
+def test_public_api_behavior_is_uncached_allowlisted_and_single_attempt():
+    site = (ROOT / "infra/site.tf").read_text()
+    gate = (ROOT / "site/public-api-gate.js").read_text()
+    behavior = site.split('path_pattern             = "/api/*"', maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+
+    assert (
+        'cache_policy_id          = "413f1603-3b9c-4ea9-bf45-8c6a2e83ef45"' in behavior
+    )
+    assert (
+        'origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"' in behavior
+    )
+    assert 'viewer_protocol_policy   = "https-only"' in behavior
+    assert re.search(r"connection_attempts\s+= 1", site)
+    assert re.search(r"connection_timeout\s+= 5", site)
+    assert re.search(r"origin_read_timeout\s+= 55", site)
+    for route in ("/api/config", "/api/chat", "/api/reset"):
+        assert route in gate
+    assert 'request.method === "GET"' in gate
+    assert 'request.method === "POST"' in gate
+    assert 'search_string         = "POST"' in site
+
+
+def test_public_waf_has_only_the_bounded_metrics_only_controls():
+    site = (ROOT / "infra/site.tf").read_text()
+    waf = site.split('resource "aws_wafv2_web_acl" "public_chat"', maxsplit=1)[1].split(
+        'resource "aws_lambda_permission" "public_chat_url"', maxsplit=1
+    )[0]
+
+    assert "limit                 = 20" in waf
+    assert "evaluation_window_sec = 300" in waf
+    assert re.search(r'aggregate_key_type\s+= "IP"', waf)
+    assert "size                = 32768" in waf
+    assert 'comparison_operator = "GT"' in waf
+    assert 'oversize_handling = "MATCH"' in waf
+    gate = (ROOT / "site/public-api-gate.js").read_text()
+    assert "statusCode: 404" in gate
+    for code in (413, 429):
+        assert f"response_code            = {code}" in waf
+    runbook = (ROOT / "docs/runbooks/kill-switch.md").read_text()
+    assert "503" in runbook and "default action" in runbook
+    assert "ignore_changes = [default_action]" in waf
+    assert "cloudwatch_metrics_enabled = true" in waf
+    assert "sampled_requests_enabled   = false" in waf
+    assert "managed_rule_group_statement" not in waf
+    assert "aws_wafv2_web_acl_logging_configuration" not in site

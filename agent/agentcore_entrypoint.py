@@ -8,7 +8,9 @@ import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from contextvars import ContextVar
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol, cast
 
@@ -16,7 +18,14 @@ import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp, BedrockAgentCoreContext
 from opentelemetry import baggage, trace
 from opentelemetry import context as otel_context
-from strands.hooks import MessageAddedEvent
+from strands.hooks import (
+    BeforeInvocationEvent,
+    BeforeModelCallEvent,
+    BeforeToolCallEvent,
+    HookProvider,
+    HookRegistry,
+    MessageAddedEvent,
+)
 
 from agent.toll_agent import (
     SYSTEM_PROMPT_VERSION,
@@ -26,6 +35,8 @@ from agent.toll_agent import (
 
 MAX_MESSAGE_CHARS = 8_000
 MAX_TURNS = 5
+MAX_MODEL_CALLS = 6
+MAX_TOOL_CALLS = 5
 DISCLAIMER = (
     "Estimates only. Verify current rates with the toll operator before travel."
 )
@@ -40,9 +51,61 @@ _CREDENTIAL_VALUE = re.compile(
     re.IGNORECASE,
 )
 _SYSTEM_PROMPT_KEY = re.compile(r"(?:system|developer)[_-]?prompt\Z", re.IGNORECASE)
+_INVOCATION_LIMIT_STATE_KEY = "tollchat_invocation_limits"
 _TRACER = trace.get_tracer(__name__)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _InvocationLimitState:
+    model_calls: int = 0
+    tool_calls: int = 0
+    exceeded: bool = False
+
+
+class InvocationLimits(HookProvider):
+    """Stop one request before it can exceed its model or tool budget."""
+
+    def __init__(self) -> None:
+        self._state = ContextVar[_InvocationLimitState | None](
+            "tollchat_invocation_limits", default=None
+        )
+
+    @property
+    def exceeded(self) -> bool:
+        state = self._state.get()
+        return state.exceeded if state else False
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: object) -> None:
+        registry.add_callback(BeforeInvocationEvent, self.before_invocation)
+        registry.add_callback(BeforeModelCallEvent, self.before_model)
+        registry.add_callback(BeforeToolCallEvent, self.before_tool)
+
+    def before_invocation(self, event: BeforeInvocationEvent) -> None:
+        state = _InvocationLimitState()
+        event.invocation_state[_INVOCATION_LIMIT_STATE_KEY] = state
+        self._state.set(state)
+
+    def before_model(self, event: BeforeModelCallEvent) -> None:
+        state = cast(
+            _InvocationLimitState,
+            event.invocation_state[_INVOCATION_LIMIT_STATE_KEY],
+        )
+        state.model_calls += 1
+        if state.model_calls > MAX_MODEL_CALLS:
+            state.exceeded = True
+            event.cancel = "TollChat model-call limit reached."
+
+    def before_tool(self, event: BeforeToolCallEvent) -> None:
+        state = cast(
+            _InvocationLimitState,
+            event.invocation_state[_INVOCATION_LIMIT_STATE_KEY],
+        )
+        state.tool_calls += 1
+        if state.tool_calls > MAX_TOOL_CALLS:
+            state.exceeded = True
+            event.cancel_tool = "TollChat tool-call limit reached."
 
 
 class GuardrailClient(Protocol):
@@ -87,6 +150,7 @@ class TollChatRuntime:
         self._trace_log_stream = f"runtime-{uuid.uuid4().hex}"
         self._trace_log_stream_ready = False
         self._model_messages: list[object] = []
+        self._invocation_limits = InvocationLimits()
 
     def _record_message(self, event: MessageAddedEvent) -> None:
         self._model_messages.append(deepcopy(event.message))
@@ -187,7 +251,7 @@ class TollChatRuntime:
                             "session.id": correlation["session_id"],
                             "tollchat.session_id": correlation["session_id"],
                         },
-                        hooks=[self._record_message],
+                        hooks=[self._record_message, self._invocation_limits],
                     )
                 self._turns += 1
                 agent = self._agent
@@ -211,6 +275,8 @@ class TollChatRuntime:
                             result = event["result"]
                     if result is None:
                         raise RuntimeError("agent stream ended without a result")
+                    if self._invocation_limits.exceeded:
+                        raise RuntimeError("agent invocation limit reached")
                     answer = str(result).strip()
                     self._emit_trace(
                         "agent",

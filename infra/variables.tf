@@ -39,3 +39,9 @@ variable "chat_proxy_package_path" {
   type        = string
   default     = ""
 }
+
+variable "enable_public_chat" {
+  description = "Expose the chat proxy through the public CloudFront /api/* path. Keep false until every launch gate is approved."
+  type        = bool
+  default     = false
+}

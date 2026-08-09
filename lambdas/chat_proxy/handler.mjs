@@ -105,8 +105,8 @@ async function* ndjsonFromSse(stream) {
 
 export async function route(event, dependencies) {
   const { client, runtimeArn, previewHtml, previewJs = "", previewAssets = {} } = dependencies;
-  const method = event.httpMethod;
-  const path = event.path;
+  const method = event.httpMethod ?? event.requestContext?.http?.method;
+  const path = event.path ?? event.rawPath;
   if (method === "GET" && path === "/") {
     return { statusCode: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, body: previewHtml };
   }
