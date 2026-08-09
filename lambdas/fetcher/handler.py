@@ -12,6 +12,7 @@ Polls the two VDOT SmarterRoads feeds and lands raw payloads in S3. Per spec
 
 import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -24,6 +25,7 @@ logger.setLevel(logging.INFO)
 
 TIMEOUT_SECONDS = 30
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+_DRILL_ID = re.compile(r"[a-f0-9]{16}\Z")
 
 
 # tick_minutes is each feed's own publish cadence, measured against prod rather
@@ -119,8 +121,14 @@ def _scrub(text: str, token: str) -> str:
     return text.replace(token, "***")
 
 
-def _s3_key(feed: str, now: datetime, extension: str, tick_minutes: int) -> str:
-    """raw/feed=<feed>/date=<YYYY-MM-DD>/<HHMM>Z.<ext>, tick-rounded per spec.
+def _s3_key(
+    feed: str,
+    now: datetime,
+    extension: str,
+    tick_minutes: int,
+    drill_id: str | None = None,
+) -> str:
+    """Build the tick-rounded raw key, with an optional unique drill suffix.
 
     tick_minutes is the feed's own cadence, so I-66's buckets are 6 minutes
     wide (…0000Z, 0006Z, 0012Z) and I-95's are 10.
@@ -129,7 +137,8 @@ def _s3_key(feed: str, now: datetime, extension: str, tick_minutes: int) -> str:
     tick = now.replace(minute=tick_minute, second=0, microsecond=0)
     date = tick.strftime("%Y-%m-%d")
     stamp = tick.strftime("%H%M") + "Z"
-    return f"raw/feed={feed}/date={date}/{stamp}.{extension}"
+    suffix = f"-{drill_id}" if drill_id else ""
+    return f"raw/feed={feed}/date={date}/{stamp}{suffix}.{extension}"
 
 
 def _fetch_feed(feed: str, url: str, token: str) -> bytes:
@@ -151,9 +160,15 @@ def _fetch_feed(feed: str, url: str, token: str) -> bytes:
     return body
 
 
-def _poll_feed(feed: str, cfg: FeedConfig, token: str, now: datetime) -> None:
+def _poll_feed(
+    feed: str,
+    cfg: FeedConfig,
+    token: str,
+    now: datetime,
+    drill_id: str | None = None,
+) -> str:
     body = _fetch_feed(feed, cfg["url"], token)
-    key = _s3_key(feed, now, cfg["extension"], cfg["tick_minutes"])
+    key = _s3_key(feed, now, cfg["extension"], cfg["tick_minutes"], drill_id)
     cast(S3Client, _client("s3")).put_object(
         Bucket=os.environ["RAW_BUCKET"],
         Key=key,
@@ -173,9 +188,10 @@ def _poll_feed(feed: str, cfg: FeedConfig, token: str, now: datetime) -> None:
         ],
     )
     logger.info("poll succeeded feed=%s key=%s", feed, key)
+    return key
 
 
-def handler(event: dict[str, Any] | None, _context: object) -> None:
+def handler(event: dict[str, Any] | None, _context: object) -> dict[str, list[str]]:
     """Poll the feeds named in event["feeds"], or every feed if unspecified.
 
     The two feeds publish on different cadences, so infra/triggers.tf gives
@@ -198,12 +214,18 @@ def handler(event: dict[str, Any] | None, _context: object) -> None:
     unknown = [feed for feed in requested if feed not in FEEDS]
     if unknown:
         raise RuntimeError(f"unknown feed(s) requested: {', '.join(unknown)}")
+    drill_id = (event or {}).get("drill_id")
+    if drill_id is not None and (
+        not isinstance(drill_id, str) or not _DRILL_ID.fullmatch(drill_id)
+    ):
+        raise RuntimeError("drill_id must be 16 lowercase hexadecimal characters")
 
     failed_feeds: list[str] = []
+    keys: list[str] = []
     for feed in requested:
         cfg = FEEDS[feed]
         try:
-            _poll_feed(feed, cfg, tokens[feed], now)
+            keys.append(_poll_feed(feed, cfg, tokens[feed], now, drill_id))
         except Exception as exc:
             logger.exception(
                 "feed=%s poll failed: %s", feed, _scrub(str(exc), tokens[feed])
@@ -213,3 +235,4 @@ def handler(event: dict[str, Any] | None, _context: object) -> None:
         # Surfaces as a Lambda Errors metric (spec Observability alarm #1)
         # without ever touching the other feed's attempt above.
         raise RuntimeError(f"poll failed for feed(s): {', '.join(failed_feeds)}")
+    return {"keys": keys}

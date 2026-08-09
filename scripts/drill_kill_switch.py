@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -40,7 +41,11 @@ ARTIFACTS = (
     "agentcore.zip",
     "chat-proxy.zip",
 )
-_LOAD_OK = re.compile(r"\bLOAD_OK\s+(i66|i95)\b")
+_LOAD_OBJECT_OK = re.compile(
+    r"\bLOAD_OBJECT_OK\s+(i66|i95)\s+"
+    r"(raw/feed=(?:i66|i95)/date=\d{4}-\d{2}-\d{2}/\d{4}Z-[a-f0-9]{16}"
+    r"\.(?:csv|xml))\b"
+)
 _AMBIENT_AWS_CREDENTIALS = {
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
@@ -336,8 +341,9 @@ def _prove_agentcore() -> None:
         raise DrillError("AgentCore produced an invocation while chat was disabled")
 
 
-def _invoke_fetcher(output: Path) -> None:
-    _run(
+def _invoke_fetcher(output: Path) -> set[str]:
+    drill_id = secrets.token_hex(8)
+    completed = _run(
         [
             "aws",
             "--profile",
@@ -351,14 +357,46 @@ def _invoke_fetcher(output: Path) -> None:
             "--cli-binary-format",
             "raw-in-base64-out",
             "--payload",
-            '{"feeds":["i95","i66"]}',
+            json.dumps({"feeds": ["i95", "i66"], "drill_id": drill_id}),
             str(output),
         ],
         timeout=60,
     )
+    try:
+        invocation = json.loads(completed.stdout)
+        payload = json.loads(output.read_text())
+    except (json.JSONDecodeError, OSError) as error:
+        raise DrillError("controlled fetcher returned invalid metadata") from error
+    if not isinstance(invocation, dict) or not isinstance(payload, dict):
+        raise DrillError("controlled fetcher invocation failed")
+    invocation_data = cast(dict[str, object], invocation)
+    payload_data = cast(dict[str, object], payload)
+    if (
+        invocation_data.get("StatusCode") != 200
+        or "FunctionError" in invocation_data
+        or not isinstance(payload_data.get("keys"), list)
+    ):
+        raise DrillError("controlled fetcher invocation failed")
+    keys = cast(list[object], payload_data["keys"])
+    expected = {
+        feed: re.compile(
+            rf"raw/feed={feed}/date=\d{{4}}-\d{{2}}-\d{{2}}/\d{{4}}Z-"
+            rf"{drill_id}\.{extension}\Z"
+        )
+        for feed, extension in (("i95", "csv"), ("i66", "xml"))
+    }
+    if len(keys) != 2 or any(not isinstance(key, str) for key in keys):
+        raise DrillError("controlled fetcher returned unexpected objects")
+    typed_keys = cast(list[str], keys)
+    if not all(
+        any(pattern.fullmatch(key) for key in typed_keys)
+        for pattern in expected.values()
+    ):
+        raise DrillError("controlled fetcher returned unexpected objects")
+    return set(typed_keys)
 
 
-def _load_successes(start_millis: int) -> set[str]:
+def _load_successes(start_millis: int, expected_keys: set[str]) -> set[str]:
     response = cast(
         dict[str, object],
         _aws_json(
@@ -369,10 +407,10 @@ def _load_successes(start_millis: int) -> set[str]:
             "--start-time",
             str(start_millis),
             "--filter-pattern",
-            '"LOAD_OK"',
+            '"LOAD_OBJECT_OK"',
         ),
     )
-    feeds: set[str] = set()
+    loaded: set[str] = set()
     for raw in cast(list[object], response.get("events", [])):
         if not isinstance(raw, dict):
             continue
@@ -380,20 +418,27 @@ def _load_successes(start_millis: int) -> set[str]:
         message = event.get("message")
         if not isinstance(message, str):
             continue
-        match = _LOAD_OK.search(message)
-        if match:
-            feeds.add(match.group(1))
-    return feeds
+        match = _LOAD_OBJECT_OK.search(message)
+        if (
+            match
+            and f"feed={match.group(1)}" in match.group(2)
+            and match.group(2) in expected_keys
+        ):
+            loaded.add(match.group(2))
+    return loaded
 
 
 def _prove_pipeline() -> None:
     start_millis = int(_now() * 1000) - 1000
     with tempfile.TemporaryDirectory() as directory:
-        _invoke_fetcher(Path(directory) / "fetcher.json")
+        expected_keys = _invoke_fetcher(Path(directory) / "fetcher.json")
         deadline = _now() + 120
-        while _now() < deadline and _load_successes(start_millis) != {"i66", "i95"}:
+        while (
+            _now() < deadline
+            and _load_successes(start_millis, expected_keys) != expected_keys
+        ):
             time.sleep(5)
-    if _load_successes(start_millis) != {"i66", "i95"}:
+    if _load_successes(start_millis, expected_keys) != expected_keys:
         raise DrillError("fetcher/loader did not complete both feeds")
     alarms = _alarm_states()
     if (
@@ -682,11 +727,11 @@ def run(
         raise DrillError("live execution requires explicit owner approval")
 
     started = _now()
-    engaged = False
+    restore_armed = False
     restored_at = 0.0
     try:
+        restore_armed = True
         _put_concurrency(0)
-        engaged = True
         _engaged_at = int(started) - 1
         if _get_concurrency() != 0:
             raise DrillError("control plane did not engage the kill switch")
@@ -698,7 +743,7 @@ def run(
         if pause_for_screenshot:
             _screenshot_pause()
     finally:
-        if engaged:
+        if restore_armed:
             restored_at = _now()
             _restore_concurrency(baseline)
 

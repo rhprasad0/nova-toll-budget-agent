@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -129,6 +130,24 @@ def test_every_engaged_failure_restores_baseline(monkeypatch, failure: str):
     assert concurrency == 5
 
 
+def test_ambiguous_concurrency_update_failure_still_restores(monkeypatch):
+    restored: list[int] = []
+    monkeypatch.setattr(drill, "_preflight", lambda: _healthy_preflight())
+    monkeypatch.setattr(
+        drill,
+        "_put_concurrency",
+        lambda _value: (_ for _ in ()).throw(
+            subprocess.TimeoutExpired("aws lambda", 120)
+        ),
+    )
+    monkeypatch.setattr(drill, "_restore_concurrency", restored.append)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        drill.run(execute=True, approved_by="Ryan", pause_for_screenshot=False)
+
+    assert restored == [5]
+
+
 @pytest.mark.parametrize("statuses", [(200, 500), (403, 500), (500, 429)])
 def test_blocked_routes_require_integration_failures(statuses: tuple[int, int]):
     with pytest.raises(drill.DrillError, match="integration"):
@@ -186,6 +205,66 @@ def test_agentcore_query_uses_the_parsed_stage_field():
     assert drill.AGENTCORE_COUNT_QUERY == (
         'filter stage = "invoke" | stats count() as count'
     )
+
+
+def test_controlled_fetcher_rejects_handler_failure(monkeypatch, tmp_path):
+    output = tmp_path / "fetcher.json"
+    output.write_text('{"errorMessage":"failed"}')
+    monkeypatch.setattr(drill.secrets, "token_hex", lambda _size: "a" * 16)
+    monkeypatch.setattr(
+        drill,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, '{"StatusCode":200,"FunctionError":"Unhandled"}', ""
+        ),
+    )
+
+    with pytest.raises(drill.DrillError, match="invocation failed"):
+        drill._invoke_fetcher(output)
+
+
+def test_controlled_fetcher_returns_only_its_unique_objects(monkeypatch, tmp_path):
+    output = tmp_path / "fetcher.json"
+    keys = [
+        "raw/feed=i95/date=2026-08-09/1940Z-aaaaaaaaaaaaaaaa.csv",
+        "raw/feed=i66/date=2026-08-09/1940Z-aaaaaaaaaaaaaaaa.xml",
+    ]
+    output.write_text(json.dumps({"keys": keys}))
+    monkeypatch.setattr(drill.secrets, "token_hex", lambda _size: "a" * 16)
+    monkeypatch.setattr(
+        drill,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, '{"StatusCode":200}', ""
+        ),
+    )
+
+    assert drill._invoke_fetcher(output) == set(keys)
+
+
+def test_loader_proof_ignores_unrelated_scheduled_loads(monkeypatch):
+    expected = {
+        "raw/feed=i95/date=2026-08-09/1940Z-aaaaaaaaaaaaaaaa.csv",
+        "raw/feed=i66/date=2026-08-09/1940Z-aaaaaaaaaaaaaaaa.xml",
+    }
+    monkeypatch.setattr(
+        drill,
+        "_aws_json",
+        lambda *_args: {
+            "events": [
+                {"message": "LOAD_OK i95"},
+                {
+                    "message": (
+                        "LOAD_OBJECT_OK i95 raw/feed=i95/date=2026-08-09/1940Z.csv"
+                    )
+                },
+                {"message": f"LOAD_OBJECT_OK i66 {sorted(expected)[0]}"},
+                {"message": f"LOAD_OBJECT_OK i95 {sorted(expected)[1]}"},
+            ]
+        },
+    )
+
+    assert drill._load_successes(0, expected) == expected
 
 
 def _policy_change(address: str, expanded_resource: str) -> dict[str, object]:

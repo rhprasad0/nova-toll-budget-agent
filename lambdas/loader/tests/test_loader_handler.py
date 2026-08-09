@@ -52,6 +52,10 @@ def test_upsert_i66_sql_does_not_update_key_columns():
     [
         ("raw/feed=i95/date=2026-07-21/1440Z.csv", "i95"),
         ("raw/feed=i66/date=2026-07-21/1440Z.xml", "i66"),
+        (
+            "raw/feed=i66/date=2026-07-21/1440Z-0123456789abcdef.xml",
+            "i66",
+        ),
     ],
 )
 def test_feed_from_key(key, feed):
@@ -69,6 +73,7 @@ def test_feed_from_key_raises_without_feed_segment():
         "raw/feed=i95-live/date=2026-07-21/1440Z.csv",
         "raw/feed=i95/date=2026-07-21/not-a-time.csv",
         "raw/feed=other/date=2026-07-21/1440Z.csv",
+        "raw/feed=i95/date=2026-07-21/1440Z-not-a-drill-id.csv",
         "raw/feed=i95/date=2026-07-21/1440Z.csv/extra",
     ],
 )

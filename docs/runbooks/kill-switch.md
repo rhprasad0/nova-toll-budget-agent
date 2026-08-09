@@ -43,7 +43,10 @@ The runner records start and restore timestamps, captures the live concurrency
 baseline, and restores that exact value in `finally`. While engaged it proves
 both private API routes are blocked, no AgentCore invocation is produced, a
 controlled fetcher run loads both feeds into RDS, every pipeline alarm stays
-healthy. The saved Terraform plan must be a no-op or contain only those two
+healthy. The runner rejects Lambda handler failures and correlates loader
+successes to uniquely suffixed objects from that exact fetcher invocation, so
+scheduled polls cannot satisfy the drill. The saved Terraform plan must be a
+no-op or contain only those two
 exact policy normalizations, and the following apply must leave concurrency at zero. The
 Cloudflare token is read from SSM Parameter Store directly into the Terraform
 subprocess environment; it is never written to a file or report.
