@@ -18,6 +18,7 @@ const sessionDependencies = {
 const event = (method, path, body) => ({
   httpMethod: method,
   path,
+  requestContext: { domainName: "preview.tollchat.ai" },
   body: body === undefined ? null : JSON.stringify(body),
   isBase64Encoded: false,
   headers: {
@@ -29,7 +30,10 @@ const event = (method, path, body) => ({
 });
 
 const functionUrlEvent = (method, path, body) => ({
-  requestContext: { http: { method } },
+  requestContext: {
+    http: { method },
+    domainName: "example.lambda-url.us-east-1.on.aws",
+  },
   rawPath: path,
   body: body === undefined ? null : JSON.stringify(body),
   isBase64Encoded: false,
@@ -107,6 +111,41 @@ test("chat forwards validated AgentCore SSE as ordered NDJSON", async () => {
       "",
     ].join("\n"),
   );
+});
+
+test("only the trusted private route forwards the runtime failure drill", async () => {
+  const calls = [];
+  const client = {
+    async send(command) {
+      calls.push(JSON.parse(new TextDecoder().decode(command.input.payload)));
+      return {
+        contentType: "text/event-stream",
+        response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+      };
+    },
+  };
+  const privateRequest = event("POST", "/api/chat", { message: "verify failure" });
+  privateRequest.headers["x-tollchat-drill"] = "runtime-exception-v1";
+  const publicRequest = functionUrlEvent("POST", "/api/chat", { message: "ordinary request" });
+  publicRequest.headers.origin = "https://preview.tollchat.ai";
+  publicRequest.headers["x-tollchat-drill"] = "runtime-exception-v1";
+
+  const dependencies = {
+    ...sessionDependencies,
+    client,
+    runtimeArn: "runtime-arn",
+    previewHtml: "",
+  };
+  const privateResponse = await route(privateRequest, dependencies);
+  const publicResponse = await route(publicRequest, dependencies);
+  const privateBody = await bodyText(privateResponse.body);
+  await bodyText(publicResponse.body);
+
+  assert.deepEqual(calls, [
+    { prompt: "verify failure", failure_mode: "runtime_exception_v1" },
+    { prompt: "ordinary request" },
+  ]);
+  assert.doesNotMatch(privateBody, /runtime_exception/);
 });
 
 test("chat replaces malformed or internal upstream data with a safe error", async () => {
