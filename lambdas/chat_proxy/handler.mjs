@@ -92,7 +92,8 @@ const validPost = (event) => {
 
 const credential = (event) => {
   const values = [];
-  for (const source of [...(event.cookies ?? []), header(event, "cookie") ?? ""].filter(Boolean)) {
+  const sources = event.cookies?.length ? event.cookies : [header(event, "cookie") ?? ""];
+  for (const source of sources.filter(Boolean)) {
     for (const part of source.split(";")) {
       const [name, ...raw] = part.trim().split("=");
       if (name === COOKIE) values.push(raw.join("="));
