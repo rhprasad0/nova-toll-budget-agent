@@ -82,3 +82,11 @@ def test_private_bundle_serves_the_shared_pinned_map_assets() -> None:
     assert "site/assets/maplibre-gl-6.0.0" in build
     assert '"assets/coverage-map-v1.mjs"' in infra
     assert 'path.endsWith(".css") ? "text/css; charset=utf-8"' in handler
+
+
+def test_private_map_uses_mode_selected_route_geometry() -> None:
+    module = MAP_MODULE.read_text()
+
+    assert "const displayedRouteData = routeDataForMode(mode);" in module
+    assert "displayedRouteData.features.map" in module
+    assert "data:displayedRouteData" in module
