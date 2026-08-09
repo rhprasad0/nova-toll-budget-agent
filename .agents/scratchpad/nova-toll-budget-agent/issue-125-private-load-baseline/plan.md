@@ -9,6 +9,8 @@
 3. Missing or non-overlapping loader evidence rejects the run.
 4. Missing CloudWatch telemetry or a breached launch threshold rejects the run.
 5. Unsafe deployment/report metadata is rejected before serialization.
+6. Preflight fingerprints the proxy, fetcher, and loader packages so any
+   deployment during the run invalidates the evidence.
 
 ## Implementation
 
@@ -23,6 +25,6 @@
 ## Risks
 
 - CloudWatch metrics arrive asynchronously; poll to a bounded deadline.
-- A runtime deployment during the test invalidates evidence; pin and recheck its
-  live version.
+- A runtime or Lambda deployment during the test invalidates evidence; pin and
+  recheck every component involved in serving or ingesting the load.
 - A real capacity breach blocks publication rather than being normalized away.

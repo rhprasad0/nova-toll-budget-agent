@@ -218,6 +218,50 @@ def test_report_rejects_client_latency_at_timeout_margin():
         )
 
 
+def test_preflight_fingerprints_ingestion_lambdas(monkeypatch):
+    def aws_json(_aws: list[str], service: str, action: str, *arguments: str):
+        if action == "get-function-concurrency":
+            return {"ReservedConcurrentExecutions": 5}
+        if action == "describe-db-instances":
+            return {
+                "DBInstances": [
+                    {
+                        "DBInstanceStatus": "available",
+                        "DBInstanceClass": "db.t4g.micro",
+                        "EngineVersion": "17.9",
+                    }
+                ]
+            }
+        if action == "describe-rule":
+            return {"State": "ENABLED"}
+        assert service == "cloudwatch" and action == "describe-alarms"
+        return {
+            "MetricAlarms": [
+                {"AlarmName": name, "StateValue": "OK"} for name in load._ALARM_NAMES
+            ]
+        }
+
+    def aws(_aws: list[str], service: str, action: str, *arguments: str):
+        if action == "list-agent-runtimes":
+            return "runtime-identity"
+        if action == "get-agent-runtime-endpoint":
+            return "22"
+        assert service == "lambda" and action == "get-function"
+        return {
+            "tollchat-chat-proxy": "P" * 43 + "=",
+            "toll-fetcher": "F" * 43 + "=",
+            "toll-loader": "L" * 43 + "=",
+        }[arguments[1]]
+
+    monkeypatch.setattr(load, "_aws_json", aws_json)
+    monkeypatch.setattr(load, "_aws", aws)
+
+    identity = load._preflight(["aws"])
+
+    assert identity["fetcher_code_sha256"] == "F" * 43 + "="
+    assert identity["loader_code_sha256"] == "L" * 43 + "="
+
+
 def test_cli_sanitizes_preflight_failure_without_preview_url():
     env = {key: value for key, value in os.environ.items() if key != "PREVIEW_URL"}
 

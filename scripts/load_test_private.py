@@ -353,22 +353,29 @@ def _preflight(aws: list[str]) -> dict[str, str]:
         "--output",
         "text",
     )
-    proxy_hash = _aws(
-        aws,
-        "lambda",
-        "get-function",
-        "--function-name",
-        "tollchat-chat-proxy",
-        "--query",
-        "Configuration.CodeSha256",
-        "--output",
-        "text",
-    )
+    lambda_hashes = {
+        f"{label}_code_sha256": _aws(
+            aws,
+            "lambda",
+            "get-function",
+            "--function-name",
+            function_name,
+            "--query",
+            "Configuration.CodeSha256",
+            "--output",
+            "text",
+        )
+        for label, function_name in (
+            ("proxy", "tollchat-chat-proxy"),
+            ("fetcher", "toll-fetcher"),
+            ("loader", "toll-loader"),
+        )
+    }
     identity = {
         "runtime_id": runtime_id,
         "runtime_arn": runtime_arn,
         "runtime_version": runtime_version,
-        "proxy_code_sha256": proxy_hash,
+        **lambda_hashes,
         "rds_class": cast(str, db.get("DBInstanceClass")),
         "rds_engine_version": cast(str, db.get("EngineVersion")),
     }

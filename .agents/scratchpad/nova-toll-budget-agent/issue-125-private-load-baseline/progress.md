@@ -10,6 +10,8 @@
 - [x] Run Gitleaks and final validation
 - [x] Commit validated implementation
 - [x] Push, open ready PR, and confirm CI
+- [x] Document the baseline and no-resize conclusion in issue #95
+- [x] Address review feedback by fingerprinting both ingestion Lambdas
 
 ## Setup
 
@@ -41,3 +43,6 @@
   its whole-directory scan reported only ignored pytest/bytecode test fixtures.
 - Rebased implementation commit: `a7cdc73` (`test: record private load baseline`).
 - Published ready PR #148; CI, Gitleaks, GitGuardian, and all CodeQL checks passed.
+- Review RED/GREEN: a focused preflight test first failed because ingestion
+  fingerprints were absent, then passed after adding fetcher and loader code
+  hashes to the existing identity comparison.
