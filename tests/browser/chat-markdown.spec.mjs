@@ -259,7 +259,9 @@ test("private preview presents the open beta and its source limitations", async 
     "Tolls on I-95, I-495, and I-66 use dynamic pricing based on congestion, making trips difficult to plan and budget. TollChat turns a trip into a clear price before you merge, not after."
   );
 
-  const badge = page.getByRole("link", { name: "TollChat CI status" });
+  await expect(page.locator("header").getByRole("link", { name: "TollChat CI status" })).toHaveCount(0);
+  const footer = page.locator("footer");
+  const badge = footer.getByRole("link", { name: "TollChat CI status" });
   await expect(badge).toHaveAttribute(
     "href",
     "https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml"
@@ -270,19 +272,23 @@ test("private preview presents the open beta and its source limitations", async 
   );
   await expect(badge).toHaveAttribute("referrerpolicy", "no-referrer");
 
-  await expect(page.getByRole("link", { name: "contact@tollchat.ai" })).toHaveAttribute(
+  await expect(footer).toContainText("Found a bug or have another comment? Email contact@tollchat.ai.");
+  await expect(footer.getByRole("link", { name: "contact@tollchat.ai" })).toHaveAttribute(
     "href",
     "mailto:contact@tollchat.ai"
   );
-  await expect(page.getByRole("link", { name: "VDOT SmarterRoads terms" })).toHaveAttribute(
+  await expect(footer.getByRole("link", { name: "GitHub", exact: true })).toHaveCount(0);
+  await expect(footer.getByRole("link", { name: "VDOT SmarterRoads terms" })).toHaveAttribute(
     "href",
     "https://smarterroads.vdot.virginia.gov/termsOfService"
   );
-  await expect(page.locator("footer")).toContainText("not affiliated with the Virginia Department of Transportation");
-  await expect(page.locator("footer")).toContainText("as is and as available");
-  await expect(page.locator("footer")).toContainText("may be inaccurate, delayed, changed, or unavailable");
-  await expect(page.locator("footer")).toContainText("behavior may change, and no availability commitment is offered");
-  await expect(page.locator("footer")).toContainText("Estimates only. Verify current rates with the toll operator before travel.");
+  await expect(footer).toContainText("not affiliated with the Virginia Department of Transportation");
+  await expect(footer).toContainText("as is and as available");
+  await expect(footer).toContainText("may be inaccurate, delayed, changed, or unavailable");
+  await expect(footer).toContainText("TollChat uses VDOT’s public toll pricing data.");
+  await expect(footer).not.toContainText("and we’re fans");
+  await expect(footer).toContainText("behavior may change, and no availability commitment is offered");
+  await expect(footer).toContainText("Estimates only. Verify current rates with the toll operator before travel.");
 });
 
 test("private preview discloses retention before message entry", async ({ page }) => {
@@ -463,8 +469,6 @@ test("shared coverage map stays interactive publicly and direction-aware private
   await expect(page.locator("#reset-map")).toBeEnabled();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "New chat" })).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "TollChat CI status" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip map and ask a question" })).toBeFocused();
   await page.keyboard.press("Enter");
