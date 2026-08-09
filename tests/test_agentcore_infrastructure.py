@@ -382,10 +382,12 @@ def test_public_api_behavior_is_uncached_allowlisted_and_single_attempt():
     )[0]
 
     assert (
-        'cache_policy_id          = "413f1603-3b9c-4ea9-bf45-8c6a2e83ef45"' in behavior
+        "cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id"
+        in behavior
     )
     assert (
-        'origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"' in behavior
+        "origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_except_host.id"
+        in behavior
     )
     assert 'viewer_protocol_policy   = "https-only"' in behavior
     assert re.search(r"connection_attempts\s+= 1", site)
