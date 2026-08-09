@@ -223,6 +223,22 @@ resource "aws_cloudwatch_log_metric_filter" "load_success" {
   }
 }
 
+# The proxy intentionally converts dependency and stream failures into the
+# browser-safe error contract, so AWS/Lambda Errors cannot see them. Count the
+# stable metadata-only marker while retaining Lambda Errors for timeouts and
+# uncaught failures.
+resource "aws_cloudwatch_log_metric_filter" "proxy_failure" {
+  name           = "ProxyFailure"
+  log_group_name = aws_cloudwatch_log_group.tollchat_proxy.name
+  pattern        = "PROXY_FAILURE"
+
+  metric_transformation {
+    namespace = "NovaToll"
+    name      = "ProxyFailure"
+    value     = "1"
+  }
+}
+
 # 1. toll-fetcher errors
 resource "aws_cloudwatch_metric_alarm" "fetcher_errors" {
   alarm_name          = "toll-fetcher-errors"
@@ -257,6 +273,7 @@ resource "aws_cloudwatch_metric_alarm" "freshness" {
   for_each = toset(["i95", "i66"])
 
   alarm_name          = "toll-freshness-${each.key}"
+  alarm_description   = "No successful ${each.key} load for 30 minutes. Follow docs/runbooks/alarms.md."
   namespace           = "NovaToll"
   metric_name         = "LoadSuccess"
   dimensions          = { feed = each.key }
@@ -320,13 +337,44 @@ resource "aws_cloudwatch_metric_alarm" "bucket_storage" {
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
   alarm_name          = "tollchat-chat-proxy-errors"
+  alarm_description   = "Proxy timeout or uncaught failure. Follow docs/runbooks/alarms.md."
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
   period              = 300
   evaluation_periods  = 1
   statistic           = "Sum"
-  threshold           = 5
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_failures" {
+  alarm_name          = "tollchat-chat-proxy-failures"
+  alarm_description   = "Proxy returned the safe dependency-failure contract. Follow docs/runbooks/alarms.md."
+  namespace           = "NovaToll"
+  metric_name         = "ProxyFailure"
+  period              = 300
+  evaluation_periods  = 1
+  statistic           = "Sum"
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_latency" {
+  alarm_name          = "tollchat-chat-proxy-latency"
+  alarm_description   = "Proxy p99 is within five seconds of its timeout. Follow docs/runbooks/alarms.md."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
+  period              = 300
+  evaluation_periods  = 2
+  datapoints_to_alarm = 1
+  extended_statistic  = "p99"
+  threshold           = 45 * 1000
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
@@ -334,14 +382,80 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_sessions" {
   alarm_name          = "tollchat-agentcore-active-sessions"
+  alarm_description   = "AgentCore active sessions exceed the private baseline. Follow docs/runbooks/alarms.md."
   namespace           = "AWS/Bedrock-AgentCore"
   metric_name         = "ActiveSessionCount"
   dimensions          = { Service = "AgentCore.Runtime" }
   period              = 60
-  evaluation_periods  = 1
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
   statistic           = "Maximum"
-  threshold           = 5
+  threshold           = 10
   comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
+  alarm_name          = "toll-rds-cpu"
+  alarm_description   = "RDS CPU stayed above the launch threshold. Follow docs/runbooks/alarms.md."
+  namespace           = "AWS/RDS"
+  metric_name         = "CPUUtilization"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.main.identifier }
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 5
+  statistic           = "Average"
+  threshold           = 70
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_free_memory" {
+  alarm_name          = "toll-rds-free-memory"
+  alarm_description   = "RDS freeable memory is below the private baseline. Follow docs/runbooks/alarms.md."
+  namespace           = "AWS/RDS"
+  metric_name         = "FreeableMemory"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.main.identifier }
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 3
+  statistic           = "Minimum"
+  threshold           = 64 * 1024 * 1024
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_connections" {
+  alarm_name          = "toll-rds-connections"
+  alarm_description   = "RDS connections reached 60 of the observed 79 maximum. Follow docs/runbooks/alarms.md."
+  namespace           = "AWS/RDS"
+  metric_name         = "DatabaseConnections"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.main.identifier }
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 3
+  statistic           = "Maximum"
+  threshold           = 60
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
+  alarm_name          = "toll-rds-cpu-credits"
+  alarm_description   = "RDS CPU credits fell below 25 percent of the observed full balance. Follow docs/runbooks/alarms.md."
+  namespace           = "AWS/RDS"
+  metric_name         = "CPUCreditBalance"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.main.identifier }
+  period              = 300
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  statistic           = "Minimum"
+  threshold           = 72
+  comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }

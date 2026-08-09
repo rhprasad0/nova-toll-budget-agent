@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-08-09T20:49:06Z",
+  "issues": [
+    125
+  ],
+  "status": "passed",
+  "scenario": "Actionable AWS launch alarms and notification delivery",
+  "evidence_type": "Metadata-only deployed observability verification",
+  "alarm_count": 10,
+  "baseline_days": 14,
+  "baseline": {
+    "proxy_duration_p99_max_ms": 48675.212,
+    "proxy_duration_p95_ms": 19515.614,
+    "proxy_errors_window_max": 1,
+    "agentcore_active_sessions_max": 6,
+    "rds_cpu_max_percent": 24.464,
+    "rds_free_memory_p01_mib": 65.4,
+    "rds_connections_max": 3,
+    "rds_max_connections": 79,
+    "rds_cpu_credit_full_balance": 288
+  },
+  "checks": {
+    "targeted_plan_no_destroy": true,
+    "proxy_failure_metric_filter_present": true,
+    "proxy_failure_alarm_present": true,
+    "proxy_latency_alarm_present": true,
+    "agentcore_session_alarm_present": true,
+    "freshness_alarms_present": true,
+    "rds_capacity_alarms_present": true,
+    "all_alarm_actions_use_alert_topic": true,
+    "email_subscription_confirmed": true,
+    "owner_received_test_notification": true,
+    "cloudwatch_alarm_action_succeeded": true,
+    "canonical_smoke_passed": true,
+    "proxy_healthy_after_apply": true
+  },
+  "notes": "Alarm actions, states, thresholds, metric-filter wiring, and delivery were verified without curating recipient, account, subscription, message, request, session, endpoint, or credential data. A concurrent older Terraform apply was detected and the scoped resources were reconciled without changing that session's AgentCore artifact."
+}

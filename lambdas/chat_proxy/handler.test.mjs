@@ -149,6 +149,9 @@ test("only the trusted private route forwards the runtime failure drill", async 
 });
 
 test("chat replaces malformed or internal upstream data with a safe error", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args);
   const client = {
     async send() {
       return {
@@ -160,17 +163,23 @@ test("chat replaces malformed or internal upstream data with a safe error", asyn
     },
   };
 
-  const response = await route(
-    event("POST", "/api/chat", { message: "hello" }),
-    { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
-  );
-  const body = await bodyText(response.body);
+  let body;
+  try {
+    const response = await route(
+      event("POST", "/api/chat", { message: "hello" }),
+      { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
+    );
+    body = await bodyText(response.body);
+  } finally {
+    console.error = originalError;
+  }
 
   assert.equal(
     body,
     '{"type":"error","code":"agent_unavailable","message":"TollChat is temporarily unavailable. Please try again."}\n',
   );
   assert.doesNotMatch(body, /password|hunter2|raw secret/);
+  assert.deepEqual(errors, [["PROXY_FAILURE", "stream", "Error"]]);
 });
 
 test("chat requires exactly one terminal upstream event", async () => {
@@ -189,6 +198,34 @@ test("chat requires exactly one terminal upstream event", async () => {
     assert.doesNotMatch(body, /The toll is/);
     assert.equal(body.match(/"type":"(?:answer|error)"/g)?.length, 1);
   }
+});
+
+test("chat counts a valid AgentCore dependency error without exposing detail", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args);
+  const client = { async send() {
+    return {
+      contentType: "text/event-stream",
+      response: chunks(
+        'data: {"type":"error","code":"agent_unavailable","message":"TollChat could not complete that request. Please try again."}\n\n',
+      ),
+    };
+  } };
+
+  let body;
+  try {
+    const response = await route(
+      event("POST", "/api/chat", { message: "hello" }),
+      { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
+    );
+    body = await bodyText(response.body);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.match(body, /could not complete/);
+  assert.deepEqual(errors, [["PROXY_FAILURE", "runtime", "agent_unavailable"]]);
 });
 
 test("validation, page, config, and reset keep their small contracts", async () => {
@@ -247,16 +284,25 @@ test("validation, page, config, and reset keep their small contracts", async () 
 });
 
 test("AgentCore invocation failures return no internal detail", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args);
   const client = { async send() { throw new Error("credential-shaped detail"); } };
-  const response = await route(
-    event("POST", "/api/chat", { message: "hello" }),
-    { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
-  );
+  let response;
+  try {
+    response = await route(
+      event("POST", "/api/chat", { message: "hello" }),
+      { ...sessionDependencies, client, runtimeArn: "runtime-arn", previewHtml: "" },
+    );
+  } finally {
+    console.error = originalError;
+  }
 
   assert.equal(response.statusCode, 502);
   const body = await bodyText(response.body);
   assert.match(body, /temporarily unavailable/);
   assert.doesNotMatch(body, /credential-shaped/);
+  assert.deepEqual(errors, [["PROXY_FAILURE", "request", "Error"]]);
 });
 
 test("reset is idempotent when its runtime session does not exist", async () => {
@@ -448,6 +494,38 @@ test("conditional session updates enforce idle, absolute expiry, and revocation"
   assert.match(update.UpdateExpression, /lease_id = :lease_id/);
   assert.equal(update.ExpressionAttributeValues[":idle_cutoff"].N, "1699999100");
   assert.equal(updates[1].UpdateExpression, "REMOVE lease_id, lease_until");
+});
+
+test("lease-release failures are counted without replacing a completed answer", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args);
+  const sessionClient = { async send(command) {
+    if (command.input.UpdateExpression === "REMOVE lease_id, lease_until") {
+      throw new Error("sensitive detail");
+    }
+    return { Attributes: { runtime_session_id: { S: sessionId } } };
+  } };
+  const client = { async send() {
+    return {
+      contentType: "text/event-stream",
+      response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+    };
+  } };
+
+  let body;
+  try {
+    const response = await route(
+      event("POST", "/api/chat", { message: "hello" }),
+      { ...sessionDependencies, sessionClient, client, runtimeArn: "runtime-arn", previewHtml: "" },
+    );
+    body = await bodyText(response.body);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(body, '{"type":"answer","text":"Done","blocked":false}\n');
+  assert.deepEqual(errors, [["PROXY_FAILURE", "lease_release", "Error"]]);
 });
 
 test("a newly-created credential survives an AgentCore failure for safe retry", async () => {
