@@ -278,7 +278,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "agentcore_artifacts" {
   rule {
     id     = "trim-old-runtime-artifacts"
     status = "Enabled"
-    filter {}
+    filter { prefix = "runtime/" }
     noncurrent_version_expiration {
       noncurrent_days           = 30
       newer_noncurrent_versions = 5
