@@ -115,7 +115,7 @@ receives model, tool, database, provider, or infrastructure details.
 - [ ] Add actionable alarms for proxy failures and latency, AgentCore sessions,
       toll-data freshness, RDS CPU/free memory/connections/CPU credits, and
       provider spend. Confirm the SNS recipient actually receives them.
-- [ ] Run a short private load test with ingestion active. Set alert and rollout
+- [x] Run a short private load test with ingestion active. Set alert and rollout
       thresholds from that baseline; resize RDS only if the evidence requires it.
 - [ ] Implement the launch-critical slice of
       [#104](https://github.com/rhprasad0/nova-toll-budget-agent/issues/104):

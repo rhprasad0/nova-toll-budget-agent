@@ -306,9 +306,14 @@ def _runtime_version(aws: list[str]) -> str:
     return _safe_runtime_version(version)
 
 
-def _post_chat(base_url: str, marker: str) -> tuple[int, bytes]:
+def _post_chat(
+    base_url: str,
+    marker: str,
+    *,
+    opener: urllib.request.OpenerDirector | None = None,
+) -> tuple[int, bytes]:
     origin = urllib.parse.urlsplit(base_url)
-    opener = urllib.request.build_opener(
+    opener = opener or urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(CookieJar())
     )
     request = urllib.request.Request(
