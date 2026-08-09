@@ -1,7 +1,7 @@
 # Public agent launch gate
 
 **Status:** blocked; this repository does not deploy a public agent.
-**Owner:** Ryan Prasad · **Last updated:** 2026-07-30
+**Owner:** Ryan Prasad · **Last updated:** 2026-08-09
 
 The private-preview implementation now exists on branch
 `feat/agentcore-private-preview`, but no item below is complete until an
@@ -38,6 +38,14 @@ Every unchecked item blocks launch.
 
 ## Operations
 
+- [x] Drill the service-wide private kill switch. The 2026-08-09 drill blocked
+      both private API routes in 2.3 seconds with zero AgentCore invocations,
+      kept ingestion and RDS healthy through Terraform apply, and restored
+      concurrency `5` plus the canonical smoke in 21.4 seconds. Escalate if
+      recovery exceeds 60 seconds or cannot be confirmed after three attempts.
+- [ ] With public chat temporarily enabled under owner approval, prove the WAF
+      switch returns 503, then apply `enable_public_chat=false` and prove
+      CloudFront removes `/api/*` without changing private proxy governance.
 - [ ] Make the SNS subscription address and `scripts/smoke.sh` instruction
       agree, confirm the subscription, and test delivery.
 - [ ] Record when each route oracle was retrieved and define a manual
