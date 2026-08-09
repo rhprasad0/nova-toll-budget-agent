@@ -8,8 +8,9 @@ database endpoints, IP addresses, account IDs, or KMS key IDs.
 
 The data pipeline uses separate least-privilege Lambda roles, parameterized
 database queries, RDS IAM authentication, and TLS certificate verification.
-The public chat agent is not deployed yet. Its release gate is documented in
-[`docs/public-agent-launch-gate.md`](docs/public-agent-launch-gate.md).
+The private preview and public beta are deployed. Public chat reaches the same
+validated proxy through CloudFront OAC and WAF; reports sent to
+`contact@tollchat.ai` reach the admin.
 
 ## Implemented hardening (2026-07-26)
 
@@ -117,8 +118,7 @@ S3 objects and RDS rows must not be destroyed.
 - Keep the OpenAI API key in SSM Parameter Store at
   `/nova-toll/openai_api_key`. The agent reads it with decryption through the
   ambient AWS identity; never export it, log it, or copy it into a local file.
-- Both OpenAI and Bedrock Mantle use stateful Responses, so provider-side
-  retention must be reviewed before public launch. Local tool auditing uses
+- Both OpenAI and Bedrock Mantle use stateful Responses. Local tool auditing uses
   the response `metrics.traces`, not Strands' empty stateful message history.
 - Keep the Cloudflare API token in SSM Parameter Store at
   `/nova-toll/cloudflare-api-token`, on its dedicated KMS key. Terraform does
@@ -157,11 +157,8 @@ S3 objects and RDS rows must not be destroyed.
 - Use the replay role only for approved recovery work, with MFA. Never widen
   its S3 or KMS permissions for convenience.
 
-## Remaining review items
+## Agent posture
 
-- Before a public agent launch, implement every control in the public-agent
-  launch gate, including WAF throttling, concurrency/spend limits, a kill
-  switch, output validation, and a dedicated read-only runtime role.
 - Agent deployment keeps the OpenAI key in SSM Parameter Store and restricts
   the runtime to read that one parameter, connect to RDS only as
   `pricing_reader`, and apply the designated Bedrock Guardrail. Private preview
@@ -169,5 +166,5 @@ S3 objects and RDS rows must not be destroyed.
   private API Gateway custom domain; API and domain policies require the
   execute-api VPC endpoint, while direct runtime invocation requires the
   separate AgentCore VPC endpoint.
-- Public chat routing is present but disabled by default. Enabling it before
-  every launch-gate item has evidence is an operating-policy violation.
+- Public chat routing is enabled for the beta. The admin can remove `/api/*`
+  without changing the private preview by applying `enable_public_chat=false`.

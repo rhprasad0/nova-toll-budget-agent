@@ -41,7 +41,31 @@ variable "chat_proxy_package_path" {
 }
 
 variable "enable_public_chat" {
-  description = "Expose the chat proxy through the public CloudFront /api/* path. Keep false until every launch gate is approved."
+  description = "Expose the chat proxy through the public CloudFront /api/* path. Set false to remove public chat while preserving the private preview."
   type        = bool
   default     = false
+}
+
+variable "site_index_path" {
+  description = "Optional reviewed HTML artifact used for the public site."
+  type        = string
+  default     = ""
+}
+
+variable "site_script_path" {
+  description = "Optional reviewed JavaScript artifact used for the public site."
+  type        = string
+  default     = ""
+}
+
+variable "site_privacy_path" {
+  description = "Optional reviewed privacy notice artifact used for the public site."
+  type        = string
+  default     = ""
+}
+
+variable "site_terms_path" {
+  description = "Optional reviewed terms artifact used for the public site."
+  type        = string
+  default     = ""
 }

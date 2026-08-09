@@ -1,4 +1,4 @@
-# --- coming-soon static site bucket (private, CloudFront-only access) -----
+# --- open-beta static site bucket (private, CloudFront-only access) -------
 
 resource "aws_s3_bucket" "site" {
   bucket = "tollchat-site-920534282028"
@@ -21,17 +21,51 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
   }
 }
 
+locals {
+  site_index_path   = var.site_index_path != "" ? var.site_index_path : "${path.module}/../site/preview.html"
+  site_script_path  = var.site_script_path != "" ? var.site_script_path : "${path.module}/../site/preview.mjs"
+  site_privacy_path = var.site_privacy_path != "" ? var.site_privacy_path : "${path.module}/../docs/legal/privacy.md"
+  site_terms_path   = var.site_terms_path != "" ? var.site_terms_path : "${path.module}/../docs/legal/terms.md"
+}
+
 resource "aws_s3_object" "index" {
   bucket       = aws_s3_bucket.site.id
   key          = "index.html"
-  source       = "${path.module}/../site/index.html"
-  etag         = filemd5("${path.module}/../site/index.html")
+  source       = local.site_index_path
+  etag         = filemd5(local.site_index_path)
   content_type = "text/html"
   # Revalidate on every hit so a site edit goes live with the apply, no
   # CloudFront invalidation needed. One page, so the origin hits are free.
   cache_control = "no-cache"
 
   depends_on = [aws_s3_object.site_assets]
+}
+
+resource "aws_s3_object" "preview_script" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "preview.mjs"
+  source        = local.site_script_path
+  etag          = filemd5(local.site_script_path)
+  content_type  = "text/javascript"
+  cache_control = "no-cache"
+}
+
+resource "aws_s3_object" "privacy" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "privacy.txt"
+  source        = local.site_privacy_path
+  etag          = filemd5(local.site_privacy_path)
+  content_type  = "text/plain; charset=utf-8"
+  cache_control = "no-cache"
+}
+
+resource "aws_s3_object" "terms" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "terms.txt"
+  source        = local.site_terms_path
+  etag          = filemd5(local.site_terms_path)
+  content_type  = "text/plain; charset=utf-8"
+  cache_control = "no-cache"
 }
 
 locals {

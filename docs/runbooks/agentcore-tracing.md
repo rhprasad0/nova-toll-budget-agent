@@ -54,4 +54,4 @@ The check must fail on missing model/tool/Guardrail stages, missing versions or 
 - Incomplete chunks: do not use the trace as evidence; retain the temporary export for local diagnosis only, then delete it.
 - Access denied: assume the reviewer role; do not broaden the runtime writer role.
 
-Primary costs are 100% trace ingestion, CloudWatch Logs storage/query scanning, Transaction Search indexing at 1%, KMS requests, and live model calls. Keep queries session- and time-bounded. Revisit sampling only before public launch; changing it weakens the every-invocation promise.
+Primary costs are 100% trace ingestion, CloudWatch Logs storage/query scanning, Transaction Search indexing at 1%, KMS requests, and live model calls. Keep queries session- and time-bounded. Review evidence before changing sampling; changing it weakens the every-invocation promise.

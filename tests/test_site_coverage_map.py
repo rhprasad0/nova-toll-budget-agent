@@ -1,4 +1,4 @@
-"""Regression checks for the self-contained coming-soon coverage map."""
+"""Regression checks for the self-contained open-beta coverage map."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
-SITE = ROOT / "site" / "index.html"
+SITE = ROOT / "site" / "preview.html"
 MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v1.mjs"
 ORACLES = ROOT / "oracles"
 ASSETS = ROOT / "site" / "assets"
@@ -59,8 +59,7 @@ def test_map_uses_token_free_pinned_maplibre_and_stays_accessible() -> None:
     page = SITE.read_text()
     implementation = page + MAP_MODULE.read_text()
     assert 'id="coverage-map"' in page
-    assert 'aria-label="Interactive TollChat coverage map"' in page
-    assert "145 supported entry and exit nodes" in page
+    assert 'aria-label="Interactive TollChat coverage map.' in page
     assert 'href="/assets/maplibre-gl-6.0.0/maplibre-gl.css"' in page
     assert 'import("/assets/maplibre-gl-6.0.0/maplibre-gl.mjs")' in implementation
     assert "setWorkerUrl" not in implementation
@@ -102,8 +101,8 @@ def test_maplibre_assets_are_pinned_and_published_by_terraform() -> None:
 def test_map_recovers_from_a_slow_load_and_preserves_mobile_attribution() -> None:
     page = SITE.read_text()
     assert "error.hidden = true;" in MAP_MODULE.read_text()
-    assert ".map-detail { right: .75rem; bottom: 3.25rem;" in page
-    assert ".reset-map { top: auto; right: .75rem; bottom: 14.5rem;" in page
+    assert "grid-template-rows:auto 20rem auto" in page
+    assert ".map-detail { position:static;" in page
 
 
 def test_map_embeds_road_following_geojson_for_every_facility() -> None:
@@ -141,7 +140,7 @@ def test_map_exposes_native_filters_reset_and_details() -> None:
 def test_rendered_pins_use_precomputed_fixed_positions() -> None:
     page = SITE.read_text()
     module = MAP_MODULE.read_text()
-    assert ".map-pin, .junction-pin { position: absolute;" in page
+    assert ".map-pin,.junction-pin { position:absolute;" in page
     assert "snapToRoute" not in page
     assert "mountMarker(marker, [pin.lon,pin.lat])" in module
     assert "move = true" not in module
@@ -151,7 +150,7 @@ def test_rendered_pins_use_precomputed_fixed_positions() -> None:
 def test_map_marks_the_i95_i495_junction_as_unpriced() -> None:
     page = SITE.read_text()
     module = MAP_MODULE.read_text()
-    assert "Coverage, with one honest gap." in page
+    assert "Coverage at a glance" in page
     assert "I-95 \u2194 I-495 junction price unavailable." in page
     assert 'dataset.junction = "true"' in module
     assert 'aria-label", "I-95 to I-495 junction: price unavailable"' in module
@@ -185,24 +184,17 @@ def test_footer_states_ai_support_and_vdot_independence() -> None:
     page = SITE.read_text()
     assert "We support American AI innovation" in page
     assert "Virginia Department of Transportation (VDOT)" in page
-    assert "We use VDOT\u2019s public toll pricing data - and we\u2019re fans." in page
+    assert "TollChat uses VDOT\u2019s public toll pricing data." in page
 
 
-def test_page_explains_congestion_pricing_problem() -> None:
+def test_page_contains_an_accessible_chat() -> None:
     page = SITE.read_text()
-    assert "I-95, I-495, and I-66" in page
-    assert "dynamic pricing based on congestion" in page
-    assert "difficult to plan and budget" in page
-
-
-def test_page_contains_a_config_gated_accessible_chat() -> None:
-    page = SITE.read_text()
-    assert 'id="tollchat-chat"' in page
-    assert 'id="chat-messages"' in page
+    script = (ROOT / "site" / "preview.mjs").read_text()
+    assert 'id="transcript"' in page
+    assert 'id="message"' in page
     assert 'aria-live="polite"' in page
     assert 'maxlength="8000"' in page
-    assert 'fetch("/api/config"' in page
-    assert 'request("/api/chat"' in page
-    assert 'request("/api/reset"' in page
-    assert "status.textContent = errorMessage" in page
+    assert 'post("/api/chat"' in script
+    assert 'post("/api/reset"' in script
+    assert 'id="privacy-notice"' in page
     assert "Raw telemetry" not in page

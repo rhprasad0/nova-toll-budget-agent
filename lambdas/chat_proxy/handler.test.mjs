@@ -250,6 +250,14 @@ test("validation, page, config, and reset keep their small contracts", async () 
   assert.equal(asset.headers["Content-Type"], "text/javascript; charset=utf-8");
   assert.equal(asset.headers["Cache-Control"], "public, max-age=31536000, immutable");
   assert.equal(await bodyText(asset.body), "export const safe = true;");
+  const privacy = await route(event("GET", "/privacy.txt"), {
+    ...dependencies,
+    previewAssets: { "/privacy.txt": "# Privacy" },
+  });
+  assert.equal(privacy.statusCode, 200);
+  assert.equal(privacy.headers["Content-Type"], "text/plain; charset=utf-8");
+  assert.equal(privacy.headers["Cache-Control"], "no-store");
+  assert.equal(await bodyText(privacy.body), "# Privacy");
   const coverageMap = await route(event("GET", "/assets/coverage-map-v1.mjs"), {
     ...dependencies,
     previewAssets: { "/assets/coverage-map-v1.mjs": "export const pins = [];" },

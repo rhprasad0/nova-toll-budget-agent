@@ -19,6 +19,7 @@ on:
         "uv.lock",
         "lambdas/**",
         "site/**",
+        "docs/legal/**",
       ]
   pull_request:
     paths:
@@ -35,6 +36,7 @@ on:
         "uv.lock",
         "lambdas/**",
         "site/**",
+        "docs/legal/**",
       ]
 
 concurrency:
@@ -74,7 +76,10 @@ jobs:
       - name: Record reviewed package digests
         run: |
           cd infra/build
-          sha256sum agentcore.zip chat-proxy.zip fetcher.zip loader.zip > SHA256SUMS
+          cp ../../site/preview.html ../../site/preview.mjs .
+          cp ../../docs/legal/privacy.md ../../docs/legal/terms.md .
+          sha256sum agentcore.zip chat-proxy.zip fetcher.zip loader.zip \
+            preview.html preview.mjs privacy.md terms.md > SHA256SUMS
           REVIEWED_RELEASE="${GITHUB_SHA}/$(sha256sum SHA256SUMS | cut -d ' ' -f1)"
           echo "REVIEWED_RELEASE=$REVIEWED_RELEASE" >> "$GITHUB_ENV"
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
@@ -85,12 +90,12 @@ jobs:
         run: |
           verification_dir="$(mktemp -d)"
           trap 'rm -r -- "$verification_dir"' EXIT
-          for artifact in agentcore.zip chat-proxy.zip fetcher.zip loader.zip SHA256SUMS; do
+          for artifact in agentcore.zip chat-proxy.zip fetcher.zip loader.zip preview.html preview.mjs privacy.md terms.md SHA256SUMS; do
             aws s3 cp "infra/build/$artifact" \
               "s3://nova-toll-agentcore-920534282028/reviewed/$REVIEWED_RELEASE/$artifact" \
               --checksum-algorithm SHA256 --only-show-errors
           done
-          for artifact in agentcore.zip chat-proxy.zip fetcher.zip loader.zip SHA256SUMS; do
+          for artifact in agentcore.zip chat-proxy.zip fetcher.zip loader.zip preview.html preview.mjs privacy.md terms.md SHA256SUMS; do
             aws s3 cp \
               "s3://nova-toll-agentcore-920534282028/reviewed/$REVIEWED_RELEASE/$artifact" \
               "$verification_dir/$artifact" \
@@ -112,7 +117,8 @@ jobs:
             -var fetcher_package_path=build/fetcher.zip \
             -var loader_package_path=build/loader.zip \
             -var agentcore_package_path=build/agentcore.zip \
-            -var chat_proxy_package_path=build/chat-proxy.zip
+            -var chat_proxy_package_path=build/chat-proxy.zip \
+            -var enable_public_chat=true
         working-directory: infra
       - name: Publish reviewed release
         run: |

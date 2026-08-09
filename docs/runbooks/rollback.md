@@ -77,7 +77,7 @@ object versions are excluded from expiration so the audit trail remains
 recoverable even if a current version is accidentally replaced.
 
 Fetch the Cloudflare token from SSM as described in `SECURITY.md`, then plan
-with all four verified ZIPs:
+with the verified packages and public-site files. Keep the public edge off:
 
 ```bash
 terraform -chdir=infra init
@@ -85,15 +85,21 @@ terraform -chdir=infra plan -out=rollback.tfplan \
   -var "fetcher_package_path=$artifact_dir/fetcher.zip" \
   -var "loader_package_path=$artifact_dir/loader.zip" \
   -var "agentcore_package_path=$artifact_dir/agentcore.zip" \
-  -var "chat_proxy_package_path=$artifact_dir/chat-proxy.zip"
+  -var "chat_proxy_package_path=$artifact_dir/chat-proxy.zip" \
+  -var "site_index_path=$artifact_dir/preview.html" \
+  -var "site_script_path=$artifact_dir/preview.mjs" \
+  -var "site_privacy_path=$artifact_dir/privacy.md" \
+  -var "site_terms_path=$artifact_dir/terms.md" \
+  -var enable_public_chat=false
 terraform -chdir=infra show rollback.tfplan
 # After owner approval:
 terraform -chdir=infra apply rollback.tfplan
 ```
 
-Verify the plan changes only the approved packages and their expected runtime
-or endpoint dependencies. Do not roll back the database, raw feed objects, or
-Terraform state.
+Verify the plan changes only the approved packages, public-site files, and
+their expected runtime or endpoint dependencies. It must not create a public
+Lambda URL, public origin access control, `/api/*` behavior, or WAF. Do not
+roll back the database, raw feed objects, or Terraform state.
 
 ## Validate with bounded private concurrency
 

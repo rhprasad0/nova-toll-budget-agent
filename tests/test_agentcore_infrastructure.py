@@ -336,13 +336,19 @@ def test_trace_reviewer_is_read_only_for_governed_telemetry():
     assert "logs:DeleteLogGroup" not in reviewer
 
 
-def test_public_chat_edge_is_default_off_and_uses_cloudfront_oac():
+def test_public_chat_edge_is_explicitly_promoted_and_uses_cloudfront_oac():
     variables = (ROOT / "infra/variables.tf").read_text()
     site = (ROOT / "infra/site.tf").read_text()
+    workflow = (ROOT / ".github/workflows/terraform.yml").read_text()
 
     public_switch = variables.split('variable "enable_public_chat"', maxsplit=1)[1]
     assert "type        = bool" in public_switch
     assert "default     = false" in public_switch
+    assert "-var enable_public_chat=true" in workflow
+    assert "source       = local.site_index_path" in site
+    assert 'key           = "preview.mjs"' in site
+    assert "source        = local.site_script_path" in site
+    assert 'cache_control = "no-cache"' in site
     assert 'resource "aws_lambda_function_url" "public_chat"' in site
     assert 'authorization_type = "AWS_IAM"' in site
     assert re.search(r'invoke_mode\s+= "RESPONSE_STREAM"', site)
@@ -356,6 +362,16 @@ def test_public_chat_edge_is_default_off_and_uses_cloudfront_oac():
     assert "source_arn             = aws_cloudfront_distribution.site.arn" in site
     assert 'function_url_auth_type = "AWS_IAM"' in site
     assert "invoked_via_function_url = true" in site
+
+
+def test_public_site_publishes_privacy_and_terms():
+    site = (ROOT / "infra/site.tf").read_text()
+    page = (ROOT / "site/preview.html").read_text()
+
+    assert 'key           = "privacy.txt"' in site
+    assert 'key           = "terms.txt"' in site
+    assert 'href="/privacy.txt"' in page
+    assert 'href="/terms.txt"' in page
 
 
 def test_public_api_behavior_is_uncached_allowlisted_and_single_attempt():

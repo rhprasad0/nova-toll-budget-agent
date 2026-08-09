@@ -81,7 +81,8 @@ def test_private_bundle_serves_the_shared_pinned_map_assets() -> None:
     assert "site/assets/coverage-map-v1.mjs" in build
     assert "site/assets/maplibre-gl-6.0.0" in build
     assert '"assets/coverage-map-v1.mjs"' in infra
-    assert 'path.endsWith(".css") ? "text/css; charset=utf-8"' in handler
+    assert 'path.endsWith(".css")' in handler
+    assert '"text/css; charset=utf-8"' in handler
 
 
 def test_private_map_uses_mode_selected_route_geometry() -> None:

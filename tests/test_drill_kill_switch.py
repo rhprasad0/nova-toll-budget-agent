@@ -384,8 +384,8 @@ def test_runbook_requires_approval_restore_and_metadata_only_evidence():
     runbook = (ROOT / "docs/runbooks/kill-switch.md").read_text()
 
     for required in (
-        "explicit owner approval",
-        "--approved-by Ryan",
+        "explicit approval",
+        "--approved-by Admin",
         "--pause-for-screenshot",
         "put-function-concurrency",
         "eval/results/",
