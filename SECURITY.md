@@ -8,8 +8,8 @@ database endpoints, IP addresses, account IDs, or KMS key IDs.
 
 The data pipeline uses separate least-privilege Lambda roles, parameterized
 database queries, RDS IAM authentication, and TLS certificate verification.
-The public chat agent is not deployed yet. Its release gate is documented in
-[`docs/public-agent-launch-gate.md`](docs/public-agent-launch-gate.md).
+The private preview is deployed. Public chat routing is present but disabled by
+default in Terraform. Reports sent to `contact@tollchat.ai` reach the admin.
 
 ## Implemented hardening (2026-07-26)
 
@@ -157,11 +157,8 @@ S3 objects and RDS rows must not be destroyed.
 - Use the replay role only for approved recovery work, with MFA. Never widen
   its S3 or KMS permissions for convenience.
 
-## Remaining review items
+## Agent posture
 
-- Before a public agent launch, implement every control in the public-agent
-  launch gate, including WAF throttling, concurrency/spend limits, a kill
-  switch, output validation, and a dedicated read-only runtime role.
 - Agent deployment keeps the OpenAI key in SSM Parameter Store and restricts
   the runtime to read that one parameter, connect to RDS only as
   `pricing_reader`, and apply the designated Bedrock Guardrail. Private preview
@@ -170,4 +167,5 @@ S3 objects and RDS rows must not be destroyed.
   execute-api VPC endpoint, while direct runtime invocation requires the
   separate AgentCore VPC endpoint.
 - Public chat routing is present but disabled by default. Enabling it before
-  every launch-gate item has evidence is an operating-policy violation.
+  the admin deliberately approves the Terraform change is an operating-policy
+  violation.
