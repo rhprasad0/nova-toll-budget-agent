@@ -9,7 +9,7 @@
 - [x] Curate evidence and rollout thresholds
 - [x] Run Gitleaks and final validation
 - [x] Commit validated implementation
-- [ ] Push, open ready PR, and confirm CI
+- [x] Push, open ready PR, and confirm CI
 
 ## Setup
 
@@ -40,3 +40,4 @@
   formatting, and Pyright passed. Gitleaks found no leaks in any intended file;
   its whole-directory scan reported only ignored pytest/bytecode test fixtures.
 - Rebased implementation commit: `a7cdc73` (`test: record private load baseline`).
+- Published ready PR #148; CI, Gitleaks, GitGuardian, and all CodeQL checks passed.
