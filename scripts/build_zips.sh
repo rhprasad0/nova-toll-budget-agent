@@ -56,6 +56,8 @@ cp "$REPO/lambdas/chat_proxy/handler.mjs" \
    "$REPO/site/preview.html" \
    "$REPO/site/preview.mjs" \
    "$proxy_stage/"
+cp "$REPO/docs/legal/privacy.md" "$proxy_stage/privacy.txt"
+cp "$REPO/docs/legal/terms.md" "$proxy_stage/terms.txt"
 cp -R "$REPO/lambdas/chat_proxy/node_modules" "$proxy_stage/"
 cp "$REPO/site/assets/chat-markdown-v1.mjs" "$proxy_stage/assets/"
 cp "$REPO/site/assets/coverage-map-v1.mjs" "$proxy_stage/assets/"

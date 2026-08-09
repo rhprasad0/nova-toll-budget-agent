@@ -8,8 +8,9 @@ database endpoints, IP addresses, account IDs, or KMS key IDs.
 
 The data pipeline uses separate least-privilege Lambda roles, parameterized
 database queries, RDS IAM authentication, and TLS certificate verification.
-The private preview is deployed. Public chat routing is present but disabled by
-default in Terraform. Reports sent to `contact@tollchat.ai` reach the admin.
+The private preview and public beta are deployed. Public chat reaches the same
+validated proxy through CloudFront OAC and WAF; reports sent to
+`contact@tollchat.ai` reach the admin.
 
 ## Implemented hardening (2026-07-26)
 
@@ -117,8 +118,7 @@ S3 objects and RDS rows must not be destroyed.
 - Keep the OpenAI API key in SSM Parameter Store at
   `/nova-toll/openai_api_key`. The agent reads it with decryption through the
   ambient AWS identity; never export it, log it, or copy it into a local file.
-- Both OpenAI and Bedrock Mantle use stateful Responses, so provider-side
-  retention must be reviewed before public launch. Local tool auditing uses
+- Both OpenAI and Bedrock Mantle use stateful Responses. Local tool auditing uses
   the response `metrics.traces`, not Strands' empty stateful message history.
 - Keep the Cloudflare API token in SSM Parameter Store at
   `/nova-toll/cloudflare-api-token`, on its dedicated KMS key. Terraform does
@@ -166,6 +166,5 @@ S3 objects and RDS rows must not be destroyed.
   private API Gateway custom domain; API and domain policies require the
   execute-api VPC endpoint, while direct runtime invocation requires the
   separate AgentCore VPC endpoint.
-- Public chat routing is present but disabled by default. Enabling it before
-  the admin deliberately approves the Terraform change is an operating-policy
-  violation.
+- Public chat routing is enabled for the beta. The admin can remove `/api/*`
+  without changing the private preview by applying `enable_public_chat=false`.

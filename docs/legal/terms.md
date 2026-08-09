@@ -1,6 +1,4 @@
-# TollChat terms — draft
-
-**Owner/legal review required before public launch.**
+# TollChat terms
 
 TollChat provides informational estimates for Northern Virginia toll trips. It does not guarantee a fare, route, road availability, or travel outcome and is not affiliated with VDOT or any toll operator. Users remain responsible for verifying current rates and obeying posted signs and applicable law.
 

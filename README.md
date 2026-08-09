@@ -1,12 +1,13 @@
 # TollChat
 
-`Status: pre-launch — tollchat.ai`
+`Status: open beta — tollchat.ai`
 
 TollChat answers one question: what will this trip cost on Northern
 Virginia's toll roads? Ask it in plain language — an origin, a destination —
 and `agent/toll_agent.py` (an OpenAI GPT-5.6 Luna agent) resolves it to a
-real interchange and a real price by calling the pricing tools below. No
-public product yet; this repo is the pipeline and tools that back it.
+real interchange and a real price by calling the pricing tools below. The
+public beta carries no availability commitment; verify estimates with the
+toll operator before travel.
 
 **What runs.** A fetcher Lambda polls VDOT's two SmarterRoads tolling feeds
 every 10 minutes and lands the raw payloads in S3; a loader Lambda parses each
@@ -22,10 +23,10 @@ price source.
 | `agent_tools/` | Separate route tools price I-66, 95/395, 495, and Dulles. `i95_junction_leg` selects the open 95 direction and the movement-specific Edsall or Franconia-Springfield boundary; 495 pricing resumes at Braddock, while the junction remains explicitly unpriced. |
 | `lambdas/fetcher`, `lambdas/loader` | the primary VDOT pipeline |
 | `db/` | the per-feed schema and the `loader_writer` role |
-| `infra/` | Terraform for the fetcher/loader Lambdas, S3, RDS, observability, and the tollchat.ai coming-soon site (DNS records in Cloudflare, static page on CloudFront) |
+| `infra/` | Terraform for the data pipeline, AgentCore runtime, private preview, and WAF-protected tollchat.ai public beta |
 | `oracles/` | operator-published route maps (see below) |
 | `vdot_sample_data/` | committed raw feed samples the parsers are tested against |
-| `site/` | the static tollchat.ai coming-soon page served by CloudFront |
+| `site/` | the public-beta and private-preview browser interface served through CloudFront and the private proxy |
 
 **Oracles.** `oracles/i95.json` and `oracles/i66.json` are route maps published
 by the operators themselves — Transurban for the 95/395/495 Express Lanes, VDOT

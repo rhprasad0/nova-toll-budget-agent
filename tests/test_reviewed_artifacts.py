@@ -14,6 +14,10 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
         "chat-proxy.zip",
         "fetcher.zip",
         "loader.zip",
+        "preview.html",
+        "preview.mjs",
+        "privacy.md",
+        "terms.md",
     ):
         assert artifact in workflow
         assert artifact in rollback
@@ -36,6 +40,14 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
     assert "${reviewed_release#*/}" in rollback
     assert "sha256sum SHA256SUMS" in rollback
     assert "sha256sum --check SHA256SUMS" in rollback
+    assert "-var enable_public_chat=false" in rollback
+    for variable in (
+        "site_index_path",
+        "site_script_path",
+        "site_privacy_path",
+        "site_terms_path",
+    ):
+        assert variable in rollback
     assert "trap fail_closed EXIT" in rollback
     bounded = rollback.index("Validate with bounded private concurrency")
     smoke = rollback.index("scripts/smoke_agentcore_canonical.py")

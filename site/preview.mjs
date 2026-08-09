@@ -6,6 +6,16 @@ const SAFE_ERROR = {
   message: "TollChat is temporarily unavailable. Please try again.",
 };
 const TOOL_STATUS = new Set(["running", "completed", "failed"]);
+const post = async (path, body) => {
+  const payload = JSON.stringify(body);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-amz-content-sha256": hash },
+    body: payload,
+  });
+};
 
 const validEvent = (event) => {
   if (!event || typeof event !== "object") return false;
@@ -139,11 +149,7 @@ function start() {
         });
         return;
       }
-      const response = await fetch("/api/reset", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      }).catch(() => null);
+      const response = await post("/api/reset", {}).catch(() => null);
       if (!response?.ok) {
         const data = response ? await response.json().catch(() => ({})) : {};
         if (data?.error?.code !== "session_expired") {
@@ -179,11 +185,7 @@ function start() {
     const view = newTurn(transcript);
     input.value = "";
     runRequest(async (onEvent) => {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
+      const response = await post("/api/chat", { message });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
         const error = new Error(data.error?.message || "request failed");
@@ -201,11 +203,7 @@ function start() {
   reset.addEventListener("click", async () => {
     setBusy(true);
     try {
-      const response = await fetch("/api/reset", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      const response = await post("/api/reset", {});
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         if (data.error?.code !== "session_expired") {

@@ -249,8 +249,12 @@ export async function route(event, dependencies) {
     return { statusCode: 200, headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" }, body: previewJs };
   }
   if (method === "GET" && Object.hasOwn(previewAssets, path)) {
-    const contentType = path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
-    const cacheControl = path === "/assets/coverage-map-v1.mjs" ? "no-store" : "public, max-age=31536000, immutable";
+    const contentType = path.endsWith(".css")
+      ? "text/css; charset=utf-8"
+      : path.endsWith(".txt") ? "text/plain; charset=utf-8" : "text/javascript; charset=utf-8";
+    const cacheControl = path === "/assets/coverage-map-v1.mjs" || path.endsWith(".txt")
+      ? "no-store"
+      : "public, max-age=31536000, immutable";
     return { statusCode: 200, headers: { "Content-Type": contentType, "Cache-Control": cacheControl }, body: previewAssets[path] };
   }
   if (method === "GET" && path === "/api/config") {
@@ -353,6 +357,8 @@ const dependencies = deployed ? {
   previewHtml: readFileSync(new URL("./preview.html", import.meta.url), "utf8"),
   previewJs: readFileSync(new URL("./preview.mjs", import.meta.url), "utf8"),
   previewAssets: {
+    "/privacy.txt": readFileSync(new URL("./privacy.txt", import.meta.url), "utf8"),
+    "/terms.txt": readFileSync(new URL("./terms.txt", import.meta.url), "utf8"),
     "/assets/chat-markdown-v1.mjs": readFileSync(new URL("./assets/chat-markdown-v1.mjs", import.meta.url), "utf8"),
     "/assets/coverage-map-v1.mjs": readFileSync(new URL("./assets/coverage-map-v1.mjs", import.meta.url), "utf8"),
     "/assets/markdown-it-15.0.0/markdown-it.esm.min.mjs": readFileSync(new URL("./assets/markdown-it-15.0.0/markdown-it.esm.min.mjs", import.meta.url), "utf8"),

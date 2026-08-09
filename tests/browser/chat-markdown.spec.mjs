@@ -31,9 +31,6 @@ test.beforeEach(async ({ page }) => {
 
 const enableChat = async (page, assistantAnswer = answer, includeTool = true) => {
   const requests = [];
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
   const recordRequest = (route) => {
     const payload = route.request().postData();
     requests.push({ payload, hash: route.request().headers()["x-amz-content-sha256"] });
@@ -53,18 +50,18 @@ const enableChat = async (page, assistantAnswer = answer, includeTool = true) =>
     recordRequest(route);
     return route.fulfill({ json: { ok: true } });
   });
-  await page.goto("/");
-  await expect(page.locator("#tollchat-chat")).toBeVisible();
+  await page.goto("/preview.html");
+  await expect(page.locator("#message")).toBeEnabled();
   return requests;
 };
 
 test("renders streamed assistant Markdown and signs public POST bodies", async ({ page }) => {
   const requests = await enableChat(page);
-  await page.locator("#chat-input").fill("**Dumfries** <img src=x onerror=alert(1)>");
-  await page.locator("#chat-form").getByRole("button", { name: "Send" }).click();
+  await page.locator("#message").fill("**Dumfries** <img src=x onerror=alert(1)>");
+  await page.getByRole("button", { name: "Estimate tolls" }).click();
 
-  const user = page.locator(".chat-message.user");
-  const assistant = page.locator(".chat-message.agent").last();
+  const user = page.locator(".user-turn");
+  const assistant = page.locator(".assistant-answer").last();
   await expect(user).toHaveText("**Dumfries** <img src=x onerror=alert(1)>");
   await expect(user.locator("strong, img")).toHaveCount(0);
   await expect(assistant.getByRole("heading", { name: "Route and fares" })).toBeVisible();
@@ -87,9 +84,6 @@ test("renders streamed assistant Markdown and signs public POST bodies", async (
 
 test("expired ownership clears the transcript without replaying the message", async ({ page }) => {
   let chats = 0;
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
   await page.route("**/api/chat", (route) => {
     chats += 1;
     return route.fulfill({
@@ -98,31 +92,25 @@ test("expired ownership clears the transcript without replaying the message", as
       json: { error: { code: "session_expired", message: "Your chat expired. Please send your question again." } },
     });
   });
-  await page.goto("/");
-  await page.locator("#chat-input").fill("Price my trip");
-  await page.locator("#chat-form").getByRole("button", { name: "Send" }).click();
+  await page.goto("/preview.html");
+  await page.locator("#message").fill("Price my trip");
+  await page.getByRole("button", { name: "Estimate tolls" }).click();
 
-  await expect(page.locator(".chat-message.user")).toHaveCount(0);
-  await expect(page.locator(".chat-message.agent")).toHaveText("Your chat expired. Please send your question again.");
+  await expect(page.locator(".user-turn")).toHaveCount(0);
+  await expect(page.locator(".assistant-answer")).toHaveText("Your chat expired. Please send your question again.");
   expect(chats).toBe(1);
 });
 
 test("browser tab handoff rotates instead of silently merging chats", async ({ context, page }) => {
   const calls = [];
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
   await page.route("**/api/reset", (route) => {
     calls.push("first-reset");
     return route.fulfill({ json: { ok: true } });
   });
-  await page.goto("/");
-  await expect(page.locator("#chat-input")).toBeEnabled();
+  await page.goto("/preview.html");
+  await expect(page.locator("#message")).toBeEnabled();
 
   const second = await context.newPage();
-  await second.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
   await second.route("**/api/reset", (route) => {
     calls.push("second-reset");
     return route.fulfill({ json: { ok: true } });
@@ -134,38 +122,20 @@ test("browser tab handoff rotates instead of silently merging chats", async ({ c
       body: '{"type":"answer","text":"Fresh","blocked":false}\n',
     });
   });
-  await second.goto("/");
+  await second.goto("/preview.html");
 
-  await expect(second.locator("#chat-input")).toBeDisabled();
-  await expect(second.locator("#chat-status")).toHaveText("TollChat is open in another tab.");
+  await expect(second.locator("#message")).toBeDisabled();
+  await expect(second.locator(".assistant-answer")).toHaveText("TollChat is open in another tab.");
   await page.close();
   await second.reload();
-  await expect(second.locator("#chat-input")).toBeEnabled();
-  await second.locator("#chat-input").fill("new tab");
-  await second.getByRole("button", { name: "Send" }).click();
-  await expect(second.locator(".chat-message.agent").last()).toHaveText("Fresh");
+  await expect(second.locator("#message")).toBeEnabled();
+  await second.locator("#message").fill("new tab");
+  await second.getByRole("button", { name: "Estimate tolls" }).click();
+  await expect(second.locator(".assistant-answer").last()).toHaveText("Fresh");
   expect(calls).toEqual(["first-reset", "second-reset", "second-chat"]);
 });
 
-test("failed resets preserve the public and private transcripts", async ({ page }) => {
-  let publicResets = 0;
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
-  await page.route("**/api/reset", (route) => {
-    publicResets += 1;
-    return publicResets === 1
-      ? route.fulfill({ json: { ok: true } })
-      : route.fulfill({
-          status: 409,
-          json: { error: { code: "session_busy", message: "Wait for the current response to finish." } },
-        });
-  });
-  await page.goto("/");
-  await page.getByRole("button", { name: "New chat" }).click();
-  await expect(page.locator(".chat-message.agent")).toHaveText("Where are you entering and exiting?");
-  await expect(page.locator("#chat-status")).toHaveText("Wait for the current response to finish.");
-
+test("failed resets preserve the transcript", async ({ page }) => {
   let privateResets = 0;
   await page.route("**/api/reset", (route) => {
     privateResets += 1;
@@ -189,46 +159,17 @@ test("failed resets preserve the public and private transcripts", async ({ page 
 });
 
 test("an expired cookie is a successful page-load rotation", async ({ page }) => {
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
   await page.route("**/api/reset", (route) => route.fulfill({
     status: 401,
     headers: { "set-cookie": "__Host-tollchat-session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict" },
     json: { error: { code: "session_expired", message: "Your chat expired. Please send your question again." } },
   }));
 
-  await page.goto("/");
-  await expect(page.locator("#chat-input")).toBeEnabled();
   await page.goto("/preview.html");
   await expect(page.locator("#message")).toBeEnabled();
 });
 
 test("an expired cookie is a successful user reset", async ({ page }) => {
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 } })
-  );
-  let publicResets = 0;
-  await page.route("**/api/reset", (route) => {
-    publicResets += 1;
-    return publicResets === 1
-      ? route.fulfill({ json: { ok: true } })
-      : route.fulfill({
-          status: 401,
-          json: { error: { code: "session_expired", message: "Your chat expired." } },
-        });
-  });
-  await page.goto("/");
-  await page.locator("#chat-messages").evaluate((node) => {
-    const turn = document.createElement("p");
-    turn.className = "chat-message user";
-    turn.textContent = "clear me";
-    node.append(turn);
-  });
-  await page.getByRole("button", { name: "New chat" }).click();
-  await expect(page.locator(".chat-message.user")).toHaveCount(0);
-  await expect(page.locator(".chat-message.agent")).toHaveText("Where are you entering and exiting?");
-
   let privateResets = 0;
   await page.route("**/api/reset", (route) => {
     privateResets += 1;
@@ -334,10 +275,10 @@ test("hostile Markdown stays inert while HTTPS links remain accessible", async (
 \`\`\`text
 ${"x".repeat(300)}
 \`\`\``, false);
-  await page.locator("#chat-input").fill("test");
-  await page.locator("#chat-form").getByRole("button", { name: "Send" }).click();
+  await page.locator("#message").fill("test");
+  await page.getByRole("button", { name: "Estimate tolls" }).click();
 
-  const assistant = page.locator(".chat-message.agent").last();
+  const assistant = page.locator(".assistant-answer").last();
   await expect(assistant.locator("script, style, iframe, img")).toHaveCount(0);
   expect(await page.evaluate(() => window.markdownAttack)).toBeUndefined();
   await expect(assistant).toContainText("<script>window.markdownAttack = true</script>");
@@ -354,21 +295,6 @@ ${"x".repeat(300)}
   await link.focus();
   await expect(link).toBeFocused();
   await expect(assistant.locator("pre")).toHaveCSS("overflow-x", "auto");
-});
-
-test("does not download the Markdown renderer when chat is disabled", async ({ page }) => {
-  const rendererRequests = [];
-  page.on("request", (request) => {
-    if (request.url().includes("chat-markdown")) rendererRequests.push(request.url());
-  });
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
-  );
-
-  await page.goto("/");
-
-  await expect(page.locator("#tollchat-chat")).toBeHidden();
-  expect(rendererRequests).toEqual([]);
 });
 
 test("private preview renders streamed assistant Markdown safely", async ({ page }) => {
@@ -395,8 +321,13 @@ test("private preview renders streamed assistant Markdown safely", async ({ page
 
 test("private preview submits with Enter and keeps Shift+Enter as a newline", async ({ page }) => {
   let requests = 0;
+  let signedRequest;
   await page.route("**/api/chat", (route) => {
     requests += 1;
+    signedRequest = {
+      payload: route.request().postData(),
+      hash: route.request().headers()["x-amz-content-sha256"],
+    };
     return route.fulfill({
       contentType: "application/x-ndjson",
       body: `${JSON.stringify({ type: "answer", text: "Done", blocked: false })}\n`,
@@ -414,6 +345,9 @@ test("private preview submits with Enter and keeps Shift+Enter as a newline", as
   await expect(page.locator(".user-turn")).toHaveText("First line\nSecond line");
   await expect(page.locator(".assistant-answer")).toHaveText("Done");
   expect(requests).toBe(1);
+  expect(signedRequest.hash).toBe(
+    createHash("sha256").update(signedRequest.payload).digest("hex")
+  );
 });
 
 test("private preview blocks submission while a new chat is resetting", async ({ page }) => {
@@ -439,20 +373,10 @@ test("private preview blocks submission while a new chat is resetting", async ({
   await expect(page.locator("#message")).toBeEnabled();
 });
 
-test("shared coverage map stays interactive publicly and direction-aware privately", async ({ page }) => {
+test("open-beta coverage map stays interactive and direction-aware", async ({ page }) => {
   await page.route("https://tiles.openfreemap.org/styles/dark", (route) =>
     route.fulfill({ json: { version: 8, sources: {}, layers: [] } })
   );
-  await page.route("**/api/config", (route) =>
-    route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
-  );
-  await page.goto("/");
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
-  await expect(page.locator(".map-pin")).toHaveCount(82);
-  await expect(page.locator(".ramp-badge")).toHaveCount(0);
-  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(1);
-  await expect(page.locator("#reset-map")).toBeEnabled();
-
   await Promise.all([
     page.waitForRequest((request) => {
       const url = new URL(request.url());

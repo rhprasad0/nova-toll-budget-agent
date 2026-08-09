@@ -7,7 +7,7 @@ stopping the toll fetcher, loader, or RDS. Terraform intentionally ignores concu
 ## Authorized private drill
 
 Run only from the repository worktree on an approved Tailscale client. The
-owner must give **explicit owner approval** immediately before execution.
+admin must give **explicit approval** immediately before execution.
 Reserve a 15-minute private-preview outage, stop other Terraform operations,
 and keep a second terminal ready for the emergency restore command below.
 
@@ -28,13 +28,13 @@ Before starting:
    runner permits only AWS's two behavior-preserving API policy ARN
    normalization updates; every other planned change aborts the drill.
 
-After the owner says go, run:
+After the admin says go, run:
 
 ```bash
 report="$(mktemp)"
 trap 'rm -f "$report"' EXIT
 uv run --frozen python scripts/drill_kill_switch.py \
-  --execute --approved-by Ryan --pause-for-screenshot >"$report" &&
+  --execute --approved-by Admin --pause-for-screenshot >"$report" &&
   uv run --frozen python -m json.tool "$report" >/dev/null &&
   mv "$report" "eval/results/$(date -u +%Y%m%dT%H%M%SZ)-kill-switch-drill.json"
 ```
@@ -74,8 +74,8 @@ unless the browser path, AgentCore tool call, historical `$12.15` RDS result,
 and disclaimer all pass.
 
 Only a successful final JSON file belongs in `eval/results/`. Update
-`eval/results/README.md` and the operational launch gates with its measured
-disable/recovery times, then run `gitleaks git --pre-commit --redact .` before committing. Delete
+`eval/results/README.md` with its measured disable/recovery times, then run
+`gitleaks git --pre-commit --redact .` before committing. Delete
 failed or superseded reports; external outages never waive a fresh passing
 rerun.
 
@@ -101,7 +101,7 @@ AWS_PROFILE=nova-toll aws --region us-east-1 lambda get-function-concurrency \
 ```
 
 Escalate immediately if restoration exceeds 60 seconds or cannot be confirmed
-after three attempts. Keep public chat disabled, preserve the Terraform lock,
+after three attempts. Block public chat at WAF, preserve the Terraform lock,
 and do not retry the drill until AWS access and the private smoke test are
 healthy.
 
@@ -110,18 +110,16 @@ healthy.
 For suspected service-wide harm, set concurrency to zero with the first
 emergency command but substitute `0`, verify both private API routes fail, and
 record the incident start time. Restore the last approved baseline only after
-owner approval, then run the canonical private smoke. Never place credentials
+admin approval, then run the canonical private smoke. Never place credentials
 or response content in an incident record.
 
-## Public switch (deferred)
+## Public switch
 
-Public chat remains declaratively disabled with `enable_public_chat=false`.
-Before public launch, separately deploy the approved controls with public chat
-enabled. Its immediate switch is the `tollchat-public-chat` CloudFront WAF
+Public chat is declaratively enabled. Its immediate switch is the
+`tollchat-public-chat` CloudFront WAF
 default action: change `Allow` to the existing `unavailable` custom `Block`
 response with status `503`, verify public `/api/config` returns 503 while the
 static site and private preview remain available, then restore `Allow` only
-after approval. After that controlled test, apply
-`enable_public_chat=false` and prove CloudFront removes `/api/*` while the
-private path remains governed by proxy concurrency. That controlled public
-test is not part of this private drill.
+after admin approval. To remove the public path declaratively, apply
+`enable_public_chat=false`; CloudFront removes `/api/*` while the private path
+remains governed by proxy concurrency.
