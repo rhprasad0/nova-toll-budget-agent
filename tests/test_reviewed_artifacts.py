@@ -19,12 +19,16 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
         assert artifact in rollback
 
     apply = workflow.index("terraform apply -auto-approve")
-    publish = workflow.index("name: Retain reviewed packages")
+    stage = workflow.index("name: Stage reviewed packages")
+    publish = workflow.index("name: Publish reviewed release")
     latest = workflow.index("reviewed/latest")
-    assert apply < publish < latest
+    assert stage < apply < publish < latest
     assert "SHA256SUMS" in workflow
     assert 'REVIEWED_RELEASE="${GITHUB_SHA}/' in workflow
     assert "GITHUB_STEP_SUMMARY" in workflow
+    assert "--checksum-algorithm SHA256" in workflow
+    assert "--checksum-mode ENABLED" in workflow
+    assert "sha256sum --check SHA256SUMS" in workflow
 
     assert "rebuild the corresponding Git commit" not in rollback
     assert "s3://$artifact_bucket/reviewed/latest" not in rollback

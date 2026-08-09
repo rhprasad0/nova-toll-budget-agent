@@ -43,11 +43,11 @@ The public chat agent is not deployed yet. Its release gate is documented in
 - Successful trusted-main deployments retain all four reviewed package ZIPs
   and their SHA-256 manifest in the private, versioned AgentCore artifact
   bucket. Release prefixes include the Git commit and manifest digest; the
-  `reviewed/latest` pointer advances only after the complete set is uploaded.
-  Reviewed versions never expire, CloudTrail supplies an independently
-  validated publication record, and rollback requires an explicitly approved
-  prior release ID. It rejects missing or mismatched packages instead of
-  rebuilding them.
+  workflow uploads and downloads-verifies the complete set before apply, then
+  advances `reviewed/latest` only after apply succeeds. Reviewed versions never
+  expire, CloudTrail supplies an independently validated publication record,
+  and rollback requires an explicitly approved prior release ID. It rejects
+  missing or mismatched packages instead of rebuilding them.
 
 ## Implemented hardening (2026-07-27)
 
