@@ -345,10 +345,9 @@ test("Lambda Function URL events keep the existing API contract", async () => {
     maxTurns: 5,
   });
 
-  const reset = await route(
-    functionUrlEvent("POST", "/api/reset", {}),
-    dependencies,
-  );
+  const resetEvent = functionUrlEvent("POST", "/api/reset", {});
+  resetEvent.cookies = [`__Host-tollchat-session=${sessionToken}`];
+  const reset = await route(resetEvent, dependencies);
   assert.equal(reset.statusCode, 200);
   assert.deepEqual(calls, [{
     agentRuntimeArn: "runtime-arn",
