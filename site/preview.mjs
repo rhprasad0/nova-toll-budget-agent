@@ -107,7 +107,7 @@ function start() {
   const reset = document.querySelector("#reset");
   const transcript = document.querySelector("#transcript");
   let session = crypto.randomUUID();
-  import("./assets/coverage-map-v1.mjs")
+  import("./assets/coverage-map-v1.mjs?v=2")
     .then(({ mountCoverageMap }) => mountCoverageMap({ mode: "preview" }))
     .catch(() => {
       document.querySelector("#map-loading").hidden = true;

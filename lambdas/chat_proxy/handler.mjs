@@ -115,7 +115,8 @@ export async function route(event, dependencies) {
   }
   if (method === "GET" && Object.hasOwn(previewAssets, path)) {
     const contentType = path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
-    return { statusCode: 200, headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" }, body: previewAssets[path] };
+    const cacheControl = path === "/assets/coverage-map-v1.mjs" ? "no-store" : "public, max-age=31536000, immutable";
+    return { statusCode: 200, headers: { "Content-Type": contentType, "Cache-Control": cacheControl }, body: previewAssets[path] };
   }
   if (method === "GET" && path === "/api/config") {
     return json(200, { chatEnabled: true, maxMessageChars: MAX_MESSAGE_CHARS, maxTurns: 5 });

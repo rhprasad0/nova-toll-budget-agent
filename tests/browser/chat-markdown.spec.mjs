@@ -198,9 +198,14 @@ test("shared coverage map stays interactive publicly and direction-aware private
   await page.goto("/preview.html");
 
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
+  expect(await page.evaluate(() => performance.getEntriesByType("resource").some((entry) => {
+    const url = new URL(entry.name);
+    return url.pathname.endsWith("/assets/coverage-map-v1.mjs") && url.searchParams.get("v") === "2";
+  }))).toBe(true);
   await expect(page.getByRole("region", { name: /Interactive TollChat coverage map/ })).toBeVisible();
   await expect(page.locator(".map-legend")).toContainText("Unlabelled ramps serve both directions.");
   await expect(page.locator(".preview-map-pin")).toHaveCount(82);
+  await expect(page.locator(".preview-map-pin").first()).toHaveCSS("isolation", "isolate");
   await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
   await expect(page.locator(".ramp-badge")).toHaveCount(20);
   await expect(page.locator("#directional-ramps")).toHaveCount(0);
