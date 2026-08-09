@@ -25,6 +25,24 @@ class IsolationVerificationError(ValueError):
 Post = Callable[[str, dict[str, object]], tuple[int, dict[str, object]]]
 
 
+def _response_object(raw: bytes) -> dict[str, object]:
+    try:
+        value = cast(object, json.loads(raw))
+    except json.JSONDecodeError:
+        try:
+            value = cast(
+                object,
+                json.loads(next(line for line in reversed(raw.splitlines()) if line)),
+            )
+        except (json.JSONDecodeError, StopIteration) as error:
+            raise IsolationVerificationError(
+                "preview response must contain JSON"
+            ) from error
+    if not isinstance(value, dict):
+        raise IsolationVerificationError("preview response must be a JSON object")
+    return cast(dict[str, object], value)
+
+
 def _expect(
     post: Post,
     path: str,
@@ -37,7 +55,9 @@ def _expect(
         actual_status, response = post(path, body)
         error = response.get("error")
         error = cast(dict[str, object], error) if isinstance(error, dict) else None
-        actual_code = error.get("code") if error else None
+        actual_code = (
+            response.get("code") if response.get("type") == "error" else None
+        ) or (error.get("code") if error else None)
         if actual_status == status and actual_code == error_code:
             return
         if actual_status != 502 or attempt == retries:
@@ -73,7 +93,7 @@ def exercise_sessions(
     for _ in range(4):
         chat(post_a, marker_a)
     chat(post_b, marker_b)
-    chat(post_a, marker_a, 422, "turn_limit")
+    chat(post_a, marker_a, code="turn_limit")
     _expect(post_a, "/api/reset", {}, 200)
     chat(post_b, marker_b)
     chat(post_a, marker_a, retries=3)
@@ -93,7 +113,7 @@ def _stage_counts(
 
 
 def verify_isolation(
-    records: list[dict[str, str]], session_a: str, session_b: str
+    records: list[dict[str, str]], session_a: set[str], session_b: set[str]
 ) -> dict[str, object]:
     stream_sessions: dict[str, set[str]] = defaultdict(set)
     for record in records:
@@ -103,31 +123,39 @@ def verify_isolation(
         ):
             raise IsolationVerificationError("malformed trace record")
         stream_sessions[record["log_stream"]].add(record["session_id"])
-    if any(
-        len(sessions) > 1 and sessions & {session_a, session_b}
-        for sessions in stream_sessions.values()
+    target_sessions = session_a | session_b
+    if session_a & session_b or any(
+        len(sessions & target_sessions) > 1 for sessions in stream_sessions.values()
     ):
         raise IsolationVerificationError("a runtime log stream was shared by sessions")
 
-    a_streams = _stage_counts(records, session_a)
-    b_streams = _stage_counts(records, session_b)
+    a_streams = [_stage_counts(records, session) for session in session_a]
+    a_counts = [
+        next(iter(streams.values())) for streams in a_streams if len(streams) == 1
+    ]
     if (
         sum(
             counts.get("agent") == 5 and counts.get("invoke") == 6
-            for counts in a_streams.values()
+            for counts in a_counts
         )
         != 1
     ):
         raise IsolationVerificationError("missing session A pre-reset turn evidence")
     if (
-        len(a_streams) != 2
+        len(session_a) != 2
         or sum(
             counts.get("agent") == 1 and counts.get("invoke") == 1
-            for counts in a_streams.values()
+            for counts in a_counts
         )
         != 1
     ):
         raise IsolationVerificationError("session A did not receive a fresh runtime")
+
+    if len(session_b) != 1:
+        raise IsolationVerificationError(
+            "session B runtime changed during session A reset"
+        )
+    b_streams = _stage_counts(records, next(iter(session_b)))
     if len(b_streams) != 1:
         raise IsolationVerificationError(
             "session B runtime changed during session A reset"
@@ -155,12 +183,6 @@ def _http_post(base_url: str) -> Post:
         urllib.request.HTTPCookieProcessor(CookieJar())
     )
 
-    def json_object(raw: bytes) -> dict[str, object]:
-        value = cast(object, json.loads(raw))
-        if not isinstance(value, dict):
-            raise IsolationVerificationError("preview response must be a JSON object")
-        return cast(dict[str, object], value)
-
     def post(path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
         request = urllib.request.Request(
             f"{base_url.rstrip('/')}{path}",
@@ -175,9 +197,9 @@ def _http_post(base_url: str) -> Post:
         try:
             response = opener.open(request, timeout=60)
         except urllib.error.HTTPError as error:
-            return error.code, json_object(error.read())
+            return error.code, _response_object(error.read())
         with response:
-            return response.status, json_object(response.read())
+            return response.status, _response_object(response.read())
 
     return post
 
@@ -293,17 +315,17 @@ def _query_records(
     return records
 
 
-def _session_for_marker(records: list[dict[str, str]], marker: str) -> str:
+def _sessions_for_marker(records: list[dict[str, str]], marker: str) -> set[str]:
     matches = {
         record["session_id"]
         for record in records
         if marker in record.get("payload", "")
     }
-    if len(matches) != 1:
+    if not matches:
         raise IsolationVerificationError(
-            f"could not correlate one runtime session for {marker}"
+            f"could not correlate a runtime session for {marker}"
         )
-    return matches.pop()
+    return matches
 
 
 def main() -> int:
@@ -329,8 +351,8 @@ def main() -> int:
             records = _query_records(aws, log_group, started, deadline=deadline)
             checks = verify_isolation(
                 records,
-                _session_for_marker(records, marker_a),
-                _session_for_marker(records, marker_b),
+                _sessions_for_marker(records, marker_a),
+                _sessions_for_marker(records, marker_b),
             )
             break
         except IsolationVerificationError as error:
@@ -343,11 +365,16 @@ def main() -> int:
 
     report = {
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "issue": 97,
+        "issues": [97, 108, 123],
         "status": "passed",
         "agent_runtime_version": runtime_version,
-        "scenario": "Two interleaved private-preview AgentCore sessions with turn exhaustion and reset",
-        "evidence_type": "Metadata-only live AgentCore session-isolation verification",
+        "scenario": (
+            "Two backend-owned private-preview browser sessions with turn exhaustion "
+            "and reset rotation"
+        ),
+        "evidence_type": (
+            "Metadata-only live AgentCore session-ownership and isolation verification"
+        ),
         "checks": checks,
         "notes": (
             "Raw responses, trace records, session identifiers, and log-stream identifiers "

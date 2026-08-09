@@ -16,6 +16,7 @@ evaluator = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(evaluator)
 
 SESSION_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+SESSION_A_RESET = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 SESSION_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 
@@ -37,7 +38,7 @@ def _successful_exercise():
             return _response()
         a_chats += 1
         if a_chats == 6:
-            return _response(422, "turn_limit")
+            return 200, {"type": "error", "code": "turn_limit"}
         return _response()
 
     def post_b(path: str, body: dict[str, object]):
@@ -80,7 +81,7 @@ def _records(
 def _passing_records() -> list[dict[str, str]]:
     return [
         *_records(SESSION_A, "a-before-reset", agent_count=5, invoke_count=6),
-        *_records(SESSION_A, "a-after-reset", agent_count=1, invoke_count=1),
+        *_records(SESSION_A_RESET, "a-after-reset", agent_count=1, invoke_count=1),
         *_records(SESSION_B, "b", agent_count=3, invoke_count=3),
     ]
 
@@ -98,7 +99,9 @@ def test_exercise_interleaves_sessions_exhausts_a_and_resets_only_a():
 
 
 def test_verify_accepts_isolated_turns_and_reset_streams():
-    report = evaluator.verify_isolation(_passing_records(), SESSION_A, SESSION_B)
+    report = evaluator.verify_isolation(
+        _passing_records(), {SESSION_A, SESSION_A_RESET}, {SESSION_B}
+    )
 
     assert report == {
         "interleaved_sessions": 2,
@@ -113,6 +116,7 @@ def test_verify_accepts_isolated_turns_and_reset_streams():
     }
     serialized = json.dumps(report)
     assert SESSION_A not in serialized
+    assert SESSION_A_RESET not in serialized
     assert SESSION_B not in serialized
     assert "a-before-reset" not in serialized
 
@@ -127,7 +131,7 @@ def test_exercise_fails_if_a_turn_limit_or_reset_affects_b(fail_on_b_call):
         if path == "/api/chat":
             a_calls += 1
             if a_calls == 6:
-                return _response(422, "turn_limit")
+                return 200, {"type": "error", "code": "turn_limit"}
         return _response()
 
     def post_b(path: str, body: dict[str, object]):
@@ -135,7 +139,7 @@ def test_exercise_fails_if_a_turn_limit_or_reset_affects_b(fail_on_b_call):
         if path == "/api/chat":
             b_calls += 1
             if b_calls == fail_on_b_call:
-                return _response(422, "turn_limit")
+                return 200, {"type": "error", "code": "turn_limit"}
         return _response()
 
     with pytest.raises(
@@ -161,7 +165,11 @@ def test_exercise_retries_a_transient_post_reset_failure(monkeypatch):
                 return _response(502, "agent_unavailable")
             return _response()
         a_calls += 1
-        return _response(422, "turn_limit") if a_calls == 6 else _response()
+        return (
+            (200, {"type": "error", "code": "turn_limit"})
+            if a_calls == 6
+            else _response()
+        )
 
     def post_b(_path: str, _body: dict[str, object]):
         return _response()
@@ -209,20 +217,35 @@ def test_trace_query_rejects_unknown_status(monkeypatch):
         evaluator._query_records(["aws"], "log-group", 0, deadline=float("inf"))
 
 
-def test_session_for_marker_requires_one_runtime():
+def test_sessions_for_marker_requires_at_least_one_runtime():
     records = [
         {"session_id": SESSION_A, "payload": "verify-a"},
+        {"session_id": SESSION_A_RESET, "payload": "verify-a"},
         {"session_id": SESSION_B, "payload": "verify-b"},
     ]
 
-    assert evaluator._session_for_marker(records, "verify-a") == SESSION_A
+    assert evaluator._sessions_for_marker(records, "verify-a") == {
+        SESSION_A,
+        SESSION_A_RESET,
+    }
     with pytest.raises(evaluator.IsolationVerificationError, match="correlate"):
-        evaluator._session_for_marker(records, "missing")
+        evaluator._sessions_for_marker(records, "missing")
+
+
+def test_response_object_accepts_json_and_returns_the_last_ndjson_event():
+    assert evaluator._response_object(b'{"error":{"code":"expired"}}') == {
+        "error": {"code": "expired"}
+    }
+    assert evaluator._response_object(
+        b'{"type":"tool","name":"route"}\n{"type":"answer","text":"done"}\n'
+    ) == {"type": "answer", "text": "done"}
 
 
 def test_verify_rejects_malformed_trace_records():
     with pytest.raises(evaluator.IsolationVerificationError, match="malformed"):
-        evaluator.verify_isolation([{"session_id": SESSION_A}], SESSION_A, SESSION_B)
+        evaluator.verify_isolation(
+            [{"session_id": SESSION_A}], {SESSION_A, SESSION_A_RESET}, {SESSION_B}
+        )
 
 
 @pytest.mark.parametrize(
@@ -231,7 +254,7 @@ def test_verify_rejects_malformed_trace_records():
         (
             [
                 *_records(SESSION_A, "shared", agent_count=5, invoke_count=6),
-                *_records(SESSION_A, "a-new", agent_count=1, invoke_count=1),
+                *_records(SESSION_A_RESET, "a-new", agent_count=1, invoke_count=1),
                 *_records(SESSION_B, "shared", agent_count=3, invoke_count=3),
             ],
             "shared by sessions",
@@ -239,7 +262,7 @@ def test_verify_rejects_malformed_trace_records():
         (
             [
                 *_records(SESSION_A, "a-old", agent_count=4, invoke_count=6),
-                *_records(SESSION_A, "a-new", agent_count=1, invoke_count=1),
+                *_records(SESSION_A_RESET, "a-new", agent_count=1, invoke_count=1),
                 *_records(SESSION_B, "b", agent_count=3, invoke_count=3),
             ],
             "pre-reset turn evidence",
@@ -247,7 +270,7 @@ def test_verify_rejects_malformed_trace_records():
         (
             [
                 *_records(SESSION_A, "a-old", agent_count=5, invoke_count=6),
-                *_records(SESSION_A, "a-new", agent_count=1, invoke_count=1),
+                *_records(SESSION_A_RESET, "a-new", agent_count=1, invoke_count=1),
                 *_records(SESSION_B, "b-old", agent_count=2, invoke_count=2),
                 *_records(SESSION_B, "b-new", agent_count=1, invoke_count=1),
             ],
@@ -264,4 +287,4 @@ def test_verify_rejects_malformed_trace_records():
 )
 def test_verify_fails_closed_on_invalid_isolation_evidence(records, match):
     with pytest.raises(evaluator.IsolationVerificationError, match=match):
-        evaluator.verify_isolation(records, SESSION_A, SESSION_B)
+        evaluator.verify_isolation(records, {SESSION_A, SESSION_A_RESET}, {SESSION_B})
