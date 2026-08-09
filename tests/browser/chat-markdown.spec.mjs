@@ -253,10 +253,11 @@ test("an expired cookie is a successful user reset", async ({ page }) => {
 test("private preview presents the open beta and its source limitations", async ({ page }) => {
   await page.goto("/preview.html");
 
+  await expect(page).toHaveTitle("TollChat: Plan with the tolls we know");
   await expect(page.getByText("Open beta · AI toll assistant", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Know your toll before you drive." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan with the tolls we know." })).toBeVisible();
   await expect(page.locator("header .lede")).toHaveText(
-    "Tolls on I-95, I-495, and I-66 use dynamic pricing based on congestion, making trips difficult to plan and budget. TollChat turns a trip into a clear price before you merge, not after."
+    "TollChat shows what supported Northern Virginia toll trips cost at specific recorded times—real observations to inform your planning, not predictions of what you’ll pay."
   );
 
   await expect(page.locator("header").getByRole("link", { name: "TollChat CI status" })).toHaveCount(0);
