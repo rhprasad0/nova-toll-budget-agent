@@ -72,6 +72,20 @@ def test_preview_edge_stays_private_and_closes_direct_runtime_access():
     assert 'resource "aws_lb_target_group" "tollchat"' not in agentcore
 
 
+def test_preview_throttle_covers_a_cold_page_asset_fanout():
+    agentcore = (ROOT / "infra/agentcore.tf").read_text()
+    handler = (ROOT / "lambdas/chat_proxy/handler.mjs").read_text()
+    settings = agentcore.split(
+        'resource "aws_api_gateway_method_settings" "tollchat"', maxsplit=1
+    )[1]
+    burst_match = re.search(r"throttling_burst_limit\s*=\s*(\d+)", settings)
+    assert burst_match
+    burst = int(burst_match.group(1))
+    assets = re.findall(r'^\s+"/assets/[^\"]+": readFileSync', handler, re.MULTILINE)
+
+    assert burst >= len(assets) + 2  # HTML and preview.mjs also use the private API.
+
+
 def test_api_deployment_hashes_the_complete_stage_snapshot():
     agentcore = (ROOT / "infra/agentcore.tf").read_text()
     deployment = agentcore.split('resource "aws_api_gateway_deployment" "tollchat"')[

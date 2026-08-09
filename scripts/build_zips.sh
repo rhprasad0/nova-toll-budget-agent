@@ -58,7 +58,9 @@ cp "$REPO/lambdas/chat_proxy/handler.mjs" \
    "$proxy_stage/"
 cp -R "$REPO/lambdas/chat_proxy/node_modules" "$proxy_stage/"
 cp "$REPO/site/assets/chat-markdown-v1.mjs" "$proxy_stage/assets/"
+cp "$REPO/site/assets/coverage-map-v1.mjs" "$proxy_stage/assets/"
 cp -R "$REPO/site/assets/markdown-it-15.0.0" "$proxy_stage/assets/"
+cp -R "$REPO/site/assets/maplibre-gl-6.0.0" "$proxy_stage/assets/"
 
 # --- AgentCore direct code: application + locked ARM64 dependencies ---
 agent_stage="$BUILD/agentcore"

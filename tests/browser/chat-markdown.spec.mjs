@@ -137,3 +137,127 @@ test("private preview renders streamed assistant Markdown safely", async ({ page
   await expect(answer.locator("script, img")).toHaveCount(0);
   expect(await page.evaluate(() => window.previewAttack)).toBeUndefined();
 });
+
+test("private preview submits with Enter and keeps Shift+Enter as a newline", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/api/chat", (route) => {
+    requests += 1;
+    return route.fulfill({
+      contentType: "application/x-ndjson",
+      body: `${JSON.stringify({ type: "answer", text: "Done", blocked: false })}\n`,
+    });
+  });
+  await page.goto("/preview.html");
+
+  await page.locator("#message").fill("First line");
+  await page.locator("#message").press("Shift+Enter");
+  await page.locator("#message").type("Second line");
+  await expect(page.locator("#message")).toHaveValue("First line\nSecond line");
+  expect(requests).toBe(0);
+
+  await page.locator("#message").press("Enter");
+  await expect(page.locator(".user-turn")).toHaveText("First line\nSecond line");
+  await expect(page.locator(".assistant-answer")).toHaveText("Done");
+  expect(requests).toBe(1);
+});
+
+test("private preview blocks submission while a new chat is resetting", async ({ page }) => {
+  let finishReset;
+  const resetPending = new Promise((resolve) => { finishReset = resolve; });
+  await page.route("**/api/reset", async (route) => {
+    await resetPending;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/preview.html");
+
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator("form")).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("#message")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Estimate tolls" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "New chat" })).toBeDisabled();
+
+  finishReset();
+  await expect(page.locator("form")).toHaveAttribute("aria-busy", "false");
+  await expect(page.locator("#message")).toBeEnabled();
+});
+
+test("shared coverage map stays interactive publicly and direction-aware privately", async ({ page }) => {
+  await page.route("https://tiles.openfreemap.org/styles/dark", (route) =>
+    route.fulfill({ json: { version: 8, sources: {}, layers: [] } })
+  );
+  await page.route("**/api/config", (route) =>
+    route.fulfill({ json: { chatEnabled: false, maxMessageChars: 8000, maxTurns: 5 } })
+  );
+  await page.goto("/");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
+  await expect(page.locator(".map-pin")).toHaveCount(82);
+  await expect(page.locator(".ramp-badge")).toHaveCount(0);
+  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(1);
+  await expect(page.locator("#reset-map")).toBeEnabled();
+
+  await page.goto("/preview.html");
+
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "data:,");
+  expect(await page.evaluate(() => performance.getEntriesByType("resource").some((entry) => {
+    const url = new URL(entry.name);
+    return url.pathname.endsWith("/assets/coverage-map-v1.mjs") && url.searchParams.get("v") === "2";
+  }))).toBe(true);
+  await expect(page.getByRole("region", { name: /Interactive TollChat coverage map/ })).toBeVisible();
+  await expect(page.locator(".map-legend")).toContainText("Unlabelled ramps serve both directions.");
+  await expect(page.locator(".preview-map-pin")).toHaveCount(82);
+  await expect(page.locator(".preview-map-pin").first()).toHaveCSS("isolation", "isolate");
+  await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
+  await expect(page.locator(".ramp-badge")).toHaveCount(20);
+  await expect(page.locator("#directional-ramps")).toHaveCount(0);
+  await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(1);
+  await expect(page.locator("#route-filters button")).toHaveCount(6);
+  await expect(page.locator("#route-filters button:enabled")).toHaveCount(6);
+  await expect(page.locator("#reset-map")).toBeEnabled();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "New chat" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip map and ask a question" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#message")).toBeFocused();
+  expect(await page.locator(".preview-map-pin").evaluateAll((pins) =>
+    pins.every((pin) => pin.tagName === "BUTTON" && pin.tabIndex === 0 &&
+      pin.hasAttribute("aria-label"))
+  )).toBe(true);
+  expect(await page.locator(".preview-map-pin").evaluateAll((pins) => {
+    const labels = pins.map((pin) => pin.getAttribute("aria-label"));
+    return new Set(labels).size === labels.length;
+  })).toBe(true);
+  await expect(page.getByRole("button", { name: /95\/395 Express Lanes — I-95 Near Cardinal Drive: NB ENTRY only/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /I-66 — I-66 West: serves both directions/ })).toHaveCount(1);
+
+  await page.getByRole("button", { name: "I-66", exact: true }).click();
+  await expect(page.getByRole("button", { name: "I-66", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".preview-map-pin:visible")).toHaveCount(17);
+  await page.getByRole("button", { name: /I-495 S: serves both directions/ }).click();
+  await page.getByRole("button", { name: /I-495 N: EB ENTRY only/ }).click();
+  await expect(page.locator("#map-detail")).toContainText("EB entry only. 1 supported node (2)");
+
+  await page.getByRole("button", { name: /I-66 West: serves both directions/ }).focus();
+  await expect(page.locator("#map-detail")).toContainText("Serves both directions.");
+  await page.getByRole("button", { name: "Reset coverage" }).click();
+  await expect(page.locator(".preview-map-pin:visible")).toHaveCount(82);
+  await expect(page.locator("#map-detail")).toContainText("Coverage break");
+});
+
+test("private preview stacks map before transcript on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview.html");
+
+  const header = await page.locator("header").boundingBox();
+  const map = await page.locator(".map-panel").boundingBox();
+  const frame = await page.locator(".map-frame").boundingBox();
+  const detail = await page.locator("#map-detail").boundingBox();
+  const transcript = await page.locator("#transcript").boundingBox();
+  const reset = await page.locator("#reset-map").boundingBox();
+  expect(header.y + header.height).toBeLessThanOrEqual(map.y);
+  expect(frame.y + frame.height).toBeLessThanOrEqual(detail.y);
+  expect(detail.y + detail.height).toBeLessThanOrEqual(transcript.y);
+  expect(reset.x + reset.width).toBeLessThanOrEqual(390);
+  await expect(page.locator("form")).toHaveCSS("position", "static");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});

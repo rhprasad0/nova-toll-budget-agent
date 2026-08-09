@@ -42,6 +42,7 @@ locals {
     "assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs"   = "text/javascript"
     "assets/markdown-it-15.0.0/markdown-it.esm.min.mjs" = "text/javascript"
     "assets/chat-markdown-v1.mjs"                       = "text/javascript"
+    "assets/coverage-map-v1.mjs"                        = "text/javascript"
   }
 }
 

@@ -133,7 +133,20 @@ test("validation, page, config, and reset keep their small contracts", async () 
   });
   assert.equal(asset.statusCode, 200);
   assert.equal(asset.headers["Content-Type"], "text/javascript; charset=utf-8");
+  assert.equal(asset.headers["Cache-Control"], "public, max-age=31536000, immutable");
   assert.equal(await bodyText(asset.body), "export const safe = true;");
+  const coverageMap = await route(event("GET", "/assets/coverage-map-v1.mjs"), {
+    ...dependencies,
+    previewAssets: { "/assets/coverage-map-v1.mjs": "export const pins = [];" },
+  });
+  assert.equal(coverageMap.statusCode, 200);
+  assert.equal(coverageMap.headers["Cache-Control"], "no-store");
+  const stylesheet = await route(event("GET", "/assets/maplibre-gl-6.0.0/maplibre-gl.css"), {
+    ...dependencies,
+    previewAssets: { "/assets/maplibre-gl-6.0.0/maplibre-gl.css": ".map{}" },
+  });
+  assert.equal(stylesheet.statusCode, 200);
+  assert.equal(stylesheet.headers["Content-Type"], "text/css; charset=utf-8");
   assert.deepEqual(
     JSON.parse(await bodyText((await route(event("GET", "/api/config"), dependencies)).body)),
     { chatEnabled: true, maxMessageChars: 8000, maxTurns: 5 },
@@ -166,4 +179,19 @@ test("AgentCore invocation failures return no internal detail", async () => {
   const body = await bodyText(response.body);
   assert.match(body, /temporarily unavailable/);
   assert.doesNotMatch(body, /credential-shaped/);
+});
+
+test("reset is idempotent when its runtime session does not exist", async () => {
+  const client = { async send() {
+    const error = new Error("missing session");
+    error.name = "ResourceNotFoundException";
+    throw error;
+  } };
+  const response = await route(
+    event("POST", "/api/reset", { session_id: sessionId }),
+    { client, runtimeArn: "runtime-arn", previewHtml: "" },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(JSON.parse(await bodyText(response.body)), { ok: true });
 });

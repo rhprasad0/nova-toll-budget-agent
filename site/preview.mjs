@@ -83,6 +83,9 @@ export async function runRequest(request, onEvent, setBusy) {
   }
 }
 
+export const shouldSubmitOnEnter = (event, busy) =>
+  event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && !busy;
+
 function newTurn(container) {
   const article = document.createElement("article");
   article.className = "assistant-turn";
@@ -104,11 +107,24 @@ function start() {
   const reset = document.querySelector("#reset");
   const transcript = document.querySelector("#transcript");
   let session = crypto.randomUUID();
+  import("./assets/coverage-map-v1.mjs?v=2")
+    .then(({ mountCoverageMap }) => mountCoverageMap({ mode: "preview" }))
+    .catch(() => {
+      document.querySelector("#map-loading").hidden = true;
+      document.querySelector("#map-error").hidden = false;
+    });
   const setBusy = (busy) => {
     submit.disabled = busy;
     input.disabled = busy;
+    reset.disabled = busy;
     form.setAttribute("aria-busy", String(busy));
   };
+
+  input.addEventListener("keydown", (event) => {
+    if (!shouldSubmitOnEnter(event, form.getAttribute("aria-busy") === "true")) return;
+    event.preventDefault();
+    form.requestSubmit();
+  });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -132,14 +148,19 @@ function start() {
   });
 
   reset.addEventListener("click", async () => {
-    await fetch("/api/reset", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ session_id: session }),
-    }).catch(() => {});
-    session = crypto.randomUUID();
-    transcript.replaceChildren();
-    input.focus();
+    setBusy(true);
+    try {
+      await fetch("/api/reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session_id: session }),
+      }).catch(() => {});
+    } finally {
+      session = crypto.randomUUID();
+      transcript.replaceChildren();
+      setBusy(false);
+      input.focus();
+    }
   });
 }
 

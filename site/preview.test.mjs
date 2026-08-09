@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyEvent, consumeNdjson, runRequest } from "./preview.mjs";
+import { applyEvent, consumeNdjson, runRequest, shouldSubmitOnEnter } from "./preview.mjs";
 
 const element = (tagName = "div") => ({
   tagName,
@@ -119,4 +119,13 @@ test("NDJSON parser requires exactly one terminal event", async () => {
     ), () => {}),
     /event after terminal/,
   );
+});
+
+test("Enter submits unless the user wants a newline or is still composing", () => {
+  assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: false }, false), true);
+  assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: true, isComposing: false }, false), false);
+  assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: true }, false), false);
+  assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: false, keyCode: 229 }, false), false);
+  assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false, isComposing: false }, true), false);
+  assert.equal(shouldSubmitOnEnter({ key: "a", shiftKey: false, isComposing: false }, false), false);
 });
