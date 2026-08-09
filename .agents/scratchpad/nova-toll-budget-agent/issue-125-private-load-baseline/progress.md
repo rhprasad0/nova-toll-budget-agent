@@ -8,7 +8,8 @@
 - [x] Run passing live load test with ingestion overlap
 - [x] Curate evidence and rollout thresholds
 - [x] Run Gitleaks and final validation
-- [ ] Commit, push, open ready PR, and confirm CI
+- [x] Commit validated implementation
+- [ ] Push, open ready PR, and confirm CI
 
 ## Setup
 
@@ -38,3 +39,4 @@
 - Final validation: 480 Python tests, 15 browser tests, 24 proxy tests, Ruff,
   formatting, and Pyright passed. Gitleaks found no leaks in any intended file;
   its whole-directory scan reported only ignored pytest/bytecode test fixtures.
+- Rebased implementation commit: `a7cdc73` (`test: record private load baseline`).
