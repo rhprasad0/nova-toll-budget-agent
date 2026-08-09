@@ -426,3 +426,62 @@ def test_proxy_session_store_is_private_ephemeral_and_least_privilege():
     assert "dynamodb:GetItem" not in proxy_policy
     assert "SESSION_TABLE_NAME" in agentcore
     assert "aws_vpc_endpoint.dynamodb" in agentcore
+
+
+def test_launch_gate_alarms_cover_actionable_runtime_and_rds_signals():
+    observability = (ROOT / "infra/observability.tf").read_text()
+    smoke = (ROOT / "scripts/smoke.sh").read_text()
+
+    assert (
+        'resource "aws_cloudwatch_log_metric_filter" "proxy_failure"' in observability
+    )
+    assert 'pattern        = "PROXY_FAILURE"' in observability
+    assert 'name      = "ProxyFailure"' in observability
+
+    expected = {
+        "tollchat_proxy_errors": ("Errors", "threshold           = 1"),
+        "tollchat_proxy_failures": ("ProxyFailure", "threshold           = 1"),
+        "tollchat_proxy_latency": ("Duration", 'extended_statistic  = "p99"'),
+        "tollchat_sessions": ("ActiveSessionCount", "threshold           = 10"),
+        "rds_cpu": ("CPUUtilization", "threshold           = 70"),
+        "rds_free_memory": ("FreeableMemory", "threshold           = 64 * 1024 * 1024"),
+        "rds_connections": ("DatabaseConnections", "threshold           = 60"),
+        "rds_cpu_credits": ("CPUCreditBalance", "threshold           = 72"),
+    }
+    for resource, (metric, setting) in expected.items():
+        block = observability.split(
+            f'resource "aws_cloudwatch_metric_alarm" "{resource}"', maxsplit=1
+        )[1].split("\n}", maxsplit=1)[0]
+        assert f'metric_name         = "{metric}"' in block
+        assert setting in block
+        assert "alarm_description" in block
+        assert "alarm_actions       = [aws_sns_topic.alerts.arn]" in block
+        assert 'treat_missing_data  = "notBreaching"' in block
+
+    latency = observability.split(
+        'resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_latency"', maxsplit=1
+    )[1].split("\n}", maxsplit=1)[0]
+    assert "threshold           = 45 * 1000" in latency
+    assert "datapoints_to_alarm = 1" in latency
+
+    sessions = observability.split(
+        'resource "aws_cloudwatch_metric_alarm" "tollchat_sessions"', maxsplit=1
+    )[1].split("\n}", maxsplit=1)[0]
+    assert "datapoints_to_alarm = 2" in sessions
+    assert "evaluation_periods  = 3" in sessions
+
+    assert 'resource "aws_cloudwatch_metric_alarm" "freshness"' in observability
+    assert 'treat_missing_data  = "breaching"' in observability
+    assert "docs/runbooks/alarms.md" in observability
+    assert "Endpoint=='$RECIPIENT'" in smoke
+    for alarm in (
+        "tollchat-chat-proxy-errors",
+        "tollchat-chat-proxy-failures",
+        "tollchat-chat-proxy-latency",
+        "tollchat-agentcore-active-sessions",
+        "toll-rds-cpu",
+        "toll-rds-free-memory",
+        "toll-rds-connections",
+        "toll-rds-cpu-credits",
+    ):
+        assert alarm in smoke

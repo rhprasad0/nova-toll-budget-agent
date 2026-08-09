@@ -13,17 +13,25 @@ PROFILE=nova-toll
 REGION=us-east-1
 BUCKET=nova-toll-raw-920534282028
 TOPIC_ARN="arn:aws:sns:${REGION}:920534282028:nova-toll-alerts"
+RECIPIENT="bills@ryanprasad.ai"
 AWS=(aws --profile "$PROFILE" --region "$REGION")
 DATE_UTC="$(date -u +%Y-%m-%d)"
 fail=0
 say() { printf '%-22s %s\n' "$1" "$2"; }
 
-# 0. SNS test message — an unconfirmed subscription silently mutes every alarm,
-#    so this both tests wiring and forces the confirmation email to matter.
+# 0. SNS test message — an unconfirmed subscription silently mutes every alarm.
+subscription=$("${AWS[@]}" sns list-subscriptions-by-topic --topic-arn "$TOPIC_ARN" \
+  --query "Subscriptions[?Protocol=='email' && Endpoint=='$RECIPIENT'].SubscriptionArn | [0]" --output text)
+if [[ -z "$subscription" || "$subscription" == "None" || "$subscription" == "PendingConfirmation" ]]; then
+  say "sns subscription" "MISSING/unconfirmed"
+  fail=1
+else
+  say "sns subscription" "confirmed"
+fi
 "${AWS[@]}" sns publish --topic-arn "$TOPIC_ARN" \
   --subject "nova-toll smoke test" \
   --message "Smoke test $(date -u +%FT%TZ). If you got this, the alarm path works." >/dev/null
-say "sns publish" "sent -> check bills@ryanprasad.ai (confirm the subscription if needed)"
+say "sns publish" "sent -> check $RECIPIENT"
 
 # 1. optionally fire the fetcher, then give the loader a moment to run
 if [[ "${1:-}" == "--fire" ]]; then
@@ -59,7 +67,11 @@ done
 
 # 5. every alarm in OK (not ALARM, not INSUFFICIENT_DATA)
 for a in toll-fetcher-errors toll-loader-errors toll-freshness-i95 \
-         toll-freshness-i66 toll-loader-onfailure-queue toll-rds-free-storage; do
+         toll-freshness-i66 toll-loader-onfailure-queue toll-rds-free-storage \
+         tollchat-chat-proxy-errors tollchat-chat-proxy-failures \
+         tollchat-chat-proxy-latency tollchat-agentcore-active-sessions \
+         toll-rds-cpu toll-rds-free-memory toll-rds-connections \
+         toll-rds-cpu-credits; do
   st=$("${AWS[@]}" cloudwatch describe-alarms --alarm-names "$a" \
         --query 'MetricAlarms[0].StateValue' --output text 2>/dev/null || echo MISSING)
   if [[ "$st" == "OK" ]]; then say "alarm $a" "OK"; else say "alarm $a" "$st"; fail=1; fi

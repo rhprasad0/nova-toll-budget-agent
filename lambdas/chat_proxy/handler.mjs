@@ -183,7 +183,7 @@ const releaseSession = async (dependencies, token, leaseId) => {
       ExpressionAttributeValues: { ":lease_id": { S: leaseId } },
     }));
   } catch (error) {
-    if (!conditionalFailure(error)) console.error("Session lease release failed", error?.name ?? "Error");
+    if (!conditionalFailure(error)) console.error("PROXY_FAILURE", "lease_release", error?.name ?? "Error");
   }
 };
 
@@ -226,8 +226,12 @@ async function* ndjsonFromSse(stream, release = async () => {}) {
     }
     if (buffer.trim()) throw new Error("incomplete SSE frame");
     if (!terminal) throw new Error("missing terminal event");
+    if (terminal.type === "error" && terminal.code === "agent_unavailable") {
+      console.error("PROXY_FAILURE", "runtime", terminal.code);
+    }
     yield `${JSON.stringify(terminal)}\n`;
-  } catch {
+  } catch (error) {
+    console.error("PROXY_FAILURE", "stream", error?.name ?? "Error");
     yield `${JSON.stringify(SAFE_ERROR)}\n`;
   } finally {
     await release();
@@ -327,7 +331,7 @@ export async function route(event, dependencies) {
       return json(200, { ok: true }, { "Set-Cookie": clearCookie });
     }
     await release();
-    console.error("Chat proxy request failed", error?.name ?? "Error");
+    console.error("PROXY_FAILURE", "request", error?.name ?? "Error");
     return json(502, { error: SAFE_ERROR }, cookie ? { "Set-Cookie": cookie } : {});
   }
 }
