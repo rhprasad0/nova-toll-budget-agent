@@ -134,6 +134,7 @@ The default suite excludes tests that require a network, model API, or RDS:
 ```sh
 uv sync --locked
 npm ci
+npx playwright install --with-deps chromium
 uv run ruff check .
 uv run pyright
 uv run pytest
