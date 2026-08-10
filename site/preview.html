@@ -104,6 +104,9 @@
     .map-state strong { display:block; margin-bottom:4px; color:var(--text); }
     .map-pin,.junction-pin { position:absolute; top:0; left:0; isolation:isolate; display:grid; width:44px; height:44px; padding:0; place-items:center; border:0; border-radius:50%; background:transparent; color:#fff; cursor:pointer; font-size:8px; font-weight:850; outline:none; }
     .preview-map-pin::before,.preview-junction-pin::before { position:absolute; z-index:-1; width:15px; height:15px; border:2px solid var(--pin); border-radius:50%; background:#0b1715; box-shadow:0 0 0 4px rgba(4,12,11,.38),0 0 12px color-mix(in srgb,var(--pin) 55%,transparent); content:""; transition:background-color .16s ease,transform .16s ease; }
+    .landmark-map-pin::before { position:absolute; z-index:-1; width:14px; height:14px; border:2px solid var(--text); border-radius:3px; background:#0b1715; box-shadow:0 0 0 4px rgba(4,12,11,.38),0 0 12px rgba(255,255,255,.3); content:""; transform:rotate(45deg); transition:background-color .16s ease,transform .16s ease; }
+    .landmark-map-pin:hover::before,.landmark-map-pin:focus-visible::before,.landmark-map-pin.selected::before { background:color-mix(in srgb,var(--text) 25%,#0b1715); transform:rotate(45deg) scale(1.28); }
+    .landmark-map-pin:focus-visible { box-shadow:inset 0 0 0 2px var(--text); }
     .preview-map-pin:hover::before,.preview-map-pin:focus-visible::before,.preview-map-pin.selected::before,.preview-junction-pin:hover::before,.preview-junction-pin:focus-visible::before { background:color-mix(in srgb,var(--pin) 25%,#0b1715); transform:scale(1.28); }
     .preview-map-pin:focus-visible,.preview-junction-pin:focus-visible { box-shadow:inset 0 0 0 2px var(--text); }
     .ramp-badge { position:absolute; z-index:2; display:grid; min-width:34px; padding:3px 5px; border:1px solid color-mix(in srgb,var(--pin) 68%,white); border-left:3px solid var(--pin); border-radius:5px; background:rgba(7,16,15,.95); box-shadow:0 3px 10px rgba(0,0,0,.42); color:var(--text); line-height:1; text-align:center; pointer-events:none; }
@@ -163,7 +166,7 @@
       <div class="map-copy">
         <p class="eyebrow">Ramp access</p>
         <h2 id="map-title">Coverage at a glance</h2>
-        <p class="map-legend"><strong>Labels identify one-way ramps and their allowed use.</strong> Unlabelled ramps serve both directions. The amber mark is the unpriced I-95 ↔ I-495 junction.</p>
+        <p class="map-legend"><strong>Labels identify one-way ramps and their allowed use.</strong> Unlabelled ramps serve both directions. Diamond pins are geographic landmarks, not toll-road access. The amber mark is the unpriced I-95 ↔ I-495 junction.</p>
         <a class="skip-map" href="#message">Skip map and ask a question</a>
         <div class="map-tools">
           <nav id="route-filters" class="filters" aria-label="Filter toll facilities">
@@ -178,7 +181,7 @@
         </div>
       </div>
       <div class="map-frame">
-        <div id="coverage-map" role="region" aria-label="Interactive TollChat coverage map. Labelled ramps show travel direction and whether they are entries, exits, or both; unlabelled ramps serve both directions."></div>
+        <div id="coverage-map" role="region" aria-label="Interactive TollChat coverage map. Labelled ramps show travel direction and whether they are entries, exits, or both; unlabelled ramps serve both directions; landmark pins are geographic references, not toll-road access."></div>
         <div id="map-loading" class="map-state" role="status"><strong>Drawing the toll map…</strong>Loading road and ramp coverage.</div>
         <div id="map-error" class="map-state" role="alert" hidden><strong>The map could not load.</strong>Chat remains available. Coverage includes I-66, 95/395, 495, the Dulles Toll Road, and the Dulles Greenway.</div>
       </div>

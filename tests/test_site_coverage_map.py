@@ -10,7 +10,7 @@ from typing import TypedDict, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site" / "preview.html"
-MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v1.mjs"
+MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v2.mjs"
 ORACLES = ROOT / "oracles"
 ASSETS = ROOT / "site" / "assets"
 MAPLIBRE_ASSETS = ASSETS / "maplibre-gl-6.0.0"
@@ -26,6 +26,12 @@ class CoveragePin(TypedDict):
     nodeIds: list[str]
 
 
+class LandmarkPin(TypedDict):
+    label: str
+    lat: float
+    lon: float
+
+
 def _exported_json(name: str) -> object:
     source = MAP_MODULE.read_text().split(f"export const {name} = ", maxsplit=1)[1]
     return json.JSONDecoder().raw_decode(source)[0]
@@ -33,6 +39,25 @@ def _exported_json(name: str) -> object:
 
 def _coverage_data() -> list[CoveragePin]:
     return cast(list[CoveragePin], _exported_json("coveragePins"))
+
+
+def test_map_landmarks_are_separate_from_toll_coverage() -> None:
+    landmarks = cast(list[LandmarkPin], _exported_json("landmarkPins"))
+
+    assert landmarks == [
+        {
+            "label": "Dulles International Airport",
+            "lat": 38.9522663,
+            "lon": -77.4534849,
+        },
+        {
+            "label": "Reagan National Airport",
+            "lat": 38.8512894,
+            "lon": -77.0396889,
+        },
+        {"label": "Washington, DC", "lat": 38.9072, "lon": -77.0369},
+    ]
+    assert all("facility" not in pin and "nodeIds" not in pin for pin in landmarks)
 
 
 def test_shared_map_data_covers_every_active_oracle_node() -> None:

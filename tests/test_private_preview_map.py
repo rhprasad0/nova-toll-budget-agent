@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v1.mjs"
+MAP_MODULE = ROOT / "site" / "assets" / "coverage-map-v2.mjs"
 HANDLER = ROOT / "lambdas" / "chat_proxy" / "handler.mjs"
 BUILD = ROOT / "scripts" / "build_zips.sh"
 INFRA = ROOT / "infra" / "site.tf"
@@ -71,16 +71,21 @@ def test_private_bundle_serves_the_shared_pinned_map_assets() -> None:
     infra = INFRA.read_text()
 
     for asset in (
-        "coverage-map-v1.mjs",
+        "coverage-map-v2.mjs",
         "maplibre-gl.css",
         "maplibre-gl.mjs",
         "maplibre-gl-shared.mjs",
         "maplibre-gl-worker.mjs",
     ):
         assert asset in handler
-    assert "site/assets/coverage-map-v1.mjs" in build
+    assert "site/assets/coverage-map-v2.mjs" in build
     assert "site/assets/maplibre-gl-6.0.0" in build
-    assert '"assets/coverage-map-v1.mjs"' in infra
+    assert '"assets/coverage-map-v2.mjs"' in infra
+    assert '"assets/coverage-map-v1.mjs" = "assets/coverage-map-v2.mjs"' in infra
+    assert (
+        'depends_on = [aws_s3_object.site_assets["assets/coverage-map-v2.mjs"]]'
+        in infra
+    )
     assert 'path.endsWith(".css")' in handler
     assert '"text/css; charset=utf-8"' in handler
 

@@ -117,7 +117,7 @@ function start() {
   const submit = form.querySelector("button");
   const reset = document.querySelector("#reset");
   const transcript = document.querySelector("#transcript");
-  import("./assets/coverage-map-v1.mjs?v=2")
+  import("./assets/coverage-map-v2.mjs")
     .then(({ mountCoverageMap }) => mountCoverageMap({ mode: "preview" }))
     .catch(() => {
       document.querySelector("#map-loading").hidden = true;
