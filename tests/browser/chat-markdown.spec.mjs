@@ -380,7 +380,7 @@ test("open-beta coverage map stays interactive and direction-aware", async ({ pa
   await Promise.all([
     page.waitForRequest((request) => {
       const url = new URL(request.url());
-      return url.pathname.endsWith("/assets/coverage-map-v1.mjs") && url.searchParams.get("v") === "2";
+      return url.pathname.endsWith("/assets/coverage-map-v2.mjs");
     }),
     page.goto("/preview.html"),
   ]);
@@ -389,6 +389,7 @@ test("open-beta coverage map stays interactive and direction-aware", async ({ pa
   await expect(page.getByRole("region", { name: /Interactive TollChat coverage map/ })).toBeVisible();
   await expect(page.locator(".map-legend")).toContainText("Unlabelled ramps serve both directions.");
   await expect(page.locator(".preview-map-pin")).toHaveCount(82);
+  await expect(page.locator(".landmark-map-pin")).toHaveCount(3);
   await expect(page.locator(".preview-map-pin").first()).toHaveCSS("isolation", "isolate");
   await expect(page.locator(".preview-map-pin[data-direction]")).toHaveCount(20);
   await expect(page.locator(".ramp-badge")).toHaveCount(20);
@@ -413,12 +414,18 @@ test("open-beta coverage map stays interactive and direction-aware", async ({ pa
   })).toBe(true);
   await expect(page.getByRole("button", { name: /95\/395 Express Lanes — I-95 Near Cardinal Drive: NB ENTRY only/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /I-66 — I-66 West: serves both directions/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Landmark — Dulles International Airport" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Landmark — Reagan National Airport" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Landmark — Washington, DC" })).toHaveCount(1);
 
   await page.getByRole("button", { name: "I-66", exact: true }).click();
   await expect(page.getByRole("button", { name: "I-66", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".preview-map-pin:visible")).toHaveCount(17);
-  await page.getByRole("button", { name: /I-495 S: serves both directions/ }).click();
-  await page.getByRole("button", { name: /I-495 N: EB ENTRY only/ }).click();
+  await expect(page.locator(".landmark-map-pin:visible")).toHaveCount(3);
+  await page.getByRole("button", { name: "Landmark — Reagan National Airport" }).click();
+  await expect(page.locator("#map-detail")).toContainText("Geographic reference only. Not a supported toll-road entry or exit.");
+  await page.getByRole("button", { name: /I-495 S: serves both directions/ }).focus();
+  await page.getByRole("button", { name: /I-495 N: EB ENTRY only/ }).focus();
   await expect(page.locator("#map-detail")).toContainText("EB entry only. 1 supported node (2)");
 
   await page.getByRole("button", { name: /I-66 West: serves both directions/ }).focus();
@@ -426,12 +433,26 @@ test("open-beta coverage map stays interactive and direction-aware", async ({ pa
   await page.getByRole("button", { name: "Reset coverage" }).click();
   await expect(page.locator(".preview-map-pin:visible")).toHaveCount(82);
   await expect(page.locator("#map-detail")).toContainText("Coverage break");
+
+  const landmarksInsideMap = () => page.evaluate(() => {
+    const map = document.querySelector("#coverage-map").getBoundingClientRect();
+    return [...document.querySelectorAll(".landmark-map-pin")].every((pin) => {
+      const bounds = pin.getBoundingClientRect();
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      return x >= map.left && x <= map.right && y >= map.top && y <= map.bottom;
+    });
+  });
+  await page.getByRole("button", { name: "Greenway", exact: true }).click();
+  await expect.poll(landmarksInsideMap).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(landmarksInsideMap).toBe(true);
 });
 
 test("private 95/395 geometry stops at the Van Dorn ramp", async ({ page }) => {
   await page.goto("/preview.html");
   const geometry = await page.evaluate(async () => {
-    const { coveragePins, routeData, routeDataForMode } = await import("/assets/coverage-map-v1.mjs?v=2");
+    const { coveragePins, routeData, routeDataForMode } = await import("/assets/coverage-map-v2.mjs");
     const i95Lines = (data) => data.features.find(
       (feature) => feature.properties.facility === "i95"
     ).geometry.coordinates;

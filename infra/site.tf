@@ -48,6 +48,8 @@ resource "aws_s3_object" "preview_script" {
   etag          = filemd5(local.site_script_path)
   content_type  = "text/javascript"
   cache_control = "no-cache"
+
+  depends_on = [aws_s3_object.site_assets["assets/coverage-map-v2.mjs"]]
 }
 
 resource "aws_s3_object" "privacy" {
@@ -77,6 +79,10 @@ locals {
     "assets/markdown-it-15.0.0/markdown-it.esm.min.mjs" = "text/javascript"
     "assets/chat-markdown-v1.mjs"                       = "text/javascript"
     "assets/coverage-map-v1.mjs"                        = "text/javascript"
+    "assets/coverage-map-v2.mjs"                        = "text/javascript"
+  }
+  site_asset_sources = {
+    "assets/coverage-map-v1.mjs" = "assets/coverage-map-v2.mjs"
   }
 }
 
@@ -85,8 +91,8 @@ resource "aws_s3_object" "site_assets" {
 
   bucket        = aws_s3_bucket.site.id
   key           = each.key
-  source        = "${path.module}/../site/${each.key}"
-  etag          = filemd5("${path.module}/../site/${each.key}")
+  source        = "${path.module}/../site/${lookup(local.site_asset_sources, each.key, each.key)}"
+  etag          = filemd5("${path.module}/../site/${lookup(local.site_asset_sources, each.key, each.key)}")
   content_type  = each.value
   cache_control = "public, max-age=31536000, immutable"
 }
