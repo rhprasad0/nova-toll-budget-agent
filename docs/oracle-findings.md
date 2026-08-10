@@ -1,6 +1,6 @@
 # Oracle Findings
 
-Status: findings record and current route-tool rationale · Owner: Ryan Prasad · Last updated: 2026-07-30
+Status: findings record and current route-tool rationale · Owner: Ryan Prasad · Last updated: 2026-08-04
 
 The original curated toll graph and free-form database tools were removed.
 This document preserves what that work found and records the rationale behind
