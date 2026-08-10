@@ -167,3 +167,13 @@ as an applied AI engineering project: useful to drivers, constrained enough to
 trust, and instrumented enough to debug when reality gets weird.
 
 Questions or beta feedback: [contact@tollchat.ai](mailto:contact@tollchat.ai)
+
+## License
+
+Unless otherwise noted, project-authored source code and documentation are
+available under the [Apache License 2.0](LICENSE).
+Copyright 2026 Benevolent Clankers LLC.
+
+Apache-2.0 does not grant trademark rights in the TollChat name and branding
+beyond customary descriptive use. Third-party code, assets, and data—including
+VDOT data—remain subject to their respective licenses and terms.
