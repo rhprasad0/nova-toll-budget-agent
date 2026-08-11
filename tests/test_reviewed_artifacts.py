@@ -16,6 +16,7 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
         "loader.zip",
         "preview.html",
         "preview.mjs",
+        "faq.html",
         "privacy.md",
         "terms.md",
     ):
@@ -44,6 +45,7 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
     for variable in (
         "site_index_path",
         "site_script_path",
+        "site_faq_path",
         "site_privacy_path",
         "site_terms_path",
     ):

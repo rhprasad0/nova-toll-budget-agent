@@ -256,6 +256,54 @@ test("private preview presents source-backed pricing with official verification 
   await expect(footer).not.toContainText("Estimates only.");
 });
 
+test("pricing FAQ explains freshness, route oracles, and the unpriced junction", async ({ page }) => {
+  await page.goto("/preview.html");
+
+  const faqEntry = page.locator("footer > .footer-faq");
+  await expect(faqEntry).toBeVisible();
+  await expect(faqEntry.getByRole("link", { name: "Pricing FAQ" })).toHaveAttribute(
+    "href",
+    "/faq.html"
+  );
+  await expect(faqEntry).toContainText("Data freshness, route oracles, and known coverage gaps.");
+
+  await page.goto("/faq.html");
+  await expect(page).toHaveTitle("Pricing FAQ · TollChat");
+  await expect(page.getByRole("heading", { name: "How TollChat prices a trip." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Where do TollChat prices come from?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Why can TollChat differ from an operator site?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How does the route oracle work?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Why is part of the I-95 ↔ I-495 junction unpriced?" })).toBeVisible();
+
+  const main = page.locator("main");
+  await expect(main).toContainText("matches ExpressLanes exactly when shifted by 10 minutes");
+  await expect(main).toContainText("six-minute intervals with a measured 1–4-minute source delay");
+  await expect(main).toContainText("one capture behind VA66Tolls");
+  await expect(main).toContainText("committed, read-only route map");
+  await expect(main).toContainText("price lookup keys");
+  await expect(main).toContainText("does not generate prices");
+  await expect(main).toContainText("Edsall or Franconia-Springfield");
+  await expect(main).toContainText("I-495 Near Braddock Road");
+  await expect(main).toContainText("known toll total");
+
+  const expectedLinks = [
+    ["95/395/495 Express Lanes", "https://www.expresslanes.com/map-your-trip/"],
+    ["I-66 Inside the Beltway", "https://vai66tolls.com/"],
+    ["Dulles Toll Road", "https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate"],
+    ["Dulles Greenway", "https://www.dullesgreenway.com/toll-calculator/"],
+  ];
+  for (const [name, href] of expectedLinks) {
+    await expect(main.getByRole("link", { name })).toHaveAttribute("href", href);
+  }
+  await expect(main.getByRole("link", { name: "Read the technical evidence" })).toHaveAttribute(
+    "href",
+    /docs\/oracle-findings\.md#9-vdot-republishes-transurbans-price-on-a-10-minute-delay$/
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
 test("footer carries the privacy notice and composer requests a latest price", async ({ page }) => {
   await page.goto("/preview.html");
 

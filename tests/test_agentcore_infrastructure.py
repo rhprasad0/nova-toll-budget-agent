@@ -364,12 +364,15 @@ def test_public_chat_edge_is_explicitly_promoted_and_uses_cloudfront_oac():
     assert "invoked_via_function_url = true" in site
 
 
-def test_public_site_publishes_privacy_and_terms():
+def test_public_site_publishes_faq_privacy_and_terms():
     site = (ROOT / "infra/site.tf").read_text()
     page = (ROOT / "site/preview.html").read_text()
 
     assert 'key           = "privacy.txt"' in site
     assert 'key           = "terms.txt"' in site
+    assert 'key           = "faq.html"' in site
+    assert "source        = local.site_faq_path" in site
+    assert 'href="/faq.html"' in page
     assert 'href="/privacy.txt"' in page
     assert 'href="/terms.txt"' in page
 

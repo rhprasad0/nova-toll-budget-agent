@@ -252,8 +252,10 @@ export async function route(event, dependencies) {
   if (method === "GET" && Object.hasOwn(previewAssets, path)) {
     const contentType = path.endsWith(".css")
       ? "text/css; charset=utf-8"
-      : path.endsWith(".txt") ? "text/plain; charset=utf-8" : "text/javascript; charset=utf-8";
-    const cacheControl = path === "/assets/coverage-map-v2.mjs" || path.endsWith(".txt")
+      : path.endsWith(".html")
+        ? "text/html; charset=utf-8"
+        : path.endsWith(".txt") ? "text/plain; charset=utf-8" : "text/javascript; charset=utf-8";
+    const cacheControl = path === "/assets/coverage-map-v2.mjs" || path.endsWith(".html") || path.endsWith(".txt")
       ? "no-store"
       : "public, max-age=31536000, immutable";
     return { statusCode: 200, headers: { "Content-Type": contentType, "Cache-Control": cacheControl }, body: previewAssets[path] };
@@ -358,6 +360,7 @@ const dependencies = deployed ? {
   previewHtml: readFileSync(new URL("./preview.html", import.meta.url), "utf8"),
   previewJs: readFileSync(new URL("./preview.mjs", import.meta.url), "utf8"),
   previewAssets: {
+    "/faq.html": readFileSync(new URL("./faq.html", import.meta.url), "utf8"),
     "/privacy.txt": readFileSync(new URL("./privacy.txt", import.meta.url), "utf8"),
     "/terms.txt": readFileSync(new URL("./terms.txt", import.meta.url), "utf8"),
     "/assets/chat-markdown-v1.mjs": readFileSync(new URL("./assets/chat-markdown-v1.mjs", import.meta.url), "utf8"),

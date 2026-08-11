@@ -88,6 +88,7 @@ terraform -chdir=infra plan -out=rollback.tfplan \
   -var "chat_proxy_package_path=$artifact_dir/chat-proxy.zip" \
   -var "site_index_path=$artifact_dir/preview.html" \
   -var "site_script_path=$artifact_dir/preview.mjs" \
+  -var "site_faq_path=$artifact_dir/faq.html" \
   -var "site_privacy_path=$artifact_dir/privacy.md" \
   -var "site_terms_path=$artifact_dir/terms.md" \
   -var enable_public_chat=false

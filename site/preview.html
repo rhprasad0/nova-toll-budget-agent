@@ -85,6 +85,9 @@
     form[aria-busy=true] { opacity:.72; }
     footer { grid-area:footer; display:grid; gap:12px; padding:20px clamp(24px,4vw,56px); border-top:1px solid var(--line); color:var(--faint); font-size:.75rem; line-height:1.55; }
     footer p { margin:0; text-wrap:pretty; }
+    .footer-faq { display:grid; gap:2px; padding-bottom:12px; border-bottom:1px solid var(--line); }
+    .footer-faq a { width:max-content; max-width:100%; color:var(--text); font-size:1rem; font-weight:800; }
+    .footer-faq p { color:var(--muted); font-size:.8rem; }
     .footer-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:.85rem; }
     .footer-legal { display:grid; gap:4px; }
 
@@ -213,6 +216,10 @@
       <button type="submit">Price trip</button>
     </form>
     <footer>
+      <div class="footer-faq">
+        <a href="/faq.html">Pricing FAQ <span aria-hidden="true">→</span></a>
+        <p>Data freshness, route oracles, and known coverage gaps.</p>
+      </div>
       <div class="footer-actions">
         <p>Found a bug or have another comment? Email <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a>.</p>
         <a class="ci-badge" href="https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml" aria-label="TollChat CI status" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><img src="https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml/badge.svg" alt="" width="90" height="20" referrerpolicy="no-referrer"></a>

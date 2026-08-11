@@ -24,6 +24,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
 locals {
   site_index_path   = var.site_index_path != "" ? var.site_index_path : "${path.module}/../site/preview.html"
   site_script_path  = var.site_script_path != "" ? var.site_script_path : "${path.module}/../site/preview.mjs"
+  site_faq_path     = var.site_faq_path != "" ? var.site_faq_path : "${path.module}/../site/faq.html"
   site_privacy_path = var.site_privacy_path != "" ? var.site_privacy_path : "${path.module}/../docs/legal/privacy.md"
   site_terms_path   = var.site_terms_path != "" ? var.site_terms_path : "${path.module}/../docs/legal/terms.md"
 }
@@ -50,6 +51,15 @@ resource "aws_s3_object" "preview_script" {
   cache_control = "no-cache"
 
   depends_on = [aws_s3_object.site_assets["assets/coverage-map-v2.mjs"]]
+}
+
+resource "aws_s3_object" "faq" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "faq.html"
+  source        = local.site_faq_path
+  etag          = filemd5(local.site_faq_path)
+  content_type  = "text/html; charset=utf-8"
+  cache_control = "no-cache"
 }
 
 resource "aws_s3_object" "privacy" {
