@@ -77,9 +77,15 @@ object versions are excluded from expiration so the audit trail remains
 recoverable even if a current version is accidentally replaced.
 
 Fetch the Cloudflare token from SSM as described in `SECURITY.md`, then plan
-with the verified packages and public-site files. Keep the public edge off:
+with the verified packages and public-site files. Releases created before the
+pricing FAQ have no `faq.html`; for those legacy manifests, omit its override
+and retain the checked-out FAQ source. Keep the public edge off:
 
 ```bash
+site_faq_args=()
+if [[ -f "$artifact_dir/faq.html" ]]; then
+  site_faq_args=(-var "site_faq_path=$artifact_dir/faq.html")
+fi
 terraform -chdir=infra init
 terraform -chdir=infra plan -out=rollback.tfplan \
   -var "fetcher_package_path=$artifact_dir/fetcher.zip" \
@@ -88,7 +94,7 @@ terraform -chdir=infra plan -out=rollback.tfplan \
   -var "chat_proxy_package_path=$artifact_dir/chat-proxy.zip" \
   -var "site_index_path=$artifact_dir/preview.html" \
   -var "site_script_path=$artifact_dir/preview.mjs" \
-  -var "site_faq_path=$artifact_dir/faq.html" \
+  "${site_faq_args[@]}" \
   -var "site_privacy_path=$artifact_dir/privacy.md" \
   -var "site_terms_path=$artifact_dir/terms.md" \
   -var enable_public_chat=false
