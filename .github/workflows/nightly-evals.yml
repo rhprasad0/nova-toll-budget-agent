@@ -42,18 +42,34 @@ jobs:
       - name: Run every evaluation suite
         run: |
           failed=0
-          uv run --frozen python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py || failed=1
-          uv run --frozen python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py || failed=1
-          uv run --frozen python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_one_way_access.py || failed=1
-          uv run --frozen python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_non_i95_directional_access.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_ny_time_us_format.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_historical_closures.py || failed=1
-          uv run --frozen python eval/simulated/simulated_user_missing_parameter_acquisition.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_single_leg_base_cases.py || failed=1
-          NOVA_TOLL_EVAL_MODEL_ID="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)" uv run --frozen python eval/simulated/simulated_user_i95_i495_junctions.py || failed=1
+          run_eval() {
+            local name="$1"
+            shift
+            echo "::group::$name"
+            if "$@"; then
+              echo "::notice title=Live evaluation passed::$name"
+            else
+              echo "::error title=Live evaluation failed::$name; inspect the uploaded report artifact"
+              failed=1
+            fi
+            echo "::endgroup::"
+          }
+          eval_model_id="$(aws ssm get-parameter --name /nova-toll/nightly_eval_bedrock_profile_arn --query Parameter.Value --output text)"
+          run_eval "Fuzzy location matching" uv run --frozen python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py
+          run_eval "New York time formatting" uv run --frozen python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py
+          run_eval "Historical I-95 closures" uv run --frozen python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py
+          run_eval "Single-leg base cases" uv run --frozen python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py
+          run_eval "I-95 one-way access" uv run --frozen python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py
+          run_eval "Dulles connector junction" uv run --frozen python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py
+          run_eval "I-95/I-495 junction" uv run --frozen python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py
+          run_eval "Simulated I-95 one-way access" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_i95_one_way_access.py
+          run_eval "Simulated non-I-95 directional access" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_non_i95_directional_access.py
+          run_eval "Simulated fuzzy location matching" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py
+          run_eval "Simulated New York time formatting" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_ny_time_us_format.py
+          run_eval "Simulated historical I-95 closures" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_i95_historical_closures.py
+          run_eval "Missing parameter acquisition" uv run --frozen python eval/simulated/simulated_user_missing_parameter_acquisition.py
+          run_eval "Simulated single-leg base cases" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_single_leg_base_cases.py
+          run_eval "Simulated I-95/I-495 junction" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_i95_i495_junctions.py
           exit "$failed"
       - name: Submit report-only Batch judges
         if: always()

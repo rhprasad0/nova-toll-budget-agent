@@ -20,32 +20,20 @@ def test_openai_ci_credentials_are_main_only() -> None:
     assert "refs/heads/*" not in trust
 
 
-def test_failed_live_eval_reports_are_preserved_without_curated_baselines() -> None:
-    workflow = (WORKFLOWS / "ci.yml").read_text()
+def test_stochastic_agent_evals_are_nightly_not_required_ci() -> None:
+    ci = (WORKFLOWS / "ci.yml").read_text()
+    nightly = (WORKFLOWS / "nightly-evals.yml").read_text()
+    runners = (
+        "eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py",
+        "eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py",
+        "eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py",
+    )
 
-    assert workflow.count("run: rm -f eval/results/*.json") == 3
-    ordered_steps = (
-        "name: Clear curated evaluation reports",
-        "id: single_leg_eval",
-        "name: Clear previous live evaluation report",
-        "id: i95_one_way_eval",
-        "name: Clear previous live junction evaluation report",
-        "id: i95_i495_junction_eval",
-        "name: Save failed live evaluation report",
-    )
-    positions = [workflow.index(step) for step in ordered_steps]
-    assert positions == sorted(positions)
-    assert (
-        "if: failure() && (steps.single_leg_eval.outcome == 'failure' || steps.i95_one_way_eval.outcome == 'failure' || steps.i95_i495_junction_eval.outcome == 'failure')"
-        in workflow
-    )
-    assert (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
-    )
-    assert (
-        "name: ci-live-eval-${{ github.run_id }}-${{ github.run_attempt }}" in workflow
-    )
-    assert "retention-days: 7" in workflow
+    for runner in runners:
+        assert f"run: uv run python {runner} --check" in ci
+        assert f"run: uv run python {runner}\n" not in ci
+        assert runner in nightly
+    assert "::error title=Live evaluation failed::" in nightly
 
 
 def test_claude_pr_review_has_no_secret_bearing_workflow() -> None:

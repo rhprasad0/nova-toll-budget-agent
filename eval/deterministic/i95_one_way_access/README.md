@@ -24,3 +24,7 @@ The deterministic runner invokes OpenAI and read-only RDS as needed. The
 three-turn simulation additionally invokes Bedrock for actors and judges.
 Reports are written to `eval/results/`; only technically valid runs belong in
 the curated index.
+
+Required CI runs only the two offline checks. Deterministic grading does not
+make TollChat's live model execution deterministic, so both live commands run
+nightly as observational evidence.
