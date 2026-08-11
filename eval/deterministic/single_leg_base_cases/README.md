@@ -17,7 +17,7 @@ uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_
 This exercises fixture loading and evaluator branches with synthetic calls and
 responses. It does not invoke OpenAI, Bedrock, AWS, or RDS.
 
-## Deterministic live run
+## Code-graded live run
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py
@@ -27,6 +27,6 @@ The live run invokes TollChat once per case using the OpenAI key from SSM and
 read-only historical RDS for VDOT-backed roads. `dulles_route` reads committed
 oracles. Results are written to `eval/results/<timestamp>.json`.
 
-Pull-request CI runs only `--check`. The live deterministic suite runs from
-trusted `main` integration after merge. The matching three-turn simulations
-live at `eval/simulated/simulated_user_single_leg_base_cases.py` and run nightly.
+Required CI runs only `--check`. The code-based grader is repeatable, but the
+live TollChat execution is stochastic, so both this suite and the matching
+three-turn simulation run nightly as observational evidence.

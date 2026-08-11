@@ -7,3 +7,6 @@ uv run python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junct
 ```
 
 Omit `--check` only with the repository's configured OpenAI and AWS/RDS credentials.
+Required CI runs the synthetic check only. The live model execution and its
+simulated-user companion run nightly as observational evidence; deterministic
+grading still rejects duplicate or incorrect tool trajectories.

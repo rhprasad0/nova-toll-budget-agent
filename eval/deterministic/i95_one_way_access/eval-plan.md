@@ -16,14 +16,16 @@ replacement.
 
 ## Promotion and execution
 
-Run the deterministic suite three times. Only three complete perfect runs make
-it eligible for trusted integration CI. The simulated suite is observational and
-runs nightly.
+Run the code-graded suite three times before treating it as representative
+evidence. Both live suites are observational and run nightly; required CI uses
+their synthetic checks only.
 
 ## Execution record
 
-- 2026-08-04: three deterministic executions passed all three cases with
-  populated evaluator details; the suite is promoted to trusted integration CI.
+- 2026-08-04: three code-graded executions passed all three cases with
+  populated evaluator details; the suite was promoted to trusted integration CI.
+- 2026-08-11: live execution moved to nightly because model behavior remains
+  stochastic even when trace grading and fixtures are deterministic.
 - 2026-08-04: the one authorized simulation execution scored 0.5833 (4/6
   judgments). It is not curated or rerun: one actor stopped after turn one,
   while a grader comparison was corrected to ignore harmless extra tool fields.

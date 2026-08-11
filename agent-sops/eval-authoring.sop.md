@@ -200,14 +200,16 @@ Save each completed report as timestamped JSON under `eval/results/`.
 
 ### 9. Place the eval in automation
 
-Add stable, code-graded live regressions to the trusted internal-PR integration
-job in `.github/workflows/ci.yml`. Add stochastic simulated-user runners to
+Keep synthetic, code-graded checks in required CI. Run live agent evaluations,
+including code-graded and simulated-user suites, from
 `.github/workflows/nightly-evals.yml`, which uploads reports as artifacts.
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
-- A controlled pricing fixture does not move a live model regression to nightly;
-  once its trace and result grading are stable, keep it in trusted integration.
+- You MUST NOT treat deterministic grading as deterministic execution: any suite
+  that invokes a model belongs in nightly observational automation, even when
+  its evaluator and pricing fixtures are repeatable.
+- Deterministic RDS-only integration tests MAY remain in trusted integration CI.
 - You MUST NOT run paid simulation on every PR because it is stochastic and
   consumes OpenAI, Bedrock, and RDS resources.
 - You MUST keep fork and Dependabot restrictions on trusted integration jobs to
