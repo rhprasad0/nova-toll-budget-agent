@@ -258,6 +258,14 @@ test("validation, page, config, and reset keep their small contracts", async () 
   assert.equal(privacy.headers["Content-Type"], "text/plain; charset=utf-8");
   assert.equal(privacy.headers["Cache-Control"], "no-store");
   assert.equal(await bodyText(privacy.body), "# Privacy");
+  const faq = await route(event("GET", "/faq.html"), {
+    ...dependencies,
+    previewAssets: { "/faq.html": "<!doctype html><title>FAQ</title>" },
+  });
+  assert.equal(faq.statusCode, 200);
+  assert.equal(faq.headers["Content-Type"], "text/html; charset=utf-8");
+  assert.equal(faq.headers["Cache-Control"], "no-store");
+  assert.equal(await bodyText(faq.body), "<!doctype html><title>FAQ</title>");
   const coverageMap = await route(event("GET", "/assets/coverage-map-v2.mjs"), {
     ...dependencies,
     previewAssets: { "/assets/coverage-map-v2.mjs": "export const pins = [];" },

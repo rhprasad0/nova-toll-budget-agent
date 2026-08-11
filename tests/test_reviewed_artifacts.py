@@ -16,6 +16,7 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
         "loader.zip",
         "preview.html",
         "preview.mjs",
+        "faq.html",
         "privacy.md",
         "terms.md",
     ):
@@ -40,10 +41,15 @@ def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> No
     assert "${reviewed_release#*/}" in rollback
     assert "sha256sum SHA256SUMS" in rollback
     assert "sha256sum --check SHA256SUMS" in rollback
+    assert "site_faq_args=()" in rollback
+    assert 'if [[ -f "$artifact_dir/faq.html" ]]; then' in rollback
+    assert 'site_faq_args=(-var "site_faq_path=$artifact_dir/faq.html")' in rollback
+    assert '"${site_faq_args[@]}"' in rollback
     assert "-var enable_public_chat=false" in rollback
     for variable in (
         "site_index_path",
         "site_script_path",
+        "site_faq_path",
         "site_privacy_path",
         "site_terms_path",
     ):

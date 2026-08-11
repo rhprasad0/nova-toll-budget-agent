@@ -58,6 +58,12 @@ variable "site_script_path" {
   default     = ""
 }
 
+variable "site_faq_path" {
+  description = "Optional reviewed pricing FAQ artifact used for the public site."
+  type        = string
+  default     = ""
+}
+
 variable "site_privacy_path" {
   description = "Optional reviewed privacy notice artifact used for the public site."
   type        = string

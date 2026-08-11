@@ -55,6 +55,7 @@ npm ci --omit=dev --prefix "$REPO/lambdas/chat_proxy"
 cp "$REPO/lambdas/chat_proxy/handler.mjs" \
    "$REPO/site/preview.html" \
    "$REPO/site/preview.mjs" \
+   "$REPO/site/faq.html" \
    "$proxy_stage/"
 cp "$REPO/docs/legal/privacy.md" "$proxy_stage/privacy.txt"
 cp "$REPO/docs/legal/terms.md" "$proxy_stage/terms.txt"
