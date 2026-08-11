@@ -58,7 +58,7 @@ const enableChat = async (page, assistantAnswer = answer, includeTool = true) =>
 test("renders streamed assistant Markdown and signs public POST bodies", async ({ page }) => {
   const requests = await enableChat(page);
   await page.locator("#message").fill("**Dumfries** <img src=x onerror=alert(1)>");
-  await page.getByRole("button", { name: "Estimate tolls" }).click();
+  await page.getByRole("button", { name: "Price trip" }).click();
 
   const user = page.locator(".user-turn");
   const assistant = page.locator(".assistant-answer").last();
@@ -94,7 +94,7 @@ test("expired ownership clears the transcript without replaying the message", as
   });
   await page.goto("/preview.html");
   await page.locator("#message").fill("Price my trip");
-  await page.getByRole("button", { name: "Estimate tolls" }).click();
+  await page.getByRole("button", { name: "Price trip" }).click();
 
   await expect(page.locator(".user-turn")).toHaveCount(0);
   await expect(page.locator(".assistant-answer")).toHaveText("Your chat expired. Please send your question again.");
@@ -130,7 +130,7 @@ test("browser tab handoff rotates instead of silently merging chats", async ({ c
   await second.reload();
   await expect(second.locator("#message")).toBeEnabled();
   await second.locator("#message").fill("new tab");
-  await second.getByRole("button", { name: "Estimate tolls" }).click();
+  await second.getByRole("button", { name: "Price trip" }).click();
   await expect(second.locator(".assistant-answer").last()).toHaveText("Fresh");
   expect(calls).toEqual(["first-reset", "second-reset", "second-chat"]);
 });
@@ -191,15 +191,30 @@ test("an expired cookie is a successful user reset", async ({ page }) => {
   await expect(page.locator("#transcript")).toBeEmpty();
 });
 
-test("private preview presents the open beta and its source limitations", async ({ page }) => {
+test("private preview presents source-backed pricing with official verification links", async ({ page }) => {
   await page.goto("/preview.html");
 
-  await expect(page).toHaveTitle("TollChat: Plan with the tolls we know");
-  await expect(page.getByText("Open beta · AI toll assistant", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Plan with the tolls we know." })).toBeVisible();
+  await expect(page).toHaveTitle("TollChat: Toll prices grounded in public records");
+  await expect(page.getByText("Open beta · Source-backed toll records", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan with prices grounded in public records." })).toBeVisible();
   await expect(page.locator("header .lede")).toHaveText(
-    "TollChat shows what supported Northern Virginia toll trips cost at specific recorded times - real observations to inform your planning, not predictions of what you’ll pay."
+    "TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and official operator rate schedules. Dynamic-price results include the VDOT observation time; every result shows the toll components and arithmetic used."
   );
+
+  const sources = page.getByRole("navigation", { name: "Official pricing sources" });
+  const expectedSources = [
+    ["95/395/495 Express Lanes", "https://www.expresslanes.com/map-your-trip/"],
+    ["I-66 Inside the Beltway", "https://vai66tolls.com/"],
+    ["Dulles Toll Road", "https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate"],
+    ["Dulles Greenway", "https://www.dullesgreenway.com/toll-calculator/"],
+  ];
+  for (const [name, href] of expectedSources) {
+    const link = sources.getByRole("link", { name });
+    await expect(link).toHaveAttribute("href", href);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(link).toHaveAttribute("referrerpolicy", "no-referrer");
+  }
 
   await expect(page.locator("header").getByRole("link", { name: "TollChat CI status" })).toHaveCount(0);
   const footer = page.locator("footer");
@@ -235,7 +250,10 @@ test("private preview presents the open beta and its source limitations", async 
   await expect(footer).toContainText("TollChat uses VDOT’s public toll pricing data.");
   await expect(footer).not.toContainText("and we’re fans");
   await expect(footer).toContainText("behavior may change, and no availability commitment is offered");
-  await expect(footer).toContainText("Estimates only. Verify current rates with the toll operator before travel.");
+  await expect(footer).toContainText(
+    "TollChat reports recorded VDOT prices and published operator rates, not future toll quotes. Verify current dynamic prices with the relevant operator before travel."
+  );
+  await expect(footer).not.toContainText("Estimates only.");
 });
 
 test("footer carries the privacy notice and composer requests a latest price", async ({ page }) => {
@@ -276,7 +294,7 @@ test("hostile Markdown stays inert while HTTPS links remain accessible", async (
 ${"x".repeat(300)}
 \`\`\``, false);
   await page.locator("#message").fill("test");
-  await page.getByRole("button", { name: "Estimate tolls" }).click();
+  await page.getByRole("button", { name: "Price trip" }).click();
 
   const assistant = page.locator(".assistant-answer").last();
   await expect(assistant.locator("script, style, iframe, img")).toHaveCount(0);
@@ -310,7 +328,7 @@ test("private preview renders streamed assistant Markdown safely", async ({ page
   );
   await page.goto("/preview.html");
   await page.locator("#message").fill("Price my trip");
-  await page.getByRole("button", { name: "Estimate tolls" }).click();
+  await page.getByRole("button", { name: "Price trip" }).click();
 
   const answer = page.locator(".assistant-answer");
   await expect(answer.getByRole("heading", { name: "Fare" })).toBeVisible();
@@ -365,7 +383,7 @@ test("private preview blocks submission while a new chat is resetting", async ({
   await page.getByRole("button", { name: "New chat" }).click();
   await expect(page.locator("form")).toHaveAttribute("aria-busy", "true");
   await expect(page.locator("#message")).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Estimate tolls" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Price trip" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "New chat" })).toBeDisabled();
 
   finishReset();
@@ -398,6 +416,15 @@ test("open-beta coverage map stays interactive and direction-aware", async ({ pa
   await expect(page.locator("#route-filters button")).toHaveCount(6);
   await expect(page.locator("#route-filters button:enabled")).toHaveCount(6);
   await expect(page.locator("#reset-map")).toBeEnabled();
+  for (const name of [
+    "95/395/495 Express Lanes",
+    "I-66 Inside the Beltway",
+    "Dulles Toll Road",
+    "Dulles Greenway",
+  ]) {
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name })).toBeFocused();
+  }
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "New chat" })).toBeFocused();
   await page.keyboard.press("Tab");

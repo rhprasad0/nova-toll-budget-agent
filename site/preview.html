@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <meta name="description" content="TollChat shows what supported Northern Virginia toll trips cost at specific recorded times.">
-  <title>TollChat: Plan with the tolls we know</title>
+  <meta name="description" content="TollChat reconstructs supported Northern Virginia toll trips from recorded VDOT prices and official operator rates.">
+  <title>TollChat: Toll prices grounded in public records</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/assets/maplibre-gl-6.0.0/maplibre-gl.css">
   <style>
@@ -32,10 +32,14 @@
     body { margin:0; min-width:320px; min-height:100vh; background:var(--asphalt); color:var(--text); font:16px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
     main { display:grid; grid-template: "header map" auto "transcript map" minmax(16rem,1fr) "composer map" auto "footer map" auto / minmax(0,58fr) minmax(24rem,42fr); min-height:100svh; }
     header { grid-area:header; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding:32px clamp(24px,4vw,56px) 24px; border-bottom:1px solid var(--line); }
-    header > div:first-child { min-width:0; }
+    .header-copy { min-width:0; }
     h1 { max-width:11ch; margin:0; font-size:clamp(2.6rem,6vw,4.4rem); letter-spacing:-.065em; line-height:.9; text-wrap:balance; }
     .eyebrow { margin:0 0 8px; color:var(--lime); font-size:.72rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
     .lede { max-width:38rem; margin:14px 0 0; color:var(--muted); text-wrap:pretty; }
+    .source-strip { display:grid; max-width:46rem; gap:8px; margin-top:20px; padding:12px 14px; border:1px solid var(--line); border-left:3px solid var(--lime); border-radius:6px; background:rgba(215,255,95,.04); }
+    .source-strip p { margin:0; color:var(--text); font-size:.7rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .source-links { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.78rem; line-height:1.4; }
+    .source-links a:focus-visible { outline:2px solid var(--lime); outline-offset:3px; }
     a { color:var(--lime); text-underline-offset:3px; }
     a:hover { text-decoration-thickness:2px; }
     .ci-badge { display:inline-flex; border-radius:3px; }
@@ -134,6 +138,8 @@
       header { padding:24px 16px 20px; }
       h1 { font-size:clamp(2.6rem,14vw,4rem); }
       header { flex-direction:column; }
+      .source-strip { margin-top:16px; padding:10px 12px; }
+      .source-links { gap:8px 14px; }
       #reset { margin-top:4px; padding-inline:12px; }
       .map-panel { position:relative; grid-template-rows:auto 20rem auto; height:auto; min-height:0; border-top:1px solid var(--line); border-right:0; border-bottom:1px solid var(--line); border-left:0; }
       .map-copy { padding:12px 16px; }
@@ -155,10 +161,19 @@
 <body>
   <main>
     <header>
-      <div>
-        <p class="eyebrow">Open beta · AI toll assistant</p>
-        <h1>Plan with the tolls we know.</h1>
-        <p class="lede">TollChat shows what supported Northern Virginia toll trips cost at specific recorded times - real observations to inform your planning, not predictions of what you’ll pay.</p>
+      <div class="header-copy">
+        <p class="eyebrow">Open beta · Source-backed toll records</p>
+        <h1>Plan with prices grounded in public records.</h1>
+        <p class="lede">TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and official operator rate schedules. Dynamic-price results include the VDOT observation time; every result shows the toll components and arithmetic used.</p>
+        <nav class="source-strip" aria-label="Official pricing sources">
+          <p>Official pricing sources</p>
+          <div class="source-links">
+            <a href="https://www.expresslanes.com/map-your-trip/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">95/395/495 Express Lanes</a>
+            <a href="https://vai66tolls.com/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">I-66 Inside the Beltway</a>
+            <a href="https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Dulles Toll Road</a>
+            <a href="https://www.dullesgreenway.com/toll-calculator/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Dulles Greenway</a>
+          </div>
+        </nav>
       </div>
       <button id="reset" type="button">New chat</button>
     </header>
@@ -195,7 +210,7 @@
     <form aria-busy="false">
       <label for="message">Where are you going, and when? <span aria-hidden="true">Shift+Enter adds a line.</span></label>
       <textarea id="message" maxlength="8000" required placeholder="Latest price from Dumfries to Tysons"></textarea>
-      <button type="submit">Estimate tolls</button>
+      <button type="submit">Price trip</button>
     </form>
     <footer>
       <div class="footer-actions">
@@ -205,7 +220,7 @@
       <div class="footer-legal">
         <p id="privacy-notice"><strong>Privacy:</strong> Your message, TollChat’s answer, tool activity, and safety-check results are retained in AWS for 30 days to operate, secure, debug, and improve TollChat. OpenAI also processes and stores response data for at least 30 days. TollChat does not use this content to train models. Do not submit personal, confidential, payment, credential, or unnecessarily precise location information. Read the <a href="/privacy.txt">privacy notice</a> and <a href="/terms.txt">terms</a>.</p>
         <p>Open beta: behavior may change, and no availability commitment is offered.</p>
-        <p>Estimates only. Verify current rates with the toll operator before travel.</p>
+        <p>TollChat reports recorded VDOT prices and published operator rates, not future toll quotes. Verify current dynamic prices with the relevant operator before travel.</p>
         <p>&copy; 2026 Benevolent Clankers LLC. Source code is licensed under <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Apache-2.0</a>; TollChat name and branding reserved.</p>
         <p>TollChat is not affiliated with the Virginia Department of Transportation (VDOT).</p>
         <p>SmarterRoads toll data is provided as is and as available and may be inaccurate, delayed, changed, or unavailable. See the <a href="https://smarterroads.vdot.virginia.gov/termsOfService" target="_blank" rel="noopener noreferrer">VDOT SmarterRoads terms</a>.</p>
