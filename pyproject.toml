@@ -20,7 +20,7 @@ dev = [
     "pyright",
     "pytest",
     "strands-agents-evals>=1.1.0",
-    "strands-agents-sops>=1.1.2",
+    "strands-agents-sops>=1.1.3",
 ]
 
 [tool.pytest.ini_options]
