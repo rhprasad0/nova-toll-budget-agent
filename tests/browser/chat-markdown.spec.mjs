@@ -198,7 +198,7 @@ test("private preview presents source-backed pricing with official verification 
   await expect(page.getByText("Open beta · Source-backed toll records", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Plan with prices grounded in public records." })).toBeVisible();
   await expect(page.locator("header .lede")).toHaveText(
-    "TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and official operator rate schedules. Dynamic-price results include the VDOT observation time; every result shows the toll components and arithmetic used."
+    "TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and committed 2-axle E-ZPass rate tables for the Dulles roads. Dulles rates are hand-transcribed from operator pages and cross-checked against other public sources; every result shows the toll components and arithmetic used."
   );
 
   const sources = page.getByRole("navigation", { name: "Official pricing sources" });
@@ -251,7 +251,7 @@ test("private preview presents source-backed pricing with official verification 
   await expect(footer).not.toContainText("and we’re fans");
   await expect(footer).toContainText("behavior may change, and no availability commitment is offered");
   await expect(footer).toContainText(
-    "TollChat reports recorded VDOT prices and published operator rates, not future toll quotes. Verify current dynamic prices with the relevant operator before travel."
+    "TollChat reports recorded VDOT prices and committed 2-axle E-ZPass Dulles rate tables, not future toll quotes. Verify current dynamic prices with the relevant operator before travel."
   );
   await expect(footer).not.toContainText("Estimates only.");
 });
@@ -276,15 +276,22 @@ test("pricing FAQ explains freshness, route oracles, and the unpriced junction",
   await expect(page.getByRole("heading", { name: "Why is part of the I-95 ↔ I-495 junction unpriced?" })).toBeVisible();
 
   const main = page.locator("main");
-  await expect(main).toContainText("matches ExpressLanes exactly when shifted by 10 minutes");
+  await expect(main).toContainText("59,217 aligned comparisons matched exactly");
+  await expect(main).toContainText("validates transport and time alignment, not independent toll-price accuracy");
   await expect(main).toContainText("six-minute intervals with a measured 1–4-minute source delay");
-  await expect(main).toContainText("one capture behind VA66Tolls");
+  await expect(main).toContainText("preceding VDOT capture until the next poll");
+  await expect(main).not.toContainText("one capture behind VA66Tolls");
+  await expect(main).toContainText("hand-transcribed 2-axle E-ZPass rate tables");
+  await expect(main).toContainText("Exit 16 directional rule");
+  await expect(main).toContainText("weekday-only peak windows");
   await expect(main).toContainText("committed, read-only route map");
+  await expect(main).toContainText("public maps and explicitly curated connector facts");
   await expect(main).toContainText("price lookup keys");
   await expect(main).toContainText("does not generate prices");
   await expect(main).toContainText("Edsall or Franconia-Springfield");
   await expect(main).toContainText("I-495 Near Braddock Road");
   await expect(main).toContainText("known toll total");
+  await expect(main).toContainText("not a complete operator-issued fare");
 
   const expectedLinks = [
     ["95/395/495 Express Lanes", "https://www.expresslanes.com/map-your-trip/"],

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <meta name="description" content="How TollChat uses recorded VDOT prices, operator rate schedules, route oracles, and explicit coverage gaps.">
+  <meta name="description" content="How TollChat uses recorded VDOT prices, committed Dulles rate tables, route oracles, and explicit coverage gaps.">
   <title>Pricing FAQ · TollChat</title>
   <link rel="icon" href="data:,">
   <style>
@@ -53,7 +53,7 @@
       <section aria-labelledby="sources-title">
         <span class="section-kicker">01 · Sources</span>
         <h2 id="sources-title">Where do TollChat prices come from?</h2>
-        <p>Dynamic prices for I-66 Inside the Beltway, the 95/395 Express Lanes, and the 495 Express Lanes come from VDOT’s public toll-pricing feeds. Dulles Toll Road and Dulles Greenway prices come from their official operator schedules. TollChat is independent and is not affiliated with VDOT or any toll operator.</p>
+        <p>Dynamic prices for I-66 Inside the Beltway, the 95/395 Express Lanes, and the 495 Express Lanes come from VDOT’s public toll-pricing feeds. Dulles Toll Road and Dulles Greenway use committed, hand-transcribed 2-axle E-ZPass rate tables reconstructed from operator pages and cross-checked against other public sources. They exclude pay-by-plate and 3+ axle rates; the Exit 16 directional rule and weekday-only peak windows are documented assumptions. TollChat is independent and is not affiliated with VDOT or any toll operator.</p>
         <nav class="sources" aria-label="Official pricing sources">
           <a href="https://www.expresslanes.com/map-your-trip/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">95/395/495 Express Lanes</a>
           <a href="https://vai66tolls.com/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">I-66 Inside the Beltway</a>
@@ -65,25 +65,25 @@
       <section aria-labelledby="freshness-title">
         <span class="section-kicker">02 · Freshness</span>
         <h2 id="freshness-title">Why can TollChat differ from an operator site?</h2>
-        <p>For 95/395/495, our retained captures showed that the VDOT series matches ExpressLanes exactly when shifted by <strong>10 minutes</strong>. I-66 publishes in six-minute intervals with a measured <strong>1–4-minute source delay</strong>, so TollChat can remain one capture behind VA66Tolls until the next poll. Every dynamic result includes the VDOT observation time; use the operator links above for the price displayed now.</p>
+        <p>For 95/395/495, VDOT republishes the same Transurban price series <strong>10 minutes later</strong>: 59,217 aligned comparisons matched exactly. That validates transport and time alignment, not independent toll-price accuracy. I-66 publishes in six-minute intervals with a measured <strong>1–4-minute source delay</strong>, so TollChat may retain the preceding VDOT capture until the next poll. Every dynamic result includes the VDOT observation time; use the operator links above for the price displayed now.</p>
         <p><a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/docs/oracle-findings.md#9-vdot-republishes-transurbans-price-on-a-10-minute-delay" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Read the technical evidence</a>.</p>
       </section>
 
       <section aria-labelledby="oracle-title">
         <span class="section-kicker">03 · Route oracle</span>
         <h2 id="oracle-title">How does the route oracle work?</h2>
-        <p>The route oracle is a committed, read-only route map built from operator-published entry and exit pairs. It stores route topology and price lookup keys; it does not generate prices. The planner selects supported legs, corridor tools retrieve the relevant VDOT observation or official operator schedule, and TollChat lists and adds the returned toll components. If the oracle cannot support a route, TollChat does not invent one.</p>
+        <p>The route oracle is a committed, read-only route map derived from operator-published entry and exit pairs, public maps and explicitly curated connector facts. It stores route topology and price lookup keys; it does not generate prices. The planner selects supported legs, corridor tools retrieve the relevant VDOT observation or committed Dulles rate table, and TollChat lists and adds the returned toll components. If the oracle cannot support a route, TollChat does not invent one.</p>
       </section>
 
       <section aria-labelledby="junction-title">
         <span class="section-kicker">04 · Known gap</span>
         <h2 id="junction-title">Why is part of the I-95 ↔ I-495 junction unpriced?</h2>
-        <p>The available VDOT data does not provide a price for the road between the direction-selected I-95 boundary—Edsall or Franconia-Springfield—and I-495 Near Braddock Road. We made a deliberate design decision to leave that gap unpriced instead of calling it free or fabricating a fare. TollChat reports the priced components and labels their sum the <strong>known toll total</strong>.</p>
+        <p>The available VDOT data does not provide a price for the road between the direction-selected I-95 boundary—Edsall or Franconia-Springfield—and I-495 Near Braddock Road. We made a deliberate design decision to leave that gap unpriced instead of calling it free or fabricating a fare. TollChat reports the priced components and labels their sum the <strong>known toll total</strong>. It is not a complete operator-issued fare.</p>
       </section>
     </div>
 
     <footer>
-      <p>Recorded prices and published rates—not future toll quotes.</p>
+      <p>Recorded VDOT prices and committed Dulles rate tables—not future toll quotes.</p>
       <p><a href="/privacy.txt">Privacy</a> · <a href="/terms.txt">Terms</a></p>
     </footer>
   </main>
