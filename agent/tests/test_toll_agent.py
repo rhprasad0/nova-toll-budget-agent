@@ -10,6 +10,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from strands.hooks import (
+    AfterToolCallEvent,
+    BeforeInvocationEvent,
+    BeforeToolCallEvent,
+    HookRegistry,
+)
 from strands.models.openai_responses import OpenAIResponsesModel
 
 from agent import toll_agent as toll_agent_module
@@ -20,6 +26,7 @@ from agent.toll_agent import (
     _LOCATION_ALIASES,
     _PRICED_LOCATION_ORACLE_JSON,
     NETWORK_TRANSFERS,
+    DuplicateToolUseGuard,
     build_agent,
     build_system_prompt,
     plan_toll_route,
@@ -78,6 +85,249 @@ class _ScriptedPlannerModel(OpenAIResponsesModel):
             yield {"contentBlockDelta": {"delta": {"text": "planned"}}}
             yield {"contentBlockStop": {}}
             yield {"messageStop": {"stopReason": "end_turn"}}
+
+
+class _DuplicatePlannerModel(_ScriptedPlannerModel):
+    """Request the same successful planner call on consecutive model turns."""
+
+    async def stream(self, messages, _tool_specs=None, _system_prompt=None, **_kwargs):
+        self.requests.append(deepcopy(messages))
+        yield {"messageStart": {"role": "assistant"}}
+        if len(self.requests) <= 2:
+            yield {
+                "contentBlockStart": {
+                    "start": {
+                        "toolUse": {
+                            "toolUseId": f"plan-{len(self.requests)}",
+                            "name": "plan_toll_route",
+                        }
+                    }
+                }
+            }
+            yield {
+                "contentBlockDelta": {
+                    "delta": {"toolUse": {"input": json.dumps(self.tool_input)}}
+                }
+            }
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+        else:
+            yield {"contentBlockStart": {"start": {}}}
+            yield {"contentBlockDelta": {"delta": {"text": "continued"}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+
+def _before_tool(
+    invocation_state, call_id="call-one", arguments=None, name="plan_toll_route"
+):
+    return BeforeToolCallEvent(
+        agent=object(),
+        selected_tool=None,
+        tool_use={
+            "toolUseId": call_id,
+            "name": name,
+            "input": arguments or {"origin": "Dumfries", "destination": "Westpark"},
+        },
+        invocation_state=invocation_state,
+    )
+
+
+def _after_tool(before, *, status="success", exception=None, cancel_message=None):
+    return AfterToolCallEvent(
+        agent=before.agent,
+        selected_tool=None,
+        tool_use=before.tool_use,
+        invocation_state=before.invocation_state,
+        result={
+            "toolUseId": before.tool_use["toolUseId"],
+            "status": status,
+            "content": [{"text": "result"}],
+        },
+        exception=exception,
+        cancel_message=cancel_message,
+    )
+
+
+def test_duplicate_tool_guard_cancels_exact_repeat_and_allows_changed_input():
+    guard = DuplicateToolUseGuard()
+    invocation_state = {}
+    guard.before_invocation(
+        BeforeInvocationEvent(agent=object(), invocation_state=invocation_state)
+    )
+    first = _before_tool(
+        invocation_state,
+        arguments={"origin": "Dumfries", "destination": "Westpark"},
+    )
+    guard.before_tool(first)
+    guard.after_tool(_after_tool(first))
+
+    duplicate = _before_tool(
+        invocation_state,
+        call_id="call-two",
+        arguments={"destination": "Westpark", "origin": "Dumfries"},
+    )
+    guard.before_tool(duplicate)
+    changed = _before_tool(
+        invocation_state,
+        call_id="call-three",
+        arguments={"origin": "Dumfries", "destination": "Tysons"},
+    )
+    guard.before_tool(changed)
+
+    assert duplicate.cancel_tool == (
+        "This exact tool call already ran during this request. "
+        "Use its previous result and continue with the next planned step."
+    )
+    assert changed.cancel_tool is False
+
+
+def test_duplicate_tool_guard_releases_failures_and_resets_each_invocation():
+    guard = DuplicateToolUseGuard()
+    invocation_state = {}
+    guard.before_invocation(
+        BeforeInvocationEvent(agent=object(), invocation_state=invocation_state)
+    )
+    failed = _before_tool(invocation_state)
+    guard.before_tool(failed)
+    guard.after_tool(_after_tool(failed, status="error", exception=ValueError("no")))
+
+    retry = _before_tool(invocation_state, call_id="retry")
+    guard.before_tool(retry)
+    assert retry.cancel_tool is False
+    concurrent_duplicate = _before_tool(invocation_state, call_id="parallel")
+    guard.before_tool(concurrent_duplicate)
+    assert concurrent_duplicate.cancel_tool
+
+    next_invocation = {}
+    guard.before_invocation(
+        BeforeInvocationEvent(agent=object(), invocation_state=next_invocation)
+    )
+    repeated_next_turn = _before_tool(next_invocation, call_id="next-turn")
+    guard.before_tool(repeated_next_turn)
+    assert repeated_next_turn.cancel_tool is False
+
+
+def test_duplicate_tool_guard_runs_after_input_hooks_and_final_result_hooks():
+    guard = DuplicateToolUseGuard()
+    registry = HookRegistry()
+    guard.register_hooks(registry)
+    invocation_state = {}
+    registry.invoke_callbacks(
+        BeforeInvocationEvent(agent=object(), invocation_state=invocation_state)
+    )
+
+    def normalize(event: BeforeToolCallEvent):
+        event.tool_use["input"] = {"normalized": "same"}
+
+    def recover(event: AfterToolCallEvent):
+        event.result = {**event.result, "status": "success"}
+
+    registry.add_callback(BeforeToolCallEvent, normalize)
+    registry.add_callback(AfterToolCallEvent, recover)
+    first = _before_tool(invocation_state, arguments={"alias": "one"})
+    registry.invoke_callbacks(first)
+    failed_but_recovered = _after_tool(
+        first, status="error", exception=ValueError("recovered")
+    )
+    registry.invoke_callbacks(failed_but_recovered)
+
+    duplicate = _before_tool(
+        invocation_state, call_id="call-two", arguments={"alias": "two"}
+    )
+    registry.invoke_callbacks(duplicate)
+
+    assert duplicate.tool_use["input"] == {"normalized": "same"}
+    assert duplicate.cancel_tool
+
+
+def test_duplicate_tool_guard_does_not_retain_an_external_cancellation():
+    guard = DuplicateToolUseGuard()
+    invocation_state = {}
+    guard.before_invocation(
+        BeforeInvocationEvent(agent=object(), invocation_state=invocation_state)
+    )
+    cancelled = _before_tool(invocation_state)
+    guard.before_tool(cancelled)
+    guard.after_tool(
+        _after_tool(cancelled, status="error", cancel_message="policy denied")
+    )
+
+    retry = _before_tool(invocation_state, call_id="retry")
+    guard.before_tool(retry)
+
+    assert retry.cancel_tool is False
+
+
+def test_duplicate_tool_guard_does_not_reserve_a_replaced_cancelled_call():
+    guard = DuplicateToolUseGuard()
+    registry = HookRegistry()
+    guard.register_hooks(registry)
+    invocation_state = {}
+    registry.invoke_callbacks(
+        BeforeInvocationEvent(agent=object(), invocation_state=invocation_state)
+    )
+
+    def replace_and_cancel(event: BeforeToolCallEvent):
+        event.tool_use = {
+            **event.tool_use,
+            "input": {"normalized": "same"},
+        }
+        if event.tool_use["toolUseId"] == "call-one":
+            event.cancel_tool = "policy denied"
+
+    registry.add_callback(BeforeToolCallEvent, replace_and_cancel)
+    cancelled = _before_tool(invocation_state, arguments={"alias": "one"})
+    registry.invoke_callbacks(cancelled)
+    retry = _before_tool(
+        invocation_state, call_id="call-two", arguments={"alias": "two"}
+    )
+    registry.invoke_callbacks(retry)
+
+    assert cancelled.cancel_tool == "policy denied"
+    assert retry.tool_use["input"] == {"normalized": "same"}
+    assert retry.cancel_tool is False
+
+
+def test_agent_suppresses_duplicate_planner_and_preserves_caller_hooks(monkeypatch):
+    model = _DuplicatePlannerModel(
+        {
+            "origin_corridor": "i95",
+            "origin": "Dumfries",
+            "destination_corridor": "i495",
+            "destination": "Westpark Drive",
+            "at_time": "2026-07-29T10:10:00-04:00",
+        }
+    )
+    monkeypatch.setattr(toll_agent_module, "_build_model", lambda: model)
+    invocations = []
+
+    def record_invocation(event: BeforeInvocationEvent):
+        invocations.append(event)
+
+    result = build_agent(hooks=[record_invocation])("price this junction trip")
+
+    assert str(result).strip() == "continued"
+    assert len(invocations) == 1
+    tool_results = {
+        result["toolUseId"]: result
+        for message in model.requests[-1]
+        for block in message["content"]
+        if (result := block.get("toolResult"))
+    }
+    assert tool_results["plan-1"]["status"] == "success"
+    assert tool_results["plan-2"] == {
+        "toolUseId": "plan-2",
+        "status": "error",
+        "content": [
+            {
+                "text": (
+                    "This exact tool call already ran during this request. "
+                    "Use its previous result and continue with the next planned step."
+                )
+            }
+        ],
+    }
 
 
 def _contract_manifest():

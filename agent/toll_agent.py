@@ -35,11 +35,20 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any, Literal, cast, override
 from zoneinfo import ZoneInfo
 
 import boto3
 from strands import Agent, tool  # pyright: ignore[reportUnknownVariableType]
+from strands.hooks import (
+    AfterToolCallEvent,
+    BeforeInvocationEvent,
+    BeforeToolCallEvent,
+    HookOrder,
+    HookProvider,
+    HookRegistry,
+)
 from strands.models.openai_responses import OpenAIResponsesModel
 from strands.types.content import Messages
 from strands.types.streaming import StreamEvent
@@ -70,6 +79,83 @@ _ORACLES: dict[str, _oracle_route.JsonObject] = {
     name: json.loads((_ORACLE_DIR / f"{name}.json").read_text())
     for name in ("i95", "i66", "dulles_toll_road", "dulles_greenway")
 }
+_DUPLICATE_TOOL_STATE_KEY = "tollchat_duplicate_tool_calls"
+_DUPLICATE_HOOK_ORDER = HookOrder.SDK_LAST + 1
+_DUPLICATE_TOOL_MESSAGE = (
+    "This exact tool call already ran during this request. "
+    "Use its previous result and continue with the next planned step."
+)
+
+
+class _DuplicateToolUseState:
+    def __init__(self) -> None:
+        self.owners: dict[tuple[str, str], str] = {}
+        self.lock = Lock()
+
+
+class DuplicateToolUseGuard(HookProvider):
+    """Suppress exact repeated tool calls within one agent invocation."""
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: object) -> None:
+        registry.add_callback(
+            BeforeInvocationEvent,
+            self.before_invocation,
+            order=HookOrder.SDK_FIRST,
+        )
+        registry.add_callback(
+            BeforeToolCallEvent,
+            self.before_tool,
+            order=_DUPLICATE_HOOK_ORDER,
+        )
+        registry.add_callback(
+            AfterToolCallEvent,
+            self.after_tool,
+            order=_DUPLICATE_HOOK_ORDER,
+        )
+
+    def before_invocation(self, event: BeforeInvocationEvent) -> None:
+        event.invocation_state[_DUPLICATE_TOOL_STATE_KEY] = _DuplicateToolUseState()
+
+    @staticmethod
+    def _signature(event: BeforeToolCallEvent | AfterToolCallEvent) -> tuple[str, str]:
+        return (
+            event.tool_use["name"],
+            json.dumps(
+                event.tool_use["input"],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ),
+        )
+
+    @staticmethod
+    def _state(
+        event: BeforeToolCallEvent | AfterToolCallEvent,
+    ) -> _DuplicateToolUseState:
+        return cast(
+            _DuplicateToolUseState,
+            event.invocation_state[_DUPLICATE_TOOL_STATE_KEY],
+        )
+
+    def before_tool(self, event: BeforeToolCallEvent) -> None:
+        if event.cancel_tool:
+            return
+        state = self._state(event)
+        signature = self._signature(event)
+        with state.lock:
+            if signature in state.owners:
+                event.cancel_tool = _DUPLICATE_TOOL_MESSAGE
+                return
+            state.owners[signature] = event.tool_use["toolUseId"]
+
+    def after_tool(self, event: AfterToolCallEvent) -> None:
+        if event.result.get("status") == "success" and not event.retry:
+            return
+        state = self._state(event)
+        signature = self._signature(event)
+        with state.lock:
+            if state.owners.get(signature) == event.tool_use["toolUseId"]:
+                state.owners.pop(signature)
 
 
 def _locations(
@@ -1010,7 +1096,7 @@ def build_agent(
         system_prompt=build_system_prompt(),
         callback_handler=None,
         trace_attributes=trace_attributes,
-        hooks=cast(Any, hooks),
+        hooks=cast(Any, [DuplicateToolUseGuard(), *(hooks or [])]),
     )
 
 

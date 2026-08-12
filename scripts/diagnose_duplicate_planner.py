@@ -100,6 +100,70 @@ def classify_planner_calls(messages: Sequence[object]) -> dict[str, object]:
     }
 
 
+def classify_planner_executions(events: Sequence[object]) -> dict[str, object]:
+    successful = suppressed = failed = 0
+    successful_signatures: set[str] = set()
+    suppressed_signatures: set[str] = set()
+    for raw_event in events:
+        event = _mapping(raw_event)
+        payload = _mapping(event.get("payload")) if event else None
+        tool_use = _mapping(payload.get("tool_use")) if payload else None
+        if (
+            not event
+            or event.get("event") != "after_tool"
+            or not payload
+            or not tool_use
+            or tool_use.get("name") != PLANNER
+        ):
+            continue
+        if payload.get("cancel_message"):
+            suppressed += 1
+            suppressed_signatures.add(
+                json.dumps(
+                    {
+                        "name": tool_use.get("name"),
+                        "input": tool_use.get("input"),
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                )
+            )
+            continue
+        result = _mapping(payload.get("result"))
+        if result and result.get("status") == "success":
+            successful += 1
+            successful_signatures.add(
+                json.dumps(
+                    {
+                        "name": tool_use.get("name"),
+                        "input": tool_use.get("input"),
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                )
+            )
+        else:
+            failed += 1
+    status = (
+        "suppressed_duplicate"
+        if suppressed
+        and successful == 1
+        and not failed
+        and successful_signatures == suppressed_signatures
+        else "normal"
+        if successful == 1 and not suppressed and not failed
+        else "other"
+    )
+    return {
+        "status": status,
+        "successful_execution_count": successful,
+        "suppressed_count": suppressed,
+        "failed_execution_count": failed,
+    }
+
+
 def reasoning_summaries(messages: Sequence[object]) -> list[str]:
     summaries: list[str] = []
     for message in messages:
@@ -124,7 +188,7 @@ def reasoning_summaries(messages: Sequence[object]) -> list[str]:
 
 
 def should_stop(statuses: Sequence[str]) -> bool:
-    return "normal" in statuses and "duplicate" in statuses
+    return "normal" in statuses and "suppressed_duplicate" in statuses
 
 
 def enable_reasoning_summary(agent: object) -> None:
@@ -214,6 +278,7 @@ class RawTraceRecorder(HookProvider):
                 "tool_use": event.tool_use,
                 "result": event.result,
                 "exception": str(event.exception) if event.exception else None,
+                "cancel_message": event.cancel_message,
                 "retry": event.retry,
             },
         )
@@ -248,12 +313,19 @@ def _run_trial(index: int, output_path: Path) -> str:
         metrics = None
         error = {"type": type(caught).__name__, "message": str(caught)}
     classification = classify_planner_calls(recorder.messages)
+    execution = classify_planner_executions(recorder.events)
+    if (
+        execution["status"] == "suppressed_duplicate"
+        and classification["status"] != "duplicate"
+    ):
+        execution["status"] = "other"
     record: dict[str, object] = {
         "trial": index,
         "started_at": started_at,
         "ended_at": datetime.now(UTC).isoformat(),
         "prompt": PROMPT,
         "classification": classification,
+        "execution": execution,
         "reasoning_summaries": reasoning_summaries(recorder.messages),
         "events": recorder.events,
         "messages": recorder.messages,
@@ -267,6 +339,7 @@ def _run_trial(index: int, output_path: Path) -> str:
             {
                 "trial": index,
                 "classification": classification,
+                "execution": execution,
                 "reasoning_summaries": record["reasoning_summaries"],
                 "error": error,
                 "trace_path": str(output_path),
@@ -279,7 +352,7 @@ def _run_trial(index: int, output_path: Path) -> str:
     )
     if error:
         raise RuntimeError("diagnostic trial failed; inspect the raw trace")
-    return cast(str, classification["status"])
+    return cast(str, execution["status"])
 
 
 def main() -> int:
@@ -298,7 +371,7 @@ def main() -> int:
         if should_stop(statuses):
             break
     print(json.dumps({"statuses": statuses, "trace_path": str(output_path)}))
-    return 0 if "duplicate" in statuses else 2
+    return 0 if should_stop(statuses) else 2
 
 
 if __name__ == "__main__":

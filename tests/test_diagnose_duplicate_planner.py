@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import stat
+import sys
 from pathlib import Path
 
 from strands.hooks import BeforeModelCallEvent, BeforeToolCallEvent, MessageAddedEvent
@@ -87,10 +88,100 @@ def test_extracts_reasoning_summaries_in_message_order():
 
 
 def test_stops_only_after_normal_and_duplicate_trials_exist():
-    assert diagnostic.should_stop(["normal", "duplicate"])
-    assert diagnostic.should_stop(["other", "duplicate", "normal"])
-    assert not diagnostic.should_stop(["duplicate"])
+    assert diagnostic.should_stop(["normal", "suppressed_duplicate"])
+    assert diagnostic.should_stop(["other", "suppressed_duplicate", "normal"])
+    assert not diagnostic.should_stop(["suppressed_duplicate"])
     assert not diagnostic.should_stop(["normal", "other"])
+
+
+def test_classifies_successful_and_suppressed_planner_executions():
+    events = [
+        {
+            "event": "after_tool",
+            "payload": {
+                "tool_use": {
+                    "toolUseId": "call-one",
+                    "name": "plan_toll_route",
+                    "input": {"origin": "Dumfries"},
+                },
+                "result": {"status": "success"},
+                "cancel_message": None,
+            },
+        },
+        {
+            "event": "after_tool",
+            "payload": {
+                "tool_use": {
+                    "toolUseId": "call-two",
+                    "name": "plan_toll_route",
+                    "input": {"origin": "Dumfries"},
+                },
+                "result": {"status": "error"},
+                "cancel_message": "duplicate",
+            },
+        },
+    ]
+
+    assert diagnostic.classify_planner_executions(events) == {
+        "status": "suppressed_duplicate",
+        "successful_execution_count": 1,
+        "suppressed_count": 1,
+        "failed_execution_count": 0,
+    }
+
+
+def test_does_not_certify_failed_or_different_planner_executions():
+    events = [
+        {
+            "event": "after_tool",
+            "payload": {
+                "tool_use": {
+                    "toolUseId": "failed",
+                    "name": "plan_toll_route",
+                    "input": {"origin": "Dumfries"},
+                },
+                "result": {"status": "error"},
+                "cancel_message": None,
+            },
+        },
+        {
+            "event": "after_tool",
+            "payload": {
+                "tool_use": {
+                    "toolUseId": "suppressed",
+                    "name": "plan_toll_route",
+                    "input": {"origin": "Dumfries"},
+                },
+                "result": {"status": "error"},
+                "cancel_message": "duplicate",
+            },
+        },
+        {
+            "event": "after_tool",
+            "payload": {
+                "tool_use": {
+                    "toolUseId": "success",
+                    "name": "plan_toll_route",
+                    "input": {"origin": "Pentagon"},
+                },
+                "result": {"status": "success"},
+                "cancel_message": None,
+            },
+        },
+    ]
+
+    assert diagnostic.classify_planner_executions(events)["status"] == "other"
+
+
+def test_main_requires_both_normal_and_suppressed_trials(monkeypatch, tmp_path):
+    monkeypatch.setattr(diagnostic, "configure_local_pricing_env", lambda: None)
+    monkeypatch.setattr(diagnostic, "_output_path", lambda: tmp_path / "trace.jsonl")
+    monkeypatch.setattr(
+        diagnostic, "_run_trial", lambda _index, _path: "suppressed_duplicate"
+    )
+    monkeypatch.setattr(sys, "argv", ["diagnostic", "--max-trials", "1"])
+
+    assert diagnostic.main() == 2
 
 
 def test_enables_reasoning_summary_without_changing_other_model_params():
