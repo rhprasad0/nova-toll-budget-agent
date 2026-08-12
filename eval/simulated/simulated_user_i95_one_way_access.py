@@ -23,7 +23,10 @@ from strands_evals.types.simulation import ActorProfile  # noqa: E402
 from strands_evals.types.trace import Session  # noqa: E402
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
-from agent.toll_agent import build_agent  # noqa: E402
+from agent.toll_agent import (  # noqa: E402
+    _DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+    build_agent,
+)
 from eval.deterministic.i95_one_way_access.deterministic_i95_one_way_access import (  # noqa: E402
     load_rows,
 )
@@ -112,6 +115,67 @@ def _matches_input(call: dict[str, Any], expected: dict[str, Any]) -> bool:
     )
 
 
+def _successful_calls(
+    calls: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[EvaluationOutput] | None]:
+    successful: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for call in calls:
+        signature = (
+            str(call.get("turn_id")),
+            str(call.get("name")),
+            json.dumps(call.get("input"), sort_keys=True, separators=(",", ":")),
+        )
+        if call.get("tool_result") == _DUPLICATE_TOOL_MESSAGE:
+            if signature not in seen:
+                return [], _result(
+                    False,
+                    "duplicate cancellation lacked a matching success in that turn",
+                    "orphan_suppression",
+                )
+            continue
+        if call.get("tool_error"):
+            return [], _result(False, f"tool execution failed: {call}", "tool_error")
+        if signature in seen:
+            return [], _result(
+                False,
+                f"tool executed successfully twice in one turn: {call['name']}",
+                "duplicate_success",
+            )
+        seen.add(signature)
+        successful.append(call)
+    return successful, None
+
+
+def _planned_calls(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    at_time = plan.get("at_time")
+    calls: list[dict[str, Any]] = []
+    for step in plan.get("steps", []):
+        if step.get("kind") == "priced":
+            calls.append(
+                {
+                    "tool": step.get("tool"),
+                    "input": {
+                        "origin": step.get("origin"),
+                        "destination": step.get("destination"),
+                        "at_time": at_time,
+                    },
+                }
+            )
+        elif step.get("kind") == "junction":
+            calls.append(
+                {
+                    "tool": step.get("tool"),
+                    "input": {
+                        "location": step.get("location"),
+                        "movement": step.get("movement"),
+                        "at_time": at_time,
+                    },
+                }
+            )
+    return calls
+
+
 class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
     """Code-grade the distinct access and recovery calls across actor turns."""
 
@@ -126,14 +190,16 @@ class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
         metadata = evaluation_case.metadata or {}
         expected = metadata["expected_trajectory"][0]["calls"][0]["input"]
         selected = metadata["selected_alternative"]
-        calls = extract_unique_tool_calls(session)
+        calls, failure = _successful_calls(extract_unique_tool_calls(session))
+        if failure:
+            return failure
         role = metadata["expected_mismatch"]["constraint"]["role"]
         if metadata["expected_trajectory"][0]["calls"][0]["tool"] == "plan_toll_route":
             expected_selected = {
                 **expected,
                 "origin" if role == "entry" else "destination": selected,
             }
-            if [call["name"] for call in calls[:2]] != [
+            if len(calls) < 2 or [call["name"] for call in calls[:2]] != [
                 "plan_toll_route",
                 "plan_toll_route",
             ]:
@@ -159,6 +225,28 @@ class OneWaySimulationTraceEvaluator(Evaluator[str, str]):
                     False,
                     f"unexpected planner results: {first}, {second}",
                     "wrong_access_result",
+                )
+            planned = _planned_calls(second)
+            if not planned:
+                return _result(
+                    False,
+                    "replanned journey contained no executable downstream steps",
+                    "wrong_access_result",
+                )
+            expected_calls = [
+                {"tool": "plan_toll_route", "input": expected},
+                {"tool": "plan_toll_route", "input": expected_selected},
+                *planned,
+            ]
+            if len(calls) != len(expected_calls) or any(
+                call["name"] != wanted["tool"]
+                or not _matches_input(call, cast(dict[str, Any], wanted["input"]))
+                for call, wanted in zip(calls, expected_calls, strict=False)
+            ):
+                return _result(
+                    False,
+                    f"unexpected planner recovery calls: {[call['name'] for call in calls]}",
+                    "tool_order",
                 )
             return _result(
                 True,
@@ -267,7 +355,7 @@ def _self_check() -> None:
         EvaluationData[str, str](input="x", actual_output="", actual_trajectory=[])
     )
     assert bad[0].label == "bad_trajectory"
-    print("self-check ok (two actor profiles and calibrated judge; no network)")
+    print("self-check ok (three actor profiles and duplicate-aware trace grading)")
 
 
 if __name__ == "__main__":

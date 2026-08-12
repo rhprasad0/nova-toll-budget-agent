@@ -12,7 +12,10 @@ replacement.
   checker/planner-first calls, exact structured constraints, alternatives, no
   premature fare, and a supported control route.
 - **Simulated:** three explicit driver profiles use up to three turns to choose
-  a named returned alternative and confirm the recovered route.
+  a named returned alternative and confirm the recovered route. Objective trace
+  grading accepts only guard-generated duplicate cancellations after a matching
+  success, permits the changed recovery call, and requires every planner-derived
+  downstream step.
 
 ## Promotion and execution
 
@@ -26,6 +29,8 @@ their synthetic checks only.
   populated evaluator details; the suite was promoted to trusted integration CI.
 - 2026-08-11: live execution moved to nightly because model behavior remains
   stochastic even when trace grading and fixtures are deterministic.
+- 2026-08-12: simulation trace grading added duplicate-hook and complete
+  cross-corridor recovery coverage; its next live execution remains observational.
 - 2026-08-04: the one authorized simulation execution scored 0.5833 (4/6
   judgments). It is not curated or rerun: one actor stopped after turn one,
   while a grader comparison was corrected to ignore harmless extra tool fields.

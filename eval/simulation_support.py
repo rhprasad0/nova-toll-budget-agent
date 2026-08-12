@@ -85,12 +85,14 @@ def extract_unique_tool_calls(session: Session) -> list[dict[str, Any]]:
             seen.add(key)
             calls.append(
                 {
+                    "turn_id": span.span_info.trace_id,
                     "name": span.tool_call.name,
                     "input": cast(
                         dict[str, Any],
                         span.tool_call.arguments,  # pyright: ignore[reportUnknownMemberType]
                     ),
                     "tool_result": span.tool_result.content,
+                    "tool_error": span.tool_result.error,
                 }
             )
     return calls
