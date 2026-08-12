@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 
 from eval.deterministic.price_hallucination.batch import (
+    build_multi_leg_requests,
     build_single_leg_requests,
     write_gate3_packet,
+    write_multi_leg_packet,
 )
 
 
@@ -63,3 +65,48 @@ def test_gate3_renders_production_parity_and_cost_ceiling(tmp_path: Path) -> Non
     duplicate = _case()
     with pytest.raises(ValueError, match="unique"):
         build_single_leg_requests([_case(), duplicate], expected_requests=10)
+
+
+def test_multi_leg_expands_repeats_and_shards_under_batch_limit(
+    tmp_path: Path,
+) -> None:
+    case = _case()
+    case["id"] = "multi_leg:i495-dtr-001"
+    case["stratum"] = "multi_leg"
+    case["source"]["evidence"]["calls"].append(
+        {
+            "tool": "dulles_route",
+            "input": {"origin": "B", "destination": "C"},
+            "result": {"total_usd": "2.00"},
+        }
+    )
+
+    requests, report = build_multi_leg_requests(
+        [case], repetitions=2, expected_requests=10
+    )
+
+    assert requests[0]["custom_id"] == "multi_leg:i495-dtr-001:v1:r01"
+    assert requests[-1]["custom_id"] == "multi_leg:i495-dtr-001:v5:r02"
+    assert [item.get("type") for item in requests[0]["body"]["input"]] == [
+        "message",
+        None,
+        "function_call",
+        "function_call",
+        "function_call_output",
+        "function_call_output",
+    ]
+    assert report["repetitions"] == 2
+    assert report["unapproved_payload_differences"] == 0
+
+    packet = write_multi_leg_packet(
+        [case],
+        tmp_path,
+        repetitions=2,
+        expected_requests=10,
+        shard_request_limit=5,
+    )
+    shards = sorted(tmp_path.glob("multi-leg-batch-*.jsonl"))
+    assert [len(path.read_text().splitlines()) for path in shards] == [5, 5]
+    assert packet["shard_count"] == 2
+    assert packet["sha256"] in (tmp_path / "gate5-review.md").read_text()
+    assert all(size < 200_000_000 for size in packet["shard_bytes"])

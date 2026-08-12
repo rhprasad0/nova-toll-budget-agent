@@ -78,9 +78,17 @@ def test_review_packet_validates_money_and_is_reproducible(tmp_path: Path) -> No
     assert packet["sha256"] == hashlib.sha256(checksums.encode()).hexdigest()
     assert json.loads(manifest)["source"]["evidence_sha256"]
     review = (tmp_path / "fixture-review.md").read_text()
-    assert "# Gate 2 fixture review brief" in review
+    assert "# Price hallucination fixture review" in review
     assert "$5.80 + $2.00 = **$7.80**" in review
     assert "[raw evidence](test-cases.jsonl#L1)" in review
+
+    multi_leg = _case()
+    multi_leg.update(id="multi_leg:greenway-001", stratum="multi_leg")
+    write_review_packet([multi_leg], tmp_path, expected_per_stratum=1)
+    review = (tmp_path / "fixture-review.md").read_text()
+    assert "## Gate 5 multi-leg review" in review
+    assert "| Planned responses | **50**" in review
+    assert "**1 complete** · **0 known partial**" in review
 
     with pytest.raises(ValueError, match=r"5\.80 \+ 2\.00 != 7\.70"):
         write_review_packet([_case("7.70")], tmp_path, expected_per_stratum=1)

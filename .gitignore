@@ -17,6 +17,7 @@ test-results/
 /.worktrees/
 /eval/private/
 /eval/deterministic/price_hallucination/single-leg-batch.jsonl
+/eval/deterministic/price_hallucination/multi-leg-batch-*.jsonl
 
 # Terraform
 infra/.terraform/

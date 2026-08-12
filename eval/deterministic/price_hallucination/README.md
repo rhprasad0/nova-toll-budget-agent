@@ -1,7 +1,8 @@
 # GPT-5.6 Luna price-synthesis fixture review
 
 **Gate 2 packet:** 1,000 canonical contexts and 5,000 frozen prompt variants.
-No Batch request file has been rendered and no model has been called.
+The approved single-leg pilot has since completed; the multi-leg Gate 5 packet
+is rendered but has not been uploaded.
 
 | Stratum | Canonical rows | Price calculations | No calculation |
 | --- | ---: | ---: | ---: |
@@ -11,6 +12,11 @@ No Batch request file has been rendered and no model has been called.
 | Out of scope/future | 200 | 0 | 200 |
 | Adversarial pressure | 200 | 160 | 40 |
 | **Total** | **1,000** | **660** | **340** |
+
+The adversarial-pressure rows remain in this approved historical fixture packet
+but are **excluded from Batch execution and all accuracy denominators**. The
+public claim covers good-faith supported pricing requests, not user-abuse
+resistance; the exclusion was recorded before adversarial outputs were run.
 
 ## Manual review
 
@@ -38,11 +44,17 @@ multi-leg strata: 56 I-66 WB and two I-495 SB. They are typed tool results,
 not connector or unpriced-gap sentinels. Connector `$0.00` planning sentinels
 appear only as excluded `source_value` fields and never enter arithmetic.
 
-**Packet SHA-256:**
+**Approved Gate 2 packet SHA-256 (historical):**
 `dbfb5eebcd37cc23d890bce0062b9029d67ac863f6841d3dcebfb055d7f97a9a`
 
-Approval of this exact hash unlocks only Gate 3: rendering and reviewing the
-single-leg Batch JSONL, payload-parity report, and maximum cost. It does not
+**Current Gate 5 review revision SHA-256:**
+`e14891af4657af0e6544f534f0bdceca4d437d8deda69cefa3baf89441883ece`
+
+Only `fixture-review.md` changed in this revision. The approved canonical JSONL
+and CSV retain their original hashes; the new section aggregates the multi-leg
+fixtures and maps them to the 10,000 planned executions.
+
+This is a review-only revision: it does not change the approved fixture data or
 authorize upload or inference.
 
 ## Gate 3 smoke packet
@@ -54,5 +66,9 @@ No request has been uploaded and no model has been called.
 
 The completed single-leg run is summarized in `gate4-review.md`: automated
 grading found 1,000/1,000 correct price amounts and 999/1,000 fully grounded
-responses because one answer misstated the evidence timestamp. Manual review of
-the failure and the fixed 100-pass sample is pending.
+responses because one answer misstated the evidence timestamp. The failure and
+fixed 100-pass sample were manually reviewed and approved.
+
+Gate 4 was approved on 2026-08-12. The next review artifact is
+`gate5-review.md`: 10,000 multi-leg responses split across five size-bounded
+Batch files. Nothing in that packet has been uploaded.

@@ -137,17 +137,94 @@ def _write_markdown(cases: list[dict[str, Any]], path: Path) -> None:
     priced = Counter(
         case["stratum"] for case in cases if case["calculation"] is not None
     )
+    multi_leg = [case for case in cases if case["stratum"] == "multi_leg"]
     lines = [
-        "# Gate 2 fixture review brief",
+        "# Price hallucination fixture review",
         "",
-        "> **Purpose:** review coverage and arithmetic without reading 1,000 rows.",
+        f"> **Purpose:** review coverage and arithmetic without reading {len(cases):,} rows.",
         "> The checksum-covered CSV and JSONL remain the full drill-down evidence.",
         "",
-        "## Dashboard",
-        "",
-        "| Stratum | Canonical fixtures | Calculations | Abstentions |",
-        "| --- | ---: | ---: | ---: |",
     ]
+    if multi_leg:
+        variants = sum(len(case["prompts"]) for case in multi_leg)
+        total_types = Counter(case["total_type"] for case in multi_leg)
+        component_shapes = Counter(len(case["components"]) for case in multi_leg)
+        call_shapes = Counter(
+            len(case["source"]["evidence"].get("calls", [])) for case in multi_leg
+        )
+        family_shapes = Counter(_category(case["id"]) for case in multi_leg)
+        family_counts = sorted(family_shapes.values())
+        family_summary = (
+            f"{family_counts[0]} canonical calculations each"
+            if len(set(family_counts)) == 1
+            else f"{family_counts} canonical calculations"
+        )
+        partial_count = total_types["known_partial"]
+        zero_count = sum(
+            component["price_usd"] == "0.00"
+            for case in multi_leg
+            for component in case["components"]
+        )
+        lines.extend(
+            [
+                "## Gate 5 multi-leg review",
+                "",
+                f"> **Decision scope:** approve the {len(multi_leg)} canonical multi-leg price",
+                "> calculations below for a 10,000-response Batch run. Repetition",
+                "> measures reliability; it does **not** create new fixture coverage.",
+                "",
+                "| Layer | Count | What needs manual review |",
+                "| --- | ---: | --- |",
+                f"| Canonical calculations | **{len(multi_leg)}** | Price components, exclusions, and total type |",
+                f"| Frozen prompt variants | **{variants:,}** | Wording only; five per calculation |",
+                "| Repeat executions | **10x** | Identical evidence replayed per variant |",
+                f"| Planned responses | **{variants * 10:,}** | Execution count, not {variants * 10:,} distinct prices |",
+                "",
+                "### Gate 5 arithmetic shape",
+                "",
+                "| Check | Aggregate |",
+                "| --- | --- |",
+                f"| Total types | **{total_types['complete']} complete** · **{total_types['known_partial']} known partial** |",
+                "| Priced components | "
+                + " · ".join(
+                    f"**{count}** with {size} component{'s' if size != 1 else ''}"
+                    for size, count in sorted(component_shapes.items())
+                )
+                + " |",
+                "| Evidence calls | "
+                + " · ".join(
+                    f"**{count}** with {size} call{'s' if size != 1 else ''}"
+                    for size, count in sorted(call_shapes.items())
+                )
+                + " |",
+                f"| Unpriced junction gaps | **{partial_count}**, all retained as `known_partial` |",
+                f"| Source-returned dynamic zeros | **{zero_count}**, all retained as priced components |",
+                "| Planning connectors | Excluded from every calculation |",
+                "",
+                "### Gate 5 sign-off",
+                "",
+                f"- [ ] The {len(family_shapes)} corridor families contain {family_summary}.",
+                "- [ ] Every displayed decimal expression recomputes to its bold total.",
+                f"- [ ] All {partial_count} partial results remain `known_partial`; gaps are never `$0.00`.",
+                f"- [ ] The {zero_count} dynamic `$0.00` tool results remain distinct from excluded connectors.",
+                "- [ ] Ten executions per prompt are acceptable as reliability repeats, not added coverage.",
+                "- [ ] Any discrepancy is recorded in the log below before Batch upload.",
+                "",
+                "**Focused drill-down:** [I-95/I-495](#i-95i-495-junction) · "
+                "[I-495/DTR](#i-495dulles-toll-road) · "
+                "[I-66/DTR](#i-66dulles-toll-road) · "
+                "[DTR/Greenway](#dulles-toll-roadgreenway)",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Whole-packet dashboard",
+            "",
+            "| Stratum | Canonical fixtures | Calculations | Abstentions |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
     for stratum, title in _STRATUM_TITLES.items():
         if stratum in counts:
             lines.append(

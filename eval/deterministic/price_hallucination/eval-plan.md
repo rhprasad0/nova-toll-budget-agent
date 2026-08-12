@@ -10,7 +10,11 @@
 - **Evaluation boundary:** Frozen, terminal, tool-disabled synthesis from the
   production system prompt, tool schemas, conversation, and approved tool
   evidence. This is not end-to-end TollChat or source-agreement accuracy.
-- **Live authorization:** Zero runs are authorized at Gate 1.
+- **Product scope:** Headline results cover good-faith, supported pricing
+  requests and grounded limitations. Adversarial-pressure fixtures are retained
+  for auditability but excluded from Batch execution and every reported metric.
+- **Initial authorization:** Zero runs were authorized at Gate 1; current
+  authorization is tracked in the progress table below.
 
 ---
 
@@ -72,10 +76,11 @@ evidence and sets `tool_choice: none`.
   price claim.
 - **Method:** Deterministic forbidden-claim grading.
 
-HTTP/provider failures are execution errors, not behavioral verdicts. No
-combined 5,000-response claim is permitted unless each stratum has exactly
-1,000 completed responses. Counts are descriptive; there is no confidence
-interval or production-rate inference.
+HTTP/provider failures are execution errors, not behavioral verdicts. Any
+cross-stratum result must disclose each included stratum's sample size and the
+worst included stratum. Adversarial-pressure fixtures are never included in a
+denominator. Counts are descriptive; there is no confidence interval or
+production-rate inference.
 
 ---
 
@@ -113,13 +118,18 @@ allowed arithmetic, or expected answer class.
 - 50 future dynamic-price requests, 50 unsupported-road requests, 50 unresolved
   or ambiguous locations, and 50 non-pricing/out-of-domain requests.
 
-### Stratum 5: adversarial pressure
+### Archived stratum: adversarial pressure (excluded)
 
 - 40 demands to guess or provide a ballpark.
 - 40 demands to treat an unpriced gap as free.
 - 40 demands to relabel a known partial total as a complete fare.
 - 40 user-supplied monetary decoys.
 - 40 instruction-injection or provenance-hiding attempts.
+
+These fixtures remain in the approved canonical packet, but user-abuse behavior
+is outside the accuracy claim. They will not be rendered or submitted to Batch
+and will not contribute to the headline numerator, denominator, or worst-stratum
+result. This exclusion was recorded before any adversarial outputs were run.
 
 The five prompt variants are concise/direct, natural budget phrasing, skeptical
 challenge, requested-format variation, and pressure/follow-up phrasing. Stable
@@ -162,17 +172,18 @@ SHA-256 before any Batch file is rendered.
 3. Approve the exact single-leg Batch JSONL, payload-parity report, and maximum
    cost.
 4. Audit the pilot before any other Batch authorization.
-5. Approve and audit each remaining stratum separately.
-6. Approve adversarial quantitative review, methodology, and public copy.
+5. Approve and audit each included remaining stratum separately.
+6. Approve independent quantitative review, methodology, and public copy.
 
 ### Proposed public wording
 
 > **X/N frozen, tool-disabled synthesis responses introduced no unsupported
 > price; Y/Z required-price responses were complete and correct.**
 
-The linked methodology must display every stratum and the worst stratum, and
-must state that the test does not measure routing, tool execution, source
-accuracy, freshness, or production traffic.
+The linked methodology must display every executed stratum, the worst included
+stratum, and the archived adversarial exclusion. It must state that the claim
+covers good-faith supported pricing requests and does not measure routing, tool
+execution, source accuracy, freshness, abuse resistance, or production traffic.
 
 ---
 
@@ -189,6 +200,7 @@ accuracy, freshness, or production traffic.
 | 2026-08-11 | Require manual fixture-calculation review and critical pauses |
 | 2026-08-11 | Obtain angry-math-nerd adversarial review |
 | 2026-08-12 | Target 10,000 responses per future stratum after the 1,000-response pilot |
+| 2026-08-12 | Archive adversarial-pressure fixtures; exclude them from execution and all public accuracy denominators |
 
 ### Evaluation Progress
 
@@ -200,6 +212,8 @@ accuracy, freshness, or production traffic.
 | Single-leg Batch packet | Approved | Gate 3 packet approved and submitted unchanged |
 | Single-leg Batch run | Complete | 1,000/1,000 provider completions; zero execution errors |
 | Gate 4 automated audit | Complete | 1,000/1,000 correct price amounts; 999/1,000 fully grounded due to one unsupported evidence timestamp |
-| Gate 4 manual audit | Awaiting review | One failure plus fixed 100-pass sample in `gate4-review.md` |
-| Remaining Batch runs | Not authorized | Target 10,000 responses per stratum; expansion design, exact payload, and cost require review before submission |
+| Gate 4 manual audit | Approved | User approved proceeding on 2026-08-12 after reviewing the one failure and fixed 100-pass packet |
+| Multi-leg 10k packet | Awaiting approval | Ten repeats of every reviewed case/prompt pair; five 2,000-request shards, zero parity drift |
+| Adversarial-pressure fixtures | Excluded | Archived for auditability; no Batch execution or metric inclusion |
+| Remaining Batch runs | Not authorized | No multi-leg shard or later stratum has been uploaded or submitted |
 | Public claim | Blocked | Requires all evidence and Gate 6 |

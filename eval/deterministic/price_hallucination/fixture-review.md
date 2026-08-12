@@ -1,9 +1,44 @@
-# Gate 2 fixture review brief
+# Price hallucination fixture review
 
 > **Purpose:** review coverage and arithmetic without reading 1,000 rows.
 > The checksum-covered CSV and JSONL remain the full drill-down evidence.
 
-## Dashboard
+## Gate 5 multi-leg review
+
+> **Decision scope:** approve the 200 canonical multi-leg price
+> calculations below for a 10,000-response Batch run. Repetition
+> measures reliability; it does **not** create new fixture coverage.
+
+| Layer | Count | What needs manual review |
+| --- | ---: | --- |
+| Canonical calculations | **200** | Price components, exclusions, and total type |
+| Frozen prompt variants | **1,000** | Wording only; five per calculation |
+| Repeat executions | **10x** | Identical evidence replayed per variant |
+| Planned responses | **10,000** | Execution count, not 10,000 distinct prices |
+
+### Gate 5 arithmetic shape
+
+| Check | Aggregate |
+| --- | --- |
+| Total types | **150 complete** · **50 known partial** |
+| Priced components | **35** with 1 component · **65** with 2 components · **100** with 3 components |
+| Evidence calls | **85** with 1 call · **115** with 2 calls |
+| Unpriced junction gaps | **50**, all retained as `known_partial` |
+| Source-returned dynamic zeros | **36**, all retained as priced components |
+| Planning connectors | Excluded from every calculation |
+
+### Gate 5 sign-off
+
+- [ ] The 4 corridor families contain 50 canonical calculations each.
+- [ ] Every displayed decimal expression recomputes to its bold total.
+- [ ] All 50 partial results remain `known_partial`; gaps are never `$0.00`.
+- [ ] The 36 dynamic `$0.00` tool results remain distinct from excluded connectors.
+- [ ] Ten executions per prompt are acceptable as reliability repeats, not added coverage.
+- [ ] Any discrepancy is recorded in the log below before Batch upload.
+
+**Focused drill-down:** [I-95/I-495](#i-95i-495-junction) · [I-495/DTR](#i-495dulles-toll-road) · [I-66/DTR](#i-66dulles-toll-road) · [DTR/Greenway](#dulles-toll-roadgreenway)
+
+## Whole-packet dashboard
 
 | Stratum | Canonical fixtures | Calculations | Abstentions |
 | --- | ---: | ---: | ---: |
