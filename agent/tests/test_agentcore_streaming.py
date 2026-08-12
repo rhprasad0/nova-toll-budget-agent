@@ -8,6 +8,7 @@ from agent.agentcore_entrypoint import (
     DISCLAIMER,
     TollChatRuntime,
 )
+from agent.toll_agent import _DUPLICATE_TOOL_MESSAGE
 
 
 class Guardrail:
@@ -177,6 +178,31 @@ def test_stream_keeps_multiple_tools_ordered_and_marks_tool_errors():
     assert [event.get("label") for event in events[:2]] == [
         "Planning toll route",
         "Checking I-495 tolls",
+    ]
+
+
+def test_stream_does_not_show_guarded_duplicate_as_failed():
+    cancellation = tool_result("plan-2", "error")
+    cancellation["message"]["content"][0]["toolResult"]["content"] = [
+        {"text": _DUPLICATE_TOOL_MESSAGE}
+    ]
+    agent = StreamingAgent(
+        [
+            tool_use("plan-1", "plan_toll_route"),
+            tool_result("plan-1"),
+            tool_use("plan-2", "plan_toll_route"),
+            cancellation,
+            {"result": "The route still completed."},
+        ]
+    )
+
+    events = collect(app(agent), {"prompt": "Price my route"})
+
+    assert [event.get("status") for event in events[:-1]] == [
+        "running",
+        "completed",
+        "running",
+        "completed",
     ]
 
 

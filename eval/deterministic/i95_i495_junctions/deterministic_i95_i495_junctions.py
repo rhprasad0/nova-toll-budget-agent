@@ -23,7 +23,11 @@ from strands_evals.types.evaluation import (  # noqa: E402
 )
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
-from agent.toll_agent import build_agent, plan_toll_route  # noqa: E402
+from agent.toll_agent import (  # noqa: E402
+    _DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+    build_agent,
+    plan_toll_route,
+)
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
@@ -289,7 +293,20 @@ def _calls(case: EvaluationData[str, str]) -> list[dict[str, Any]]:
     trajectory = case.actual_trajectory
     if not isinstance(trajectory, list) or len(trajectory) != 1:
         return []
-    return cast(list[dict[str, Any]], trajectory[0].get("calls", []))
+    calls = cast(list[dict[str, Any]], trajectory[0].get("calls", []))
+    return _without_guard_cancellations(calls)
+
+
+def _without_guard_cancellations(
+    calls: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        call
+        for call in calls
+        if not (
+            call.get("is_error") and call.get("tool_result") == _DUPLICATE_TOOL_MESSAGE
+        )
+    ]
 
 
 class JunctionTraceEvaluator(Evaluator[str, str]):
@@ -408,6 +425,12 @@ def _self_check() -> None:
     row = rows[0]
     calls = synthetic_calls(row)
     assert evaluate_junction_calls(calls + calls[-1:], row)[0].label == "tool_mismatch"
+    cancellation = {
+        **calls[0],
+        "is_error": True,
+        "tool_result": _DUPLICATE_TOOL_MESSAGE,
+    }
+    assert _without_guard_cancellations([calls[0], cancellation]) == [calls[0]]
     good = (
         "Known segment prices. Unpriced junction at Braddock: the gap is free. "
         "Calculation. Known toll total."

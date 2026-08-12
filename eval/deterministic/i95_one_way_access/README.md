@@ -3,6 +3,8 @@
 This track verifies TollChat checks I-95/395 direction-specific access before
 pricing. It covers direct and cross-corridor invalid southbound exits,
 invalid northbound entries, and a supported control route.
+The simulated trace grader also distinguishes valid duplicate-hook cancellations
+from duplicate successful executions and requires complete downstream recovery.
 
 ## Offline checks
 

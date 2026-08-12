@@ -28,6 +28,7 @@ from strands.hooks import (
 )
 
 from agent.toll_agent import (
+    _DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
     SYSTEM_PROMPT_VERSION,
     TOOLSET_VERSION,
     build_agent,
@@ -584,6 +585,12 @@ _TOOL_LABELS = {
 }
 
 
+def _is_duplicate_tool_cancellation(result: Mapping[str, object]) -> bool:
+    return result.get("status") == "error" and result.get("content") == [
+        {"text": _DUPLICATE_TOOL_MESSAGE}
+    ]
+
+
 def _activity_events(
     message: Mapping[object, object], activities: dict[str, dict[str, object]]
 ) -> list[dict[str, object]]:
@@ -619,6 +626,7 @@ def _activity_events(
                 activity["status"] = (
                     "failed"
                     if tool_result_data.get("status") == "error"
+                    and not _is_duplicate_tool_cancellation(tool_result_data)
                     else "completed"
                 )
                 events.append(dict(activity))

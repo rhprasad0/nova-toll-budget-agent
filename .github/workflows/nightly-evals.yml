@@ -62,6 +62,7 @@ jobs:
           run_eval "I-95 one-way access" uv run --frozen python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py
           run_eval "Dulles connector junction" uv run --frozen python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py
           run_eval "I-95/I-495 junction" uv run --frozen python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py
+          run_eval "Duplicate tool guard" uv run --frozen python eval/deterministic/duplicate_tool_guard/deterministic_duplicate_tool_guard.py
           run_eval "Simulated I-95 one-way access" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_i95_one_way_access.py
           run_eval "Simulated non-I-95 directional access" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_non_i95_directional_access.py
           run_eval "Simulated fuzzy location matching" env NOVA_TOLL_EVAL_MODEL_ID="$eval_model_id" uv run --frozen python eval/simulated/simulated_user_fuzzy_location_matching.py

@@ -27,6 +27,7 @@ def test_stochastic_agent_evals_are_nightly_not_required_ci() -> None:
         "eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py",
         "eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py",
         "eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py",
+        "eval/deterministic/duplicate_tool_guard/deterministic_duplicate_tool_guard.py",
     )
 
     for runner in runners:
