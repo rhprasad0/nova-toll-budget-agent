@@ -6,6 +6,7 @@ not curated.
 
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |
+| [`20260812T191012Z.json`](20260812T191012Z.json) | Exact duplicate suppression on Dumfries/Pentagon I-95-to-I-495 routes plus changed-origin recovery from Joplin to Dumfries | Live deterministic tool-attempt and result grading | 1.0000; 3/3 cases passed; one duplicate planner attempt was cancelled after its matching success, all downstream tools completed, and the changed planner signature remained allowed |
 | [`20260812T190511Z.json`](20260812T190511Z.json) | Three simulated I-95 one-way alternative selections, including cross-corridor replanning from Joplin to Dumfries | Live simulated user with duplicate-aware deterministic trace grading | 1.0000; 3/3 cases passed; changed inputs were allowed, every recovery tool completed, no duplicate attempt occurred, and no execution errors were recorded |
 | [`20260809T214710Z-private-load-baseline.json`](20260809T214710Z-private-load-baseline.json) | Five concurrent private users making 15 canonical requests while both toll feeds ingest | Metadata-only deployed load and ingestion baseline | Passed; all requests and feed loads succeeded with zero errors or throttles, 15.47-second client p99, 15.19-second proxy p99, six active sessions, 5.43% peak RDS CPU, and 83.16 MiB minimum free memory |
 | [`20260809T204906Z-actionable-alarms.json`](20260809T204906Z-actionable-alarms.json) | Proxy failure/latency, AgentCore session, toll-data freshness, and RDS capacity alarms | Metadata-only deployed observability verification | Passed; 10 alarms route to the confirmed alert topic, canonical smoke passed, CloudWatch recorded successful alarm-action execution, and the owner confirmed notification receipt |
@@ -70,6 +71,13 @@ rejected access check, one changed successful access check, and one pricing
 call. The cross-corridor case executed the rejected planner call, changed
 planner call, junction call, and I-495 call. All tool spans had distinct IDs and
 no guard cancellation was needed in this observed run.
+
+The dedicated duplicate-hook run reproduced the original Dumfries stutter with
+two distinct planner call IDs and identical arguments. The first execution
+succeeded, the hook cancelled the second, and the junction and I-495 calls then
+completed. Pentagon completed without a stutter. The two-turn recovery first
+received the expected Joplin mismatch, then allowed the changed Dumfries planner
+call and completed both downstream calls.
 
 The non-I-95 deterministic run rejected every wrong-direction endpoint before
 pricing, including Compass Creek, Westpark-to-Scott, and the reported

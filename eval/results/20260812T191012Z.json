@@ -1,0 +1,388 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "Price a trip from Dumfries to Westpark Drive at 10:10 AM Eastern on July 29, 2026.",
+      "actual_output": "## Known segment prices\n\n- **I-95 Near Dumfries Road/Route 234 \u2192 Franconia-Springfield Parkway/Route 289** \u2014 Northbound, I-95/395 Express Lanes: **$12.30**\n  - VDOT observed at: **7/29/2026 10:00 AM ET**\n- **I-495 Near Braddock Road \u2192 Westpark Drive** \u2014 Northbound, I-495 Express Lanes: **$14.15**\n  - VDOT observed at: **7/29/2026 10:00 AM ET**\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between the **Franconia-Springfield Parkway/Route 289** boundary and **I-495 Near Braddock Road**. This junction gap is not treated as free.\n\n## Calculation\n\n**$12.30 + $14.15 = $26.45**\n\n## Known toll total\n\n**$26.45.** This sum excludes the unpriced junction and is not a complete operator-issued fare.\n",
+      "name": "dumfries-westpark-northbound",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "turns": [
+            [
+              {
+                "tool_use_id": "call_HRuHP8G2OdyNrx59lvHzfCSi",
+                "name": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i95",
+                  "origin": "I-95 Near Dumfries Road/Route 234",
+                  "destination_corridor": "i495",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"at_time\": \"2026-07-29T10:10:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                "is_error": false
+              },
+              {
+                "tool_use_id": "call_zfSAGQwwktUjYBI6zEnEzw1p",
+                "name": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i95",
+                  "origin": "I-95 Near Dumfries Road/Route 234",
+                  "destination_corridor": "i495",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "This exact tool call already ran during this request. Use its previous result and continue with the next planned step.",
+                "is_error": true
+              },
+              {
+                "tool_use_id": "call_wgoWjgo0DOUiFZ7GDjbwmp0d",
+                "name": "i95_junction_leg",
+                "input": {
+                  "location": "I-95 Near Dumfries Road/Route 234",
+                  "movement": "i95_to_i495",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"origin\": \"I-95 Near Dumfries Road/Route 234\", \"destination\": \"Franconia-Springfield Parkway/Route 289\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"218NO\", \"label\": \"I-95 Near Dumfries Road/Route 234\"}, \"exit\": {\"node_id\": \"206ND\", \"label\": \"Franconia-Springfield Parkway/Route 289\"}, \"legs\": [{\"od_pair_id\": 1103, \"price_usd\": \"12.30\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-29T10:10:00-04:00\", \"observed_at\": \"2026-07-29T10:00:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i95_to_i495\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"at_time\": \"2026-07-29T10:10:00-04:00\", \"lane_statuses\": {\"Northbound\": \"NORTHBOUND_OPEN\", \"Southbound\": \"CLOSED\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"Franconia-Springfield Parkway/Route 289\", \"direction\": \"Northbound\"}, \"total_usd\": \"12.30\"}",
+                "is_error": false
+              },
+              {
+                "tool_use_id": "call_N8Do2NBXZl8gJcJjmiBRz9DB",
+                "name": "i495_route",
+                "input": {
+                  "origin": "191NO",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"origin\": \"191NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"191NO\", \"label\": \"I-495 Near Braddock Road\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1012, \"price_usd\": \"14.15\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-07-29T10:10:00-04:00\", \"observed_at\": \"2026-07-29T10:00:00-04:00\"}], \"at_time\": \"2026-07-29T10:10:00-04:00\", \"total_usd\": \"14.15\"}",
+                "is_error": false
+              }
+            ]
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "dumfries-westpark-northbound",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Dumfries to Westpark Drive at 10:10 AM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_turns": [
+          [
+            {
+              "tool": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i95",
+                "origin": "I-95 Near Dumfries Road/Route 234",
+                "destination_corridor": "i495",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            },
+            {
+              "tool": "i95_junction_leg",
+              "input": {
+                "location": "I-95 Near Dumfries Road/Route 234",
+                "movement": "i95_to_i495",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            },
+            {
+              "tool": "i495_route",
+              "input": {
+                "origin": "191NO",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            }
+          ]
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DuplicateToolGuardEvaluator",
+      "evaluator_type": "DuplicateToolGuardEvaluator"
+    },
+    {
+      "input": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026.",
+      "actual_output": "## Known segment prices\n\n- Pentagon/Eads Street \u2192 I-395 Near Edsall Road \u2014 **I-95/395 Express Lanes, southbound:** **$10.05**\n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n- I-495 Near Braddock Road \u2192 Westpark Drive \u2014 **I-495 Express Lanes, northbound:** **$8.70**\n  - VDOT observed at: **7/29/2026 6:40 PM ET**\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between **I-395 Near Edsall Road** and **I-495 Near Braddock Road**. This gap is not treated as free.\n\n## Calculation\n\n**$10.05 + $8.70 = $18.75**\n\n## Known toll total\n\n**$18.75.** This sum excludes the unpriced junction and is not a complete operator-issued fare.\n",
+      "name": "pentagon-westpark-southbound",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "turns": [
+            [
+              {
+                "tool_use_id": "call_Evi1dJSnbd7SXDOkIAuZFXOU",
+                "name": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i95",
+                  "origin": "Pentagon/Eads Street",
+                  "destination_corridor": "i495",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T18:50:00-04:00"
+                },
+                "tool_result": "{\"at_time\": \"2026-07-29T18:50:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                "is_error": false
+              },
+              {
+                "tool_use_id": "call_hpL1s0R9CYTII33fcNsqd4Nz",
+                "name": "i95_junction_leg",
+                "input": {
+                  "location": "Pentagon/Eads Street",
+                  "movement": "i95_to_i495",
+                  "at_time": "2026-07-29T18:50:00-04:00"
+                },
+                "tool_result": "{\"origin\": \"Pentagon/Eads Street\", \"destination\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"2233SO\", \"label\": \"Pentagon/Eads Street\"}, \"exit\": {\"node_id\": \"227SD\", \"label\": \"I-395 Near Edsall Road\"}, \"legs\": [{\"od_pair_id\": 1203, \"price_usd\": \"10.05\", \"corridor_name\": \"I-95-SB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i95_to_i495\", \"location\": \"Pentagon/Eads Street\", \"at_time\": \"2026-07-29T18:50:00-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"I-395 Near Edsall Road\", \"direction\": \"Southbound\"}, \"total_usd\": \"10.05\"}",
+                "is_error": false
+              },
+              {
+                "tool_use_id": "call_pUnLP8zdjPxxq7LodcOYHiYX",
+                "name": "i495_route",
+                "input": {
+                  "origin": "191NO",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T18:50:00-04:00"
+                },
+                "tool_result": "{\"origin\": \"191NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"191NO\", \"label\": \"I-495 Near Braddock Road\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1012, \"price_usd\": \"8.70\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-07-29T18:50:00-04:00\", \"observed_at\": \"2026-07-29T18:40:00-04:00\"}], \"at_time\": \"2026-07-29T18:50:00-04:00\", \"total_usd\": \"8.70\"}",
+                "is_error": false
+              }
+            ]
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "pentagon-westpark-southbound",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from Pentagon/Eads Street to Westpark Drive at 6:50 PM Eastern on July 29, 2026."
+          }
+        ],
+        "expected_turns": [
+          [
+            {
+              "tool": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i95",
+                "origin": "Pentagon/Eads Street",
+                "destination_corridor": "i495",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T18:50:00-04:00"
+              }
+            },
+            {
+              "tool": "i95_junction_leg",
+              "input": {
+                "location": "Pentagon/Eads Street",
+                "movement": "i95_to_i495",
+                "at_time": "2026-07-29T18:50:00-04:00"
+              }
+            },
+            {
+              "tool": "i495_route",
+              "input": {
+                "origin": "191NO",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T18:50:00-04:00"
+              }
+            }
+          ]
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DuplicateToolGuardEvaluator",
+      "evaluator_type": "DuplicateToolGuardEvaluator"
+    },
+    {
+      "input": "Price a trip from I-95 Near Joplin Road/Quantico to Westpark Drive at 10:10 AM Eastern on July 29, 2026.",
+      "actual_output": "**Known segment prices**\n\n- **I-95 Near Dumfries Road/Route 234 \u2192 Franconia-Springfield Parkway/Route 289** \u2014 I-95/395 Express Lanes, northbound: **$12.30**\n  - VDOT observed at: 7/29/2026 10:00 AM ET\n- **I-495 Near Braddock Road \u2192 Westpark Drive** \u2014 I-495 Express Lanes, northbound: **$14.15**\n  - VDOT observed at: 7/29/2026 10:00 AM ET\n\n**Unpriced junction**\n\nVDOT does not provide a price for the road between the Franconia-Springfield Parkway/Route 289 boundary and I-495 Near Braddock Road. This junction is not treated as free.\n\n**Calculation**\n\n$12.30 + $14.15 = **$26.45**\n\n**Known toll total**\n\n**$26.45**. This sum excludes the unpriced junction and is not a complete operator-issued fare.\n",
+      "name": "cross-corridor-origin-recovery",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "turns": [
+            [
+              {
+                "tool_use_id": "call_LLGsMz4d7aE6UAnzXLNn7001",
+                "name": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i95",
+                  "origin": "I-95 Near Joplin Road/Quantico",
+                  "destination_corridor": "i495",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"error\": \"'I-95 Near Joplin Road/Quantico' is not a valid northbound entry for this cross-corridor trip\", \"valid_options\": [\"I-95 Near Dumfries Road/Route 234\", \"I-95 Near Cardinal Drive\"], \"status\": \"one_way_mismatch\", \"direction\": \"Northbound\", \"constraints\": [{\"location\": \"I-95 Near Joplin Road/Quantico\", \"role\": \"entry\", \"required_direction\": \"Northbound\", \"available_directions\": [], \"nearby_options\": [\"I-95 Near Dumfries Road/Route 234\", \"I-95 Near Cardinal Drive\"]}]}",
+                "is_error": false
+              }
+            ],
+            [
+              {
+                "tool_use_id": "call_bYA3eNibuqYEW7VVYIxp6QFy",
+                "name": "plan_toll_route",
+                "input": {
+                  "origin_corridor": "i95",
+                  "origin": "I-95 Near Dumfries Road/Route 234",
+                  "destination_corridor": "i495",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"at_time\": \"2026-07-29T10:10:00-04:00\", \"steps\": [{\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i95_to_i495\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191NO\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"191NO\", \"destination\": \"Westpark Drive\"}]}",
+                "is_error": false
+              },
+              {
+                "tool_use_id": "call_01po32eWEiPBI5llRXmMzZCl",
+                "name": "i95_junction_leg",
+                "input": {
+                  "location": "I-95 Near Dumfries Road/Route 234",
+                  "movement": "i95_to_i495",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"origin\": \"I-95 Near Dumfries Road/Route 234\", \"destination\": \"Franconia-Springfield Parkway/Route 289\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"218NO\", \"label\": \"I-95 Near Dumfries Road/Route 234\"}, \"exit\": {\"node_id\": \"206ND\", \"label\": \"Franconia-Springfield Parkway/Route 289\"}, \"legs\": [{\"od_pair_id\": 1103, \"price_usd\": \"12.30\", \"corridor_name\": \"I-95-NB\", \"priced_as_of\": \"2026-07-29T10:10:00-04:00\", \"observed_at\": \"2026-07-29T10:00:00-04:00\"}], \"pricing_status\": \"priced\", \"movement\": \"i95_to_i495\", \"location\": \"I-95 Near Dumfries Road/Route 234\", \"at_time\": \"2026-07-29T10:10:00-04:00\", \"lane_statuses\": {\"Northbound\": \"NORTHBOUND_OPEN\", \"Southbound\": \"CLOSED\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"junction_boundary\": {\"label\": \"Franconia-Springfield Parkway/Route 289\", \"direction\": \"Northbound\"}, \"total_usd\": \"12.30\"}",
+                "is_error": false
+              },
+              {
+                "tool_use_id": "call_BWKjls4y0s2rjjHTxfvE42Mg",
+                "name": "i495_route",
+                "input": {
+                  "origin": "191NO",
+                  "destination": "Westpark Drive",
+                  "at_time": "2026-07-29T10:10:00-04:00"
+                },
+                "tool_result": "{\"origin\": \"191NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"191NO\", \"label\": \"I-495 Near Braddock Road\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1012, \"price_usd\": \"14.15\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-07-29T10:10:00-04:00\", \"observed_at\": \"2026-07-29T10:00:00-04:00\"}], \"at_time\": \"2026-07-29T10:10:00-04:00\", \"total_usd\": \"14.15\"}",
+                "is_error": false
+              }
+            ]
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "cross-corridor-origin-recovery",
+        "conversation": [
+          {
+            "role": "user",
+            "content": "Price a trip from I-95 Near Joplin Road/Quantico to Westpark Drive at 10:10 AM Eastern on July 29, 2026."
+          },
+          {
+            "role": "user",
+            "content": "Use I-95 Near Dumfries Road/Route 234."
+          }
+        ],
+        "expected_turns": [
+          [
+            {
+              "tool": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i95",
+                "origin": "I-95 Near Joplin Road/Quantico",
+                "destination_corridor": "i495",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            }
+          ],
+          [
+            {
+              "tool": "plan_toll_route",
+              "input": {
+                "origin_corridor": "i95",
+                "origin": "I-95 Near Dumfries Road/Route 234",
+                "destination_corridor": "i495",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            },
+            {
+              "tool": "i95_junction_leg",
+              "input": {
+                "location": "I-95 Near Dumfries Road/Route 234",
+                "movement": "i95_to_i495",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            },
+            {
+              "tool": "i495_route",
+              "input": {
+                "origin": "191NO",
+                "destination": "Westpark Drive",
+                "at_time": "2026-07-29T10:10:00-04:00"
+              }
+            }
+          ]
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "DuplicateToolGuardEvaluator",
+      "evaluator_type": "DuplicateToolGuardEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true,
+    true
+  ],
+  "reasons": [
+    "all SOP calls executed once or were safely suppressed",
+    "all SOP calls executed once or were safely suppressed",
+    "all SOP calls executed once or were safely suppressed"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "all SOP calls executed once or were safely suppressed",
+        "label": "guard_ok"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "all SOP calls executed once or were safely suppressed",
+        "label": "guard_ok"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "all SOP calls executed once or were safely suppressed",
+        "label": "guard_ok"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null,
+    null
+  ]
+}

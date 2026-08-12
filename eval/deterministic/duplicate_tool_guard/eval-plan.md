@@ -17,10 +17,11 @@ The JSONL cases become Strands Evals `Case` objects. A fresh production `build_a
 - [x] Plan and three JSONL cases designed from the production SOP and committed route oracle.
 - [x] Offline evaluator branches validated.
 - [x] CI and nightly automation updated.
-- [ ] Live validation pending: the first authorized execution on 8/12/2026
-  produced correct-looking responses but invalid empty trajectories because the
-  runner read stateful `agent.messages`; response-metric extraction is fixed
-  offline, and the invalid report is not curated or rerun.
+- [x] Live validation completed on 8/12/2026: after an invalid empty-trajectory
+  baseline exposed and repaired response-metric extraction, one renewed run
+  passed 3/3. Dumfries produced an exact duplicate planner attempt that the hook
+  suppressed before junction and I-495 completion; Pentagon ran normally; and
+  the changed Joplin-to-Dumfries replan remained allowed.
 
 ## User requirements log
 
