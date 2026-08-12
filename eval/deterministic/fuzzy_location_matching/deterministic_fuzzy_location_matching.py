@@ -37,7 +37,10 @@ from strands_evals.types.evaluation import (  # noqa: E402
 )
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
-from agent.toll_agent import build_agent  # noqa: E402
+from agent.toll_agent import (  # noqa: E402
+    _LOCATION_ALIASES,  # pyright: ignore[reportPrivateUsage]
+    build_agent,
+)
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
@@ -109,17 +112,62 @@ def _extract_tool_calls(messages: Messages) -> list[dict[str, Any]]:
     )
 
 
+def _new_tool_calls(
+    calls: list[dict[str, Any]], previous_calls: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Strip the cumulative message-history prefix from a later agent turn."""
+    if calls[: len(previous_calls)] == previous_calls:
+        return calls[len(previous_calls) :]
+    return calls
+
+
+def _tool_result_issue(
+    call: dict[str, Any], expected: dict[str, Any], response: str
+) -> str | None:
+    if call.get("is_error"):
+        return "transport error"
+    raw = call.get("tool_result")
+    if not isinstance(raw, str) or not raw:
+        return "missing tool result"
+    try:
+        decoded: object = json.loads(raw)
+    except json.JSONDecodeError:
+        return "invalid tool result JSON"
+    if not isinstance(decoded, dict):
+        return "tool result is not an object"
+    payload = cast(dict[str, Any], decoded)
+    expected_result: dict[str, Any] = expected.get("expected_result", {})
+    if any(payload.get(key) != value for key, value in expected_result.items()):
+        return "tool result fields did not match fixture"
+    error = payload.get("error")
+    if not error:
+        return None
+    allowed = expected.get("allowed_result_error_contains")
+    if not allowed or str(allowed).casefold() not in str(error).casefold():
+        return f"application error: {error}"
+    required = expected.get("response_must_contain_on_error", [])
+    forbidden = expected.get("response_must_not_contain_on_error", [])
+    if not all(term.casefold() in response.casefold() for term in required) or any(
+        term.casefold() in response.casefold() for term in forbidden
+    ):
+        return "response did not handle the allowed tool error"
+    return None
+
+
 def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
     turns: list[dict[str, str]] = _metadata(case)["conversation"]
     trajectory_by_turn: list[dict[str, Any]] = []
+    previous_calls: list[dict[str, Any]] = []
     response = None
     for turn in turns:
         response = agent(turn["content"])
         summary: dict[str, Any] = response.metrics.get_summary()
         traces = cast(list[dict[str, Any]], summary.get("traces", []))
-        calls = _extract_tool_calls(_trace_messages(traces))
+        cumulative_calls = _extract_tool_calls(_trace_messages(traces))
+        calls = _new_tool_calls(cumulative_calls, previous_calls)
         trajectory_by_turn.append({"response": str(response), "calls": calls})
+        previous_calls = cumulative_calls
     return {
         "output": str(response),
         "trajectory": trajectory_by_turn,
@@ -196,6 +244,17 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
                         f"turn {entry['turn']}: tool arguments did not match fixture",
                         "label_mismatch",
                     )
+                issues = [
+                    issue
+                    for call, expected in zip(actual_calls, expected_calls, strict=True)
+                    if (issue := _tool_result_issue(call, expected, response))
+                ]
+                if issues:
+                    return _result(
+                        False,
+                        f"turn {entry['turn']}: {issues[0]}",
+                        "tool_error",
+                    )
                 continue
 
             expected_tool = entry.get("tool")
@@ -232,6 +291,12 @@ class LocationResolutionEvaluator(Evaluator[str, str]):
                     f"turn {entry['turn']}: {expected_tool} called with "
                     f"{actual_input}, expected exact hard labels {expected_input}",
                     "label_mismatch",
+                )
+            if issue := _tool_result_issue(actual_calls[0], entry, response):
+                return _result(
+                    False,
+                    f"turn {entry['turn']}: {issue}",
+                    "tool_error",
                 )
 
         return _result(
@@ -270,10 +335,29 @@ def _self_check() -> None:
         "ambiguous-washington-destination-i395-followup",
         "explicit-washington-i66",
         "explicit-washington-i395",
-        "endpoint-context-washington-origin-i66",
-        "endpoint-context-washington-destination-i395",
+        "endpoint-context-washington-origin-still-ambiguous",
+        "endpoint-context-washington-destination-still-ambiguous",
+        "ambiguous-alias-tysons",
+        "ambiguous-alias-arlington",
+        "ambiguous-alias-ballston-same-corridor",
+        "ambiguous-alias-vienna-same-corridor",
+        "ambiguous-alias-herndon-same-corridor",
+        "explicit-corridor-uniquely-selects-mclean",
+        "roundabout-washington-i66-confirmed",
+        "roundabout-washington-switches-i395",
+        "other-endpoint-corridor-does-not-bind-washington",
+        "roundabout-washington-informed-acknowledgment",
     ]
     assert cases[1].expected_trajectory == ["i95_access_options", "i95_route"]
+    assert {
+        _metadata(case)["alias"] for case in cases if _metadata(case).get("alias")
+    } == {alias for alias, labels in _LOCATION_ALIASES.items() if len(labels) > 1}
+    alias_cases = [case for case in cases if _metadata(case).get("alias")]
+    assert all(
+        _metadata(case)["expected_trajectory"][0].get("tool") is None
+        and _metadata(case)["expected_trajectory"][0].get("response_must_be_question")
+        for case in alias_cases
+    )
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
 
@@ -297,6 +381,8 @@ def _self_check() -> None:
     actual_route = {
         "name": "i495_route",
         "input": {"origin": "A", "destination": "B", "at_time": None},
+        "tool_result": json.dumps({"total_usd": "1.10"}),
+        "is_error": False,
     }
     expected_i95_route = {
         "turn": 1,
@@ -304,6 +390,10 @@ def _self_check() -> None:
             {
                 "tool": "i95_access_options",
                 "input": {"origin": "A", "destination": "B"},
+                "expected_result": {
+                    "status": "supported",
+                    "direction": "Northbound",
+                },
             },
             {
                 "tool": "i95_route",
@@ -315,8 +405,17 @@ def _self_check() -> None:
         {
             "name": "i95_access_options",
             "input": {"origin": "A", "destination": "B"},
+            "tool_result": json.dumps(
+                {"status": "supported", "direction": "Northbound"}
+            ),
+            "is_error": False,
         },
-        {"name": "i95_route", "input": {"origin": "A", "destination": "B"}},
+        {
+            "name": "i95_route",
+            "input": {"origin": "A", "destination": "B"},
+            "tool_result": json.dumps({"total_usd": "1.10"}),
+            "is_error": False,
+        },
     ]
     trace_calls = _extract_tool_calls(
         _trace_messages(
@@ -354,6 +453,10 @@ def _self_check() -> None:
         )
     )
     assert trace_calls == [{**actual_route, "tool_result": "ok", "is_error": False}]
+    assert _new_tool_calls([actual_route, *actual_i95_calls], [actual_route]) == (
+        actual_i95_calls
+    )
+    assert _new_tool_calls(actual_i95_calls, [actual_route]) == actual_i95_calls
     clarification = {
         "turn": 1,
         "tool": None,
@@ -381,6 +484,22 @@ def _self_check() -> None:
             {"expected_trajectory": [expected_i95_route]},
             [{"response": "", "calls": list(reversed(actual_i95_calls))}],
             "tool_mismatch",
+        ),
+        (
+            {"expected_trajectory": [expected_i95_route]},
+            [
+                {
+                    "response": "",
+                    "calls": [
+                        {
+                            **actual_i95_calls[0],
+                            "tool_result": json.dumps({"status": "one_way_mismatch"}),
+                        },
+                        actual_i95_calls[1],
+                    ],
+                }
+            ],
+            "tool_error",
         ),
         (
             {
@@ -427,6 +546,105 @@ def _self_check() -> None:
                 }
             ],
             "label_mismatch",
+        ),
+        (
+            {"expected_trajectory": [expected_route]},
+            [
+                {
+                    "response": "",
+                    "calls": [
+                        {
+                            **actual_route,
+                            "tool_result": json.dumps(
+                                {"error": "database unavailable"}
+                            ),
+                            "is_error": False,
+                        }
+                    ],
+                }
+            ],
+            "tool_error",
+        ),
+        (
+            {"expected_trajectory": [expected_route]},
+            [
+                {
+                    "response": "",
+                    "calls": [
+                        {
+                            **actual_route,
+                            "tool_result": json.dumps(
+                                {"pricing_status": "unavailable"}
+                            ),
+                        }
+                    ],
+                }
+            ],
+            "resolved",
+        ),
+        (
+            {"expected_trajectory": [expected_route]},
+            [
+                {
+                    "response": "",
+                    "calls": [{**actual_route, "tool_result": "not JSON"}],
+                }
+            ],
+            "tool_error",
+        ),
+        (
+            {
+                "expected_trajectory": [
+                    {
+                        **expected_route,
+                        "allowed_result_error_contains": "CLOSED",
+                        "response_must_contain_on_error": [
+                            "I-95 general-purpose lanes"
+                        ],
+                        "response_must_not_contain_on_error": ["I-66", "I-495"],
+                    }
+                ]
+            },
+            [
+                {
+                    "response": "Use the I-95 general-purpose lanes.",
+                    "calls": [
+                        {
+                            **actual_route,
+                            "tool_result": json.dumps({"error": "1132 CLOSED"}),
+                        }
+                    ],
+                }
+            ],
+            "resolved",
+        ),
+        (
+            {
+                "expected_trajectory": [
+                    {
+                        **expected_route,
+                        "allowed_result_error_contains": "CLOSED",
+                        "response_must_contain_on_error": [
+                            "I-95 general-purpose lanes"
+                        ],
+                        "response_must_not_contain_on_error": ["I-66", "I-495"],
+                    }
+                ]
+            },
+            [
+                {
+                    "response": (
+                        "Use the I-95 general-purpose lanes or the I-66 detour."
+                    ),
+                    "calls": [
+                        {
+                            **actual_route,
+                            "tool_result": json.dumps({"error": "1132 CLOSED"}),
+                        }
+                    ],
+                }
+            ],
+            "tool_error",
         ),
     ]
     for metadata, trajectory, label in resolver_checks:

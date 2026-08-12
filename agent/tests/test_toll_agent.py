@@ -1319,14 +1319,46 @@ def test_location_aliases_only_point_to_priced_labels():
     assert "potential tickets" in prompt
 
 
-def test_system_prompt_clarifies_the_ambiguous_washington_corridor():
+def test_system_prompt_always_clarifies_multi_match_aliases():
     prompt = " ".join(build_system_prompt().split())
-    assert "Washington" in prompt
+    assert "Every alias with multiple canonical matches is ambiguous" in prompt
+    assert "Perform this alias check before considering" in prompt
+    assert "MUST NOT use the other endpoint" in prompt
+    assert "Multiple matches on the same corridor remain ambiguous" in prompt
+    assert "retain the other endpoint and any supplied travel time" in prompt
     assert "I-66 or I-395" in prompt
     assert "Washington D.C." in prompt
     assert "without calling any tool" in prompt
-    assert "retain the other endpoint" in prompt
-    assert "corridor or the other resolved endpoint" in prompt
+    assert "Explicit corridor or interchange wording may filter the alias" in prompt
+    assert "only when that wording leaves exactly one" in prompt
+    assert "If Washington's selection is `I-66`, use `Washington`" in prompt
+    assert "If Washington's selection is `I-395`, use `Washington D.C.`" in prompt
+    assert "MUST NOT ask the Washington question" in prompt
+    assert "Apply this Washington rule in the following order" in prompt
+    assert "This ordered rule overrides the general multi-match alias rule" in prompt
+    assert "call `plan_toll_route` before any pricing tool" in prompt
+    assert "Never call `i66_route` with `Westpark Drive`" in prompt
+    assert "Resolve each complete endpoint in this strict order" in prompt
+    assert "Exact oracle labels win before alias matching" in prompt
+    assert "same complete text is also a multi-match alias" in prompt
+    assert "the alias rule wins and requires clarification" in prompt
+    assert "only when the complete endpoint equals that alias" in prompt
+    assert "Washington D.C.` must remain that exact I-395 label" in prompt
+    assert "Do not apply direction or role filters to reduce those candidates" in prompt
+    assert "bound directly to the `Washington` endpoint" in prompt
+    assert "appears only inside the other endpoint" in prompt
+    assert "Parse both complete endpoints before applying corridor scope" in prompt
+    assert "Price from Washington to I-395 Near Edsall Road" in prompt
+    assert "Price the I-395 Express Lanes from Washington" in prompt
+    assert "Mandatory same-corridor example" in prompt
+    assert "that would guess before the required user clarification" in prompt
+    assert "For that exact trip-wide request" in prompt
+    assert "followed by the exact reply `I-395`" in prompt
+    assert "map the retained destination to `Washington D.C.`" in prompt
+    assert "Do you still want me to price the roundabout I-66 route?" in prompt
+    assert "reuse the retained planner result" in prompt
+    assert "direct I-395 route" in prompt
+    assert "general-purpose lanes instead of the I-66/I-495 detour" in prompt
 
 
 def test_system_prompt_is_an_agent_sop():
@@ -1432,12 +1464,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.27.0"
-    advanced["system_prompt"]["releases"]["1.27.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.31.0"
+    advanced["system_prompt"]["releases"]["1.31.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.26\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.30\.0"):
         validate_manifest_update(previous, advanced)
 
 

@@ -1,10 +1,17 @@
 # Deterministic TollChat evaluation: fuzzy location matching
 
 Tests Step 1 of `agent-sops/nova-toll-pricing-assistant.sop.md` — does the
-agent ask before guessing an ambiguous location, converge on the exact
-oracle label once the user clarifies, resolve an unambiguous case-insensitive
-match without asking, and distinguish Washington's I-66 and I-395 endpoints.
-See `eval-plan.md` for the full plan and `test-cases.jsonl` for the 8 cases.
+agent ask before guessing every current multi-match alias, retain the fixed
+endpoint and optional time through clarification, converge on the exact oracle
+label, resolve an unambiguous case-insensitive match without asking, and honor
+explicit wording only when it leaves one candidate. See `eval-plan.md` for the
+full plan and `test-cases.jsonl` for the cases.
+
+The Washington controls also require endpoint-bound corridor wording, an
+informed confirmation before pricing the roundabout I-66/I-495/I-395 route,
+retained-plan execution after confirmation, and a direct-I-395 switch. If the
+direct Express Lanes are closed, the response must recommend the unpriced I-95
+general-purpose lanes instead of returning to the detour.
 
 ## Self-check (no network)
 
@@ -43,18 +50,22 @@ scripted conversation turn — import it directly, same as the deterministic
 suite imports its own helpers. `simulated_user_fuzzy_location_matching.py`
 contains the observational McLean, Washington-origin, and
 Washington-destination scenarios built on it. Unlike Track 1's code-based
-grading, the simulated user is an LLM and the report records Batch judging as
-pending, so results vary run to run. See `eval-plan.md`'s "Track 2" section for
-the full design.
+script, the simulated user is an LLM, so conversations vary run to run. A
+code-based trace evaluator still requires the first-turn question, no premature
+tool, the exact ordered canonical calls, retained endpoints/time, and non-error
+tool executions. Both trace graders parse serialized result JSON and reject
+application-level errors rather than treating nonempty content as success.
+Batch metadata remains available for later qualitative judging.
+See `eval-plan.md`'s "Track 2" section for the full design.
 
 ```bash
 uv run python eval/simulation_support.py --check
 uv run python eval/simulated/simulated_user_fuzzy_location_matching.py --check
 ```
 
-Both only validate deterministic, non-network logic (the turn-loop's stop
-conditions, and the simulated `Case` and actor profile shapes). Span-to-session
-mapping and both judges only run live and are not covered by `--check`.
+Both validate deterministic, non-network logic. The simulated check exercises
+the trace evaluator with synthetic sessions; live telemetry mapping and actor
+behavior are not covered by `--check`.
 
 ```bash
 AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_fuzzy_location_matching.py
@@ -62,18 +73,18 @@ AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_fuzzy_location
 
 A live run spends across three billed surfaces for the three simulated cases:
 OpenAI (the agent under test), Bedrock (the simulator's conversational turns),
-and RDS (the agent's pricing tools). Later report-only Batch judges use OpenAI.
+and RDS (the agent's pricing tools). Optional later Batch judges use OpenAI.
 The simulator uses Claude Haiku 4.5
 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
 `NOVA_TOLL_EVAL_MODEL_ID` overrides that model for automated runs.
 
 ## Nightly run
 
-`.github/workflows/nightly-evals.yml` runs both the code-graded live suite and
-the simulated-user evaluation every day at 3:17 AM New York time, and supports
-manual dispatch from `main`. Judge verdicts are observational; execution
-failures still fail the workflow. Each JSON report is retained as a GitHub
-artifact for 90 days.
+`.github/workflows/nightly-evals.yml` runs both code-graded suites every day at
+3:17 AM New York time, and supports manual dispatch from `main`. Simulated
+execution remains observational because the actor is stochastic; failed trace
+verdicts and execution failures fail the workflow. Each JSON report is retained
+as a GitHub artifact for 90 days.
 
 Nightly simulator and judge calls use the `nova-toll-nightly-eval` Bedrock
 application inference profile. In the AWS payer account, activate the `purpose`
