@@ -12,7 +12,7 @@ from typing import Any, cast
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
-from strands.types.content import Messages  # noqa: E402
+from strands.types.content import Message, Messages  # noqa: E402
 from strands_evals import Case, Experiment  # noqa: E402
 from strands_evals.evaluators import Evaluator  # noqa: E402
 from strands_evals.types.evaluation import (  # noqa: E402
@@ -101,6 +101,16 @@ def extract_calls(messages: Messages) -> list[dict[str, Any]]:
     return calls
 
 
+def _trace_messages(traces: list[dict[str, Any]]) -> Messages:
+    def walk(trace: dict[str, Any]) -> Messages:
+        messages = [cast(Message, trace["message"])] if trace.get("message") else []
+        for child in trace.get("children", []):
+            messages.extend(walk(child))
+        return messages
+
+    return [message for trace in traces for message in walk(trace)]
+
+
 def evaluate_guard_calls(
     turns: Sequence[Sequence[Mapping[str, object]]],
     expected_turns: Sequence[Sequence[Mapping[str, object]]],
@@ -181,7 +191,9 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     for message in metadata["conversation"]:
         response = agent(message["content"])
         output = str(response)
-        calls = extract_calls(agent.messages)
+        summary: dict[str, Any] = response.metrics.get_summary()
+        traces = cast(list[dict[str, Any]], summary.get("traces", []))
+        calls = extract_calls(_trace_messages(traces))
         turns.append([call for call in calls if call["tool_use_id"] not in seen_ids])
         seen_ids.update(call["tool_use_id"] for call in calls)
     return {"output": output, "trajectory": [{"turns": turns}]}
@@ -242,6 +254,7 @@ def _self_check() -> None:
         ],
     )
     assert [call["tool_use_id"] for call in extract_calls(messages)] == ["call-one"]
+    assert _trace_messages([{"message": messages[0], "children": []}]) == [messages[0]]
     expected = [
         {"tool": "plan_toll_route", "input": {"origin": "Dumfries"}},
         {"tool": "i495_route", "input": {"destination": "Westpark Drive"}},

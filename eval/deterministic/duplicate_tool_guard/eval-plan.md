@@ -17,7 +17,10 @@ The JSONL cases become Strands Evals `Case` objects. A fresh production `build_a
 - [x] Plan and three JSONL cases designed from the production SOP and committed route oracle.
 - [x] Offline evaluator branches validated.
 - [x] CI and nightly automation updated.
-- [ ] Live evaluation pending nightly execution; no local billed run authorized.
+- [ ] Live validation pending: the first authorized execution on 8/12/2026
+  produced correct-looking responses but invalid empty trajectories because the
+  runner read stateful `agent.messages`; response-metric extraction is fixed
+  offline, and the invalid report is not curated or rerun.
 
 ## User requirements log
 

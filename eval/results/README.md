@@ -6,6 +6,7 @@ not curated.
 
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |
+| [`20260812T190511Z.json`](20260812T190511Z.json) | Three simulated I-95 one-way alternative selections, including cross-corridor replanning from Joplin to Dumfries | Live simulated user with duplicate-aware deterministic trace grading | 1.0000; 3/3 cases passed; changed inputs were allowed, every recovery tool completed, no duplicate attempt occurred, and no execution errors were recorded |
 | [`20260809T214710Z-private-load-baseline.json`](20260809T214710Z-private-load-baseline.json) | Five concurrent private users making 15 canonical requests while both toll feeds ingest | Metadata-only deployed load and ingestion baseline | Passed; all requests and feed loads succeeded with zero errors or throttles, 15.47-second client p99, 15.19-second proxy p99, six active sessions, 5.43% peak RDS CPU, and 83.16 MiB minimum free memory |
 | [`20260809T204906Z-actionable-alarms.json`](20260809T204906Z-actionable-alarms.json) | Proxy failure/latency, AgentCore session, toll-data freshness, and RDS capacity alarms | Metadata-only deployed observability verification | Passed; 10 alarms route to the confirmed alert topic, canonical smoke passed, CloudWatch recorded successful alarm-action execution, and the owner confirmed notification receipt |
 | [`20260809T203937Z-agentcore-failure-drill.json`](20260809T203937Z-agentcore-failure-drill.json) | Request-scoped deployed AgentCore runtime exception through the private browser path | Metadata-only deployed failure and recovery drill | Passed on runtime 22; the browser received the exact safe error, governed failure telemetry correlated without contradictory records, and the same session recovered with the canonical $12.15 request while deployment identity stayed fixed |
@@ -62,6 +63,13 @@ I-95 pricing, correctly explained both the southbound Quantico exit and the
 northbound Joplin entry restrictions without quoting a fare, and checked access
 before the supported control route's one `i95_route` call. This satisfies the
 three-perfect-run promotion criterion for the deterministic suite.
+
+The duplicate-aware one-way simulation preserved the other endpoint while each
+driver selected the assigned alternative. Both direct cases executed one
+rejected access check, one changed successful access check, and one pricing
+call. The cross-corridor case executed the rejected planner call, changed
+planner call, junction call, and I-495 call. All tool spans had distinct IDs and
+no guard cancellation was needed in this observed run.
 
 The non-I-95 deterministic run rejected every wrong-direction endpoint before
 pricing, including Compass Creek, Westpark-to-Scott, and the reported

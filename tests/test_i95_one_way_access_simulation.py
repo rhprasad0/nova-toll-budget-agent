@@ -45,6 +45,7 @@ def _span(
             error=error,
             tool_call_id=f"call-{span_id}",
         ),
+        agent_span_id=trace_id,
     )
 
 
@@ -121,6 +122,13 @@ def test_cross_corridor_recovery_allows_guard_suppression_and_requires_completio
     )
 
     assert _evaluate([*spans[:2], cancellation, *spans[2:]]).label == "recovered"
+    wrong_turn_cancellation = cancellation.model_copy(
+        update={"agent_span_id": "turn-3"}
+    )
+    assert (
+        _evaluate([*spans[:2], wrong_turn_cancellation, *spans[2:]]).label
+        == "orphan_suppression"
+    )
     duplicate_success = spans[1].model_copy(
         update={
             "span_info": spans[1].span_info.model_copy(update={"span_id": "plan-2"})
