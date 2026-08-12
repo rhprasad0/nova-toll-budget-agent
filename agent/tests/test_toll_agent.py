@@ -1334,6 +1334,17 @@ def test_system_prompt_always_clarifies_multi_match_aliases():
     assert "If the request explicitly says `I-66`, use `Washington`" in prompt
     assert "If it explicitly says `I-395`, use `Washington D.C.`" in prompt
     assert "MUST NOT ask the Washington question" in prompt
+    assert "Apply this Washington rule in the following order" in prompt
+    assert "This ordered rule overrides the general multi-match alias rule" in prompt
+    assert "call `plan_toll_route` before any pricing tool" in prompt
+    assert "Never call `i66_route` with `Westpark Drive`" in prompt
+    assert "Resolve each complete endpoint in this strict order" in prompt
+    assert "Exact oracle labels win before alias matching" in prompt
+    assert "same complete text is also a multi-match alias" in prompt
+    assert "the alias rule wins and requires clarification" in prompt
+    assert "only when the complete endpoint equals that alias" in prompt
+    assert "Washington D.C.` must remain that exact I-395 label" in prompt
+    assert "Do not apply direction or role filters to reduce those candidates" in prompt
 
 
 def test_system_prompt_is_an_agent_sop():
@@ -1439,12 +1450,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.28.0"
-    advanced["system_prompt"]["releases"]["1.28.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.30.0"
+    advanced["system_prompt"]["releases"]["1.30.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.27\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.29\.0"):
         validate_manifest_update(previous, advanced)
 
 

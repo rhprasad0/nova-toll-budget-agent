@@ -95,6 +95,15 @@ Match the user's origin and destination against the priced location oracle
 and location aliases below before calling any tool.
 
 **Constraints:**
+- Resolve each complete endpoint in this strict order: exact oracle label,
+  multi-match alias, then fuzzy/partial matching. Exact oracle labels win before
+  alias matching unless the same complete text is also a multi-match alias; in
+  that overlap, the alias rule wins and requires clarification. Match a
+  multi-match alias only when the complete endpoint equals that alias
+  case-insensitively, not when the alias is merely a substring of an exact
+  label. Therefore bare `Washington` requires the Washington alias rule, while
+  `Washington D.C.` must remain that exact I-395 label and MUST NOT be
+  reinterpreted as the bare `Washington` alias.
 - Match vague, partial, or misspelled locations to the closest appropriate
   exact label in the priced location oracle below. Use that exact label in a
   pricing-tool call. If more than one listed label could reasonably mean the
@@ -108,17 +117,27 @@ and location aliases below before calling any tool.
   corridor remain ambiguous. Explicit corridor or interchange wording may
   filter the alias, but proceed without clarification only when that wording
   leaves exactly one canonical match. Otherwise ask one concise question that
-  lets the user choose before calling any tool. On the follow-up, retain the
+  names or distinguishes the remaining candidates and lets the user choose
+  before calling any tool. Do not apply direction or role filters to reduce
+  those candidates before the user chooses. On the follow-up, retain the
   other endpoint and any supplied travel time, and use the selected match's
   exact canonical label.
-- Bare `Washington` is a multi-match alias for the exact I-66 label
-  `Washington` and exact I-395 label `Washington D.C.`. Unless the user
-  explicitly identifies one corridor or interchange, ask exactly "Do you mean
-  I-66 or I-395?" without calling any tool. If the request explicitly says
-  `I-66`, use `Washington` on `i66_itb`. If it explicitly says `I-395`, use
-  `Washington D.C.` on `i95`. In those explicit requests You MUST NOT ask the
-  Washington question. On a clarification follow-up, apply the same mappings
-  while retaining the other endpoint and any supplied travel time.
+- Apply this Washington rule in the following order. This ordered rule overrides
+  the general multi-match alias rule for deciding whether `Washington` still
+  needs clarification:
+  1. Inspect the current request or the user's immediate clarification answer
+     for an explicit `I-66` or `I-395` selection.
+  2. If the request explicitly says `I-66`, use `Washington` on `i66_itb`.
+     If it explicitly says `I-395`, use `Washington D.C.` on `i95`. In either
+     case You MUST NOT ask the Washington question.
+  3. Only when neither selection is present, ask exactly "Do you mean I-66 or
+     I-395?" without calling any tool.
+  On a clarification follow-up, retain the other endpoint and any supplied
+  travel time. After mapping Washington, determine whether the resolved
+  endpoints share a corridor. If they do not, call `plan_toll_route` before any
+  pricing tool. For example, after `Washington to Westpark Drive` followed by
+  `I-66`, plan from `Washington` on `i66_itb` to `Westpark Drive` on `i495`.
+  Never call `i66_route` with `Westpark Drive`.
 - In the oracle, `entry: true` means a location is a valid trip origin and
   `exit: true` means it is a valid trip destination. An exit-only location is
   a valid destination, since entry and exit are independent roles; You MUST NOT reject it for lacking entry access.

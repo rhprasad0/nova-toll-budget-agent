@@ -286,6 +286,12 @@ def _self_check() -> None:
     assert {
         _metadata(case)["alias"] for case in cases if _metadata(case).get("alias")
     } == {alias for alias, labels in _LOCATION_ALIASES.items() if len(labels) > 1}
+    alias_cases = [case for case in cases if _metadata(case).get("alias")]
+    assert all(
+        _metadata(case)["expected_trajectory"][0].get("tool") is None
+        and _metadata(case)["expected_trajectory"][0].get("response_must_be_question")
+        for case in alias_cases
+    )
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
 

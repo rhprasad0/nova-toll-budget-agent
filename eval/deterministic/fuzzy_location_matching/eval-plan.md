@@ -94,7 +94,7 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | :----------------------- | :------------------------------------------------------ |
 | **Language/Version**     | Python 3.13                                              |
 | **Evaluation Framework** | Strands Evals SDK (`strands-agents-evals`) — `Case`, `Experiment`, custom `Evaluator` subclasses |
-| **Evaluators**           | Code-based only: `LocationResolutionEvaluator` (per-turn response + hard-label args) |
+| **Evaluators**           | Code-based: `LocationResolutionEvaluator` for scripted turns and `FuzzyLocationSimulationTraceEvaluator` for simulated telemetry |
 | **Agent Integration**    | Direct import of `agent.toll_agent.build_agent` |
 | **Results Storage**      | JSON files under `eval/results/`; representative valid runs are curated for review |
 
@@ -117,11 +117,13 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | 2026-08-01 18:20 | deterministic_fuzzy_location_matching.py | Completed | One code-based evaluator only — no LLM-judge half exists or is claimed. Requires `AWS_PROFILE=nova-toll` (OpenAI key via SSM) and tailnet RDS access to actually invoke the agent; not run live as part of this session, so results reflect the self-test only, not a real agent trajectory. `--check` self-test covers response requirements, expected/absent tool calls, and exact hard labels against synthetic trajectories with no network calls. Per-turn call extraction walks the response's `metrics.traces` and feeds those messages into `tools_use_extractor.extract_agent_tools_used_from_messages`, because stateful Responses leave `agent.messages` empty. |
 | 2026-08-08 | Issue #88 fixtures | Superseded by #175 | Added Washington clarification plus endpoint-only inference controls. Issue #175 later removed contextual inference, so its deterministic report is no longer curated as current evidence. |
 | 2026-08-12 | Issue #175 fixtures | Completed | Expanded deterministic coverage to all seven current multi-match aliases, made contextual endpoints non-authoritative, retained McLean's fixed time, and kept unique explicit-corridor controls direct. One authorized deterministic run exposed and drove stricter precedence/same-corridor wording; its failed report was discarded and not rerun. One authorized simulated run then produced three populated, premise-faithful trajectories with no first-turn tool calls and was curated with Batch judgments pending. |
+| 2026-08-12 | Objective simulation grading | Completed | Replaced the pending-only verdict with code grading for the exact Washington question, no premature tool execution, exact ordered canonical inputs, retained endpoint/time, and non-error tool executions. An authorized simulated run passed 3/3. Deterministic runs then exposed and drove fixes for Washington precedence/planner ordering, exact-label substring handling, and same-corridor direction filtering. After each run received separate authorization, prompt 1.29.0 passed the complete deterministic suite 14/14; failed and superseded reports were removed. |
 
 ## Track 2: simulated-user conversations
 
-Track 2 uses `ActorSimulator` for open-ended turns and is **not a regression
-gate**: the user and judges are LLMs. `simulation_support.py` keeps simulator
-spans out of the judged session; `simulated/simulated_user_fuzzy_location_matching.py`
-shows the McLean case with pinned Haiku 4.5 judges. See `README.md` for commands and
+Track 2 uses `ActorSimulator` for open-ended turns, so execution is stochastic.
+`simulation_support.py` keeps simulator spans out of the evaluated session;
+`simulated/simulated_user_fuzzy_location_matching.py` code-grades the captured
+TollChat invocations and tool spans while retaining Batch metadata for optional
+qualitative judging. See `README.md` for commands and
 `agent-sops/eval-authoring.sop.md` for the authoring checklist.
