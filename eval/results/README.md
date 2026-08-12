@@ -25,8 +25,7 @@ not curated.
 | [`20260804T153830Z.json`](20260804T153830Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T153901Z.json`](20260804T153901Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T192029Z.json`](20260804T192029Z.json) | Ambiguous McLean location resolved before pricing | Simulated user, goal-success and helpfulness judges | 0.9165 overall; 2/2 judgments passed; 0 execution errors |
-| [`20260808T133347Z.json`](20260808T133347Z.json) | Washington as ambiguous origin/destination plus explicit and endpoint-only corridor controls | Deterministic per-turn response and exact tool-trajectory grading | 1.0000 overall; 8/8 cases passed; no premature or unnecessary clarification |
-| [`20260808T132652Z.json`](20260808T132652Z.json) | Simulated McLean and Washington corridor clarification | Simulated users with report-only Batch judgments pending | 3/3 technically valid executions; observed Washington trajectories selected the intended corridors |
+| [`20260812T185910Z.json`](20260812T185910Z.json) | Multi-match McLean and Washington clarification after issue #175 | Simulated users with report-only Batch judgments pending | 3/3 technically valid executions; every first turn clarified without tools, McLean retained Westpark Drive and 7/15/2026 3:30 PM ET, and Washington follow-ups selected the intended canonical endpoints |
 | [`20260804T192403Z.json`](20260804T192403Z.json) | Four historical I-95 closure conversations | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
 | [`20260804T211001Z.json`](20260804T211001Z.json) | Reciprocal I-66 / Dulles Toll Road trips split at the shared untolled junction | Code-graded live planner trajectory and response wording | 1.0000 overall; 2/2 cases passed; plaza billing preserved |
 | [`20260804T211034Z.json`](20260804T211034Z.json) | Fixed directional access plus Glebe-to-Wiehle cross-corridor recovery | Deterministic trace and response grading | 1.0000 overall; 5/5 cases passed; 0 execution errors |
@@ -90,13 +89,15 @@ The missing-parameter run asked the exact question for all and only the absent
 endpoints, then made one matching `i495_route` call per case after the scripted
 user supplied the missing values. No LLM actor or judge participated.
 
-The Washington deterministic run asked I-66 versus I-395 before every ambiguous
-origin or destination and made no first-turn tool call. Follow-ups preserved
-Westpark Drive and planned with `Washington` on `i66_itb` or `Washington D.C.`
-on `i95`; explicit-corridor and endpoint-only controls proceeded directly. In the simulated run,
-both Washington actors withheld their corridor until asked, then produced the
-same canonical planner inputs. Its placeholder verdicts record pending Batch
-judgment, not completed qualitative scores.
+The issue #175 simulated run made no first-turn tool call for McLean or either
+Washington role. McLean retained Westpark Drive and the requested 7/15/2026
+3:30 PM ET through clarification, then called `i495_route` with the exact Jones
+Branch Drive label and timestamp. Both Washington actors withheld their
+corridor until asked, retained Westpark Drive, and produced the selected
+canonical planner inputs. Its placeholder verdicts record pending Batch
+judgment, not completed qualitative scores. Older fuzzy-location reports were
+removed because their endpoint-inference controls or prompt version were
+superseded by this stricter user-selection contract.
 
 The New York-time run resolved EDT, explicit Pacific, and EST requests to the
 expected instants and preserved the tool-returned timestamps in US format. The

@@ -99,15 +99,26 @@ and location aliases below before calling any tool.
   exact label in the priced location oracle below. Use that exact label in a
   pricing-tool call. If more than one listed label could reasonably mean the
   user's location, ask a concise clarifying question instead of guessing.
-  An exact listed label, matched case-insensitively, is unambiguous; use it
-  without asking the user to confirm it.
-- Bare `Washington` can mean the exact I-66 label `Washington` or the exact
-  I-395 label `Washington D.C.`. If neither an explicit corridor nor the other
-  resolved endpoint uniquely identifies one of those corridors, ask exactly
-  "Do you mean I-66 or I-395?" without calling any tool. On the follow-up,
-  retain the other endpoint and resolve `I-66` to `Washington` on `i66_itb` or
-  `I-395` to `Washington D.C.` on `i95`. If the corridor or the other resolved
-  endpoint already identifies one choice, proceed without this clarification.
+  An exact listed label that is not also a multi-match alias, matched
+  case-insensitively, is unambiguous; use it without asking the user to confirm it.
+- Every alias with multiple canonical matches is ambiguous. You MUST NOT use
+  the other endpoint, requested travel time, or likely route to choose one for
+  the user. Perform this alias check before considering direction, access,
+  route feasibility, or the other endpoint. Multiple matches on the same
+  corridor remain ambiguous. Explicit corridor or interchange wording may
+  filter the alias, but proceed without clarification only when that wording
+  leaves exactly one canonical match. Otherwise ask one concise question that
+  lets the user choose before calling any tool. On the follow-up, retain the
+  other endpoint and any supplied travel time, and use the selected match's
+  exact canonical label.
+- Bare `Washington` is a multi-match alias for the exact I-66 label
+  `Washington` and exact I-395 label `Washington D.C.`. Unless the user
+  explicitly identifies one corridor or interchange, ask exactly "Do you mean
+  I-66 or I-395?" without calling any tool. If the request explicitly says
+  `I-66`, use `Washington` on `i66_itb`. If it explicitly says `I-395`, use
+  `Washington D.C.` on `i95`. In those explicit requests You MUST NOT ask the
+  Washington question. On a clarification follow-up, apply the same mappings
+  while retaining the other endpoint and any supplied travel time.
 - In the oracle, `entry: true` means a location is a valid trip origin and
   `exit: true` means it is a valid trip destination. An exit-only location is
   a valid destination, since entry and exit are independent roles; You MUST NOT reject it for lacking entry access.
@@ -461,8 +472,10 @@ so I cannot provide a combined trip total.
 ## Troubleshooting
 
 ### The user's location doesn't match any oracle label
-Ask a concise clarifying question only if more than one listed label could
-reasonably match; an exact, case-insensitive label match needs no
+Ask a concise clarifying question if more than one listed label could
+reasonably match, including whenever a multi-match alias remains ambiguous
+after applying the user's explicit corridor or interchange wording. An exact,
+case-insensitive label that is not also a multi-match alias needs no
 confirmation (Step 1). If nothing in the oracle matches, say the location is
 outside coverage rather than guessing a nearby road.
 

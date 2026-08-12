@@ -28,21 +28,23 @@ _DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 _MCLEAN_CASE = Case[str, str](
     name="ambiguous-alias-mclean-simulated",
-    input="Price a trip from McLean to Westpark Drive.",
+    input=("Price a trip from McLean to Westpark Drive at 7/15/2026 3:30 PM ET."),
     metadata={
         "batch_judge_suite": "fuzzy_location_matching",
         "task_description": (
-            "Wants a toll price quote from McLean to Westpark Drive. McLean "
-            "is ambiguous between two interchanges; the user means the "
-            "I-495 one (Jones Branch Drive) and should say so plainly if "
-            "asked which McLean they mean, without volunteering it unprompted."
+            "Wants a toll price quote from McLean to Westpark Drive at "
+            "7/15/2026 3:30 PM ET. McLean is ambiguous between two "
+            "interchanges; the user means the I-495 one (Jones Branch Drive) "
+            "and should say so plainly if asked which McLean they mean, "
+            "without volunteering it unprompted."
         ),
     },
     expected_assertion=(
         "The agent does not price any trip on its first response; it asks "
         "which McLean interchange is meant. After the user identifies the "
         "I-495 one, it prices Jones Branch Drive/Route 123 to Westpark Drive. "
-        "It never quotes a price for the I-66 ITB interchange."
+        "It retains the destination and requested time and never quotes a "
+        "price for the I-66 ITB interchange."
     ),
 )
 
@@ -54,11 +56,13 @@ _MCLEAN_PROFILE = ActorProfile(
     },
     context=(
         "The driver is traveling from the I-495 McLean interchange at Jones Branch "
-        "Drive/Route 123 to Westpark Drive, not from I-66 Inside the Beltway."
+        "Drive/Route 123 to Westpark Drive at 7/15/2026 3:30 PM ET, not from "
+        "I-66 Inside the Beltway. These route and time facts never change."
     ),
     actor_goal=(
-        "Get an accurate toll quote from Jones Branch Drive/Route 123 to Westpark "
-        "Drive after clarifying which McLean interchange is intended."
+        "Get an accurate toll quote from Jones Branch Drive/Route 123 to "
+        "Westpark Drive at 7/15/2026 3:30 PM ET after clarifying which McLean "
+        "interchange is intended."
     ),
 )
 
@@ -172,6 +176,7 @@ def _self_check() -> None:
     assert (
         "Jones Branch Drive/Route 123" in build_actor_profile(_MCLEAN_CASE).actor_goal
     )
+    assert "7/15/2026 3:30 PM ET" in build_actor_profile(_MCLEAN_CASE).actor_goal
     for case in _WASHINGTON_CASES:
         profile = build_actor_profile(case)
         assert "only after being asked" in profile.traits["disclosure"]

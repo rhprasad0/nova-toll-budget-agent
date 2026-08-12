@@ -37,7 +37,10 @@ from strands_evals.types.evaluation import (  # noqa: E402
 )
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
-from agent.toll_agent import build_agent  # noqa: E402
+from agent.toll_agent import (  # noqa: E402
+    _LOCATION_ALIASES,  # pyright: ignore[reportPrivateUsage]
+    build_agent,
+)
 
 _CASES_PATH = Path(__file__).resolve().parent / "test-cases.jsonl"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
@@ -270,10 +273,19 @@ def _self_check() -> None:
         "ambiguous-washington-destination-i395-followup",
         "explicit-washington-i66",
         "explicit-washington-i395",
-        "endpoint-context-washington-origin-i66",
-        "endpoint-context-washington-destination-i395",
+        "endpoint-context-washington-origin-still-ambiguous",
+        "endpoint-context-washington-destination-still-ambiguous",
+        "ambiguous-alias-tysons",
+        "ambiguous-alias-arlington",
+        "ambiguous-alias-ballston-same-corridor",
+        "ambiguous-alias-vienna-same-corridor",
+        "ambiguous-alias-herndon-same-corridor",
+        "explicit-corridor-uniquely-selects-mclean",
     ]
     assert cases[1].expected_trajectory == ["i95_access_options", "i95_route"]
+    assert {
+        _metadata(case)["alias"] for case in cases if _metadata(case).get("alias")
+    } == {alias for alias, labels in _LOCATION_ALIASES.items() if len(labels) > 1}
     assert _report_passed([True, True])
     assert not _report_passed([True, False])
 

@@ -1319,14 +1319,21 @@ def test_location_aliases_only_point_to_priced_labels():
     assert "potential tickets" in prompt
 
 
-def test_system_prompt_clarifies_the_ambiguous_washington_corridor():
+def test_system_prompt_always_clarifies_multi_match_aliases():
     prompt = " ".join(build_system_prompt().split())
-    assert "Washington" in prompt
+    assert "Every alias with multiple canonical matches is ambiguous" in prompt
+    assert "Perform this alias check before considering" in prompt
+    assert "MUST NOT use the other endpoint" in prompt
+    assert "Multiple matches on the same corridor remain ambiguous" in prompt
+    assert "retain the other endpoint and any supplied travel time" in prompt
     assert "I-66 or I-395" in prompt
     assert "Washington D.C." in prompt
     assert "without calling any tool" in prompt
-    assert "retain the other endpoint" in prompt
-    assert "corridor or the other resolved endpoint" in prompt
+    assert "Explicit corridor or interchange wording may filter the alias" in prompt
+    assert "only when that wording leaves exactly one" in prompt
+    assert "If the request explicitly says `I-66`, use `Washington`" in prompt
+    assert "If it explicitly says `I-395`, use `Washington D.C.`" in prompt
+    assert "MUST NOT ask the Washington question" in prompt
 
 
 def test_system_prompt_is_an_agent_sop():
@@ -1432,12 +1439,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.27.0"
-    advanced["system_prompt"]["releases"]["1.27.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.28.0"
+    advanced["system_prompt"]["releases"]["1.28.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.26\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.27\.0"):
         validate_manifest_update(previous, advanced)
 
 

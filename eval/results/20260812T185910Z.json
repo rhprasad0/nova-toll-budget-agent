@@ -7,11 +7,11 @@
   ],
   "cases": [
     {
-      "input": "Price a trip from McLean to Westpark Drive.",
-      "actual_output": "Do you mean **Jones Branch Drive/Route 123 on I-495** or **Route 123 - Dolley Madison Blvd on I-66**?\n\n\n## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound**, I-495 Express Lanes: **$1.10**\n  - VDOT observed at: **8/8/2026 9:10 AM ET**\n\n## Calculation\n\n**$1.10 = $1.10**\n\n## Final price\n\n**$1.10**\n",
+      "input": "Price a trip from McLean to Westpark Drive at 7/15/2026 3:30 PM ET.",
+      "actual_output": "Which McLean location do you mean: Route 123 - Dolley Madison Blvd or Jones Branch Drive/Route 123?\n\n\n## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 Southbound on **I-495 Express Lanes**: **$1.10**\n  - VDOT observed at: 7/15/2026 3:20 PM ET\n\n## Calculation\n\n$1.10 = $1.10\n\n## Final price\n\n**$1.10**\n\n\nYes. The **$1.10 toll** was priced for **7/15/2026 3:30 PM ET**. The **3:20 PM ET** timestamp is when VDOT\u2019s data was observed, not the requested travel time.\n",
       "name": "ambiguous-alias-mclean-simulated",
       "expected_output": null,
-      "expected_assertion": "The agent does not price any trip on its first response; it asks which McLean interchange is meant. After the user identifies the I-495 one, it prices Jones Branch Drive/Route 123 to Westpark Drive. It never quotes a price for the I-66 ITB interchange.",
+      "expected_assertion": "The agent does not price any trip on its first response; it asks which McLean interchange is meant. After the user identifies the I-495 one, it prices Jones Branch Drive/Route 123 to Westpark Drive. It retains the destination and requested time and never quotes a price for the I-66 ITB interchange.",
       "expected_trajectory": null,
       "actual_trajectory": {
         "traces": [
@@ -19,12 +19,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-                  "span_id": "3dc957d4e41fbd71",
-                  "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d",
-                  "parent_span_id": "ccb704d1bab6a43c",
-                  "start_time": "2026-08-08T13:25:36.208364Z",
-                  "end_time": "2026-08-08T13:25:38.458774Z"
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "f8b62e2818f66c90",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": "6e8aa10f0850a990",
+                  "start_time": "2026-08-12T18:57:44.643257Z",
+                  "end_time": "2026-08-12T18:57:47.226537Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -34,7 +34,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Price a trip from McLean to Westpark Drive."
+                        "text": "Price a trip from McLean to Westpark Drive at 7/15/2026 3:30 PM ET."
                       }
                     ]
                   },
@@ -43,7 +43,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Do you mean **Jones Branch Drive/Route 123 on I-495** or **Route 123 - Dolley Madison Blvd on I-66**?"
+                        "text": "Which McLean location do you mean: Route 123 - Dolley Madison Blvd or Jones Branch Drive/Route 123?"
                       }
                     ]
                   }
@@ -51,17 +51,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-                  "span_id": "2bdfbd26039298e9",
-                  "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d",
-                  "parent_span_id": "816f6830daf73510",
-                  "start_time": "2026-08-08T13:25:36.205741Z",
-                  "end_time": "2026-08-08T13:25:38.459153Z"
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "6e8aa10f0850a990",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:57:44.642142Z",
+                  "end_time": "2026-08-12T18:57:47.226926Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Price a trip from McLean to Westpark Drive.",
-                "agent_response": "Do you mean **Jones Branch Drive/Route 123 on I-495** or **Route 123 - Dolley Madison Blvd on I-66**?\n",
+                "user_prompt": "Price a trip from McLean to Westpark Drive at 7/15/2026 3:30 PM ET.",
+                "agent_response": "Which McLean location do you mean: Route 123 - Dolley Madison Blvd or Jones Branch Drive/Route 123?\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -103,12 +103,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-                  "span_id": "d34e1e1e63775abd",
-                  "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d",
-                  "parent_span_id": "076a539e40f5201c",
-                  "start_time": "2026-08-08T13:25:45.484692Z",
-                  "end_time": "2026-08-08T13:25:47.457233Z"
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "c8bad3b8e39a61b7",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": "0e95756a2d11f45a",
+                  "start_time": "2026-08-12T18:57:50.743726Z",
+                  "end_time": "2026-08-12T18:57:53.005167Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -118,7 +118,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Jones Branch Drive/Route 123 on I-495, that's where I'm starting from."
+                        "text": "Jones Branch Drive/Route 123. Can you give me the toll quote for that route?"
                       }
                     ]
                   },
@@ -130,9 +130,9 @@
                         "arguments": {
                           "origin": "Jones Branch Drive/Route 123",
                           "destination": "Westpark Drive",
-                          "at_time": ""
+                          "at_time": "2026-07-15T15:30:00-04:00"
                         },
-                        "tool_call_id": "call_PodohAO39qgiToX01hvMzDQR",
+                        "tool_call_id": "call_Dn9MWxpJatIdLu2UIUmIuR1P",
                         "content_type": "tool_use"
                       }
                     ]
@@ -141,12 +141,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-                  "span_id": "7bbe2433d005ad80",
-                  "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d",
-                  "parent_span_id": "076a539e40f5201c",
-                  "start_time": "2026-08-08T13:25:47.457515Z",
-                  "end_time": "2026-08-08T13:25:47.743400Z"
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "589d454c18c871d4",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": "0e95756a2d11f45a",
+                  "start_time": "2026-08-12T18:57:53.005487Z",
+                  "end_time": "2026-08-12T18:57:53.472991Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -155,24 +155,25 @@
                   "arguments": {
                     "origin": "Jones Branch Drive/Route 123",
                     "destination": "Westpark Drive",
-                    "at_time": ""
+                    "at_time": "2026-07-15T15:30:00-04:00"
                   },
-                  "tool_call_id": "call_PodohAO39qgiToX01hvMzDQR"
+                  "tool_call_id": "call_Dn9MWxpJatIdLu2UIUmIuR1P"
                 },
                 "tool_result": {
-                  "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.10\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:25:47.457952-04:00\", \"total_usd\": \"1.10\"}",
+                  "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.10\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-15T15:30:00-04:00\", \"observed_at\": \"2026-07-15T15:20:00-04:00\"}], \"at_time\": \"2026-07-15T15:30:00-04:00\", \"total_usd\": \"1.10\"}",
                   "error": null,
-                  "tool_call_id": "call_PodohAO39qgiToX01hvMzDQR"
-                }
+                  "tool_call_id": "call_Dn9MWxpJatIdLu2UIUmIuR1P"
+                },
+                "agent_span_id": "0e95756a2d11f45a"
               },
               {
                 "span_info": {
-                  "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-                  "span_id": "54669083066a99a9",
-                  "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d",
-                  "parent_span_id": "d187836ea3550d4a",
-                  "start_time": "2026-08-08T13:25:47.745615Z",
-                  "end_time": "2026-08-08T13:25:49.454454Z"
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "b8307786b9e8715e",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": "0e95756a2d11f45a",
+                  "start_time": "2026-08-12T18:57:53.473825Z",
+                  "end_time": "2026-08-12T18:57:57.663280Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -182,7 +183,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Jones Branch Drive/Route 123 on I-495, that's where I'm starting from."
+                        "text": "Jones Branch Drive/Route 123. Can you give me the toll quote for that route?"
                       }
                     ]
                   },
@@ -194,9 +195,9 @@
                         "arguments": {
                           "origin": "Jones Branch Drive/Route 123",
                           "destination": "Westpark Drive",
-                          "at_time": ""
+                          "at_time": "2026-07-15T15:30:00-04:00"
                         },
-                        "tool_call_id": "call_PodohAO39qgiToX01hvMzDQR",
+                        "tool_call_id": "call_Dn9MWxpJatIdLu2UIUmIuR1P",
                         "content_type": "tool_use"
                       }
                     ]
@@ -205,9 +206,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.10\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:25:47.457952-04:00\", \"total_usd\": \"1.10\"}",
+                        "content": "{\"origin\": \"Jones Branch Drive/Route 123\", \"destination\": \"Westpark Drive\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"183SO\", \"label\": \"Jones Branch Drive/Route 123\"}, \"exit\": {\"node_id\": \"185SD\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1060, \"price_usd\": \"1.10\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-07-15T15:30:00-04:00\", \"observed_at\": \"2026-07-15T15:20:00-04:00\"}], \"at_time\": \"2026-07-15T15:30:00-04:00\", \"total_usd\": \"1.10\"}",
                         "error": null,
-                        "tool_call_id": "call_PodohAO39qgiToX01hvMzDQR",
+                        "tool_call_id": "call_Dn9MWxpJatIdLu2UIUmIuR1P",
                         "content_type": "tool_result"
                       }
                     ]
@@ -217,7 +218,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound**, I-495 Express Lanes: **$1.10**\n  - VDOT observed at: **8/8/2026 9:10 AM ET**\n\n## Calculation\n\n**$1.10 = $1.10**\n\n## Final price\n\n**$1.10**"
+                        "text": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 Southbound on **I-495 Express Lanes**: **$1.10**\n  - VDOT observed at: 7/15/2026 3:20 PM ET\n\n## Calculation\n\n$1.10 = $1.10\n\n## Final price\n\n**$1.10**"
                       }
                     ]
                   }
@@ -225,17 +226,101 @@
               },
               {
                 "span_info": {
-                  "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-                  "span_id": "031676fa5440e98e",
-                  "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d",
-                  "parent_span_id": "816f6830daf73510",
-                  "start_time": "2026-08-08T13:25:45.483755Z",
-                  "end_time": "2026-08-08T13:25:49.454783Z"
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "0e95756a2d11f45a",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:57:50.741949Z",
+                  "end_time": "2026-08-12T18:57:57.663623Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "Jones Branch Drive/Route 123 on I-495, that's where I'm starting from.",
-                "agent_response": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 **Southbound**, I-495 Express Lanes: **$1.10**\n  - VDOT observed at: **8/8/2026 9:10 AM ET**\n\n## Calculation\n\n**$1.10 = $1.10**\n\n## Final price\n\n**$1.10**\n",
+                "user_prompt": "Jones Branch Drive/Route 123. Can you give me the toll quote for that route?",
+                "agent_response": "## Route and fares\n\n- Jones Branch Drive/Route 123 \u2192 Westpark Drive \u2014 Southbound on **I-495 Express Lanes**: **$1.10**\n  - VDOT observed at: 7/15/2026 3:20 PM ET\n\n## Calculation\n\n$1.10 = $1.10\n\n## Final price\n\n**$1.10**\n",
+                "available_tools": [
+                  {
+                    "name": "plan_toll_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_access_options",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_junction_leg",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i95_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i495_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "i66_route",
+                    "description": null,
+                    "parameters": null
+                  },
+                  {
+                    "name": "dulles_route",
+                    "description": null,
+                    "parameters": null
+                  }
+                ],
+                "system_prompt": null
+              },
+              {
+                "span_info": {
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "d2ac0179b0fc4658",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": "77359de65dc915bc",
+                  "start_time": "2026-08-12T18:58:05.633840Z",
+                  "end_time": "2026-08-12T18:58:08.407974Z"
+                },
+                "metadata": {},
+                "span_type": "inference",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "The quote shows 3:20 PM but I asked for 3:30 PM\u2014can you confirm the toll is the same at 3:30 PM ET?"
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "content_type": "text",
+                        "text": "Yes. The **$1.10 toll** was priced for **7/15/2026 3:30 PM ET**. The **3:20 PM ET** timestamp is when VDOT\u2019s data was observed, not the requested travel time."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "span_info": {
+                  "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+                  "span_id": "77359de65dc915bc",
+                  "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:58:05.633122Z",
+                  "end_time": "2026-08-12T18:58:08.408288Z"
+                },
+                "metadata": {},
+                "span_type": "invoke_agent",
+                "user_prompt": "The quote shows 3:20 PM but I asked for 3:30 PM\u2014can you confirm the toll is the same at 3:30 PM ET?",
+                "agent_response": "Yes. The **$1.10 toll** was priced for **7/15/2026 3:30 PM ET**. The **3:20 PM ET** timestamp is when VDOT\u2019s data was observed, not the requested travel time.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -276,15 +361,15 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "d3d9d8f997f74b90b744e86d353a9393",
-            "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d"
+            "trace_id": "f9785f7fd371012419eec5e6692ef4b9",
+            "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334"
           }
         ],
-        "session_id": "8ac8c39a-d308-4a34-bc9b-3213c6bf6f5d"
+        "session_id": "3b7e1fa5-094b-41dc-9307-7b808c5f0334"
       },
       "metadata": {
         "batch_judge_suite": "fuzzy_location_matching",
-        "task_description": "Wants a toll price quote from McLean to Westpark Drive. McLean is ambiguous between two interchanges; the user means the I-495 one (Jones Branch Drive) and should say so plainly if asked which McLean they mean, without volunteering it unprompted."
+        "task_description": "Wants a toll price quote from McLean to Westpark Drive at 7/15/2026 3:30 PM ET. McLean is ambiguous between two interchanges; the user means the I-495 one (Jones Branch Drive) and should say so plainly if asked which McLean they mean, without volunteering it unprompted."
       },
       "actual_interactions": null,
       "expected_interactions": null,
@@ -295,7 +380,7 @@
     },
     {
       "input": "Price a trip from Washington to Westpark Drive.",
-      "actual_output": "Do you mean I-66 or I-395?\n\n\n## Route and fares\n\n- **Washington \u2192 I-495 S** \u2014 I-66 Inside-the-Beltway Express Lanes, westbound: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n- **Untolled connector:** I-66/I-495 interchange\n- **Interstate 66 \u2192 Westpark Drive** \u2014 I-495 Express Lanes, northbound: **$2.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n## Calculation\n\n$0.00 + $2.05 = **$2.05**\n\n## Final price\n\n**$2.05**\n",
+      "actual_output": "Do you mean I-66 or I-395?\n\n\n## Route and fares\n\n- Washington \u2192 I-495 S \u2014 **I-66 Inside-the-Beltway Express Lanes**, westbound: **$2.80**\n  - VDOT observed at: 8/12/2026 2:51 PM ET\n- **Untolled connector:** I-66/I-495 interchange\n- Interstate 66 \u2192 Westpark Drive \u2014 **I-495 Express Lanes**, northbound: **$2.60**\n  - VDOT observed at: 8/12/2026 2:40 PM ET\n\n## Calculation\n\n$2.80 + $2.60 = **$5.40**\n\n## Final price\n\n**$5.40**\n",
       "name": "ambiguous-washington-origin-i66-simulated",
       "expected_output": null,
       "expected_assertion": "The agent asks whether Washington means I-66 or I-395 before pricing. After the user selects I-66, it retains Westpark Drive and prices a route beginning at the I-66 endpoint named Washington, without using the I-395 endpoint named Washington D.C.",
@@ -306,12 +391,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "dc227815b1625956",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "2a036df01e2f0b79",
-                  "start_time": "2026-08-08T13:25:56.613250Z",
-                  "end_time": "2026-08-08T13:25:58.334992Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "a5ae32dc2c8d9be3",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "59ebced032948617",
+                  "start_time": "2026-08-12T18:58:17.091553Z",
+                  "end_time": "2026-08-12T18:58:18.430139Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -338,12 +423,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "be9f692b5f8ca702",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "f40e77231449e7b9",
-                  "start_time": "2026-08-08T13:25:56.610956Z",
-                  "end_time": "2026-08-08T13:25:58.335864Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "59ebced032948617",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:58:17.089163Z",
+                  "end_time": "2026-08-12T18:58:18.431028Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
@@ -390,12 +475,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "76cbde0d94a89fd8",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "e0db97052d39e215",
-                  "start_time": "2026-08-08T13:26:02.086465Z",
-                  "end_time": "2026-08-08T13:26:05.578870Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "781047cab25ad74e",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:21.860785Z",
+                  "end_time": "2026-08-12T18:58:24.007071Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -421,7 +506,7 @@
                           "destination": "Westpark Drive",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_use"
                       }
                     ]
@@ -430,12 +515,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "1de290e8e9e50d9b",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "e0db97052d39e215",
-                  "start_time": "2026-08-08T13:26:05.579665Z",
-                  "end_time": "2026-08-08T13:26:05.584300Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "39ea2e365551c745",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:24.007840Z",
+                  "end_time": "2026-08-12T18:58:24.011886Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -448,22 +533,23 @@
                     "destination": "Westpark Drive",
                     "at_time": ""
                   },
-                  "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw"
+                  "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO"
                 },
                 "tool_result": {
-                  "content": "{\"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
+                  "content": "{\"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
                   "error": null,
-                  "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw"
-                }
+                  "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO"
+                },
+                "agent_span_id": "02439eccd5fcd339"
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "9fde37568f003dd9",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "9d7ced3c07e741f3",
-                  "start_time": "2026-08-08T13:26:05.586766Z",
-                  "end_time": "2026-08-08T13:26:07.710310Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "b082d126efc0e237",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:24.014007Z",
+                  "end_time": "2026-08-12T18:58:26.061234Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -489,7 +575,7 @@
                           "destination": "Westpark Drive",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_use"
                       }
                     ]
@@ -498,9 +584,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
+                        "content": "{\"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
                         "error": null,
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_result"
                       }
                     ]
@@ -513,9 +599,9 @@
                         "arguments": {
                           "origin": "Washington",
                           "destination": "5",
-                          "at_time": "2026-08-08T09:26:05.580929-04:00"
+                          "at_time": "2026-08-12T14:58:24.008913-04:00"
                         },
-                        "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz",
+                        "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp",
                         "content_type": "tool_use"
                       }
                     ]
@@ -524,12 +610,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "af429641ea127ae8",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "9d7ced3c07e741f3",
-                  "start_time": "2026-08-08T13:26:07.710579Z",
-                  "end_time": "2026-08-08T13:26:07.997338Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "3e9ed6c3e2956c0f",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:26.061517Z",
+                  "end_time": "2026-08-12T18:58:26.231586Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -538,24 +624,25 @@
                   "arguments": {
                     "origin": "Washington",
                     "destination": "5",
-                    "at_time": "2026-08-08T09:26:05.580929-04:00"
+                    "at_time": "2026-08-12T14:58:24.008913-04:00"
                   },
-                  "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz"
+                  "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp"
                 },
                 "tool_result": {
-                  "content": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-08T09:24:00-04:00\", \"observed_at\": \"2026-08-08T09:19:59-04:00\"}], \"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"total_usd\": \"0.00\"}",
+                  "content": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"2.80\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-12T14:54:00-04:00\", \"observed_at\": \"2026-08-12T14:51:08-04:00\"}], \"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"total_usd\": \"2.80\"}",
                   "error": null,
-                  "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz"
-                }
+                  "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp"
+                },
+                "agent_span_id": "02439eccd5fcd339"
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "67495c02b2c4c1aa",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "0ff8258223850421",
-                  "start_time": "2026-08-08T13:26:08.000035Z",
-                  "end_time": "2026-08-08T13:26:09.459964Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "a3f0ce2b4da8921a",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:26.232498Z",
+                  "end_time": "2026-08-12T18:58:27.788107Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -581,7 +668,7 @@
                           "destination": "Westpark Drive",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_use"
                       }
                     ]
@@ -590,9 +677,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
+                        "content": "{\"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
                         "error": null,
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_result"
                       }
                     ]
@@ -605,9 +692,9 @@
                         "arguments": {
                           "origin": "Washington",
                           "destination": "5",
-                          "at_time": "2026-08-08T09:26:05.580929-04:00"
+                          "at_time": "2026-08-12T14:58:24.008913-04:00"
                         },
-                        "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz",
+                        "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp",
                         "content_type": "tool_use"
                       }
                     ]
@@ -616,9 +703,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-08T09:24:00-04:00\", \"observed_at\": \"2026-08-08T09:19:59-04:00\"}], \"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"total_usd\": \"0.00\"}",
+                        "content": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"2.80\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-12T14:54:00-04:00\", \"observed_at\": \"2026-08-12T14:51:08-04:00\"}], \"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"total_usd\": \"2.80\"}",
                         "error": null,
-                        "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz",
+                        "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp",
                         "content_type": "tool_result"
                       }
                     ]
@@ -631,9 +718,9 @@
                         "arguments": {
                           "origin": "187NO",
                           "destination": "Westpark Drive",
-                          "at_time": "2026-08-08T09:26:05.580929-04:00"
+                          "at_time": "2026-08-12T14:58:24.008913-04:00"
                         },
-                        "tool_call_id": "call_6f3ErCJxwctWg3rHElYQYLiX",
+                        "tool_call_id": "call_lYG4TxpXBBsbWPYFylNM6OKJ",
                         "content_type": "tool_use"
                       }
                     ]
@@ -642,12 +729,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "19862621e1300c4a",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "0ff8258223850421",
-                  "start_time": "2026-08-08T13:26:09.460785Z",
-                  "end_time": "2026-08-08T13:26:09.631971Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "7a23164db7f3f82c",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:27.788417Z",
+                  "end_time": "2026-08-12T18:58:27.947656Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -656,24 +743,25 @@
                   "arguments": {
                     "origin": "187NO",
                     "destination": "Westpark Drive",
-                    "at_time": "2026-08-08T09:26:05.580929-04:00"
+                    "at_time": "2026-08-12T14:58:24.008913-04:00"
                   },
-                  "tool_call_id": "call_6f3ErCJxwctWg3rHElYQYLiX"
+                  "tool_call_id": "call_lYG4TxpXBBsbWPYFylNM6OKJ"
                 },
                 "tool_result": {
-                  "content": "{\"origin\": \"187NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"187NO\", \"label\": \"Interstate 66\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1031, \"price_usd\": \"2.05\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"total_usd\": \"2.05\"}",
+                  "content": "{\"origin\": \"187NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"187NO\", \"label\": \"Interstate 66\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1031, \"price_usd\": \"2.60\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-08-12T14:50:00-04:00\", \"observed_at\": \"2026-08-12T14:40:00-04:00\"}], \"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"total_usd\": \"2.60\"}",
                   "error": null,
-                  "tool_call_id": "call_6f3ErCJxwctWg3rHElYQYLiX"
-                }
+                  "tool_call_id": "call_lYG4TxpXBBsbWPYFylNM6OKJ"
+                },
+                "agent_span_id": "02439eccd5fcd339"
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "da6ad50f83e8ccfb",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "97d4f56507067038",
-                  "start_time": "2026-08-08T13:26:09.634778Z",
-                  "end_time": "2026-08-08T13:26:12.618124Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "288f33dfe3051418",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": "02439eccd5fcd339",
+                  "start_time": "2026-08-12T18:58:27.948664Z",
+                  "end_time": "2026-08-12T18:58:30.542891Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -699,7 +787,7 @@
                           "destination": "Westpark Drive",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_use"
                       }
                     ]
@@ -708,9 +796,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
+                        "content": "{\"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i66_itb\", \"tool\": \"i66_route\", \"origin\": \"Washington\", \"destination\": \"5\"}, {\"kind\": \"connector\", \"transfer_id\": \"i66_to_i495_north\", \"label\": \"I-66/I-495 interchange\", \"price_usd\": \"0.00\"}, {\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"187NO\", \"destination\": \"Westpark Drive\"}]}",
                         "error": null,
-                        "tool_call_id": "call_VSbrXNfNA5ZTmGcNjZCnd2bw",
+                        "tool_call_id": "call_Sq1YE55gpHpP7YIFukVVgVCO",
                         "content_type": "tool_result"
                       }
                     ]
@@ -723,9 +811,9 @@
                         "arguments": {
                           "origin": "Washington",
                           "destination": "5",
-                          "at_time": "2026-08-08T09:26:05.580929-04:00"
+                          "at_time": "2026-08-12T14:58:24.008913-04:00"
                         },
-                        "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz",
+                        "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp",
                         "content_type": "tool_use"
                       }
                     ]
@@ -734,9 +822,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"0.00\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-08T09:24:00-04:00\", \"observed_at\": \"2026-08-08T09:19:59-04:00\"}], \"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"total_usd\": \"0.00\"}",
+                        "content": "{\"origin\": \"Washington\", \"destination\": \"5\", \"direction\": \"WB\", \"entry\": {\"node_id\": \"16\", \"label\": \"Washington\"}, \"exit\": {\"node_id\": \"5\", \"label\": \"I-495 S\"}, \"legs\": [{\"start_zone_id\": 3200, \"end_zone_id\": 3230, \"price_usd\": \"2.80\", \"corridor_name\": \"I-66 WB\", \"priced_as_of\": \"2026-08-12T14:54:00-04:00\", \"observed_at\": \"2026-08-12T14:51:08-04:00\"}], \"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"total_usd\": \"2.80\"}",
                         "error": null,
-                        "tool_call_id": "call_5tdhZXv6DNBs7otvhsSB38Jz",
+                        "tool_call_id": "call_ky3J2GJxLr7MQ3z5akXo1dmp",
                         "content_type": "tool_result"
                       }
                     ]
@@ -749,9 +837,9 @@
                         "arguments": {
                           "origin": "187NO",
                           "destination": "Westpark Drive",
-                          "at_time": "2026-08-08T09:26:05.580929-04:00"
+                          "at_time": "2026-08-12T14:58:24.008913-04:00"
                         },
-                        "tool_call_id": "call_6f3ErCJxwctWg3rHElYQYLiX",
+                        "tool_call_id": "call_lYG4TxpXBBsbWPYFylNM6OKJ",
                         "content_type": "tool_use"
                       }
                     ]
@@ -760,9 +848,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"origin\": \"187NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"187NO\", \"label\": \"Interstate 66\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1031, \"price_usd\": \"2.05\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:26:05.580929-04:00\", \"total_usd\": \"2.05\"}",
+                        "content": "{\"origin\": \"187NO\", \"destination\": \"Westpark Drive\", \"direction\": \"Northbound\", \"entry\": {\"node_id\": \"187NO\", \"label\": \"Interstate 66\"}, \"exit\": {\"node_id\": \"185ND\", \"label\": \"Westpark Drive\"}, \"legs\": [{\"od_pair_id\": 1031, \"price_usd\": \"2.60\", \"corridor_name\": \"I-495-NB\", \"priced_as_of\": \"2026-08-12T14:50:00-04:00\", \"observed_at\": \"2026-08-12T14:40:00-04:00\"}], \"at_time\": \"2026-08-12T14:58:24.008913-04:00\", \"total_usd\": \"2.60\"}",
                         "error": null,
-                        "tool_call_id": "call_6f3ErCJxwctWg3rHElYQYLiX",
+                        "tool_call_id": "call_lYG4TxpXBBsbWPYFylNM6OKJ",
                         "content_type": "tool_result"
                       }
                     ]
@@ -772,7 +860,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "## Route and fares\n\n- **Washington \u2192 I-495 S** \u2014 I-66 Inside-the-Beltway Express Lanes, westbound: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n- **Untolled connector:** I-66/I-495 interchange\n- **Interstate 66 \u2192 Westpark Drive** \u2014 I-495 Express Lanes, northbound: **$2.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n## Calculation\n\n$0.00 + $2.05 = **$2.05**\n\n## Final price\n\n**$2.05**"
+                        "text": "## Route and fares\n\n- Washington \u2192 I-495 S \u2014 **I-66 Inside-the-Beltway Express Lanes**, westbound: **$2.80**\n  - VDOT observed at: 8/12/2026 2:51 PM ET\n- **Untolled connector:** I-66/I-495 interchange\n- Interstate 66 \u2192 Westpark Drive \u2014 **I-495 Express Lanes**, northbound: **$2.60**\n  - VDOT observed at: 8/12/2026 2:40 PM ET\n\n## Calculation\n\n$2.80 + $2.60 = **$5.40**\n\n## Final price\n\n**$5.40**"
                       }
                     ]
                   }
@@ -780,17 +868,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-                  "span_id": "c54332aacc7a1855",
-                  "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6",
-                  "parent_span_id": "f40e77231449e7b9",
-                  "start_time": "2026-08-08T13:26:02.084037Z",
-                  "end_time": "2026-08-08T13:26:12.619138Z"
+                  "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+                  "span_id": "02439eccd5fcd339",
+                  "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:58:21.860069Z",
+                  "end_time": "2026-08-12T18:58:30.543250Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "I-66.",
-                "agent_response": "## Route and fares\n\n- **Washington \u2192 I-495 S** \u2014 I-66 Inside-the-Beltway Express Lanes, westbound: **$0.00**\n  - VDOT observed at: 8/8/2026 9:19 AM ET\n- **Untolled connector:** I-66/I-495 interchange\n- **Interstate 66 \u2192 Westpark Drive** \u2014 I-495 Express Lanes, northbound: **$2.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n\n## Calculation\n\n$0.00 + $2.05 = **$2.05**\n\n## Final price\n\n**$2.05**\n",
+                "agent_response": "## Route and fares\n\n- Washington \u2192 I-495 S \u2014 **I-66 Inside-the-Beltway Express Lanes**, westbound: **$2.80**\n  - VDOT observed at: 8/12/2026 2:51 PM ET\n- **Untolled connector:** I-66/I-495 interchange\n- Interstate 66 \u2192 Westpark Drive \u2014 **I-495 Express Lanes**, northbound: **$2.60**\n  - VDOT observed at: 8/12/2026 2:40 PM ET\n\n## Calculation\n\n$2.80 + $2.60 = **$5.40**\n\n## Final price\n\n**$5.40**\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -831,11 +919,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "c6a6029ba114d3dfcb75131e4598d91e",
-            "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6"
+            "trace_id": "1575576ccf3b9b5eff14bd3eec77f7ca",
+            "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a"
           }
         ],
-        "session_id": "e56f2ce0-3c41-441a-9a2d-9d2ec841d4b6"
+        "session_id": "617390c2-7d13-48e3-b08b-ac80a251725a"
       },
       "metadata": {
         "batch_judge_suite": "fuzzy_location_matching",
@@ -850,7 +938,7 @@
     },
     {
       "input": "Price a trip from Westpark Drive to Washington.",
-      "actual_output": "Do you mean I-66 or I-395?\n\n\n**Known segment prices**\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$6.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n- The I-95/395 junction segment is unavailable. The tool reported: **\u201cWashington D.C. has no southbound 95/395 segment to the junction boundary.\u201d**\n\n**Unpriced junction**\n\nThe planned junction boundary is **I-495 Near Braddock Road**. VDOT does not provide a price for the road between this boundary and the selected 95/395 endpoint.\n\n**Complete price unavailable**\n\nA complete trip price is unavailable because the junction is unpriced.\n\n\nCorrect. I can price the I-495 segment at **$6.05**, but the remaining junction segment to Washington, D.C. is unpriced by the registered tool. Therefore, I can\u2019t provide a complete price for the whole trip.\n",
+      "actual_output": "Do you mean I-66 or I-395?\n\n\n## Known segment prices\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes, southbound:** **$20.50**\n  - VDOT observed at: **8/12/2026 2:40 PM ET**\n- The I-95/395 segment is unavailable. The registered tool reported: **\u201cWashington D.C.\u201d has no southbound 95/395 segment to the junction boundary.**\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between the selected I-95/395 boundary and **I-495 Near Braddock Road**. The junction is not treated as free.\n\n## Calculation\n\n**$20.50 = $20.50**\n\n## Known toll total\n\n**$20.50**\n\nThis total excludes the unpriced junction and the unavailable I-95/395 segment; it is not a complete operator-issued fare.\n\n\nThe registered tools cannot provide a complete end-to-end toll total for this trip. They priced **$20.50** for the southbound I-495 Express Lanes from Westpark Drive to I-495 Near Braddock Road, but returned no price for the remaining I-95/395 portion to Washington, D.C. The junction segment is unpriced, so **$20.50 is only the known toll total\u2014not the complete amount you would pay end-to-end**.\n",
       "name": "ambiguous-washington-destination-i395-simulated",
       "expected_output": null,
       "expected_assertion": "The agent asks whether Washington means I-66 or I-395 before pricing. After the user selects I-395, it retains Westpark Drive and plans to the I-395 endpoint named Washington D.C., without substituting the I-66 endpoint named Washington.",
@@ -861,12 +949,12 @@
             "spans": [
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "e4bb7a67ffdfc862",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "2eb2b1bc748a8fab",
-                  "start_time": "2026-08-08T13:26:19.552592Z",
-                  "end_time": "2026-08-08T13:26:21.912960Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "ad494ea4d2465b01",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "14ab694068ce3546",
+                  "start_time": "2026-08-12T18:58:38.885404Z",
+                  "end_time": "2026-08-12T18:58:40.676942Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -893,12 +981,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "7fb2a5272ad80613",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "1613e3f59b79ce71",
-                  "start_time": "2026-08-08T13:26:19.551868Z",
-                  "end_time": "2026-08-08T13:26:21.913691Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "14ab694068ce3546",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:58:38.884708Z",
+                  "end_time": "2026-08-12T18:58:40.677321Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
@@ -945,12 +1033,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "cb2f1d6eaabc638b",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "d6f6dc0d05aaa7cc",
-                  "start_time": "2026-08-08T13:26:25.237408Z",
-                  "end_time": "2026-08-08T13:26:26.856586Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "e0cf9d359fa1e55e",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:43.816180Z",
+                  "end_time": "2026-08-12T18:58:45.838442Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -976,7 +1064,7 @@
                           "destination": "Washington D.C.",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -985,12 +1073,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "11e67bbddcc30de2",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "d6f6dc0d05aaa7cc",
-                  "start_time": "2026-08-08T13:26:26.857392Z",
-                  "end_time": "2026-08-08T13:26:26.860482Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "6db864fa9827b961",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:45.838749Z",
+                  "end_time": "2026-08-12T18:58:45.839749Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1003,22 +1091,23 @@
                     "destination": "Washington D.C.",
                     "at_time": ""
                   },
-                  "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d"
+                  "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW"
                 },
                 "tool_result": {
-                  "content": "{\"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                  "content": "{\"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
                   "error": null,
-                  "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d"
-                }
+                  "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW"
+                },
+                "agent_span_id": "95965bf5685d67a4"
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "91e64cbbbf65c57c",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "61a572ec62deed7e",
-                  "start_time": "2026-08-08T13:26:26.862870Z",
-                  "end_time": "2026-08-08T13:26:28.626482Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "903d1cd8ad11759a",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:45.840460Z",
+                  "end_time": "2026-08-12T18:58:47.579149Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1044,7 +1133,7 @@
                           "destination": "Washington D.C.",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1053,9 +1142,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "content": "{\"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
                         "error": null,
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1068,9 +1157,9 @@
                         "arguments": {
                           "origin": "Westpark Drive",
                           "destination": "191SD",
-                          "at_time": "2026-08-08T09:26:26.858589-04:00"
+                          "at_time": "2026-08-12T14:58:45.839155-04:00"
                         },
-                        "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha",
+                        "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1079,12 +1168,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "eeb601214f575df6",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "61a572ec62deed7e",
-                  "start_time": "2026-08-08T13:26:28.627292Z",
-                  "end_time": "2026-08-08T13:26:28.808287Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "013d57384a9533a3",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:47.579479Z",
+                  "end_time": "2026-08-12T18:58:47.877374Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1093,24 +1182,25 @@
                   "arguments": {
                     "origin": "Westpark Drive",
                     "destination": "191SD",
-                    "at_time": "2026-08-08T09:26:26.858589-04:00"
+                    "at_time": "2026-08-12T14:58:45.839155-04:00"
                   },
-                  "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha"
+                  "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG"
                 },
                 "tool_result": {
-                  "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"6.05\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"total_usd\": \"6.05\"}",
+                  "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"20.50\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-12T14:50:00-04:00\", \"observed_at\": \"2026-08-12T14:40:00-04:00\"}], \"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"total_usd\": \"20.50\"}",
                   "error": null,
-                  "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha"
-                }
+                  "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG"
+                },
+                "agent_span_id": "95965bf5685d67a4"
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "23ea0ee27f327331",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "6ff6ce6d05173faf",
-                  "start_time": "2026-08-08T13:26:28.810915Z",
-                  "end_time": "2026-08-08T13:26:30.168025Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "a2fe534bbd43c5dd",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:47.879733Z",
+                  "end_time": "2026-08-12T18:58:49.554881Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1136,7 +1226,7 @@
                           "destination": "Washington D.C.",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1145,9 +1235,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "content": "{\"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
                         "error": null,
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1160,9 +1250,9 @@
                         "arguments": {
                           "origin": "Westpark Drive",
                           "destination": "191SD",
-                          "at_time": "2026-08-08T09:26:26.858589-04:00"
+                          "at_time": "2026-08-12T14:58:45.839155-04:00"
                         },
-                        "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha",
+                        "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1171,9 +1261,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"6.05\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"total_usd\": \"6.05\"}",
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"20.50\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-12T14:50:00-04:00\", \"observed_at\": \"2026-08-12T14:40:00-04:00\"}], \"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"total_usd\": \"20.50\"}",
                         "error": null,
-                        "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha",
+                        "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1186,9 +1276,9 @@
                         "arguments": {
                           "location": "Washington D.C.",
                           "movement": "i495_to_i95",
-                          "at_time": "2026-08-08T09:26:26.858589-04:00"
+                          "at_time": "2026-08-12T14:58:45.839155-04:00"
                         },
-                        "tool_call_id": "call_zwyAjX6c7lf1zSkb6FHJtXBK",
+                        "tool_call_id": "call_vFhI8Pd1XOpgNldnHuj2byDL",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1197,12 +1287,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "ee552818322449bb",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "6ff6ce6d05173faf",
-                  "start_time": "2026-08-08T13:26:30.168756Z",
-                  "end_time": "2026-08-08T13:26:30.332753Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "334df383fa0574a4",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:49.555174Z",
+                  "end_time": "2026-08-12T18:58:49.768821Z"
                 },
                 "metadata": {},
                 "span_type": "execute_tool",
@@ -1211,24 +1301,25 @@
                   "arguments": {
                     "location": "Washington D.C.",
                     "movement": "i495_to_i95",
-                    "at_time": "2026-08-08T09:26:26.858589-04:00"
+                    "at_time": "2026-08-12T14:58:45.839155-04:00"
                   },
-                  "tool_call_id": "call_zwyAjX6c7lf1zSkb6FHJtXBK"
+                  "tool_call_id": "call_vFhI8Pd1XOpgNldnHuj2byDL"
                 },
                 "tool_result": {
-                  "content": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"'Washington D.C.' has no southbound 95/395 segment to the junction boundary\"}",
+                  "content": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"'Washington D.C.' has no southbound 95/395 segment to the junction boundary\"}",
                   "error": null,
-                  "tool_call_id": "call_zwyAjX6c7lf1zSkb6FHJtXBK"
-                }
+                  "tool_call_id": "call_vFhI8Pd1XOpgNldnHuj2byDL"
+                },
+                "agent_span_id": "95965bf5685d67a4"
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "abeb2a01e62d3ff8",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "04c3735b128c13e8",
-                  "start_time": "2026-08-08T13:26:30.335598Z",
-                  "end_time": "2026-08-08T13:26:34.539793Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "d5a613281fa48c4a",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "95965bf5685d67a4",
+                  "start_time": "2026-08-12T18:58:49.769721Z",
+                  "end_time": "2026-08-12T18:58:53.420655Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1254,7 +1345,7 @@
                           "destination": "Washington D.C.",
                           "at_time": ""
                         },
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1263,9 +1354,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
+                        "content": "{\"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"steps\": [{\"kind\": \"priced\", \"corridor\": \"i495\", \"tool\": \"i495_route\", \"origin\": \"Westpark Drive\", \"destination\": \"191SD\"}, {\"kind\": \"junction\", \"tool\": \"i95_junction_leg\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"node_id\": \"191SD\"}, \"pricing\": \"unpriced between the selected 95 boundary and Braddock\"}]}",
                         "error": null,
-                        "tool_call_id": "call_SwX9fYng3TALAIfAyY2VgF4d",
+                        "tool_call_id": "call_wAA6xmQf6Yvmefy647MHH4bW",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1278,9 +1369,9 @@
                         "arguments": {
                           "origin": "Westpark Drive",
                           "destination": "191SD",
-                          "at_time": "2026-08-08T09:26:26.858589-04:00"
+                          "at_time": "2026-08-12T14:58:45.839155-04:00"
                         },
-                        "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha",
+                        "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1289,9 +1380,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"6.05\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-08T09:20:00-04:00\", \"observed_at\": \"2026-08-08T09:10:00-04:00\"}], \"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"total_usd\": \"6.05\"}",
+                        "content": "{\"origin\": \"Westpark Drive\", \"destination\": \"191SD\", \"direction\": \"Southbound\", \"entry\": {\"node_id\": \"185SO\", \"label\": \"Westpark Drive\"}, \"exit\": {\"node_id\": \"191SD\", \"label\": \"I-495 Near Braddock Road\"}, \"legs\": [{\"od_pair_id\": 1063, \"price_usd\": \"20.50\", \"corridor_name\": \"I-495-SB\", \"priced_as_of\": \"2026-08-12T14:50:00-04:00\", \"observed_at\": \"2026-08-12T14:40:00-04:00\"}], \"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"total_usd\": \"20.50\"}",
                         "error": null,
-                        "tool_call_id": "call_3mS7HI6FQXv7O6hhRqWtrcha",
+                        "tool_call_id": "call_frYmBulMQttcGRcCJjdT3HRG",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1304,9 +1395,9 @@
                         "arguments": {
                           "location": "Washington D.C.",
                           "movement": "i495_to_i95",
-                          "at_time": "2026-08-08T09:26:26.858589-04:00"
+                          "at_time": "2026-08-12T14:58:45.839155-04:00"
                         },
-                        "tool_call_id": "call_zwyAjX6c7lf1zSkb6FHJtXBK",
+                        "tool_call_id": "call_vFhI8Pd1XOpgNldnHuj2byDL",
                         "content_type": "tool_use"
                       }
                     ]
@@ -1315,9 +1406,9 @@
                     "role": "user",
                     "content": [
                       {
-                        "content": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"at_time\": \"2026-08-08T09:26:26.858589-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"'Washington D.C.' has no southbound 95/395 segment to the junction boundary\"}",
+                        "content": "{\"pricing_status\": \"unavailable\", \"movement\": \"i495_to_i95\", \"location\": \"Washington D.C.\", \"at_time\": \"2026-08-12T14:58:45.839155-04:00\", \"lane_statuses\": {\"Northbound\": \"CLOSED\", \"Southbound\": \"SOUTHBOUND_OPEN\"}, \"i495_boundary\": {\"label\": \"I-495 Near Braddock Road\", \"entry_node_id\": \"191NO\", \"exit_node_id\": \"191SD\"}, \"reason\": \"'Washington D.C.' has no southbound 95/395 segment to the junction boundary\"}",
                         "error": null,
-                        "tool_call_id": "call_zwyAjX6c7lf1zSkb6FHJtXBK",
+                        "tool_call_id": "call_vFhI8Pd1XOpgNldnHuj2byDL",
                         "content_type": "tool_result"
                       }
                     ]
@@ -1327,7 +1418,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "**Known segment prices**\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$6.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n- The I-95/395 junction segment is unavailable. The tool reported: **\u201cWashington D.C. has no southbound 95/395 segment to the junction boundary.\u201d**\n\n**Unpriced junction**\n\nThe planned junction boundary is **I-495 Near Braddock Road**. VDOT does not provide a price for the road between this boundary and the selected 95/395 endpoint.\n\n**Complete price unavailable**\n\nA complete trip price is unavailable because the junction is unpriced."
+                        "text": "## Known segment prices\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes, southbound:** **$20.50**\n  - VDOT observed at: **8/12/2026 2:40 PM ET**\n- The I-95/395 segment is unavailable. The registered tool reported: **\u201cWashington D.C.\u201d has no southbound 95/395 segment to the junction boundary.**\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between the selected I-95/395 boundary and **I-495 Near Braddock Road**. The junction is not treated as free.\n\n## Calculation\n\n**$20.50 = $20.50**\n\n## Known toll total\n\n**$20.50**\n\nThis total excludes the unpriced junction and the unavailable I-95/395 segment; it is not a complete operator-issued fare."
                       }
                     ]
                   }
@@ -1335,17 +1426,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "4d6d1c1c529ed39c",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "1613e3f59b79ce71",
-                  "start_time": "2026-08-08T13:26:25.235132Z",
-                  "end_time": "2026-08-08T13:26:34.540160Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "95965bf5685d67a4",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:58:43.815472Z",
+                  "end_time": "2026-08-12T18:58:53.421052Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
                 "user_prompt": "I-395.",
-                "agent_response": "**Known segment prices**\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes**, southbound: **$6.05**\n  - VDOT observed at: 8/8/2026 9:10 AM ET\n- The I-95/395 junction segment is unavailable. The tool reported: **\u201cWashington D.C. has no southbound 95/395 segment to the junction boundary.\u201d**\n\n**Unpriced junction**\n\nThe planned junction boundary is **I-495 Near Braddock Road**. VDOT does not provide a price for the road between this boundary and the selected 95/395 endpoint.\n\n**Complete price unavailable**\n\nA complete trip price is unavailable because the junction is unpriced.\n",
+                "agent_response": "## Known segment prices\n\n- Westpark Drive \u2192 I-495 Near Braddock Road \u2014 **I-495 Express Lanes, southbound:** **$20.50**\n  - VDOT observed at: **8/12/2026 2:40 PM ET**\n- The I-95/395 segment is unavailable. The registered tool reported: **\u201cWashington D.C.\u201d has no southbound 95/395 segment to the junction boundary.**\n\n## Unpriced junction\n\nVDOT does not provide a price for the road between the selected I-95/395 boundary and **I-495 Near Braddock Road**. The junction is not treated as free.\n\n## Calculation\n\n**$20.50 = $20.50**\n\n## Known toll total\n\n**$20.50**\n\nThis total excludes the unpriced junction and the unavailable I-95/395 segment; it is not a complete operator-issued fare.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -1387,12 +1478,12 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "fa5933336dd06e02",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "6e3263698798a1f8",
-                  "start_time": "2026-08-08T13:26:41.898231Z",
-                  "end_time": "2026-08-08T13:26:43.988471Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "14e698c91b6b8025",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": "547f4fc63daf4662",
+                  "start_time": "2026-08-12T18:59:03.259126Z",
+                  "end_time": "2026-08-12T18:59:06.930366Z"
                 },
                 "metadata": {},
                 "span_type": "inference",
@@ -1402,7 +1493,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "So you can't give me a complete price for the whole trip?"
+                        "text": "The quote is incomplete\u2014you're saying parts of the route aren't priced, but you haven't given me a complete toll total. Can you clarify what I'd actually pay end-to-end?"
                       }
                     ]
                   },
@@ -1411,7 +1502,7 @@
                     "content": [
                       {
                         "content_type": "text",
-                        "text": "Correct. I can price the I-495 segment at **$6.05**, but the remaining junction segment to Washington, D.C. is unpriced by the registered tool. Therefore, I can\u2019t provide a complete price for the whole trip."
+                        "text": "The registered tools cannot provide a complete end-to-end toll total for this trip. They priced **$20.50** for the southbound I-495 Express Lanes from Westpark Drive to I-495 Near Braddock Road, but returned no price for the remaining I-95/395 portion to Washington, D.C. The junction segment is unpriced, so **$20.50 is only the known toll total\u2014not the complete amount you would pay end-to-end**."
                       }
                     ]
                   }
@@ -1419,17 +1510,17 @@
               },
               {
                 "span_info": {
-                  "trace_id": "6a010d98a2162aee6218398f37569385",
-                  "span_id": "af0f2df054e9b7d3",
-                  "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79",
-                  "parent_span_id": "1613e3f59b79ce71",
-                  "start_time": "2026-08-08T13:26:41.896130Z",
-                  "end_time": "2026-08-08T13:26:43.989347Z"
+                  "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+                  "span_id": "547f4fc63daf4662",
+                  "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69",
+                  "parent_span_id": null,
+                  "start_time": "2026-08-12T18:59:03.257071Z",
+                  "end_time": "2026-08-12T18:59:06.931251Z"
                 },
                 "metadata": {},
                 "span_type": "invoke_agent",
-                "user_prompt": "So you can't give me a complete price for the whole trip?",
-                "agent_response": "Correct. I can price the I-495 segment at **$6.05**, but the remaining junction segment to Washington, D.C. is unpriced by the registered tool. Therefore, I can\u2019t provide a complete price for the whole trip.\n",
+                "user_prompt": "The quote is incomplete\u2014you're saying parts of the route aren't priced, but you haven't given me a complete toll total. Can you clarify what I'd actually pay end-to-end?",
+                "agent_response": "The registered tools cannot provide a complete end-to-end toll total for this trip. They priced **$20.50** for the southbound I-495 Express Lanes from Westpark Drive to I-495 Near Braddock Road, but returned no price for the remaining I-95/395 portion to Washington, D.C. The junction segment is unpriced, so **$20.50 is only the known toll total\u2014not the complete amount you would pay end-to-end**.\n",
                 "available_tools": [
                   {
                     "name": "plan_toll_route",
@@ -1470,11 +1561,11 @@
                 "system_prompt": null
               }
             ],
-            "trace_id": "6a010d98a2162aee6218398f37569385",
-            "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79"
+            "trace_id": "05b2eaa98c5021abe6247a9f73e1eb42",
+            "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69"
           }
         ],
-        "session_id": "d65ff242-8d64-43dd-9fa6-4299da261d79"
+        "session_id": "ca82e17b-b5c4-4958-9841-ce0a0c383b69"
       },
       "metadata": {
         "batch_judge_suite": "fuzzy_location_matching",
