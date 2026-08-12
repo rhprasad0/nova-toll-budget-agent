@@ -44,3 +44,15 @@ appear only as excluded `source_value` fields and never enter arithmetic.
 Approval of this exact hash unlocks only Gate 3: rendering and reviewing the
 single-leg Batch JSONL, payload-parity report, and maximum cost. It does not
 authorize upload or inference.
+
+## Gate 3 smoke packet
+
+The offline 1,000-request single-leg packet is ready in `gate3-review.md`.
+No request has been uploaded and no model has been called.
+
+## Gate 4 audit
+
+The completed single-leg run is summarized in `gate4-review.md`: automated
+grading found 1,000/1,000 correct price amounts and 999/1,000 fully grounded
+responses because one answer misstated the evidence timestamp. Manual review of
+the failure and the fixed 100-pass sample is pending.

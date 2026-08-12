@@ -3,8 +3,9 @@
 ## 1. Evaluation Requirements
 
 - **Agent path:** `./agent`, specifically `agent/toll_agent.py`
-- **User requirement:** Measure whether GPT-5.6 Luna invents toll prices, using
-  five separately reviewed 1,000-request Batch strata. Pause for manual fixture
+- **User requirement:** Measure whether GPT-5.6 Luna invents toll prices. Use
+  the completed 1,000-request single-leg pilot, then target 10,000 responses for
+  each remaining separately reviewed Batch stratum. Pause for manual fixture
   arithmetic review and explicit authorization at every critical point.
 - **Evaluation boundary:** Frozen, terminal, tool-disabled synthesis from the
   production system prompt, tool schemas, conversation, and approved tool
@@ -166,7 +167,7 @@ SHA-256 before any Batch file is rendered.
 
 ### Proposed public wording
 
-> **X/5,000 frozen, tool-disabled synthesis responses introduced no unsupported
+> **X/N frozen, tool-disabled synthesis responses introduced no unsupported
 > price; Y/Z required-price responses were complete and correct.**
 
 The linked methodology must display every stratum and the worst stratum, and
@@ -187,13 +188,18 @@ accuracy, freshness, or production traffic.
 | 2026-08-11 | Pilot the single-leg stratum first |
 | 2026-08-11 | Require manual fixture-calculation review and critical pauses |
 | 2026-08-11 | Obtain angry-math-nerd adversarial review |
+| 2026-08-12 | Target 10,000 responses per future stratum after the 1,000-response pilot |
 
 ### Evaluation Progress
 
 | Component | Status | Notes |
 | --- | --- | --- |
 | Research and contract | Approved | Gate 1 approved 2026-08-11 |
-| Fixtures | Awaiting approval | 1,000-row review packet; SHA-256 `dbfb5eeb...d7f97a9a` |
+| Fixtures | Approved | Gate 2 approved 2026-08-11; SHA-256 `dbfb5eeb...d7f97a9a` |
 | Offline validator/tests | Complete | Decimal, typed-evidence, count, and hash checks pass |
-| Live Batch runs | Not authorized | Zero paid runs authorized |
+| Single-leg Batch packet | Approved | Gate 3 packet approved and submitted unchanged |
+| Single-leg Batch run | Complete | 1,000/1,000 provider completions; zero execution errors |
+| Gate 4 automated audit | Complete | 1,000/1,000 correct price amounts; 999/1,000 fully grounded due to one unsupported evidence timestamp |
+| Gate 4 manual audit | Awaiting review | One failure plus fixed 100-pass sample in `gate4-review.md` |
+| Remaining Batch runs | Not authorized | Target 10,000 responses per stratum; expansion design, exact payload, and cost require review before submission |
 | Public claim | Blocked | Requires all evidence and Gate 6 |
