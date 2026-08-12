@@ -89,7 +89,7 @@ def test_multi_leg_expands_repeats_and_shards_under_batch_limit(
     }
 
     requests, report = build_multi_leg_requests(
-        [case], repetitions=2, expected_requests=12
+        [case], repetitions=2, repetition_start=1, expected_requests=12
     )
 
     assert requests[0]["custom_id"] == "multi_leg:i495-dtr-001:v1:r01"
@@ -127,8 +127,10 @@ def test_multi_leg_expands_repeats_and_shards_under_batch_limit(
         [case],
         tmp_path,
         repetitions=2,
+        repetition_start=1,
         expected_requests=12,
         shard_request_limit=6,
+        shard_number_start=1,
     )
     shards = sorted(tmp_path.glob("multi-leg-batch-*.jsonl"))
     assert [len(path.read_text().splitlines()) for path in shards] == [6, 6]
@@ -138,4 +140,6 @@ def test_multi_leg_expands_repeats_and_shards_under_batch_limit(
 
     case.pop("blocked_duplicate")
     with pytest.raises(ValueError, match="lacks reviewed blocked-duplicate evidence"):
-        build_multi_leg_requests([case], repetitions=1, expected_requests=6)
+        build_multi_leg_requests(
+            [case], repetitions=1, repetition_start=1, expected_requests=6
+        )

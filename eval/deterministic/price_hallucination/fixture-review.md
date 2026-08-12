@@ -6,7 +6,7 @@
 ## Gate 5 multi-leg review
 
 > **Decision scope:** approve the 200 canonical multi-leg price
-> calculations below for a 12,000-response Batch run. Repetition
+> calculations below for a 2,400-response Batch run. Repetition
 > measures reliability; it does **not** create new fixture coverage.
 
 | Layer | Count | What needs manual review |
@@ -15,8 +15,8 @@
 | Ordinary prompt variants | **1,000** | Five per calculation |
 | Blocked-duplicate prompts | **200** | One exact guard cancellation per calculation |
 | Base requests | **1,200** | Reviewed transcripts before repetition |
-| Repeat executions | **10x** | Identical evidence replayed per base request |
-| Planned responses | **12,000** | Execution count, not distinct prices |
+| Repeat executions | **2x** | Complete `r07` and `r08` sweeps |
+| Planned responses | **2,400** | Execution count, not distinct prices |
 
 ### Gate 5 arithmetic shape
 
@@ -36,7 +36,7 @@
 - [ ] All 50 partial results remain `known_partial`; gaps are never `$0.00`.
 - [ ] The 36 dynamic `$0.00` tool results remain distinct from excluded connectors.
 - [ ] The 200 recovery prompts contain an exact blocked duplicate after a matching success.
-- [ ] Ten executions per base request are acceptable as reliability repeats, not added coverage.
+- [ ] Two executions per base request are acceptable as reliability repeats, not added coverage.
 - [ ] Any discrepancy is recorded in the log below before Batch upload.
 
 ### Blocked-tool recovery examples

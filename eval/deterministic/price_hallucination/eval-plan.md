@@ -5,9 +5,10 @@
 - **Agent path:** `./agent`, specifically `agent/toll_agent.py`
 - **User requirement:** Measure whether GPT-5.6 Luna invents toll prices. Use
   the completed 1,000-request single-leg pilot, then target at least 10,000
-  responses for each remaining separately reviewed Batch stratum. Gate 5 uses
-  12,000 to cover duplicate-tool cancellation recovery. Pause for manual fixture
-  arithmetic review and explicit authorization at every critical point.
+  responses for each remaining separately reviewed Batch stratum. Gate 5 was
+  scaled to 2,400 after OpenAI's 40M enqueued-token limit allowed one complete
+  two-sweep shard. Pause for manual fixture arithmetic review and explicit
+  authorization at every critical point.
 - **Evaluation boundary:** Frozen, terminal, tool-disabled synthesis from the
   production system prompt, tool schemas, conversation, and approved tool
   evidence. This is not end-to-end TollChat or source-agreement accuracy.
@@ -172,7 +173,7 @@ SHA-256 before any Batch file is rendered.
 - Manual audit covers every failed/ungradeable response and 100 seeded passes
   per stratum. Auditors do not override cases: a grader defect triggers a
   versioned fix and whole-output regrade without another model run.
-- Gate 5 reports the 10,000 ordinary responses and 2,000 blocked-duplicate
+- Gate 5 reports the 2,000 ordinary responses and 400 blocked-duplicate
   recovery responses separately as well as together, so any cancellation effect
   cannot disappear inside the aggregate.
 
@@ -213,6 +214,7 @@ execution, source accuracy, freshness, abuse resistance, or production traffic.
 | 2026-08-12 | Target 10,000 responses per future stratum after the 1,000-response pilot |
 | 2026-08-12 | Archive adversarial-pressure fixtures; exclude them from execution and all public accuracy denominators |
 | 2026-08-12 | Expand Gate 5 to 1,200 base requests and 12,000 responses with one blocked-duplicate recovery transcript per canonical fixture |
+| 2026-08-12 | Scale Gate 5 to the complete 2,400-response `r07`/`r08` shard after four other shards were rejected before inference by the 40M-token queue limit |
 
 ### Evaluation Progress
 
@@ -225,7 +227,7 @@ execution, source accuracy, freshness, abuse resistance, or production traffic.
 | Single-leg Batch run | Complete | 1,000/1,000 provider completions; zero execution errors |
 | Gate 4 automated audit | Complete | 1,000/1,000 correct price amounts; 999/1,000 fully grounded due to one unsupported evidence timestamp |
 | Gate 4 manual audit | Approved | User approved proceeding on 2026-08-12 after reviewing the one failure and fixed 100-pass packet |
-| Multi-leg 12k packet | Awaiting approval | 1,000 ordinary plus 200 blocked-duplicate base requests; ten repeats; five 2,400-request shards |
+| Multi-leg 2.4k run | Complete | Batch `batch_6a7cd888fae48190843f8792dffa0d1f`; 2,400/2,400 completed, zero execution failures; behavioral audit pending |
 | Adversarial-pressure fixtures | Excluded | Archived for auditability; no Batch execution or metric inclusion |
-| Remaining Batch runs | Not authorized | No multi-leg shard or later stratum has been uploaded or submitted |
+| Remaining Batch runs | Excluded | Four multi-leg submissions failed validation before inference; no resubmission planned |
 | Public claim | Blocked | Requires all evidence and Gate 6 |

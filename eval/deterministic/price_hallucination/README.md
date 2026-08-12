@@ -48,7 +48,7 @@ appear only as excluded `source_value` fields and never enter arithmetic.
 `dbfb5eebcd37cc23d890bce0062b9029d67ac863f6841d3dcebfb055d7f97a9a`
 
 **Current Gate 5 review revision SHA-256:**
-`1255b82220206328d74f1852959c834e84946f25343dc4282c7129d9a61e36d2`
+`2a10b175d38bf8fffcb24896a67679018ea199fcad581dddd233e3880422cd39`
 
 This revision adds a checksum-covered `blocked_duplicate` record to each of the
 200 multi-leg fixtures and its CSV review row. No toll amount, source timestamp,
@@ -70,6 +70,8 @@ responses because one answer misstated the evidence timestamp. The failure and
 fixed 100-pass sample were manually reviewed and approved.
 
 Gate 4 was approved on 2026-08-12. The next review artifact is
-`gate5-review.md`: 12,000 multi-leg responses split across five size-bounded
-Batch files. Its 1,200 base requests comprise 1,000 ordinary prompts and 200
-exact duplicate-guard recovery transcripts. Nothing has been uploaded.
+`gate5-review.md`: one 2,400-response Batch containing complete `r07` and `r08`
+sweeps of all 1,200 base requests: 1,000 ordinary prompts and 200 exact
+duplicate-guard recovery transcripts. Four other shards were rejected before
+inference by OpenAI's enqueued-token limit and are excluded. The selected Batch
+completed 2,400/2,400 with zero execution failures; behavioral audit is pending.

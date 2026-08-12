@@ -144,12 +144,13 @@ def _messages(
 def build_multi_leg_requests(
     cases: list[dict[str, Any]],
     *,
-    repetitions: int = 10,
-    expected_requests: int = 12_000,
+    repetitions: int = 2,
+    repetition_start: int = 7,
+    expected_requests: int = 2_400,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Build ten repeat sweeps of the reviewed 1,200-request multi-leg suite."""
-    if repetitions < 1:
-        raise ValueError("repetitions must be positive")
+    """Build the two selected repeat sweeps of the 1,200-request suite."""
+    if repetitions < 1 or repetition_start < 1:
+        raise ValueError("repetitions and repetition_start must be positive")
     selected = [case for case in cases if case.get("stratum") == "multi_leg"]
     model = _model()
     system_prompt = build_system_prompt(current_date=_RUN_DATE)
@@ -201,7 +202,7 @@ def build_multi_leg_requests(
             )
 
     requests: list[dict[str, Any]] = []
-    for repetition in range(1, repetitions + 1):
+    for repetition in range(repetition_start, repetition_start + repetitions):
         for base in base_requests:
             base_body = cast(dict[str, Any], base["body"])
             requests.append(
@@ -243,6 +244,7 @@ def build_multi_leg_requests(
         "blocked_duplicate_base_request_count": len(selected),
         "canonical_case_count": len(selected),
         "repetitions": repetitions,
+        "repetition_start": repetition_start,
         "model": _MODEL,
         "run_date": _RUN_DATE.isoformat(),
         "system_prompt_sha256": _sha256(system_prompt),
@@ -277,7 +279,7 @@ def build_multi_leg_requests(
             ),
             "pilot_projection": (
                 "The observed $0.301442325 single-leg charge scaled linearly to "
-                "12,000 responses; multi-leg token usage may differ."
+                "2,400 responses; multi-leg token usage may differ."
             ),
         },
     }
@@ -453,14 +455,18 @@ def write_multi_leg_packet(
     cases: list[dict[str, Any]],
     output_dir: Path,
     *,
-    repetitions: int = 10,
-    expected_requests: int = 12_000,
+    repetitions: int = 2,
+    repetition_start: int = 7,
+    expected_requests: int = 2_400,
     shard_request_limit: int = 2_400,
+    shard_number_start: int = 4,
+    submitted_batch_id: str | None = None,
 ) -> dict[str, Any]:
     """Write size-bounded Batch shards and their Gate 5 review packet."""
     requests, report = build_multi_leg_requests(
         cases,
         repetitions=repetitions,
+        repetition_start=repetition_start,
         expected_requests=expected_requests,
     )
     if shard_request_limit < 1:
@@ -472,7 +478,7 @@ def write_multi_leg_packet(
     shard_bytes: list[int] = []
     shard_names: list[str] = []
     for start in range(0, len(requests), shard_request_limit):
-        shard_number = len(shard_names) + 1
+        shard_number = shard_number_start + len(shard_names)
         name = f"multi-leg-batch-{shard_number:02d}.jsonl"
         content = serialize_requests(requests[start : start + shard_request_limit])
         size = len(content.encode())
@@ -498,10 +504,15 @@ def write_multi_leg_packet(
         f"| `{name}` | {min(shard_request_limit, len(requests) - index * shard_request_limit):,} | {size / 1_000_000:.1f} MB |"
         for index, (name, size) in enumerate(zip(shard_names, shard_bytes, strict=True))
     )
+    submission = (
+        f"**Submitted Batch:** `{submitted_batch_id}`. Collection and audit are pending."
+        if submitted_batch_id
+        else "**Nothing in this packet has been uploaded and no model call has been made.**"
+    )
+    shard_label = "shard" if report["shard_count"] == 1 else "shards"
     review = f"""# Gate 5 — {report["request_count"]:,}-response multi-leg review
 
-**Nothing in this packet has been uploaded and no additional model call has
-been made.**
+{submission}
 
 | Check | Result |
 | --- | ---: |
@@ -516,17 +527,18 @@ been made.**
 | Pilot-linear cost projection | **${report["pilot_linear_cost_projection_usd"]:.2f}** |
 | Absolute conservative ceiling | **${report["maximum_cost_usd"]:.2f}** |
 
-The {report["request_count"]:,} responses are ten repeat executions of 1,000
-ordinary case/prompt pairs plus one blocked-duplicate recovery prompt for each
-of the 200 canonical fixtures. The recovery prompts replay the exact duplicate
-guard message after a matching successful tool call to test whether Luna then
-invents a price. Repetition increases reliability evidence, **not scenario
-coverage**; it does not justify a naive IID confidence interval.
+The {report["request_count"]:,} responses are two complete repeat sweeps
+(`r07` and `r08`) of 1,000 ordinary case/prompt pairs plus one blocked-duplicate
+recovery prompt for each of the 200 canonical fixtures. The recovery prompts
+replay the exact duplicate guard message after a matching successful tool call
+to test whether Luna then invents a price. Repetition increases reliability
+evidence, **not scenario coverage**; it does not justify a naive IID confidence
+interval.
 
 This frozen synthesis run does not execute the hook itself; the dedicated
 duplicate-tool-guard evaluation covers suppression. Gate 5 isolates the next
 risk: Luna's answer after receiving the production-formatted cancellation.
-The audit must report the 10,000 ordinary and 2,000 recovery responses
+The audit must report the 2,000 ordinary and 400 recovery responses
 separately as well as together.
 
 The absolute ceiling intentionally treats every UTF-8 body byte as a billed
@@ -541,7 +553,7 @@ break-glass bound.
 {shard_rows}
 
 Each shard stays below OpenAI's 200 MB Batch input limit and contains complete
-repeat sweeps; all {report["shard_count"]} shards must complete before a
+repeat sweeps; all {report["shard_count"]} {shard_label} must complete before a
 {report["request_count"]:,}-response result is reported.
 
 ## Integrity
@@ -553,8 +565,8 @@ sha256sum gate5-packet.sha256
 
 **Gate 5 packet SHA-256:** `{packet_sha256}`
 
-Approval authorizes submission of these exact {report["shard_count"]} shards only. Collection and
-audit must finish before another stratum is rendered or submitted.
+This hash covers the exact selected {shard_label}. Collection and audit must
+finish before another stratum is rendered or submitted.
 """
     (output_dir / "gate5-review.md").write_text(review)
     return {

@@ -14,31 +14,24 @@
     "absolute_output_ceiling": "Every response consumes all 2,048 output tokens.",
     "batch_cache_write_input_usd_per_million": "0.125",
     "batch_output_usd_per_million": "0.60",
-    "pilot_projection": "The observed $0.301442325 single-leg charge scaled linearly to 12,000 responses; multi-leg token usage may differ."
+    "pilot_projection": "The observed $0.301442325 single-leg charge scaled linearly to 2,400 responses; multi-leg token usage may differ."
   },
-  "maximum_cost_usd": 114.428789,
-  "maximum_output_tokens": 24576000,
+  "maximum_cost_usd": 22.885758,
+  "maximum_output_tokens": 4915200,
   "model": "gpt-5.6-luna",
   "ordinary_base_request_count": 1000,
-  "pilot_linear_cost_projection_usd": 3.617308,
-  "repetitions": 10,
-  "request_body_utf8_byte_token_ceiling": 797465510,
-  "request_count": 12000,
+  "pilot_linear_cost_projection_usd": 0.723462,
+  "repetition_start": 7,
+  "repetitions": 2,
+  "request_body_utf8_byte_token_ceiling": 159493102,
+  "request_count": 2400,
   "run_date": "2026-08-11",
   "shard_bytes": [
-    159721702,
-    159721702,
-    159721702,
-    159721702,
     159721702
   ],
-  "shard_count": 5,
+  "shard_count": 1,
   "shard_names": [
-    "multi-leg-batch-01.jsonl",
-    "multi-leg-batch-02.jsonl",
-    "multi-leg-batch-03.jsonl",
-    "multi-leg-batch-04.jsonl",
-    "multi-leg-batch-05.jsonl"
+    "multi-leg-batch-04.jsonl"
   ],
   "shard_request_limit": 2400,
   "system_prompt_sha256": "dc45eda217e269db300355df2e719beee335eaea88cbd30651048c084434f7f7",

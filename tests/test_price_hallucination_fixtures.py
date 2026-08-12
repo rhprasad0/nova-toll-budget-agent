@@ -95,7 +95,7 @@ def test_review_packet_validates_money_and_is_reproducible(tmp_path: Path) -> No
     review = (tmp_path / "fixture-review.md").read_text()
     fixture = json.loads((tmp_path / "test-cases.jsonl").read_text())
     assert "## Gate 5 multi-leg review" in review
-    assert "| Planned responses | **60**" in review
+    assert "| Planned responses | **12**" in review
     assert "| Blocked-duplicate prompts | **1**" in review
     assert "### Blocked-tool recovery examples" in review
     assert fixture["blocked_duplicate"] == {
