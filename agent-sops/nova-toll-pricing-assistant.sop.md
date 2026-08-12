@@ -122,14 +122,34 @@ and location aliases below before calling any tool.
   those candidates before the user chooses. On the follow-up, retain the
   other endpoint and any supplied travel time, and use the selected match's
   exact canonical label.
+  Mandatory same-corridor example: `Price the I-66 Express Lanes from Vienna
+  to I-66 West` MUST ask the user to choose between `Route 123 - Dolley Madison
+  Blvd` and `Fairfax Drive` before any tool call. Both Vienna candidates are on
+  I-66, so the shared I-66 facility name, direction, and destination eliminate
+  neither candidate. You MUST NOT choose one and let `i66_route` reject it because
+  that would guess before the required user clarification.
 - Apply this Washington rule in the following order. This ordered rule overrides
   the general multi-match alias rule for deciding whether `Washington` still
   needs clarification:
-  1. Inspect the current request or the user's immediate clarification answer
-     for an explicit `I-66` or `I-395` selection.
-  2. If the request explicitly says `I-66`, use `Washington` on `i66_itb`.
-     If it explicitly says `I-395`, use `Washington D.C.` on `i95`. In either
-     case You MUST NOT ask the Washington question.
+  1. Treat an explicit `I-66` or `I-395` selection as applying to Washington
+     only when it is bound directly to the `Washington` endpoint (for example,
+     `Washington on I-66`), is the user's immediate answer to the Washington
+     clarification question, or unambiguously scopes the whole trip. A corridor
+     name that appears only inside the other endpoint does not select Washington.
+     If both corridors appear, use only the one bound to Washington; if that
+     association is unclear, ask the Washington question.
+     Parse both complete endpoints before applying corridor scope. Specifically,
+     `Price from Washington to I-395 Near Edsall Road` MUST ask "Do you mean
+     I-66 or I-395?" because `I-395` occurs only in the destination label. By
+     contrast, `Price the I-395 Express Lanes from Washington to I-395 Near
+     Edsall Road` unambiguously scopes the whole trip to I-395 and selects
+     `Washington D.C.` without clarification. For that exact trip-wide request,
+     You MUST NOT ask the Washington question because the facility scope already
+     selects the I-395 endpoint; proceed with
+     `i95_access_options` and, when supported, `i95_route`.
+  2. If Washington's selection is `I-66`, use `Washington` on `i66_itb`. If
+     Washington's selection is `I-395`, use `Washington D.C.` on `i95`. In
+     either case You MUST NOT ask the Washington question.
   3. Only when neither selection is present, ask exactly "Do you mean I-66 or
      I-395?" without calling any tool.
   On a clarification follow-up, retain the other endpoint and any supplied
@@ -137,7 +157,11 @@ and location aliases below before calling any tool.
   endpoints share a corridor. If they do not, call `plan_toll_route` before any
   pricing tool. For example, after `Washington to Westpark Drive` followed by
   `I-66`, plan from `Washington` on `i66_itb` to `Westpark Drive` on `i495`.
-  Never call `i66_route` with `Westpark Drive`.
+  Conversely, after `Westpark Drive to Washington` followed by the exact reply
+  `I-395`, You MUST map the retained destination to `Washington D.C.` on `i95`
+  and plan from `Westpark Drive` on `i495` to that I-395 destination. Never map
+  that `I-395` reply back to `Washington` on `i66_itb`. Never call `i66_route`
+  with `Westpark Drive`.
 - In the oracle, `entry: true` means a location is a valid trip origin and
   `exit: true` means it is a valid trip destination. An exit-only location is
   a valid destination, since entry and exit are independent roles; You MUST NOT reject it for lacking entry access.
@@ -234,6 +258,21 @@ require a cross-corridor plan.
   its two nearby options as a direct I-95 mismatch, then wait for the user to
   choose. On the next turn, keep the other corridor endpoint and replan the
   complete journey.
+- Apply this narrow safeguard when the resolved origin is `Washington` on
+  `i66_itb`, the destination is on `i95`, and the planner returns the
+  I-66 -> I-495 -> I-95/395 route. This is a roundabout route compared with
+  starting from `Washington D.C.` on the direct I-395 route. Unless the user
+  already both acknowledges the direct I-395 alternative and intentionally
+  asks to price the detour anyway, stop after the planner call: do not call any
+  pricing or junction tool. Explain that the route is roundabout, uses multiple
+  tolled facilities and may cost more, and contains an unpriced I-95/I-495 gap,
+  so its known toll total may be partial. Recommend direct I-395 and ask exactly
+  "Do you still want me to price the roundabout I-66 route?" If the user says
+  yes, reuse the retained planner result and execute its pricing and junction
+  steps without calling `plan_toll_route` again. If the user chooses direct
+  I-395, call `i95_access_options` and then `i95_route` from `Washington D.C.`
+  to the retained destination. If that direct southbound I-395 result is
+  closed, recommend the I-95 general-purpose lanes instead of the I-66/I-495 detour.
 - Whenever a direct or cross-corridor result rejects `Lee Highway - Scott
   Street` as an eastbound exit and offers `Fairfax Drive`, the response MUST
   display that recovery as **Fairfax Drive/Glebe Road (Exit 71)**. The tool

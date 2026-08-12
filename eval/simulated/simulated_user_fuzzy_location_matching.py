@@ -269,11 +269,19 @@ class FuzzyLocationSimulationTraceEvaluator(Evaluator[str, str]):
                 "tool inputs changed the selected location, endpoint, or time",
                 "input_mismatch",
             )
-        if any(
-            span.tool_result.error or not span.tool_result.content
-            for span in tool_spans
-        ):
-            return _result(False, "a required tool did not succeed", "tool_error")
+        for span in tool_spans:
+            if span.tool_result.error or not span.tool_result.content:
+                return _result(False, "a required tool did not succeed", "tool_error")
+            try:
+                decoded: object = json.loads(span.tool_result.content)
+            except json.JSONDecodeError:
+                return _result(False, "a tool returned invalid JSON", "tool_error")
+            if not isinstance(decoded, dict) or cast(dict[str, Any], decoded).get(
+                "error"
+            ):
+                return _result(
+                    False, "a tool returned an application error", "tool_error"
+                )
         return _result(
             True,
             "clarification preceded the exact non-error canonical route calls",
@@ -375,6 +383,7 @@ def _self_check() -> None:
         *,
         agent_span_id: str = "second",
         origin: str = "Jones Branch Drive/Route 123",
+        tool_content: str = '{"total_usd":"1.10"}',
         first_response: str = (
             "Which McLean location: Route 123 - Dolley Madison Blvd or "
             "Jones Branch Drive/Route 123?"
@@ -406,9 +415,7 @@ def _self_check() -> None:
                                 name=expected_call["name"],
                                 arguments={**expected_call["input"], "origin": origin},
                             ),
-                            tool_result=ToolResult(
-                                content=json.dumps({"total_usd": "1.10"})
-                            ),
+                            tool_result=ToolResult(content=tool_content),
                         ),
                     ],
                 )
@@ -429,6 +436,11 @@ def _self_check() -> None:
         )[0]
 
     assert evaluate(session()).label == "clarified_route"
+    assert (
+        evaluate(session(tool_content='{"error":"database unavailable"}')).label
+        == "tool_error"
+    )
+    assert evaluate(session(tool_content="not JSON")).label == "tool_error"
     assert evaluate(session(agent_span_id="first")).label == "premature_tool_call"
     assert (
         evaluate(session(origin="Route 123 - Dolley Madison Blvd")).label

@@ -3,7 +3,7 @@
 ## 1. Evaluation Requirements
 
 - **User Input:** `"we want to see if the agent is able to do fuzzy location matching. If it is unsure of an origin or destination, it needs to spend turns clarifying until it has hard labels that it can use with its tools"`
-- **Interpreted Evaluation Requirements:** Verify Step 1 ("Resolve locations") end to end, including issue #175: every multi-match alias must ask before tools even when the other endpoint suggests a route, retain the other endpoint and optional time, and use the selected canonical label. Explicit wording proceeds only when one candidate remains; exact case-insensitive labels remain direct.
+- **Interpreted Evaluation Requirements:** Verify Step 1 ("Resolve locations") end to end, including issue #175: every multi-match alias must ask before tools even when the other endpoint suggests a route, retain the other endpoint and optional time, and use the selected canonical label. Corridor wording must bind to the Washington endpoint rather than merely occur elsewhere. For the roundabout Washington-on-I-66 route to I-395, require informed confirmation before pricing, support switching to direct I-395, and recommend general-purpose lanes if that direct Express Lanes trip is closed.
 
 ---
 
@@ -39,7 +39,8 @@ flowchart LR
 **Available Tools:**
 
 - **`i95_route`, `i495_route`:** Same-corridor pricing — the tools under test here (both scenarios below stay single-corridor to isolate location resolution from route planning).
-- **`i66_route`, `dulles_route`, `i95_junction_leg`, `plan_toll_route`:** Available to the agent but out of scope; a failure mode to watch for is any of these firing where a resolution question was expected instead.
+- **`i66_route`, `i95_junction_leg`, `plan_toll_route`:** Used by the Washington roundabout safeguards to verify planner-only warning, retained-plan execution, and informed same-turn pricing.
+- **`dulles_route`:** Available to the agent but not exercised by these cases.
 
 **Observability Status**
 
@@ -53,7 +54,7 @@ flowchart LR
 ### Location Resolution Trajectory
 
 - **Evaluation Area:** Tool calling accuracy + interaction quality (premature/absent clarification)
-- **Description:** For every turn in a case's conversation, the agent's actual response and tool trajectory must match what the SOP's fuzzy-matching rule requires: an ambiguous turn must ask a relevant question and make no pricing call, while a resolvable turn must call exactly the expected tool with the expected origin/destination — the exact case-correct oracle label, not the user's raw wording. The argument check is a subset match on the case's `input` keys (origin/destination), not full dict equality, so an unpinned optional argument (e.g. `i495_route`'s `at_time`) can't produce a false `label_mismatch` for a case that never specified a time.
+- **Description:** For every turn, the response and tool trajectory must match the SOP: ambiguous aliases ask before tools; resolved routes use exact canonical labels; the roundabout route plans before warning and prices only after informed confirmation; switching to direct I-395 never returns to the detour. Tool results must be nonempty JSON objects without transport or unexpected application errors. The direct switch requires a `supported` southbound access result. A fixture-declared `CLOSED` direct-I-395 result is accepted only when the response recommends I-95 general-purpose lanes and omits I-66/I-495.
 - **Method:** Code-based (per-turn response requirements plus expected tool name and exact arguments)
 
 ## 4. Test Data Generation
@@ -61,7 +62,8 @@ flowchart LR
 - **Ambiguous alias, multi-turn convergence**: `"McLean"` maps to two oracle labels on two different corridors. Turn 1 must clarify despite the Westpark endpoint; turn 2 must call `i495_route` with the exact selected label, retained destination, and retained historical time.
 - **Unambiguous case-insensitive match, single turn**: `"pentagon/eads street"` → `"i-95 near dumfries road/route 234"` (lowercased, verified as a direct oracle pair in this direction) is an exact label modulo case — the SOP says this needs no confirmation. Turn 1 must call `i95_route` immediately with the correctly-cased labels, no clarifying question.
 - **Alias completeness and controls**: First-turn checks cover all seven current multi-match aliases, including same-corridor Ballston, Vienna, and Herndon ambiguity. Washington endpoint-only context now clarifies; explicit Washington and uniquely filtered McLean cases proceed directly.
-- **Total number of test cases**: 14
+- **Washington route-safety controls**: Endpoint-bound I-66 plans and warns before pricing; confirmation reuses the plan; switching uses direct I-395; a corridor appearing only in the destination does not bind Washington; an initially informed detour request may proceed in one turn.
+- **Total number of test cases**: 18 (23 conversation turns)
 
 ---
 
@@ -118,6 +120,7 @@ No new `requirements.txt` needed — `strands-agents-evals` is already a `pyproj
 | 2026-08-08 | Issue #88 fixtures | Superseded by #175 | Added Washington clarification plus endpoint-only inference controls. Issue #175 later removed contextual inference, so its deterministic report is no longer curated as current evidence. |
 | 2026-08-12 | Issue #175 fixtures | Completed | Expanded deterministic coverage to all seven current multi-match aliases, made contextual endpoints non-authoritative, retained McLean's fixed time, and kept unique explicit-corridor controls direct. One authorized deterministic run exposed and drove stricter precedence/same-corridor wording; its failed report was discarded and not rerun. One authorized simulated run then produced three populated, premise-faithful trajectories with no first-turn tool calls and was curated with Batch judgments pending. |
 | 2026-08-12 | Objective simulation grading | Completed | Replaced the pending-only verdict with code grading for the exact Washington question, no premature tool execution, exact ordered canonical inputs, retained endpoint/time, and non-error tool executions. An authorized simulated run passed 3/3. Deterministic runs then exposed and drove fixes for Washington precedence/planner ordering, exact-label substring handling, and same-corridor direction filtering. After each run received separate authorization, prompt 1.29.0 passed the complete deterministic suite 14/14; failed and superseded reports were removed. |
+| 2026-08-12 | PR feedback and route-safety expansion | Completed | Expanded to 18 cases for endpoint-bound corridor scope and the informed roundabout gate. Both fuzzy evaluators parse serialized tool results and reject unexpected application errors; direct I-395 `CLOSED` is narrowly accepted only with the general-purpose-lane fallback. After prompt and cumulative-trajectory fixes, one technically valid live run passed 18/18 cases across 23 turns; failed and superseded runs were removed. |
 
 ## Track 2: simulated-user conversations
 

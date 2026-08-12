@@ -7,6 +7,12 @@ label, resolve an unambiguous case-insensitive match without asking, and honor
 explicit wording only when it leaves one candidate. See `eval-plan.md` for the
 full plan and `test-cases.jsonl` for the cases.
 
+The Washington controls also require endpoint-bound corridor wording, an
+informed confirmation before pricing the roundabout I-66/I-495/I-395 route,
+retained-plan execution after confirmation, and a direct-I-395 switch. If the
+direct Express Lanes are closed, the response must recommend the unpriced I-95
+general-purpose lanes instead of returning to the detour.
+
 ## Self-check (no network)
 
 ```bash
@@ -47,7 +53,9 @@ Washington-destination scenarios built on it. Unlike Track 1's code-based
 script, the simulated user is an LLM, so conversations vary run to run. A
 code-based trace evaluator still requires the first-turn question, no premature
 tool, the exact ordered canonical calls, retained endpoints/time, and non-error
-tool executions. Batch metadata remains available for later qualitative judging.
+tool executions. Both trace graders parse serialized result JSON and reject
+application-level errors rather than treating nonempty content as success.
+Batch metadata remains available for later qualitative judging.
 See `eval-plan.md`'s "Track 2" section for the full design.
 
 ```bash

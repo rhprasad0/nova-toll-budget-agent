@@ -6,6 +6,7 @@ not curated.
 
 | Report | Scenario | Type | Result |
 | :-- | :-- | :-- | :-- |
+| [`20260812T205245Z.json`](20260812T205245Z.json) | Issue #175 alias clarification plus endpoint-scoped Washington and informed roundabout-route handling | Code-graded live trajectories | 1.0000; 18/18 cases and 23/23 turns passed; the detour warned before pricing, confirmation reused the plan, switching used supported southbound direct I-395, and application errors were rejected |
 | [`20260812T191012Z.json`](20260812T191012Z.json) | Exact duplicate suppression on Dumfries/Pentagon I-95-to-I-495 routes plus changed-origin recovery from Joplin to Dumfries | Live deterministic tool-attempt and result grading | 1.0000; 3/3 cases passed; one duplicate planner attempt was cancelled after its matching success, all downstream tools completed, and the changed planner signature remained allowed |
 | [`20260812T190511Z.json`](20260812T190511Z.json) | Three simulated I-95 one-way alternative selections, including cross-corridor replanning from Joplin to Dumfries | Live simulated user with duplicate-aware deterministic trace grading | 1.0000; 3/3 cases passed; changed inputs were allowed, every recovery tool completed, no duplicate attempt occurred, and no execution errors were recorded |
 | [`20260809T214710Z-private-load-baseline.json`](20260809T214710Z-private-load-baseline.json) | Five concurrent private users making 15 canonical requests while both toll feeds ingest | Metadata-only deployed load and ingestion baseline | Passed; all requests and feed loads succeeded with zero errors or throttles, 15.47-second client p99, 15.19-second proxy p99, six active sessions, 5.43% peak RDS CPU, and 83.16 MiB minimum free memory |
@@ -25,7 +26,6 @@ not curated.
 | [`20260804T153830Z.json`](20260804T153830Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T153901Z.json`](20260804T153901Z.json) | I-95/395 one-way destination, origin, and supported-control access checks | Deterministic trace and response grading | 1.0000 overall; 3/3 cases passed; 0 execution errors |
 | [`20260804T192029Z.json`](20260804T192029Z.json) | Ambiguous McLean location resolved before pricing | Simulated user, goal-success and helpfulness judges | 0.9165 overall; 2/2 judgments passed; 0 execution errors |
-| [`20260812T193949Z.json`](20260812T193949Z.json) | Issue #175 multi-match location clarification and direct-resolution controls | Code-graded live trajectories | 1.0000; 14/14 cases passed, every multi-match alias clarified before tools, and explicit/exact controls proceeded with canonical inputs |
 | [`20260804T192403Z.json`](20260804T192403Z.json) | Four historical I-95 closure conversations | Deterministic trace grading plus goal-success and helpfulness judges | 0.9167 overall; 12/12 judgments passed; 0 execution errors |
 | [`20260804T211001Z.json`](20260804T211001Z.json) | Reciprocal I-66 / Dulles Toll Road trips split at the shared untolled junction | Code-graded live planner trajectory and response wording | 1.0000 overall; 2/2 cases passed; plaza billing preserved |
 | [`20260804T211034Z.json`](20260804T211034Z.json) | Fixed directional access plus Glebe-to-Wiehle cross-corridor recovery | Deterministic trace and response grading | 1.0000 overall; 5/5 cases passed; 0 execution errors |
@@ -89,13 +89,15 @@ The missing-parameter run asked the exact question for all and only the absent
 endpoints, then made one matching `i495_route` call per case after the scripted
 user supplied the missing values. No LLM actor or judge participated.
 
-The issue #175 deterministic run asked before tools for all seven current
-multi-match aliases, including same-corridor Ballston, Vienna, and Herndon.
-Bare Washington clarified as either endpoint even when the other endpoint
-suggested a corridor; explicit I-66/I-395 requests proceeded directly, and
-exact `Washington D.C.` was not reinterpreted as the bare alias. McLean retained
-Westpark Drive and 7/15/2026 3:30 PM ET through clarification, while its explicit
-I-495 control used the same canonical inputs without an extra question.
+The expanded issue #175 run asked before tools for every multi-match alias and
+kept corridor wording bound to the Washington endpoint. The roundabout
+Washington-on-I-66 cases called only the planner before warning; confirmation
+then executed the retained I-66, I-495, and junction steps without replanning,
+while switching used supported southbound direct I-395 access and pricing. A
+user who explicitly acknowledged the direct alternative could intentionally
+price the detour in one turn. The direct lanes were open in this observed run;
+the evaluator's offline `CLOSED` branch requires the exact I-95 general-purpose
+lanes fallback and forbids I-66/I-495 fallback wording.
 
 The New York-time run resolved EDT, explicit Pacific, and EST requests to the
 expected instants and preserved the tool-returned timestamps in US format. The
