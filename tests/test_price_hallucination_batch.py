@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from eval.deterministic.price_hallucination.batch import (
+    DUPLICATE_TOOL_MESSAGE,
     build_multi_leg_requests,
     build_single_leg_requests,
     write_gate3_packet,
@@ -80,13 +81,19 @@ def test_multi_leg_expands_repeats_and_shards_under_batch_limit(
             "result": {"total_usd": "2.00"},
         }
     )
+    case["blocked_duplicate"] = {
+        "tool": "i95_route",
+        "input": {"origin": "A", "destination": "B"},
+        "status": "error",
+        "message": DUPLICATE_TOOL_MESSAGE,
+    }
 
     requests, report = build_multi_leg_requests(
-        [case], repetitions=2, expected_requests=10
+        [case], repetitions=2, expected_requests=12
     )
 
     assert requests[0]["custom_id"] == "multi_leg:i495-dtr-001:v1:r01"
-    assert requests[-1]["custom_id"] == "multi_leg:i495-dtr-001:v5:r02"
+    assert requests[-1]["custom_id"] == ("multi_leg:i495-dtr-001:blocked-duplicate:r02")
     assert [item.get("type") for item in requests[0]["body"]["input"]] == [
         "message",
         None,
@@ -96,17 +103,39 @@ def test_multi_leg_expands_repeats_and_shards_under_batch_limit(
         "function_call_output",
     ]
     assert report["repetitions"] == 2
+    assert report["blocked_duplicate_base_request_count"] == 1
     assert report["unapproved_payload_differences"] == 0
+
+    blocked = requests[5]
+    blocked_calls = [
+        item for item in blocked["body"]["input"] if item.get("type") == "function_call"
+    ]
+    blocked_outputs = [
+        item
+        for item in blocked["body"]["input"]
+        if item.get("type") == "function_call_output"
+    ]
+    assert blocked_calls[0]["name"] == blocked_calls[-1]["name"] == "i95_route"
+    assert blocked_calls[0]["arguments"] == blocked_calls[-1]["arguments"]
+    assert blocked_outputs[0]["call_id"] == blocked_calls[0]["call_id"]
+    assert blocked_outputs[-1]["output"] == DUPLICATE_TOOL_MESSAGE
+    assert blocked["body"]["input"].index(blocked_outputs[0]) < blocked["body"][
+        "input"
+    ].index(blocked_calls[-1])
 
     packet = write_multi_leg_packet(
         [case],
         tmp_path,
         repetitions=2,
-        expected_requests=10,
-        shard_request_limit=5,
+        expected_requests=12,
+        shard_request_limit=6,
     )
     shards = sorted(tmp_path.glob("multi-leg-batch-*.jsonl"))
-    assert [len(path.read_text().splitlines()) for path in shards] == [5, 5]
+    assert [len(path.read_text().splitlines()) for path in shards] == [6, 6]
     assert packet["shard_count"] == 2
     assert packet["sha256"] in (tmp_path / "gate5-review.md").read_text()
     assert all(size < 200_000_000 for size in packet["shard_bytes"])
+
+    case.pop("blocked_duplicate")
+    with pytest.raises(ValueError, match="lacks reviewed blocked-duplicate evidence"):
+        build_multi_leg_requests([case], repetitions=1, expected_requests=6)

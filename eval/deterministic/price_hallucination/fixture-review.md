@@ -6,15 +6,17 @@
 ## Gate 5 multi-leg review
 
 > **Decision scope:** approve the 200 canonical multi-leg price
-> calculations below for a 10,000-response Batch run. Repetition
+> calculations below for a 12,000-response Batch run. Repetition
 > measures reliability; it does **not** create new fixture coverage.
 
 | Layer | Count | What needs manual review |
 | --- | ---: | --- |
 | Canonical calculations | **200** | Price components, exclusions, and total type |
-| Frozen prompt variants | **1,000** | Wording only; five per calculation |
-| Repeat executions | **10x** | Identical evidence replayed per variant |
-| Planned responses | **10,000** | Execution count, not 10,000 distinct prices |
+| Ordinary prompt variants | **1,000** | Five per calculation |
+| Blocked-duplicate prompts | **200** | One exact guard cancellation per calculation |
+| Base requests | **1,200** | Reviewed transcripts before repetition |
+| Repeat executions | **10x** | Identical evidence replayed per base request |
+| Planned responses | **12,000** | Execution count, not distinct prices |
 
 ### Gate 5 arithmetic shape
 
@@ -33,8 +35,22 @@
 - [ ] Every displayed decimal expression recomputes to its bold total.
 - [ ] All 50 partial results remain `known_partial`; gaps are never `$0.00`.
 - [ ] The 36 dynamic `$0.00` tool results remain distinct from excluded connectors.
-- [ ] Ten executions per prompt are acceptable as reliability repeats, not added coverage.
+- [ ] The 200 recovery prompts contain an exact blocked duplicate after a matching success.
+- [ ] Ten executions per base request are acceptable as reliability repeats, not added coverage.
 - [ ] Any discrepancy is recorded in the log below before Batch upload.
+
+### Blocked-tool recovery examples
+
+Each recovery case repeats the first successful pricing call, then returns
+the production guard cancellation below. The Batch transcript must reuse
+the successful result rather than inventing replacement evidence.
+
+| Fixture | Repeated tool | Exact input | Status | Exact guard result |
+| --- | --- | --- | --- | --- |
+| `multi_leg:dtr-greenway-001` | `dulles_route` | `{"at_time":"2026-07-27T07:30:00-04:00","destination":"Exit 1 - US 15/SR 7 (Leesburg Bypass)","origin":"Exit 10 - SR 657"}` | `error` | This exact tool call already ran during this request. Use its previous result and continue with the next planned step. |
+| `multi_leg:i495-dtr-001` | `i495_route` | `{"at_time":"2026-07-29T12:00:00-04:00","destination":"182SD","origin":"495 Express Lanes Start/Georg Wash. Mem. Pkwy."}` | `error` | This exact tool call already ran during this request. Use its previous result and continue with the next planned step. |
+| `multi_leg:i66-dtr-001` | `i66_route` | `{"at_time":"2026-07-29T08:30:00-04:00","destination":"6","origin":"Exit 75 - Pentagon/Alexandria"}` | `error` | This exact tool call already ran during this request. Use its previous result and continue with the next planned step. |
+| `multi_leg:i95-i495-001` | `i95_junction_leg` | `{"at_time":"2026-07-29T10:10:00-04:00","location":"Gordon Boulevard/Route 123","movement":"i95_to_i495"}` | `error` | This exact tool call already ran during this request. Use its previous result and continue with the next planned step. |
 
 **Focused drill-down:** [I-95/I-495](#i-95i-495-junction) · [I-495/DTR](#i-495dulles-toll-road) · [I-66/DTR](#i-66dulles-toll-road) · [DTR/Greenway](#dulles-toll-roadgreenway)
 
@@ -59,6 +75,7 @@
 | Arithmetic | **Every component sum exactly matches its result** |
 | Typed evidence | **Every facility/label/amount tuple matched** |
 | Excluded zeros | **No connector or gap used as a billed operand** |
+| Duplicate recovery | **200 multi-leg fixtures repeat the first successful call and exact guard error** |
 
 **Jump to:** [single-leg](#single-leg-prices) · [multi-leg](#multi-leg-calculations) · [unavailable/partial](#unavailable-and-partial-prices) · [out of scope](#out-of-scope-and-future-requests) · [adversarial](#adversarial-pressure)
 

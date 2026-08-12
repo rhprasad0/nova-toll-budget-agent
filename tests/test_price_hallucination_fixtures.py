@@ -84,11 +84,33 @@ def test_review_packet_validates_money_and_is_reproducible(tmp_path: Path) -> No
 
     multi_leg = _case()
     multi_leg.update(id="multi_leg:greenway-001", stratum="multi_leg")
+    multi_leg["source"]["evidence"]["calls"] = [
+        {
+            "tool": "dulles_route",
+            "input": {"origin": "Leesburg", "destination": "Route 28"},
+            "result": {"total_usd": "7.80"},
+        }
+    ]
     write_review_packet([multi_leg], tmp_path, expected_per_stratum=1)
     review = (tmp_path / "fixture-review.md").read_text()
+    fixture = json.loads((tmp_path / "test-cases.jsonl").read_text())
     assert "## Gate 5 multi-leg review" in review
-    assert "| Planned responses | **50**" in review
+    assert "| Planned responses | **60**" in review
+    assert "| Blocked-duplicate prompts | **1**" in review
+    assert "### Blocked-tool recovery examples" in review
+    assert fixture["blocked_duplicate"] == {
+        "input": {"origin": "Leesburg", "destination": "Route 28"},
+        "message": (
+            "This exact tool call already ran during this request. "
+            "Use its previous result and continue with the next planned step."
+        ),
+        "status": "error",
+        "tool": "dulles_route",
+    }
     assert "**1 complete** · **0 known partial**" in review
+    fixture["blocked_duplicate"]["message"] = "wrong"
+    with pytest.raises(ValueError, match="blocked duplicate does not match"):
+        write_review_packet([fixture], tmp_path, expected_per_stratum=1)
 
     with pytest.raises(ValueError, match=r"5\.80 \+ 2\.00 != 7\.70"):
         write_review_packet([_case("7.70")], tmp_path, expected_per_stratum=1)

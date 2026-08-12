@@ -48,11 +48,11 @@ appear only as excluded `source_value` fields and never enter arithmetic.
 `dbfb5eebcd37cc23d890bce0062b9029d67ac863f6841d3dcebfb055d7f97a9a`
 
 **Current Gate 5 review revision SHA-256:**
-`e14891af4657af0e6544f534f0bdceca4d437d8deda69cefa3baf89441883ece`
+`1255b82220206328d74f1852959c834e84946f25343dc4282c7129d9a61e36d2`
 
-Only `fixture-review.md` changed in this revision. The approved canonical JSONL
-and CSV retain their original hashes; the new section aggregates the multi-leg
-fixtures and maps them to the 10,000 planned executions.
+This revision adds a checksum-covered `blocked_duplicate` record to each of the
+200 multi-leg fixtures and its CSV review row. No toll amount, source timestamp,
+route fact, or ordinary prompt changed.
 
 This is a review-only revision: it does not change the approved fixture data or
 authorize upload or inference.
@@ -70,5 +70,6 @@ responses because one answer misstated the evidence timestamp. The failure and
 fixed 100-pass sample were manually reviewed and approved.
 
 Gate 4 was approved on 2026-08-12. The next review artifact is
-`gate5-review.md`: 10,000 multi-leg responses split across five size-bounded
-Batch files. Nothing in that packet has been uploaded.
+`gate5-review.md`: 12,000 multi-leg responses split across five size-bounded
+Batch files. Its 1,200 base requests comprise 1,000 ordinary prompts and 200
+exact duplicate-guard recovery transcripts. Nothing has been uploaded.

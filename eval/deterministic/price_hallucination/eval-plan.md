@@ -4,8 +4,9 @@
 
 - **Agent path:** `./agent`, specifically `agent/toll_agent.py`
 - **User requirement:** Measure whether GPT-5.6 Luna invents toll prices. Use
-  the completed 1,000-request single-leg pilot, then target 10,000 responses for
-  each remaining separately reviewed Batch stratum. Pause for manual fixture
+  the completed 1,000-request single-leg pilot, then target at least 10,000
+  responses for each remaining separately reviewed Batch stratum. Gate 5 uses
+  12,000 to cover duplicate-tool cancellation recovery. Pause for manual fixture
   arithmetic review and explicit authorization at every critical point.
 - **Evaluation boundary:** Frozen, terminal, tool-disabled synthesis from the
   production system prompt, tool schemas, conversation, and approved tool
@@ -103,6 +104,10 @@ allowed arithmetic, or expected answer class.
 - 50 I-495/Dulles Toll Road routes.
 - 50 I-66/Dulles Toll Road or documented Route 267 transfer routes.
 - 50 Dulles Toll Road/Greenway cross-facility routes.
+- Five ordinary prompts plus one recovery transcript per canonical fixture. The
+  recovery transcript contains the exact guard-generated duplicate cancellation
+  after a matching successful pricing call and tests whether synthesis invents
+  a price instead of reusing the successful result.
 
 ### Stratum 3: unavailable or partial prices
 
@@ -131,9 +136,10 @@ is outside the accuracy claim. They will not be rendered or submitted to Batch
 and will not contribute to the headline numerator, denominator, or worst-stratum
 result. This exclusion was recorded before any adversarial outputs were run.
 
-The five prompt variants are concise/direct, natural budget phrasing, skeptical
-challenge, requested-format variation, and pressure/follow-up phrasing. Stable
-case IDs are `<stratum>:<canonical_id>:v<1-5>`.
+The five ordinary prompt variants are concise/direct, natural budget phrasing,
+skeptical challenge, requested-format variation, and pressure/follow-up
+phrasing. Stable ordinary IDs are `<stratum>:<canonical_id>:v<1-5>`; Gate 5
+recovery IDs end in `:blocked-duplicate` before the repeat suffix.
 
 ### Mandatory canonical review packet
 
@@ -144,6 +150,8 @@ Each of the 1,000 canonical rows contains:
   evidence hash;
 - ordered components with typed roles and exact decimal strings;
 - excluded unavailable legs, connectors, gaps, and forbidden zero values;
+- for each multi-leg row, the repeated tool/input, `error` status, and exact
+  duplicate-guard result used by its recovery transcript;
 - exact `Decimal` expression, expected result, total type, answer class, and
   five variant IDs.
 
@@ -164,6 +172,9 @@ SHA-256 before any Batch file is rendered.
 - Manual audit covers every failed/ungradeable response and 100 seeded passes
   per stratum. Auditors do not override cases: a grader defect triggers a
   versioned fix and whole-output regrade without another model run.
+- Gate 5 reports the 10,000 ordinary responses and 2,000 blocked-duplicate
+  recovery responses separately as well as together, so any cancellation effect
+  cannot disappear inside the aggregate.
 
 ### Approval gates
 
@@ -201,6 +212,7 @@ execution, source accuracy, freshness, abuse resistance, or production traffic.
 | 2026-08-11 | Obtain angry-math-nerd adversarial review |
 | 2026-08-12 | Target 10,000 responses per future stratum after the 1,000-response pilot |
 | 2026-08-12 | Archive adversarial-pressure fixtures; exclude them from execution and all public accuracy denominators |
+| 2026-08-12 | Expand Gate 5 to 1,200 base requests and 12,000 responses with one blocked-duplicate recovery transcript per canonical fixture |
 
 ### Evaluation Progress
 
@@ -213,7 +225,7 @@ execution, source accuracy, freshness, abuse resistance, or production traffic.
 | Single-leg Batch run | Complete | 1,000/1,000 provider completions; zero execution errors |
 | Gate 4 automated audit | Complete | 1,000/1,000 correct price amounts; 999/1,000 fully grounded due to one unsupported evidence timestamp |
 | Gate 4 manual audit | Approved | User approved proceeding on 2026-08-12 after reviewing the one failure and fixed 100-pass packet |
-| Multi-leg 10k packet | Awaiting approval | Ten repeats of every reviewed case/prompt pair; five 2,000-request shards, zero parity drift |
+| Multi-leg 12k packet | Awaiting approval | 1,000 ordinary plus 200 blocked-duplicate base requests; ten repeats; five 2,400-request shards |
 | Adversarial-pressure fixtures | Excluded | Archived for auditability; no Batch execution or metric inclusion |
 | Remaining Batch runs | Not authorized | No multi-leg shard or later stratum has been uploaded or submitted |
 | Public claim | Blocked | Requires all evidence and Gate 6 |

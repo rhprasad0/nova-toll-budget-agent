@@ -12,6 +12,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+from agent.toll_agent import (
+    _DUPLICATE_TOOL_MESSAGE as DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+)
+
 _MONEY = re.compile(r"\d+\.\d{2}\Z")
 _STRATUM_TITLES = {
     "single_leg": "Single-leg prices",
@@ -84,6 +88,22 @@ def _validate(case: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"{case['id']}: prompts must contain five unique variants")
 
     evidence = case["source"]["evidence"]
+    if case["stratum"] == "multi_leg":
+        calls = evidence.get("calls")
+        if not isinstance(calls, list) or not calls:
+            raise ValueError(f"{case['id']}: multi-leg evidence needs a tool call")
+        first_call = cast(dict[str, Any], calls[0])
+        blocked_duplicate = {
+            "tool": first_call["tool"],
+            "input": first_call["input"],
+            "status": "error",
+            "message": DUPLICATE_TOOL_MESSAGE,
+        }
+        if case.get("blocked_duplicate", blocked_duplicate) != blocked_duplicate:
+            raise ValueError(
+                f"{case['id']}: blocked duplicate does not match first call"
+            )
+        case["blocked_duplicate"] = blocked_duplicate
     case["source"]["evidence_sha256"] = hashlib.sha256(
         _json(evidence).encode()
     ).hexdigest()
@@ -147,6 +167,8 @@ def _write_markdown(cases: list[dict[str, Any]], path: Path) -> None:
     ]
     if multi_leg:
         variants = sum(len(case["prompts"]) for case in multi_leg)
+        blocked_duplicates = len(multi_leg)
+        gate5_base_requests = variants + blocked_duplicates
         total_types = Counter(case["total_type"] for case in multi_leg)
         component_shapes = Counter(len(case["components"]) for case in multi_leg)
         call_shapes = Counter(
@@ -170,15 +192,17 @@ def _write_markdown(cases: list[dict[str, Any]], path: Path) -> None:
                 "## Gate 5 multi-leg review",
                 "",
                 f"> **Decision scope:** approve the {len(multi_leg)} canonical multi-leg price",
-                "> calculations below for a 10,000-response Batch run. Repetition",
+                "> calculations below for a 12,000-response Batch run. Repetition",
                 "> measures reliability; it does **not** create new fixture coverage.",
                 "",
                 "| Layer | Count | What needs manual review |",
                 "| --- | ---: | --- |",
                 f"| Canonical calculations | **{len(multi_leg)}** | Price components, exclusions, and total type |",
-                f"| Frozen prompt variants | **{variants:,}** | Wording only; five per calculation |",
-                "| Repeat executions | **10x** | Identical evidence replayed per variant |",
-                f"| Planned responses | **{variants * 10:,}** | Execution count, not {variants * 10:,} distinct prices |",
+                f"| Ordinary prompt variants | **{variants:,}** | Five per calculation |",
+                f"| Blocked-duplicate prompts | **{blocked_duplicates:,}** | One exact guard cancellation per calculation |",
+                f"| Base requests | **{gate5_base_requests:,}** | Reviewed transcripts before repetition |",
+                "| Repeat executions | **10x** | Identical evidence replayed per base request |",
+                f"| Planned responses | **{gate5_base_requests * 10:,}** | Execution count, not distinct prices |",
                 "",
                 "### Gate 5 arithmetic shape",
                 "",
@@ -207,8 +231,32 @@ def _write_markdown(cases: list[dict[str, Any]], path: Path) -> None:
                 "- [ ] Every displayed decimal expression recomputes to its bold total.",
                 f"- [ ] All {partial_count} partial results remain `known_partial`; gaps are never `$0.00`.",
                 f"- [ ] The {zero_count} dynamic `$0.00` tool results remain distinct from excluded connectors.",
-                "- [ ] Ten executions per prompt are acceptable as reliability repeats, not added coverage.",
+                f"- [ ] The {blocked_duplicates} recovery prompts contain an exact blocked duplicate after a matching success.",
+                "- [ ] Ten executions per base request are acceptable as reliability repeats, not added coverage.",
                 "- [ ] Any discrepancy is recorded in the log below before Batch upload.",
+                "",
+                "### Blocked-tool recovery examples",
+                "",
+                "Each recovery case repeats the first successful pricing call, then returns",
+                "the production guard cancellation below. The Batch transcript must reuse",
+                "the successful result rather than inventing replacement evidence.",
+                "",
+                "| Fixture | Repeated tool | Exact input | Status | Exact guard result |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        representatives: dict[str, dict[str, Any]] = {}
+        for case in multi_leg:
+            representatives.setdefault(_category(case["id"]), case)
+        for case in representatives.values():
+            blocked = cast(dict[str, Any], case["blocked_duplicate"])
+            lines.append(
+                f"| `{case['id']}` | `{blocked['tool']}` | "
+                f"`{_markdown(_json(blocked['input']))}` | `{blocked['status']}` | "
+                f"{_markdown(blocked['message'])} |"
+            )
+        lines.extend(
+            [
                 "",
                 "**Focused drill-down:** [I-95/I-495](#i-95i-495-junction) · "
                 "[I-495/DTR](#i-495dulles-toll-road) · "
@@ -246,6 +294,7 @@ def _write_markdown(cases: list[dict[str, Any]], path: Path) -> None:
             "| Arithmetic | **Every component sum exactly matches its result** |",
             "| Typed evidence | **Every facility/label/amount tuple matched** |",
             "| Excluded zeros | **No connector or gap used as a billed operand** |",
+            "| Duplicate recovery | **200 multi-leg fixtures repeat the first successful call and exact guard error** |",
             "",
             "**Jump to:** [single-leg](#single-leg-prices) · "
             "[multi-leg](#multi-leg-calculations) · "
@@ -462,6 +511,7 @@ def write_review_packet(
         "source_provenance",
         "source_status",
         "evidence_sha256",
+        "blocked_duplicate",
         "variant_ids",
     ]
     with (output_dir / "fixture-review.csv").open("w", newline="") as stream:
@@ -495,6 +545,11 @@ def write_review_packet(
                     "source_provenance": _json(source["provenance"]),
                     "source_status": _json(source["status"]),
                     "evidence_sha256": source["evidence_sha256"],
+                    "blocked_duplicate": (
+                        _json(case["blocked_duplicate"])
+                        if "blocked_duplicate" in case
+                        else ""
+                    ),
                     "variant_ids": _json(
                         [f"{case['id']}:v{number}" for number in range(1, 6)]
                     ),

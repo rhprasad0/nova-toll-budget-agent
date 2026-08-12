@@ -1,4 +1,4 @@
-"""Render the approved single-leg fixtures as an offline OpenAI Batch packet."""
+"""Render approved price fixtures as offline OpenAI Batch packets."""
 
 from __future__ import annotations
 
@@ -13,6 +13,9 @@ from typing import Any, cast
 
 from agent.toll_agent import (
     _AGENT_TOOLS as AGENT_TOOLS,  # pyright: ignore[reportPrivateUsage]
+)
+from agent.toll_agent import (
+    _DUPLICATE_TOOL_MESSAGE as DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
 )
 from agent.toll_agent import (
     _CachedResponsesModel as CachedResponsesModel,  # pyright: ignore[reportPrivateUsage]
@@ -55,7 +58,9 @@ def _model() -> CachedResponsesModel:
     )
 
 
-def _messages(case: dict[str, Any], prompt: str) -> list[dict[str, Any]]:
+def _messages(
+    case: dict[str, Any], prompt: str, *, blocked_duplicate: bool = False
+) -> list[dict[str, Any]]:
     calls = cast(list[dict[str, Any]], case["source"]["evidence"]["calls"])
     if not calls:
         raise ValueError(f"{case['id']} must contain terminal tool evidence")
@@ -64,7 +69,7 @@ def _messages(case: dict[str, Any], prompt: str) -> list[dict[str, Any]]:
         call_prefix if len(calls) == 1 else f"{call_prefix}_{number}"
         for number in range(1, len(calls) + 1)
     ]
-    return [
+    messages = [
         {"role": "user", "content": [{"text": prompt}]},
         {
             "role": "assistant",
@@ -93,15 +98,56 @@ def _messages(case: dict[str, Any], prompt: str) -> list[dict[str, Any]]:
             ],
         },
     ]
+    if blocked_duplicate:
+        blocked = cast(dict[str, Any] | None, case.get("blocked_duplicate"))
+        expected = {
+            "tool": calls[0]["tool"],
+            "input": calls[0]["input"],
+            "status": "error",
+            "message": DUPLICATE_TOOL_MESSAGE,
+        }
+        if blocked != expected:
+            raise ValueError(f"{case['id']} lacks reviewed blocked-duplicate evidence")
+        blocked = cast(dict[str, Any], blocked)
+        duplicate_id = f"{tool_use_ids[0]}_duplicate"
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": duplicate_id,
+                                "name": blocked["tool"],
+                                "input": blocked["input"],
+                            }
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "toolResult": {
+                                "toolUseId": duplicate_id,
+                                "content": [{"text": blocked["message"]}],
+                                "status": blocked["status"],
+                            }
+                        }
+                    ],
+                },
+            ]
+        )
+    return messages
 
 
 def build_multi_leg_requests(
     cases: list[dict[str, Any]],
     *,
     repetitions: int = 10,
-    expected_requests: int = 10_000,
+    expected_requests: int = 12_000,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Build ten repeat sweeps of the reviewed 1,000-request multi-leg suite."""
+    """Build ten repeat sweeps of the reviewed 1,200-request multi-leg suite."""
     if repetitions < 1:
         raise ValueError("repetitions must be positive")
     selected = [case for case in cases if case.get("stratum") == "multi_leg"]
@@ -114,9 +160,16 @@ def build_multi_leg_requests(
         prompts = cast(list[str], case.get("prompts"))
         if len(prompts) != 5:
             raise ValueError(f"{case['id']} must contain exactly five prompts")
-        for variant, prompt in enumerate(prompts, 1):
+        variants: list[tuple[str, str, bool]] = [
+            (f"v{variant}", prompt, False) for variant, prompt in enumerate(prompts, 1)
+        ]
+        variants.append(("blocked-duplicate", prompts[0], True))
+        for variant, prompt, blocked_duplicate in variants:
             production = model._format_request(  # pyright: ignore[reportPrivateUsage]
-                cast(Any, _messages(case, prompt)),
+                cast(
+                    Any,
+                    _messages(case, prompt, blocked_duplicate=blocked_duplicate),
+                ),
                 cast(Any, tool_specs),
                 system_prompt,
             )
@@ -127,7 +180,8 @@ def build_multi_leg_requests(
             body["metadata"] = {
                 "suite": "price_hallucination_multi_leg",
                 "case_id": case["id"],
-                "variant": str(variant),
+                "variant": variant,
+                "duplicate_guard": "blocked" if blocked_duplicate else "none",
                 "evidence_sha256": case["source"]["evidence_sha256"],
             }
             normalized = copy.deepcopy(body)
@@ -139,7 +193,7 @@ def build_multi_leg_requests(
             unapproved_differences += normalized != expected
             base_requests.append(
                 {
-                    "custom_id": f"{case['id']}:v{variant}",
+                    "custom_id": f"{case['id']}:{variant}",
                     "method": "POST",
                     "url": "/v1/responses",
                     "body": body,
@@ -185,6 +239,8 @@ def build_multi_leg_requests(
     report = {
         "request_count": len(requests),
         "base_request_count": len(base_requests),
+        "ordinary_base_request_count": len(selected) * 5,
+        "blocked_duplicate_base_request_count": len(selected),
         "canonical_case_count": len(selected),
         "repetitions": repetitions,
         "model": _MODEL,
@@ -221,7 +277,7 @@ def build_multi_leg_requests(
             ),
             "pilot_projection": (
                 "The observed $0.301442325 single-leg charge scaled linearly to "
-                "10,000 responses; multi-leg token usage may differ."
+                "12,000 responses; multi-leg token usage may differ."
             ),
         },
     }
@@ -398,8 +454,8 @@ def write_multi_leg_packet(
     output_dir: Path,
     *,
     repetitions: int = 10,
-    expected_requests: int = 10_000,
-    shard_request_limit: int = 2_000,
+    expected_requests: int = 12_000,
+    shard_request_limit: int = 2_400,
 ) -> dict[str, Any]:
     """Write size-bounded Batch shards and their Gate 5 review packet."""
     requests, report = build_multi_leg_requests(
@@ -409,6 +465,8 @@ def write_multi_leg_packet(
     )
     if shard_request_limit < 1:
         raise ValueError("shard_request_limit must be positive")
+    if shard_request_limit % report["base_request_count"]:
+        raise ValueError("shards must contain complete repeat sweeps")
     output_dir.mkdir(parents=True, exist_ok=True)
     checksums = ""
     shard_bytes: list[int] = []
@@ -440,7 +498,7 @@ def write_multi_leg_packet(
         f"| `{name}` | {min(shard_request_limit, len(requests) - index * shard_request_limit):,} | {size / 1_000_000:.1f} MB |"
         for index, (name, size) in enumerate(zip(shard_names, shard_bytes, strict=True))
     )
-    review = f"""# Gate 5 — 10,000-response multi-leg review
+    review = f"""# Gate 5 — {report["request_count"]:,}-response multi-leg review
 
 **Nothing in this packet has been uploaded and no additional model call has
 been made.**
@@ -448,7 +506,9 @@ been made.**
 | Check | Result |
 | --- | ---: |
 | Reviewed canonical fixtures | {report["canonical_case_count"]:,} |
-| Reviewed base requests | {report["base_request_count"]:,} |
+| Ordinary reviewed prompts | {report["ordinary_base_request_count"]:,} |
+| Blocked-duplicate recovery prompts | {report["blocked_duplicate_base_request_count"]:,} |
+| Total reviewed base requests | {report["base_request_count"]:,} |
 | Repeat executions per base request | {report["repetitions"]} |
 | Total Batch requests | **{report["request_count"]:,}** |
 | Unapproved production-payload differences | {report["unapproved_payload_differences"]} |
@@ -456,10 +516,18 @@ been made.**
 | Pilot-linear cost projection | **${report["pilot_linear_cost_projection_usd"]:.2f}** |
 | Absolute conservative ceiling | **${report["maximum_cost_usd"]:.2f}** |
 
-The 10,000 responses are ten repeat executions of each of the 1,000
-reviewed case/prompt pairs. This increases repeat-reliability evidence, **not
-scenario coverage**. Results remain descriptive; repetitions are clustered by
-fixture and do not justify a naive IID confidence interval.
+The {report["request_count"]:,} responses are ten repeat executions of 1,000
+ordinary case/prompt pairs plus one blocked-duplicate recovery prompt for each
+of the 200 canonical fixtures. The recovery prompts replay the exact duplicate
+guard message after a matching successful tool call to test whether Luna then
+invents a price. Repetition increases reliability evidence, **not scenario
+coverage**; it does not justify a naive IID confidence interval.
+
+This frozen synthesis run does not execute the hook itself; the dedicated
+duplicate-tool-guard evaluation covers suppression. Gate 5 isolates the next
+risk: Luna's answer after receiving the production-formatted cancellation.
+The audit must report the 10,000 ordinary and 2,000 recovery responses
+separately as well as together.
 
 The absolute ceiling intentionally treats every UTF-8 body byte as a billed
 cache-write token and every response as consuming all 2,048 output tokens. The
@@ -473,8 +541,8 @@ break-glass bound.
 {shard_rows}
 
 Each shard stays below OpenAI's 200 MB Batch input limit and contains complete
-repeat sweeps; all five shards must complete before a 10,000-response result is
-reported.
+repeat sweeps; all {report["shard_count"]} shards must complete before a
+{report["request_count"]:,}-response result is reported.
 
 ## Integrity
 
@@ -485,7 +553,7 @@ sha256sum gate5-packet.sha256
 
 **Gate 5 packet SHA-256:** `{packet_sha256}`
 
-Approval authorizes submission of these exact five shards only. Collection and
+Approval authorizes submission of these exact {report["shard_count"]} shards only. Collection and
 audit must finish before another stratum is rendered or submitted.
 """
     (output_dir / "gate5-review.md").write_text(review)
