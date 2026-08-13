@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +43,25 @@ def test_claude_pr_review_has_no_secret_bearing_workflow() -> None:
     workflows = "\n".join(workflow.read_text() for workflow in WORKFLOWS.glob("*.y*ml"))
     assert "CLAUDE_API_KEY" not in workflows
     assert "claude-code-security-review" not in workflows
+
+
+def test_trivy_scans_vulnerabilities_and_terraform_without_secrets() -> None:
+    workflow = (WORKFLOWS / "trivy.yml").read_text()
+
+    assert 'branches: ["main"]' in workflow
+    assert "pull_request:" in workflow
+    assert 'cron: "0 6 * * 1"' in workflow
+    assert "scan-type: fs" in workflow
+    assert "scan-ref: ." in workflow
+    assert "scanners: vuln,misconfig" in workflow
+    assert "severity: HIGH,CRITICAL" in workflow
+    assert "exit-code: 1" in workflow
+    assert "secret" not in workflow.lower()
+    assert "uses: aquasecurity/trivy-action@" in workflow
+
+    actions = re.findall(r"uses: [^@\s]+@([^\s]+)", workflow)
+    assert actions
+    assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in actions)
 
 
 def test_terraform_pr_checks_are_credential_free() -> None:
