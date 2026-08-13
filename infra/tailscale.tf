@@ -92,6 +92,11 @@ resource "aws_instance" "tailscale_router" {
   vpc_security_group_ids = [aws_security_group.tailscale_router.id]
   iam_instance_profile   = aws_iam_instance_profile.tailscale_router.name
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
   # Subnet-router/exit-node duty requires IP forwarding -- Tailscale won't
   # forward traffic without it.
   user_data = <<-EOF

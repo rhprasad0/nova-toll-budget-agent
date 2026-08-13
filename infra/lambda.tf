@@ -58,7 +58,8 @@ resource "aws_lambda_function_event_invoke_config" "fetcher" {
 # --- toll-loader -----------------------------------------------------------
 
 resource "aws_sqs_queue" "loader_onfailure" {
-  name = "toll-loader-onfailure"
+  name                    = "toll-loader-onfailure"
+  sqs_managed_sse_enabled = true
 }
 
 resource "aws_lambda_function" "loader" {

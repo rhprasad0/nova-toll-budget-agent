@@ -19,6 +19,7 @@ dev = [
     "ruff",
     "pyright",
     "pytest",
+    "pyyaml",
     "strands-agents-evals>=1.1.0",
     "strands-agents-sops>=1.1.3",
 ]
