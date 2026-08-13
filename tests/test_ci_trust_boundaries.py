@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 MAIN_SUBJECT = (
@@ -46,20 +48,30 @@ def test_claude_pr_review_has_no_secret_bearing_workflow() -> None:
 
 
 def test_trivy_scans_vulnerabilities_and_terraform_without_secrets() -> None:
-    workflow = (WORKFLOWS / "trivy.yml").read_text()
+    workflow = yaml.load((WORKFLOWS / "trivy.yml").read_text(), Loader=yaml.BaseLoader)
 
-    assert 'branches: ["main"]' in workflow
-    assert "pull_request:" in workflow
-    assert 'cron: "0 6 * * 1"' in workflow
-    assert "scan-type: fs" in workflow
-    assert "scan-ref: ." in workflow
-    assert "scanners: vuln,misconfig" in workflow
-    assert "severity: HIGH,CRITICAL" in workflow
-    assert "exit-code: 1" in workflow
-    assert "secret" not in workflow.lower()
-    assert "uses: aquasecurity/trivy-action@" in workflow
+    assert workflow["on"] == {
+        "push": {"branches": ["main"]},
+        "pull_request": "",
+        "schedule": [{"cron": "0 6 * * 1"}],
+    }
 
-    actions = re.findall(r"uses: [^@\s]+@([^\s]+)", workflow)
+    steps = workflow["jobs"]["scan"]["steps"]
+    trivy_steps = [
+        step
+        for step in steps
+        if step.get("uses", "").startswith("aquasecurity/trivy-action@")
+    ]
+    assert len(trivy_steps) == 1
+    assert trivy_steps[0]["with"] == {
+        "scan-type": "fs",
+        "scan-ref": ".",
+        "scanners": "vuln,misconfig",
+        "severity": "HIGH,CRITICAL",
+        "exit-code": "1",
+    }
+
+    actions = [step["uses"].rsplit("@", 1)[1] for step in steps if "uses" in step]
     assert actions
     assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in actions)
 
