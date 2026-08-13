@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <meta name="description" content="TollChat reconstructs Northern Virginia toll trips from recorded VDOT prices and committed Dulles rate tables.">
-  <title>TollChat: Toll prices grounded in public records</title>
+  <title>TollChat: Toll prices grounded in public data</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/assets/maplibre-gl-6.0.0/maplibre-gl.css">
   <style>
@@ -36,6 +36,9 @@
     h1 { max-width:11ch; margin:0; font-size:clamp(2.6rem,6vw,4.4rem); letter-spacing:-.065em; line-height:.9; text-wrap:balance; }
     .eyebrow { margin:0 0 8px; color:var(--lime); font-size:.72rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
     .lede { max-width:38rem; margin:14px 0 0; color:var(--muted); text-wrap:pretty; }
+    .evaluation-note { max-width:42rem; margin:12px 0 0; color:var(--muted); font-size:.82rem; line-height:1.5; text-wrap:pretty; }
+    .evaluation-note strong { color:var(--text); }
+    .evaluation-note a:focus-visible { outline:2px solid var(--lime); outline-offset:3px; }
     .source-strip { display:grid; max-width:46rem; gap:8px; margin-top:20px; padding:12px 14px; border:1px solid var(--line); border-left:3px solid var(--lime); border-radius:6px; background:rgba(215,255,95,.04); }
     .source-strip p { margin:0; color:var(--text); font-size:.7rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .source-links { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.78rem; line-height:1.4; }
@@ -166,8 +169,9 @@
     <header>
       <div class="header-copy">
         <p class="eyebrow">Open beta · Source-backed toll records</p>
-        <h1>Plan with prices grounded in public records.</h1>
+        <h1>Plan with prices grounded in public data.</h1>
         <p class="lede">TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and committed 2-axle E-ZPass rate tables for the Dulles roads. Dulles rates are hand-transcribed from operator pages and cross-checked against other public sources; every result shows the toll components and arithmetic used.</p>
+        <p class="evaluation-note"><strong>TollChat uses GPT-5.6 Luna.</strong> In our 3,400-response frozen hallucination battery, it did not fabricate a toll price. It did make other mistakes. <a href="/faq.html#hallucinations-title">Read the limits <span aria-hidden="true">→</span></a></p>
         <nav class="source-strip" aria-label="Official pricing sources">
           <p>Official pricing sources</p>
           <div class="source-links">
