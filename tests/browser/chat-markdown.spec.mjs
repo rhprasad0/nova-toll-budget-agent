@@ -203,7 +203,7 @@ test("private preview presents source-backed pricing with official verification 
   const evaluationNote = page.locator("header .evaluation-note");
   await expect(evaluationNote).toContainText("TollChat uses GPT-5.6 Luna");
   await expect(evaluationNote).toContainText(
-    "In our 3,400-response frozen hallucination battery, it did not fabricate a toll price—but it did make other mistakes."
+    "In our 3,400-response frozen hallucination battery, it did not fabricate a toll price. It did make other mistakes."
   );
   await expect(evaluationNote.getByRole("link", { name: "Read the limits" })).toHaveAttribute(
     "href",
