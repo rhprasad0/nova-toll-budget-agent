@@ -194,9 +194,9 @@ test("an expired cookie is a successful user reset", async ({ page }) => {
 test("private preview presents source-backed pricing with official verification links", async ({ page }) => {
   await page.goto("/preview.html");
 
-  await expect(page).toHaveTitle("TollChat: Toll prices grounded in public records");
+  await expect(page).toHaveTitle("TollChat: Toll prices grounded in public data");
   await expect(page.getByText("Open beta · Source-backed toll records", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Plan with prices grounded in public records." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan with prices grounded in public data." })).toBeVisible();
   await expect(page.locator("header .lede")).toHaveText(
     "TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and committed 2-axle E-ZPass rate tables for the Dulles roads. Dulles rates are hand-transcribed from operator pages and cross-checked against other public sources; every result shows the toll components and arithmetic used."
   );
