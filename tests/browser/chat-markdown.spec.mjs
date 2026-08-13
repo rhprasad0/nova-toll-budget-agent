@@ -200,6 +200,15 @@ test("private preview presents source-backed pricing with official verification 
   await expect(page.locator("header .lede")).toHaveText(
     "TollChat reconstructs supported Northern Virginia trips from VDOT-published dynamic prices and committed 2-axle E-ZPass rate tables for the Dulles roads. Dulles rates are hand-transcribed from operator pages and cross-checked against other public sources; every result shows the toll components and arithmetic used."
   );
+  const evaluationNote = page.locator("header .evaluation-note");
+  await expect(evaluationNote).toContainText("TollChat uses GPT-5.6 Luna");
+  await expect(evaluationNote).toContainText(
+    "In our 3,400-response frozen hallucination battery, it did not fabricate a toll price—but it did make other mistakes."
+  );
+  await expect(evaluationNote.getByRole("link", { name: "Read the limits" })).toHaveAttribute(
+    "href",
+    "/faq.html#hallucinations-title"
+  );
 
   const sources = page.getByRole("navigation", { name: "Official pricing sources" });
   const expectedSources = [
@@ -274,6 +283,7 @@ test("pricing FAQ explains freshness, route oracles, and the unpriced junction",
   await expect(page.getByRole("heading", { name: "Why can TollChat differ from an operator site?" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "How does the route oracle work?" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why is part of the I-95 ↔ I-495 junction unpriced?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Does TollChat hallucinate?" })).toBeVisible();
 
   const main = page.locator("main");
   await expect(main).toContainText("59,217 aligned comparisons matched exactly");
@@ -283,6 +293,12 @@ test("pricing FAQ explains freshness, route oracles, and the unpriced junction",
   await expect(main).not.toContainText("one capture behind VA66Tolls");
   await expect(main).toContainText("hand-transcribed 2-axle E-ZPass rate tables");
   await expect(main).toContainText("Exit 16 directional rule");
+  await expect(main).toContainText("3,400 frozen, tool-disabled responses");
+  await expect(main).toContainText("no dollar amount absent from the supplied toll evidence");
+  await expect(main).toContainText("invented one observation time");
+  await expect(main).toContainText("omitted required components, totals, or partial-price disclosures");
+  await expect(main).toContainText("601 multi-leg responses still require manual semantic review");
+  await expect(main).toContainText("More hallucination evaluations are planned");
   await expect(main).toContainText("weekday-only peak windows");
   await expect(main).toContainText("committed, read-only route map");
   await expect(main).toContainText("public maps and explicitly curated connector facts");
@@ -471,6 +487,8 @@ test("open-beta coverage map stays interactive and direction-aware", async ({ pa
   await expect(page.locator("#route-filters button")).toHaveCount(6);
   await expect(page.locator("#route-filters button:enabled")).toHaveCount(6);
   await expect(page.locator("#reset-map")).toBeEnabled();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Read the limits" })).toBeFocused();
   for (const name of [
     "95/395/495 Express Lanes",
     "I-66 Inside the Beltway",
