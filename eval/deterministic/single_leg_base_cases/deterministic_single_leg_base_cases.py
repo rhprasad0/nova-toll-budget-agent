@@ -335,8 +335,7 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                 facility_matches = explicit_facilities == {expected_facility} or (
                     not explicit_facilities
                     and (
-                        not single_facility
-                        or expected_facility == route_facility
+                        (single_facility and expected_facility == route_facility)
                         or _has_facility_heading_before(
                             response, match.start(), expected_facility
                         )
@@ -576,6 +575,20 @@ def _self_check() -> None:
         "Dulles Toll Road",
     )
     assert response_label(metadata, call, segmented_output) == "grounded_response"
+    unattributed_tolls = good_output.replace("Dulles Greenway ", "").replace(
+        "Dulles Toll Road ", ""
+    )
+    assert response_label(metadata, call, unattributed_tolls) == "route_missing"
+    headed_dtr = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n",
+        "  - Dulles Toll Road\n    - Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, headed_dtr) == "grounded_response"
+    wrong_headed_dtr = headed_dtr.replace(
+        "  - Dulles Toll Road\n    - Mainline plaza: $2.00\n",
+        "  - Dulles Greenway\n    - Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, wrong_headed_dtr) == "route_missing"
 
     metadata, call, good_output = prepared[0]
     expected = metadata["expected_trajectory"][0]

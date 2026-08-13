@@ -131,7 +131,7 @@ eval/
 | :-- | :-- | :-- | :-- |
 | 2026-08-02 | Plan and fixtures | Completed | Routes and exact historical fares verified against committed oracles and read-only RDS. |
 | 2026-08-02 | Deterministic implementation | Completed | Exact captured-call and response graders with offline mutation checks. |
-| 2026-08-02 | Simulated implementation | Completed | Eight immutable actor profiles capped at three turns with deterministic trace grading. |
+| 2026-08-02 | Simulated implementation | Completed | Nine immutable actor profiles, including the direct Dulles composite, capped at three turns with deterministic trace grading. |
 | 2026-08-11 | Automation | Completed | Offline checks remain in required CI; code-graded and simulated live executions run nightly as observational evidence. |
 | 2026-08-02 | Deterministic live execution | Reviewed, not curated | Exact tool results passed 8/8; response grading exposed presentation false negatives and one genuine missing-rate-period response. |
 | 2026-08-02 | Simulated live execution | Reviewed, not curated | Goal/helpfulness passed 16/16; trace grading caught one invalid-time retry, and only 5/8 conversations reached all three turns. |

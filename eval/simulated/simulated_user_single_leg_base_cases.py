@@ -1,4 +1,4 @@
-"""Three-turn simulated-user evaluation for the eight single-leg base cases."""
+"""Three-turn simulated-user evaluation for nine direct-route base cases."""
 
 from __future__ import annotations
 
@@ -186,8 +186,8 @@ def main() -> None:
 
 def _self_check() -> None:
     cases = load_cases()
-    assert len(cases) == 8
-    assert len({case.name for case in cases}) == 8
+    assert len(cases) == 9
+    assert len({case.name for case in cases}) == 9
     assert all(case.input and case.expected_assertion for case in cases)
     assert all((case.metadata or {}).get("task_description") for case in cases)
     assert all(
@@ -230,7 +230,7 @@ def _self_check() -> None:
             },
         )
     assert evaluate_single_leg_calls(calls, row)[0].label == "exact_result"
-    print("self-check ok (8 case/profile shapes and bad-session guard; no network)")
+    print("self-check ok (9 case/profile shapes and bad-session guard; no network)")
 
 
 if __name__ == "__main__":
