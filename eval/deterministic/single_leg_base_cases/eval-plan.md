@@ -137,3 +137,4 @@ eval/
 | 2026-08-03 | Greenway fee fixtures and graders | Completed | Both directions require one distinct DTR item, exact multiplicity, travel order, component arithmetic, and neutral simulated follow-ups. |
 | 2026-08-03 | Deterministic live execution | Completed | 1.0000 overall; 16/16 judgments passed; 0 execution errors. |
 | 2026-08-03 | Simulated live execution | Completed | 0.9167 overall; 24/24 judgments passed; 0 execution errors. |
+| 2026-08-13 | Issue #179 repair | Completed | Prompt 1.31.0 requires chronological absolute-date comparison and treats the Toll Road plus Greenway as one Dulles pricing surface for route selection. Twenty fresh targeted runs and the 16-verdict live suite used direct `dulles_route` calls without false future refusals. |

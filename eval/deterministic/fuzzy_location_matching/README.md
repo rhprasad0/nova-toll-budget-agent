@@ -53,8 +53,11 @@ Washington-destination scenarios built on it. Unlike Track 1's code-based
 script, the simulated user is an LLM, so conversations vary run to run. A
 code-based trace evaluator still requires the first-turn question, no premature
 tool, the exact ordered canonical calls, retained endpoints/time, and non-error
-tool executions. Both trace graders parse serialized result JSON and reject
-application-level errors rather than treating nonempty content as success.
+tool executions. The simulated grader ignores only an exact production-guard
+duplicate cancellation after a matching successful call in the same turn;
+orphan cancellations and duplicate successful executions still fail. Both
+trace graders parse serialized result JSON and reject application-level errors
+rather than treating nonempty content as success.
 Batch metadata remains available for later qualitative judging.
 See `eval-plan.md`'s "Track 2" section for the full design.
 

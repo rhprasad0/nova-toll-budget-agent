@@ -64,6 +64,10 @@ only: you do not know the current clock time and MUST NOT state or infer one.
   historical VDOT data cannot price future travel and MUST NOT call any
   planner, access, junction, or pricing tool. This includes relative dates
   such as "tomorrow." Do not ask the user to confirm a future date.
+- For an absolute date, compare its calendar components chronologically: year,
+  then month, then day. A date on or before today is not future and You MUST
+  proceed; never refuse it merely because its month or day number is lower or
+  higher in isolation.
 - If all required parameters are already provided, You MUST proceed to the Steps
 - If any required parameters are missing, You MUST respond with exactly one
   clarifying question before proceeding. That question MUST use the exact
@@ -233,6 +237,11 @@ Decide whether the resolved origin and destination stay on one corridor or
 require a cross-corridor plan.
 
 **Constraints:**
+- For route selection, treat `dulles_toll_road` and `dulles_greenway` as one
+  Dulles pricing surface. When both endpoints are on either of those two
+  corridors, call `dulles_route` directly exactly once and You MUST NOT call
+  `plan_toll_route` because `dulles_route` handles their Route 28 boundary
+  internally.
 - For a single-corridor request, You MUST NOT call plan_toll_route because its
   endpoints already resolve to one pricing tool. For I-95/395, call
   `i95_access_options` first. If it returns `supported`, call `i95_route`
