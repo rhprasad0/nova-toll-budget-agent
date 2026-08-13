@@ -18,6 +18,10 @@ test-results/
 /eval/private/
 /eval/deterministic/price_hallucination/single-leg-batch.jsonl
 /eval/deterministic/price_hallucination/multi-leg-batch-*.jsonl
+/eval/deterministic/price_hallucination/gate*-automated.json
+/eval/deterministic/price_hallucination/gate*-manual-sample.json
+/eval/deterministic/price_hallucination/gate*-results-packet.sha256
+/eval/deterministic/price_hallucination/gate*-results-review.md
 
 # Terraform
 infra/.terraform/

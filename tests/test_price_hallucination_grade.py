@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from eval.deterministic.price_hallucination.grade import grade_outputs
+from eval.deterministic.price_hallucination.grade import (
+    grade_multi_leg_outputs,
+    grade_outputs,
+)
 
 
 def _case() -> dict:
@@ -74,3 +77,58 @@ def test_grader_distinguishes_amount_and_timestamp_hallucinations() -> None:
     wrong_price = grade_outputs([_case()], [_result("Total: $9.99")])
     assert wrong_price["counts"]["invented_amount"] == 1
     assert wrong_price["verdicts"][0]["unsupported_amounts"] == ["9.99"]
+
+
+def test_multi_leg_grader_separates_grounding_from_completion() -> None:
+    case = _case()
+    case.update(
+        id="multi_leg:i495-dtr-001",
+        stratum="multi_leg",
+        prompts=["one"],
+        components=[
+            {"facility": "I-495-SB", "price_usd": "3.65"},
+            {"facility": "dulles_toll_road", "price_usd": "4.00"},
+            {"facility": "dulles_toll_road", "price_usd": "2.00"},
+        ],
+        calculation={"result_usd": "9.65"},
+        total_type="complete",
+        excluded=[],
+    )
+
+    subtotal = _result("Dulles subtotal $6.00; I-495 $3.65. I cannot total it.")
+    subtotal["custom_id"] = "multi_leg:i495-dtr-001:v1:r07"
+    result = grade_multi_leg_outputs(
+        [case], [subtotal], repetitions=(7,), include_blocked=False
+    )
+    assert result["counts"]["invented_amount"] == 0
+    assert result["counts"]["required_price_pass"] == 0
+
+    invented = _result("Components: $3.65, $4.00, $2.00. Total: $9.99")
+    invented["custom_id"] = "multi_leg:i495-dtr-001:v1:r07"
+    result = grade_multi_leg_outputs(
+        [case], [invented], repetitions=(7,), include_blocked=False
+    )
+    assert result["counts"]["invented_amount"] == 1
+    assert result["verdicts"][0]["unsupported_amounts"] == ["9.99"]
+
+
+def test_multi_leg_grader_requires_partial_disclosure() -> None:
+    case = _case()
+    case.update(
+        id="multi_leg:i95-i495-001",
+        stratum="multi_leg",
+        total_type="known_partial",
+        excluded=[{"kind": "unpriced_gap", "reason": "junction gap"}],
+        blocked_duplicate={},
+    )
+    row = _result("Known toll total: $2.45; excludes the unpriced junction gap.")
+    row["custom_id"] = "multi_leg:i95-i495-001:blocked-duplicate:r08"
+    result = grade_multi_leg_outputs([case], [row], repetitions=(8,), variants=())
+    assert result["counts"]["required_price_pass"] == 1
+    assert result["counts"]["fully_grounded"] == 1
+
+    row = _result("Total: $2.45")
+    row["custom_id"] = "multi_leg:i95-i495-001:blocked-duplicate:r08"
+    result = grade_multi_leg_outputs([case], [row], repetitions=(8,), variants=())
+    assert result["counts"]["missing_partial_disclosure"] == 1
+    assert result["counts"]["required_price_pass"] == 0

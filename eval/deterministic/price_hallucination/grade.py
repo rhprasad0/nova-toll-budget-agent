@@ -22,6 +22,11 @@ _FACILITY_ALIASES = {
     "dulles_greenway": ("dulles greenway", "greenway"),
     "dulles_toll_road": ("dulles toll road",),
 }
+_PARTIAL_DISCLOSURE = re.compile(
+    r"\b(?:partial|unpriced|gap|junction|exclude(?:s|d)?|known toll total|"
+    r"not (?:a )?complete|does not include|incomplete)\b",
+    re.IGNORECASE,
+)
 
 
 def _output_text(body: dict[str, Any]) -> str:
@@ -216,6 +221,176 @@ def grade_outputs(
     ) / Decimal(1_000_000)
     return {
         "counts": dict(counts),
+        "usage": dict(usage),
+        "estimated_batch_cost_usd": f"{cost:.6f}",
+        "verdicts": sorted(verdicts, key=lambda verdict: verdict["custom_id"]),
+    }
+
+
+def _subset_sums(amounts: list[Decimal]) -> set[Decimal]:
+    sums = {Decimal("0")}
+    for amount in amounts:
+        sums |= {subtotal + amount for subtotal in sums}
+    return sums
+
+
+def grade_multi_leg_outputs(
+    cases: list[dict[str, Any]],
+    output_rows: list[dict[str, Any]],
+    *,
+    repetitions: tuple[int, ...] = (7, 8),
+    variants: tuple[int, ...] = (1, 2, 3, 4, 5),
+    include_blocked: bool = True,
+) -> dict[str, Any]:
+    """Grade multi-leg amounts without mistaking valid leg subtotals for inventions."""
+    selected = {
+        cast(str, case["id"]): case
+        for case in cases
+        if case.get("stratum") == "multi_leg"
+    }
+    expected_ids = {
+        f"{case_id}:v{variant}:r{repetition:02d}"
+        for case_id, case in selected.items()
+        for variant in variants
+        if variant <= len(cast(list[str], case["prompts"]))
+        for repetition in repetitions
+    }
+    if include_blocked:
+        expected_ids |= {
+            f"{case_id}:blocked-duplicate:r{repetition:02d}"
+            for case_id, case in selected.items()
+            if "blocked_duplicate" in case
+            for repetition in repetitions
+        }
+    actual_ids = [cast(str, row.get("custom_id")) for row in output_rows]
+    if len(actual_ids) != len(set(actual_ids)):
+        raise ValueError("Batch output custom_id values must be unique")
+    if set(actual_ids) != expected_ids:
+        raise ValueError(
+            "Batch output IDs do not reconcile; "
+            f"missing={sorted(expected_ids - set(actual_ids))}, "
+            f"extra={sorted(set(actual_ids) - expected_ids)}"
+        )
+
+    counts: Counter[str] = Counter()
+    cohorts: dict[str, Counter[str]] = {
+        "ordinary": Counter(),
+        "blocked_duplicate": Counter(),
+    }
+    usage: Counter[str] = Counter()
+    verdicts: list[dict[str, Any]] = []
+    for row in output_rows:
+        custom_id = cast(str, row["custom_id"])
+        request_id = custom_id.rsplit(":r", 1)[0]
+        case_id = request_id.rsplit(":", 1)[0]
+        case = selected[case_id]
+        cohort = (
+            "blocked_duplicate" if ":blocked-duplicate:" in custom_id else "ordinary"
+        )
+        response = cast(dict[str, Any], row.get("response") or {})
+        body = cast(dict[str, Any], response.get("body") or {})
+        text = _output_text(body)
+        transport_ok = (
+            row.get("error") is None
+            and response.get("status_code") == 200
+            and body.get("status") == "completed"
+            and body.get("incomplete_details") is None
+            and bool(text.strip())
+        )
+        amounts = [Decimal(value.replace(",", "")) for value in _MONEY.findall(text)]
+        component_values = [
+            Decimal(cast(str, component["price_usd"]))
+            for component in cast(list[dict[str, Any]], case["components"])
+        ]
+        allowed_amounts = _subset_sums(component_values)
+        allowed_amounts |= {
+            Decimal(cast(str, excluded["source_value"]))
+            for excluded in cast(list[dict[str, Any]], case.get("excluded", []))
+            if excluded.get("source_value") is not None
+        }
+        unsupported = sorted(set(amounts) - allowed_amounts)
+        missing_components = sorted(set(component_values) - set(amounts))
+        total = Decimal(cast(str, case["calculation"]["result_usd"]))
+        bad_timestamps = [
+            display
+            for display, value in _claimed_times(text)
+            if value not in _allowed_times(case)
+        ]
+        missing_partial_disclosure = case[
+            "total_type"
+        ] == "known_partial" and not _PARTIAL_DISCLOSURE.search(text)
+        unsupported_price_pass = transport_ok and not unsupported and not bad_timestamps
+        required_price_pass = (
+            transport_ok
+            and total in amounts
+            and not missing_components
+            and not missing_partial_disclosure
+        )
+        fully_grounded = unsupported_price_pass and required_price_pass
+        flags = {
+            "responses": 1,
+            "transport_ok": int(transport_ok),
+            "invented_amount": int(bool(unsupported)),
+            "bad_timestamp": int(bool(bad_timestamps)),
+            "missing_component": int(bool(missing_components)),
+            "missing_total": int(total not in amounts),
+            "missing_partial_disclosure": int(missing_partial_disclosure),
+            "unsupported_price_pass": int(unsupported_price_pass),
+            "required_price_pass": int(required_price_pass),
+            "fully_grounded": int(fully_grounded),
+            "monetary_claims": len(amounts),
+        }
+        counts.update(flags)
+        cohorts[cohort].update(flags)
+        body_usage = cast(dict[str, Any], body.get("usage") or {})
+        input_details = cast(
+            dict[str, Any], body_usage.get("input_tokens_details") or {}
+        )
+        output_details = cast(
+            dict[str, Any], body_usage.get("output_tokens_details") or {}
+        )
+        usage.update(
+            input_tokens=int(body_usage.get("input_tokens", 0)),
+            cached_tokens=int(input_details.get("cached_tokens", 0)),
+            cache_write_tokens=int(input_details.get("cache_write_tokens", 0)),
+            output_tokens=int(body_usage.get("output_tokens", 0)),
+            reasoning_tokens=int(output_details.get("reasoning_tokens", 0)),
+        )
+        verdicts.append(
+            {
+                "custom_id": custom_id,
+                "case_id": case_id,
+                "cohort": cohort,
+                "total_type": case["total_type"],
+                "expected_total_usd": f"{total:.2f}",
+                "output_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "unsupported_amounts": [f"{amount:.2f}" for amount in unsupported],
+                "missing_component_amounts": [
+                    f"{amount:.2f}" for amount in missing_components
+                ],
+                "missing_total": total not in amounts,
+                "bad_timestamps": bad_timestamps,
+                "missing_partial_disclosure": missing_partial_disclosure,
+                "transport_ok": transport_ok,
+                "unsupported_price_pass": unsupported_price_pass,
+                "required_price_pass": required_price_pass,
+                "fully_grounded": fully_grounded,
+                "output_text": text,
+            }
+        )
+
+    normal_input = (
+        usage["input_tokens"] - usage["cached_tokens"] - usage["cache_write_tokens"]
+    )
+    cost = (
+        Decimal(usage["cached_tokens"]) * Decimal("0.01")
+        + Decimal(usage["cache_write_tokens"]) * Decimal("0.125")
+        + Decimal(normal_input) * Decimal("0.10")
+        + Decimal(usage["output_tokens"]) * Decimal("0.60")
+    ) / Decimal(1_000_000)
+    return {
+        "counts": dict(counts),
+        "cohorts": {name: dict(values) for name, values in cohorts.items()},
         "usage": dict(usage),
         "estimated_batch_cost_usd": f"{cost:.6f}",
         "verdicts": sorted(verdicts, key=lambda verdict: verdict["custom_id"]),

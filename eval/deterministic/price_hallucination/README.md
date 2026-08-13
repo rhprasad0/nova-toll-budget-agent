@@ -1,8 +1,8 @@
 # GPT-5.6 Luna price-synthesis fixture review
 
 **Gate 2 packet:** 1,000 canonical contexts and 5,000 frozen prompt variants.
-The approved single-leg pilot has since completed; the multi-leg Gate 5 packet
-is rendered but has not been uploaded.
+The single-leg and multi-leg runs are complete; see [`RESULTS.md`](RESULTS.md)
+for the concise evidence, limitations, and remaining review work.
 
 | Stratum | Canonical rows | Price calculations | No calculation |
 | --- | ---: | ---: | ---: |
@@ -57,21 +57,10 @@ route fact, or ordinary prompt changed.
 This is a review-only revision: it does not change the approved fixture data or
 authorize upload or inference.
 
-## Gate 3 smoke packet
+## Execution status
 
-The offline 1,000-request single-leg packet is ready in `gate3-review.md`.
-No request has been uploaded and no model has been called.
-
-## Gate 4 audit
-
-The completed single-leg run is summarized in `gate4-review.md`: automated
-grading found 1,000/1,000 correct price amounts and 999/1,000 fully grounded
-responses because one answer misstated the evidence timestamp. The failure and
-fixed 100-pass sample were manually reviewed and approved.
-
-Gate 4 was approved on 2026-08-12. The next review artifact is
-`gate5-review.md`: one 2,400-response Batch containing complete `r07` and `r08`
-sweeps of all 1,200 base requests: 1,000 ordinary prompts and 200 exact
-duplicate-guard recovery transcripts. Four other shards were rejected before
-inference by OpenAI's enqueued-token limit and are excluded. The selected Batch
-completed 2,400/2,400 with zero execution failures; behavioral audit is pending.
+Gate 4's 1,000-response single-leg run and Gate 5's 2,400-response multi-leg
+run completed without execution failures. Gate 4's fixed manual audit was
+approved; Gate 5 currently has deterministic screening only. Generated response
+dumps are intentionally untracked. The frozen fixtures, parity manifests,
+packet hashes, graders, and tests remain here for audit and reproduction.
