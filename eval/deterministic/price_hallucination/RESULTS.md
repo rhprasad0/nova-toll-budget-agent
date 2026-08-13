@@ -32,22 +32,28 @@ I-66/Dulles, and known-partial I-95/I-495 trips.
 
 ## Results
 
-| Cohort | Provider complete | No unsupported dollars | Required answer complete | Other grounding failures |
+| Cohort | Provider complete | No unsupported dollars | Automatically verified complete | Other grounding failures |
 | --- | ---: | ---: | ---: | ---: |
 | Single leg | 1,000/1,000 | 1,000/1,000 | 1,000/1,000 | 1 unsupported timestamp |
-| Ordinary multi-leg | 2,000/2,000 | 2,000/2,000 | 1,967/2,000 | 0 unsupported timestamps |
-| Blocked duplicate | 400/400 | 400/400 | 373/400 | 0 unsupported timestamps |
+| Ordinary multi-leg | 2,000/2,000 | 2,000/2,000 | 1,517/2,000 | 0 unsupported timestamps |
+| Blocked duplicate | 400/400 | 400/400 | 282/400 | 0 unsupported timestamps |
 
-The **60 unique multi-leg completeness exceptions** overlap across three
-checks: 37 omitted at least one component, 49 omitted the expected total, and
-17 omitted a required partial-price disclosure. These are failures to provide
-the requested answer, even though they are not invented-price failures. The
-blocked-duplicate cohort was less complete than its ordinary counterpart
-(93.25% versus 98.35%), which is a real weakness rather than rounding glitter.
+The grader sends **601 multi-leg responses** to manual review rather than
+calling them complete. Of those, 61 fail one or more automated completeness
+checks: 37 omit at least one component, 49 omit the expected total, and 18 omit
+a required partial-price disclosure. Counts overlap. Another 540 responses
+come from 45 fixtures with equal-valued components; repeated dollar tokens
+cannot prove that the model attributed every equal-priced toll correctly, so
+none count as automatically complete. These two review groups do not overlap.
+
+The automatic-clearance rates (75.85% ordinary and 70.50% blocked duplicate)
+therefore mix detected omissions with conservative semantic-review deferrals.
+They must not be presented as measured failure rates.
 
 Gate 4's one automated exception and fixed 100-pass sample were manually
-reviewed and approved. **Gate 5 has only automated screening so far**: its 60
-exceptions and fixed 100-pass sample still need semantic review to confirm that
+reviewed and approved. **Gate 5 has only automated screening so far**: its 601
+review-required responses and fixed 100-pass sample still need semantic review
+to confirm that
 amounts were attached to the correct facilities, legs, and roles.
 
 ## What this does not establish
@@ -62,12 +68,16 @@ amounts were attached to the correct facilities, legs, and roles.
 - The deterministic screen can detect unknown values and missing required
   values, but semantic attribution still needs human review.
 
-## Audit trail
+## Retained evidence and current audit gap
 
 The committed fixture packet contains all 1,000 reviewed contexts and source
 evidence. `review-packet.sha256`, the Gate 3 and Gate 5 packet manifests, parity
-reports, graders, and tests preserve the input and evaluation method without
-committing bulky model-output dumps.
+reports, graders, and tests preserve the inputs and evaluation method without
+committing bulky model-output dumps. `audit-packet.json` and its checksum retain
+aggregate counts, per-response verdict hashes for every review-required output,
+and the fixed sample identities. They do **not** let an independent reviewer
+verify response text from a fresh clone; the raw provider outputs must still be
+supplied separately and matched to the hashes below.
 
 The completed provider outputs are identified by:
 
@@ -75,6 +85,18 @@ The completed provider outputs are identified by:
   `b7eec9b494418510042c21e8f438ff102fdad86a5c080440ea0722e93edf2cc4`
 - Multi-leg: `batch_6a7cd888fae48190843f8792dffa0d1f`, SHA-256
   `4b2c8e3ac6a987cf4bcea7b4cdc939b989cf97597184c82c2165d8ae666ec111`
+
+With those raw JSONL files available, rerun the deterministic summaries from
+the repository root:
+
+```bash
+uv run python eval/deterministic/price_hallucination/grade.py \
+  eval/deterministic/price_hallucination/test-cases.jsonl SINGLE_OUTPUT.jsonl \
+  --summary
+uv run python eval/deterministic/price_hallucination/grade.py \
+  eval/deterministic/price_hallucination/test-cases.jsonl MULTI_OUTPUT.jsonl \
+  --stratum multi-leg --summary
+```
 
 The next useful step is manual Gate 5 review, followed by an independent
 quantitative and methodology audit before turning this evidence into a public

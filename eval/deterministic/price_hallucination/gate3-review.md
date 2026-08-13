@@ -29,6 +29,10 @@ sha256sum -c gate3-packet.sha256
 sha256sum gate3-packet.sha256
 ```
 
+The generated Batch JSONL is intentionally untracked, so the first command
+requires regenerating or restoring `single-leg-batch.jsonl` first. The manifest
+records the submitted input identity; it is not a self-contained result packet.
+
 **Gate 3 packet SHA-256:** `f8a120c199a6d5f39d5cb8af5257fda089c13f4c0fa8c52cca0f16516ad99247`
 
 Approving this packet authorizes only upload/submission of this exact 1,000-row

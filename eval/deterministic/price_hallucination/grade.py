@@ -23,7 +23,7 @@ _FACILITY_ALIASES = {
     "dulles_toll_road": ("dulles toll road",),
 }
 _PARTIAL_DISCLOSURE = re.compile(
-    r"\b(?:partial|unpriced|gap|junction|exclude(?:s|d)?|known toll total|"
+    r"\b(?:partial|unpriced|exclude(?:s|d)?|known toll total|"
     r"not (?:a )?complete|does not include|incomplete)\b",
     re.IGNORECASE,
 )
@@ -302,6 +302,9 @@ def grade_multi_leg_outputs(
             Decimal(cast(str, component["price_usd"]))
             for component in cast(list[dict[str, Any]], case["components"])
         ]
+        needs_component_attribution_review = len(component_values) != len(
+            set(component_values)
+        )
         allowed_amounts = _subset_sums(component_values)
         allowed_amounts |= {
             Decimal(cast(str, excluded["source_value"]))
@@ -309,7 +312,12 @@ def grade_multi_leg_outputs(
             if excluded.get("source_value") is not None
         }
         unsupported = sorted(set(amounts) - allowed_amounts)
-        missing_components = sorted(set(component_values) - set(amounts))
+        amount_counts = Counter(amounts)
+        missing_components = sorted(
+            amount
+            for amount, expected in Counter(component_values).items()
+            for _ in range(max(0, expected - amount_counts[amount]))
+        )
         total = Decimal(cast(str, case["calculation"]["result_usd"]))
         bad_timestamps = [
             display
@@ -325,6 +333,7 @@ def grade_multi_leg_outputs(
             and total in amounts
             and not missing_components
             and not missing_partial_disclosure
+            and not needs_component_attribution_review
         )
         fully_grounded = unsupported_price_pass and required_price_pass
         flags = {
@@ -335,6 +344,7 @@ def grade_multi_leg_outputs(
             "missing_component": int(bool(missing_components)),
             "missing_total": int(total not in amounts),
             "missing_partial_disclosure": int(missing_partial_disclosure),
+            "component_attribution_review": int(needs_component_attribution_review),
             "unsupported_price_pass": int(unsupported_price_pass),
             "required_price_pass": int(required_price_pass),
             "fully_grounded": int(fully_grounded),
@@ -371,6 +381,7 @@ def grade_multi_leg_outputs(
                 "missing_total": total not in amounts,
                 "bad_timestamps": bad_timestamps,
                 "missing_partial_disclosure": missing_partial_disclosure,
+                "component_attribution_review": needs_component_attribution_review,
                 "transport_ok": transport_ok,
                 "unsupported_price_pass": unsupported_price_pass,
                 "required_price_pass": required_price_pass,
@@ -587,11 +598,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("fixtures", type=Path)
     parser.add_argument("outputs", type=Path)
+    parser.add_argument(
+        "--stratum", choices=("single-leg", "multi-leg"), default="single-leg"
+    )
+    parser.add_argument("--summary", action="store_true")
     parser.add_argument("--review-dir", type=Path)
     parser.add_argument("--batch-id")
     args = parser.parse_args()
-    result = grade_outputs(_jsonl(args.fixtures), _jsonl(args.outputs))
+    cases = _jsonl(args.fixtures)
+    outputs = _jsonl(args.outputs)
+    result = (
+        grade_multi_leg_outputs(cases, outputs)
+        if args.stratum == "multi-leg"
+        else grade_outputs(cases, outputs)
+    )
     if args.review_dir:
+        if args.stratum != "single-leg":
+            parser.error("--review-dir only supports the single-leg audit")
         if not args.batch_id:
             parser.error("--batch-id is required with --review-dir")
         packet = write_gate4_review(
@@ -602,4 +625,9 @@ if __name__ == "__main__":
         )
         print(json.dumps({"counts": result["counts"], **packet}, indent=2))
     else:
-        print(json.dumps(result, indent=2))
+        output = (
+            {key: value for key, value in result.items() if key != "verdicts"}
+            if args.summary
+            else result
+        )
+        print(json.dumps(output, indent=2))

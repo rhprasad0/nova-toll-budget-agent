@@ -112,6 +112,36 @@ def test_multi_leg_grader_separates_grounding_from_completion() -> None:
     assert result["verdicts"][0]["unsupported_amounts"] == ["9.99"]
 
 
+def test_multi_leg_grader_preserves_duplicate_component_counts() -> None:
+    case = _case()
+    case.update(
+        id="multi_leg:dtr-greenway-001",
+        stratum="multi_leg",
+        prompts=["one"],
+        components=[
+            {"facility": "dulles_toll_road", "price_usd": "2.00"},
+            {"facility": "dulles_toll_road", "price_usd": "2.00"},
+            {"facility": "dulles_greenway", "price_usd": "3.65"},
+        ],
+        calculation={"result_usd": "7.65"},
+        total_type="complete",
+        excluded=[],
+    )
+    row = _result(
+        "Entrance ramp and mainline together: $2.00. Greenway: $3.65. "
+        "Calculation: $2.00 + $3.65 = $7.65."
+    )
+    row["custom_id"] = "multi_leg:dtr-greenway-001:v1:r07"
+
+    result = grade_multi_leg_outputs(
+        [case], [row], repetitions=(7,), include_blocked=False
+    )
+
+    assert result["counts"]["component_attribution_review"] == 1
+    assert result["counts"]["required_price_pass"] == 0
+    assert result["verdicts"][0]["component_attribution_review"] is True
+
+
 def test_multi_leg_grader_requires_partial_disclosure() -> None:
     case = _case()
     case.update(
@@ -127,7 +157,7 @@ def test_multi_leg_grader_requires_partial_disclosure() -> None:
     assert result["counts"]["required_price_pass"] == 1
     assert result["counts"]["fully_grounded"] == 1
 
-    row = _result("Total: $2.45")
+    row = _result("At the I-95/I-495 junction, the total is $2.45.")
     row["custom_id"] = "multi_leg:i95-i495-001:blocked-duplicate:r08"
     result = grade_multi_leg_outputs([case], [row], repetitions=(8,), variants=())
     assert result["counts"]["missing_partial_disclosure"] == 1

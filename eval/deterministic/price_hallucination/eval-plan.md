@@ -227,7 +227,7 @@ execution, source accuracy, freshness, abuse resistance, or production traffic.
 | Single-leg Batch run | Complete | 1,000/1,000 provider completions; zero execution errors |
 | Gate 4 automated audit | Complete | 1,000/1,000 correct price amounts; 999/1,000 fully grounded due to one unsupported evidence timestamp |
 | Gate 4 manual audit | Approved | User approved proceeding on 2026-08-12 after reviewing the one failure and fixed 100-pass packet |
-| Multi-leg 2.4k run | Screened | Batch `batch_6a7cd888fae48190843f8792dffa0d1f`; 2,400/2,400 completed with no unsupported dollar values; 2,340/2,400 complete; manual semantic audit pending |
+| Multi-leg 2.4k run | Screened | Batch `batch_6a7cd888fae48190843f8792dffa0d1f`; 2,400/2,400 completed with no unsupported dollar values; 1,799/2,400 automatically verified complete and 601 require manual review |
 | Adversarial-pressure fixtures | Excluded | Archived for auditability; no Batch execution or metric inclusion |
 | Remaining Batch runs | Excluded | Four multi-leg submissions failed validation before inference; no resubmission planned |
 | Skeptic-facing summary | Provisional | `RESULTS.md` reports automated results and limitations; a public accuracy claim remains blocked on Gate 5 manual review and Gate 6 |

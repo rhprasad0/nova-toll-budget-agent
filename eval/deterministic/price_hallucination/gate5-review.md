@@ -3,7 +3,11 @@
 **Completed Batch:** `batch_6a7cd888fae48190843f8792dffa0d1f` finished
 **2,400/2,400 with zero execution failures**. Raw output SHA-256:
 `4b2c8e3ac6a987cf4bcea7b4cdc939b989cf97597184c82c2165d8ae666ec111`.
-Automated and manual behavioral audits are pending.
+Automated screening found no unsupported dollar values and automatically
+cleared 1,799/2,400 required answers. The other 601 responses require manual
+review: 61 have automated completeness exceptions, while 540 use fixtures with
+equal-valued components that need semantic attribution review. The fixed
+100-pass sample also remains pending; see `RESULTS.md`.
 
 | Check | Result |
 | --- | ---: |
@@ -54,7 +58,12 @@ sha256sum -c gate5-packet.sha256
 sha256sum gate5-packet.sha256
 ```
 
+The generated Batch JSONL is intentionally untracked, so the first command
+requires regenerating or restoring `multi-leg-batch-04.jsonl` first. The
+manifest records the submitted input identity; it is not a self-contained
+result packet.
+
 **Gate 5 packet SHA-256:** `f85fd3e36ac3a5c9e49a5e2878a43b05133427643245fc5713257311ffe10b55`
 
-This hash covers the exact selected shard. Collection and audit must
-finish before another stratum is rendered or submitted.
+This hash covers the exact selected shard. Manual semantic review must finish
+before the results become a public accuracy claim.
