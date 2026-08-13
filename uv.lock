@@ -2728,6 +2728,7 @@ dependencies = [
 dev = [
     { name = "pyright" },
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "strands-agents-evals" },
     { name = "strands-agents-sops" },
@@ -2748,6 +2749,7 @@ requires-dist = [
 dev = [
     { name = "pyright" },
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "strands-agents-evals", specifier = ">=1.1.0" },
     { name = "strands-agents-sops", specifier = ">=1.1.3" },
