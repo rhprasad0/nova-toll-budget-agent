@@ -30,7 +30,10 @@ from strands_evals.types.trace import (  # noqa: E402
 )
 
 from agent.dev_chat import configure_local_pricing_env  # noqa: E402
-from agent.toll_agent import build_agent  # noqa: E402
+from agent.toll_agent import (  # noqa: E402
+    _DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+    build_agent,
+)
 from eval.simulation_support import (  # noqa: E402
     build_telemetry,
     raise_for_evaluation_errors,
@@ -195,6 +198,45 @@ def _matches_input(span: ToolExecutionSpan, expected: dict[str, Any]) -> bool:
     return all(actual.get(key) == value for key, value in expected.items())
 
 
+def _without_guard_cancellations(
+    spans: list[ToolExecutionSpan],
+) -> tuple[list[ToolExecutionSpan], str | None]:
+    """Drop only same-turn duplicate cancellations after a matching success."""
+    successful: set[tuple[str | None, str, str]] = set()
+    kept: list[ToolExecutionSpan] = []
+    for span in spans:
+        signature = (
+            span.agent_span_id,
+            span.tool_call.name,
+            json.dumps(
+                cast(
+                    dict[str, Any],
+                    span.tool_call.arguments,  # pyright: ignore[reportUnknownMemberType]
+                ),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ),
+        )
+        if (
+            span.tool_result.error
+            and span.tool_result.content == _DUPLICATE_TOOL_MESSAGE
+        ):
+            if signature not in successful:
+                return [], "duplicate cancellation lacked a matching success"
+            continue
+        kept.append(span)
+        if span.tool_result.error or not span.tool_result.content:
+            continue
+        try:
+            decoded: object = json.loads(span.tool_result.content)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(decoded, dict) and not cast(dict[str, Any], decoded).get("error"):
+            successful.add(signature)
+    return kept, None
+
+
 class FuzzyLocationSimulationTraceEvaluator(Evaluator[str, str]):
     """Code-grade clarification and selected canonical route across actor turns."""
 
@@ -242,6 +284,10 @@ class FuzzyLocationSimulationTraceEvaluator(Evaluator[str, str]):
                 continue
             seen.add(key)
             tool_spans.append(span)
+
+        tool_spans, suppression_issue = _without_guard_cancellations(tool_spans)
+        if suppression_issue:
+            return _result(False, suppression_issue, "orphan_suppression")
 
         first_span_id = first.span_info.span_id
         if any(span.agent_span_id == first_span_id for span in tool_spans):
@@ -388,7 +434,48 @@ def _self_check() -> None:
             "Which McLean location: Route 123 - Dolley Madison Blvd or "
             "Jones Branch Drive/Route 123?"
         ),
+        duplicate_cancellation: bool = False,
+        duplicate_success: bool = False,
+        orphan_cancellation: bool = False,
     ) -> Session:
+        successful_span = ToolExecutionSpan(
+            span_info=span_info("tool"),
+            agent_span_id="second",
+            tool_call=ToolCall(
+                name=expected_call["name"],
+                arguments={**expected_call["input"], "origin": origin},
+            ),
+            tool_result=ToolResult(content=tool_content),
+        )
+        cancellation_span = ToolExecutionSpan(
+            span_info=span_info("duplicate"),
+            agent_span_id="second",
+            tool_call=successful_span.tool_call,
+            tool_result=ToolResult(
+                content=_DUPLICATE_TOOL_MESSAGE,
+                error="error",
+            ),
+        )
+        tool_spans = [
+            *([] if orphan_cancellation else [successful_span]),
+            *(
+                [cancellation_span]
+                if duplicate_cancellation or orphan_cancellation
+                else []
+            ),
+            *(
+                [
+                    ToolExecutionSpan(
+                        span_info=span_info("duplicate-success"),
+                        agent_span_id="second",
+                        tool_call=successful_span.tool_call,
+                        tool_result=successful_span.tool_result,
+                    )
+                ]
+                if duplicate_success
+                else []
+            ),
+        ]
         return Session(
             session_id="session",
             traces=[
@@ -408,15 +495,15 @@ def _self_check() -> None:
                             agent_response="The route is priced.",
                             available_tools=[],
                         ),
-                        ToolExecutionSpan(
-                            span_info=span_info("tool"),
-                            agent_span_id=agent_span_id,
-                            tool_call=ToolCall(
-                                name=expected_call["name"],
-                                arguments={**expected_call["input"], "origin": origin},
-                            ),
-                            tool_result=ToolResult(content=tool_content),
-                        ),
+                        *[
+                            ToolExecutionSpan(
+                                span_info=span.span_info,
+                                agent_span_id=agent_span_id,
+                                tool_call=span.tool_call,
+                                tool_result=span.tool_result,
+                            )
+                            for span in tool_spans
+                        ],
                     ],
                 )
             ],
@@ -436,6 +523,9 @@ def _self_check() -> None:
         )[0]
 
     assert evaluate(session()).label == "clarified_route"
+    assert evaluate(session(duplicate_cancellation=True)).label == "clarified_route"
+    assert evaluate(session(duplicate_success=True)).label == "tool_mismatch"
+    assert evaluate(session(orphan_cancellation=True)).label == "orphan_suppression"
     assert (
         evaluate(session(tool_content='{"error":"database unavailable"}')).label
         == "tool_error"

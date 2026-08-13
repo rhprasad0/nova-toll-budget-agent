@@ -349,6 +349,13 @@ def _self_check() -> None:
         "roundabout-washington-informed-acknowledgment",
     ]
     assert cases[1].expected_trajectory == ["i95_access_options", "i95_route"]
+    for index in (1, 5):
+        metadata = _metadata(cases[index])
+        assert "8/12/2026 4:50 PM ET" in str(cases[index].input)
+        assert (
+            metadata["expected_trajectory"][0]["calls"][-1]["input"]["at_time"]
+            == "2026-08-12T16:50:00-04:00"
+        )
     assert {
         _metadata(case)["alias"] for case in cases if _metadata(case).get("alias")
     } == {alias for alias, labels in _LOCATION_ALIASES.items() if len(labels) > 1}

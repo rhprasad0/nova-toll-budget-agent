@@ -1,4 +1,4 @@
-"""Code-graded live regression for eight routine single-leg toll trips.
+"""Code-graded live regression for routine direct toll trips.
 
 The grader is deterministic; the live TollChat invocation is stochastic.
 ``--check`` exercises fixtures and grader branches without network access.
@@ -170,8 +170,11 @@ def evaluate_single_leg_calls(
             False, f"pricing tool returned an error: {captured}", "tool_error"
         )
     legs = captured.get("legs")
-    if not isinstance(legs, list) or len(cast(list[object], legs)) != 1:
-        return _result(False, "pricing result was not exactly one leg", "leg_count")
+    expected_legs = cast(list[object], metadata["expected_result"]["legs"])
+    if not isinstance(legs, list) or len(cast(list[object], legs)) != len(
+        expected_legs
+    ):
+        return _result(False, "pricing result had unexpected leg count", "leg_count")
     mismatches = [
         key
         for key, value in metadata["expected_result"].items()
@@ -181,7 +184,7 @@ def evaluate_single_leg_calls(
         return _result(
             False, f"result mismatched keys: {mismatches}", "result_mismatch"
         )
-    return _result(True, "exact single-leg fixture matched", "exact_result")
+    return _result(True, "exact direct-route fixture matched", "exact_result")
 
 
 def task_function(case: Case[str, str]) -> dict[str, Any]:
@@ -240,6 +243,8 @@ def _has_facility_heading_before(response: str, position: int, facility: str) ->
 
 
 def _route_term_present(response: str, term: str) -> bool:
+    if term in _FACILITY_LABELS:
+        return _term_present(response, _FACILITY_LABELS[term])
     humanized = _ROUTE_ALIASES.get(term)
     if not humanized:
         return _term_present(response, term)
@@ -279,10 +284,20 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
         origin = expected_call["input"]["origin"]
         destination = expected_call["input"]["destination"]
         fare = str(metadata["expected_final_usd"])
+        expected_legs = metadata["expected_result"]["legs"]
+        single_facility = len(expected_legs) == 1
         route_line = _route_line(response, origin, destination)
-        missing_terms = [] if route_line else [f"{origin} → {destination}"]
-        if not route_line or not _route_term_present(
-            route_line, metadata["expected_route_label"]
+        route_present = bool(route_line) or (
+            not single_facility
+            and all(
+                _route_line(response, leg["entry"]["label"], leg["exit"]["label"])
+                for leg in expected_legs
+            )
+        )
+        missing_terms = [] if route_present else [f"{origin} → {destination}"]
+        if single_facility and (
+            not route_line
+            or not _route_term_present(route_line, metadata["expected_route_label"])
         ):
             missing_terms.append(metadata["expected_route_label"])
         tolls = metadata["expected_result"].get("tolls", [])
@@ -320,7 +335,7 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                 facility_matches = explicit_facilities == {expected_facility} or (
                     not explicit_facilities
                     and (
-                        expected_facility == route_facility
+                        (single_facility and expected_facility == route_facility)
                         or _has_facility_heading_before(
                             response, match.start(), expected_facility
                         )
@@ -396,10 +411,12 @@ class SingleLegResponseEvaluator(Evaluator[str, str]):
                 )
         else:
             matches = _RATE_PERIOD_RE.findall(plain_response)
-            periods = {re.sub(r"[-\s]+", "_", period.lower()) for period, _ in matches}
-            expected_period = str(metadata["expected_rate_period"]).lower()
+            periods = {re.sub(r"[-_\s]+", "", period.lower()) for period, _ in matches}
+            expected_period = re.sub(
+                r"[-_\s]+", "", str(metadata["expected_rate_period"]).lower()
+            )
             tail_periods = {
-                re.sub(r"[-\s]+", "_", period.lower())
+                re.sub(r"[-_\s]+", "", period.lower())
                 for _, tail in matches
                 for period in re.findall(
                     r"\b(?:off[-_ ]?peak|peak)\b", tail, re.IGNORECASE
@@ -440,9 +457,9 @@ def main() -> None:
 def _self_check() -> None:
     rows = load_rows()
     cases = load_cases()
-    assert len(rows) == len(cases) == 8
+    assert len(rows) == len(cases) == 9
     assert [case.name for case in cases] == [row["id"] for row in rows]
-    assert len({case.name for case in cases}) == 8
+    assert len({case.name for case in cases}) == 9
     assert {row["expected_trajectory"][0]["tool"] for row in rows} == {
         "i95_route",
         "i495_route",
@@ -510,10 +527,11 @@ def _self_check() -> None:
         provenance = (
             f"VDOT observed at: {metadata['expected_observed_display']}"
             if metadata.get("expected_observed_display")
-            else f"Rate period: {metadata['expected_rate_period']}"
+            else f"Rate period: {str(metadata['expected_rate_period']).replace('_', '-')}"
         )
+        route_label = metadata["expected_route_label"]
         displayed_route = _ROUTE_ALIASES.get(
-            metadata["expected_route_label"], metadata["expected_route_label"]
+            route_label, _FACILITY_LABELS.get(route_label, route_label)
         )
         tolls = metadata["expected_result"].get("tolls", [])
         toll_lines = "".join(
@@ -537,6 +555,40 @@ def _self_check() -> None:
         assert trace_label(metadata, required_calls(metadata, call)) == "exact_result"
         assert response_label(metadata, call, good_output) == "grounded_response"
         prepared.append((metadata, call, good_output))
+
+    metadata, call, good_output = prepared[8]
+    assert (
+        response_label(
+            metadata,
+            call,
+            good_output.replace("(Dulles Greenway)", "eastbound"),
+        )
+        == "grounded_response"
+    )
+    legs = metadata["expected_result"]["legs"]
+    segmented_output = good_output.replace(
+        f"- {legs[0]['entry']['label']} → {legs[1]['exit']['label']} — "
+        "dulles_route (Dulles Greenway): $9.25",
+        f"- {legs[0]['entry']['label']} → {legs[0]['exit']['label']} — "
+        "Dulles Greenway\n"
+        f"- {legs[1]['entry']['label']} → {legs[1]['exit']['label']} — "
+        "Dulles Toll Road",
+    )
+    assert response_label(metadata, call, segmented_output) == "grounded_response"
+    unattributed_tolls = good_output.replace("Dulles Greenway ", "").replace(
+        "Dulles Toll Road ", ""
+    )
+    assert response_label(metadata, call, unattributed_tolls) == "route_missing"
+    headed_dtr = good_output.replace(
+        "  - Dulles Toll Road Mainline plaza: $2.00\n",
+        "  - Dulles Toll Road\n    - Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, headed_dtr) == "grounded_response"
+    wrong_headed_dtr = headed_dtr.replace(
+        "  - Dulles Toll Road\n    - Mainline plaza: $2.00\n",
+        "  - Dulles Greenway\n    - Mainline plaza: $2.00\n",
+    )
+    assert response_label(metadata, call, wrong_headed_dtr) == "route_missing"
 
     metadata, call, good_output = prepared[0]
     expected = metadata["expected_trajectory"][0]
@@ -721,7 +773,7 @@ def _self_check() -> None:
             == "grounded_response"
         )
 
-    metadata, call, good_output = prepared[-1]
+    metadata, call, good_output = prepared[7]
     markdown_period = good_output.replace("Rate period: peak", "**Rate period:** peak")
     assert response_label(metadata, call, markdown_period) == "grounded_response"
     explained_period = good_output.replace(
@@ -810,7 +862,7 @@ def _self_check() -> None:
         trace_label(metadata, [{**call, "tool_result": missing_fee_result}])
         == "result_mismatch"
     )
-    print("self-check ok (8 fixtures and synthetic grader mutations; no network)")
+    print("self-check ok (9 fixtures and synthetic grader mutations; no network)")
 
 
 if __name__ == "__main__":

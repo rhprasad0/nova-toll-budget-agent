@@ -459,10 +459,14 @@ def test_system_prompt_contains_i95_i495_junction():
 
 def test_system_prompt_embeds_only_the_current_new_york_date():
     prompt = build_system_prompt(current_date=date(2026, 8, 5))
+    normalized = " ".join(prompt.split())
 
     assert "Today in America/New_York is 8/5/2026." in prompt
     assert "current clock time" in prompt
     assert "after today" in prompt
+    assert "year, then month, then day" in normalized
+    assert "on or before today" in normalized
+    assert "MUST proceed" in normalized
     assert "historical VDOT data cannot price future travel" in prompt
 
 
@@ -489,6 +493,14 @@ def test_system_prompt_requires_direction_access_checks_on_every_corridor():
     assert re.search(
         r"Never reject a cross-corridor request\s+from prompt knowledge", prompt
     )
+
+
+def test_system_prompt_routes_between_dulles_facilities_without_planner():
+    prompt = " ".join(build_system_prompt().split())
+
+    assert "one Dulles pricing surface" in prompt
+    assert "call `dulles_route` directly exactly once" in prompt
+    assert "MUST NOT call `plan_toll_route`" in prompt
 
 
 def test_system_prompt_describes_curated_network_transfers():
@@ -1464,12 +1476,12 @@ def test_agent_contract_manifest_releases_are_append_only_and_monotonic():
         validate_manifest_update(previous, rewritten)
 
     advanced = deepcopy(previous)
-    advanced["system_prompt"]["current"] = "1.31.0"
-    advanced["system_prompt"]["releases"]["1.31.0"] = "0" * 64
+    advanced["system_prompt"]["current"] = "1.32.0"
+    advanced["system_prompt"]["releases"]["1.32.0"] = "0" * 64
     validate_manifest_update(previous, advanced)
 
     advanced["system_prompt"]["current"] = "1.9.0"
-    with pytest.raises(ValueError, match=r"must advance beyond 1\.30\.0"):
+    with pytest.raises(ValueError, match=r"must advance beyond 1\.31\.0"):
         validate_manifest_update(previous, advanced)
 
 

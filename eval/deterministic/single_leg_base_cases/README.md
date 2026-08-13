@@ -1,12 +1,14 @@
 # Deterministic TollChat evaluation: single-leg base cases
 
-Eight exact-price cases cover both directions of I-95, I-495, I-66 ITB, and
-the Dulles Greenway. Every request is a verified single corridor leg: exactly
-one pricing tool call, no route planner, and no junction tool. See
+Nine exact-price cases cover both directions of I-95, I-495, I-66 ITB, and
+the Dulles Greenway, plus a Greenway-to-Toll-Road composite. Every request uses
+exactly one pricing tool call, no route planner, and no junction tool. See
 `eval-plan.md` and `test-cases.jsonl` for the contract and fixtures.
 The reciprocal Greenway cases cross its mainline plaza and require the full
 peak fare plus a separately attributed $2.00 Dulles Toll Road item in travel
 order.
+The composite case uses a prior-year date whose month and day sort after the
+current date, covering chronological comparison and cross-facility routing.
 
 ## Self-check (no network)
 
