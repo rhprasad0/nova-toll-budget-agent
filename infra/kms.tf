@@ -128,3 +128,48 @@ resource "aws_kms_alias" "agentcore_telemetry" {
   name          = "alias/nova-toll-agentcore-telemetry"
   target_key_id = aws_kms_key.agentcore_telemetry.key_id
 }
+
+data "aws_iam_policy_document" "alerts_kms" {
+  statement {
+    sid       = "EnableAccountIamPolicies"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid       = "AllowCloudWatchAlarms"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:aws:sns:topicArn"
+      values   = ["arn:aws:sns:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:nova-toll-alerts"]
+    }
+  }
+}
+
+resource "aws_kms_key" "alerts" {
+  description             = "Nova Toll CloudWatch alarm notifications"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.alerts_kms.json
+}
+
+resource "aws_kms_alias" "alerts" {
+  name          = "alias/nova-toll-alerts"
+  target_key_id = aws_kms_key.alerts.key_id
+}

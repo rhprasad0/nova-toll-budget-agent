@@ -1,5 +1,6 @@
 resource "aws_sns_topic" "alerts" {
-  name = "nova-toll-alerts"
+  name              = "nova-toll-alerts"
+  kms_master_key_id = aws_kms_key.alerts.arn
 }
 
 resource "aws_sns_topic_subscription" "alerts_email" {

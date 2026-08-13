@@ -21,4 +21,4 @@ jobs:
           scanners: vuln,misconfig
           severity: HIGH,CRITICAL
           exit-code: 1
-
+          trivyignores: .trivyignore.yaml
