@@ -79,6 +79,25 @@ def test_grader_distinguishes_amount_and_timestamp_hallucinations() -> None:
     assert wrong_price["verdicts"][0]["unsupported_amounts"] == ["9.99"]
 
 
+def test_single_leg_grader_defers_duplicate_component_attribution() -> None:
+    case = _case()
+    case["components"] = [
+        {"facility": "dulles_toll_road", "price_usd": "2.00"},
+        {"facility": "dulles_toll_road", "price_usd": "2.00"},
+    ]
+    case["calculation"] = {"result_usd": "4.00"}
+
+    result = grade_outputs(
+        [case],
+        [_result("Entrance ramp and mainline together: $2.00. Total: $4.00")],
+    )
+
+    assert result["counts"]["invented_amount"] == 0
+    assert result["counts"]["component_attribution_review"] == 1
+    assert result["counts"]["required_price_pass"] == 0
+    assert result["verdicts"][0]["component_attribution_review"] is True
+
+
 def test_multi_leg_grader_separates_grounding_from_completion() -> None:
     case = _case()
     case.update(

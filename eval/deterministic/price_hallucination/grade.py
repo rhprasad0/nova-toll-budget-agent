@@ -133,9 +133,11 @@ def grade_outputs(
         )
         amounts = [Decimal(value.replace(",", "")) for value in _MONEY.findall(text)]
         components = cast(list[dict[str, Any]], case["components"])
-        component_amounts = {
-            Decimal(component["price_usd"]) for component in components
-        }
+        component_values = [Decimal(component["price_usd"]) for component in components]
+        component_amounts = set(component_values)
+        needs_component_attribution_review = len(component_values) != len(
+            component_amounts
+        )
         total = Decimal(case["calculation"]["result_usd"])
         allowed_amounts = component_amounts | {total}
         unsupported = sorted(
@@ -162,12 +164,14 @@ def grade_outputs(
             and total in amounts
             and not missing_components
             and not wrong_completeness
+            and not needs_component_attribution_review
         )
         fully_grounded = unsupported_price_pass and required_price_pass
         counts["transport_ok"] += transport_ok
         counts["invented_amount"] += bool(unsupported)
         counts["bad_timestamp"] += bool(bad_timestamps)
         counts["facility_mismatch"] += bool(facility_mismatches)
+        counts["component_attribution_review"] += needs_component_attribution_review
         counts["unsupported_price_pass"] += unsupported_price_pass
         counts["required_price_pass"] += required_price_pass
         counts["fully_grounded"] += fully_grounded
@@ -202,6 +206,7 @@ def grade_outputs(
                 ],
                 "bad_timestamps": bad_timestamps,
                 "facility_mismatches": facility_mismatches,
+                "component_attribution_review": needs_component_attribution_review,
                 "transport_ok": transport_ok,
                 "unsupported_price_pass": unsupported_price_pass,
                 "required_price_pass": required_price_pass,
@@ -460,6 +465,7 @@ def write_gate4_review(
             "missing_component_amounts",
             "bad_timestamps",
             "facility_mismatches",
+            "component_attribution_review",
             "transport_ok",
             "unsupported_price_pass",
             "required_price_pass",
@@ -518,9 +524,13 @@ def write_gate4_review(
         )
     failure_summary = (
         "\n".join(
-            f"- **{verdict['custom_id']}**: unsupported timestamp "
-            f"`{', '.join(verdict['bad_timestamps'])}`; price amount "
-            f"`${verdict['expected_total_usd']}` was correct."
+            f"- **{verdict['custom_id']}**: "
+            + (
+                f"unsupported timestamp `{', '.join(verdict['bad_timestamps'])}`"
+                if verdict["bad_timestamps"]
+                else "equal-valued components require semantic attribution review"
+            )
+            + f"; price amount `${verdict['expected_total_usd']}` was supported."
             for verdict in failures
         )
         or "- None."
@@ -542,9 +552,9 @@ been rendered or submitted.**
 
 {failure_summary}
 
-This is **not an invented-price-amount failure**. It is a grounding failure:
-the response attached the correct price to a timestamp absent from the frozen
-tool evidence.
+These are **not invented-price-amount failures**. They are grounding exceptions:
+an unsupported timestamp or an equal-valued-component attribution that token
+matching cannot verify.
 
 ## Usage and estimated cost
 
@@ -562,7 +572,7 @@ usage; the OpenAI invoice remains authoritative.
 
 ## Manual audit checklist
 
-- [ ] Review every automated failure above (1).
+- [ ] Review every automated exception above ({len(failures)}).
 - [ ] Review the deterministic sample of 100 automated passes below.
 - [ ] Confirm route/facility attribution, component completeness, arithmetic,
       total, and any stated source time.

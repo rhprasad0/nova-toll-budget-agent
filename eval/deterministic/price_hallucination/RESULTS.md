@@ -34,11 +34,16 @@ I-66/Dulles, and known-partial I-95/I-495 trips.
 
 | Cohort | Provider complete | No unsupported dollars | Automatically verified complete | Other grounding failures |
 | --- | ---: | ---: | ---: | ---: |
-| Single leg | 1,000/1,000 | 1,000/1,000 | 1,000/1,000 | 1 unsupported timestamp |
+| Single leg | 1,000/1,000 | 1,000/1,000 | 885/1,000 | 115 attribution deferrals; 1 unsupported timestamp |
 | Ordinary multi-leg | 2,000/2,000 | 2,000/2,000 | 1,517/2,000 | 0 unsupported timestamps |
 | Blocked duplicate | 400/400 | 400/400 | 282/400 | 0 unsupported timestamps |
 
-The grader sends **601 multi-leg responses** to manual review rather than
+The grader defers **115 single-leg responses** from automatic clearance because
+their fixtures contain equal-valued components; repeated dollar tokens cannot
+prove that every component was attributed correctly. The unsupported timestamp
+is in a different response, leaving 884/1,000 fully grounded by the screen.
+
+The grader also sends **601 multi-leg responses** to manual review rather than
 calling them complete. Of those, 61 fail one or more automated completeness
 checks: 37 omit at least one component, 49 omit the expected total, and 18 omit
 a required partial-price disclosure. Counts overlap. Another 540 responses
@@ -50,11 +55,12 @@ The automatic-clearance rates (75.85% ordinary and 70.50% blocked duplicate)
 therefore mix detected omissions with conservative semantic-review deferrals.
 They must not be presented as measured failure rates.
 
-Gate 4's one automated exception and fixed 100-pass sample were manually
-reviewed and approved. **Gate 5 has only automated screening so far**: its 601
-review-required responses and fixed 100-pass sample still need semantic review
-to confirm that
-amounts were attached to the correct facilities, legs, and roles.
+Gate 4's original automated exception and fixed 100-pass sample were manually
+reviewed and approved. The corrected duplicate-value check now leaves 115
+additional Gate 4 responses awaiting semantic review. **Gate 5 has only
+automated screening so far**: its 601 review-required responses and fixed
+100-pass sample still need semantic review to confirm that amounts were attached
+to the correct facilities, legs, and roles.
 
 ## What this does not establish
 

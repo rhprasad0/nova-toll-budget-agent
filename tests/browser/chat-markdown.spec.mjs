@@ -297,7 +297,7 @@ test("pricing FAQ explains freshness, route oracles, and the unpriced junction",
   await expect(main).toContainText("no dollar amount absent from the supplied toll evidence");
   await expect(main).toContainText("invented one observation time");
   await expect(main).toContainText("omitted required components, totals, or partial-price disclosures");
-  await expect(main).toContainText("540 responses could not be automatically verified");
+  await expect(main).toContainText("115 single-leg and 540 multi-leg responses could not be automatically verified");
   await expect(main).not.toContainText("manual semantic review");
   await expect(main).toContainText("More hallucination evaluations are planned");
   await expect(main).toContainText("weekday-only peak windows");
