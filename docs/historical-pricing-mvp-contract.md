@@ -12,6 +12,10 @@ traveler than a long-term average that hides current commuting patterns.
 ## Comparison method
 
 - Match the requested route, local weekday, and 15-minute departure slot.
+- Treat the start of that slot as the comparison instant. For each observed
+  route component, select the latest complete source observation within the
+  slot (`slot_start <= interval_end_at < slot_end`). Exclude the date if any
+  required observed component has no observation in the slot.
 - Use one comparable trip price from each eligible date in the half-open window
   from 28 days before the requested time through, but not including, the
   requested time, for at most four comparable weekdays.
@@ -32,13 +36,23 @@ an explicit Eastern offset so the orchestrator can format them for users.
 {
   "route_plan_id": "plan-123",
   "method": "same_weekday_same_15_minute_slot",
-  "source_kind": "observed",
+  "source_kind": "mixed",
   "requested_at": "2026-08-13T08:00:00-04:00",
   "window_start": "2026-07-16T08:00:00-04:00",
   "window_end": "2026-08-13T08:00:00-04:00",
   "latest_observation_at": "2026-08-06T08:00:00-04:00",
+  "component_sources": [
+    {"route_step_id": "step-1", "source_kind": "schedule_derived"},
+    {"route_step_id": "step-2", "source_kind": "observed"}
+  ],
   "comparable_period_count": 4,
   "expected_comparable_period_count": 4,
+  "comparable_totals": [
+    {"departure_at": "2026-07-16T08:00:00-04:00", "total_usd": "7.10"},
+    {"departure_at": "2026-07-23T08:00:00-04:00", "total_usd": "9.00"},
+    {"departure_at": "2026-07-30T08:00:00-04:00", "total_usd": "9.50"},
+    {"departure_at": "2026-08-06T08:00:00-04:00", "total_usd": "13.60"}
+  ],
   "mean_usd": "9.80",
   "median_usd": "9.25",
   "minimum_usd": "7.10",
@@ -64,12 +78,14 @@ an explicit Eastern offset so the orchestrator can format them for users.
 | --- | --- |
 | `route_plan_id` | Identifier of the immutable route plan supplied by the orchestrator. |
 | `method` | Exact comparison method used. MVP value: `same_weekday_same_15_minute_slot`. |
-| `source_kind` | `observed` or `schedule_derived`. |
+| `source_kind` | `observed`, `schedule_derived`, or `mixed`; `mixed` means the route total combines both source kinds. |
 | `requested_at` | Requested departure time used to select comparable observations. |
 | `window_start`, `window_end` | Half-open 28-day analysis window: `[window_start, window_end)`. |
-| `latest_observation_at` | Newest observation included in the result. |
+| `latest_observation_at` | Newest observation included across all comparable periods and route components; `null` when `source_kind` is `schedule_derived`. |
+| `component_sources` | Source kind for each canonical route step, preserving provenance for mixed routes. |
 | `comparable_period_count` | Number of complete comparable trip observations used. |
 | `expected_comparable_period_count` | Number expected under full coverage, normally four. |
+| `comparable_totals` | Departure instant and complete route total for every included period. |
 | `mean_usd` | Arithmetic mean of comparable route totals. |
 | `median_usd` | Median comparable route total. |
 | `minimum_usd`, `maximum_usd` | Observed range; not a confidence interval. |
@@ -88,8 +104,9 @@ specialists are requested, the orchestrator may derive:
 }
 ```
 
-When the user supplies a budget, the orchestrator may also report the literal
-count, such as "the toll was $10 or less on 3 of 4 comparable Thursdays."
+When the user supplies a budget, the orchestrator counts qualifying values in
+`comparable_totals` and may report the literal count, such as "the toll was $10
+or less on 3 of 4 comparable Thursdays."
 Annual projections require an explicit trip frequency:
 
 ```text
