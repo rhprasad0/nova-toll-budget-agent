@@ -339,7 +339,7 @@ def test_trace_reviewer_is_read_only_for_governed_telemetry():
 def test_public_chat_edge_is_explicitly_promoted_and_uses_cloudfront_oac():
     variables = (ROOT / "infra/variables.tf").read_text()
     site = (ROOT / "infra/site.tf").read_text()
-    workflow = (ROOT / ".github/workflows/terraform.yml").read_text()
+    workflow = (ROOT.parent / ".github/workflows/terraform.yml").read_text()
 
     public_switch = variables.split('variable "enable_public_chat"', maxsplit=1)[1]
     assert "type        = bool" in public_switch

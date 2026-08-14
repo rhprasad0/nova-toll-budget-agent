@@ -14,7 +14,7 @@ Open pull requests ready for review. Do not create draft pull requests.
 
 # Multiagent rewrite
 
-Keep all new multiagent code, tests, evals, infrastructure, and documentation under `multiagent/`. Treat code outside that directory as the current single-agent implementation: do not move, rename, import, or modify it for the rewrite unless the user explicitly requests that change. Reuse is opt-in; copy or reintroduce only the pieces the rewrite actually needs.
+The complete current product lives under `single-agent/`; preserve its behavior unless the user explicitly requests a change there. Keep all new multiagent code, tests, evals, infrastructure, and documentation under `multiagent/`. The rewrite has no compatibility contract with the current product: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
 
 # Tools
 
@@ -22,8 +22,8 @@ Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa searc
 
 # Secrets
 
-SSM Parameter Store is the source of truth for every credential in this repo (see `SECURITY.md`) — never a local file.
+SSM Parameter Store is the source of truth for every credential in the deployed single-agent system (see `single-agent/SECURITY.md`) — never a local file.
 
 # Evaluation evidence
 
-Curate technically valid, representative reports in `eval/results/` for reviewers. Do not commit failed or superseded runs. Update `eval/results/README.md` and run gitleaks before committing a report.
+Curate technically valid, representative single-agent reports in `single-agent/eval/results/` for reviewers. Do not commit failed or superseded runs. Update `single-agent/eval/results/README.md` and run gitleaks before committing a report.

@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_reviewed_packages_publish_atomically_and_rollback_verifies_them() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+    workflow = (ROOT.parent / ".github" / "workflows" / "terraform.yml").read_text()
     rollback = (ROOT / "docs" / "runbooks" / "rollback.md").read_text()
     agentcore = (ROOT / "infra" / "agentcore.tf").read_text()
     audit = (ROOT / "infra" / "audit.tf").read_text()

@@ -3,7 +3,7 @@ from tomllib import load
 
 
 def test_angry_math_nerd_agent_contract() -> None:
-    path = Path(__file__).parents[1] / ".codex/agents/angry_math_nerd.toml"
+    path = Path(__file__).parents[2] / ".codex/agents/angry_math_nerd.toml"
     with path.open("rb") as definition:
         config = load(definition)
 

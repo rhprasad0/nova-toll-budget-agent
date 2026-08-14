@@ -7,36 +7,36 @@ on:
     branches: ["main"]
     paths:
       [
-        "infra/**",
+        "single-agent/infra/**",
         ".github/workflows/terraform.yml",
-        "scripts/build_zips.sh",
-        "scripts/loader-requirements.txt",
-        "agent/**",
-        "agent_tools/**",
-        "agent-sops/**",
-        "oracles/**",
-        "pyproject.toml",
-        "uv.lock",
-        "lambdas/**",
-        "site/**",
-        "docs/legal/**",
+        "single-agent/scripts/build_zips.sh",
+        "single-agent/scripts/loader-requirements.txt",
+        "single-agent/agent/**",
+        "single-agent/agent_tools/**",
+        "single-agent/agent-sops/**",
+        "single-agent/oracles/**",
+        "single-agent/pyproject.toml",
+        "single-agent/uv.lock",
+        "single-agent/lambdas/**",
+        "single-agent/site/**",
+        "single-agent/docs/legal/**",
       ]
   pull_request:
     paths:
       [
-        "infra/**",
+        "single-agent/infra/**",
         ".github/workflows/terraform.yml",
-        "scripts/build_zips.sh",
-        "scripts/loader-requirements.txt",
-        "agent/**",
-        "agent_tools/**",
-        "agent-sops/**",
-        "oracles/**",
-        "pyproject.toml",
-        "uv.lock",
-        "lambdas/**",
-        "site/**",
-        "docs/legal/**",
+        "single-agent/scripts/build_zips.sh",
+        "single-agent/scripts/loader-requirements.txt",
+        "single-agent/agent/**",
+        "single-agent/agent_tools/**",
+        "single-agent/agent-sops/**",
+        "single-agent/oracles/**",
+        "single-agent/pyproject.toml",
+        "single-agent/uv.lock",
+        "single-agent/lambdas/**",
+        "single-agent/site/**",
+        "single-agent/docs/legal/**",
       ]
 
 concurrency:
@@ -53,11 +53,11 @@ jobs:
         with:
           terraform_wrapper: false
       - run: terraform fmt -check -recursive
-        working-directory: infra
+        working-directory: single-agent/infra
       - run: terraform init -backend=false
-        working-directory: infra
+        working-directory: single-agent/infra
       - run: terraform validate
-        working-directory: infra
+        working-directory: single-agent/infra
 
   apply:
     needs: fmt-validate
@@ -69,6 +69,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    defaults:
+      run:
+        working-directory: single-agent
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -111,7 +114,7 @@ jobs:
         with:
           terraform_wrapper: false
       - run: terraform init
-        working-directory: infra
+        working-directory: single-agent/infra
       - run: |
           terraform apply -auto-approve \
             -var fetcher_package_path=build/fetcher.zip \
@@ -119,7 +122,7 @@ jobs:
             -var agentcore_package_path=build/agentcore.zip \
             -var chat_proxy_package_path=build/chat-proxy.zip \
             -var enable_public_chat=true
-        working-directory: infra
+        working-directory: single-agent/infra
       - name: Publish reviewed release
         run: |
           printf 'Reviewed release: `%s`\n' "$REVIEWED_RELEASE" >> "$GITHUB_STEP_SUMMARY"

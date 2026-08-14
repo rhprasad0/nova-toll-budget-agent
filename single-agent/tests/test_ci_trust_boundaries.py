@@ -4,7 +4,8 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOWS = ROOT / ".github" / "workflows"
+REPO_ROOT = ROOT.parent
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 MAIN_SUBJECT = (
     "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"
 )
@@ -79,37 +80,37 @@ def test_trivy_scans_vulnerabilities_and_terraform_without_secrets() -> None:
 
 def test_trivy_exceptions_are_narrow_and_security_findings_are_fixed() -> None:
     ignores = yaml.load(
-        (ROOT / ".trivyignore.yaml").read_text(), Loader=yaml.BaseLoader
+        (REPO_ROOT / ".trivyignore.yaml").read_text(), Loader=yaml.BaseLoader
     )
     assert ignores == {
         "misconfigurations": [
             {
                 "id": "AVD-AWS-0104",
-                "paths": ["infra/agentcore.tf"],
+                "paths": ["single-agent/infra/agentcore.tf"],
                 "statement": "The runtime must reach the public OpenAI API over HTTPS.",
                 "expired_at": "2027-02-13",
             },
             {
                 "id": "AVD-AWS-0104",
-                "paths": ["infra/network.tf"],
+                "paths": ["single-agent/infra/network.tf"],
                 "statement": "The Tailscale exit node must forward peer-selected internet traffic.",
                 "expired_at": "2027-02-13",
             },
             {
                 "id": "AVD-AWS-0132",
-                "paths": ["infra/agentcore.tf"],
+                "paths": ["single-agent/infra/agentcore.tf"],
                 "statement": "Versioned deployment artifacts contain no user data and use SSE-S3.",
                 "expired_at": "2027-02-13",
             },
             {
                 "id": "AVD-AWS-0132",
-                "paths": ["infra/site.tf"],
+                "paths": ["single-agent/infra/site.tf"],
                 "statement": "The bucket contains public static assets and uses SSE-S3.",
                 "expired_at": "2027-02-13",
             },
             {
                 "id": "AVD-AWS-0131",
-                "paths": ["infra/tailscale.tf"],
+                "paths": ["single-agent/infra/tailscale.tf"],
                 "statement": "Encrypt by staged router cutover; replacing the sole bridge unattended risks an outage.",
                 "expired_at": "2027-02-13",
             },

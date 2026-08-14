@@ -8,6 +8,10 @@ from typing import Any, cast
 
 _CONTRACTS = ("system_prompt", "toolset")
 _MANIFEST_PATH = Path(__file__).resolve().parent.parent / "agent/contract-manifest.json"
+_MANIFEST_GIT_PATHS = (
+    "single-agent/agent/contract-manifest.json",
+    "agent/contract-manifest.json",
+)
 
 
 def _version_tuple(version: str) -> tuple[int, int, int]:
@@ -44,17 +48,16 @@ def _manifest_at(base_ref: str) -> dict[str, Any] | None:
         check=True,
         capture_output=True,
     )
-    result = subprocess.run(
-        ["git", "show", f"{base_ref}:agent/contract-manifest.json"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return (
-        cast(dict[str, Any], json.loads(result.stdout))
-        if result.returncode == 0
-        else None
-    )
+    for path in _MANIFEST_GIT_PATHS:
+        result = subprocess.run(
+            ["git", "show", f"{base_ref}:{path}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return cast(dict[str, Any], json.loads(result.stdout))
+    return None
 
 
 def main() -> int:
