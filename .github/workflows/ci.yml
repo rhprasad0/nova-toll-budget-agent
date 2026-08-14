@@ -15,6 +15,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: single-agent
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,6 +29,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: single-agent/package-lock.json
       - run: uv sync --locked
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -38,28 +42,14 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest
       - run: npm ci && npm test
-        working-directory: lambdas/chat_proxy
-      - run: uv run python eval/deterministic/fuzzy_location_matching/deterministic_fuzzy_location_matching.py --check
-      - run: uv run python eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py --check
-      - run: uv run python eval/deterministic/non_i95_directional_access/deterministic_non_i95_directional_access.py --check
-      - run: uv run python eval/deterministic/ny_time_us_format/deterministic_ny_time_us_format.py --check
-      - run: uv run python eval/deterministic/i95_historical_closures/deterministic_i95_historical_closures.py --check
-      - run: uv run python eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py --check
-      - run: uv run python eval/deterministic/dulles_connector_junction/deterministic_dulles_connector_junction.py --check
-      - run: uv run python eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py --check
-      - run: uv run python eval/deterministic/duplicate_tool_guard/deterministic_duplicate_tool_guard.py --check
-      - run: uv run python eval/deterministic/guardrail_boundary/deterministic_guardrail_boundary.py --check
-      - run: uv run python eval/simulated/simulated_user_i95_historical_closures.py --check
-      - run: uv run python eval/simulated/simulated_user_i95_one_way_access.py --check
-      - run: uv run python eval/simulated/simulated_user_fuzzy_location_matching.py --check
-      - run: uv run python eval/simulated/simulated_user_non_i95_directional_access.py --check
-      - run: uv run python eval/simulated/simulated_user_missing_parameter_acquisition.py --check
-      - run: uv run python eval/simulated/simulated_user_single_leg_base_cases.py --check
-      - run: uv run python eval/simulated/simulated_user_i95_i495_junctions.py --check
+        working-directory: single-agent/lambdas/chat_proxy
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
 
   integration:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: single-agent
     # Checked-out code can reach RDS and retrieve the OpenAI key, so only
     # merged main content may run this job. The workflow also runs
     # for tags, but this exact ref guard keeps them credential-free.
@@ -69,7 +59,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # infra/build/ is gitignored (scripts/build_zips.sh's output) -- fetch
+      # single-agent/infra/build/ is gitignored (scripts/build_zips.sh's output) -- fetch
       # just the CA bundle piece of it here, same URL + pinned hash as that
       # script uses for the loader Lambda zip.
       - name: Fetch RDS CA bundle

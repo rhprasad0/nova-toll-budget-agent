@@ -15,18 +15,18 @@ __pycache__/
 node_modules/
 test-results/
 /.worktrees/
-/eval/private/
-/eval/deterministic/price_hallucination/single-leg-batch.jsonl
-/eval/deterministic/price_hallucination/multi-leg-batch-*.jsonl
-/eval/deterministic/price_hallucination/gate*-automated.json
-/eval/deterministic/price_hallucination/gate*-manual-sample.json
-/eval/deterministic/price_hallucination/gate*-results-packet.sha256
-/eval/deterministic/price_hallucination/gate*-results-review.md
+/single-agent/eval/private/
+/single-agent/eval/deterministic/price_hallucination/single-leg-batch.jsonl
+/single-agent/eval/deterministic/price_hallucination/multi-leg-batch-*.jsonl
+/single-agent/eval/deterministic/price_hallucination/gate*-automated.json
+/single-agent/eval/deterministic/price_hallucination/gate*-manual-sample.json
+/single-agent/eval/deterministic/price_hallucination/gate*-results-packet.sha256
+/single-agent/eval/deterministic/price_hallucination/gate*-results-review.md
 
 # Terraform
-infra/.terraform/
-infra/*.tfstate
-infra/*.tfstate.*
-infra/build/
-infra/*.tfplan
+/single-agent/infra/.terraform/
+/single-agent/infra/*.tfstate
+/single-agent/infra/*.tfstate.*
+/single-agent/infra/build/
+/single-agent/infra/*.tfplan
 *.tfvars
