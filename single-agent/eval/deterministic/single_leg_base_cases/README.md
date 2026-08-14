@@ -29,6 +29,6 @@ The live run invokes TollChat once per case using the OpenAI key from SSM and
 read-only historical RDS for VDOT-backed roads. `dulles_route` reads committed
 oracles. Results are written to `eval/results/<timestamp>.json`.
 
-Required CI runs only `--check`. The code-based grader is repeatable, but the
-live TollChat execution is stochastic, so both this suite and the matching
-three-turn simulation run nightly as observational evidence.
+Required CI runs only `--check`. The code-based grader is repeatable, but live
+TollChat execution is stochastic, so this suite and its matching three-turn
+simulation require explicit manual authorization as observational evidence.

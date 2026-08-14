@@ -20,21 +20,21 @@ replacement.
 ## Promotion and execution
 
 Run the code-graded suite three times before treating it as representative
-evidence. Both live suites are observational and run nightly; required CI uses
-their synthetic checks only.
+evidence. Both live suites are manually authorized observations; required CI
+uses their synthetic checks only.
 
 ## Execution record
 
 - 2026-08-04: three code-graded executions passed all three cases with
   populated evaluator details; the suite was promoted to trusted integration CI.
-- 2026-08-11: live execution moved to nightly because model behavior remains
+- 2026-08-11: live execution left required CI because model behavior remains
   stochastic even when trace grading and fixtures are deterministic.
 - 2026-08-12: simulation trace grading added duplicate-hook and complete
   cross-corridor recovery coverage; its next live execution remains observational.
 - 2026-08-04: the one authorized simulation execution scored 0.5833 (4/6
   judgments). It is not curated or rerun: one actor stopped after turn one,
   while a grader comparison was corrected to ignore harmless extra tool fields.
-  Its next live attempt remains a nightly observation.
+  Any next live attempt requires explicit authorization.
 - 2026-08-04: one renewed deterministic run passed 3/3. The renewed simulation
   scored 0.5277 (3/6): the now-removed exact-three-turn criterion was stricter
   than the simulation contract. The helpfulness judge is calibrated to accept

@@ -28,7 +28,7 @@ See the [README](README.md) for commands.
 
 ## Simulated track
 
-The nightly simulation asks for the same route "tomorrow around 3". The actor
+The simulated-user track asks for the same route "tomorrow around 3". The actor
 receives the real New York date so it can answer a clarification with a concrete
 date. `HelpfulnessEvaluator` and `GoalSuccessRateEvaluator` remain observational
 because the actor and judges are model-based.

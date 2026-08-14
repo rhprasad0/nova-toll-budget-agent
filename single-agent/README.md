@@ -71,8 +71,8 @@ with the canonical `$12.15` result without changing deployment identity.
 The [eval-authoring SOP](agent-sops/eval-authoring.sop.md) captures the loop:
 define the behavior contract, validate evaluators offline, run billed live
 suites only with explicit authorization, inspect raw traces, preserve observed
-scores without rerunning for a prettier number, and promote stable checks into
-CI or nightly automation.
+scores without rerunning for a prettier number, and promote stable offline
+checks into CI.
 
 **[Explore all curated evaluation evidence →](eval/results/README.md)**
 

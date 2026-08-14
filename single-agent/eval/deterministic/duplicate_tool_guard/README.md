@@ -6,4 +6,4 @@ Three code-graded cases verify that exact repeated tool attempts are suppressed 
 uv run python eval/deterministic/duplicate_tool_guard/deterministic_duplicate_tool_guard.py --check
 ```
 
-Omit `--check` only through the repository's nightly workflow: live execution uses OpenAI and historical RDS pricing.
+Omit `--check` only for an explicitly authorized manual run: live execution uses OpenAI and historical RDS pricing.

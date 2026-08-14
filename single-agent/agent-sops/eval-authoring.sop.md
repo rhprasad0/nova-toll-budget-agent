@@ -198,17 +198,16 @@ Save each completed report as timestamped JSON under `eval/results/`.
 - Claims in `eval-report.md` MUST cite raw telemetry when tool counts or ordering
   matter.
 
-### 9. Place the eval in automation
+### 9. Place stable checks in automation
 
-Keep synthetic, code-graded checks in required CI. Run live agent evaluations,
-including code-graded and simulated-user suites, from
-`.github/workflows/nightly-evals.yml`, which uploads reports as artifacts.
+Keep synthetic, code-graded checks in required CI. Run live agent evaluations
+manually and only with explicit authorization.
 
 **Constraints:**
 - You MUST keep non-network `--check` commands in ordinary CI.
-- You MUST NOT treat deterministic grading as deterministic execution: any suite
-  that invokes a model belongs in nightly observational automation, even when
-  its evaluator and pricing fixtures are repeatable.
+- You MUST NOT treat deterministic grading as deterministic execution: suites
+  that invoke a model remain manually authorized observations, even when their
+  evaluators and pricing fixtures are repeatable.
 - Deterministic RDS-only integration tests MAY remain in trusted integration CI.
 - You MUST NOT run paid simulation on every PR because it is stochastic and
   consumes OpenAI, Bedrock, and RDS resources.

@@ -5,7 +5,7 @@
 - **User Input:** Create eight routine single-leg evaluations covering both
   directions of I-95, I-495, I-66 ITB, and the Dulles Greenway; pin reversible
   I-95 trips to open-direction times, require exact prices, keep synthetic
-  checks in required CI, and run live agent cases and simulations nightly;
+  checks in required CI, and run live agent cases and simulations manually;
   later add one direct Dulles cross-facility historical-date regression.
 - **Interpreted Evaluation Requirements:** Every case must call exactly one
   corridor pricing tool, return the fixture-matching priced leg or Dulles
@@ -120,8 +120,8 @@ eval/
 | **Timestamp** | **Phase** | **Requirement** |
 | :-- | :-- | :-- |
 | 2026-08-02 | Planning | Eight longest reciprocal, exact-price, single-leg base cases with boundary endpoints allowed. |
-| 2026-08-02 | Automation | Code-graded live cases initially ran in trusted CI; simulations nightly. |
-| 2026-08-11 | Automation | Live agent execution moved to nightly because deterministic grading does not make model execution deterministic; required CI retains `--check`. |
+| 2026-08-02 | Automation | Code-graded live cases initially ran in trusted CI; simulations ran separately. |
+| 2026-08-11 | Automation | Live agent execution left required CI because deterministic grading does not make model execution deterministic; required CI retains `--check`. |
 | 2026-08-02 | Simulation | Matching explicit-profile simulations capped at three agent turns per case. |
 | 2026-08-03 | Coverage | Reuse both Greenway directions to validate the separate additive DTR mainline fee. |
 
@@ -132,7 +132,7 @@ eval/
 | 2026-08-02 | Plan and fixtures | Completed | Routes and exact historical fares verified against committed oracles and read-only RDS. |
 | 2026-08-02 | Deterministic implementation | Completed | Exact captured-call and response graders with offline mutation checks. |
 | 2026-08-02 | Simulated implementation | Completed | Nine immutable actor profiles, including the direct Dulles composite, capped at three turns with deterministic trace grading. |
-| 2026-08-11 | Automation | Completed | Offline checks remain in required CI; code-graded and simulated live executions run nightly as observational evidence. |
+| 2026-08-14 | Automation | Completed | Offline checks remain in required CI; code-graded and simulated live executions require explicit manual authorization. |
 | 2026-08-02 | Deterministic live execution | Reviewed, not curated | Exact tool results passed 8/8; response grading exposed presentation false negatives and one genuine missing-rate-period response. |
 | 2026-08-02 | Simulated live execution | Reviewed, not curated | Goal/helpfulness passed 16/16; trace grading caught one invalid-time retry, and only 5/8 conversations reached all three turns. |
 | 2026-08-02 | Adversarial review | Completed | Accepted valid human-readable route labels and Markdown arithmetic and kept tool counts in code grading; turn count remains an SDK cap because valid actors may finish early. |

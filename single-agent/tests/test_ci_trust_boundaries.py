@@ -24,9 +24,8 @@ def test_openai_ci_credentials_are_main_only() -> None:
     assert "refs/heads/*" not in trust
 
 
-def test_stochastic_agent_evals_are_nightly_not_required_ci() -> None:
+def test_stochastic_agent_evals_are_offline_only_in_required_ci() -> None:
     ci = (WORKFLOWS / "ci.yml").read_text()
-    nightly = (WORKFLOWS / "nightly-evals.yml").read_text()
     runners = (
         "eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py",
         "eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py",
@@ -37,8 +36,8 @@ def test_stochastic_agent_evals_are_nightly_not_required_ci() -> None:
     for runner in runners:
         assert f"run: uv run python {runner} --check" in ci
         assert f"run: uv run python {runner}\n" not in ci
-        assert runner in nightly
-    assert "::error title=Live evaluation failed::" in nightly
+    assert not (WORKFLOWS / "nightly-evals.yml").exists()
+    assert not (WORKFLOWS / "batch-judge-collector.yml").exists()
 
 
 def test_claude_pr_review_has_no_secret_bearing_workflow() -> None:

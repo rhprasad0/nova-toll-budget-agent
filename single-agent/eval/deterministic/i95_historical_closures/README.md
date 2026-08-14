@@ -32,8 +32,8 @@ AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_i95_historical
 ```
 
 This additionally bills Bedrock for four user simulations of up to two agent
-turns. The nightly workflow submits two report-only OpenAI Batch judges per
-case. It is observational, not a deterministic regression gate. Set
+turns. Optional report-only OpenAI Batch judges may be submitted manually.
+The run is observational, not a deterministic regression gate. Set
 `NOVA_TOLL_EVAL_MODEL_ID` to override the pinned simulator model.
 Neither track contacts Transurban live pricing. Representative technically valid
 runs are listed in `eval/results/README.md`; failed and superseded runs are not

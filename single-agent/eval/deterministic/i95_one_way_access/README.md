@@ -28,5 +28,5 @@ Reports are written to `eval/results/`; only technically valid runs belong in
 the curated index.
 
 Required CI runs only the two offline checks. Deterministic grading does not
-make TollChat's live model execution deterministic, so both live commands run
-nightly as observational evidence.
+make TollChat's live model execution deterministic, so both live commands
+require explicit manual authorization and remain observational evidence.

@@ -39,9 +39,8 @@ once first to create the gitignored RDS CA bundle; after that, only
 `AWS_PROFILE` is needed. Results land in `eval/results/<timestamp>.json`;
 representative valid runs may be curated in the repository's results index.
 
-Required CI runs only the offline `--check`. The live suite runs nightly because
-agent execution is stochastic; a failed evaluator fails that nightly workflow
-without blocking a merge.
+Required CI runs only the offline `--check`. Live execution is stochastic and
+therefore requires explicit manual authorization without blocking a merge.
 
 ## Simulated-user evaluation (Track 2)
 
@@ -65,20 +64,14 @@ are not covered by `--check`.
 AWS_PROFILE=nova-toll uv run python eval/simulated/simulated_user_ny_time_us_format.py
 ```
 
-To match nightly exactly, set `NOVA_TOLL_EVAL_MODEL_ID` from
-`/nova-toll/nightly_eval_bedrock_profile_arn` in SSM for that command.
-
 A live run spends across three billed surfaces for the one simulated case:
 OpenAI (the agent under test), Bedrock (the simulator's conversational
 turns and both judges), and RDS (the agent's pricing tools). The simulator
 and judges use Claude Haiku 4.5
 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) locally;
-`NOVA_TOLL_EVAL_MODEL_ID` overrides that model for automated runs.
+`NOVA_TOLL_EVAL_MODEL_ID` overrides that model for an authorized run.
 
-## Nightly run
+## Automation policy
 
-`.github/workflows/nightly-evals.yml` runs both the code-graded live suite and
-the simulated-user evaluation every day at 3:17 AM New York time alongside the
-fuzzy-location evaluations, and supports manual dispatch from `main`. Judge
-verdicts are observational; execution failures still fail the workflow. Each
-JSON report is retained as a GitHub artifact for 90 days.
+Only offline checks run automatically. Live agent, simulator, judge, and RDS
+calls are manual observations requiring explicit authorization.

@@ -11,7 +11,7 @@ from eval import simulation_support
 
 def test_only_actor_simulator_uses_configured_model(monkeypatch, tmp_path):
     model_id = (
-        "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/nightly"
+        "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/manual"
     )
     models = []
     actor_options = {}

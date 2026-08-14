@@ -80,18 +80,6 @@ validated proxy through CloudFront OAC and WAF; reports sent to
   Cloudflare API token remains on its own dedicated KMS key (`infra/kms.tf`),
   isolated from the VDOT feed tokens and Tailscale authkey.
 
-## Implemented hardening (2026-08-01)
-
-- Nightly simulated-user evaluations use a dedicated GitHub OIDC role trusted
-  only for `main`. Its permissions are limited to the read-only pricing path,
-  the two required SSM parameters, and the tagged Claude Haiku application
-  inference profile plus its underlying regional models. The workflow cannot
-  invoke arbitrary Bedrock models.
-- Bedrock evaluation costs are attributed through an application inference
-  profile tagged `project=nova-toll-budget-agent` and
-  `purpose=nightly-eval`; the payer account must activate the `purpose`
-  cost-allocation tag before it appears in Cost Explorer or CUR.
-
 ## Deployment verification
 
 Historical verification after the 2026-07-26 deployment:
