@@ -54,8 +54,9 @@ The orchestrator MUST:
   among multiple plausible matches;
 - use the universal route tool for every trip, including a trip contained
   within one corridor;
-- run the I-95 direction and access gates before the route tool for every trip
-  that uses an I-95/395 endpoint or documented I-95 handoff;
+- run the I-95 direction gate before the route tool for every trip that uses an
+  I-95/395 endpoint or documented I-95 handoff, and run the access gate whenever
+  a usable Express Lanes direction exists;
 - discuss direction, access, unsupported connections, and alternatives with the
   user before finalizing the route;
 - create a new immutable route plan whenever the origin, destination, departure
@@ -121,19 +122,32 @@ An I-95 trip includes both a direct I-95/395 trip and a cross-corridor trip that
 uses a documented I-95 handoff.
 
 1. Call the I-95 direction tool with the normalized requested time.
-2. If no usable direction can be established, explain the returned condition
-   and stop. Do not call the access, route, or specialist tools.
-3. Call the public I-95 access-options tool with the canonical trip endpoints
-   and the direction result. This one tool covers both direct trips and
-   cross-corridor endpoint handoffs.
-4. If access is invalid, explain the affected entry or exit and offer only the
-   returned alternatives. Wait for the user to choose.
-5. Call the universal route tool only after the direction and access results
+2. If no usable direction can be established for an I-95-only trip, explain the
+   returned condition and stop. Do not call the access, route, or specialist
+   tools.
+3. If no usable direction can be established for a cross-corridor trip, call
+   the universal route tool with that direction result. The route may end the
+   priceable corridor at its documented boundary and add an explicit unpriced
+   general-purpose-lane remainder. For example, Wolf Trap to Dumfries prices
+   I-495 only as far as Braddock and tells the user to complete the remaining
+   trip on the I-95 general-purpose lanes.
+4. Otherwise, call the public I-95 access-options tool with the canonical trip
+   endpoints and the direction result. This one tool covers both direct trips
+   and cross-corridor endpoint handoffs.
+5. If fixed ramp access is invalid, explain the affected entry or exit and offer
+   only the returned alternatives. Wait for the user to choose. If the desired
+   I-95 direction is closed on an I-95-only trip, explain it and stop. If it is
+   closed on a cross-corridor trip, use the partial-route behavior from step 3
+   instead.
+6. Call the universal route tool only after the direction and access results
    support the requested trip.
-6. Finalize the route plan only if the route tool returns a supported route.
+7. Finalize the route plan only if the route tool returns a supported complete
+   or partial route.
 
-The route tool MUST still fail closed if its inputs contradict the supplied
-I-95 validation. Tool-boundary validation protects correctness if the model
+The route tool MUST NOT produce an I-95 Express Lanes step that contradicts the
+supplied validation. An unavailable direction may authorize only a documented
+partial route that omits the Express Lanes step and marks the general-purpose
+remainder unpriced. Tool-boundary validation protects correctness if the model
 mis-sequences a call; it does not change the orchestrator's required order.
 
 ## Canonical route plan
@@ -201,8 +215,9 @@ The route-plan contract requires these invariants:
   operands.
 - `unpriced` steps remain explicitly unpriced; neither the orchestrator nor a
   specialist may convert them to `$0.00`.
-- An I-95 plan carries the successful direction and access evidence used to
-  admit it.
+- An I-95 plan carries the direction and access evidence used to admit it. A
+  cross-corridor fallback carries the unavailable direction evidence and an
+  explicit unpriced general-purpose-lane remainder.
 - A plan contains route facts, not specialist tool names or database details.
 
 Changing any trip-defining field creates a new identifier. Specialist results
@@ -229,8 +244,8 @@ Specialist route coverage uses three outcomes:
 
 | Status | Monetary field | Meaning |
 | --- | --- | --- |
-| `complete` | `total_usd` | Every required toll step was priced. |
-| `partial` | `known_total_usd` | At least one price is known, but a required step is unpriced or unavailable. |
+| `complete` | `total_usd` | Every toll step was priced, and the route has no required `unpriced` or unavailable step. |
+| `partial` | `known_total_usd` | At least one price is known, but a required route step is explicitly unpriced or unavailable. |
 | `unavailable` | none | No defensible monetary result is available. |
 
 The orchestrator may compare current and historical results only when they
@@ -246,6 +261,9 @@ math.
 - Preserve exact user-selected endpoints through later turns.
 - Explain why an I-95 direction or ramp is unavailable before presenting
   alternatives.
+- For a cross-corridor trip with unavailable I-95 Express Lanes, price the
+  supported toll portion, identify its boundary, and direct the remainder to
+  the unpriced I-95 general-purpose lanes.
 - Do not claim that a general-purpose lane has a known toll when no pricing
   specialist supplied one.
 - Describe a `partial` result as a known subtotal, not the trip's complete fare.
@@ -287,8 +305,8 @@ the retired implementation verbatim.
 | [Missing parameter acquisition](../../single-agent/eval/simulated/missing_parameter_acquisition/README.md) | Ask for all and only missing required endpoints, make no premature tool call, and retain supplied facts after the answer. |
 | [Fuzzy location matching](../../single-agent/eval/deterministic/fuzzy_location_matching/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_fuzzy_location_matching.py) | Ask before choosing a multi-match alias, preserve time and the other endpoint, honor exact canonical labels, and handle the Washington I-66/I-395 choice without guessing. |
 | [I-95 one-way access](../../single-agent/eval/deterministic/i95_one_way_access/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_i95_one_way_access.py) | Exercise direct and cross-corridor access mismatches, returned alternatives, user recovery, and the successful control. Update the expected sequence to direction, access, then universal route. |
-| [Historical I-95 closures](../../single-agent/eval/deterministic/i95_historical_closures/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_i95_historical_closures.py) | Move closure detection ahead of route planning and specialist delegation. Require no fare and no downstream calls when the direction gate cannot admit the trip. |
-| [I-95/I-495 junctions](../../single-agent/eval/deterministic/i95_i495_junctions/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_i95_i495_junctions.py) | Preserve movement-aware boundaries, both-closed behavior, boundary-equal cases, explicit unpriced gaps, and qualified known totals. Replace the old junction-pricing trajectory with orchestrator gates, one route plan, and specialist calls. |
+| [Historical I-95 closures](../../single-agent/eval/deterministic/i95_historical_closures/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_i95_historical_closures.py) | Move closure detection ahead of route planning and specialist delegation. Require no fare and no downstream calls for an I-95-only trip that the direction gate cannot admit. |
+| [I-95/I-495 junctions](../../single-agent/eval/deterministic/i95_i495_junctions/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_i95_i495_junctions.py) | Preserve movement-aware boundaries, boundary-equal cases, explicit unpriced gaps, and qualified known totals. A both-closed cross-corridor case must still price the supported leg to Braddock and identify the general-purpose-lane remainder. Replace the old junction-pricing trajectory with orchestrator gates, one route plan, and specialist calls. |
 | [Non-I-95 directional access](../../single-agent/eval/deterministic/non_i95_directional_access/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_non_i95_directional_access.py) | Preserve fixed one-way ramp mismatches and recovery options for I-66, I-495, and the Greenway through the universal route tool. |
 | [Airport endpoints](../../single-agent/eval/deterministic/airport_endpoints/README.md) and its [simulated user](../../single-agent/eval/simulated/simulated_user_airport_endpoints.py) | Preserve IAD and DCA canonicalization, directed handoffs, untolled airport connectors, the Dulles charge after IAD access, and rejection of Access Highway misuse. DCA cases also exercise the I-95 gates. |
 | [I-66/Dulles junction](../../single-agent/eval/deterministic/dulles_connector_junction/README.md) | Preserve both directed handoffs and ensure an untolled connector is present in the route but absent from pricing arithmetic. |
