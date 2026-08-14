@@ -12,6 +12,10 @@ Create all worktrees inside the project-root `.worktrees/` directory, which must
 
 Open pull requests ready for review. Do not create draft pull requests.
 
+# Multiagent rewrite
+
+Keep all new multiagent code, tests, evals, infrastructure, and documentation under `multiagent/`. Treat code outside that directory as the current single-agent implementation: do not move, rename, import, or modify it for the rewrite unless the user explicitly requests that change. Reuse is opt-in; copy or reintroduce only the pieces the rewrite actually needs.
+
 # Tools
 
 Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa search for other search tasks.
