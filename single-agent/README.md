@@ -90,7 +90,7 @@ the model and RDS.
 | Security and safety | [Agent security posture](SECURITY.md#agent-posture), [runtime resource policy](infra/agentcore.tf#L30-L62), and the [runbooks](docs/runbooks/) | Least privilege, secret handling, guardrail boundaries, spend controls, and operational controls |
 | AWS architecture | [AgentCore and VPC Terraform](infra/agentcore.tf#L30-L179), [CloudFront/OAC/WAF path](infra/site.tf#L319-L415), and [deployment decisions](docs/architecture/decisions.md) | AgentCore, Lambda, RDS, private networking, observability, rollback, and a kill switch |
 | Engineering investigation | [Oracle findings](docs/oracle-findings.md) and the [poller specification](docs/poller-spec.md) | Data-source reconciliation, discovered edge cases, migrations, and documented tradeoffs |
-| Quality gates | [CI check and eval gates](../.github/workflows/ci.yml) and [browser tests](tests/browser/) | Strict typing, linting, unit and integration tests, UI checks, and agent evaluations |
+| Quality gates | [CI checks](../.github/workflows/ci.yml), [browser tests](tests/browser/), and [curated eval evidence](eval/results/README.md) | Strict typing, linting, unit and integration tests, UI checks, and separately preserved agent evaluations |
 
 ## How it works
 

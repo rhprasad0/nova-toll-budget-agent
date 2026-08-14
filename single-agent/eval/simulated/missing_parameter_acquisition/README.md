@@ -27,4 +27,4 @@ each and writes a timestamped report to `eval/results/`. The agent remains
 stochastic; one observation is evidence, not proof of future responses. Any
 failed deterministic verdict makes the runner exit nonzero.
 
-Ordinary CI runs only `--check`. Run the paid live suite manually with explicit authorization.
+Run `--check` manually before an explicitly authorized paid live suite.

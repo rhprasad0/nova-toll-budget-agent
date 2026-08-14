@@ -27,6 +27,6 @@ three-turn simulation additionally invokes Bedrock for actors and judges.
 Reports are written to `eval/results/`; only technically valid runs belong in
 the curated index.
 
-Required CI runs only the two offline checks. Deterministic grading does not
-make TollChat's live model execution deterministic, so both live commands
-require explicit manual authorization and remain observational evidence.
+Run both offline checks manually before live evaluation. Deterministic grading
+does not make TollChat's live model execution deterministic, so both live
+commands require explicit authorization and remain observational evidence.

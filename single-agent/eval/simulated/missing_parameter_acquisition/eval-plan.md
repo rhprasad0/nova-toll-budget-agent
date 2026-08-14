@@ -24,7 +24,7 @@ all cases converge on Jones Branch Drive/Route 123 to Westpark Drive.
 
 The runner uses the real `build_agent()`, a deterministic scripted user, shared
 agent-only telemetry, a fresh agent per case, and exactly two turns. Offline
-`--check` runs in ordinary CI; live agent runs require explicit manual authorization.
+Run `--check` manually; live agent runs require explicit authorization.
 
 ## Progress
 

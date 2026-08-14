@@ -38,8 +38,8 @@ gitignored RDS CA bundle; after that, only `AWS_PROFILE` is needed. Results
 land in `eval/results/<timestamp>.json`; representative valid runs may be curated
 in the repository's results index.
 
-Required CI runs only the offline `--check`. Live execution is stochastic and
-therefore requires explicit manual authorization without blocking a merge.
+Run the offline `--check` manually. Live execution is stochastic and therefore
+requires explicit authorization.
 
 ## Simulated-user evaluation (Track 2)
 
@@ -82,6 +82,6 @@ The simulator uses Claude Haiku 4.5
 
 ## Automation policy
 
-Only offline checks run automatically. Live agent, simulator, judge, and RDS
-calls are manual observations requiring explicit authorization; representative
-valid reports may be curated under `eval/results/`.
+Agent evaluations do not run automatically. Live agent, simulator, judge, and
+RDS calls are manual observations requiring explicit authorization;
+representative valid reports may be curated under `eval/results/`.

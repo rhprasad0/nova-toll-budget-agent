@@ -198,13 +198,14 @@ Save each completed report as timestamped JSON under `eval/results/`.
 - Claims in `eval-report.md` MUST cite raw telemetry when tool counts or ordering
   matter.
 
-### 9. Place stable checks in automation
+### 9. Keep evaluations manual
 
-Keep synthetic, code-graded checks in required CI. Run live agent evaluations
-manually and only with explicit authorization.
+Run synthetic `--check` modes locally before any live evaluation. Run live agent
+evaluations only with explicit authorization. Do not add evaluation runners to
+required CI for the retired single-agent implementation.
 
 **Constraints:**
-- You MUST keep non-network `--check` commands in ordinary CI.
+- You MUST keep non-network `--check` commands runnable for manual validation.
 - You MUST NOT treat deterministic grading as deterministic execution: suites
   that invoke a model remain manually authorized observations, even when their
   evaluators and pricing fixtures are repeatable.

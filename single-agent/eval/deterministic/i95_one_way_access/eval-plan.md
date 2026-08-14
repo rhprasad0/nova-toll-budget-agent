@@ -20,14 +20,14 @@ replacement.
 ## Promotion and execution
 
 Run the code-graded suite three times before treating it as representative
-evidence. Both live suites are manually authorized observations; required CI
-uses their synthetic checks only.
+evidence. Both live suites are manually authorized observations; run their
+synthetic checks manually first.
 
 ## Execution record
 
 - 2026-08-04: three code-graded executions passed all three cases with
   populated evaluator details; the suite was promoted to trusted integration CI.
-- 2026-08-11: live execution left required CI because model behavior remains
+- 2026-08-11: live execution left required automation because model behavior remains
   stochastic even when trace grading and fixtures are deterministic.
 - 2026-08-12: simulation trace grading added duplicate-hook and complete
   cross-corridor recovery coverage; its next live execution remains observational.

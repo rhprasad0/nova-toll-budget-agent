@@ -14,5 +14,5 @@ same untolled I-66 / Dulles Toll Road junction.
 
 ## Execution
 
-`--check` uses synthetic tool traces in CI. Explicitly authorized manual runs
-invoke the actual agent and store reports under `eval/results/`.
+Run `--check` manually with synthetic tool traces. Explicitly authorized live
+runs invoke the actual agent and store reports under `eval/results/`.

@@ -23,7 +23,7 @@ the expected instant. `USFormatEvaluator` derives expected display values from
 the captured tool result and rejects any other explicit date/time form. A tool
 error with no timestamp is not applicable to the format metric.
 
-The suite's `--check` mode covers evaluator failure paths and runs in CI.
+The suite's manual `--check` mode covers evaluator failure paths.
 See the [README](README.md) for commands.
 
 ## Simulated track

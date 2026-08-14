@@ -24,18 +24,10 @@ def test_openai_ci_credentials_are_main_only() -> None:
     assert "refs/heads/*" not in trust
 
 
-def test_stochastic_agent_evals_are_offline_only_in_required_ci() -> None:
+def test_agent_eval_runners_are_not_in_required_ci() -> None:
     ci = (WORKFLOWS / "ci.yml").read_text()
-    runners = (
-        "eval/deterministic/single_leg_base_cases/deterministic_single_leg_base_cases.py",
-        "eval/deterministic/i95_one_way_access/deterministic_i95_one_way_access.py",
-        "eval/deterministic/i95_i495_junctions/deterministic_i95_i495_junctions.py",
-        "eval/deterministic/duplicate_tool_guard/deterministic_duplicate_tool_guard.py",
-    )
-
-    for runner in runners:
-        assert f"run: uv run python {runner} --check" in ci
-        assert f"run: uv run python {runner}\n" not in ci
+    assert "python eval/deterministic/" not in ci
+    assert "python eval/simulated/" not in ci
     assert not (WORKFLOWS / "nightly-evals.yml").exists()
     assert not (WORKFLOWS / "batch-judge-collector.yml").exists()
 

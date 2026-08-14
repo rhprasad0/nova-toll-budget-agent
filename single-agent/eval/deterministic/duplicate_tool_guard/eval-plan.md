@@ -12,11 +12,11 @@ Issue #112 requires the Strands hook to suppress an exact repeated tool call wit
 
 ## Implementation and progress
 
-The JSONL cases become Strands Evals `Case` objects. A fresh production `build_agent()` runs each case, and a code evaluator grades unique tool IDs, exact input signatures, tool results, cancellation text, ordering, and completion. `--check` uses synthetic trajectories in required CI; live execution is manual because model behavior remains stochastic.
+The JSONL cases become Strands Evals `Case` objects. A fresh production `build_agent()` runs each case, and a code evaluator grades unique tool IDs, exact input signatures, tool results, cancellation text, ordering, and completion. Run `--check` manually with synthetic trajectories; live execution is also manual because model behavior remains stochastic.
 
 - [x] Plan and three JSONL cases designed from the production SOP and committed route oracle.
 - [x] Offline evaluator branches validated.
-- [x] Offline CI coverage added.
+- [x] Offline self-check coverage added.
 - [x] Live validation completed on 8/12/2026: after an invalid empty-trajectory
   baseline exposed and repaired response-metric extraction, one renewed run
   passed 3/3. Dumfries produced an exact duplicate planner attempt that the hook
