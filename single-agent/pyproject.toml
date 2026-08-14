@@ -11,7 +11,7 @@ dependencies = [
     "strands-agents[openai]==1.51.0",
     # 3.2.13 is the newest release with AgentCore's documented
     # aarch64-manylinux2014 wheel; 3.3.x requires a newer glibc tag.
-    "psycopg[binary]==3.2.13",
+    "psycopg[binary]==3.3.4",
 ]
 
 [dependency-groups]
