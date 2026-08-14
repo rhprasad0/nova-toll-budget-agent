@@ -1,0 +1,822 @@
+{
+ "nodes": {
+  "1": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [
+    "WB"
+   ],
+   "label": "I-66 West"
+  },
+  "10": {
+   "entry_in": [],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Westmoreland St"
+  },
+  "11": {
+   "entry_in": [
+    "WB"
+   ],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Washington Blvd"
+  },
+  "12": {
+   "entry_in": [
+    "WB"
+   ],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Fairfax Drive"
+  },
+  "13": {
+   "entry_in": [
+    "WB"
+   ],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Lee Highway - Spout Run Parkway"
+  },
+  "14": {
+   "entry_in": [],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Exit 73 - Rosslyn"
+  },
+  "15": {
+   "entry_in": [
+    "WB"
+   ],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Exit 75 - Pentagon/Alexandria"
+  },
+  "16": {
+   "entry_in": [
+    "WB"
+   ],
+   "exit_in": [
+    "EB"
+   ],
+   "label": "Washington"
+  },
+  "17": {
+   "entry_in": [
+    "WB"
+   ],
+   "exit_in": [],
+   "label": "Lee Highway - Scott Street"
+  },
+  "2": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [],
+   "label": "I-495 N"
+  },
+  "3": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [],
+   "label": "I-495 Express Lanes N"
+  },
+  "4": {
+   "entry_in": [
+    "EB",
+    "WB"
+   ],
+   "exit_in": [
+    "EB",
+    "WB"
+   ],
+   "label": "Route 7 - Leesburg Pike"
+  },
+  "5": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [
+    "WB"
+   ],
+   "label": "I-495 S"
+  },
+  "6": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [
+    "WB"
+   ],
+   "label": "Route 267 - Dulles Toll Road"
+  },
+  "7": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [],
+   "label": "Route 123 - Dolley Madison Blvd"
+  },
+  "8": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [
+    "WB"
+   ],
+   "label": "Sycamore St"
+  },
+  "9": {
+   "entry_in": [
+    "EB"
+   ],
+   "exit_in": [
+    "WB"
+   ],
+   "label": "Glebe Road"
+  }
+ },
+ "pairs": [
+  {
+   "direction": "EB",
+   "end_zone": 3100,
+   "entry": "1",
+   "exit": "4",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "1",
+   "exit": "10",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "1",
+   "exit": "11",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "1",
+   "exit": "12",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "1",
+   "exit": "13",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "1",
+   "exit": "14",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "1",
+   "exit": "15",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "1",
+   "exit": "16",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3100,
+   "entry": "2",
+   "exit": "4",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "2",
+   "exit": "10",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "2",
+   "exit": "11",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "2",
+   "exit": "12",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "2",
+   "exit": "13",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "2",
+   "exit": "14",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "2",
+   "exit": "15",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "2",
+   "exit": "16",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3100,
+   "entry": "3",
+   "exit": "4",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "3",
+   "exit": "10",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "3",
+   "exit": "11",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "3",
+   "exit": "12",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "3",
+   "exit": "13",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "3",
+   "exit": "14",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "3",
+   "exit": "15",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "3",
+   "exit": "16",
+   "start_zone": 3100
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "4",
+   "exit": "10",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "4",
+   "exit": "11",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "4",
+   "exit": "12",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "4",
+   "exit": "13",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "4",
+   "exit": "14",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "4",
+   "exit": "15",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "4",
+   "exit": "16",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "5",
+   "exit": "10",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "5",
+   "exit": "11",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "5",
+   "exit": "12",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "5",
+   "exit": "13",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "5",
+   "exit": "14",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "5",
+   "exit": "15",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "5",
+   "exit": "16",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "6",
+   "exit": "10",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "6",
+   "exit": "11",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "6",
+   "exit": "12",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "6",
+   "exit": "13",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "6",
+   "exit": "14",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "6",
+   "exit": "15",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "6",
+   "exit": "16",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "7",
+   "exit": "10",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3110,
+   "entry": "7",
+   "exit": "11",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "7",
+   "exit": "12",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "7",
+   "exit": "13",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "7",
+   "exit": "14",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "7",
+   "exit": "15",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "7",
+   "exit": "16",
+   "start_zone": 3110
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3120,
+   "entry": "8",
+   "exit": "12",
+   "start_zone": 3120
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "8",
+   "exit": "13",
+   "start_zone": 3120
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "8",
+   "exit": "14",
+   "start_zone": 3120
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "8",
+   "exit": "15",
+   "start_zone": 3120
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "8",
+   "exit": "16",
+   "start_zone": 3120
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "9",
+   "exit": "13",
+   "start_zone": 3130
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "9",
+   "exit": "14",
+   "start_zone": 3130
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "9",
+   "exit": "15",
+   "start_zone": 3130
+  },
+  {
+   "direction": "EB",
+   "end_zone": 3130,
+   "entry": "9",
+   "exit": "16",
+   "start_zone": 3130
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "4",
+   "exit": "1",
+   "start_zone": 3230
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "4",
+   "exit": "5",
+   "start_zone": 3230
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "11",
+   "exit": "1",
+   "start_zone": 3220
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "11",
+   "exit": "4",
+   "start_zone": 3220
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "11",
+   "exit": "5",
+   "start_zone": 3220
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "11",
+   "exit": "6",
+   "start_zone": 3220
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "12",
+   "exit": "1",
+   "start_zone": 3210
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "12",
+   "exit": "4",
+   "start_zone": 3210
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "12",
+   "exit": "5",
+   "start_zone": 3210
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "12",
+   "exit": "6",
+   "start_zone": 3210
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3210,
+   "entry": "12",
+   "exit": "8",
+   "start_zone": 3210
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "13",
+   "exit": "1",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "13",
+   "exit": "4",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "13",
+   "exit": "5",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "13",
+   "exit": "6",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3210,
+   "entry": "13",
+   "exit": "8",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3200,
+   "entry": "13",
+   "exit": "9",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "15",
+   "exit": "1",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "15",
+   "exit": "4",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "15",
+   "exit": "5",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "15",
+   "exit": "6",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3210,
+   "entry": "15",
+   "exit": "8",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3200,
+   "entry": "15",
+   "exit": "9",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "16",
+   "exit": "1",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "16",
+   "exit": "4",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "16",
+   "exit": "5",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "16",
+   "exit": "6",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3210,
+   "entry": "16",
+   "exit": "8",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3200,
+   "entry": "16",
+   "exit": "9",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "17",
+   "exit": "1",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "17",
+   "exit": "4",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3230,
+   "entry": "17",
+   "exit": "5",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3220,
+   "entry": "17",
+   "exit": "6",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3210,
+   "entry": "17",
+   "exit": "8",
+   "start_zone": 3200
+  },
+  {
+   "direction": "WB",
+   "end_zone": 3200,
+   "entry": "17",
+   "exit": "9",
+   "start_zone": 3200
+  }
+ ],
+ "source_url": "https://vai66tolls.com/Index"
+}

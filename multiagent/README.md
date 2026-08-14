@@ -13,3 +13,20 @@ Multiagent-related documents in `single-agent/` are historical reference materia
 ## Adopted contracts
 
 - [Historical pricing MVP](docs/historical-pricing-mvp-contract.md)
+
+## Route-ready orchestrator
+
+The first implementation slice lives in [`orchestrator/`](orchestrator/). It
+owns the I-95 direction and access gates plus the universal route planner. It
+does not contain pricing specialists yet.
+
+```bash
+uv sync --locked
+uv run pytest
+uv run python -m orchestrator.agent "Plan a trip from I-66 West to Westmoreland St"
+```
+
+The live I-95 tool smoke is opt-in with `pytest -m live` and requires the
+read-only RDS environment variables documented by the existing AWS setup. The
+agent loads its OpenAI key from SSM; credentials are never read from a local
+file.

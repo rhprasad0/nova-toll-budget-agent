@@ -170,13 +170,46 @@ A successful route is immutable and structurally resembles:
     "label": "Route 267"
   },
   "i95_validation": {
-    "open_direction": "Northbound",
-    "effective_at": "2026-08-14T08:00:00-04:00",
-    "observed_at": "2026-08-14T07:55:00-04:00",
-    "source_kind": "observed",
-    "access_status": "supported",
-    "validated_entry_node_id": "210NO",
-    "validated_exit_node_id": "206ND"
+    "direction": {
+      "status": "supported",
+      "requested_at": "2026-08-14T08:00:00-04:00",
+      "source_kind": "observed",
+      "open_direction": "Northbound",
+      "observations": [
+        {
+          "direction": "Northbound",
+          "od_pair_id": 1132,
+          "corridor_name": "I-95-NB",
+          "link_status": "NORTHBOUND_OPEN",
+          "effective_at": "2026-08-14T07:55:00-04:00",
+          "observed_at": "2026-08-14T07:50:00-04:00"
+        },
+        {
+          "direction": "Southbound",
+          "od_pair_id": 1151,
+          "corridor_name": "I-95-SB",
+          "link_status": "CLOSED",
+          "effective_at": "2026-08-14T07:55:00-04:00",
+          "observed_at": "2026-08-14T07:50:00-04:00"
+        }
+      ],
+      "validation_id": "direction-..."
+    },
+    "access": {
+      "status": "supported",
+      "origin_corridor": "i95",
+      "origin": "US-1",
+      "destination_corridor": "i495",
+      "destination": "Route 267",
+      "requested_at": "2026-08-14T08:00:00-04:00",
+      "open_direction": "Northbound",
+      "required_direction": "Northbound",
+      "movement": "i95_to_i495",
+      "entry_node_id": "210NO",
+      "exit_node_id": "206ND",
+      "constraints": [],
+      "validation_id": "access-..."
+    }
   },
   "steps": [
     {
@@ -204,11 +237,79 @@ A successful route is immutable and structurally resembles:
 }
 ```
 
-The exact schemas of the three orchestrator tools will be defined separately.
+## Orchestrator tool contracts
+
+The first route-ready implementation exposes exactly three Strands tools. Their
+nested inputs and outputs are validated with Pydantic and emitted as JSON-safe
+objects. Domain outcomes are returned as structured statuses; operational
+failures such as an unavailable database connection remain tool failures.
+
+### `i95_direction`
+
+Input:
+
+```json
+{"requested_at": "2026-08-14T08:00:00-04:00"}
+```
+
+`requested_at` is required and must be an ISO 8601 instant with an explicit
+UTC offset. The tool converts it to Eastern time. A past or current request
+uses observed VDOT status rows for the northbound and southbound sentinel OD
+pairs. It selects no fare columns.
+
+A usable result has `status: "supported"`, `source_kind: "observed"`, exactly
+one `open_direction`, and one observation for each direction. Every observation
+contains `direction`, `od_pair_id`, `corridor_name`, `link_status`,
+`effective_at`, and `observed_at`. The two observations must share one effective
+interval, and the exact `*_OPEN` status must agree with `open_direction`.
+Every result also carries an opaque `validation_id` proving it was issued by
+this tool in the current process; downstream tools reject copied-and-edited or
+handcrafted evidence.
+
+Otherwise the tool returns `status: "unavailable"`, `open_direction: null`, a
+`reason_code`, a user-actionable `reason`, and any observations that were safe
+to retain. Reason codes include `invalid_time`, `future_direction_unavailable`,
+`missing_observation`, `mismatched_intervals`, and `direction_indeterminate`.
+Future direction is unavailable in v1; the tool MUST NOT infer a schedule.
+
+### `i95_access_options`
+
+Inputs are `origin_corridor`, `origin`, `destination_corridor`, `destination`,
+and the complete `direction_result`. The tool covers direct I-95/395 trips,
+movement-aware I-95/I-495 handoffs, and DCA's documented I-95 access.
+
+`supported` contains the required/open direction, movement, validated I-95
+entry and exit node IDs, and an opaque `validation_id` binding the complete
+result to this tool invocation. Every non-`invalid_evidence` outcome is bound the
+same way. Other statuses are `one_way_mismatch`,
+`direction_closed`, `unavailable`, `unsupported`, and `invalid_evidence`.
+`one_way_mismatch` contains only oracle-supported nearby alternatives.
+
+### `plan_toll_route`
+
+Required inputs are both corridor/location pairs and `requested_at`. Optional
+`i95_direction_result` and `i95_access_result` objects become mandatory when
+the route uses I-95. The tool validates their time, issuance provenance,
+complete semantics, and status before admitting an I-95 Express Lanes step.
+Access evidence is recomputed for the exact route request, so evidence for a
+different movement or endpoint cannot be reused.
+
+Success returns the canonical `RoutePlan` with `status: "ready"`. Failures use
+`one_way_mismatch`, `validation_failed`, `unsupported`, or `invalid_request` and
+contain no plan. An unavailable or closed desired I-95 direction may admit only
+a documented cross-corridor partial plan with an explicit unpriced
+general-purpose-lane remainder.
+
+`route_plan_id` is `plan-` plus a SHA-256 digest of the immutable plan contents.
+Every content change therefore changes the identifier while an identical plan
+is stable. Route steps are numbered `step-1`, `step-2`, and so on.
+The session separately records successful route-tool results and accepts a
+ready state only when its plan exactly matches one of those results.
+
 The route-plan contract requires these invariants:
 
-- `route_plan_id` identifies one immutable origin, destination, time, and step
-  sequence.
+- `route_plan_id` identifies one immutable origin, destination, time, evidence,
+  and step sequence.
 - Every step has a stable `route_step_id` within the plan.
 - `toll` steps contain canonical facility, direction, and endpoint identifiers.
 - `connector` steps describe documented untolled handoffs but are never pricing
@@ -323,8 +424,8 @@ superseded evidence must not be curated as a representative result.
 
 - Specialist input and output schemas beyond the common route-plan and coverage
   invariants.
-- Exact schemas for the direction, access-options, and universal route tools.
-- The authoritative source and policy for future I-95 direction availability.
+- An authoritative source for future I-95 direction availability beyond the v1
+  fail-closed policy.
 - RDS relations and historical aggregation views.
 - Forecasting, travel-time routing, and general-purpose-lane pricing.
 
