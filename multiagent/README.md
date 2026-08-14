@@ -6,6 +6,10 @@ The complete current implementation lives in [`single-agent/`](../single-agent/)
 
 Multiagent-related documents in `single-agent/` are historical reference material until the rewrite deliberately adopts them.
 
+## Contract drafts
+
+- [Orchestrator agent (incomplete)](docs/orchestrator-agent-contract.md)
+
 ## Adopted contracts
 
 - [Historical pricing MVP](docs/historical-pricing-mvp-contract.md)
