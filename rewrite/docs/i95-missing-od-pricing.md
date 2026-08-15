@@ -109,10 +109,6 @@ before making stronger accuracy claims or presenting its output publicly:
 - The committed restore contract verifies the mapping constants and SQL
   behavior, not the empirical quality of each mapping. Retain a runnable
   analysis and its per-OD output before calling every mapping validated.
-- The [historical pricing contract](historical-pricing-mvp-contract.md) cannot
-  yet encode modeled provenance losslessly. Add a modeled source kind plus
-  `pricing_method` and `proxy_od_pair_id` per component before consuming these
-  estimates through that interface.
 - Rejecting pooled ordinary least squares is reasonable, but each mapping
   still needs comparison against identity, mean/median-offset, and simple
   destination-matched baselines.
