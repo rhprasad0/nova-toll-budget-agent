@@ -15,6 +15,7 @@ rewrite deliberately adopts them.
 ## Adopted contract
 
 - [Historical pricing MVP](docs/historical-pricing-mvp-contract.md)
+- [Point-in-time pricing and insights MVP](docs/point-in-time-pricing-mvp-contract.md)
 
 ## Database bootstrap
 
