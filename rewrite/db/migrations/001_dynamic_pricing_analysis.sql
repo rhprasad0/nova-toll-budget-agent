@@ -1,21 +1,14 @@
--- TollChat rewrite PostgreSQL roles. Run after db/schema.sql on AWS RDS.
-
+-- Additive production migration for an existing TollChat PostgreSQL database.
 \set ON_ERROR_STOP on
 
 BEGIN;
 SET LOCAL search_path = public, pg_catalog, pg_temp;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '2min';
 
-CREATE ROLE loader_writer WITH LOGIN;
-GRANT rds_iam TO loader_writer;
-GRANT SELECT, INSERT, UPDATE ON trip_pricing_i95, trip_pricing_i66
-    TO loader_writer;
+\ir ../analysis.sql
 
-CREATE ROLE pricing_reader WITH LOGIN;
-GRANT rds_iam TO pricing_reader;
-GRANT SELECT ON trip_pricing_i95, trip_pricing_i66 TO pricing_reader;
 GRANT SELECT ON
-    current_trip_pricing_i95,
-    current_trip_pricing_i66,
     current_i95_direction,
     i95_modeled_od_proxy,
     modeled_trip_pricing_i95,
@@ -32,6 +25,5 @@ GRANT EXECUTE ON FUNCTION
     point_in_time_dynamic_route_pricing(timestamptz, jsonb),
     historical_dynamic_route_pricing(timestamptz, jsonb)
 TO pricing_reader;
-ALTER ROLE pricing_reader SET TimeZone TO 'America/New_York';
 
 COMMIT;

@@ -13,14 +13,19 @@ traveler than a long-term average that hides current commuting patterns.
 
 - Match the requested route, local weekday, and 15-minute departure slot.
 - Apply the same explicit pricing profile to every comparable route total.
-- Treat the start of that slot as the comparison instant. For each observed or
+- Treat the start of that slot as the comparison instant and anchor the 28-day
+  window to that instant, not to the exact minute inside the requested slot.
+  For each observed or
   modeled route component, select the latest source row within the slot
   (`slot_start <= interval_end_at < slot_end`) before applying its availability
   rule. Exclude the date if that selected row is missing, incomplete, closed, or
   otherwise unavailable. Never fall back to an older usable row in the slot.
 - Use one comparable trip price from each eligible date in the half-open window
-  from 28 days before the requested time through, but not including, the
-  requested time, for at most four comparable weekdays.
+  from 28 local days before the slot start through, but not including, that slot
+  start, for at most four comparable weekdays.
+- Preserve the requested physical occurrence when a fall-back hour repeats.
+  Ambiguous prior comparison slots use the later, standard-time occurrence;
+  nonexistent spring-forward slots are ineligible and reduce the expected count.
 - Calculate route totals for each date before calculating summary statistics.
   Do not independently average legs and then combine them.
 - Exclude missing or incomplete route observations instead of treating them as

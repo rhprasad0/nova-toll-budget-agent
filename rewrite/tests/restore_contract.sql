@@ -14,7 +14,8 @@ BEGIN
         'current_i95_direction',
         'i95_modeled_od_proxy',
         'modeled_trip_pricing_i95',
-        'modeled_current_trip_pricing_i95'
+        'modeled_current_trip_pricing_i95',
+        'dynamic_pricing_observations'
     ] LOOP
         IF to_regclass('public.' || relation_name) IS NULL THEN
             RAISE EXCEPTION 'missing relation: %', relation_name;
@@ -32,6 +33,14 @@ BEGIN
 
     IF to_regclass('public.trip_pricing_i95_live') IS NOT NULL THEN
         RAISE EXCEPTION 'rewrite bootstrap must not create Transurban history';
+    END IF;
+
+    IF to_regprocedure(
+        'public.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)'
+    ) IS NULL OR to_regprocedure(
+        'public.historical_dynamic_route_pricing(timestamp with time zone,jsonb)'
+    ) IS NULL THEN
+        RAISE EXCEPTION 'missing dynamic pricing functions';
     END IF;
 END $$;
 
@@ -93,13 +102,41 @@ BEGIN
        OR NOT has_table_privilege('pricing_reader', 'current_i95_direction', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'i95_modeled_od_proxy', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'modeled_trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'modeled_current_trip_pricing_i95', 'SELECT') THEN
+       OR NOT has_table_privilege('pricing_reader', 'modeled_current_trip_pricing_i95', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'dynamic_pricing_observations', 'SELECT')
+       OR NOT has_function_privilege(
+            'pricing_reader',
+            'point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
+            'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+            'pricing_reader',
+            'historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
+            'EXECUTE'
+       ) THEN
         RAISE EXCEPTION 'pricing_reader is missing read privileges';
+    END IF;
+
+    IF has_function_privilege(
+        'public',
+        'point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
+        'EXECUTE'
+    ) OR has_function_privilege(
+        'public',
+        'historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
+        'EXECUTE'
+    ) THEN
+        RAISE EXCEPTION 'dynamic pricing functions must not be executable by public';
     END IF;
 
     IF has_table_privilege('pricing_reader', 'trip_pricing_i95', 'INSERT,UPDATE,DELETE')
        OR has_table_privilege('pricing_reader', 'trip_pricing_i66', 'INSERT,UPDATE,DELETE') THEN
         RAISE EXCEPTION 'pricing_reader must remain read-only';
+    END IF;
+
+    IF to_regclass('hostile.trip_pricing_i95') IS NOT NULL
+       AND has_table_privilege('pricing_reader', 'hostile.trip_pricing_i95', 'SELECT') THEN
+        RAISE EXCEPTION 'bootstrap granted access to a search-path shadow relation';
     END IF;
 END $$;
 
