@@ -15,3 +15,12 @@ rewrite deliberately adopts them.
 ## Adopted contract
 
 - [Historical pricing MVP](docs/historical-pricing-mvp-contract.md)
+
+## Database bootstrap
+
+- [PostgreSQL schema](db/schema.sql)
+- [IAM-authenticated database roles](db/roles.sql)
+- [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
+
+The bootstrap restores an empty database's schema and permissions. Historical
+price rows require a separate replay from retained raw objects.
