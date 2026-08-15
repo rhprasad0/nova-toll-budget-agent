@@ -15,6 +15,7 @@ GRANT SELECT ON trip_pricing_i95, trip_pricing_i66 TO pricing_reader;
 GRANT SELECT ON
     current_trip_pricing_i95,
     current_trip_pricing_i66,
+    current_i95_direction,
     i95_modeled_od_proxy,
     modeled_trip_pricing_i95,
     modeled_current_trip_pricing_i95

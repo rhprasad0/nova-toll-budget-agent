@@ -11,6 +11,7 @@ BEGIN
         'trip_pricing_i66',
         'current_trip_pricing_i95',
         'current_trip_pricing_i66',
+        'current_i95_direction',
         'i95_modeled_od_proxy',
         'modeled_trip_pricing_i95',
         'modeled_current_trip_pricing_i95'
@@ -89,6 +90,7 @@ BEGIN
        OR NOT has_table_privilege('pricing_reader', 'trip_pricing_i66', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'current_trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'current_trip_pricing_i66', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'current_i95_direction', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'i95_modeled_od_proxy', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'modeled_trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'modeled_current_trip_pricing_i95', 'SELECT') THEN
@@ -230,6 +232,201 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'current view must not fall back past a newer closed row';
     END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF (SELECT count(*) FROM current_i95_direction) <> 1
+       OR (SELECT direction_state FROM current_i95_direction) <> 'missing_source'
+       OR (SELECT direction FROM current_i95_direction) IS NOT NULL THEN
+        RAISE EXCEPTION 'empty direction sources must return one missing_source row';
+    END IF;
+END $$;
+
+CREATE FUNCTION pg_temp.insert_i95_direction_source(
+    source_od_pair_id integer,
+    source_corridor_name text,
+    source_link_status text,
+    source_interval_end_at timestamptz
+) RETURNS void
+LANGUAGE sql
+AS $$
+    INSERT INTO trip_pricing_i95 (
+        interval_end_at,
+        current_at,
+        calculated_at,
+        corridor_id,
+        corridor_name,
+        od_pair_id,
+        od_pair_name,
+        start_zone_id,
+        start_zone_name,
+        end_zone_id,
+        end_zone_name,
+        zone_toll_rate_usd,
+        link_status,
+        s3_key
+    ) VALUES (
+        source_interval_end_at,
+        source_interval_end_at,
+        source_interval_end_at,
+        95,
+        source_corridor_name,
+        source_od_pair_id,
+        'direction status source',
+        source_od_pair_id,
+        'direction status start',
+        source_od_pair_id + 1,
+        'direction status end',
+        1.00,
+        source_link_status,
+        'test/direction.json'
+    );
+$$;
+
+SELECT pg_temp.insert_i95_direction_source(
+    1132,
+    'I-95-NB',
+    'NORTHBOUND_OPEN',
+    '2026-07-30 13:00:00+00'
+);
+
+DO $$
+BEGIN
+    IF (SELECT direction_state FROM current_i95_direction) <> 'missing_source' THEN
+        RAISE EXCEPTION 'one direction source must remain missing_source';
+    END IF;
+END $$;
+
+SELECT pg_temp.insert_i95_direction_source(
+    1151,
+    'I-95-SB',
+    'CLOSED',
+    '2026-07-30 13:00:00+00'
+);
+
+DO $$
+BEGIN
+    IF (SELECT direction_state FROM current_i95_direction) <> 'available'
+       OR (SELECT direction FROM current_i95_direction) <> 'Northbound'
+       OR (SELECT interval_end_at FROM current_i95_direction)
+          <> '2026-07-30 13:00:00+00'
+       OR (SELECT northbound_link_status FROM current_i95_direction)
+          <> 'NORTHBOUND_OPEN'
+       OR (SELECT southbound_link_status FROM current_i95_direction) <> 'CLOSED' THEN
+        RAISE EXCEPTION 'same-interval northbound open sources must select Northbound';
+    END IF;
+END $$;
+
+DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+SELECT pg_temp.insert_i95_direction_source(
+    1132,
+    'I-95-NB',
+    'CLOSED',
+    '2026-07-30 13:10:00+00'
+);
+SELECT pg_temp.insert_i95_direction_source(
+    1151,
+    'I-95-SB',
+    'SOUTHBOUND_OPEN',
+    '2026-07-30 13:10:00+00'
+);
+
+DO $$
+BEGIN
+    IF (SELECT direction_state FROM current_i95_direction) <> 'available'
+       OR (SELECT direction FROM current_i95_direction) <> 'Southbound' THEN
+        RAISE EXCEPTION 'same-interval southbound open sources must select Southbound';
+    END IF;
+END $$;
+
+DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+SELECT pg_temp.insert_i95_direction_source(
+    1132,
+    'I-95-NB',
+    'NORTHBOUND_OPEN',
+    '2026-07-30 13:20:00+00'
+);
+SELECT pg_temp.insert_i95_direction_source(
+    1151,
+    'I-95-SB',
+    'CLOSED',
+    '2026-07-30 13:30:00+00'
+);
+
+DO $$
+BEGIN
+    IF (SELECT direction_state FROM current_i95_direction) <> 'interval_mismatch'
+       OR (SELECT direction FROM current_i95_direction) IS NOT NULL
+       OR (SELECT interval_end_at FROM current_i95_direction) IS NOT NULL THEN
+        RAISE EXCEPTION 'different source intervals must fail with interval_mismatch';
+    END IF;
+END $$;
+
+DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+SELECT pg_temp.insert_i95_direction_source(
+    1132,
+    'I-95-SB',
+    'NORTHBOUND_OPEN',
+    '2026-07-30 13:40:00+00'
+);
+SELECT pg_temp.insert_i95_direction_source(
+    1151,
+    'I-95-SB',
+    'CLOSED',
+    '2026-07-30 13:40:00+00'
+);
+
+DO $$
+BEGIN
+    IF (SELECT direction_state FROM current_i95_direction) <> 'invalid_source'
+       OR (SELECT northbound_corridor_name FROM current_i95_direction) <> 'I-95-SB'
+       OR (SELECT direction FROM current_i95_direction) IS NOT NULL THEN
+        RAISE EXCEPTION 'unexpected source corridors must fail with invalid_source';
+    END IF;
+END $$;
+
+DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+SELECT pg_temp.insert_i95_direction_source(
+    1132,
+    'I-95-NB',
+    'CLOSED',
+    '2026-07-30 13:50:00+00'
+);
+SELECT pg_temp.insert_i95_direction_source(
+    1151,
+    'I-95-SB',
+    'CLOSED',
+    '2026-07-30 13:50:00+00'
+);
+
+DO $$
+DECLARE
+    northbound_status text;
+    southbound_status text;
+BEGIN
+    FOR northbound_status, southbound_status IN
+        SELECT * FROM (VALUES
+            ('NORTHBOUND_OPEN', 'SOUTHBOUND_OPEN'),
+            ('CLOSED', 'CLOSED'),
+            ('NORTHBOUND_OPENING', 'CLOSED'),
+            ('CLOSED', 'SOUTHBOUND_CLOSING')
+        ) AS statuses (northbound_status, southbound_status)
+    LOOP
+        UPDATE trip_pricing_i95
+        SET link_status = CASE od_pair_id
+            WHEN 1132 THEN northbound_status
+            WHEN 1151 THEN southbound_status
+        END
+        WHERE od_pair_id IN (1132, 1151);
+
+        IF (SELECT direction_state FROM current_i95_direction) <> 'indeterminate'
+           OR (SELECT direction FROM current_i95_direction) IS NOT NULL THEN
+            RAISE EXCEPTION 'statuses %, % must be indeterminate',
+                northbound_status,
+                southbound_status;
+        END IF;
+    END LOOP;
 END $$;
 
 ROLLBACK;
