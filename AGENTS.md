@@ -12,9 +12,9 @@ Create all worktrees inside the project-root `.worktrees/` directory, which must
 
 Open pull requests ready for review. Do not create draft pull requests.
 
-# Multiagent rewrite
+# Agent rewrite
 
-The complete current product lives under `single-agent/`; preserve its behavior unless the user explicitly requests a change there. Keep all new multiagent code, tests, evals, infrastructure, and documentation under `multiagent/`. The rewrite has no compatibility contract with the current product: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
+The complete original product lives under `single-agent/`; preserve its behavior unless the user explicitly requests a change there. Keep all rewrite code, tests, evals, infrastructure, and documentation under `rewrite/`. The rewrite has no compatibility contract with the original product: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
 
 # Tools
 
