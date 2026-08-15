@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Define the smallest useful response contract for TollChat's rolling-average
-pricing specialist. The specialist receives the orchestrator's canonical route
-plan and describes what that same trip recently cost without changing the route.
+Define the smallest useful response contract for TollChat's deterministic
+rolling-average pricing analysis. The analysis receives a canonical route plan
+and describes what that same trip recently cost without changing the route.
 
 The MVP uses the previous four weeks because recent prices are more useful to a
 traveler than a long-term average that hides current commuting patterns.
@@ -27,10 +27,10 @@ traveler than a long-term average that hides current commuting patterns.
   history, as `schedule_derived`; never present them as observed averages.
 - Do not silently widen the time window or use older data when coverage is poor.
 
-## Specialist response
+## Analysis response
 
 Money values are decimal strings in US dollars. Times are ISO 8601 values with
-an explicit Eastern offset so the orchestrator can format them for users.
+an explicit Eastern offset so the calling agent can format them for users.
 
 ```json
 {
@@ -76,7 +76,7 @@ an explicit Eastern offset so the orchestrator can format them for users.
 
 | Field | Meaning |
 | --- | --- |
-| `route_plan_id` | Identifier of the immutable route plan supplied by the orchestrator. |
+| `route_plan_id` | Identifier of the immutable route plan supplied by the caller. |
 | `method` | Exact comparison method used. MVP value: `same_weekday_same_15_minute_slot`. |
 | `source_kind` | `observed`, `schedule_derived`, or `mixed`; `mixed` means the route total combines both source kinds. |
 | `requested_at` | Requested departure time used to select comparable observations. |
@@ -87,14 +87,14 @@ an explicit Eastern offset so the orchestrator can format them for users.
 | `expected_comparable_period_count` | Number expected under full coverage, normally four. |
 | `comparable_totals` | Departure instant and complete route total for every included period. |
 | `mean_usd` | Arithmetic mean of comparable route totals. |
-| `median_usd` | Median comparable route total. |
+| `median_usd` | Median comparable route totals. |
 | `minimum_usd`, `maximum_usd` | Observed range; not a confidence interval. |
 | `nearby_departures` | Optional comparisons for the adjacent 15-minute slots. |
 
-## Orchestrator-derived metrics
+## Caller-derived metrics
 
-The historical specialist does not call point-in-time pricing tools. When both
-specialists are requested, the orchestrator may derive:
+The historical analysis does not query point-in-time pricing. When current and
+historical analyses are requested together, the caller may derive:
 
 ```json
 {
@@ -104,7 +104,7 @@ specialists are requested, the orchestrator may derive:
 }
 ```
 
-When the user supplies a budget, the orchestrator counts qualifying values in
+When the user supplies a budget, the caller counts qualifying values in
 `comparable_totals` and may report the literal count, such as "the toll was $10
 or less on 3 of 4 comparable Thursdays."
 Annual projections require an explicit trip frequency:
@@ -129,7 +129,7 @@ Return no summary prices when there are zero complete comparable observations:
 ```
 
 For partial coverage, return the available statistics with the actual and
-expected counts. The orchestrator must disclose that coverage rather than
+expected counts. The calling agent must disclose that coverage rather than
 describing the result as a four-week average.
 
 ## Deferred beyond MVP
