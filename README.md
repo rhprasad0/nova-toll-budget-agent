@@ -1,24 +1,23 @@
 # TollChat
 
-TollChat's original toll-pricing agent runs in production while a from-scratch
-rewrite develops independently. The repository keeps the two implementations
-physically separate so the production evidence remains reviewable.
+TollChat v1 runs in production while v2 develops independently around a
+deterministic domain core. The versioned layout keeps the live product and its
+evidence easy to review without blurring it into work in progress.
 
 | Implementation | Status | Start here |
 |---|---|---|
-| **Original agent** | Live at [tollchat.ai](https://tollchat.ai); complete application, infrastructure, tests, and evaluation evidence | [`single-agent/`](single-agent/) |
-| **Agent rewrite** | Rewrite boundary established; implementation and deployment have not started | [`rewrite/`](rewrite/) |
+| **v1** | Live at [tollchat.ai](https://tollchat.ai); complete application, infrastructure, tests, and evaluation evidence | [`v1/`](v1/) |
+| **v2** | In development; PostgreSQL pricing schema, provenance contracts, modeled I-95 pricing, and deterministic analysis are implemented, while agent runtime and deployment remain future work | [`v2/`](v2/) |
 
 ```text
 .
-├── single-agent/  # Current deployable TollChat system
-└── rewrite/       # From-scratch agent rewrite
+├── v1/  # Live TollChat product
+└── v2/  # Deterministic single-agent rewrite in development
 ```
 
 For a technical review of the working system, begin with the
-[original agent architecture and evidence guide](single-agent/README.md). The
-rewrite directory will document its architecture as it earns one—no speculative
-scaffolding required.
+[v1 architecture and evidence guide](v1/README.md). For the new deterministic
+pricing contracts and database work, begin with the [v2 guide](v2/README.md).
 
 ## License
 

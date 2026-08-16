@@ -1,16 +1,16 @@
-# TollChat agent rewrite
+# TollChat v2
 
-This directory is the exclusive home for TollChat's from-scratch agent rewrite,
+This directory is the exclusive home for TollChat's from-scratch v2,
 including its future code, tests, evals, infrastructure, and documentation.
 
-The complete original implementation lives in
-[`single-agent/`](../single-agent/) and keeps its existing build and deployment
-behavior. The rewrite has no compatibility or dependency contract with it.
+The complete live implementation lives in
+[`v1/`](../v1/) and keeps its existing build and deployment behavior. V2 has no
+compatibility or dependency contract with it.
 Reuse code only through an explicit future change that copies or reintroduces
 the needed behavior here.
 
-Documents in `single-agent/` remain historical reference material until the
-rewrite deliberately adopts them.
+Documents in `v1/` remain historical reference material until v2 deliberately
+adopts them.
 
 ## Adopted contract
 
@@ -27,7 +27,7 @@ For an existing database, apply the additive dynamic-pricing analysis migration:
 
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
-  -f rewrite/db/migrations/001_dynamic_pricing_analysis.sql
+  -f v2/db/migrations/001_dynamic_pricing_analysis.sql
 ```
 
 The database functions return the dynamic subtotal and its source provenance.

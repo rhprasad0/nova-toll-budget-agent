@@ -12,9 +12,9 @@ Create all worktrees inside the project-root `.worktrees/` directory, which must
 
 Open pull requests ready for review. Do not create draft pull requests.
 
-# Agent rewrite
+# Version boundaries
 
-The complete original product lives under `single-agent/`; preserve its behavior unless the user explicitly requests a change there. Keep all rewrite code, tests, evals, infrastructure, and documentation under `rewrite/`. The rewrite has no compatibility contract with the original product: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
+The complete deployed product lives under `v1/`; preserve its behavior unless the user explicitly requests a change there. Keep all v2 code, tests, evals, infrastructure, and documentation under `v2/`. V2 has no compatibility contract with v1: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
 
 # Tools
 
@@ -22,8 +22,8 @@ Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa searc
 
 # Secrets
 
-SSM Parameter Store is the source of truth for every credential in the deployed single-agent system (see `single-agent/SECURITY.md`) — never a local file.
+SSM Parameter Store is the source of truth for every credential in the deployed v1 system (see `v1/SECURITY.md`) — never a local file.
 
 # Evaluation evidence
 
-Curate technically valid, representative single-agent reports in `single-agent/eval/results/` for reviewers. Do not commit failed or superseded runs. Update `single-agent/eval/results/README.md` and run gitleaks before committing a report.
+Curate technically valid, representative v1 reports in `v1/eval/results/` for reviewers. Do not commit failed or superseded runs. Update `v1/eval/results/README.md` and run gitleaks before committing a report.

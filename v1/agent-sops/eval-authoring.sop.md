@@ -202,7 +202,7 @@ Save each completed report as timestamped JSON under `eval/results/`.
 
 Run synthetic `--check` modes locally before any live evaluation. Run live agent
 evaluations only with explicit authorization. Do not add evaluation runners to
-required CI for the retired single-agent implementation.
+required CI for the v1 implementation.
 
 **Constraints:**
 - You MUST keep non-network `--check` commands runnable for manual validation.

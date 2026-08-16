@@ -9,6 +9,8 @@ from typing import Any, cast
 _CONTRACTS = ("system_prompt", "toolset")
 _MANIFEST_PATH = Path(__file__).resolve().parent.parent / "agent/contract-manifest.json"
 _MANIFEST_GIT_PATHS = (
+    "v1/agent/contract-manifest.json",
+    # Keep the pre-rename path so a rename PR can compare against its base.
     "single-agent/agent/contract-manifest.json",
     "agent/contract-manifest.json",
 )
