@@ -452,6 +452,9 @@ route because the general-purpose fallback remains supported.
 
 ## Agent operations
 
+The normative caller behavior and response examples are defined in the
+[agent-facing route-function contract](oracle-route-function-contract.md).
+
 The application exposes one narrow, read-only database function:
 `oracle.validate_toll_route(origin_point_id text, destination_point_id text)`.
 It is a `STABLE SECURITY DEFINER` function owned by `oracle_owner` and is the

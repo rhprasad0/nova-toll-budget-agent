@@ -1,0 +1,228 @@
+# Oracle Route Function Contract
+
+- **Status:** Adopted for oracle schema `1.0.0`
+- **Audience:** TollChat v2 agent tool and its callers
+- **Operation:** `oracle.validate_toll_route(text, text)`
+
+## Purpose
+
+This function answers whether one supported toll access movement can reach
+another **right now**. It follows the curated directed oracle graph, applies
+live I-95/395 direction state where required, and explains any supported
+general-purpose connection at the I-495/I-95 boundary.
+
+It does not resolve user language to point IDs, calculate a toll, find nearby
+ramps, provide navigation, or prove that an unsupported real-world route is
+impossible.
+
+## Agent tool boundary
+
+The agent-facing tool accepts exactly two stable point IDs:
+
+| Input | Required meaning |
+| --- | --- |
+| `origin_point_id` | An oracle `entry` or airport point |
+| `destination_point_id` | An oracle `exit` or airport point |
+
+The tool wrapper must pass both values as bound parameters. It must not expose
+arbitrary SQL, accept labels in place of IDs, infer connections from proximity,
+or silently substitute another point. Point-name resolution belongs before this
+operation.
+
+```sql
+SELECT *
+FROM oracle.validate_toll_route($1, $2);
+```
+
+The function returns exactly one row with this shape:
+
+| Field | Type | Contract |
+| --- | --- | --- |
+| `status` | `text` | One status from the table below |
+| `point_ids` | `text[]` | Selected route points in travel order |
+| `connection_ids` | `text[]` | Selected connections in travel order |
+| `connection_types` | `text[]` | Type aligned with each connection ID |
+| `general_purpose_gaps` | `jsonb` | Ordered TP1 fallback explanations |
+| `i95_evidence` | `jsonb` or null | Live evidence used by the result |
+
+`connection_ids` and `connection_types` always have the same length.
+`point_ids` has one more item than those arrays for a returned structural path.
+
+## Status contract
+
+| Status | Meaning | Path returned? |
+| --- | --- | --- |
+| `invalid_origin` | Origin is missing or is not an entry/airport | No |
+| `invalid_destination` | Destination is missing or is not an exit/airport | No |
+| `valid` | At least one currently usable or supported-fallback path exists | Yes |
+| `currently_unavailable` | Every structural proof requires a known unavailable I-95 direction | Yes |
+| `unknown_availability` | No usable proof exists without unknown I-95 evidence | Yes |
+| `no_supported_route` | Bounded traversal conclusively found no graph path | No |
+| `traversal_limit_exceeded` | The 12-connection limit prevented a conclusion | No |
+
+Origin validation takes precedence over destination validation. For valid
+inputs, the function prefers statuses in this order:
+
+1. `valid`
+2. `traversal_limit_exceeded`
+3. `unknown_availability`
+4. `currently_unavailable`
+5. `no_supported_route`
+
+Within the same status, the function selects the fewest-connection proof and
+then breaks ties by ordered connection IDs. It never relies on recursive-query
+emission order.
+
+For statuses without a path, all three path arrays and
+`general_purpose_gaps` are empty, and `i95_evidence` is null. Availability
+statuses retain the structural proof that could not currently be used.
+
+## General-purpose gap contract
+
+`general_purpose_gaps` is always a JSON array. Each item corresponds to a
+selected `general_purpose_gap` connection and contains:
+
+| Field | Value |
+| --- | --- |
+| `connection_id` | Matching item from `connection_ids` |
+| `boundary_point_id` | `i495:192NO` for TP1NB or `i495:192SD` for TP1SB |
+| `role` | `prefix` before the I-495 toll leg or `suffix` after it |
+| `i95_direction` | `NB` or `SB`; the Express direction that avoids fallback |
+| `fallback_required` | `true`, `false`, or null |
+
+Interpret `fallback_required` as follows:
+
+| Value | Agent meaning |
+| --- | --- |
+| `true` | The needed I-95 direction is known unavailable; explain the GP prefix or suffix and name TP1 |
+| `false` | The needed I-95 direction is open; do not tell the user that GP travel is required |
+| null | I-95 state is unknown; say it could not be confirmed, while noting that the supported GP fallback keeps the route valid |
+
+A gap does not make the entire route free. It says only that the identified
+prefix or suffix uses general-purpose lanes when required. Pricing later must
+price the retained toll portion and must not charge for the GP segment.
+
+## I-95 evidence
+
+`i95_evidence` is returned when the selected path requires an I-95 direction or
+contains a general-purpose gap. It is null for paths unrelated to I-95.
+
+The `availability` field is one of:
+
+| Value | Source interpretation |
+| --- | --- |
+| `northbound` | Northbound open and southbound closed |
+| `southbound` | Northbound closed and southbound open |
+| `closed` | Both directions closed |
+| `unknown` | Missing, stale, future-dated, mismatched, contradictory, or transitional evidence |
+
+When source rows exist, the evidence also includes both corridor names, link
+statuses, interval ends, and calculation timestamps. When the view has no row,
+it contains `{"availability":"unknown","reason":"missing_source"}`.
+
+Both directional observations must describe the same interval and be no more
+than 20 minutes old relative to PostgreSQL `statement_timestamp()`. The agent
+must not reinterpret stale or contradictory evidence as a direction. It may
+describe `closed` as closed; for `unknown`, it should say only that current
+availability could not be confirmed.
+
+## Required agent behavior
+
+- Treat `valid` as supported by this oracle, not as turn-by-turn navigation.
+- When `fallback_required` is true, name TP1NB/TP1SB and clearly distinguish
+  the untolled GP prefix/suffix from the tolled portion.
+- When it is false, do not claim that the fallback is mandatory.
+- When it is null, preserve the valid route but disclose uncertain I-95 state.
+- Treat `currently_unavailable` as a current directional restriction, not a
+  permanently invalid route.
+- Treat `unknown_availability` as inconclusive; do not guess a direction.
+- Treat `no_supported_route` as outside the curated graph, not proof that no
+  physical route exists.
+- Treat `traversal_limit_exceeded` as an internal inconclusive result, never as
+  `no_supported_route`.
+- Never invent a toll from this response. Pricing is a separate operation.
+- Preserve point and connection order when handing the result to later tools.
+- Surface a database/tool error as an operation failure; never fabricate one of
+  the documented statuses.
+
+## Examples
+
+### Westpark to Dumfries while I-95 is northbound
+
+Call:
+
+```sql
+SELECT *
+FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
+```
+
+Illustrative response excerpt (timestamp and corridor-name evidence fields are
+omitted only for readability):
+
+```json
+{
+  "status": "valid",
+  "point_ids": ["i495:185SO", "i95:217SD"],
+  "connection_ids": ["source:i95_shared:Southbound:185SO:217SD"],
+  "connection_types": ["general_purpose_gap"],
+  "general_purpose_gaps": [
+    {
+      "connection_id": "source:i95_shared:Southbound:185SO:217SD",
+      "boundary_point_id": "i495:192SD",
+      "role": "suffix",
+      "i95_direction": "SB",
+      "fallback_required": true
+    }
+  ],
+  "i95_evidence": {
+    "availability": "northbound",
+    "northbound_link_status": "NORTHBOUND_OPEN",
+    "southbound_link_status": "CLOSED"
+  }
+}
+```
+
+The agent should explain: use I-495 Express from Westpark to TP1SB, then use
+untolled general-purpose lanes to Dumfries. The function does not return or
+authorize a price.
+
+### I-95 origin using a TP1NB prefix
+
+When northbound I-95 Express is unavailable, a supported I-95-origin to I-495
+trip remains `valid` with:
+
+```json
+{
+  "boundary_point_id": "i495:192NO",
+  "role": "prefix",
+  "i95_direction": "NB",
+  "fallback_required": true
+}
+```
+
+The agent should explain that the driver uses general-purpose lanes to TP1NB
+and begins the tolled I-495 trip there.
+
+## Airports
+
+- Dulles International Airport is an explicit external endpoint. Its
+  `airport_access` connections may use the untolled Airport Access Highway;
+  this does not make an ordinary Dulles Toll Road trip free.
+- Reagan National Airport is destination-only and reachable only through the
+  northbound Pentagon/Eads connection while I-95 is northbound.
+- An airport can be the origin or destination but never an intermediate point.
+
+## Security and versioning
+
+`tollchat_agent` receives only schema usage and execution on the exact function
+signature. It has no direct read or write access to oracle or pricing tables.
+The function is `STABLE SECURITY DEFINER`, owned by `oracle_owner`, uses a fixed
+trusted search path, and performs no dynamic SQL.
+
+This response shape is part of the independently versioned `oracle` schema
+contract. Renaming a field, changing status meaning or precedence, changing
+freshness rules, or changing null/empty behavior requires an oracle SemVer
+change and corresponding PostgreSQL contract tests.
+
+The database implementation and graph invariants remain specified in the
+[routing oracle specification](oracle-spec.md).
