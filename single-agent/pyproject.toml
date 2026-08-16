@@ -7,7 +7,7 @@ dependencies = [
     "bedrock-agentcore>=1.21.0,<2",
     "boto3>=1.43.70",
     "defusedxml>=0.7.1",
-    "openai>=2.45.0,<3",
+    "openai>=2.53.0,<3",
     "strands-agents[openai]==1.51.0",
     # 3.2.13 is the newest release with AgentCore's documented
     # aarch64-manylinux2014 wheel; 3.3.x requires a newer glibc tag.
