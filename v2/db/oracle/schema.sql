@@ -156,6 +156,7 @@ CREATE FUNCTION oracle.validate_toll_route(
     point_ids text[],
     connection_ids text[],
     connection_types text[],
+    general_purpose_gaps jsonb,
     i95_evidence jsonb
 )
 LANGUAGE plpgsql
@@ -177,6 +178,7 @@ BEGIN
         point_ids := ARRAY[]::text[];
         connection_ids := ARRAY[]::text[];
         connection_types := ARRAY[]::text[];
+        general_purpose_gaps := '[]'::jsonb;
         i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
@@ -192,6 +194,7 @@ BEGIN
         point_ids := ARRAY[]::text[];
         connection_ids := ARRAY[]::text[];
         connection_types := ARRAY[]::text[];
+        general_purpose_gaps := '[]'::jsonb;
         i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
@@ -269,6 +272,7 @@ BEGIN
             ARRAY[origin.point_id]::text[] AS walked_point_ids,
             ARRAY[]::text[] AS walked_connection_ids,
             ARRAY[]::text[] AS walked_connection_types,
+            '[]'::jsonb AS walked_general_purpose_gaps,
             ARRAY[]::text[] AS required_i95_directions,
             0 AS depth
         FROM oracle.toll_route_point AS origin
@@ -281,6 +285,29 @@ BEGIN
             walk.walked_point_ids || destination.point_id,
             walk.walked_connection_ids || connection.connection_id,
             walk.walked_connection_types || connection.connection_type,
+            CASE WHEN connection.connection_type = 'general_purpose_gap' THEN
+                walk.walked_general_purpose_gaps || jsonb_build_array(
+                    jsonb_build_object(
+                        'connection_id', connection.connection_id,
+                        'boundary_point_id',
+                            connection.source_metadata
+                                -> 'general_purpose_fallback'
+                                ->> 'boundary_point_id',
+                        'role', CASE
+                            WHEN current_point.network_id = 'i95'
+                              AND destination.network_id = 'i495' THEN 'prefix'
+                            WHEN current_point.network_id = 'i495'
+                              AND destination.network_id = 'i95' THEN 'suffix'
+                            ELSE 'unknown'
+                        END,
+                        'i95_direction',
+                            connection.source_metadata
+                                -> 'general_purpose_fallback'
+                                ->> 'i95_direction'
+                    )
+                )
+            ELSE walk.walked_general_purpose_gaps
+            END,
             CASE WHEN connection.required_i95_direction IS NULL
                 THEN walk.required_i95_directions
                 ELSE walk.required_i95_directions
@@ -321,7 +348,35 @@ BEGIN
             walk.walked_connection_ids,
             walk.walked_connection_types,
             CASE
-                WHEN cardinality(walk.required_i95_directions) = 0 THEN NULL
+                WHEN jsonb_array_length(walk.walked_general_purpose_gaps) = 0
+                    THEN '[]'::jsonb
+                ELSE (
+                    SELECT jsonb_agg(
+                        gap.value || jsonb_build_object(
+                            'fallback_required',
+                            CASE
+                                WHEN evidence.availability = 'unknown'
+                                    THEN NULL::boolean
+                                WHEN evidence.availability = 'northbound'
+                                  AND gap.value->>'i95_direction' = 'NB'
+                                    THEN false
+                                WHEN evidence.availability = 'southbound'
+                                  AND gap.value->>'i95_direction' = 'SB'
+                                    THEN false
+                                ELSE true
+                            END
+                        )
+                        ORDER BY gap.ordinality
+                    )
+                    FROM jsonb_array_elements(
+                        walk.walked_general_purpose_gaps
+                    ) WITH ORDINALITY AS gap(value, ordinality)
+                )
+            END AS candidate_general_purpose_gaps,
+            CASE
+                WHEN cardinality(walk.required_i95_directions) = 0
+                  AND jsonb_array_length(walk.walked_general_purpose_gaps) = 0
+                    THEN NULL
                 ELSE evidence.evidence_json
             END AS candidate_evidence,
             walk.depth
@@ -355,6 +410,7 @@ BEGIN
             candidates.walked_point_ids,
             candidates.walked_connection_ids,
             candidates.walked_connection_types,
+            candidates.candidate_general_purpose_gaps,
             candidates.candidate_evidence,
             candidates.depth,
             CASE candidates.candidate_status
@@ -375,6 +431,7 @@ BEGIN
             ARRAY[]::text[],
             ARRAY[]::text[],
             ARRAY[]::text[],
+            '[]'::jsonb,
             NULL::jsonb,
             0,
             CASE WHEN frontier_state.traversal_was_truncated THEN 2 ELSE 5 END
@@ -385,8 +442,10 @@ BEGIN
         choices.walked_point_ids,
         choices.walked_connection_ids,
         choices.walked_connection_types,
+        choices.candidate_general_purpose_gaps,
         choices.candidate_evidence
-    INTO status, point_ids, connection_ids, connection_types, i95_evidence
+    INTO status, point_ids, connection_ids, connection_types,
+         general_purpose_gaps, i95_evidence
     FROM choices
     ORDER BY
         choices.priority,

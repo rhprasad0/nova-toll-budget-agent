@@ -444,6 +444,12 @@ it remains valid through the TP1 general-purpose prefix or suffix when the
 corresponding I-95 Express direction is unavailable. Fixed one-way restrictions
 recorded for I-66 and I-495 are always applied.
 
+For every selected `general_purpose_gap`, the route result compares its recorded
+I-95 direction with the live evidence. `fallback_required` is `true` when the
+needed Express direction is known unavailable, `false` when it is open, and
+null when availability is unknown. Unknown evidence does not invalidate the
+route because the general-purpose fallback remains supported.
+
 ## Agent operations
 
 The application exposes one narrow, read-only database function:
@@ -461,7 +467,8 @@ connections and return:
 - `invalid_origin` when the origin ID is missing or is not an entry/airport;
 - `invalid_destination` when the destination ID is missing or is not an
   exit/airport;
-- `valid` with the ordered route points and connection types;
+- `valid` with the ordered route points, connection types, and any structured
+  general-purpose fallback details;
 - `currently_unavailable` when every structural path requires a known
   unavailable I-95 direction;
 - `unknown_availability` when no usable path is found and an otherwise valid
@@ -473,10 +480,27 @@ connections and return:
 
 Origin validation takes precedence when both inputs are invalid. The function
 returns one structured row containing the status, ordered point IDs, ordered
-connection IDs and types, and the I-95 evidence used when applicable. Invalid,
-unsupported, and traversal-limit results contain empty path arrays. An
-availability result contains the deterministic structural proof that produced
-the result. The function never returns a price.
+connection IDs and types, `general_purpose_gaps`, and the I-95 evidence used
+when applicable. Invalid, unsupported, and traversal-limit results contain
+empty path arrays and an empty `general_purpose_gaps` array. An availability
+result contains the deterministic structural proof that produced the result.
+The function never returns a price.
+
+`general_purpose_gaps` is a JSON array in route order. Each item contains:
+
+| Field | Meaning |
+| --- | --- |
+| `connection_id` | The corresponding selected connection |
+| `boundary_point_id` | `i495:192NO` (TP1NB) or `i495:192SD` (TP1SB) |
+| `role` | `prefix` before the tolled I-495 leg or `suffix` after it |
+| `i95_direction` | I-95 Express direction that would avoid the fallback |
+| `fallback_required` | True, false, or null from the current I-95 evidence |
+
+The function returns `i95_evidence` whenever a selected path either requires an
+I-95 Express direction or contains a general-purpose gap. Consequently, a
+Westpark-to-Dumfries result can explain that TP1SB is a suffix and that the
+fallback is required while I-95 is northbound, even though the overall route
+status remains `valid`.
 
 The origin is a toll entry or airport; the destination is a toll exit or
 airport. An airport point cannot appear between them. The query may cross
@@ -581,9 +605,13 @@ handoff itself has no price.
 - TP1NB and TP1SB resolve to source movements `192NO` and `192SD` and retain
   pricing zones `495001` and `495101` in their provenance.
 - A southbound I-495 trip with an unavailable southbound I-95 continuation
-  remains valid with a disclosed TP1SB general-purpose suffix.
+  remains valid with a disclosed TP1SB general-purpose suffix,
+  `fallback_required = true`, and the live I-95 evidence.
 - An I-95 origin with unavailable northbound Express access can use a disclosed
   general-purpose prefix to TP1NB and then begin its northbound I-495 toll leg.
+- A gap matching the currently open I-95 direction reports
+  `fallback_required = false`; unknown evidence reports null without
+  invalidating the route.
 - Route 17 northbound entry and southbound exit remain normal route points, with
   their physical access variants recorded in metadata rather than extra points.
 - The northern I-495 terminus remains unsplit until source or pricing data

@@ -42,6 +42,7 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
     IF result.status <> 'valid' OR cardinality(result.connection_ids) <> 1
+       OR result.general_purpose_gaps <> '[]'::jsonb
        OR result.i95_evidence IS NOT NULL THEN
         RAISE EXCEPTION 'ordinary I-66 route failed: %', row_to_json(result);
     END IF;
@@ -85,7 +86,12 @@ BEGIN
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
     IF result.status <> 'valid'
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
-       OR result.i95_evidence IS NOT NULL THEN
+       OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192SD'
+       OR result.general_purpose_gaps->0->>'role' <> 'suffix'
+       OR result.general_purpose_gaps->0->>'i95_direction' <> 'SB'
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM true
+       OR result.i95_evidence->>'availability' <> 'northbound' THEN
         RAISE EXCEPTION 'TP1SB general-purpose suffix failed: %',
             row_to_json(result);
     END IF;
@@ -118,8 +124,23 @@ BEGIN
     FROM oracle.validate_toll_route('i95:234NO', 'i495:185ND');
     IF result.status <> 'valid'
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
-       OR result.i95_evidence IS NOT NULL THEN
+       OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192NO'
+       OR result.general_purpose_gaps->0->>'role' <> 'prefix'
+       OR result.general_purpose_gaps->0->>'i95_direction' <> 'NB'
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM true
+       OR result.i95_evidence->>'availability' <> 'southbound' THEN
         RAISE EXCEPTION 'TP1NB general-purpose prefix failed: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
+    IF result.status <> 'valid'
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM false
+       OR result.i95_evidence->>'availability' <> 'southbound' THEN
+        RAISE EXCEPTION 'available I-95 direction incorrectly required fallback: %',
             row_to_json(result);
     END IF;
 END $$;
@@ -165,6 +186,15 @@ BEGIN
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
     IF result.status <> 'unknown_availability' THEN
         RAISE EXCEPTION 'stale state was accepted';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
+    IF result.status <> 'valid'
+       OR result.general_purpose_gaps->0->>'fallback_required' IS NOT NULL
+       OR result.i95_evidence->>'availability' <> 'unknown' THEN
+        RAISE EXCEPTION 'unknown state did not preserve safe TP1 fallback: %',
+            row_to_json(result);
     END IF;
 END $$;
 
