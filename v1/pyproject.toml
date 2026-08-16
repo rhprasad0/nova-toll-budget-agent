@@ -8,7 +8,7 @@ dependencies = [
     "boto3>=1.43.70",
     "defusedxml>=0.7.1",
     "openai>=2.53.0,<3",
-    "strands-agents[openai]==1.51.0",
+    "strands-agents[openai]==1.52.0",
     # AgentCore's official packager falls back to manylinux_2_28 for ARM64
     # dependencies when a package no longer publishes a manylinux2014 wheel.
     "psycopg[binary]==3.3.4",
