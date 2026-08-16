@@ -1,0 +1,40 @@
+from pathlib import Path
+
+V2_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = V2_ROOT.parent
+MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
+V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
+
+
+def test_v1_direct_notification_and_eventbridge_coexist():
+    notification = V1_TRIGGERS.split(
+        'resource "aws_s3_bucket_notification" "raw"', maxsplit=1
+    )[1]
+    assert "eventbridge = true" in notification
+    assert "lambda_function_arn = aws_lambda_function.loader.arn" in notification
+
+
+def test_v2_has_an_independent_state_and_identity():
+    assert 'key          = "nova-toll/v2/terraform.tfstate"' in VERSIONS_TF
+    assert 'function_name = "toll-v2-pricing-loader"' in MAIN_TF
+    assert "/pricing_loader_writer" in MAIN_TF
+    assert 'DB_USER    = "pricing_loader_writer"' in MAIN_TF
+
+
+def test_eventbridge_has_both_failure_paths_and_bounded_retries():
+    assert 'detail-type = ["Object Created"]' in MAIN_TF
+    assert '{ prefix = "raw/feed=i95/" }' in MAIN_TF
+    assert '{ prefix = "raw/feed=i66/" }' in MAIN_TF
+    assert "maximum_event_age_in_seconds = 86400" in MAIN_TF
+    assert "maximum_retry_attempts       = 185" in MAIN_TF
+    assert 'resource "aws_sqs_queue" "invoke_failure"' in MAIN_TF
+    assert 'resource "aws_sqs_queue" "delivery_failure"' in MAIN_TF
+
+
+def test_loader_network_and_data_access_are_scoped():
+    assert "${data.aws_s3_bucket.raw.arn}/*" not in MAIN_TF
+    assert '"${data.aws_s3_bucket.raw.arn}/raw/feed=i95/*"' in MAIN_TF
+    assert '"${data.aws_s3_bucket.raw.arn}/raw/feed=i66/*"' in MAIN_TF
+    assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_rds"' in MAIN_TF
+    assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF

@@ -63,6 +63,9 @@ resource "aws_lambda_permission" "s3_invoke_loader" {
 
 resource "aws_s3_bucket_notification" "raw" {
   bucket = aws_s3_bucket.raw.id
+  # Preserve the v1 direct notification while publishing the same object
+  # events for independently managed v2 EventBridge consumers.
+  eventbridge = true
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.loader.arn
