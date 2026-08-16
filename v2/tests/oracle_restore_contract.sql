@@ -44,9 +44,9 @@ BEGIN
         (SELECT count(*) FROM oracle.toll_connection
          WHERE connection_type = 'airport_access') AS airports
     INTO counts;
-    IF counts.points <> 220 OR counts.connections <> 991 OR counts.located <> 107
+    IF counts.points <> 220 OR counts.connections <> 992 OR counts.located <> 107
        OR counts.within_facility <> 670 OR counts.gaps <> 300
-       OR counts.handoffs <> 12 OR counts.airports <> 9 THEN
+       OR counts.handoffs <> 13 OR counts.airports <> 9 THEN
         RAISE EXCEPTION 'unexpected oracle seed counts: %', row_to_json(counts);
     END IF;
 END $$;
@@ -58,9 +58,42 @@ BEGIN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
+        WHERE required_i95_direction IS NOT NULL) <> 308
+       OR (SELECT count(*) FROM oracle.toll_connection
+           WHERE connection_type = 'general_purpose_gap'
+             AND required_i95_direction IS NOT NULL) <> 0
+       OR (SELECT required_i95_direction FROM oracle.toll_connection
+           WHERE connection_id = 'i95_north_to_dca') <> 'NB' THEN
+        RAISE EXCEPTION 'connection-level I-95 requirements are invalid';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM oracle.toll_connection
+        WHERE connection_id = 'dulles_toll_road_westbound_to_i495_north'
+          AND from_point_id = 'dtr:1819:exit:WB'
+          AND to_point_id = 'i495:182NO'
+    ) THEN
+        RAISE EXCEPTION 'westbound DTR to northbound I-495 handoff is missing';
+    END IF;
+    IF (SELECT aliases[1] FROM oracle.toll_route_point
+        WHERE point_id = 'i495:192NO') <> 'TP1NB'
+       OR (SELECT aliases[1] FROM oracle.toll_route_point
+           WHERE point_id = 'i495:192SD') <> 'TP1SB'
+       OR (SELECT point_type FROM oracle.toll_route_point
+           WHERE point_id = 'i95:234NO') <> 'entry'
+       OR (SELECT point_type FROM oracle.toll_route_point
+           WHERE point_id = 'i95:235SD') <> 'exit' THEN
+        RAISE EXCEPTION 'TP1 or Route 17 boundary points are invalid';
+    END IF;
+    IF (SELECT count(*) FROM oracle.toll_connection
         WHERE connection_type = 'general_purpose_gap'
           AND source_metadata->'source_pair'->'ods' IS NOT NULL) <> 300 THEN
         RAISE EXCEPTION 'I-95/I-495 OD provenance was not retained';
+    END IF;
+    IF (SELECT count(*) FROM oracle.toll_connection
+        WHERE connection_type = 'general_purpose_gap'
+          AND source_metadata->'general_purpose_fallback'->>'boundary_point_id'
+              IN ('i495:192NO', 'i495:192SD')) <> 300 THEN
+        RAISE EXCEPTION 'I-95/I-495 TP1 fallback provenance was not retained';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
         WHERE connection_type = 'general_purpose_gap'

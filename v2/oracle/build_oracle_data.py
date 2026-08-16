@@ -21,8 +21,8 @@ SOURCE_FILES = {
 }
 
 EXPECTED_POINTS = 220
-EXPECTED_CONNECTIONS = 991
-EXPECTED_REACHABLE_PAIRS = 2686
+EXPECTED_CONNECTIONS = 992
+EXPECTED_REACHABLE_PAIRS = 2687
 EXPECTED_MAX_SHORTEST_PATH = 7
 
 
@@ -36,6 +36,7 @@ class Point:
     label: str
     longitude: str | None
     latitude: str | None
+    aliases: tuple[str, ...]
     source_metadata: dict[str, Any]
 
 
@@ -45,6 +46,7 @@ class Connection:
     from_point_id: str
     to_point_id: str
     connection_type: str
+    required_i95_direction: str | None
     source_route_key: str | None
     source_metadata: dict[str, Any]
 
@@ -113,22 +115,66 @@ def build_points() -> dict[str, Point]:
     typed_shared_nodes = cast(dict[str, dict[str, Any]], shared_nodes)
     for source_node_id, raw_node in typed_shared_nodes.items():
         point_id = _shared_point_id(source_node_id, raw_node)
+        label = str(raw_node["label"])
+        aliases: tuple[str, ...] = ()
+        metadata = _metadata(
+            "i95_shared",
+            shared,
+            "source_node",
+            raw_node,
+            coordinate_quality="provisional_generalized",
+        )
+        if source_node_id == "192NO":
+            label = "I-495 Express northbound start at I-95 (TP1NB)"
+            aliases = ("TP1NB", "Springfield Interchange", str(raw_node["label"]))
+            metadata["curated_boundary"] = {
+                "basis": "v2/docs/oracle-spec.md",
+                "evidence_url": "https://www.expresslanes.com/sites/default/files/inline-files/495%20Express%20Lanes%20-%20The%20First%20Year.pdf",
+                "pricing_zone_id": 495001,
+                "pricing_zone_name": "NB 495 TP Past 95/395 (TP1NB)",
+            }
+        elif source_node_id == "192SD":
+            label = "I-495 Express southbound end at I-95 (TP1SB)"
+            aliases = ("TP1SB", "Springfield Interchange", str(raw_node["label"]))
+            metadata["curated_boundary"] = {
+                "basis": "v2/docs/oracle-spec.md",
+                "evidence_url": "https://www.expresslanes.com/sites/default/files/inline-files/495%20Express%20Lanes%20-%20The%20First%20Year.pdf",
+                "pricing_zone_id": 495101,
+                "pricing_zone_name": "SB 495 TP Before 95/395 (TP1SB)",
+            }
+        elif source_node_id == "234NO":
+            label = "I-95 Express northbound start near Route 17"
+            aliases = ("I-95 Near Route 17", "Route 17 northbound entrance")
+            metadata["curated_boundary"] = {
+                "basis": "v2/docs/oracle-spec.md",
+                "evidence_url": "https://improve95.vdot.virginia.gov/fredex/",
+                "access_variants": [
+                    "northbound_general_purpose_through_slip_ramp",
+                    "route_17_route_3_local_flyover",
+                ],
+            }
+        elif source_node_id == "235SD":
+            label = "I-95 Express southbound end near Route 17"
+            aliases = ("I-95 Near Route 17", "Route 17 southbound exit")
+            metadata["curated_boundary"] = {
+                "basis": "v2/docs/oracle-spec.md",
+                "evidence_url": "https://improve95.vdot.virginia.gov/fredex/",
+                "access_variants": [
+                    "general_purpose_continuation",
+                    "route_17_route_3_local_exit",
+                ],
+            }
         points[point_id] = Point(
             point_id=point_id,
             network_id=_shared_network(raw_node),
             source_node_id=source_node_id,
             point_type=_shared_role(raw_node),
             direction=_shared_direction(raw_node),
-            label=str(raw_node["label"]),
+            label=label,
             longitude=str(raw_node["longitude"]),
             latitude=str(raw_node["latitude"]),
-            source_metadata=_metadata(
-                "i95_shared",
-                shared,
-                "source_node",
-                raw_node,
-                coordinate_quality="provisional_generalized",
-            ),
+            aliases=aliases,
+            source_metadata=metadata,
         )
 
     for network_id in ("i66", "dtr", "greenway"):
@@ -159,6 +205,7 @@ def build_points() -> dict[str, Point]:
                         label=label,
                         longitude=None,
                         latitude=None,
+                        aliases=(),
                         source_metadata=_metadata(
                             network_id,
                             source,
@@ -181,6 +228,7 @@ def build_points() -> dict[str, Point]:
             label=label,
             longitude=None,
             latitude=None,
+            aliases=(),
             source_metadata={
                 "curated": True,
                 "basis": "v2/docs/oracle-spec.md",
@@ -202,14 +250,23 @@ def _curated_connection(
     from_point_id: str,
     to_point_id: str,
     connection_type: str,
+    required_i95_direction: str | None = None,
+    evidence_url: str | None = None,
 ) -> Connection:
+    source_metadata: dict[str, Any] = {
+        "curated": True,
+        "basis": "v2/docs/oracle-spec.md",
+    }
+    if evidence_url is not None:
+        source_metadata["evidence_url"] = evidence_url
     return Connection(
         connection_id=connection_id,
         from_point_id=from_point_id,
         to_point_id=to_point_id,
         connection_type=connection_type,
+        required_i95_direction=required_i95_direction,
         source_route_key=None,
-        source_metadata={"curated": True, "basis": "v2/docs/oracle-spec.md"},
+        source_metadata=source_metadata,
     )
 
 
@@ -228,14 +285,26 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             if points[from_id].network_id == points[to_id].network_id
             else "general_purpose_gap"
         )
+        required_i95_direction = None
+        if connection_type == "within_facility" and points[from_id].network_id == "i95":
+            required_i95_direction = _shared_direction(shared_nodes[entry])
         connection_id = _source_connection_id("i95_shared", direction, entry, exit_id)
+        source_metadata = _metadata("i95_shared", shared, "source_pair", raw_pair)
+        if connection_type == "general_purpose_gap":
+            source_metadata["general_purpose_fallback"] = {
+                "boundary_point_id": (
+                    "i495:192NO" if direction == "Northbound" else "i495:192SD"
+                ),
+                "i95_direction": _shared_direction(shared_nodes[entry]),
+            }
         connections[connection_id] = Connection(
             connection_id=connection_id,
             from_point_id=from_id,
             to_point_id=to_id,
             connection_type=connection_type,
+            required_i95_direction=required_i95_direction,
             source_route_key=f"{direction}:{entry}:{exit_id}",
-            source_metadata=_metadata("i95_shared", shared, "source_pair", raw_pair),
+            source_metadata=source_metadata,
         )
 
     for network_id in ("i66", "dtr", "greenway"):
@@ -252,6 +321,7 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
                 from_point_id=from_id,
                 to_point_id=to_id,
                 connection_type="within_facility",
+                required_i95_direction=None,
                 source_route_key=f"{direction}:{entry}:{exit_id}",
                 source_metadata=_metadata(network_id, source, "source_pair", raw_pair),
             )
@@ -316,6 +386,14 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             "dtr:1819:exit:EB",
             "i495:182NO",
             "toll_handoff",
+            evidence_url="https://495next.vdot.virginia.gov/about/using/",
+        ),
+        _curated_connection(
+            "dulles_toll_road_westbound_to_i495_north",
+            "dtr:1819:exit:WB",
+            "i495:182NO",
+            "toll_handoff",
+            evidence_url="https://495next.vdot.virginia.gov/about/using/",
         ),
         _curated_connection(
             "i495_to_dulles_toll_road",
@@ -340,6 +418,7 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             from_point_id="airport_iad",
             to_point_id="dtr:66:entry:WB",
             connection_type="airport_access",
+            required_i95_direction=None,
             source_route_key=None,
             source_metadata={
                 "curated": True,
@@ -352,6 +431,7 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             from_point_id="dtr:66:exit:EB",
             to_point_id="airport_iad",
             connection_type="airport_access",
+            required_i95_direction=None,
             source_route_key=None,
             source_metadata={
                 "curated": True,
@@ -372,7 +452,11 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             "i495_south_to_iad", "i495:182SD", "airport_iad", "airport_access"
         ),
         _curated_connection(
-            "i95_north_to_dca", "i95:223ND", "airport_dca", "airport_access"
+            "i95_north_to_dca",
+            "i95:223ND",
+            "airport_dca",
+            "airport_access",
+            required_i95_direction="NB",
         ),
     )
     for connection in curated:
@@ -400,6 +484,11 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             raise ValueError(
                 f"invalid within-facility connection {connection.connection_id}"
             )
+        expected_i95_direction = (
+            from_point.direction if from_point.network_id == "i95" else None
+        )
+        if connection.required_i95_direction != expected_i95_direction:
+            raise ValueError(f"invalid I-95 requirement on {connection.connection_id}")
     elif connection.connection_type == "general_purpose_gap":
         if (
             {from_point.network_id, to_point.network_id} != {"i95", "i495"}
@@ -407,6 +496,24 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             or to_point.point_type != "exit"
         ):
             raise ValueError(f"invalid general-purpose gap {connection.connection_id}")
+        if connection.required_i95_direction is not None:
+            raise ValueError(
+                f"general-purpose gap requires I-95 on {connection.connection_id}"
+            )
+        expected_boundary = (
+            "i495:192NO"
+            if connection.source_metadata["source_pair"]["direction"] == "Northbound"
+            else "i495:192SD"
+        )
+        if (
+            connection.source_metadata.get("general_purpose_fallback", {}).get(
+                "boundary_point_id"
+            )
+            != expected_boundary
+        ):
+            raise ValueError(
+                f"invalid general-purpose boundary on {connection.connection_id}"
+            )
     elif connection.connection_type == "toll_handoff":
         if (
             from_point.network_id == to_point.network_id
@@ -414,12 +521,23 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             or to_point.point_type != "entry"
         ):
             raise ValueError(f"invalid toll handoff {connection.connection_id}")
+        if connection.required_i95_direction is not None:
+            raise ValueError(
+                f"toll handoff requires I-95 on {connection.connection_id}"
+            )
     elif connection.connection_type == "airport_access":
         valid_roles = (
             from_point.point_type == "airport" and to_point.point_type == "entry"
         ) or (from_point.point_type == "exit" and to_point.point_type == "airport")
         if not valid_roles:
             raise ValueError(f"invalid airport connection {connection.connection_id}")
+        expected_i95_direction = (
+            "NB" if connection.connection_id == "i95_north_to_dca" else None
+        )
+        if connection.required_i95_direction != expected_i95_direction:
+            raise ValueError(
+                f"invalid airport I-95 requirement on {connection.connection_id}"
+            )
     else:
         raise ValueError(f"unknown connection type on {connection.connection_id}")
 
@@ -484,7 +602,7 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
     expected_counts = {
         "within_facility": 670,
         "general_purpose_gap": 300,
-        "toll_handoff": 12,
+        "toll_handoff": 13,
         "airport_access": 9,
     }
     if dict(counts) != expected_counts:
@@ -525,6 +643,12 @@ def _sql_json(value: dict[str, Any]) -> str:
     return _sql_text(serialized) + "::jsonb"
 
 
+def _sql_text_array(values: tuple[str, ...]) -> str:
+    if not values:
+        return "ARRAY[]::text[]"
+    return "ARRAY[" + ", ".join(_sql_text(value) for value in values) + "]::text[]"
+
+
 def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> str:
     lines = [
         "-- Generated by v2/oracle/build_oracle_data.py; do not edit.",
@@ -553,7 +677,7 @@ def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> 
                     _sql_text(point.direction),
                     _sql_text(point.label),
                     location,
-                    "ARRAY[]::text[]",
+                    _sql_text_array(point.aliases),
                     _sql_json(point.source_metadata),
                 )
             )
@@ -565,7 +689,7 @@ def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> 
             "",
             "INSERT INTO oracle.toll_connection (",
             "    connection_id, from_point_id, to_point_id, connection_type,",
-            "    source_route_key, source_metadata",
+            "    required_i95_direction, source_route_key, source_metadata",
             ") VALUES",
         )
     )
@@ -579,6 +703,7 @@ def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> 
                     _sql_text(connection.from_point_id),
                     _sql_text(connection.to_point_id),
                     _sql_text(connection.connection_type),
+                    _sql_text(connection.required_i95_direction),
                     _sql_text(connection.source_route_key),
                     _sql_json(connection.source_metadata),
                 )

@@ -80,6 +80,15 @@ BEGIN
           <> 'i95_north_to_dca' THEN
         RAISE EXCEPTION 'northbound DCA route failed: %', row_to_json(result);
     END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
+    IF result.status <> 'valid'
+       OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
+       OR result.i95_evidence IS NOT NULL THEN
+        RAISE EXCEPTION 'TP1SB general-purpose suffix failed: %',
+            row_to_json(result);
+    END IF;
 END $$;
 
 SELECT pg_temp.set_i95_state(
@@ -102,6 +111,16 @@ BEGIN
     FROM oracle.validate_toll_route('i95:202NO', 'airport_dca');
     IF result.status <> 'currently_unavailable' THEN
         RAISE EXCEPTION 'southbound state allowed DCA route';
+    END IF;
+
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:234NO', 'i495:185ND');
+    IF result.status <> 'valid'
+       OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
+       OR result.i95_evidence IS NOT NULL THEN
+        RAISE EXCEPTION 'TP1NB general-purpose prefix failed: %',
+            row_to_json(result);
     END IF;
 END $$;
 
@@ -196,6 +215,15 @@ BEGIN
     END IF;
 
     SELECT * INTO result
+    FROM oracle.validate_toll_route('dtr:66:entry:WB', 'i495:181ND');
+    IF result.status <> 'valid'
+       OR NOT 'dulles_toll_road_westbound_to_i495_north'
+              = ANY(result.connection_ids) THEN
+        RAISE EXCEPTION 'westbound DTR/I-495 junction failed: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
     FROM oracle.validate_toll_route(
         'i66:11:entry:WB', 'dtr:28:exit:WB'
     );
@@ -284,7 +312,7 @@ FROM generate_series(0, 12) AS index;
 
 INSERT INTO oracle.toll_connection VALUES (
     'test-depth-cycle', 'test-depth-6', 'test-depth-2',
-    'within_facility', NULL, '{"test_fixture":true}'::jsonb
+    'within_facility', NULL, NULL, '{"test_fixture":true}'::jsonb
 );
 
 INSERT INTO oracle.toll_route_point (
@@ -305,12 +333,12 @@ INSERT INTO oracle.toll_connection VALUES
     (
         'test-limit-short-unknown',
         'test-limit-i95-origin', 'test-limit-i95-destination',
-        'within_facility', NULL, '{"test_fixture":true}'::jsonb
+        'within_facility', 'NB', NULL, '{"test_fixture":true}'::jsonb
     ),
     (
         'test-limit-long-frontier',
         'test-limit-i95-origin', 'test-depth-1',
-        'general_purpose_gap', NULL, '{"test_fixture":true}'::jsonb
+        'general_purpose_gap', NULL, NULL, '{"test_fixture":true}'::jsonb
     );
 
 DO $$

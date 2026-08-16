@@ -136,6 +136,7 @@ CREATE TABLE oracle.toll_connection (
             'general_purpose_gap', 'airport_access'
         )
     ),
+    required_i95_direction text CHECK (required_i95_direction IN ('NB', 'SB')),
     source_route_key text,
     source_metadata jsonb NOT NULL CHECK (jsonb_typeof(source_metadata) = 'object'),
     CHECK (from_point_id <> to_point_id),
@@ -280,12 +281,10 @@ BEGIN
             walk.walked_point_ids || destination.point_id,
             walk.walked_connection_ids || connection.connection_id,
             walk.walked_connection_types || connection.connection_type,
-            CASE
-                WHEN current_point.network_id = 'i95' THEN
-                    walk.required_i95_directions || current_point.direction
-                WHEN destination.network_id = 'i95' THEN
-                    walk.required_i95_directions || destination.direction
+            CASE WHEN connection.required_i95_direction IS NULL
+                THEN walk.required_i95_directions
                 ELSE walk.required_i95_directions
+                     || connection.required_i95_direction
             END,
             walk.depth + 1
         FROM walk

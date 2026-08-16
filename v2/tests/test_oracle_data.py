@@ -31,7 +31,7 @@ def test_oracle_source_contract() -> None:
     ) == {
         "within_facility": 670,
         "general_purpose_gap": 300,
-        "toll_handoff": 12,
+        "toll_handoff": 13,
         "airport_access": 9,
     }
     assert sum(point.longitude is not None for point in points.values()) == 107
@@ -54,6 +54,46 @@ def test_source_metadata_retains_future_pricing_keys() -> None:
     assert i66.source_metadata["source_pair"]["start_zone"] == 3100
     assert dtr.source_metadata["source_pair"]["charges"]
     assert greenway.source_metadata["source_pair"]["charges"]
+
+
+def test_boundary_points_and_i95_requirements_are_explicit() -> None:
+    points = build_points()
+    connections = build_connections(points)
+
+    assert points["i495:192NO"].aliases[0] == "TP1NB"
+    assert points["i495:192SD"].aliases[0] == "TP1SB"
+    assert points["i95:234NO"].point_type == "entry"
+    assert points["i95:235SD"].point_type == "exit"
+
+    same_facility = connections["source:i95_shared:Northbound:234NO:201ND"]
+    gp_prefix = connections["source:i95_shared:Northbound:234NO:185ND"]
+    gp_suffix = connections["source:i95_shared:Southbound:185SO:235SD"]
+    dca = connections["i95_north_to_dca"]
+
+    assert same_facility.required_i95_direction == "NB"
+    assert gp_prefix.required_i95_direction is None
+    assert gp_suffix.required_i95_direction is None
+    assert gp_prefix.source_metadata["general_purpose_fallback"] == {
+        "boundary_point_id": "i495:192NO",
+        "i95_direction": "NB",
+    }
+    assert gp_suffix.source_metadata["general_purpose_fallback"] == {
+        "boundary_point_id": "i495:192SD",
+        "i95_direction": "SB",
+    }
+    assert dca.required_i95_direction == "NB"
+
+
+def test_both_dtr_approaches_reach_northbound_i495() -> None:
+    connections = build_connections(build_points())
+
+    assert connections["dulles_toll_road_to_i495_north"].from_point_id == (
+        "dtr:1819:exit:EB"
+    )
+    assert (
+        connections["dulles_toll_road_westbound_to_i495_north"].from_point_id
+        == "dtr:1819:exit:WB"
+    )
 
 
 def test_generated_sql_is_deterministic() -> None:

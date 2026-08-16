@@ -171,6 +171,7 @@ erDiagram
         text from_point_id FK
         text to_point_id FK
         text connection_type
+        text required_i95_direction
         text source_route_key
         jsonb source_metadata
     }
@@ -218,6 +219,7 @@ Connections are directed; reversing a connection requires another row.
 | `from_point_id` | Starting route point |
 | `to_point_id` | Reachable route point |
 | `connection_type` | Connection classification |
+| `required_i95_direction` | Required live I-95 direction, or null when none |
 | `source_route_key` | Optional route identifier from the source oracle |
 | `source_metadata` | Provenance needed to audit the connection |
 
@@ -228,11 +230,16 @@ entry-to-exit pair becomes a `general_purpose_gap` connection. Other
 transitions between roads or an airport use the same table with a different
 type.
 
-Network and direction come from the two route-point rows and are not copied
-onto the connection. A `general_purpose_gap` is supported connectivity, but
-the agent must disclose that it is not uninterrupted Express Lane travel. An
-`airport_access` connection is restricted to a trip whose origin or
-destination is that airport; an airport can never be an intermediate waypoint.
+Network and fixed ramp direction come from the two route-point rows.
+Time-dependent I-95 availability is a property of the movement, so
+`required_i95_direction` is recorded on the connection rather than inferred
+from either endpoint. Same-facility I-95 connections require their travel
+direction, and the DCA connection requires northbound I-95. A
+`general_purpose_gap` has no I-95 requirement because its supported fallback
+uses general-purpose lanes to or from the TP1 boundary. The agent must disclose
+that such a route is not uninterrupted Express Lane travel. An
+`airport_access` connection is restricted to a trip whose origin or destination
+is that airport; an airport can never be an intermediate waypoint.
 
 ## V1 import mapping
 
@@ -325,18 +332,60 @@ I-66 and Dulles Toll Road require two directed handoffs:
 | `i66_to_dulles_toll_road` | `i66:6` | `dtr:66` |
 | `dulles_toll_road_to_i66` | `dtr:66` | `i66:6` |
 
-Dulles Toll Road and I-495 require four directed handoffs:
+Dulles Toll Road and I-495 require five directed handoffs:
 
 | Connection ID | From exit | To entry |
 | --- | --- | --- |
 | `dulles_toll_road_to_i495` | `dtr:1819` | `i495:182SO` |
 | `dulles_toll_road_to_i495_north` | `dtr:1819` | `i495:182NO` |
+| `dulles_toll_road_westbound_to_i495_north` | `dtr:1819:WB` | `i495:182NO` |
 | `i495_to_dulles_toll_road` | `i495:182ND` | `dtr:1819` |
 | `i495_south_to_dulles_toll_road` | `i495:182SD` | `dtr:1819` |
 
 These handoffs are connectivity facts, not priced route legs. They are never
-made reversible implicitly; only the twelve rows above authorize travel across
+made reversible implicitly; only the thirteen rows above authorize travel across
 the four junctions.
+
+The two northbound I-495 handoffs from DTR are distinct movements. One starts
+from the eastbound DTR exit at node `1819`; the other starts from the westbound
+DTR exit at the same interchange. They converge on the same northbound I-495
+entry and are not made interchangeable by proximity.
+
+### I-495/I-95 and Route 17 boundaries
+
+The existing source movements `192NO` and `192SD` are the TP1 boundaries, not
+Van Dorn ramps. V2 retains their stable point IDs but gives them explicit TP1
+labels and aliases:
+
+- `i495:192NO` is TP1NB, where a northbound I-495 tolled trip can begin after a
+  general-purpose prefix from an I-95 origin; and
+- `i495:192SD` is TP1SB, where a southbound I-495 tolled trip can end before a
+  general-purpose suffix to an I-95 destination.
+
+The associated I-495 pricing boundaries are zone `495001` (TP1NB) and zone
+`495101` (TP1SB). A published I-95/I-495 `general_purpose_gap` remains a valid
+route when I-95 is running the opposite direction because the I-495 tolled leg
+still exists and the unavailable I-95 portion can use general-purpose lanes.
+The route result discloses the gap; deciding which retained OD components are
+chargeable belongs to later pricing integration.
+
+The southern I-95 Express boundary is represented by the existing source
+movements `234NO` and `235SD`. `234NO` is one logical northbound entry even
+though through traffic and Route 17/Route 3 local traffic reach it over
+different physical ramps; `235SD` is the corresponding southbound exit and
+general-purpose continuation. The source and pricing data expose one movement
+identity per direction, so oracle `1.0.0` records the physical access variants
+in metadata instead of inventing separately priced points.
+
+At the northern end of I-495, current pricing exposes only zone `495009`
+(TP9NB) for northbound destinations and zone `495109` (TP9SB) for southbound
+origins. It does not identify the dedicated GW Parkway ramps separately from
+the mainline Express/general-purpose transition. Oracle `1.0.0` therefore
+retains one source-backed directed point per role. A later split requires a
+distinct operator point or pricing identity; geometry alone is insufficient.
+
+Seminary Road movements are ordinary directed ramps in this version. The
+oracle applies no separate occupancy or HOV-eligibility rule to them.
 
 The shared I-95 source contains 300 published pairs that cross between I-95
 and I-495: 148 from I-495 into I-95/395 and 152 in the reverse direction.
@@ -363,6 +412,8 @@ The importer rejects or reports:
 - toll-road handoffs that do not go from an exit to an entry;
 - `general_purpose_gap` rows that are not published I-95/I-495 entry-to-exit
   pairs;
+- I-95 requirements on a general-purpose gap or non-I-95 handoff;
+- missing or mismatched I-95 requirements on same-facility I-95 connections;
 - airport connections that are not airport-to-entry or exit-to-airport; and
 - within-facility pairs whose roles or directions disagree with the source.
 
@@ -385,9 +436,13 @@ later than that same statement timestamp is future-dated. Missing, stale,
 mismatched, future-dated, contradictory, or transitional evidence is unknown.
 This classification is a query rule, not another stored table.
 
-An I-95 route is currently usable only when its direction matches the open
-direction. The DCA connection is usable only when I-95 is northbound. The
-fixed one-way restrictions recorded for I-66 and I-495 are always applied.
+A connection with `required_i95_direction` is currently usable only when that
+direction matches the open direction. Same-facility I-95 routes therefore
+remain direction-dependent, and the DCA connection is usable only when I-95 is
+northbound. A cross-facility `general_purpose_gap` has no live-I-95 requirement:
+it remains valid through the TP1 general-purpose prefix or suffix when the
+corresponding I-95 Express direction is unavailable. Fixed one-way restrictions
+recorded for I-66 and I-495 are always applied.
 
 ## Agent operations
 
@@ -472,6 +527,9 @@ handoff itself has no price.
   different route points.
 - `connection_type` is constrained to the four documented values, and each
   directed endpoint pair is unique.
+- `required_i95_direction`, when present, is `NB` or `SB`. Import contracts
+  require it on same-facility I-95 connections and DCA access, and forbid it on
+  general-purpose gaps and unrelated handoffs.
 - Cross-row role, direction, network, and airport semantics remain importer
   validations backed by contract tests. No runtime role has table DML access,
   so the first version does not add constraint triggers.
@@ -504,8 +562,9 @@ handoff itself has no price.
 - Both I-66/Dulles Toll Road handoffs work in their recorded direction. IAD
   routes to and from DTR node `66` use the two airport-only composed edges and
   cannot create a general I-66 U-turn.
-- All four Dulles Toll Road/I-495 handoffs connect the exact exit and entry
-  movements listed in the junction contract, including both I-495 directions.
+- All five Dulles Toll Road/I-495 handoffs connect the exact exit and entry
+  movements listed in the junction contract, including eastbound and westbound
+  DTR approaches to northbound I-495.
 - Reversing or removing any junction handoff makes its dependent fixture route
   unsupported unless a separate directed handoff proves another path.
 - Entry-to-entry, exit-to-exit, and direction-incompatible junction fixtures
@@ -519,7 +578,16 @@ handoff itself has no price.
 - DCA-to-I-95 and every southbound DCA fixture return `no_supported_route`.
 - Known one-way ramps cannot be used backward.
 - A known cross-road route succeeds only when all required connections exist.
-- The I-495/I-95 general-purpose gap is disclosed.
+- TP1NB and TP1SB resolve to source movements `192NO` and `192SD` and retain
+  pricing zones `495001` and `495101` in their provenance.
+- A southbound I-495 trip with an unavailable southbound I-95 continuation
+  remains valid with a disclosed TP1SB general-purpose suffix.
+- An I-95 origin with unavailable northbound Express access can use a disclosed
+  general-purpose prefix to TP1NB and then begin its northbound I-495 toll leg.
+- Route 17 northbound entry and southbound exit remain normal route points, with
+  their physical access variants recorded in metadata rather than extra points.
+- The northern I-495 terminus remains unsplit until source or pricing data
+  supplies distinct identities for the mainline and GW Parkway movements.
 - Fresh northbound, fresh southbound, fully closed, stale, and contradictory
   I-95 evidence behave distinctly.
 - Freshness uses `statement_timestamp()`: a call made later in a long-running
