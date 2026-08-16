@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "aws-opentelemetry-distro>=0.18.0,<1",
-    "bedrock-agentcore>=1.2.0,<2",
+    "bedrock-agentcore>=1.21.0,<2",
     "boto3>=1.43.67",
     "defusedxml>=0.7.1",
     "openai>=2.45.0,<3",
