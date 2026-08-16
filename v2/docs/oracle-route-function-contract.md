@@ -211,8 +211,10 @@ and begins the tolled I-495 trip there.
 - Dulles International Airport is an explicit external endpoint. Its
   `airport_access` connections may use the untolled Airport Access Highway;
   this does not make an ordinary Dulles Toll Road trip free.
-- Reagan National Airport is destination-only and reachable only through the
-  northbound Pentagon/Eads connection while I-95 is northbound.
+- Reagan National Airport departures may enter I-395 northbound at `224NO` or
+  southbound at `2233SO` near Pentagon/Eads, subject to the corresponding live
+  direction. Reagan remains an arrival destination only through northbound
+  exit `223ND`; there is no southbound arrival connection.
 - An airport can be the origin or destination but never an intermediate point.
 
 ## Security and versioning

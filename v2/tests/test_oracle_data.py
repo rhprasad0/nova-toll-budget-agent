@@ -32,7 +32,7 @@ def test_oracle_source_contract() -> None:
         "within_facility": 670,
         "general_purpose_gap": 300,
         "toll_handoff": 13,
-        "airport_access": 9,
+        "airport_access": 11,
     }
     assert sum(point.longitude is not None for point in points.values()) == 107
     assert graph_metrics(points, connections) == (
@@ -68,7 +68,9 @@ def test_boundary_points_and_i95_requirements_are_explicit() -> None:
     same_facility = connections["source:i95_shared:Northbound:234NO:201ND"]
     gp_prefix = connections["source:i95_shared:Northbound:234NO:185ND"]
     gp_suffix = connections["source:i95_shared:Southbound:185SO:235SD"]
-    dca = connections["i95_north_to_dca"]
+    dca_destination = connections["i95_north_to_dca"]
+    dca_north = connections["dca_to_i95_north"]
+    dca_south = connections["dca_to_i95_south"]
 
     assert same_facility.required_i95_direction == "NB"
     assert gp_prefix.required_i95_direction is None
@@ -81,7 +83,11 @@ def test_boundary_points_and_i95_requirements_are_explicit() -> None:
         "boundary_point_id": "i495:192SD",
         "i95_direction": "SB",
     }
-    assert dca.required_i95_direction == "NB"
+    assert dca_destination.required_i95_direction == "NB"
+    assert dca_north.to_point_id == "i95:224NO"
+    assert dca_north.required_i95_direction == "NB"
+    assert dca_south.to_point_id == "i95:2233SO"
+    assert dca_south.required_i95_direction == "SB"
 
 
 def test_both_dtr_approaches_reach_northbound_i495() -> None:

@@ -229,6 +229,8 @@ INSERT INTO oracle.toll_connection (
     connection_id, from_point_id, to_point_id, connection_type,
     required_i95_direction, source_route_key, source_metadata
 ) VALUES
+    ('dca_to_i95_north', 'airport_dca', 'i95:224NO', 'airport_access', 'NB', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
+    ('dca_to_i95_south', 'airport_dca', 'i95:2233SO', 'airport_access', 'SB', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('dtr_to_greenway', 'dtr:28:exit:WB', 'greenway:28:entry:WB', 'toll_handoff', NULL, NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('dtr_to_iad_via_i66', 'dtr:66:exit:EB', 'airport_iad', 'airport_access', NULL, NULL, '{"basis":"v2/docs/oracle-spec.md","composed_from":["dulles_toll_road_to_i66","i66_to_iad"],"curated":true}'::jsonb),
     ('dulles_toll_road_to_i495', 'dtr:1819:exit:EB', 'i495:182SO', 'toll_handoff', NULL, NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),

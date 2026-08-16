@@ -235,7 +235,8 @@ Network and fixed ramp direction come from the two route-point rows.
 Time-dependent I-95 availability is a property of the movement, so
 `required_i95_direction` is recorded on the connection rather than inferred
 from either endpoint. Same-facility I-95 connections require their travel
-direction, and the DCA connection requires northbound I-95. A
+direction. DCA arrivals require northbound I-95; DCA departures require the
+direction of their northbound or southbound I-395 entry. A
 `general_purpose_gap` has no I-95 requirement because its supported fallback
 uses general-purpose lanes to or from the TP1 boundary. The agent must disclose
 that such a route is not uninterrupted Express Lane travel. An
@@ -261,7 +262,7 @@ their shared source, but all published pairs are retained. Of the 970 pairs,
 | Source URL and import evidence | `source_metadata` |
 | OD IDs, zone IDs, and charges | `source_metadata` and retained source file |
 
-V2 defines two airport endpoints and nine directed airport connections:
+V2 defines two airport endpoints and eleven directed airport connections:
 
 - IAD to and from I-66 node `6` through the airport-only, untolled Dulles
   Airport Access Highway;
@@ -269,16 +270,19 @@ V2 defines two airport endpoints and nine directed airport connections:
   of the airport highway and the I-66/DTR handoff;
 - IAD to the northbound and southbound I-495 entries `182NO` and `182SO`;
 - the northbound and southbound I-495 exits `182ND` and `182SD` to IAD; and
-- the northbound I-95 exit `223ND` at Pentagon/Eads Street to DCA.
+- the northbound I-95 exit `223ND` at Pentagon/Eads Street to DCA;
+- DCA to northbound I-395 entry `224NO` near Pentagon/Eads; and
+- DCA to southbound I-395 entry `2233SO` at Pentagon/Eads.
 
 The four IAD/I-495 connections let airport traffic use the untolled Airport
 Access Highway without requiring a priced Dulles Toll Road leg. They do not
 make ordinary Dulles Toll Road travel free. The routing result preserves the
 airport-access classification but does not calculate a toll.
 
-DCA is destination-only in this oracle. It has no outgoing connection, no
-southbound I-95 connection, and no connection from southbound exit `2239ND` or
-to southbound entry `2233SO`.
+DCA may be an origin in either I-395 direction. Northbound departures use entry
+`224NO`; southbound departures use entry `2233SO`. DCA remains a destination
+only from northbound exit `223ND`: there is no arrival connection from
+southbound exit `2239ND`.
 
 ### Required airport connections
 
@@ -293,10 +297,12 @@ to southbound entry `2233SO`.
 | `i495_north_to_iad` | `i495:182ND` | `airport_iad` |
 | `i495_south_to_iad` | `i495:182SD` | `airport_iad` |
 | `i95_north_to_dca` | `i95:223ND` | `airport_dca` |
+| `dca_to_i95_north` | `airport_dca` | `i95:224NO` |
+| `dca_to_i95_south` | `airport_dca` | `i95:2233SO` |
 
 The two DTR rows preserve the v1 composed route without creating a false turn
 between opposite I-66 movements at node `6`; their metadata records the two
-logical connectors they replace. These nine `airport_access` rows are the
+logical connectors they replace. These eleven `airport_access` rows are the
 complete airport connection set. They are never made reversible implicitly.
 
 ### Required junction connections
@@ -439,8 +445,9 @@ This classification is a query rule, not another stored table.
 
 A connection with `required_i95_direction` is currently usable only when that
 direction matches the open direction. Same-facility I-95 routes therefore
-remain direction-dependent, and the DCA connection is usable only when I-95 is
-northbound. A cross-facility `general_purpose_gap` has no live-I-95 requirement:
+remain direction-dependent. DCA arrival is usable only northbound, while each
+DCA departure is usable only in its recorded direction. A cross-facility
+`general_purpose_gap` has no live-I-95 requirement:
 it remains valid through the TP1 general-purpose prefix or suffix when the
 corresponding I-95 Express direction is unavailable. Fixed one-way restrictions
 recorded for I-66 and I-495 are always applied.
@@ -602,8 +609,9 @@ handoff itself has no price.
 - I-495/IAD fixtures in both directions use `airport_access` without requiring
   a priced Dulles Toll Road leg.
 - DCA is reachable only from northbound I-95 exit `223ND` at Pentagon/Eads and
-  only while I-95 is northbound.
-- DCA-to-I-95 and every southbound DCA fixture return `no_supported_route`.
+  only while I-95 is northbound; southbound exit `2239ND` has no DCA edge.
+- DCA departures use northbound entry `224NO` or southbound entry `2233SO` and
+  are usable only while the corresponding I-95/395 direction is open.
 - Known one-way ramps cannot be used backward.
 - A known cross-road route succeeds only when all required connections exist.
 - TP1NB and TP1SB resolve to source movements `192NO` and `192SD` and retain

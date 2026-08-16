@@ -44,9 +44,9 @@ BEGIN
         (SELECT count(*) FROM oracle.toll_connection
          WHERE connection_type = 'airport_access') AS airports
     INTO counts;
-    IF counts.points <> 220 OR counts.connections <> 992 OR counts.located <> 107
+    IF counts.points <> 220 OR counts.connections <> 994 OR counts.located <> 107
        OR counts.within_facility <> 670 OR counts.gaps <> 300
-       OR counts.handoffs <> 13 OR counts.airports <> 9 THEN
+       OR counts.handoffs <> 13 OR counts.airports <> 11 THEN
         RAISE EXCEPTION 'unexpected oracle seed counts: %', row_to_json(counts);
     END IF;
 END $$;
@@ -58,12 +58,16 @@ BEGIN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
-        WHERE required_i95_direction IS NOT NULL) <> 308
+        WHERE required_i95_direction IS NOT NULL) <> 310
        OR (SELECT count(*) FROM oracle.toll_connection
            WHERE connection_type = 'general_purpose_gap'
              AND required_i95_direction IS NOT NULL) <> 0
        OR (SELECT required_i95_direction FROM oracle.toll_connection
-           WHERE connection_id = 'i95_north_to_dca') <> 'NB' THEN
+           WHERE connection_id = 'i95_north_to_dca') <> 'NB'
+       OR (SELECT required_i95_direction FROM oracle.toll_connection
+           WHERE connection_id = 'dca_to_i95_north') <> 'NB'
+       OR (SELECT required_i95_direction FROM oracle.toll_connection
+           WHERE connection_id = 'dca_to_i95_south') <> 'SB' THEN
         RAISE EXCEPTION 'connection-level I-95 requirements are invalid';
     END IF;
     IF NOT EXISTS (

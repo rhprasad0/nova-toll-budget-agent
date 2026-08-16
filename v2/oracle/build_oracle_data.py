@@ -21,8 +21,8 @@ SOURCE_FILES = {
 }
 
 EXPECTED_POINTS = 220
-EXPECTED_CONNECTIONS = 992
-EXPECTED_REACHABLE_PAIRS = 2687
+EXPECTED_CONNECTIONS = 994
+EXPECTED_REACHABLE_PAIRS = 2713
 EXPECTED_MAX_SHORTEST_PATH = 7
 
 
@@ -458,6 +458,20 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             "airport_access",
             required_i95_direction="NB",
         ),
+        _curated_connection(
+            "dca_to_i95_north",
+            "airport_dca",
+            "i95:224NO",
+            "airport_access",
+            required_i95_direction="NB",
+        ),
+        _curated_connection(
+            "dca_to_i95_south",
+            "airport_dca",
+            "i95:2233SO",
+            "airport_access",
+            required_i95_direction="SB",
+        ),
     )
     for connection in curated:
         if connection.connection_id in connections:
@@ -531,9 +545,11 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
         ) or (from_point.point_type == "exit" and to_point.point_type == "airport")
         if not valid_roles:
             raise ValueError(f"invalid airport connection {connection.connection_id}")
-        expected_i95_direction = (
-            "NB" if connection.connection_id == "i95_north_to_dca" else None
-        )
+        expected_i95_direction = {
+            "i95_north_to_dca": "NB",
+            "dca_to_i95_north": "NB",
+            "dca_to_i95_south": "SB",
+        }.get(connection.connection_id)
         if connection.required_i95_direction != expected_i95_direction:
             raise ValueError(
                 f"invalid airport I-95 requirement on {connection.connection_id}"
@@ -603,7 +619,7 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         "within_facility": 670,
         "general_purpose_gap": 300,
         "toll_handoff": 13,
-        "airport_access": 9,
+        "airport_access": 11,
     }
     if dict(counts) != expected_counts:
         raise ValueError(f"unexpected connection counts: {dict(counts)}")

@@ -93,6 +93,22 @@ BEGIN
     END IF;
 
     SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:224ND');
+    IF result.status <> 'valid'
+       OR result.connection_ids[1] <> 'dca_to_i95_north'
+       OR result.i95_evidence->>'availability' <> 'northbound' THEN
+        RAISE EXCEPTION 'DCA northbound departure failed: %', row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:210SD');
+    IF result.status <> 'currently_unavailable'
+       OR result.connection_ids[1] <> 'dca_to_i95_south' THEN
+        RAISE EXCEPTION 'northbound state allowed DCA southbound departure: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
     IF result.status <> 'valid'
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
@@ -127,6 +143,22 @@ BEGIN
     FROM oracle.validate_toll_route('i95:202NO', 'airport_dca');
     IF result.status <> 'currently_unavailable' THEN
         RAISE EXCEPTION 'southbound state allowed DCA route';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:210SD');
+    IF result.status <> 'valid'
+       OR result.connection_ids[1] <> 'dca_to_i95_south'
+       OR result.i95_evidence->>'availability' <> 'southbound' THEN
+        RAISE EXCEPTION 'DCA southbound departure failed: %', row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:224ND');
+    IF result.status <> 'currently_unavailable'
+       OR result.connection_ids[1] <> 'dca_to_i95_north' THEN
+        RAISE EXCEPTION 'southbound state allowed DCA northbound departure: %',
+            row_to_json(result);
     END IF;
 
 
@@ -168,6 +200,20 @@ BEGIN
        OR result.i95_evidence->>'availability' <> 'closed' THEN
         RAISE EXCEPTION 'known closure was not distinguished';
     END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:224ND');
+    IF result.status <> 'currently_unavailable'
+       OR result.connection_ids[1] <> 'dca_to_i95_north' THEN
+        RAISE EXCEPTION 'closure allowed DCA northbound departure';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:210SD');
+    IF result.status <> 'currently_unavailable'
+       OR result.connection_ids[1] <> 'dca_to_i95_south' THEN
+        RAISE EXCEPTION 'closure allowed DCA southbound departure';
+    END IF;
 END $$;
 
 SELECT pg_temp.set_i95_state(
@@ -205,6 +251,20 @@ BEGIN
        OR result.i95_evidence->>'availability' <> 'unknown' THEN
         RAISE EXCEPTION 'unknown state did not preserve safe TP1 fallback: %',
             row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:224ND');
+    IF result.status <> 'unknown_availability'
+       OR result.connection_ids[1] <> 'dca_to_i95_north' THEN
+        RAISE EXCEPTION 'DCA northbound departure did not preserve uncertainty';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_dca', 'i95:210SD');
+    IF result.status <> 'unknown_availability'
+       OR result.connection_ids[1] <> 'dca_to_i95_south' THEN
+        RAISE EXCEPTION 'DCA southbound departure did not preserve uncertainty';
     END IF;
 
     SELECT * INTO result
@@ -328,9 +388,9 @@ BEGIN
     END IF;
 
     SELECT * INTO result
-    FROM oracle.validate_toll_route('airport_dca', 'i95:201ND');
+    FROM oracle.validate_toll_route('i95:2233SO', 'airport_dca');
     IF result.status <> 'no_supported_route' THEN
-        RAISE EXCEPTION 'DCA incorrectly gained an outgoing route';
+        RAISE EXCEPTION 'DCA incorrectly gained a southbound arrival';
     END IF;
 END $$;
 
