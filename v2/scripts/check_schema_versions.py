@@ -25,7 +25,7 @@ UPGRADE_MIGRATION = re.compile(
 class RegisteredSchema:
     name: str
     canonical_sql: str
-    owned_sql_paths: tuple[str, ...]
+    owned_paths: tuple[str, ...]
 
 
 def version_tuple(value: str) -> tuple[int, int, int]:
@@ -70,17 +70,17 @@ def load_registry(text: str) -> tuple[RegisteredSchema, ...]:
         typed_item = cast(dict[str, Any], item)
         name = typed_item.get("name")
         canonical_sql = typed_item.get("canonical_sql")
-        owned_sql_paths = typed_item.get("owned_sql_paths")
+        owned_paths = typed_item.get("owned_paths")
+        if owned_paths is None:
+            owned_paths = typed_item.get("owned_sql_paths")
         owned_objects = (
-            cast(list[object], owned_sql_paths)
-            if isinstance(owned_sql_paths, list)
-            else []
+            cast(list[object], owned_paths) if isinstance(owned_paths, list) else []
         )
         if (
             not isinstance(name, str)
             or not isinstance(canonical_sql, str)
-            or not isinstance(owned_sql_paths, list)
-            or not owned_sql_paths
+            or not isinstance(owned_paths, list)
+            or not owned_paths
             or not all(isinstance(path, str) for path in owned_objects)
         ):
             raise ValueError(f"invalid registered schema entry: {item!r}")
@@ -88,7 +88,7 @@ def load_registry(text: str) -> tuple[RegisteredSchema, ...]:
             RegisteredSchema(
                 name=name,
                 canonical_sql=canonical_sql,
-                owned_sql_paths=tuple(cast(list[str], owned_sql_paths)),
+                owned_paths=tuple(cast(list[str], owned_paths)),
             )
         )
     names = [schema.name for schema in schemas]
@@ -106,7 +106,7 @@ def load_previous_registry(text: str) -> tuple[RegisteredSchema, ...]:
             RegisteredSchema(
                 name="pricing",
                 canonical_sql="v2/db/schema.sql",
-                owned_sql_paths=(),
+                owned_paths=(),
             ),
         )
     return load_registry(text)
@@ -123,11 +123,13 @@ def git_text(base_ref: str, path: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def database_files(base_ref: str, *, added_only: bool = False) -> list[str]:
+def changed_repository_files(
+    base_ref: str, *, added_only: bool = False
+) -> list[str]:
     args = ["git", "diff", "--name-only"]
     if added_only:
         args.append("--diff-filter=A")
-    args.extend([base_ref, "--", "v2/db"])
+    args.append(base_ref)
     result = subprocess.run(
         args,
         cwd=REPO_ROOT,
@@ -142,7 +144,7 @@ def database_files(base_ref: str, *, added_only: bool = False) -> list[str]:
             "--others",
             "--exclude-standard",
             "--",
-            "v2/db",
+            ".",
         ],
         cwd=REPO_ROOT,
         check=True,
@@ -150,11 +152,11 @@ def database_files(base_ref: str, *, added_only: bool = False) -> list[str]:
         text=True,
     )
     paths = set(result.stdout.splitlines()) | set(untracked.stdout.splitlines())
-    return sorted(path for path in paths if path.endswith(".sql"))
+    return sorted(paths)
 
 
 def _owns(schema: RegisteredSchema, path: str) -> bool:
-    return any(fnmatch.fnmatchcase(path, pattern) for pattern in schema.owned_sql_paths)
+    return any(fnmatch.fnmatchcase(path, pattern) for pattern in schema.owned_paths)
 
 
 def upgrade_versions(path: str) -> tuple[str, str] | None:
@@ -241,13 +243,16 @@ def main() -> int:
         check=True,
         capture_output=True,
     )
-    changed = database_files(base_ref)
-    added = database_files(base_ref, added_only=True)
-    for path in changed:
+    changed = changed_repository_files(base_ref)
+    added = changed_repository_files(base_ref, added_only=True)
+    production_sql = [
+        path for path in changed if path.startswith("v2/db/") and path.endswith(".sql")
+    ]
+    for path in production_sql:
         owners = [schema.name for schema in schemas if _owns(schema, path)]
         if len(owners) != 1:
             raise ValueError(
-                f"changed production SQL must have exactly one registered owner: "
+                "changed production SQL must have exactly one registered owner: "
                 f"{path} has {owners}"
             )
 
@@ -272,8 +277,18 @@ def main() -> int:
             if previous_sql is not None
             else None
         )
-        schema_changes = [path for path in changed if _owns(schema, path)]
-        schema_additions = [path for path in added if _owns(schema, path)]
+        schema_changes = [
+            path
+            for path in changed
+            if _owns(schema, path)
+            or (previous_schema is not None and _owns(previous_schema, path))
+        ]
+        schema_additions = [
+            path
+            for path in added
+            if _owns(schema, path)
+            or (previous_schema is not None and _owns(previous_schema, path))
+        ]
         if previous is None:
             if not schema_changes:
                 raise ValueError(f"new schema {schema.name} has no owned SQL changes")
@@ -285,7 +300,7 @@ def main() -> int:
             continue
         if schema_changes and version_tuple(current) <= version_tuple(previous):
             raise ValueError(
-                f"{schema.name} SQL changed without advancing {previous}; "
+                f"{schema.name} contract changed without advancing {previous}; "
                 f"current is {current}: {', '.join(schema_changes)}"
             )
         if not schema_changes and current != previous:

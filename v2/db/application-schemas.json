@@ -3,16 +3,18 @@
     {
       "name": "oracle",
       "canonical_sql": "v2/db/oracle/schema.sql",
-      "owned_sql_paths": [
+      "owned_paths": [
         "v2/db/oracle/*.sql",
         "v2/db/migrations/002_create_oracle_schema.sql",
-        "v2/db/migrations/002_create_oracle_schema.rollback.sql"
+        "v2/db/migrations/002_create_oracle_schema.rollback.sql",
+        "v2/docs/oracle-route-function-contract.md",
+        "v2/docs/oracle-spec.md"
       ]
     },
     {
       "name": "pricing",
       "canonical_sql": "v2/db/schema.sql",
-      "owned_sql_paths": [
+      "owned_paths": [
         "v2/db/schema.sql",
         "v2/db/analysis.sql",
         "v2/db/roles.sql",

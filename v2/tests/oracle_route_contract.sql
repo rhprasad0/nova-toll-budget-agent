@@ -58,6 +58,16 @@ BEGIN
     IF result.status <> 'invalid_destination' THEN
         RAISE EXCEPTION 'invalid destination was not explicit';
     END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
+    IF result.status <> 'unknown_availability'
+       OR result.i95_evidence <> jsonb_build_object(
+           'availability', 'unknown', 'reason', 'missing_source'
+       ) THEN
+        RAISE EXCEPTION 'empty I-95 feed did not report missing source: %',
+            row_to_json(result);
+    END IF;
 END $$;
 
 SELECT pg_temp.set_i95_state(
@@ -194,6 +204,16 @@ BEGIN
        OR result.general_purpose_gaps->0->>'fallback_required' IS NOT NULL
        OR result.i95_evidence->>'availability' <> 'unknown' THEN
         RAISE EXCEPTION 'unknown state did not preserve safe TP1 fallback: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i495:191NO', 'airport_dca');
+    IF result.status <> 'unknown_availability'
+       OR NOT 'i95_north_to_dca' = ANY(result.connection_ids)
+       OR result.general_purpose_gaps->0->>'fallback_required' IS NOT NULL
+       OR result.i95_evidence->>'availability' <> 'unknown' THEN
+        RAISE EXCEPTION 'mixed TP1/DCA path ignored top-level uncertainty: %',
             row_to_json(result);
     END IF;
 END $$;

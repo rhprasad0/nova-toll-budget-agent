@@ -9,6 +9,7 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 DO $$
 DECLARE
     pricing_version text;
+    pricing_version_parts integer[];
 BEGIN
     IF current_setting('server_version_num')::integer < 170000
        OR current_setting('server_version_num')::integer >= 180000 THEN
@@ -16,13 +17,15 @@ BEGIN
     END IF;
     IF to_regclass('pricing.schema_version') IS NULL
        OR to_regclass('pricing.current_i95_direction') IS NULL THEN
-        RAISE EXCEPTION 'oracle requires pricing schema 1.0.0 or newer';
+        RAISE EXCEPTION 'oracle 1.0.0 requires pricing schema 1.x';
     END IF;
     EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
         INTO pricing_version;
+    pricing_version_parts := string_to_array(pricing_version, '.')::integer[];
     IF pricing_version IS NULL
-       OR string_to_array(pricing_version, '.')::integer[] < ARRAY[1, 0, 0] THEN
-        RAISE EXCEPTION 'oracle requires pricing schema 1.0.0 or newer; found %',
+       OR pricing_version_parts < ARRAY[1, 0, 0]
+       OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
+        RAISE EXCEPTION 'oracle 1.0.0 requires pricing schema 1.x; found %',
             coalesce(pricing_version, '<missing>');
     END IF;
     IF to_regrole('rds_iam') IS NULL THEN
@@ -241,16 +244,20 @@ BEGIN
                     THEN 'closed'
                 ELSE 'unknown'
             END AS availability,
-            jsonb_build_object(
-                'northbound_corridor_name', raw_i95.northbound_corridor_name,
-                'northbound_link_status', raw_i95.northbound_link_status,
-                'northbound_interval_end_at', raw_i95.northbound_interval_end_at,
-                'northbound_calculated_at', raw_i95.northbound_calculated_at,
-                'southbound_corridor_name', raw_i95.southbound_corridor_name,
-                'southbound_link_status', raw_i95.southbound_link_status,
-                'southbound_interval_end_at', raw_i95.southbound_interval_end_at,
-                'southbound_calculated_at', raw_i95.southbound_calculated_at
-            ) AS raw_evidence
+            CASE
+                WHEN raw_i95.direction_state = 'missing_source' THEN
+                    jsonb_build_object('reason', 'missing_source')
+                ELSE jsonb_build_object(
+                    'northbound_corridor_name', raw_i95.northbound_corridor_name,
+                    'northbound_link_status', raw_i95.northbound_link_status,
+                    'northbound_interval_end_at', raw_i95.northbound_interval_end_at,
+                    'northbound_calculated_at', raw_i95.northbound_calculated_at,
+                    'southbound_corridor_name', raw_i95.southbound_corridor_name,
+                    'southbound_link_status', raw_i95.southbound_link_status,
+                    'southbound_interval_end_at', raw_i95.southbound_interval_end_at,
+                    'southbound_calculated_at', raw_i95.southbound_calculated_at
+                )
+            END AS raw_evidence
         FROM raw_i95
     ),
     evidence AS (

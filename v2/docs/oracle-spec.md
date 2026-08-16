@@ -55,8 +55,8 @@ Pricing objects live separately in the `pricing` schema. The oracle tables do
 not contain prices or foreign keys to pricing tables. The only initial
 cross-schema dependency is a read of `pricing.current_i95_direction` for live
 I-95/395 availability. That dependency is one-way: pricing does not depend on
-the oracle. Oracle installation requires a compatible
-`pricing.schema_version` of at least `1.0.0` and verifies that
+the oracle. Oracle `1.0.x` installation requires a compatible
+`pricing.schema_version` in the `>=1.0.0,<2.0.0` range and verifies that
 `pricing.current_i95_direction` exists before creating the route function.
 
 ### Ownership and runtime access
@@ -119,14 +119,15 @@ timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
 mismatch is an error.
 
-`v2/db/application-schemas.json` registers both `oracle` and `pricing`. The
-schema-version checker is generalized from its current pricing-only behavior to
-validate every registered schema and compare its canonical version with the
-pull request's base commit. SQL that changes one schema must advance that
-schema's version monotonically. A shared database change must advance every
-schema whose contract it changes. A version change without corresponding SQL,
-an unregistered application schema, a missing canonical version, or a database
-contract change without the affected version bump fails CI.
+`v2/db/application-schemas.json` registers both `oracle` and `pricing`, their
+production SQL, and normative public-contract documents. The schema-version
+checker validates every registered schema and compares its canonical version
+with the pull request's base commit. A change to owned SQL or a normative
+contract document must advance that schema's version monotonically. A shared
+change must advance every schema whose contract it changes. A version change
+without a corresponding owned change, an unregistered production SQL file, a
+missing canonical version, or a contract change without the affected version
+bump fails CI.
 
 The v2 database CI job runs on PostgreSQL 17 with core PostGIS 3.5.x available
 and executes, at minimum:
@@ -613,8 +614,10 @@ handoff itself has no price.
 - An I-95 origin with unavailable northbound Express access can use a disclosed
   general-purpose prefix to TP1NB and then begin its northbound I-495 toll leg.
 - A gap matching the currently open I-95 direction reports
-  `fallback_required = false`; unknown evidence reports null without
-  invalidating the route.
+  `fallback_required = false`; unknown evidence reports null, and the route's
+  top-level status—not the gap value—determines overall usability.
+- A route that combines a TP1 gap with a separately direction-gated connection
+  can return `unknown_availability` while the gap's `fallback_required` is null.
 - Route 17 northbound entry and southbound exit remain normal route points, with
   their physical access variants recorded in metadata rather than extra points.
 - The northern I-495 terminus remains unsplit until source or pricing data

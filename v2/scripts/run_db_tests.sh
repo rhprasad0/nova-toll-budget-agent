@@ -8,6 +8,7 @@ migration_source_dir="$(mktemp -d)"
 base_ref="${1:-}"
 oracle_rollback_db="nova_toll_v2_oracle_rollback_test"
 missing_pricing_db="nova_toll_v2_oracle_missing_pricing_test"
+incompatible_pricing_db="nova_toll_v2_oracle_incompatible_pricing_test"
 unsafe_agent_db="nova_toll_v2_oracle_unsafe_agent_test"
 
 cleanup_databases() {
@@ -16,6 +17,7 @@ cleanup_databases() {
   dropdb --if-exists "$migration_db"
   dropdb --if-exists "$oracle_rollback_db"
   dropdb --if-exists "$missing_pricing_db"
+  dropdb --if-exists "$incompatible_pricing_db"
   dropdb --if-exists "$unsafe_agent_db"
 }
 
@@ -212,6 +214,17 @@ createdb --template template0 "$missing_pricing_db"
 if psql --dbname "$missing_pricing_db" \
   --file v2/db/migrations/002_create_oracle_schema.sql; then
   echo "oracle unexpectedly installed without its pricing prerequisite" >&2
+  exit 1
+fi
+
+createdb --template template0 "$incompatible_pricing_db"
+psql --dbname "$incompatible_pricing_db" \
+  --file v2/db/migrations/001_create_pricing_schema.sql
+psql --dbname "$incompatible_pricing_db" --set ON_ERROR_STOP=1 \
+  --command "UPDATE pricing.schema_version SET version = '2.0.0' WHERE singleton"
+if psql --dbname "$incompatible_pricing_db" \
+  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  echo "oracle unexpectedly accepted incompatible pricing 2.0.0" >&2
   exit 1
 fi
 

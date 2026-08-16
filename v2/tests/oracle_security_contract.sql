@@ -3,6 +3,7 @@
 DO $$
 DECLARE
     executable_count integer;
+    route_function record;
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
        OR NOT (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'tollchat_agent')
@@ -31,6 +32,42 @@ BEGIN
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid = 'oracle.validate_toll_route(text,text)'::regprocedure) THEN
         RAISE EXCEPTION 'oracle ownership or SECURITY DEFINER contract is wrong';
+    END IF;
+    SELECT
+        procedure.provolatile,
+        procedure.proconfig,
+        procedure.proargnames,
+        procedure.proallargtypes,
+        procedure.proargmodes
+    INTO route_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.validate_toll_route(text,text)'::regprocedure;
+    IF route_function.provolatile <> 's'
+       OR route_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
+       OR route_function.proargnames IS DISTINCT FROM ARRAY[
+           'origin_point_id', 'destination_point_id',
+           'status', 'point_ids', 'connection_ids', 'connection_types',
+           'general_purpose_gaps', 'i95_evidence'
+       ]::text[]
+       OR route_function.proallargtypes IS DISTINCT FROM ARRAY[
+           'text'::regtype::oid,
+           'text'::regtype::oid,
+           'text'::regtype::oid,
+           'text[]'::regtype::oid,
+           'text[]'::regtype::oid,
+           'text[]'::regtype::oid,
+           'jsonb'::regtype::oid,
+           'jsonb'::regtype::oid
+       ]::oid[]
+       OR route_function.proargmodes IS DISTINCT FROM ARRAY[
+           'i'::"char", 'i'::"char",
+           't'::"char", 't'::"char", 't'::"char",
+           't'::"char", 't'::"char", 't'::"char"
+       ]::"char"[] THEN
+        RAISE EXCEPTION 'route function catalog contract is wrong: %',
+            row_to_json(route_function);
     END IF;
     IF has_schema_privilege('tollchat_agent', 'pricing', 'USAGE')
        OR has_table_privilege(

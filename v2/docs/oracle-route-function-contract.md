@@ -96,7 +96,7 @@ Interpret `fallback_required` as follows:
 | --- | --- |
 | `true` | The needed I-95 direction is known unavailable; explain the GP prefix or suffix and name TP1 |
 | `false` | The needed I-95 direction is open; do not tell the user that GP travel is required |
-| null | I-95 state is unknown; say it could not be confirmed, while noting that the supported GP fallback keeps the route valid |
+| null | I-95 state is unknown; the gap remains supported, but the top-level `status` alone determines whether the complete route is valid |
 
 A gap does not make the entire route free. It says only that the identified
 prefix or suffix uses general-purpose lanes when required. Pricing later must
@@ -117,8 +117,9 @@ The `availability` field is one of:
 | `unknown` | Missing, stale, future-dated, mismatched, contradictory, or transitional evidence |
 
 When source rows exist, the evidence also includes both corridor names, link
-statuses, interval ends, and calculation timestamps. When the view has no row,
-it contains `{"availability":"unknown","reason":"missing_source"}`.
+statuses, interval ends, and calculation timestamps. When the pricing view
+reports missing source data, including an empty feed, the evidence is
+`{"availability":"unknown","reason":"missing_source"}`.
 
 Both directional observations must describe the same interval and be no more
 than 20 minutes old relative to PostgreSQL `statement_timestamp()`. The agent
@@ -132,7 +133,9 @@ availability could not be confirmed.
 - When `fallback_required` is true, name TP1NB/TP1SB and clearly distinguish
   the untolled GP prefix/suffix from the tolled portion.
 - When it is false, do not claim that the fallback is mandatory.
-- When it is null, preserve the valid route but disclose uncertain I-95 state.
+- When it is null, do not infer overall validity from the gap. Follow the
+  top-level `status`; for a `valid` route, disclose that the GP fallback may be
+  needed because current I-95 state could not be confirmed.
 - Treat `currently_unavailable` as a current directional restriction, not a
   permanently invalid route.
 - Treat `unknown_availability` as inconclusive; do not guess a direction.
