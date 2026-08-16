@@ -2634,7 +2634,7 @@ openai = [
 
 [[package]]
 name = "strands-agents-evals"
-version = "1.1.0"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
@@ -2648,9 +2648,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/52/a2d0b449bbcee64b1001f43ef84000874b66df646c55f35034eb052cba7f/strands_agents_evals-1.1.0.tar.gz", hash = "sha256:9cc7de1243018613611fb46ad6d7d4e051de32a1db42ae9996333d44f0f1ad0f", size = 502700, upload-time = "2026-08-07T18:08:31.772Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/42/08f42a46b803b22d49eec19e10d3767d56a53ca2768970344850913ce278/strands_agents_evals-1.1.1.tar.gz", hash = "sha256:21a7e582161dc84fb4fdc3b8ccf54086d207746937293eb5e55e040649135394", size = 526497, upload-time = "2026-08-12T18:53:51.449Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/88/c9ff2db9d6a60f374f3c0a610ce5952d22be542dfae57fa939da59d69a29/strands_agents_evals-1.1.0-py3-none-any.whl", hash = "sha256:889141af4c3d4d937306bc2e661d651c742cfcd5346f7bd086e85dc5751fff82", size = 364962, upload-time = "2026-08-07T18:08:29.963Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/5e/e3ab83348a6644e0fda6ee435740a78a12648aabd5852a7c028846ea2b3b/strands_agents_evals-1.1.1-py3-none-any.whl", hash = "sha256:05509ad19d762d1233e5955f3f4f5e7d8391516b5b19b6d98d1cf1038666fe47", size = 371892, upload-time = "2026-08-12T18:53:49.771Z" },
 ]
 
 [[package]]
@@ -2755,7 +2755,7 @@ dev = [
     { name = "pytest" },
     { name = "pyyaml" },
     { name = "ruff" },
-    { name = "strands-agents-evals", specifier = ">=1.1.0" },
+    { name = "strands-agents-evals", specifier = ">=1.1.1" },
     { name = "strands-agents-sops", specifier = ">=1.1.3" },
 ]
 
