@@ -187,7 +187,7 @@ endpoint.
 | `point_type` | `entry`, `exit`, or `airport` |
 | `direction` | Toll travel direction; null only for an airport |
 | `label` | Canonical user-facing name |
-| `location` | Exact `oracle.geography(Point,4326)` route coordinate |
+| `location` | Nullable `oracle.geography(Point,4326)` route coordinate |
 | `aliases` | Small set of known alternate names |
 | `source_metadata` | Provenance needed to audit the imported row |
 
@@ -196,10 +196,14 @@ example, a location supporting northbound entry and southbound exit is two
 route points, even if both rows share coordinates and a source node ID. This
 keeps a map marker from erasing access semantics.
 
-Every row has a location. Toll movements have one cardinal direction and are
-unique by network, source node, point type, and direction. Distinct source
-movements remain distinct even when their labels and coordinates match. The
-two airport points use `network_id` values `airport_iad` and `airport_dca`.
+Locations are nullable in oracle `1.0.0`. The generalized I-95/I-495 frontend
+coordinates may be loaded only when their metadata marks them
+`provisional_generalized`; movements without a reviewed coordinate remain
+null. Exact GIS curation is a later oracle data release and does not change
+stable point IDs. Toll movements have one cardinal direction and are unique by
+network, source node, point type, and direction. Distinct source movements
+remain distinct even when their labels and coordinates match. The two airport
+points use `network_id` values `airport_iad` and `airport_dca`.
 
 ### `oracle.toll_connection`
 
@@ -391,6 +395,9 @@ SQL to the model.
 Given an origin route point and a destination route point, follow directed
 connections and return:
 
+- `invalid_origin` when the origin ID is missing or is not an entry/airport;
+- `invalid_destination` when the destination ID is missing or is not an
+  exit/airport;
 - `valid` with the ordered route points and connection types;
 - `currently_unavailable` when every structural path requires a known
   unavailable I-95 direction;
@@ -401,9 +408,12 @@ connections and return:
 - `traversal_limit_exceeded` when the safety bound prevents a conclusive
   answer.
 
-The function returns one structured row containing the status, ordered point
-IDs, ordered connection IDs and types, and the I-95 evidence used when
-applicable. It never returns a price.
+Origin validation takes precedence when both inputs are invalid. The function
+returns one structured row containing the status, ordered point IDs, ordered
+connection IDs and types, and the I-95 evidence used when applicable. Invalid,
+unsupported, and traversal-limit results contain empty path arrays. An
+availability result contains the deterministic structural proof that produced
+the result. The function never returns a price.
 
 The origin is a toll entry or airport; the destination is a toll exit or
 airport. An airport point cannot appear between them. The query may cross
@@ -447,7 +457,8 @@ handoff itself has no price.
 - A toll movement has a source node and is unique by network, source node,
   point type, and direction, using PostgreSQL 17 null-safe uniqueness where
   needed for airport rows.
-- Every route point has a non-null `oracle.geography(Point,4326)` location.
+- `location`, when present, is an `oracle.geography(Point,4326)`. Version 1.0.0
+  permits null locations and records coordinate quality in `source_metadata`.
 - Both ends of every connection are non-null foreign keys to existing,
   different route points.
 - `connection_type` is constrained to the four documented values, and each
@@ -465,6 +476,9 @@ handoff itself has no price.
 
 - Every v1 access movement is imported without merging distinct roles or
   directions; non-access nodes are reported rather than exposed as ramps.
+- The initial 220-point seed has 107 coordinates marked
+  `provisional_generalized` and 113 null locations marked `missing`; no
+  provisional coordinate is represented as authoritative.
 - All 970 v1 pairs resolve to expected directed connections, including all 300
   published I-95/I-495 routes.
 - Every I-95/I-495 connection preserves its ordered OD IDs and discloses the

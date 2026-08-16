@@ -16,6 +16,7 @@ adopts them.
 
 - [Historical pricing MVP](docs/historical-pricing-mvp-contract.md)
 - [Point-in-time pricing and insights MVP](docs/point-in-time-pricing-mvp-contract.md)
+- [Routing oracle](docs/oracle-spec.md)
 
 ## Database bootstrap
 
@@ -28,6 +29,16 @@ version **1.0.1**. Its version is stored in `pricing.schema_version`; CI tests
 the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
+
+The independently versioned `oracle` schema starts at **1.0.0**. It installs
+core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
+exposes only `oracle.validate_toll_route(text, text)` to `tollchat_agent`.
+Regenerate and verify its checked-in seed with:
+
+```sh
+uv run python oracle/build_oracle_data.py
+uv run python oracle/build_oracle_data.py --check
+```
 
 Prepare an existing database additively; this does not move or modify v1 data:
 
@@ -42,6 +53,13 @@ migration:
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql
+```
+
+After pricing `1.0.0` or newer exists, install the oracle additively:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/002_create_oracle_schema.sql
 ```
 
 After the shadow loader is active, copy and verify the current v1 source rows:

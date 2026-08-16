@@ -6,11 +6,15 @@ backfill_db="nova_toll_v2_backfill_test"
 migration_db="nova_toll_v2_migration_test"
 migration_source_dir="$(mktemp -d)"
 base_ref="${1:-}"
+oracle_rollback_db="nova_toll_v2_oracle_rollback_test"
+missing_pricing_db="nova_toll_v2_oracle_missing_pricing_test"
 
 cleanup_databases() {
   dropdb --if-exists "$bootstrap_db"
   dropdb --if-exists "$backfill_db"
   dropdb --if-exists "$migration_db"
+  dropdb --if-exists "$oracle_rollback_db"
+  dropdb --if-exists "$missing_pricing_db"
 }
 
 cleanup() {
@@ -39,9 +43,11 @@ EXCEPTION
 END $$;
 SQL
 
-createdb "$bootstrap_db"
+createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql
+psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/002_create_oracle_schema.sql
 psql --dbname "$bootstrap_db" --file v2/tests/restore_contract.sql
 
 if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000" ]]; then
@@ -123,6 +129,9 @@ UPDATE pricing.schema_version SET version = '1.0.1' WHERE singleton;
 SQL
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_restore_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_route_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_security_contract.sql
 
 if psql --dbname "$bootstrap_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql; then
@@ -130,7 +139,13 @@ if psql --dbname "$bootstrap_db" \
   exit 1
 fi
 
-createdb "$backfill_db"
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  echo "bootstrap unexpectedly overwrote an existing oracle schema" >&2
+  exit 1
+fi
+
+createdb --template template0 "$backfill_db"
 psql --dbname "$backfill_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql
 psql --dbname "$backfill_db" --file v2/tests/public_source_fixture.sql
@@ -190,3 +205,28 @@ BEGIN
   END IF;
 END $$;
 SQL
+
+createdb --template template0 "$missing_pricing_db"
+if psql --dbname "$missing_pricing_db" \
+  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  echo "oracle unexpectedly installed without its pricing prerequisite" >&2
+  exit 1
+fi
+
+createdb --template template0 "$oracle_rollback_db"
+psql --dbname "$oracle_rollback_db" \
+  --file v2/db/migrations/001_create_pricing_schema.sql
+psql --dbname "$oracle_rollback_db" --file v2/tests/public_source_fixture.sql
+psql --dbname "$oracle_rollback_db" \
+  --file v2/db/migrations/002_create_oracle_schema.sql
+
+if psql --dbname "$oracle_rollback_db" \
+  --file v2/db/migrations/002_create_oracle_schema.rollback.sql; then
+  echo "oracle rollback unexpectedly accepted a missing confirmation" >&2
+  exit 1
+fi
+
+psql --dbname "$oracle_rollback_db" --set drop_oracle_confirmed=yes \
+  --file v2/db/migrations/002_create_oracle_schema.rollback.sql
+psql --dbname "$oracle_rollback_db" \
+  --file v2/tests/oracle_rollback_contract.sql

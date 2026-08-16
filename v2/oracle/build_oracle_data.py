@@ -1,0 +1,595 @@
+"""Build the canonical SQL seed for the TollChat v2 routing oracle."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, cast
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE_DIR = Path(__file__).resolve().parent / "sources"
+DEFAULT_OUTPUT = ROOT / "v2" / "db" / "oracle" / "data.sql"
+
+SOURCE_FILES = {
+    "i95_shared": "i95.json",
+    "i66": "i66.json",
+    "dtr": "dulles_toll_road.json",
+    "greenway": "dulles_greenway.json",
+}
+
+EXPECTED_POINTS = 220
+EXPECTED_CONNECTIONS = 989
+EXPECTED_REACHABLE_PAIRS = 3207
+EXPECTED_MAX_SHORTEST_PATH = 7
+
+
+@dataclass(frozen=True)
+class Point:
+    point_id: str
+    network_id: str
+    source_node_id: str
+    point_type: str
+    direction: str | None
+    label: str
+    longitude: str | None
+    latitude: str | None
+    source_metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Connection:
+    connection_id: str
+    from_point_id: str
+    to_point_id: str
+    connection_type: str
+    source_route_key: str | None
+    source_metadata: dict[str, Any]
+
+
+def _load_source(source_key: str) -> dict[str, Any]:
+    path = SOURCE_DIR / SOURCE_FILES[source_key]
+    value: object = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return cast(dict[str, Any], value)
+
+
+def _source_context(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value for key, value in source.items() if key not in {"nodes", "pairs"}
+    }
+
+
+def _shared_network(node: dict[str, Any]) -> str:
+    path = str(node["path"])
+    return "i495" if path.startswith("495") else "i95"
+
+
+def _shared_direction(node: dict[str, Any]) -> str:
+    return {"Northbound": "NB", "Southbound": "SB"}[str(node["direction"])]
+
+
+def _shared_role(node: dict[str, Any]) -> str:
+    return {"entries": "entry", "exits": "exit"}[str(node["side"])]
+
+
+def _shared_point_id(source_node_id: str, node: dict[str, Any]) -> str:
+    return f"{_shared_network(node)}:{source_node_id}"
+
+
+def _movement_point_id(
+    network_id: str, source_node_id: str, point_type: str, direction: str
+) -> str:
+    return f"{network_id}:{source_node_id}:{point_type}:{direction}"
+
+
+def _metadata(
+    source_key: str,
+    source: dict[str, Any],
+    payload_key: str,
+    payload: dict[str, Any],
+    *,
+    coordinate_quality: str | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "source_file": SOURCE_FILES[source_key],
+        "source_context": _source_context(source),
+        payload_key: payload,
+    }
+    if coordinate_quality is not None:
+        result["coordinate_quality"] = coordinate_quality
+    return result
+
+
+def build_points() -> dict[str, Point]:
+    points: dict[str, Point] = {}
+    shared = _load_source("i95_shared")
+    shared_nodes = shared["nodes"]
+    if not isinstance(shared_nodes, dict):
+        raise ValueError("i95 nodes must be an object")
+    typed_shared_nodes = cast(dict[str, dict[str, Any]], shared_nodes)
+    for source_node_id, raw_node in typed_shared_nodes.items():
+        point_id = _shared_point_id(source_node_id, raw_node)
+        points[point_id] = Point(
+            point_id=point_id,
+            network_id=_shared_network(raw_node),
+            source_node_id=source_node_id,
+            point_type=_shared_role(raw_node),
+            direction=_shared_direction(raw_node),
+            label=str(raw_node["label"]),
+            longitude=str(raw_node["longitude"]),
+            latitude=str(raw_node["latitude"]),
+            source_metadata=_metadata(
+                "i95_shared",
+                shared,
+                "source_node",
+                raw_node,
+                coordinate_quality="provisional_generalized",
+            ),
+        )
+
+    for network_id in ("i66", "dtr", "greenway"):
+        source = _load_source(network_id)
+        nodes = source["nodes"]
+        if not isinstance(nodes, dict):
+            raise ValueError(f"{network_id} nodes must be an object")
+        typed_nodes = cast(dict[str, dict[str, Any]], nodes)
+        for source_node_id, raw_node in typed_nodes.items():
+            label = str(raw_node["label"])
+            for point_type, field in (("entry", "entry_in"), ("exit", "exit_in")):
+                raw_directions = raw_node.get(field, [])
+                if not isinstance(raw_directions, list):
+                    raise ValueError(
+                        f"invalid directions on {network_id}:{source_node_id}"
+                    )
+                for raw_direction in cast(list[object], raw_directions):
+                    direction = str(raw_direction)
+                    point_id = _movement_point_id(
+                        network_id, source_node_id, point_type, direction
+                    )
+                    points[point_id] = Point(
+                        point_id=point_id,
+                        network_id=network_id,
+                        source_node_id=source_node_id,
+                        point_type=point_type,
+                        direction=direction,
+                        label=label,
+                        longitude=None,
+                        latitude=None,
+                        source_metadata=_metadata(
+                            network_id,
+                            source,
+                            "source_node",
+                            raw_node,
+                            coordinate_quality="missing",
+                        ),
+                    )
+
+    for airport_id, label in (
+        ("airport_iad", "Washington Dulles International Airport"),
+        ("airport_dca", "Ronald Reagan Washington National Airport"),
+    ):
+        points[airport_id] = Point(
+            point_id=airport_id,
+            network_id=airport_id,
+            source_node_id=airport_id.removeprefix("airport_").upper(),
+            point_type="airport",
+            direction=None,
+            label=label,
+            longitude=None,
+            latitude=None,
+            source_metadata={
+                "curated": True,
+                "basis": "v2/docs/oracle-spec.md",
+                "coordinate_quality": "missing",
+            },
+        )
+
+    return points
+
+
+def _source_connection_id(
+    source_key: str, direction: str, entry: str, exit_id: str
+) -> str:
+    return f"source:{source_key}:{direction}:{entry}:{exit_id}"
+
+
+def _curated_connection(
+    connection_id: str,
+    from_point_id: str,
+    to_point_id: str,
+    connection_type: str,
+) -> Connection:
+    return Connection(
+        connection_id=connection_id,
+        from_point_id=from_point_id,
+        to_point_id=to_point_id,
+        connection_type=connection_type,
+        source_route_key=None,
+        source_metadata={"curated": True, "basis": "v2/docs/oracle-spec.md"},
+    )
+
+
+def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
+    connections: dict[str, Connection] = {}
+    shared = _load_source("i95_shared")
+    shared_nodes = cast(dict[str, dict[str, Any]], shared["nodes"])
+    for raw_pair in cast(list[dict[str, Any]], shared["pairs"]):
+        entry = str(raw_pair["entry"])
+        exit_id = str(raw_pair["exit"])
+        direction = str(raw_pair["direction"])
+        from_id = _shared_point_id(entry, shared_nodes[entry])
+        to_id = _shared_point_id(exit_id, shared_nodes[exit_id])
+        connection_type = (
+            "within_facility"
+            if points[from_id].network_id == points[to_id].network_id
+            else "general_purpose_gap"
+        )
+        connection_id = _source_connection_id("i95_shared", direction, entry, exit_id)
+        connections[connection_id] = Connection(
+            connection_id=connection_id,
+            from_point_id=from_id,
+            to_point_id=to_id,
+            connection_type=connection_type,
+            source_route_key=f"{direction}:{entry}:{exit_id}",
+            source_metadata=_metadata("i95_shared", shared, "source_pair", raw_pair),
+        )
+
+    for network_id in ("i66", "dtr", "greenway"):
+        source = _load_source(network_id)
+        for raw_pair in cast(list[dict[str, Any]], source["pairs"]):
+            entry = str(raw_pair["entry"])
+            exit_id = str(raw_pair["exit"])
+            direction = str(raw_pair["direction"])
+            from_id = _movement_point_id(network_id, entry, "entry", direction)
+            to_id = _movement_point_id(network_id, exit_id, "exit", direction)
+            connection_id = _source_connection_id(network_id, direction, entry, exit_id)
+            connections[connection_id] = Connection(
+                connection_id=connection_id,
+                from_point_id=from_id,
+                to_point_id=to_id,
+                connection_type="within_facility",
+                source_route_key=f"{direction}:{entry}:{exit_id}",
+                source_metadata=_metadata(network_id, source, "source_pair", raw_pair),
+            )
+
+    curated = (
+        _curated_connection(
+            "greenway_to_dtr",
+            "greenway:28:exit:EB",
+            "dtr:28:entry:EB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "dtr_to_greenway",
+            "dtr:28:exit:WB",
+            "greenway:28:entry:WB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i66_to_i495",
+            "i66:5:exit:WB",
+            "i495:187SO",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i66_to_i495_north",
+            "i66:5:exit:WB",
+            "i495:187NO",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i495_to_i66",
+            "i495:187ND",
+            "i66:3:entry:EB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i495_south_to_i66",
+            "i495:187SD",
+            "i66:5:entry:EB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i66_to_dulles_toll_road",
+            "i66:6:exit:WB",
+            "dtr:66:entry:WB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "dulles_toll_road_to_i66",
+            "dtr:66:exit:EB",
+            "i66:6:entry:EB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "dulles_toll_road_to_i495",
+            "dtr:1819:exit:EB",
+            "i495:182SO",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "dulles_toll_road_to_i495_north",
+            "dtr:1819:exit:EB",
+            "i495:182NO",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i495_to_dulles_toll_road",
+            "i495:182ND",
+            "dtr:1819:entry:WB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "i495_south_to_dulles_toll_road",
+            "i495:182SD",
+            "dtr:1819:entry:WB",
+            "toll_handoff",
+        ),
+        _curated_connection(
+            "iad_to_i66", "airport_iad", "i66:6:entry:EB", "airport_access"
+        ),
+        _curated_connection(
+            "i66_to_iad", "i66:6:exit:WB", "airport_iad", "airport_access"
+        ),
+        _curated_connection(
+            "iad_to_i495_north", "airport_iad", "i495:182NO", "airport_access"
+        ),
+        _curated_connection(
+            "iad_to_i495_south", "airport_iad", "i495:182SO", "airport_access"
+        ),
+        _curated_connection(
+            "i495_north_to_iad", "i495:182ND", "airport_iad", "airport_access"
+        ),
+        _curated_connection(
+            "i495_south_to_iad", "i495:182SD", "airport_iad", "airport_access"
+        ),
+        _curated_connection(
+            "i95_north_to_dca", "i95:223ND", "airport_dca", "airport_access"
+        ),
+    )
+    for connection in curated:
+        if connection.connection_id in connections:
+            raise ValueError(f"duplicate curated connection {connection.connection_id}")
+        connections[connection.connection_id] = connection
+
+    return connections
+
+
+def _validate_connection(points: dict[str, Point], connection: Connection) -> None:
+    if connection.from_point_id not in points or connection.to_point_id not in points:
+        raise ValueError(f"unresolved endpoints on {connection.connection_id}")
+    if connection.from_point_id == connection.to_point_id:
+        raise ValueError(f"self connection {connection.connection_id}")
+    from_point = points[connection.from_point_id]
+    to_point = points[connection.to_point_id]
+    if connection.connection_type == "within_facility":
+        if (
+            from_point.network_id != to_point.network_id
+            or from_point.point_type != "entry"
+            or to_point.point_type != "exit"
+            or from_point.direction != to_point.direction
+        ):
+            raise ValueError(
+                f"invalid within-facility connection {connection.connection_id}"
+            )
+    elif connection.connection_type == "general_purpose_gap":
+        if (
+            {from_point.network_id, to_point.network_id} != {"i95", "i495"}
+            or from_point.point_type != "entry"
+            or to_point.point_type != "exit"
+        ):
+            raise ValueError(f"invalid general-purpose gap {connection.connection_id}")
+    elif connection.connection_type == "toll_handoff":
+        if (
+            from_point.network_id == to_point.network_id
+            or from_point.point_type != "exit"
+            or to_point.point_type != "entry"
+        ):
+            raise ValueError(f"invalid toll handoff {connection.connection_id}")
+    elif connection.connection_type == "airport_access":
+        valid_roles = (
+            from_point.point_type == "airport" and to_point.point_type == "entry"
+        ) or (from_point.point_type == "exit" and to_point.point_type == "airport")
+        if not valid_roles:
+            raise ValueError(f"invalid airport connection {connection.connection_id}")
+    else:
+        raise ValueError(f"unknown connection type on {connection.connection_id}")
+
+
+def graph_metrics(
+    points: dict[str, Point], connections: dict[str, Connection]
+) -> tuple[int, int]:
+    adjacency: dict[str, list[str]] = defaultdict(list)
+    for connection in connections.values():
+        adjacency[connection.from_point_id].append(connection.to_point_id)
+    destinations = {
+        point.point_id
+        for point in points.values()
+        if point.point_type in {"exit", "airport"}
+    }
+    origins = [
+        point.point_id
+        for point in points.values()
+        if point.point_type in {"entry", "airport"}
+    ]
+    reachable_pairs = 0
+    maximum = 0
+    for origin in origins:
+        queue = deque([(origin, 0)])
+        visited = {origin}
+        while queue:
+            point_id, depth = queue.popleft()
+            if point_id != origin and point_id in destinations:
+                reachable_pairs += 1
+                maximum = max(maximum, depth)
+            for destination in adjacency[point_id]:
+                if destination not in visited:
+                    visited.add(destination)
+                    queue.append((destination, depth + 1))
+    return reachable_pairs, maximum
+
+
+def validate(points: dict[str, Point], connections: dict[str, Connection]) -> None:
+    if len(points) != EXPECTED_POINTS:
+        raise ValueError(f"expected {EXPECTED_POINTS} points, found {len(points)}")
+    if len(connections) != EXPECTED_CONNECTIONS:
+        raise ValueError(
+            f"expected {EXPECTED_CONNECTIONS} connections, found {len(connections)}"
+        )
+    if sum(point.longitude is not None for point in points.values()) != 107:
+        raise ValueError("expected 107 provisional coordinates")
+    for point in points.values():
+        if (point.longitude is None) != (point.latitude is None):
+            raise ValueError(f"partial coordinate on {point.point_id}")
+    endpoint_pairs: set[tuple[str, str]] = set()
+    for connection in connections.values():
+        _validate_connection(points, connection)
+        pair = (connection.from_point_id, connection.to_point_id)
+        if pair in endpoint_pairs:
+            raise ValueError(f"duplicate directed endpoints {pair}")
+        endpoint_pairs.add(pair)
+    counts: dict[str, int] = defaultdict(int)
+    for connection in connections.values():
+        counts[connection.connection_type] += 1
+    expected_counts = {
+        "within_facility": 670,
+        "general_purpose_gap": 300,
+        "toll_handoff": 12,
+        "airport_access": 7,
+    }
+    if dict(counts) != expected_counts:
+        raise ValueError(f"unexpected connection counts: {dict(counts)}")
+    modeled_gap_count = sum(
+        any(
+            1374 <= int(od_id) <= 1389
+            for od_id in c.source_metadata["source_pair"]["ods"]
+        )
+        for c in connections.values()
+        if c.connection_type == "general_purpose_gap"
+    )
+    if modeled_gap_count != 107:
+        raise ValueError(
+            f"expected 107 modeled-OD gap routes, found {modeled_gap_count}"
+        )
+    reachable_pairs, maximum = graph_metrics(points, connections)
+    if reachable_pairs != EXPECTED_REACHABLE_PAIRS:
+        raise ValueError(
+            f"expected {EXPECTED_REACHABLE_PAIRS} reachable pairs, found {reachable_pairs}"
+        )
+    if maximum != EXPECTED_MAX_SHORTEST_PATH:
+        raise ValueError(
+            f"expected maximum shortest path {EXPECTED_MAX_SHORTEST_PATH}, found {maximum}"
+        )
+    if maximum > 12:
+        raise ValueError("a supported shortest path exceeds the 12-connection bound")
+
+
+def _sql_text(value: str | None) -> str:
+    if value is None:
+        return "NULL"
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _sql_json(value: dict[str, Any]) -> str:
+    serialized = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return _sql_text(serialized) + "::jsonb"
+
+
+def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> str:
+    lines = [
+        "-- Generated by v2/oracle/build_oracle_data.py; do not edit.",
+        "",
+        "INSERT INTO oracle.toll_route_point (",
+        "    point_id, network_id, source_node_id, point_type, direction,",
+        "    label, location, aliases, source_metadata",
+        ") VALUES",
+    ]
+    point_values: list[str] = []
+    for point in sorted(points.values(), key=lambda item: item.point_id):
+        location = "NULL"
+        if point.longitude is not None and point.latitude is not None:
+            location = (
+                "oracle.ST_SetSRID(oracle.ST_MakePoint("
+                f"{point.longitude}, {point.latitude}), 4326)::oracle.geography"
+            )
+        point_values.append(
+            "    ("
+            + ", ".join(
+                (
+                    _sql_text(point.point_id),
+                    _sql_text(point.network_id),
+                    _sql_text(point.source_node_id),
+                    _sql_text(point.point_type),
+                    _sql_text(point.direction),
+                    _sql_text(point.label),
+                    location,
+                    "ARRAY[]::text[]",
+                    _sql_json(point.source_metadata),
+                )
+            )
+            + ")"
+        )
+    lines.append(",\n".join(point_values) + ";")
+    lines.extend(
+        (
+            "",
+            "INSERT INTO oracle.toll_connection (",
+            "    connection_id, from_point_id, to_point_id, connection_type,",
+            "    source_route_key, source_metadata",
+            ") VALUES",
+        )
+    )
+    connection_values: list[str] = []
+    for connection in sorted(connections.values(), key=lambda item: item.connection_id):
+        connection_values.append(
+            "    ("
+            + ", ".join(
+                (
+                    _sql_text(connection.connection_id),
+                    _sql_text(connection.from_point_id),
+                    _sql_text(connection.to_point_id),
+                    _sql_text(connection.connection_type),
+                    _sql_text(connection.source_route_key),
+                    _sql_json(connection.source_metadata),
+                )
+            )
+            + ")"
+        )
+    lines.append(",\n".join(connection_values) + ";")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def build_sql() -> str:
+    points = build_points()
+    connections = build_connections(points)
+    validate(points, connections)
+    return render_sql(points, connections)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    args = parser.parse_args()
+    rendered = build_sql()
+    if args.check:
+        if (
+            not args.output.exists()
+            or args.output.read_text(encoding="utf-8") != rendered
+        ):
+            raise SystemExit(f"generated oracle data is stale: {args.output}")
+        print(f"oracle data is current: {args.output}")
+        return 0
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(rendered, encoding="utf-8")
+    print(f"wrote {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
