@@ -230,6 +230,7 @@ INSERT INTO oracle.toll_connection (
     source_route_key, source_metadata
 ) VALUES
     ('dtr_to_greenway', 'dtr:28:exit:WB', 'greenway:28:entry:WB', 'toll_handoff', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
+    ('dtr_to_iad_via_i66', 'dtr:66:exit:EB', 'airport_iad', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","composed_from":["dulles_toll_road_to_i66","i66_to_iad"],"curated":true}'::jsonb),
     ('dulles_toll_road_to_i495', 'dtr:1819:exit:EB', 'i495:182SO', 'toll_handoff', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('dulles_toll_road_to_i495_north', 'dtr:1819:exit:EB', 'i495:182NO', 'toll_handoff', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('dulles_toll_road_to_i66', 'dtr:66:exit:EB', 'i66:6:entry:EB', 'toll_handoff', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
@@ -245,6 +246,7 @@ INSERT INTO oracle.toll_connection (
     ('i66_to_i495_north', 'i66:5:exit:WB', 'i495:187NO', 'toll_handoff', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('i66_to_iad', 'i66:6:exit:WB', 'airport_iad', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('i95_north_to_dca', 'i95:223ND', 'airport_dca', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
+    ('iad_to_dtr_via_i66', 'airport_iad', 'dtr:66:entry:WB', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","composed_from":["iad_to_i66","i66_to_dulles_toll_road"],"curated":true}'::jsonb),
     ('iad_to_i495_north', 'airport_iad', 'i495:182NO', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('iad_to_i495_south', 'airport_iad', 'i495:182SO', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),
     ('iad_to_i66', 'airport_iad', 'i66:6:entry:EB', 'airport_access', NULL, '{"basis":"v2/docs/oracle-spec.md","curated":true}'::jsonb),

@@ -32,7 +32,7 @@ def test_oracle_source_contract() -> None:
         "within_facility": 670,
         "general_purpose_gap": 300,
         "toll_handoff": 12,
-        "airport_access": 7,
+        "airport_access": 9,
     }
     assert sum(point.longitude is not None for point in points.values()) == 107
     assert graph_metrics(points, connections) == (

@@ -73,7 +73,9 @@ agent. It receives `rds_iam`, `USAGE` on `oracle`, and explicit `EXECUTE` grants
 on approved function signatures. It receives no direct table or view access in
 `oracle` or `pricing`, no write privilege, and no schema-creation privilege.
 New functions are not executable by `tollchat_agent` unless a migration grants
-them explicitly.
+them explicitly. An additive install rejects a pre-existing `tollchat_agent`
+with any inherited role membership other than `rds_iam`; it never silently
+reuses a login that could bypass the function boundary.
 
 Agent-callable functions are `SECURITY DEFINER`, owned by `oracle_owner`, use
 fixed SQL without dynamic execution, qualify every application and extension
@@ -251,10 +253,12 @@ their shared source, but all published pairs are retained. Of the 970 pairs,
 | Source URL and import evidence | `source_metadata` |
 | OD IDs, zone IDs, and charges | `source_metadata` and retained source file |
 
-V2 defines two airport endpoints and seven directed airport connections:
+V2 defines two airport endpoints and nine directed airport connections:
 
 - IAD to and from I-66 node `6` through the airport-only, untolled Dulles
   Airport Access Highway;
+- IAD to and from the Dulles Toll Road node `66` through a virtual composition
+  of the airport highway and the I-66/DTR handoff;
 - IAD to the northbound and southbound I-495 entries `182NO` and `182SO`;
 - the northbound and southbound I-495 exits `182ND` and `182SD` to IAD; and
 - the northbound I-95 exit `223ND` at Pentagon/Eads Street to DCA.
@@ -274,14 +278,18 @@ to southbound entry `2233SO`.
 | --- | --- | --- |
 | `iad_to_i66` | `airport_iad` | `i66:6` entry |
 | `i66_to_iad` | `i66:6` exit | `airport_iad` |
+| `iad_to_dtr_via_i66` | `airport_iad` | `dtr:66` entry |
+| `dtr_to_iad_via_i66` | `dtr:66` exit | `airport_iad` |
 | `iad_to_i495_north` | `airport_iad` | `i495:182NO` |
 | `iad_to_i495_south` | `airport_iad` | `i495:182SO` |
 | `i495_north_to_iad` | `i495:182ND` | `airport_iad` |
 | `i495_south_to_iad` | `i495:182SD` | `airport_iad` |
 | `i95_north_to_dca` | `i95:223ND` | `airport_dca` |
 
-These seven `airport_access` rows are the complete airport connection set.
-They are never made reversible implicitly.
+The two DTR rows preserve the v1 composed route without creating a false turn
+between opposite I-66 movements at node `6`; their metadata records the two
+logical connectors they replace. These nine `airport_access` rows are the
+complete airport connection set. They are never made reversible implicitly.
 
 ### Required junction connections
 
@@ -420,8 +428,9 @@ airport. An airport point cannot appear between them. The query may cross
 networks only through recorded connections and does not infer a connection
 from physical proximity. Traversal rejects repeated point IDs and stops after
 12 connections. If the depth-12 frontier has an outgoing connection to an
-unvisited point and no conclusive result has been found, the function returns
-`traversal_limit_exceeded`, never `no_supported_route`. The data build also
+unvisited point, a proven `valid` path still wins; otherwise the function
+returns `traversal_limit_exceeded` ahead of `unknown_availability`,
+`currently_unavailable`, and `no_supported_route`. The data build also
 fails unless every supported origin/destination fixture has a shortest proof
 of at most 12 connections. If several currently usable paths exist, the
 function returns the one with the fewest connections, breaking ties by the
@@ -492,16 +501,17 @@ handoff itself has no price.
   while within-facility routes on both roads remain valid.
 - All four I-66/I-495 handoffs connect the exact exit and entry movements
   listed in the junction contract.
-- Both I-66/Dulles Toll Road handoffs work in their recorded direction, and an
-  IAD-to-DTR route depends on the `i66_to_dulles_toll_road` handoff.
+- Both I-66/Dulles Toll Road handoffs work in their recorded direction. IAD
+  routes to and from DTR node `66` use the two airport-only composed edges and
+  cannot create a general I-66 U-turn.
 - All four Dulles Toll Road/I-495 handoffs connect the exact exit and entry
   movements listed in the junction contract, including both I-495 directions.
 - Reversing or removing any junction handoff makes its dependent fixture route
   unsupported unless a separate directed handoff proves another path.
 - Entry-to-entry, exit-to-exit, and direction-incompatible junction fixtures
   are rejected by the importer.
-- IAD routes may use its two I-66 and four I-495 airport-access connections;
-  IAD cannot be an intermediate waypoint.
+- IAD routes may use its two I-66, two DTR, and four I-495 airport-access
+  connections; IAD cannot be an intermediate waypoint.
 - I-495/IAD fixtures in both directions use `airport_access` without requiring
   a priced Dulles Toll Road leg.
 - DCA is reachable only from northbound I-95 exit `223ND` at Pentagon/Eads and
@@ -541,6 +551,8 @@ handoff itself has no price.
   direct reads or writes against oracle and pricing relations fail. `PUBLIC`
   cannot execute the function, `tollchat_agent` cannot call PostGIS functions
   directly, and a same-named temporary object cannot alter the route result.
+- Oracle installation rejects a pre-existing `tollchat_agent` that inherits
+  `pg_read_all_data`, `pricing_reader`, or any role other than `rds_iam`.
 - No oracle operation reads or returns a toll price.
 
 ## Explicit non-goals

@@ -44,9 +44,9 @@ BEGIN
         (SELECT count(*) FROM oracle.toll_connection
          WHERE connection_type = 'airport_access') AS airports
     INTO counts;
-    IF counts.points <> 220 OR counts.connections <> 989 OR counts.located <> 107
+    IF counts.points <> 220 OR counts.connections <> 991 OR counts.located <> 107
        OR counts.within_facility <> 670 OR counts.gaps <> 300
-       OR counts.handoffs <> 12 OR counts.airports <> 7 THEN
+       OR counts.handoffs <> 12 OR counts.airports <> 9 THEN
         RAISE EXCEPTION 'unexpected oracle seed counts: %', row_to_json(counts);
     END IF;
 END $$;

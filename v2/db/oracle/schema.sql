@@ -62,6 +62,18 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'existing tollchat_agent role is not a scoped LOGIN role';
     END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_auth_members AS membership
+        JOIN pg_catalog.pg_roles AS member_role
+          ON member_role.oid = membership.member
+        JOIN pg_catalog.pg_roles AS granted_role
+          ON granted_role.oid = membership.roleid
+        WHERE member_role.rolname = 'tollchat_agent'
+          AND granted_role.rolname <> 'rds_iam'
+    ) THEN
+        RAISE EXCEPTION 'existing tollchat_agent has an unexpected role membership';
+    END IF;
 END $$;
 
 GRANT rds_iam TO tollchat_agent;
@@ -319,6 +331,25 @@ BEGIN
         WHERE walk.current_point_id = destination_point_id
           AND walk.depth > 0
     ),
+    frontier_state AS (
+        SELECT EXISTS (
+            SELECT 1
+            FROM walk AS frontier_walk
+            JOIN oracle.toll_route_point AS current_point
+              ON current_point.point_id = frontier_walk.current_point_id
+            JOIN oracle.toll_connection AS connection
+              ON connection.from_point_id = frontier_walk.current_point_id
+            JOIN oracle.toll_route_point AS next_point
+              ON next_point.point_id = connection.to_point_id
+            WHERE frontier_walk.depth = 12
+              AND NOT next_point.point_id = ANY(frontier_walk.walked_point_ids)
+              AND current_point.point_type <> 'airport'
+              AND (
+                  next_point.point_type <> 'airport'
+                  OR next_point.point_id = destination_point_id
+              )
+        ) AS traversal_was_truncated
+    ),
     choices AS (
         SELECT
             candidates.candidate_status,
@@ -329,8 +360,8 @@ BEGIN
             candidates.depth,
             CASE candidates.candidate_status
                 WHEN 'valid' THEN 1
-                WHEN 'unknown_availability' THEN 2
-                ELSE 3
+                WHEN 'unknown_availability' THEN 3
+                ELSE 4
             END AS priority
         FROM candidates
 
@@ -338,23 +369,8 @@ BEGIN
 
         SELECT
             CASE
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM walk AS frontier
-                    JOIN oracle.toll_route_point AS current_point
-                      ON current_point.point_id = frontier.current_point_id
-                    JOIN oracle.toll_connection AS connection
-                      ON connection.from_point_id = frontier.current_point_id
-                    JOIN oracle.toll_route_point AS next_point
-                      ON next_point.point_id = connection.to_point_id
-                    WHERE frontier.depth = 12
-                      AND NOT next_point.point_id = ANY(frontier.walked_point_ids)
-                      AND current_point.point_type <> 'airport'
-                      AND (
-                          next_point.point_type <> 'airport'
-                          OR next_point.point_id = destination_point_id
-                      )
-                ) THEN 'traversal_limit_exceeded'
+                WHEN frontier_state.traversal_was_truncated
+                    THEN 'traversal_limit_exceeded'
                 ELSE 'no_supported_route'
             END,
             ARRAY[]::text[],
@@ -362,7 +378,8 @@ BEGIN
             ARRAY[]::text[],
             NULL::jsonb,
             0,
-            4
+            CASE WHEN frontier_state.traversal_was_truncated THEN 2 ELSE 5 END
+        FROM frontier_state
     )
     SELECT
         choices.candidate_status,

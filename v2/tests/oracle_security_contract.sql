@@ -9,6 +9,18 @@ BEGIN
        OR NOT pg_has_role('tollchat_agent', 'rds_iam', 'MEMBER') THEN
         RAISE EXCEPTION 'oracle roles do not have the required attributes';
     END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_auth_members AS membership
+        JOIN pg_catalog.pg_roles AS member_role
+          ON member_role.oid = membership.member
+        JOIN pg_catalog.pg_roles AS granted_role
+          ON granted_role.oid = membership.roleid
+        WHERE member_role.rolname = 'tollchat_agent'
+          AND granted_role.rolname <> 'rds_iam'
+    ) THEN
+        RAISE EXCEPTION 'tollchat_agent retained an unexpected membership';
+    END IF;
     IF (SELECT pg_get_userbyid(nspowner) FROM pg_catalog.pg_namespace
         WHERE nspname = 'oracle') <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(relowner) FROM pg_catalog.pg_class

@@ -227,6 +227,21 @@ BEGIN
     END IF;
 
     SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_iad', 'dtr:12:exit:WB');
+    IF result.status <> 'valid'
+       OR result.connection_ids[1] <> 'iad_to_dtr_via_i66' THEN
+        RAISE EXCEPTION 'IAD-to-DTR composed access failed: %', row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('dtr:12:entry:EB', 'airport_iad');
+    IF result.status <> 'valid'
+       OR result.connection_ids[array_length(result.connection_ids, 1)]
+          <> 'dtr_to_iad_via_i66' THEN
+        RAISE EXCEPTION 'DTR-to-IAD composed access failed: %', row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
     FROM oracle.validate_toll_route('i66:4:entry:WB', 'airport_iad');
     IF result.status <> 'valid'
        OR result.connection_ids[array_length(result.connection_ids, 1)]
@@ -249,7 +264,7 @@ SELECT
     'test-depth-' || index,
     'i66',
     'test-depth-' || index,
-    CASE WHEN index = 0 THEN 'entry' WHEN index = 13 THEN 'exit' ELSE 'entry' END,
+    CASE WHEN index IN (12, 13) THEN 'exit' ELSE 'entry' END,
     'EB',
     'Traversal fixture ' || index,
     ARRAY[]::text[],
@@ -272,6 +287,32 @@ INSERT INTO oracle.toll_connection VALUES (
     'within_facility', NULL, '{"test_fixture":true}'::jsonb
 );
 
+INSERT INTO oracle.toll_route_point (
+    point_id, network_id, source_node_id, point_type, direction,
+    label, aliases, source_metadata
+) VALUES
+    (
+        'test-limit-i95-origin', 'i95', 'test-limit-origin', 'entry', 'NB',
+        'Traversal-priority origin', ARRAY[]::text[], '{"test_fixture":true}'::jsonb
+    ),
+    (
+        'test-limit-i95-destination', 'i95', 'test-limit-destination', 'exit', 'NB',
+        'Traversal-priority destination', ARRAY[]::text[],
+        '{"test_fixture":true}'::jsonb
+    );
+
+INSERT INTO oracle.toll_connection VALUES
+    (
+        'test-limit-short-unknown',
+        'test-limit-i95-origin', 'test-limit-i95-destination',
+        'within_facility', NULL, '{"test_fixture":true}'::jsonb
+    ),
+    (
+        'test-limit-long-frontier',
+        'test-limit-i95-origin', 'test-depth-1',
+        'general_purpose_gap', NULL, '{"test_fixture":true}'::jsonb
+    );
+
 DO $$
 DECLARE result record;
 BEGIN
@@ -285,6 +326,31 @@ BEGIN
     IF result.status <> 'traversal_limit_exceeded'
        OR cardinality(result.connection_ids) <> 0 THEN
         RAISE EXCEPTION '13-edge route did not report traversal limit: %',
+            row_to_json(result);
+    END IF;
+    SELECT * INTO result
+    FROM oracle.validate_toll_route(
+        'test-limit-i95-origin', 'test-limit-i95-destination'
+    );
+    IF result.status <> 'traversal_limit_exceeded' THEN
+        RAISE EXCEPTION 'truncated traversal lost to an inconclusive path: %',
+            row_to_json(result);
+    END IF;
+END $$;
+
+SELECT pg_temp.set_i95_state(
+    'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '1 minute'
+);
+
+DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_toll_route(
+        'test-limit-i95-origin', 'test-limit-i95-destination'
+    );
+    IF result.status <> 'valid' THEN
+        RAISE EXCEPTION 'proven valid path did not outrank traversal limit: %',
             row_to_json(result);
     END IF;
 END $$;

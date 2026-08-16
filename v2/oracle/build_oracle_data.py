@@ -21,8 +21,8 @@ SOURCE_FILES = {
 }
 
 EXPECTED_POINTS = 220
-EXPECTED_CONNECTIONS = 989
-EXPECTED_REACHABLE_PAIRS = 3207
+EXPECTED_CONNECTIONS = 991
+EXPECTED_REACHABLE_PAIRS = 2686
 EXPECTED_MAX_SHORTEST_PATH = 7
 
 
@@ -335,6 +335,30 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
         _curated_connection(
             "i66_to_iad", "i66:6:exit:WB", "airport_iad", "airport_access"
         ),
+        Connection(
+            connection_id="iad_to_dtr_via_i66",
+            from_point_id="airport_iad",
+            to_point_id="dtr:66:entry:WB",
+            connection_type="airport_access",
+            source_route_key=None,
+            source_metadata={
+                "curated": True,
+                "basis": "v2/docs/oracle-spec.md",
+                "composed_from": ["iad_to_i66", "i66_to_dulles_toll_road"],
+            },
+        ),
+        Connection(
+            connection_id="dtr_to_iad_via_i66",
+            from_point_id="dtr:66:exit:EB",
+            to_point_id="airport_iad",
+            connection_type="airport_access",
+            source_route_key=None,
+            source_metadata={
+                "curated": True,
+                "basis": "v2/docs/oracle-spec.md",
+                "composed_from": ["dulles_toll_road_to_i66", "i66_to_iad"],
+            },
+        ),
         _curated_connection(
             "iad_to_i495_north", "airport_iad", "i495:182NO", "airport_access"
         ),
@@ -426,6 +450,8 @@ def graph_metrics(
             if point_id != origin and point_id in destinations:
                 reachable_pairs += 1
                 maximum = max(maximum, depth)
+            if points[point_id].point_type == "airport" and point_id != origin:
+                continue
             for destination in adjacency[point_id]:
                 if destination not in visited:
                     visited.add(destination)
@@ -459,7 +485,7 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         "within_facility": 670,
         "general_purpose_gap": 300,
         "toll_handoff": 12,
-        "airport_access": 7,
+        "airport_access": 9,
     }
     if dict(counts) != expected_counts:
         raise ValueError(f"unexpected connection counts: {dict(counts)}")

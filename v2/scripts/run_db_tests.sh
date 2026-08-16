@@ -8,6 +8,7 @@ migration_source_dir="$(mktemp -d)"
 base_ref="${1:-}"
 oracle_rollback_db="nova_toll_v2_oracle_rollback_test"
 missing_pricing_db="nova_toll_v2_oracle_missing_pricing_test"
+unsafe_agent_db="nova_toll_v2_oracle_unsafe_agent_test"
 
 cleanup_databases() {
   dropdb --if-exists "$bootstrap_db"
@@ -15,6 +16,7 @@ cleanup_databases() {
   dropdb --if-exists "$migration_db"
   dropdb --if-exists "$oracle_rollback_db"
   dropdb --if-exists "$missing_pricing_db"
+  dropdb --if-exists "$unsafe_agent_db"
 }
 
 cleanup() {
@@ -230,3 +232,18 @@ psql --dbname "$oracle_rollback_db" --set drop_oracle_confirmed=yes \
   --file v2/db/migrations/002_create_oracle_schema.rollback.sql
 psql --dbname "$oracle_rollback_db" \
   --file v2/tests/oracle_rollback_contract.sql
+
+createdb --template template0 "$unsafe_agent_db"
+psql --dbname "$unsafe_agent_db" \
+  --file v2/db/migrations/001_create_pricing_schema.sql
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command "GRANT pg_read_all_data TO tollchat_agent"
+if psql --dbname "$unsafe_agent_db" \
+  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  psql --dbname postgres --set ON_ERROR_STOP=1 \
+    --command "REVOKE pg_read_all_data FROM tollchat_agent"
+  echo "oracle unexpectedly accepted an agent with inherited privileges" >&2
+  exit 1
+fi
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command "REVOKE pg_read_all_data FROM tollchat_agent"
