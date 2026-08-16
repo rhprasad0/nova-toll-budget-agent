@@ -34,23 +34,114 @@ are explicit exceptions used only as route origins or destinations.
 
 ## Database schema boundary
 
-All routing-oracle objects live in the dedicated `oracle` PostgreSQL schema.
-The initial schema contains `oracle.toll_route_point`,
-`oracle.toll_connection`, and the eventual read-only
-`oracle.validate_toll_route` operation. Importers, migrations, tests, and
-application queries always use schema-qualified names and do not rely on
-`search_path`.
+All v2 routing-oracle and spatial objects live in the dedicated `oracle`
+PostgreSQL schema. The privileged migration principal installs the RDS-provided
+core PostGIS 3.5.x extension directly into `oracle` before creating
+`oracle.toll_route_point`, `oracle.toll_connection`, and
+`oracle.validate_toll_route`. Raster, topology, Tiger geocoder, and pgRouting
+extensions are not installed. PostGIS-owned types, functions, and
+`spatial_ref_sys` therefore coexist with the two TollChat application tables in
+`oracle`.
+
+The retained v1 database contract remains entirely in `public`. V2 migrations
+do not move, replace, or modify those objects, and they create no v2-owned
+object in `public`. Importers, migrations, tests, functions, and application
+queries always use schema-qualified names and do not rely on the caller's
+`search_path`. Spatial DDL and later spatial operations likewise qualify
+PostGIS objects through `oracle`, for example
+`oracle.geography(Point,4326)` and `oracle.ST_DWithin`.
 
 Pricing objects live separately in the `pricing` schema. The oracle tables do
 not contain prices or foreign keys to pricing tables. The only initial
 cross-schema dependency is a read of `pricing.current_i95_direction` for live
 I-95/395 availability. That dependency is one-way: pricing does not depend on
-the oracle.
+the oracle. Oracle installation requires a compatible
+`pricing.schema_version` of at least `1.0.0` and verifies that
+`pricing.current_i95_direction` exists before creating the route function.
 
-Database roles receive only the required schema privileges: the migration
-owner manages `oracle`, while the agent's runtime role receives `USAGE` on the
-schema plus `SELECT` or `EXECUTE` on its read-only interface. No routing or
-pricing object is intentionally created in `public`.
+### Ownership and runtime access
+
+`oracle_owner` is a non-login, non-superuser role that owns the `oracle` schema,
+the two TollChat tables, and every agent-callable function there. The privileged
+migration principal retains ownership of the PostGIS extension and its objects.
+`oracle_owner` receives only the PostGIS privileges required by its functions,
+plus `USAGE` on `pricing` and `SELECT` on
+`pricing.current_i95_direction`; it receives no other pricing privileges.
+
+`tollchat_agent` is the dedicated IAM-authenticated login role for the v2
+agent. It receives `rds_iam`, `USAGE` on `oracle`, and explicit `EXECUTE` grants
+on approved function signatures. It receives no direct table or view access in
+`oracle` or `pricing`, no write privilege, and no schema-creation privilege.
+New functions are not executable by `tollchat_agent` unless a migration grants
+them explicitly.
+
+Agent-callable functions are `SECURITY DEFINER`, owned by `oracle_owner`, use
+fixed SQL without dynamic execution, qualify every application and extension
+object, and set `search_path` to `pg_catalog, pg_temp`. Creation, revocation of
+the default `PUBLIC` execution privilege, ownership, and the explicit
+`tollchat_agent` grant occur in one transaction. Default function privileges
+for `oracle_owner` also revoke execution from `PUBLIC`.
+
+Because PostGIS shares the `oracle` schema, the privileged migration also
+revokes `PUBLIC` execution from every PostGIS function installed there and
+grants the required PostGIS execution privileges only to `oracle_owner`. This
+hardening is repeated after each PostGIS extension update. Schema `USAGE`
+therefore does not let `tollchat_agent` bypass the approved TollChat function
+interface by calling extension functions directly.
+
+### Bootstrap order
+
+The blank bootstrap and additive deployment use this order:
+
+1. Verify PostgreSQL 17, the compatible `pricing.schema_version`, and
+   `pricing.current_i95_direction`.
+2. Create or verify `oracle_owner` and `tollchat_agent`.
+3. Create `oracle`, revoke `PUBLIC` schema privileges, install core PostGIS in
+   that schema, verify both its 3.5.x version and namespace, and replace its
+   default `PUBLIC` function execution with the required `oracle_owner` grants.
+4. Create `oracle.schema_version`, the two application tables, constraints,
+   indexes, and curated data; assign the application objects to `oracle_owner`.
+5. Grant `oracle_owner` its single pricing-view dependency, create the route
+   function, revoke `PUBLIC` execution, and grant the exact signature to
+   `tollchat_agent`.
+
+The migration aborts rather than installing PostGIS in `public`, falling back
+to an unqualified pricing view, or leaving a partially granted function.
+
+### Schema version and CI contract
+
+Every v2 application schema has an independent canonical SemVer contract. The
+oracle starts at version `1.0.0`, stored as the single row in
+`oracle.schema_version` with the same singleton, SemVer-format, and installation
+timestamp invariants used by `pricing.schema_version`. The canonical oracle
+bootstrap declares the same version in its file header and inserted row; a
+mismatch is an error.
+
+`v2/db/application-schemas.json` registers both `oracle` and `pricing`. The
+schema-version checker is generalized from its current pricing-only behavior to
+validate every registered schema and compare its canonical version with the
+pull request's base commit. SQL that changes one schema must advance that
+schema's version monotonically. A shared database change must advance every
+schema whose contract it changes. A version change without corresponding SQL,
+an unregistered application schema, a missing canonical version, or a database
+contract change without the affected version bump fails CI.
+
+The v2 database CI job runs on PostgreSQL 17 with core PostGIS 3.5.x available
+and executes, at minimum:
+
+- the existing pricing bootstrap and contracts;
+- a blank bootstrap in dependency order: pricing, then oracle;
+- the oracle restore and data-import contracts;
+- an additive installation beside retained v1 `public` and v2 `pricing`;
+- the supported upgrade path from the previous oracle version once one exists;
+- guarded oracle rollback, proving that `public` and `pricing` are unchanged;
+- PostGIS version, namespace, and extension-function privilege checks;
+- `oracle_owner` and `tollchat_agent` least-privilege tests; and
+- route-function, constraint, traversal, junction, airport, and I-95 freshness
+  contracts defined below.
+
+CI must exercise the canonical bootstrap and migration files rather than a
+test-only reconstruction of their DDL.
 
 ## Data model
 
@@ -68,7 +159,7 @@ erDiagram
         text point_type
         text direction
         text label
-        geography location
+        geography_point_4326 location
         text_array aliases
         jsonb source_metadata
     }
@@ -96,7 +187,7 @@ endpoint.
 | `point_type` | `entry`, `exit`, or `airport` |
 | `direction` | Toll travel direction; null only for an airport |
 | `label` | Canonical user-facing name |
-| `location` | Exact `geography(Point,4326)` route coordinate |
+| `location` | Exact `oracle.geography(Point,4326)` route coordinate |
 | `aliases` | Small set of known alternate names |
 | `source_metadata` | Provenance needed to audit the imported row |
 
@@ -277,9 +368,10 @@ raw statuses and timestamps exposed by `pricing.current_i95_direction`:
 
 Both observations must exist and describe the same `interval_end_at`.
 Freshness is measured independently from each row's `calculated_at` against
-the database transaction time, with a maximum age of 20 minutes. Missing,
-stale, mismatched, future-dated, contradictory, or transitional evidence is
-unknown. This classification is a query rule, not another stored table.
+`statement_timestamp()`, with a maximum age of 20 minutes. A `calculated_at`
+later than that same statement timestamp is future-dated. Missing, stale,
+mismatched, future-dated, contradictory, or transitional evidence is unknown.
+This classification is a query rule, not another stored table.
 
 An I-95 route is currently usable only when its direction matches the open
 direction. The DCA connection is usable only when I-95 is northbound. The
@@ -287,9 +379,12 @@ fixed one-way restrictions recorded for I-66 and I-495 are always applied.
 
 ## Agent operations
 
-The application exposes one narrow, read-only operation,
-`oracle.validate_toll_route`. Its exact SQL signature can be settled with the
-migration.
+The application exposes one narrow, read-only database function:
+`oracle.validate_toll_route(origin_point_id text, destination_point_id text)`.
+It is a `STABLE SECURITY DEFINER` function owned by `oracle_owner` and is the
+only initial oracle function executable by `tollchat_agent`. The application
+tool passes stable point IDs as bound parameters; it does not expose arbitrary
+SQL to the model.
 
 ### Validate a toll route
 
@@ -300,15 +395,27 @@ connections and return:
 - `currently_unavailable` when every structural path requires a known
   unavailable I-95 direction;
 - `unknown_availability` when no usable path is found and an otherwise valid
-  path depends on unknown I-95 evidence; or
-- `no_supported_route`.
+  path depends on unknown I-95 evidence;
+- `no_supported_route` when bounded traversal conclusively exhausts the graph;
+  or
+- `traversal_limit_exceeded` when the safety bound prevents a conclusive
+  answer.
+
+The function returns one structured row containing the status, ordered point
+IDs, ordered connection IDs and types, and the I-95 evidence used when
+applicable. It never returns a price.
 
 The origin is a toll entry or airport; the destination is a toll exit or
 airport. An airport point cannot appear between them. The query may cross
 networks only through recorded connections and does not infer a connection
 from physical proximity. Traversal rejects repeated point IDs and stops after
-12 connections. If several currently usable paths exist, it returns the one
-with the fewest connections, breaking ties by the ordered connection IDs.
+12 connections. If the depth-12 frontier has an outgoing connection to an
+unvisited point and no conclusive result has been found, the function returns
+`traversal_limit_exceeded`, never `no_supported_route`. The data build also
+fails unless every supported origin/destination fixture has a shortest proof
+of at most 12 connections. If several currently usable paths exist, the
+function returns the one with the fewest connections, breaking ties by the
+ordered connection IDs; it does not rely on recursive-CTE emission order.
 
 ## Pricing boundary
 
@@ -333,14 +440,25 @@ handoff itself has no price.
 
 ## Minimum integrity rules
 
-- Point type, network, and direction use constrained values.
-- Every route point has a non-null SRID 4326 location.
-- Both ends of every connection reference existing, different route points.
-- Connections are unique and directed.
+- Primary keys, required columns, foreign keys, and checks are enforced by the
+  database rather than only by importer code.
+- `point_type` is constrained to `entry`, `exit`, or `airport`; `direction` is
+  null exactly for an airport and otherwise has a permitted cardinal value.
+- A toll movement has a source node and is unique by network, source node,
+  point type, and direction, using PostgreSQL 17 null-safe uniqueness where
+  needed for airport rows.
+- Every route point has a non-null `oracle.geography(Point,4326)` location.
+- Both ends of every connection are non-null foreign keys to existing,
+  different route points.
+- `connection_type` is constrained to the four documented values, and each
+  directed endpoint pair is unique.
+- Cross-row role, direction, network, and airport semantics remain importer
+  validations backed by contract tests. No runtime role has table DML access,
+  so the first version does not add constraint triggers.
 - Connection indexes support traversal from `from_point_id`. A spatial index
   can be added with the later spatial feature.
-- All database references are schema-qualified; oracle and pricing objects are
-  not created in `public`.
+- All database references are schema-qualified; no v2-owned object is created
+  in `public`.
 - Agent operations never read or return a toll price.
 
 ## Acceptance checks
@@ -380,12 +498,35 @@ handoff itself has no price.
 - The I-495/I-95 general-purpose gap is disclosed.
 - Fresh northbound, fresh southbound, fully closed, stale, and contradictory
   I-95 evidence behave distinctly.
+- Freshness uses `statement_timestamp()`: a call made later in a long-running
+  transaction cannot reuse the transaction start time to accept stale data.
 - A cyclic route fixture terminates without repeating a route point.
+- A 12-connection proof succeeds; a route whose only possible proof continues
+  beyond 12 returns `traversal_limit_exceeded`; competing paths select the
+  deterministic shorter proof.
 - Removing a cross-road connection makes the dependent route unsupported.
-- A blank-database migration creates the routing objects in `oracle`, grants
-  only the intended runtime access, and leaves no routing objects in `public`.
+- Direct SQL attempts to insert invalid constrained values, missing endpoints,
+  self-connections, or duplicate directed pairs fail. Importer contract tests
+  reject cross-row semantic violations.
+- A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
+  PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
+  objects in `public` remain unchanged.
+- `oracle.schema_version` contains exactly one row at `1.0.0`, its canonical
+  bootstrap declaration matches that row, and `application-schemas.json`
+  registers both `oracle` and `pricing` exactly once.
+- CI rejects an oracle SQL contract change without a monotonic oracle SemVer
+  increase, and it does not require an unrelated pricing version increase.
+- The canonical blank bootstrap, additive install, restore, guarded rollback,
+  privilege, import, and route contracts all execute in the v2 database CI job
+  with PostgreSQL 17 and PostGIS 3.5.x.
+- The installed `postgis` extension reports `oracle` as its namespace; no
+  PostGIS extension is installed in `public`.
 - The route operation reads I-95 state through the qualified
   `pricing.current_i95_direction` dependency.
+- Under `SET ROLE tollchat_agent`, route-function execution succeeds while
+  direct reads or writes against oracle and pricing relations fail. `PUBLIC`
+  cannot execute the function, `tollchat_agent` cannot call PostGIS functions
+  directly, and a same-named temporary object cannot alter the route result.
 - No oracle operation reads or returns a toll price.
 
 ## Explicit non-goals
