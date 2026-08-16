@@ -1,6 +1,6 @@
 # TollChat
 
-> **Current single-agent implementation.** Commands and relative paths in this document assume `single-agent/` as the working directory. See the [repository overview](../README.md) for the rewrite boundary.
+> **Live v1 implementation.** Commands and relative paths in this document assume `v1/` as the working directory. See the [repository overview](../README.md) for the v1/v2 boundary.
 
 **For humans:** TollChat turns a plain-language Northern Virginia trip into a
 grounded toll report across supported roads. It is a live applied-AI case

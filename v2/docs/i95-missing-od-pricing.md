@@ -122,8 +122,8 @@ the strongest supported description.
 On an empty AWS RDS PostgreSQL 17 database, apply the schema before the roles:
 
 ```sh
-psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 -f rewrite/db/schema.sql
-psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 -f rewrite/db/roles.sql
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 -f v2/db/schema.sql
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 -f v2/db/roles.sql
 ```
 
 These scripts restore database shape and permissions only. Historical VDOT

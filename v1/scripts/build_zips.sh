@@ -14,9 +14,9 @@ BUILD="$REPO/infra/build"
 CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 CA_SHA256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
 PY_VERSION="3.13"
-PY_PLATFORM="x86_64-manylinux2014"  # Lambda runtime arch
-AGENT_PLATFORM="aarch64-manylinux2014" # AgentCore direct-code architecture
-EPOCH="2020-01-01 00:00:00Z"        # deterministic zip mtime
+PY_PLATFORM="x86_64-manylinux2014"       # Lambda runtime arch
+AGENT_PLATFORM="aarch64-manylinux_2_28"  # AgentCore toolkit-compatible fallback
+EPOCH="2020-01-01 00:00:00Z"             # deterministic zip mtime
 
 rm -rf "$BUILD"
 mkdir -p "$BUILD"

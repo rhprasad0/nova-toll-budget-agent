@@ -18,10 +18,10 @@ else
     echo "gitleaks not installed locally; skipping (CI will still catch it)" >&2
 fi
 
-files=$(git diff --cached --name-only --diff-filter=ACM -- 'single-agent/*.py' 'single-agent/**/*.py' | sed 's#^single-agent/##')
+files=$(git diff --cached --name-only --diff-filter=ACM -- 'v1/*.py' 'v1/**/*.py' | sed 's#^v1/##')
 [ -z "$files" ] && exit 0
 
-if ! (cd single-agent && uv run ruff check $files && uv run ruff format --check $files); then
+if ! (cd v1 && uv run ruff check $files && uv run ruff format --check $files); then
     echo "Lint failed. Run 'uv run ruff format' and 'uv run ruff check --fix' to clean up, then re-stage." >&2
     exit 1
 fi
@@ -29,12 +29,12 @@ fi
 # pyright/pytest run whole-project (not just staged files) -- cross-file type
 # errors like an executionEnvironment misconfig don't show up scoped to one
 # file, which is exactly what slipped through to CI last time.
-if ! (cd single-agent && uv run pyright); then
+if ! (cd v1 && uv run pyright); then
     echo "Type check failed." >&2
     exit 1
 fi
 
-if ! (cd single-agent && uv run pytest); then
+if ! (cd v1 && uv run pytest); then
     echo "Tests failed." >&2
     exit 1
 fi

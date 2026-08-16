@@ -321,11 +321,11 @@ test("pricing FAQ explains freshness, route oracles, and the unpriced junction",
   }
   await expect(main.getByRole("link", { name: "Read the technical evidence" })).toHaveAttribute(
     "href",
-    "https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/single-agent/docs/oracle-findings.md#9-vdot-republishes-transurbans-price-on-a-10-minute-delay"
+    "https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v1/docs/oracle-findings.md#9-vdot-republishes-transurbans-price-on-a-10-minute-delay"
   );
   await expect(main.getByRole("link", { name: "Read the current methodology and results" })).toHaveAttribute(
     "href",
-    "https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/single-agent/eval/deterministic/price_hallucination/RESULTS.md"
+    "https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v1/eval/deterministic/price_hallucination/RESULTS.md"
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
