@@ -12,7 +12,7 @@ CREATE FUNCTION pg_temp.insert_i95_price(
 ) RETURNS void
 LANGUAGE sql
 AS $$
-    INSERT INTO trip_pricing_i95 (
+    INSERT INTO pricing.trip_pricing_i95 (
         interval_end_at, current_at, calculated_at, corridor_id,
         corridor_name, od_pair_id, od_pair_name, start_zone_id,
         start_zone_name, end_zone_id, end_zone_name, zone_toll_rate_usd,
@@ -34,7 +34,7 @@ CREATE FUNCTION pg_temp.insert_i66_price(
 ) RETURNS void
 LANGUAGE sql
 AS $$
-    INSERT INTO trip_pricing_i66 (
+    INSERT INTO pricing.trip_pricing_i66 (
         interval_start_at, interval_end_at, calculated_at, corridor_id,
         corridor_name, start_zone_id, start_zone_name, end_zone_id,
         end_zone_name, zone_toll_rate_usd, s3_key
@@ -59,7 +59,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[
           {"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":5001},
@@ -79,7 +79,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[]'::jsonb
     );
@@ -105,7 +105,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":5003}]'::jsonb
     );
@@ -127,12 +127,12 @@ DECLARE
     stale record;
 BEGIN
     SELECT * INTO fresh
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":5002}]'::jsonb
     );
     SELECT * INTO stale
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:01+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":5002}]'::jsonb
     );
@@ -153,7 +153,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":5001}]'::jsonb
     );
@@ -175,7 +175,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_modeled","od_pair_id":1385}]'::jsonb
     );
@@ -198,12 +198,12 @@ DECLARE
     oversized_components jsonb;
 BEGIN
     SELECT * INTO invalid_shape
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"unknown","od_pair_id":1}]'::jsonb
     );
     SELECT * INTO duplicate_step
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[
           {"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":5001},
@@ -211,17 +211,17 @@ BEGIN
         ]'::jsonb
     );
     SELECT * INTO oversized_id
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":999999999999999999999}]'::jsonb
     );
     SELECT * INTO infinite_time
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '-infinity'::timestamptz,
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":1}]'::jsonb
     );
     SELECT * INTO string_id
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":"5001"}]'::jsonb
     );
@@ -232,11 +232,11 @@ BEGIN
     )) INTO oversized_components
     FROM generate_series(1, 17) AS values(n);
     SELECT * INTO too_many
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00', oversized_components
     );
     SELECT * INTO long_step
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         jsonb_build_array(jsonb_build_object(
             'route_step_id', repeat('x', 129),
@@ -245,7 +245,7 @@ BEGIN
         ))
     );
     SELECT * INTO too_large
-    FROM point_in_time_dynamic_route_pricing(
+    FROM pricing.point_in_time_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         jsonb_build_array(jsonb_build_object(
             'route_step_id', 'step-1',
@@ -271,7 +271,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2099-08-13 12:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":6001}]'::jsonb
     );
@@ -297,7 +297,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[
           {"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":6001},
@@ -324,7 +324,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2025-11-02 05:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":7001}]'::jsonb
     );
@@ -342,7 +342,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2026-08-13 12:32:00+00',
         '[
           {"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":6001},
@@ -365,7 +365,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2025-11-09 06:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":7001}]'::jsonb
     );
@@ -384,7 +384,7 @@ DECLARE
     result record;
 BEGIN
     SELECT * INTO result
-    FROM historical_dynamic_route_pricing(
+    FROM pricing.historical_dynamic_route_pricing(
         '2026-04-05 06:32:00+00',
         '[{"route_step_id":"step-1","price_source":"i95_observed","od_pair_id":7002}]'::jsonb
     );

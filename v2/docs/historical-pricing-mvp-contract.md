@@ -37,8 +37,8 @@ traveler than a long-term average that hides current commuting patterns.
   present proxy-derived prices as observations.
 - Do not silently widen the time window or use older data when coverage is poor.
 
-For the adopted VDOT sources, map `trip_pricing_i95.calculated_at` and
-`trip_pricing_i66.calculated_at` to the observation time; modeled I-95 prices
+For the adopted VDOT sources, map `pricing.trip_pricing_i95.calculated_at` and
+`pricing.trip_pricing_i66.calculated_at` to the observation time; modeled I-95 prices
 inherit the proxy row's `calculated_at`. Do not substitute I-95 `current_at`.
 
 ## Pricing profile

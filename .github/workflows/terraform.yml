@@ -20,6 +20,12 @@ on:
         "v1/lambdas/**",
         "v1/site/**",
         "v1/docs/legal/**",
+        "v2/infra/**",
+        "v2/lambdas/**",
+        "v2/scripts/build_loader_zip.sh",
+        "v2/scripts/loader-requirements.txt",
+        "v2/pyproject.toml",
+        "v2/uv.lock",
       ]
   pull_request:
     paths:
@@ -37,6 +43,12 @@ on:
         "v1/lambdas/**",
         "v1/site/**",
         "v1/docs/legal/**",
+        "v2/infra/**",
+        "v2/lambdas/**",
+        "v2/scripts/build_loader_zip.sh",
+        "v2/scripts/loader-requirements.txt",
+        "v2/pyproject.toml",
+        "v2/uv.lock",
       ]
 
 concurrency:
@@ -58,6 +70,12 @@ jobs:
         working-directory: v1/infra
       - run: terraform validate
         working-directory: v1/infra
+      - run: terraform fmt -check -recursive
+        working-directory: v2/infra
+      - run: terraform init -backend=false
+        working-directory: v2/infra
+      - run: terraform validate
+        working-directory: v2/infra
 
   apply:
     needs: fmt-validate
@@ -130,3 +148,75 @@ jobs:
           aws s3 cp infra/build/latest \
             s3://nova-toll-agentcore-920534282028/reviewed/latest \
             --checksum-algorithm SHA256 --only-show-errors
+
+  deploy-v2:
+    needs: [fmt-validate, apply]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    concurrency:
+      group: terraform-apply
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+      - name: Build reviewed v2 loader
+        run: v2/scripts/build_loader_zip.sh
+      - name: Fetch RDS CA bundle
+        run: |
+          mkdir -p v2/infra/build/ca
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+            -o v2/infra/build/ca/rds-ca-bundle.pem
+          echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  v2/infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-github-ci
+          aws-region: us-east-1
+      - name: Require manually prepared pricing schema
+        run: |
+          db_host="$(aws rds describe-db-instances --db-instance-identifier nova-toll-db --query 'DBInstances[0].Endpoint.Address' --output text)"
+          db_port="$(aws rds describe-db-instances --db-instance-identifier nova-toll-db --query 'DBInstances[0].Endpoint.Port' --output text)"
+          db_token="$(aws rds generate-db-auth-token --hostname "$db_host" --port "$db_port" --username pricing_reader)"
+          PGPASSWORD="$db_token" PGSSLMODE=verify-full PGSSLROOTCERT="$GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem" \
+            psql --host "$db_host" --port "$db_port" --username pricing_reader --dbname nova_toll \
+            --set ON_ERROR_STOP=1 --no-psqlrc <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.0'
+               OR to_regclass('pricing.trip_pricing_i95') IS NULL
+               OR to_regclass('pricing.trip_pricing_i66') IS NULL
+               OR NOT has_schema_privilege('pricing_loader_writer', 'pricing', 'USAGE')
+               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'SELECT')
+               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'INSERT')
+               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'UPDATE')
+               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'SELECT')
+               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'INSERT')
+               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'UPDATE') THEN
+              RAISE EXCEPTION 'pricing 1.0.0 is not prepared for the v2 loader';
+            END IF;
+          END $$;
+          SQL
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-terraform-apply
+          aws-region: us-east-1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+      - run: terraform init
+        working-directory: v2/infra
+      - run: terraform apply -auto-approve -var loader_package_path=build/loader.zip
+        working-directory: v2/infra
+      - name: Record v2 deployment
+        run: |
+          printf 'v2 loader digest: `%s`\n' "$(sha256sum v2/infra/build/loader.zip | cut -d ' ' -f1)" >> "$GITHUB_STEP_SUMMARY"

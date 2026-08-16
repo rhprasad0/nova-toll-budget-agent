@@ -56,8 +56,8 @@ source guarantee. Validate it against retained source cadence and lag before
 deployment. Revisit it only with measured source behavior, not by silently
 widening it during an outage.
 
-For the adopted VDOT sources, map `trip_pricing_i95.calculated_at` and
-`trip_pricing_i66.calculated_at` to `observed_at`; modeled I-95 prices inherit
+For the adopted VDOT sources, map `pricing.trip_pricing_i95.calculated_at` and
+`pricing.trip_pricing_i66.calculated_at` to `observed_at`; modeled I-95 prices inherit
 the proxy row's `calculated_at`. Do not substitute I-95 `current_at` when
 selecting observations or enforcing freshness.
 

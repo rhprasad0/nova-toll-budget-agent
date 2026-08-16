@@ -7,26 +7,26 @@ DECLARE
     relation_name text;
 BEGIN
     FOREACH relation_name IN ARRAY ARRAY[
-        'trip_pricing_i95',
-        'trip_pricing_i66',
-        'current_trip_pricing_i95',
-        'current_trip_pricing_i66',
-        'current_i95_direction',
-        'i95_modeled_od_proxy',
-        'modeled_trip_pricing_i95',
-        'modeled_current_trip_pricing_i95',
-        'dynamic_pricing_observations'
+        'pricing.trip_pricing_i95',
+        'pricing.trip_pricing_i66',
+        'pricing.current_trip_pricing_i95',
+        'pricing.current_trip_pricing_i66',
+        'pricing.current_i95_direction',
+        'pricing.i95_modeled_od_proxy',
+        'pricing.modeled_trip_pricing_i95',
+        'pricing.modeled_current_trip_pricing_i95',
+        'pricing.dynamic_pricing_observations'
     ] LOOP
-        IF to_regclass('public.' || relation_name) IS NULL THEN
+        IF to_regclass(relation_name) IS NULL THEN
             RAISE EXCEPTION 'missing relation: %', relation_name;
         END IF;
     END LOOP;
 
     FOREACH relation_name IN ARRAY ARRAY[
-        'trip_pricing_i95_od_lookup_idx',
-        'trip_pricing_i66_zone_lookup_idx'
+        'pricing.trip_pricing_i95_od_lookup_idx',
+        'pricing.trip_pricing_i66_zone_lookup_idx'
     ] LOOP
-        IF to_regclass('public.' || relation_name) IS NULL THEN
+        IF to_regclass(relation_name) IS NULL THEN
             RAISE EXCEPTION 'missing index: %', relation_name;
         END IF;
     END LOOP;
@@ -36,11 +36,73 @@ BEGIN
     END IF;
 
     IF to_regprocedure(
-        'public.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)'
+        'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)'
     ) IS NULL OR to_regprocedure(
-        'public.historical_dynamic_route_pricing(timestamp with time zone,jsonb)'
+        'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)'
     ) IS NULL THEN
         RAISE EXCEPTION 'missing dynamic pricing functions';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_index
+        WHERE indexrelid IN (
+            'pricing.trip_pricing_i95_od_lookup_idx'::regclass,
+            'pricing.trip_pricing_i66_zone_lookup_idx'::regclass
+        )
+          AND (NOT indisvalid OR NOT indisready)
+    ) THEN
+        RAISE EXCEPTION 'pricing lookup index is not valid and ready';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class AS relation
+        JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'pricing'
+          AND pg_get_userbyid(relation.relowner) <> current_user
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_proc AS function
+        JOIN pg_namespace AS namespace ON namespace.oid = function.pronamespace
+        WHERE namespace.nspname = 'pricing'
+          AND pg_get_userbyid(function.proowner) <> current_user
+    ) THEN
+        RAISE EXCEPTION 'pricing object owner differs from the bootstrap owner';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_proc AS function
+        JOIN pg_namespace AS namespace ON namespace.oid = function.pronamespace
+        WHERE namespace.nspname = 'pricing'
+          AND function.proname IN (
+              '_dynamic_pricing_component_errors',
+              'point_in_time_dynamic_route_pricing',
+              'historical_dynamic_route_pricing'
+          )
+          AND NOT coalesce(
+              function.proconfig @> ARRAY['search_path=pg_catalog, pg_temp'],
+              false
+          )
+    ) THEN
+        RAISE EXCEPTION 'pricing function search_path is not hardened';
+    END IF;
+
+    IF obj_description('pricing.i95_modeled_od_proxy'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.modeled_trip_pricing_i95'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.modeled_current_trip_pricing_i95'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.current_i95_direction'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.dynamic_pricing_observations'::regclass, 'pg_class') IS NULL
+       OR obj_description(
+            'pricing.point_in_time_dynamic_route_pricing(timestamptz,jsonb)'::regprocedure,
+            'pg_proc'
+       ) IS NULL
+       OR obj_description(
+            'pricing.historical_dynamic_route_pricing(timestamptz,jsonb)'::regprocedure,
+            'pg_proc'
+       ) IS NULL THEN
+        RAISE EXCEPTION 'pricing analysis comments were not preserved';
     END IF;
 END $$;
 
@@ -71,9 +133,9 @@ INSERT INTO expected_proxy VALUES
 DO $$
 BEGIN
     IF EXISTS (
-        (SELECT * FROM expected_proxy EXCEPT SELECT * FROM i95_modeled_od_proxy)
+        (SELECT * FROM expected_proxy EXCEPT SELECT * FROM pricing.i95_modeled_od_proxy)
         UNION ALL
-        (SELECT * FROM i95_modeled_od_proxy EXCEPT SELECT * FROM expected_proxy)
+        (SELECT * FROM pricing.i95_modeled_od_proxy EXCEPT SELECT * FROM expected_proxy)
     ) THEN
         RAISE EXCEPTION 'modeled OD proxy map differs from the approved 16 rows';
     END IF;
@@ -81,37 +143,50 @@ END $$;
 
 DO $$
 BEGIN
-    IF NOT pg_has_role('loader_writer', 'rds_iam', 'MEMBER')
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.0'
+       OR (SELECT count(*) FROM pricing.schema_version) <> 1 THEN
+        RAISE EXCEPTION 'pricing schema must expose exactly version 1.0.0';
+    END IF;
+
+    IF NOT pg_has_role('pricing_loader_writer', 'rds_iam', 'MEMBER')
        OR NOT pg_has_role('pricing_reader', 'rds_iam', 'MEMBER') THEN
         RAISE EXCEPTION 'database roles must use RDS IAM authentication';
     END IF;
 
-    IF NOT has_table_privilege('loader_writer', 'trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('loader_writer', 'trip_pricing_i95', 'INSERT')
-       OR NOT has_table_privilege('loader_writer', 'trip_pricing_i95', 'UPDATE')
-       OR NOT has_table_privilege('loader_writer', 'trip_pricing_i66', 'SELECT')
-       OR NOT has_table_privilege('loader_writer', 'trip_pricing_i66', 'INSERT')
-       OR NOT has_table_privilege('loader_writer', 'trip_pricing_i66', 'UPDATE') THEN
-        RAISE EXCEPTION 'loader_writer is missing pricing table privileges';
+    IF NOT has_schema_privilege('pricing_loader_writer', 'pricing', 'USAGE')
+       OR has_schema_privilege('pricing_loader_writer', 'pricing', 'CREATE')
+       OR has_table_privilege('pricing_loader_writer', 'pricing.schema_version', 'SELECT,INSERT,UPDATE,DELETE')
+       OR has_table_privilege('pricing_loader_writer', 'pricing.backfill_state', 'SELECT,INSERT,UPDATE,DELETE')
+       OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'SELECT')
+       OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'INSERT')
+       OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'UPDATE')
+       OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'SELECT')
+       OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'INSERT')
+       OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'UPDATE') THEN
+        RAISE EXCEPTION 'pricing_loader_writer has incorrect pricing privileges';
     END IF;
 
-    IF NOT has_table_privilege('pricing_reader', 'trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'trip_pricing_i66', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'current_trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'current_trip_pricing_i66', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'current_i95_direction', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'i95_modeled_od_proxy', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'modeled_trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'modeled_current_trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'dynamic_pricing_observations', 'SELECT')
+    IF NOT has_schema_privilege('pricing_reader', 'pricing', 'USAGE')
+       OR has_schema_privilege('pricing_reader', 'pricing', 'CREATE')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.schema_version', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.backfill_state', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.trip_pricing_i95', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.trip_pricing_i66', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.current_trip_pricing_i95', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.current_trip_pricing_i66', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.current_i95_direction', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.i95_modeled_od_proxy', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.modeled_trip_pricing_i95', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.modeled_current_trip_pricing_i95', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.dynamic_pricing_observations', 'SELECT')
        OR NOT has_function_privilege(
             'pricing_reader',
-            'point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
+            'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
             'EXECUTE'
        )
        OR NOT has_function_privilege(
             'pricing_reader',
-            'historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
+            'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
             'EXECUTE'
        ) THEN
         RAISE EXCEPTION 'pricing_reader is missing read privileges';
@@ -119,19 +194,35 @@ BEGIN
 
     IF has_function_privilege(
         'public',
-        'point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
+        'pricing._dynamic_pricing_component_errors(jsonb)',
         'EXECUTE'
     ) OR has_function_privilege(
         'public',
-        'historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
+        'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
+        'EXECUTE'
+    ) OR has_function_privilege(
+        'public',
+        'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
         'EXECUTE'
     ) THEN
         RAISE EXCEPTION 'dynamic pricing functions must not be executable by public';
     END IF;
 
-    IF has_table_privilege('pricing_reader', 'trip_pricing_i95', 'INSERT,UPDATE,DELETE')
-       OR has_table_privilege('pricing_reader', 'trip_pricing_i66', 'INSERT,UPDATE,DELETE') THEN
+    IF has_table_privilege('pricing_reader', 'pricing.trip_pricing_i95', 'INSERT,UPDATE,DELETE')
+       OR has_table_privilege('pricing_reader', 'pricing.trip_pricing_i66', 'INSERT,UPDATE,DELETE') THEN
         RAISE EXCEPTION 'pricing_reader must remain read-only';
+    END IF;
+
+    IF has_table_privilege(
+        'pricing_loader_writer',
+        'pricing.trip_pricing_i95',
+        'DELETE,TRUNCATE,REFERENCES,TRIGGER'
+    ) OR has_table_privilege(
+        'pricing_loader_writer',
+        'pricing.trip_pricing_i66',
+        'DELETE,TRUNCATE,REFERENCES,TRIGGER'
+    ) THEN
+        RAISE EXCEPTION 'pricing_loader_writer exceeds the intended write surface';
     END IF;
 
     IF to_regclass('hostile.trip_pricing_i95') IS NOT NULL
@@ -140,7 +231,7 @@ BEGIN
     END IF;
 END $$;
 
-INSERT INTO trip_pricing_i95 (
+INSERT INTO pricing.trip_pricing_i95 (
     interval_end_at,
     current_at,
     calculated_at,
@@ -176,7 +267,7 @@ DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1
-        FROM modeled_trip_pricing_i95
+        FROM pricing.modeled_trip_pricing_i95
         WHERE od_pair_id = 1385
           AND proxy_od_pair_id = 1165
           AND zone_toll_rate_usd = 14.25
@@ -188,7 +279,7 @@ BEGIN
 
     IF NOT EXISTS (
         SELECT 1
-        FROM modeled_current_trip_pricing_i95
+        FROM pricing.modeled_current_trip_pricing_i95
         WHERE od_pair_id = 1385
           AND proxy_od_pair_id = 1165
           AND zone_toll_rate_usd = 14.25
@@ -199,7 +290,7 @@ BEGIN
     END IF;
 END $$;
 
-INSERT INTO trip_pricing_i95 (
+INSERT INTO pricing.trip_pricing_i95 (
     interval_end_at,
     current_at,
     calculated_at,
@@ -233,13 +324,13 @@ INSERT INTO trip_pricing_i95 (
 
 DO $$
 BEGIN
-    IF (SELECT count(*) FROM modeled_trip_pricing_i95 WHERE od_pair_id = 1385) <> 2 THEN
+    IF (SELECT count(*) FROM pricing.modeled_trip_pricing_i95 WHERE od_pair_id = 1385) <> 2 THEN
         RAISE EXCEPTION 'historical view must retain the closed observation';
     END IF;
 
     IF NOT EXISTS (
         SELECT 1
-        FROM modeled_trip_pricing_i95
+        FROM pricing.modeled_trip_pricing_i95
         WHERE od_pair_id = 1385
           AND interval_end_at = '2026-07-30 12:10:00+00'
           AND link_status = 'CLOSED'
@@ -252,7 +343,7 @@ BEGIN
         SELECT 1
         FROM (
             SELECT zone_toll_rate_usd
-            FROM modeled_trip_pricing_i95
+            FROM pricing.modeled_trip_pricing_i95
             WHERE od_pair_id = 1385
               AND interval_end_at >= '2026-07-30 12:00:00+00'
               AND interval_end_at < '2026-07-30 12:15:00+00'
@@ -265,7 +356,7 @@ BEGIN
     END IF;
 
     IF EXISTS (
-        SELECT 1 FROM modeled_current_trip_pricing_i95 WHERE od_pair_id = 1385
+        SELECT 1 FROM pricing.modeled_current_trip_pricing_i95 WHERE od_pair_id = 1385
     ) THEN
         RAISE EXCEPTION 'current view must not fall back past a newer closed row';
     END IF;
@@ -273,9 +364,9 @@ END $$;
 
 DO $$
 BEGIN
-    IF (SELECT count(*) FROM current_i95_direction) <> 1
-       OR (SELECT direction_state FROM current_i95_direction) <> 'missing_source'
-       OR (SELECT direction FROM current_i95_direction) IS NOT NULL THEN
+    IF (SELECT count(*) FROM pricing.current_i95_direction) <> 1
+       OR (SELECT direction_state FROM pricing.current_i95_direction) <> 'missing_source'
+       OR (SELECT direction FROM pricing.current_i95_direction) IS NOT NULL THEN
         RAISE EXCEPTION 'empty direction sources must return one missing_source row';
     END IF;
 END $$;
@@ -288,7 +379,7 @@ CREATE FUNCTION pg_temp.insert_i95_direction_source(
 ) RETURNS void
 LANGUAGE sql
 AS $$
-    INSERT INTO trip_pricing_i95 (
+    INSERT INTO pricing.trip_pricing_i95 (
         interval_end_at,
         current_at,
         calculated_at,
@@ -330,7 +421,7 @@ SELECT pg_temp.insert_i95_direction_source(
 
 DO $$
 BEGIN
-    IF (SELECT direction_state FROM current_i95_direction) <> 'missing_source' THEN
+    IF (SELECT direction_state FROM pricing.current_i95_direction) <> 'missing_source' THEN
         RAISE EXCEPTION 'one direction source must remain missing_source';
     END IF;
 END $$;
@@ -344,18 +435,18 @@ SELECT pg_temp.insert_i95_direction_source(
 
 DO $$
 BEGIN
-    IF (SELECT direction_state FROM current_i95_direction) <> 'available'
-       OR (SELECT direction FROM current_i95_direction) <> 'Northbound'
-       OR (SELECT interval_end_at FROM current_i95_direction)
+    IF (SELECT direction_state FROM pricing.current_i95_direction) <> 'available'
+       OR (SELECT direction FROM pricing.current_i95_direction) <> 'Northbound'
+       OR (SELECT interval_end_at FROM pricing.current_i95_direction)
           <> '2026-07-30 13:00:00+00'
-       OR (SELECT northbound_link_status FROM current_i95_direction)
+       OR (SELECT northbound_link_status FROM pricing.current_i95_direction)
           <> 'NORTHBOUND_OPEN'
-       OR (SELECT southbound_link_status FROM current_i95_direction) <> 'CLOSED' THEN
+       OR (SELECT southbound_link_status FROM pricing.current_i95_direction) <> 'CLOSED' THEN
         RAISE EXCEPTION 'same-interval northbound open sources must select Northbound';
     END IF;
 END $$;
 
-DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+DELETE FROM pricing.trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
 SELECT pg_temp.insert_i95_direction_source(
     1132,
     'I-95-NB',
@@ -371,13 +462,13 @@ SELECT pg_temp.insert_i95_direction_source(
 
 DO $$
 BEGIN
-    IF (SELECT direction_state FROM current_i95_direction) <> 'available'
-       OR (SELECT direction FROM current_i95_direction) <> 'Southbound' THEN
+    IF (SELECT direction_state FROM pricing.current_i95_direction) <> 'available'
+       OR (SELECT direction FROM pricing.current_i95_direction) <> 'Southbound' THEN
         RAISE EXCEPTION 'same-interval southbound open sources must select Southbound';
     END IF;
 END $$;
 
-DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+DELETE FROM pricing.trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
 SELECT pg_temp.insert_i95_direction_source(
     1132,
     'I-95-NB',
@@ -393,14 +484,14 @@ SELECT pg_temp.insert_i95_direction_source(
 
 DO $$
 BEGIN
-    IF (SELECT direction_state FROM current_i95_direction) <> 'interval_mismatch'
-       OR (SELECT direction FROM current_i95_direction) IS NOT NULL
-       OR (SELECT interval_end_at FROM current_i95_direction) IS NOT NULL THEN
+    IF (SELECT direction_state FROM pricing.current_i95_direction) <> 'interval_mismatch'
+       OR (SELECT direction FROM pricing.current_i95_direction) IS NOT NULL
+       OR (SELECT interval_end_at FROM pricing.current_i95_direction) IS NOT NULL THEN
         RAISE EXCEPTION 'different source intervals must fail with interval_mismatch';
     END IF;
 END $$;
 
-DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+DELETE FROM pricing.trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
 SELECT pg_temp.insert_i95_direction_source(
     1132,
     'I-95-SB',
@@ -416,14 +507,14 @@ SELECT pg_temp.insert_i95_direction_source(
 
 DO $$
 BEGIN
-    IF (SELECT direction_state FROM current_i95_direction) <> 'invalid_source'
-       OR (SELECT northbound_corridor_name FROM current_i95_direction) <> 'I-95-SB'
-       OR (SELECT direction FROM current_i95_direction) IS NOT NULL THEN
+    IF (SELECT direction_state FROM pricing.current_i95_direction) <> 'invalid_source'
+       OR (SELECT northbound_corridor_name FROM pricing.current_i95_direction) <> 'I-95-SB'
+       OR (SELECT direction FROM pricing.current_i95_direction) IS NOT NULL THEN
         RAISE EXCEPTION 'unexpected source corridors must fail with invalid_source';
     END IF;
 END $$;
 
-DELETE FROM trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
+DELETE FROM pricing.trip_pricing_i95 WHERE od_pair_id IN (1132, 1151);
 SELECT pg_temp.insert_i95_direction_source(
     1132,
     'I-95-NB',
@@ -450,15 +541,15 @@ BEGIN
             ('CLOSED', 'SOUTHBOUND_CLOSING')
         ) AS statuses (northbound_status, southbound_status)
     LOOP
-        UPDATE trip_pricing_i95
+        UPDATE pricing.trip_pricing_i95
         SET link_status = CASE od_pair_id
             WHEN 1132 THEN northbound_status
             WHEN 1151 THEN southbound_status
         END
         WHERE od_pair_id IN (1132, 1151);
 
-        IF (SELECT direction_state FROM current_i95_direction) <> 'indeterminate'
-           OR (SELECT direction FROM current_i95_direction) IS NOT NULL THEN
+        IF (SELECT direction_state FROM pricing.current_i95_direction) <> 'indeterminate'
+           OR (SELECT direction FROM pricing.current_i95_direction) IS NOT NULL THEN
             RAISE EXCEPTION 'statuses %, % must be indeterminate',
                 northbound_status,
                 southbound_status;

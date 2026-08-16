@@ -29,4 +29,9 @@ test-results/
 /v1/infra/*.tfstate.*
 /v1/infra/build/
 /v1/infra/*.tfplan
+/v2/infra/.terraform/
+/v2/infra/*.tfstate
+/v2/infra/*.tfstate.*
+/v2/infra/build/
+/v2/infra/*.tfplan
 *.tfvars

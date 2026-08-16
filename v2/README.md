@@ -23,12 +23,28 @@ adopts them.
 - [IAM-authenticated database roles](db/roles.sql)
 - [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
 
-For an existing database, apply the additive dynamic-pricing analysis migration:
+The independently deployable `pricing` application schema starts at semantic
+version **1.0.0**. Its version is stored in `pricing.schema_version`; CI tests
+the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
+monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
+remains version 5.0.0 and continues to run its existing schema tests.
+
+Prepare an existing database additively; this does not move or modify v1 data:
 
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
-  -f v2/db/migrations/001_dynamic_pricing_analysis.sql
+  -f v2/db/migrations/001_create_pricing_schema.sql
 ```
+
+After the shadow loader is active, copy and verify the current v1 source rows:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/backfill.sql
+```
+
+See the [shadow rollout runbook](docs/pricing-shadow-rollout.md) for deployment,
+verification, rollback, and deliberately guarded cleanup.
 
 The database functions return the dynamic subtotal and its source provenance.
 The caller remains responsible for supplying the complete immutable dynamic
@@ -37,5 +53,6 @@ the pricing profile, and route metadata required by the adopted contracts.
 The defensive database boundary accepts at most 16 dynamic components, 128
 characters per route-step identifier, and 64 KiB of component JSON.
 
-The bootstrap restores an empty database's schema and permissions. Historical
-price rows require a separate replay from retained raw objects.
+The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
+events reach it through EventBridge while v1 keeps its direct S3 notification.
+Both paths are idempotent on their table keys and share no deployment state.

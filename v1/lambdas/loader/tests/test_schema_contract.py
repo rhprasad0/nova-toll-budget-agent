@@ -17,7 +17,7 @@ ROLES_SQL = (REPO_ROOT / "db" / "roles.sql").read_text()
 CURRENT_VIEWS_SQL = (REPO_ROOT / "db" / "add_current_pricing_views.sql").read_text()
 RETIRE_I95_LIVE_SQL = (REPO_ROOT / "db" / "retire_i95_live.sql").read_text()
 
-SEMVER = r"\d+\.\d+\.\d+"
+SEMVER = r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
 
 EXPECTED_TABLES = {"trip_pricing_i95", "trip_pricing_i66"}
 

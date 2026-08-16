@@ -13,7 +13,7 @@ I-66, Lee Highway, or Braddock Road. IDs `1375` through `1377` occur only from
 Braddock Road. VDOT has never emitted any of these 16 OD IDs, so widening the
 historical lookup window cannot recover their prices.
 
-**Live I-95 pricing is not being retired.** `trip_pricing_i95` remains the
+**Live I-95 pricing is not being retired.** `pricing.trip_pricing_i95` remains the
 official VDOT source. Retained Transurban rows are inert historical evidence
 and are not restored or queried by the rewrite database.
 
@@ -43,12 +43,12 @@ closely in the retained Transurban overlap:
 
 The database exposes three related views:
 
-- `i95_modeled_od_proxy` is the auditable mapping above.
-- `modeled_trip_pricing_i95` preserves every historical proxy observation but
+- `pricing.i95_modeled_od_proxy` is the auditable mapping above.
+- `pricing.modeled_trip_pricing_i95` preserves every historical proxy observation but
   returns a null modeled price when the required direction is not fully open.
   Rolling analysis must select the latest row in each time slot before checking
   that the price is present; this prevents fallback to an older open toll.
-- `modeled_current_trip_pricing_i95` evaluates the latest VDOT proxy row and
+- `pricing.modeled_current_trip_pricing_i95` evaluates the latest VDOT proxy row and
   returns nothing when that row is not fully open. It never falls back to an
   older open price during a direction reversal.
 
@@ -136,6 +136,6 @@ SELECT
     interval_end_at,
     proxy_od_pair_id,
     pricing_method
-FROM modeled_current_trip_pricing_i95
+FROM pricing.modeled_current_trip_pricing_i95
 WHERE od_pair_id = 1385;
 ```

@@ -1,7 +1,7 @@
 -- Shared dynamic-pricing analysis surfaces. Included by the blank bootstrap
 -- and the additive online migration after the raw tables/current views exist.
 
-CREATE OR REPLACE VIEW current_i95_direction AS
+CREATE OR REPLACE VIEW pricing.current_i95_direction AS
 WITH sources AS (
     SELECT
         max(corridor_name) FILTER (WHERE od_pair_id = 1132) AS northbound_corridor_name,
@@ -12,7 +12,7 @@ WITH sources AS (
         max(link_status) FILTER (WHERE od_pair_id = 1151) AS southbound_link_status,
         max(interval_end_at) FILTER (WHERE od_pair_id = 1151) AS southbound_interval_end_at,
         max(calculated_at) FILTER (WHERE od_pair_id = 1151) AS southbound_calculated_at
-    FROM current_trip_pricing_i95
+    FROM pricing.current_trip_pricing_i95
     WHERE od_pair_id IN (1132, 1151)
 ), classified AS (
     SELECT
@@ -49,7 +49,7 @@ SELECT
     southbound_calculated_at
 FROM classified;
 
-CREATE OR REPLACE VIEW i95_modeled_od_proxy AS
+CREATE OR REPLACE VIEW pricing.i95_modeled_od_proxy AS
 SELECT *
 FROM (
     VALUES
@@ -71,7 +71,7 @@ FROM (
         (1389, 1315, 'SOUTHBOUND_OPEN')
 ) AS proxy (target_od_pair_id, proxy_od_pair_id, required_status);
 
-CREATE OR REPLACE VIEW modeled_trip_pricing_i95 AS
+CREATE OR REPLACE VIEW pricing.modeled_trip_pricing_i95 AS
 SELECT
     p.target_od_pair_id AS od_pair_id,
     v.corridor_name,
@@ -84,10 +84,10 @@ SELECT
     'identity_proxy_v1'::text AS pricing_method,
     v.start_zone_id,
     v.end_zone_id
-FROM i95_modeled_od_proxy p
-JOIN trip_pricing_i95 v ON v.od_pair_id = p.proxy_od_pair_id;
+FROM pricing.i95_modeled_od_proxy p
+JOIN pricing.trip_pricing_i95 v ON v.od_pair_id = p.proxy_od_pair_id;
 
-CREATE OR REPLACE VIEW modeled_current_trip_pricing_i95 AS
+CREATE OR REPLACE VIEW pricing.modeled_current_trip_pricing_i95 AS
 SELECT
     p.target_od_pair_id AS od_pair_id,
     v.corridor_name,
@@ -98,12 +98,12 @@ SELECT
     p.proxy_od_pair_id,
     true AS modeled,
     'identity_proxy_v1'::text AS pricing_method
-FROM i95_modeled_od_proxy p
-JOIN current_trip_pricing_i95 v
+FROM pricing.i95_modeled_od_proxy p
+JOIN pricing.current_trip_pricing_i95 v
   ON v.od_pair_id = p.proxy_od_pair_id
  AND v.link_status = p.required_status;
 
-CREATE OR REPLACE VIEW dynamic_pricing_observations AS
+CREATE OR REPLACE VIEW pricing.dynamic_pricing_observations AS
 SELECT
     'i95_observed'::text AS price_source,
     'observed'::text AS source_kind,
@@ -129,7 +129,7 @@ SELECT
     NULL::integer AS proxy_od_pair_id,
     v.start_zone_id AS source_start_zone_id,
     v.end_zone_id AS source_end_zone_id
-FROM trip_pricing_i95 v
+FROM pricing.trip_pricing_i95 v
 UNION ALL
 SELECT
     'i95_modeled',
@@ -147,7 +147,7 @@ SELECT
     v.proxy_od_pair_id,
     v.start_zone_id,
     v.end_zone_id
-FROM modeled_trip_pricing_i95 v
+FROM pricing.modeled_trip_pricing_i95 v
 UNION ALL
 SELECT
     'i66_observed',
@@ -165,13 +165,13 @@ SELECT
     NULL::integer,
     v.start_zone_id,
     v.end_zone_id
-FROM trip_pricing_i66 v;
+FROM pricing.trip_pricing_i66 v;
 
-CREATE OR REPLACE FUNCTION _dynamic_pricing_component_errors(p_components jsonb)
+CREATE OR REPLACE FUNCTION pricing._dynamic_pricing_component_errors(p_components jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
 IMMUTABLE
-SET search_path = public, pg_catalog, pg_temp
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
     component jsonb;
@@ -259,7 +259,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION point_in_time_dynamic_route_pricing(
+CREATE OR REPLACE FUNCTION pricing.point_in_time_dynamic_route_pricing(
     p_requested_at timestamptz,
     p_components jsonb
 ) RETURNS TABLE (
@@ -274,7 +274,7 @@ CREATE OR REPLACE FUNCTION point_in_time_dynamic_route_pricing(
 )
 LANGUAGE plpgsql
 VOLATILE
-SET search_path = public, pg_catalog, pg_temp
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
     validation_errors jsonb;
@@ -287,7 +287,7 @@ BEGIN
     unavailable_components := '[]'::jsonb;
     invalid_fields := '[]'::jsonb;
 
-    validation_errors := _dynamic_pricing_component_errors(p_components);
+    validation_errors := pricing._dynamic_pricing_component_errors(p_components);
     IF p_requested_at IS NULL THEN
         validation_errors := validation_errors || '[{"field":"requested_at","reason":"required"}]'::jsonb;
     ELSIF NOT isfinite(p_requested_at) THEN
@@ -326,7 +326,7 @@ BEGIN
         FROM requested_components
         LEFT JOIN LATERAL (
             SELECT candidate.*
-            FROM dynamic_pricing_observations candidate
+            FROM pricing.dynamic_pricing_observations candidate
             WHERE candidate.price_source = requested_components.price_source
               AND (requested_components.od_pair_id IS NULL OR candidate.od_pair_id = requested_components.od_pair_id)
               AND (requested_components.start_zone_id IS NULL OR candidate.start_zone_id = requested_components.start_zone_id)
@@ -384,7 +384,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION historical_dynamic_route_pricing(
+CREATE OR REPLACE FUNCTION pricing.historical_dynamic_route_pricing(
     p_requested_at timestamptz,
     p_components jsonb
 ) RETURNS TABLE (
@@ -407,7 +407,7 @@ CREATE OR REPLACE FUNCTION historical_dynamic_route_pricing(
 )
 LANGUAGE plpgsql
 VOLATILE
-SET search_path = public, pg_catalog, pg_temp
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
     validation_errors jsonb;
@@ -421,7 +421,7 @@ BEGIN
     contains_modeled := false;
     invalid_fields := '[]'::jsonb;
 
-    validation_errors := _dynamic_pricing_component_errors(p_components);
+    validation_errors := pricing._dynamic_pricing_component_errors(p_components);
     IF p_requested_at IS NULL THEN
         validation_errors := validation_errors || '[{"field":"requested_at","reason":"required"}]'::jsonb;
     ELSIF NOT isfinite(p_requested_at) THEN
@@ -478,7 +478,7 @@ BEGIN
         CROSS JOIN requested_components
         LEFT JOIN LATERAL (
             SELECT candidate.*
-            FROM dynamic_pricing_observations candidate
+            FROM pricing.dynamic_pricing_observations candidate
             WHERE valid_slots.valid_local_time
               AND candidate.price_source = requested_components.price_source
               AND (requested_components.od_pair_id IS NULL OR candidate.od_pair_id = requested_components.od_pair_id)
@@ -526,7 +526,7 @@ BEGIN
             'proxy_od_pair_id', proxy.proxy_od_pair_id
         )) ORDER BY requested_components.component_order) AS value
         FROM requested_components
-        LEFT JOIN i95_modeled_od_proxy proxy
+        LEFT JOIN pricing.i95_modeled_od_proxy proxy
           ON requested_components.price_source = 'i95_modeled'
          AND proxy.target_od_pair_id = requested_components.od_pair_id
     )
@@ -551,17 +551,17 @@ BEGIN
 END;
 $$;
 
-COMMENT ON VIEW i95_modeled_od_proxy IS
+COMMENT ON VIEW pricing.i95_modeled_od_proxy IS
     'Validated VDOT proxy products for 16 I-95 oracle OD IDs absent from VDOT history';
-COMMENT ON VIEW modeled_trip_pricing_i95 IS
+COMMENT ON VIEW pricing.modeled_trip_pricing_i95 IS
     'Direction-compatible historical ballpark prices for oracle-only I-95 OD IDs';
-COMMENT ON VIEW modeled_current_trip_pricing_i95 IS
+COMMENT ON VIEW pricing.modeled_current_trip_pricing_i95 IS
     'Direction-compatible current ballpark prices for oracle-only I-95 OD IDs';
-COMMENT ON VIEW current_i95_direction IS
+COMMENT ON VIEW pricing.current_i95_direction IS
     'Latest known I-95 reversible direction from OD 1132/1151, with fail-safe diagnostic state';
-COMMENT ON VIEW dynamic_pricing_observations IS
+COMMENT ON VIEW pricing.dynamic_pricing_observations IS
     'Normalized observed and modeled dynamic toll observations with availability applied after selection';
-COMMENT ON FUNCTION point_in_time_dynamic_route_pricing(timestamptz, jsonb) IS
+COMMENT ON FUNCTION pricing.point_in_time_dynamic_route_pricing(timestamptz, jsonb) IS
     'Complete dynamic route subtotal at one instant; schedule-derived components remain caller-owned';
-COMMENT ON FUNCTION historical_dynamic_route_pricing(timestamptz, jsonb) IS
+COMMENT ON FUNCTION pricing.historical_dynamic_route_pricing(timestamptz, jsonb) IS
     'Complete dynamic route totals and statistics for four prior matching Eastern 15-minute slots';
