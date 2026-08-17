@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted for oracle schema `1.0.0`
+- **Status:** Adopted for oracle schema `1.0.1`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 

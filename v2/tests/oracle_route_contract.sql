@@ -92,7 +92,7 @@ BEGIN
           <> jsonb_build_array('entry', 'airport')
        OR alternatives->0->>'point_id' <> 'i66:2:entry:EB'
        OR alternatives->1->>'point_id' <> 'i66:3:entry:EB'
-       OR alternatives->0->'location' <> 'null'::jsonb
+       OR alternatives->0->'location'->>'type' <> 'Point'
        OR public_keys <> ARRAY[
            'aliases', 'direction', 'label', 'location', 'network_id',
            'point_id', 'point_type', 'source_node_id'
@@ -192,7 +192,7 @@ BEGIN
            OR alternative->>'point_type' <> 'exit'
            OR alternative->>'direction' <> 'EB'
            OR alternative->'aliases' <> '[]'::jsonb
-           OR alternative->'location' <> 'null'::jsonb
+           OR alternative->'location'->>'type' <> 'Point'
            OR NOT pg_temp.structurally_reaches(
                'airport_iad', alternative->>'point_id'
            ) THEN
