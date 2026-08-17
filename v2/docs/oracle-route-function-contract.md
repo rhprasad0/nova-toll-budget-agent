@@ -39,6 +39,7 @@ The function returns exactly one row with this shape:
 | Field | Type | Contract |
 | --- | --- | --- |
 | `status` | `text` | One status from the table below |
+| `reason` | `jsonb` or null | Structured explanation for every non-`valid` status |
 | `point_ids` | `text[]` | Selected route points in travel order |
 | `connection_ids` | `text[]` | Selected connections in travel order |
 | `connection_types` | `text[]` | Type aligned with each connection ID |
@@ -76,6 +77,49 @@ emission order.
 For statuses without a path, all three path arrays and
 `general_purpose_gaps` are empty, and `i95_evidence` is null. Availability
 statuses retain the structural proof that could not currently be used.
+
+## Reason contract
+
+`reason` is SQL null when `status` is `valid`. Every other status returns one
+JSON object with exactly these top-level fields:
+
+```json
+{
+  "code": "i95_opposite_direction_open",
+  "details": {
+    "required_i95_directions": ["NB"],
+    "availability": "southbound"
+  }
+}
+```
+
+`code` is a stable machine-readable value. `details` is always a JSON object;
+callers must use the code and details to produce user-facing prose rather than
+displaying either as a prewritten message.
+
+| Status | Reason code | Details |
+| --- | --- | --- |
+| `invalid_origin` | `origin_required` | Empty object |
+| `invalid_origin` | `origin_not_found` | Submitted `point_id` |
+| `invalid_origin` | `origin_not_entry` | `point_id`, actual `point_type`, and allowed point types |
+| `invalid_destination` | `destination_required` | Empty object |
+| `invalid_destination` | `destination_not_found` | Submitted `point_id` |
+| `invalid_destination` | `destination_not_exit` | `point_id`, actual `point_type`, and allowed point types |
+| `currently_unavailable` | `i95_opposite_direction_open` | Required directions and observed availability |
+| `currently_unavailable` | `i95_fully_closed` | Required directions and `closed` availability |
+| `unknown_availability` | `i95_missing_source` | Required directions and `unknown` availability |
+| `unknown_availability` | `i95_invalid_source` | Required directions and `unknown` availability |
+| `unknown_availability` | `i95_interval_mismatch` | Required directions and `unknown` availability |
+| `unknown_availability` | `i95_future_evidence` | Required directions and `unknown` availability |
+| `unknown_availability` | `i95_stale_evidence` | Required directions and `unknown` availability |
+| `unknown_availability` | `i95_indeterminate_state` | Required directions and `unknown` availability |
+| `no_supported_route` | `no_supported_route` | Origin and destination point IDs |
+| `traversal_limit_exceeded` | `traversal_limit_exceeded` | Point IDs and `maximum_connections` (`12`) |
+
+Required I-95 directions are returned in structural-path order. The reason
+classification follows the same evidence precedence as availability: missing
+fields, invalid corridor identities, mismatched intervals, future evidence,
+stale evidence, and finally an indeterminate link state.
 
 ## General-purpose gap contract
 
@@ -165,6 +209,7 @@ omitted only for readability):
 ```json
 {
   "status": "valid",
+  "reason": null,
   "point_ids": ["i495:185SO", "i95:217SD"],
   "connection_ids": ["source:i95_shared:Southbound:185SO:217SD"],
   "connection_types": ["general_purpose_gap"],

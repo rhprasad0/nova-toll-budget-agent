@@ -490,12 +490,13 @@ connections and return:
   answer.
 
 Origin validation takes precedence when both inputs are invalid. The function
-returns one structured row containing the status, ordered point IDs, ordered
-connection IDs and types, `general_purpose_gaps`, and the I-95 evidence used
-when applicable. Invalid, unsupported, and traversal-limit results contain
-empty path arrays and an empty `general_purpose_gaps` array. An availability
-result contains the deterministic structural proof that produced the result.
-The function never returns a price.
+returns one structured row containing the status, a machine-readable JSON
+`reason` for every non-`valid` status, ordered point IDs, ordered connection IDs
+and types, `general_purpose_gaps`, and the I-95 evidence used when applicable.
+Invalid, unsupported, and traversal-limit results contain empty path arrays and
+an empty `general_purpose_gaps` array. An availability result contains the
+deterministic structural proof that produced the result. The function never
+returns a price or database-authored user-facing prose.
 
 `general_purpose_gaps` is a JSON array in route order. Each item contains:
 

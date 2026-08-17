@@ -6,7 +6,9 @@ CREATE FUNCTION pg_temp.set_i95_state(
     northbound_status text,
     southbound_status text,
     source_calculated_at timestamptz,
-    mismatch_intervals boolean DEFAULT false
+    mismatch_intervals boolean DEFAULT false,
+    northbound_corridor text DEFAULT 'I-95-NB',
+    southbound_corridor text DEFAULT 'I-95-SB'
 ) RETURNS void
 LANGUAGE plpgsql
 AS $$
@@ -22,14 +24,14 @@ BEGIN
     ) VALUES
         (
             source_interval, source_interval, source_calculated_at, 95,
-            'I-95-NB', 1132, 'NB direction sentinel', 1, 'A', 2, 'B',
+            northbound_corridor, 1132, 'NB direction sentinel', 1, 'A', 2, 'B',
             1.00, northbound_status, 'test/oracle-nb.csv'
         ),
         (
             source_interval - CASE WHEN mismatch_intervals THEN interval '1 minute'
                                    ELSE interval '0 seconds' END,
             source_interval, source_calculated_at, 95,
-            'I-95-SB', 1151, 'SB direction sentinel', 3, 'C', 4, 'D',
+            southbound_corridor, 1151, 'SB direction sentinel', 3, 'C', 4, 'D',
             1.00, southbound_status, 'test/oracle-sb.csv'
         );
 END
@@ -42,6 +44,7 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
     IF result.status <> 'valid' OR cardinality(result.connection_ids) <> 1
+       OR result.reason IS NOT NULL
        OR result.general_purpose_gaps <> '[]'::jsonb
        OR result.i95_evidence IS NOT NULL THEN
         RAISE EXCEPTION 'ordinary I-66 route failed: %', row_to_json(result);
@@ -49,19 +52,79 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i66:4:exit:EB', 'i66:4:exit:EB');
-    IF result.status <> 'invalid_origin' OR cardinality(result.point_ids) <> 0 THEN
+    IF result.status <> 'invalid_origin'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'origin_not_entry',
+           'details', jsonb_build_object(
+               'point_id', 'i66:4:exit:EB',
+               'point_type', 'exit',
+               'allowed_point_types', jsonb_build_array('entry', 'airport')
+           )
+       )
+       OR cardinality(result.point_ids) <> 0 THEN
         RAISE EXCEPTION 'invalid origin was not explicit';
     END IF;
 
     SELECT * INTO result
+    FROM oracle.validate_toll_route(NULL, 'i66:4:exit:EB');
+    IF result.status <> 'invalid_origin'
+       OR result.reason IS DISTINCT FROM
+          '{"code":"origin_required","details":{}}'::jsonb THEN
+        RAISE EXCEPTION 'missing origin reason was not explicit';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('unknown-origin', 'i66:4:exit:EB');
+    IF result.status <> 'invalid_origin'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'origin_not_found',
+           'details', jsonb_build_object('point_id', 'unknown-origin')
+       ) THEN
+        RAISE EXCEPTION 'unknown origin reason was not explicit';
+    END IF;
+
+    SELECT * INTO result
     FROM oracle.validate_toll_route('i66:1:entry:EB', 'i66:4:entry:EB');
-    IF result.status <> 'invalid_destination' THEN
+    IF result.status <> 'invalid_destination'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'destination_not_exit',
+           'details', jsonb_build_object(
+               'point_id', 'i66:4:entry:EB',
+               'point_type', 'entry',
+               'allowed_point_types', jsonb_build_array('exit', 'airport')
+           )
+       ) THEN
         RAISE EXCEPTION 'invalid destination was not explicit';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i66:1:entry:EB', NULL);
+    IF result.status <> 'invalid_destination'
+       OR result.reason IS DISTINCT FROM
+          '{"code":"destination_required","details":{}}'::jsonb THEN
+        RAISE EXCEPTION 'missing destination reason was not explicit';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i66:1:entry:EB', 'unknown-destination');
+    IF result.status <> 'invalid_destination'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'destination_not_found',
+           'details', jsonb_build_object('point_id', 'unknown-destination')
+       ) THEN
+        RAISE EXCEPTION 'unknown destination reason was not explicit';
     END IF;
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
     IF result.status <> 'unknown_availability'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'i95_missing_source',
+           'details', jsonb_build_object(
+               'required_i95_directions', ARRAY['NB']::text[],
+               'availability', 'unknown'
+           )
+       )
        OR result.i95_evidence <> jsonb_build_object(
            'availability', 'unknown', 'reason', 'missing_source'
        ) THEN
@@ -81,6 +144,7 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
     IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
        OR result.i95_evidence->>'availability' <> 'northbound' THEN
         RAISE EXCEPTION 'fresh northbound route failed: %', row_to_json(result);
     END IF;
@@ -103,6 +167,7 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('airport_dca', 'i95:210SD');
     IF result.status <> 'currently_unavailable'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_opposite_direction_open'
        OR result.connection_ids[1] <> 'dca_to_i95_south' THEN
         RAISE EXCEPTION 'northbound state allowed DCA southbound departure: %',
             row_to_json(result);
@@ -111,6 +176,7 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
     IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
        OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192SD'
        OR result.general_purpose_gaps->0->>'role' <> 'suffix'
@@ -134,6 +200,13 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
     IF result.status <> 'currently_unavailable'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'i95_opposite_direction_open',
+           'details', jsonb_build_object(
+               'required_i95_directions', ARRAY['NB']::text[],
+               'availability', 'southbound'
+           )
+       )
        OR cardinality(result.connection_ids) <> 1
        OR result.i95_evidence->>'availability' <> 'southbound' THEN
         RAISE EXCEPTION 'opposite-direction route was not unavailable: %',
@@ -197,6 +270,13 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
     IF result.status <> 'currently_unavailable'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'i95_fully_closed',
+           'details', jsonb_build_object(
+               'required_i95_directions', ARRAY['NB']::text[],
+               'availability', 'closed'
+           )
+       )
        OR result.i95_evidence->>'availability' <> 'closed' THEN
         RAISE EXCEPTION 'known closure was not distinguished';
     END IF;
@@ -226,6 +306,7 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
     IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_indeterminate_state'
        OR result.i95_evidence->>'availability' <> 'unknown' THEN
         RAISE EXCEPTION 'contradictory state was not unknown';
     END IF;
@@ -240,13 +321,15 @@ DECLARE result record;
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
-    IF result.status <> 'unknown_availability' THEN
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_stale_evidence' THEN
         RAISE EXCEPTION 'stale state was accepted';
     END IF;
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
     IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
        OR result.general_purpose_gaps->0->>'fallback_required' IS NOT NULL
        OR result.i95_evidence->>'availability' <> 'unknown' THEN
         RAISE EXCEPTION 'unknown state did not preserve safe TP1 fallback: %',
@@ -287,8 +370,40 @@ DECLARE result record;
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
-    IF result.status <> 'unknown_availability' THEN
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_interval_mismatch' THEN
         RAISE EXCEPTION 'mismatched intervals were accepted';
+    END IF;
+END $$;
+
+SELECT pg_temp.set_i95_state(
+    'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() + interval '1 minute'
+);
+
+DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_future_evidence' THEN
+        RAISE EXCEPTION 'future evidence reason was not explicit';
+    END IF;
+END $$;
+
+SELECT pg_temp.set_i95_state(
+    'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '1 minute',
+    false, 'I-95-SB', 'I-95-SB'
+);
+
+DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_invalid_source' THEN
+        RAISE EXCEPTION 'invalid source reason was not explicit';
     END IF;
 END $$;
 
@@ -389,7 +504,14 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:2233SO', 'airport_dca');
-    IF result.status <> 'no_supported_route' THEN
+    IF result.status <> 'no_supported_route'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'no_supported_route',
+           'details', jsonb_build_object(
+               'origin_point_id', 'i95:2233SO',
+               'destination_point_id', 'airport_dca'
+           )
+       ) THEN
         RAISE EXCEPTION 'DCA incorrectly gained a southbound arrival';
     END IF;
 END $$;
@@ -462,6 +584,14 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('test-depth-0', 'test-depth-13');
     IF result.status <> 'traversal_limit_exceeded'
+       OR result.reason IS DISTINCT FROM jsonb_build_object(
+           'code', 'traversal_limit_exceeded',
+           'details', jsonb_build_object(
+               'origin_point_id', 'test-depth-0',
+               'destination_point_id', 'test-depth-13',
+               'maximum_connections', 12
+           )
+       )
        OR cardinality(result.connection_ids) <> 0 THEN
         RAISE EXCEPTION '13-edge route did not report traversal limit: %',
             row_to_json(result);
@@ -487,7 +617,7 @@ BEGIN
     FROM oracle.validate_toll_route(
         'test-limit-i95-origin', 'test-limit-i95-destination'
     );
-    IF result.status <> 'valid' THEN
+    IF result.status <> 'valid' OR result.reason IS NOT NULL THEN
         RAISE EXCEPTION 'proven valid path did not outrank traversal limit: %',
             row_to_json(result);
     END IF;

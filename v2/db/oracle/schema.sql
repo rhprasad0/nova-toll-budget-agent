@@ -156,6 +156,7 @@ CREATE FUNCTION oracle.validate_toll_route(
     destination_point_id text
 ) RETURNS TABLE (
     status text,
+    reason jsonb,
     point_ids text[],
     connection_ids text[],
     connection_types text[],
@@ -176,8 +177,42 @@ BEGIN
     FROM oracle.toll_route_point AS route_point
     WHERE route_point.point_id = origin_point_id;
 
-    IF origin_role IS NULL OR origin_role NOT IN ('entry', 'airport') THEN
+    IF origin_point_id IS NULL THEN
         status := 'invalid_origin';
+        reason := jsonb_build_object(
+            'code', 'origin_required',
+            'details', jsonb_build_object()
+        );
+        point_ids := ARRAY[]::text[];
+        connection_ids := ARRAY[]::text[];
+        connection_types := ARRAY[]::text[];
+        general_purpose_gaps := '[]'::jsonb;
+        i95_evidence := NULL;
+        RETURN NEXT;
+        RETURN;
+    ELSIF origin_role IS NULL THEN
+        status := 'invalid_origin';
+        reason := jsonb_build_object(
+            'code', 'origin_not_found',
+            'details', jsonb_build_object('point_id', origin_point_id)
+        );
+        point_ids := ARRAY[]::text[];
+        connection_ids := ARRAY[]::text[];
+        connection_types := ARRAY[]::text[];
+        general_purpose_gaps := '[]'::jsonb;
+        i95_evidence := NULL;
+        RETURN NEXT;
+        RETURN;
+    ELSIF origin_role NOT IN ('entry', 'airport') THEN
+        status := 'invalid_origin';
+        reason := jsonb_build_object(
+            'code', 'origin_not_entry',
+            'details', jsonb_build_object(
+                'point_id', origin_point_id,
+                'point_type', origin_role,
+                'allowed_point_types', jsonb_build_array('entry', 'airport')
+            )
+        );
         point_ids := ARRAY[]::text[];
         connection_ids := ARRAY[]::text[];
         connection_types := ARRAY[]::text[];
@@ -192,8 +227,42 @@ BEGIN
     FROM oracle.toll_route_point AS route_point
     WHERE route_point.point_id = destination_point_id;
 
-    IF destination_role IS NULL OR destination_role NOT IN ('exit', 'airport') THEN
+    IF destination_point_id IS NULL THEN
         status := 'invalid_destination';
+        reason := jsonb_build_object(
+            'code', 'destination_required',
+            'details', jsonb_build_object()
+        );
+        point_ids := ARRAY[]::text[];
+        connection_ids := ARRAY[]::text[];
+        connection_types := ARRAY[]::text[];
+        general_purpose_gaps := '[]'::jsonb;
+        i95_evidence := NULL;
+        RETURN NEXT;
+        RETURN;
+    ELSIF destination_role IS NULL THEN
+        status := 'invalid_destination';
+        reason := jsonb_build_object(
+            'code', 'destination_not_found',
+            'details', jsonb_build_object('point_id', destination_point_id)
+        );
+        point_ids := ARRAY[]::text[];
+        connection_ids := ARRAY[]::text[];
+        connection_types := ARRAY[]::text[];
+        general_purpose_gaps := '[]'::jsonb;
+        i95_evidence := NULL;
+        RETURN NEXT;
+        RETURN;
+    ELSIF destination_role NOT IN ('exit', 'airport') THEN
+        status := 'invalid_destination';
+        reason := jsonb_build_object(
+            'code', 'destination_not_exit',
+            'details', jsonb_build_object(
+                'point_id', destination_point_id,
+                'point_type', destination_role,
+                'allowed_point_types', jsonb_build_array('exit', 'airport')
+            )
+        );
         point_ids := ARRAY[]::text[];
         connection_ids := ARRAY[]::text[];
         connection_types := ARRAY[]::text[];
@@ -245,6 +314,41 @@ BEGIN
                 ELSE 'unknown'
             END AS availability,
             CASE
+                WHEN raw_i95.northbound_corridor_name IS NULL
+                  OR raw_i95.southbound_corridor_name IS NULL
+                  OR raw_i95.northbound_link_status IS NULL
+                  OR raw_i95.southbound_link_status IS NULL
+                  OR raw_i95.northbound_interval_end_at IS NULL
+                  OR raw_i95.southbound_interval_end_at IS NULL
+                  OR raw_i95.northbound_calculated_at IS NULL
+                  OR raw_i95.southbound_calculated_at IS NULL
+                    THEN 'i95_missing_source'
+                WHEN raw_i95.northbound_corridor_name <> 'I-95-NB'
+                  OR raw_i95.southbound_corridor_name <> 'I-95-SB'
+                    THEN 'i95_invalid_source'
+                WHEN raw_i95.northbound_interval_end_at
+                  <> raw_i95.southbound_interval_end_at
+                    THEN 'i95_interval_mismatch'
+                WHEN raw_i95.northbound_calculated_at > statement_timestamp()
+                  OR raw_i95.southbound_calculated_at > statement_timestamp()
+                    THEN 'i95_future_evidence'
+                WHEN raw_i95.northbound_calculated_at
+                       < statement_timestamp() - interval '20 minutes'
+                  OR raw_i95.southbound_calculated_at
+                       < statement_timestamp() - interval '20 minutes'
+                    THEN 'i95_stale_evidence'
+                WHEN raw_i95.northbound_link_status = 'NORTHBOUND_OPEN'
+                  AND raw_i95.southbound_link_status = 'CLOSED'
+                    THEN NULL
+                WHEN raw_i95.northbound_link_status = 'CLOSED'
+                  AND raw_i95.southbound_link_status = 'SOUTHBOUND_OPEN'
+                    THEN NULL
+                WHEN raw_i95.northbound_link_status = 'CLOSED'
+                  AND raw_i95.southbound_link_status = 'CLOSED'
+                    THEN NULL
+                ELSE 'i95_indeterminate_state'
+            END AS unavailable_reason,
+            CASE
                 WHEN raw_i95.direction_state = 'missing_source' THEN
                     jsonb_build_object('reason', 'missing_source')
                 ELSE jsonb_build_object(
@@ -263,6 +367,7 @@ BEGIN
     evidence AS (
         SELECT
             classified_i95.availability,
+            classified_i95.unavailable_reason,
             classified_i95.raw_evidence
                 || jsonb_build_object('availability', classified_i95.availability)
                 AS evidence_json
@@ -270,6 +375,7 @@ BEGIN
         UNION ALL
         SELECT
             'unknown'::text,
+            'i95_missing_source'::text,
             jsonb_build_object('availability', 'unknown', 'reason', 'missing_source')
         WHERE NOT EXISTS (SELECT 1 FROM classified_i95)
     ),
@@ -351,6 +457,34 @@ BEGIN
                   AND walk.required_i95_directions <@ ARRAY['SB']::text[] THEN 'valid'
                 ELSE 'currently_unavailable'
             END AS candidate_status,
+            CASE
+                WHEN cardinality(walk.required_i95_directions) = 0 THEN NULL
+                WHEN evidence.availability = 'unknown' THEN jsonb_build_object(
+                    'code', evidence.unavailable_reason,
+                    'details', jsonb_build_object(
+                        'required_i95_directions', walk.required_i95_directions,
+                        'availability', evidence.availability
+                    )
+                )
+                WHEN evidence.availability = 'northbound'
+                  AND walk.required_i95_directions <@ ARRAY['NB']::text[] THEN NULL
+                WHEN evidence.availability = 'southbound'
+                  AND walk.required_i95_directions <@ ARRAY['SB']::text[] THEN NULL
+                WHEN evidence.availability = 'closed' THEN jsonb_build_object(
+                    'code', 'i95_fully_closed',
+                    'details', jsonb_build_object(
+                        'required_i95_directions', walk.required_i95_directions,
+                        'availability', evidence.availability
+                    )
+                )
+                ELSE jsonb_build_object(
+                    'code', 'i95_opposite_direction_open',
+                    'details', jsonb_build_object(
+                        'required_i95_directions', walk.required_i95_directions,
+                        'availability', evidence.availability
+                    )
+                )
+            END AS candidate_reason,
             walk.walked_point_ids,
             walk.walked_connection_ids,
             walk.walked_connection_types,
@@ -414,6 +548,7 @@ BEGIN
     choices AS (
         SELECT
             candidates.candidate_status,
+            candidates.candidate_reason,
             candidates.walked_point_ids,
             candidates.walked_connection_ids,
             candidates.walked_connection_types,
@@ -435,6 +570,23 @@ BEGIN
                     THEN 'traversal_limit_exceeded'
                 ELSE 'no_supported_route'
             END,
+            CASE
+                WHEN frontier_state.traversal_was_truncated THEN jsonb_build_object(
+                    'code', 'traversal_limit_exceeded',
+                    'details', jsonb_build_object(
+                        'origin_point_id', origin_point_id,
+                        'destination_point_id', destination_point_id,
+                        'maximum_connections', 12
+                    )
+                )
+                ELSE jsonb_build_object(
+                    'code', 'no_supported_route',
+                    'details', jsonb_build_object(
+                        'origin_point_id', origin_point_id,
+                        'destination_point_id', destination_point_id
+                    )
+                )
+            END,
             ARRAY[]::text[],
             ARRAY[]::text[],
             ARRAY[]::text[],
@@ -446,12 +598,13 @@ BEGIN
     )
     SELECT
         choices.candidate_status,
+        choices.candidate_reason,
         choices.walked_point_ids,
         choices.walked_connection_ids,
         choices.walked_connection_types,
         choices.candidate_general_purpose_gaps,
         choices.candidate_evidence
-    INTO status, point_ids, connection_ids, connection_types,
+    INTO status, reason, point_ids, connection_ids, connection_types,
          general_purpose_gaps, i95_evidence
     FROM choices
     ORDER BY

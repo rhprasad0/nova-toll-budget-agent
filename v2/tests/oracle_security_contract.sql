@@ -48,13 +48,14 @@ BEGIN
           ARRAY['search_path=pg_catalog, pg_temp']::text[]
        OR route_function.proargnames IS DISTINCT FROM ARRAY[
            'origin_point_id', 'destination_point_id',
-           'status', 'point_ids', 'connection_ids', 'connection_types',
+           'status', 'reason', 'point_ids', 'connection_ids', 'connection_types',
            'general_purpose_gaps', 'i95_evidence'
        ]::text[]
        OR route_function.proallargtypes IS DISTINCT FROM ARRAY[
            'text'::regtype::oid,
            'text'::regtype::oid,
            'text'::regtype::oid,
+           'jsonb'::regtype::oid,
            'text[]'::regtype::oid,
            'text[]'::regtype::oid,
            'text[]'::regtype::oid,
@@ -64,7 +65,7 @@ BEGIN
        OR route_function.proargmodes IS DISTINCT FROM ARRAY[
            'i'::"char", 'i'::"char",
            't'::"char", 't'::"char", 't'::"char",
-           't'::"char", 't'::"char", 't'::"char"
+           't'::"char", 't'::"char", 't'::"char", 't'::"char"
        ]::"char"[] THEN
         RAISE EXCEPTION 'route function catalog contract is wrong: %',
             row_to_json(route_function);
@@ -113,7 +114,7 @@ DECLARE result record;
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
-    IF result.status <> 'valid' THEN
+    IF result.status <> 'valid' OR result.reason IS NOT NULL THEN
         RAISE EXCEPTION 'agent route execution failed';
     END IF;
     BEGIN
