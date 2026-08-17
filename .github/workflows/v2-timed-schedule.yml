@@ -1,0 +1,71 @@
+name: v2 timed live checks
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "17 6 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "17 14 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "17 11 * * 1"
+      timezone: "America/New_York"
+    - cron: "47 1 * * 2-5"
+      timezone: "America/New_York"
+    - cron: "17 10 * * 6"
+      timezone: "America/New_York"
+    - cron: "17 15 * * 6"
+      timezone: "America/New_York"
+    - cron: "17 18 * * 6"
+      timezone: "America/New_York"
+  workflow_dispatch:
+    inputs:
+      window_id:
+        description: Timed window to verify against the live system
+        required: true
+        type: choice
+        options:
+          - i95_northbound
+          - i95_reversal
+          - i95_southbound
+
+concurrency:
+  group: v2-timed-live-${{ github.event.schedule || inputs.window_id }}
+  cancel-in-progress: false
+
+jobs:
+  select-window:
+    runs-on: ubuntu-latest
+    outputs:
+      window_id: ${{ steps.window.outputs.window_id }}
+    steps:
+      - id: window
+        env:
+          DISPATCH_WINDOW: ${{ inputs.window_id }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [[ -n "$DISPATCH_WINDOW" ]]; then
+            window_id="$DISPATCH_WINDOW"
+          else
+            case "$SCHEDULE" in
+              "17 6 * * 1-5"|"17 18 * * 6") window_id="i95_northbound" ;;
+              "17 14 * * 1-5"|"17 10 * * 6") window_id="i95_southbound" ;;
+              "17 11 * * 1"|"47 1 * * 2-5"|"17 15 * * 6") window_id="i95_reversal" ;;
+              *) echo "Unmapped schedule: $SCHEDULE" >&2; exit 1 ;;
+            esac
+          fi
+          echo "window_id=$window_id" >> "$GITHUB_OUTPUT"
+
+  live-checks:
+    needs: select-window
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/v2-timed-checks.yml
+    with:
+      window_id: ${{ needs.select-window.outputs.window_id }}
+    secrets:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}

@@ -44,9 +44,9 @@ BEGIN
         (SELECT count(*) FROM oracle.toll_connection
          WHERE connection_type = 'airport_access') AS airports
     INTO counts;
-    IF counts.points <> 220 OR counts.connections <> 994 OR counts.located <> 220
+    IF counts.points <> 220 OR counts.connections <> 995 OR counts.located <> 220
        OR counts.within_facility <> 670 OR counts.gaps <> 300
-       OR counts.handoffs <> 13 OR counts.airports <> 11 THEN
+       OR counts.handoffs <> 13 OR counts.airports <> 12 THEN
         RAISE EXCEPTION 'unexpected oracle seed counts: %', row_to_json(counts);
     END IF;
 END $$;
@@ -54,11 +54,11 @@ END $$;
 DO $$
 BEGIN
     IF (SELECT count(*) FROM oracle.schema_version) <> 1
-       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.0.1' THEN
+       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.0.2' THEN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
-        WHERE required_i95_direction IS NOT NULL) <> 310
+        WHERE required_i95_direction IS NOT NULL) <> 311
        OR (SELECT count(*) FROM oracle.toll_connection
            WHERE connection_type = 'general_purpose_gap'
              AND required_i95_direction IS NOT NULL) <> 0
@@ -98,6 +98,19 @@ BEGIN
           AND source_metadata->'general_purpose_fallback'->>'boundary_point_id'
               IN ('i495:192NO', 'i495:192SD')) <> 300 THEN
         RAISE EXCEPTION 'I-95/I-495 TP1 fallback provenance was not retained';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM oracle.toll_connection
+        WHERE connection_id = 'source:i95_shared:Southbound:182SO:2239ND'
+          AND source_metadata->'general_purpose_fallback'->>'i95_direction' = 'NB'
+    ) OR NOT EXISTS (
+        SELECT 1 FROM oracle.toll_connection
+        WHERE connection_id = 'i95_north_to_dca_from_i495_south'
+          AND from_point_id = 'i95:2239ND'
+          AND to_point_id = 'airport_dca'
+          AND required_i95_direction = 'NB'
+    ) THEN
+        RAISE EXCEPTION 'I-495 south/I-95 north DCA route is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
         WHERE connection_type = 'general_purpose_gap'

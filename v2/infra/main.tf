@@ -76,6 +76,54 @@ resource "aws_iam_role_policy" "loader" {
   policy = data.aws_iam_policy_document.loader.json
 }
 
+data "aws_iam_policy_document" "timed_checks_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"]
+    }
+  }
+}
+
+resource "aws_iam_role" "timed_checks" {
+  name               = "nova-toll-v2-timed-checks"
+  assume_role_policy = data.aws_iam_policy_document.timed_checks_assume.json
+}
+
+data "aws_iam_policy_document" "timed_checks" {
+  statement {
+    sid       = "DescribeRdsEndpoint"
+    actions   = ["rds:DescribeDBInstances"]
+    resources = ["arn:aws:rds:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:db:${data.aws_db_instance.main.db_instance_identifier}"]
+  }
+
+  statement {
+    sid       = "ConnectAsTollchatAgent"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent"]
+  }
+}
+
+resource "aws_iam_role_policy" "timed_checks" {
+  name   = "nova-toll-v2-route-live-checks"
+  role   = aws_iam_role.timed_checks.id
+  policy = data.aws_iam_policy_document.timed_checks.json
+}
+
 resource "aws_security_group" "loader" {
   name        = "nova-toll-v2-pricing-loader"
   description = "v2 pricing loader Lambda ENIs"

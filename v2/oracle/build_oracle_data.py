@@ -22,8 +22,8 @@ SOURCE_FILES = {
 }
 
 EXPECTED_POINTS = 220
-EXPECTED_CONNECTIONS = 994
-EXPECTED_REACHABLE_PAIRS = 2713
+EXPECTED_CONNECTIONS = 995
+EXPECTED_REACHABLE_PAIRS = 2745
 EXPECTED_MAX_SHORTEST_PATH = 7
 
 CORRIDOR_POSITIONS = {
@@ -163,6 +163,11 @@ def _shared_network(node: dict[str, Any]) -> str:
 
 
 def _shared_direction(node: dict[str, Any]) -> str:
+    path = str(node["path"])
+    if path.endswith("North"):
+        return "NB"
+    if path.endswith("South"):
+        return "SB"
     return {"Northbound": "NB", "Southbound": "SB"}[str(node["direction"])]
 
 
@@ -416,11 +421,16 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
         connection_id = _source_connection_id("i95_shared", direction, entry, exit_id)
         source_metadata = _metadata("i95_shared", shared, "source_pair", raw_pair)
         if connection_type == "general_purpose_gap":
+            i95_node = (
+                shared_nodes[entry]
+                if points[from_id].network_id == "i95"
+                else shared_nodes[exit_id]
+            )
             source_metadata["general_purpose_fallback"] = {
                 "boundary_point_id": (
                     "i495:192NO" if direction == "Northbound" else "i495:192SD"
                 ),
-                "i95_direction": _shared_direction(shared_nodes[entry]),
+                "i95_direction": _shared_direction(i95_node),
             }
         connections[connection_id] = Connection(
             connection_id=connection_id,
@@ -584,6 +594,13 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             required_i95_direction="NB",
         ),
         _curated_connection(
+            "i95_north_to_dca_from_i495_south",
+            "i95:2239ND",
+            "airport_dca",
+            "airport_access",
+            required_i95_direction="NB",
+        ),
+        _curated_connection(
             "dca_to_i95_north",
             "airport_dca",
             "i95:224NO",
@@ -644,11 +661,14 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             if connection.source_metadata["source_pair"]["direction"] == "Northbound"
             else "i495:192SD"
         )
+        i95_point = from_point if from_point.network_id == "i95" else to_point
+        expected_i95_direction = _shared_direction(
+            cast(dict[str, Any], i95_point.source_metadata["source_node"])
+        )
+        fallback = connection.source_metadata.get("general_purpose_fallback", {})
         if (
-            connection.source_metadata.get("general_purpose_fallback", {}).get(
-                "boundary_point_id"
-            )
-            != expected_boundary
+            fallback.get("boundary_point_id") != expected_boundary
+            or fallback.get("i95_direction") != expected_i95_direction
         ):
             raise ValueError(
                 f"invalid general-purpose boundary on {connection.connection_id}"
@@ -672,6 +692,7 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             raise ValueError(f"invalid airport connection {connection.connection_id}")
         expected_i95_direction = {
             "i95_north_to_dca": "NB",
+            "i95_north_to_dca_from_i495_south": "NB",
             "dca_to_i95_north": "NB",
             "dca_to_i95_south": "SB",
         }.get(connection.connection_id)
@@ -768,7 +789,7 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         "within_facility": 670,
         "general_purpose_gap": 300,
         "toll_handoff": 13,
-        "airport_access": 11,
+        "airport_access": 12,
     }
     if dict(counts) != expected_counts:
         raise ValueError(f"unexpected connection counts: {dict(counts)}")
