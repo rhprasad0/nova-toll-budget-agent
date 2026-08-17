@@ -505,11 +505,34 @@ BEGIN
     END IF;
 
     SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:234NO', 'i495:185ND');
+    IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.point_ids
+          <> ARRAY['i95:234NO', 'i495:185ND']::text[]
+       OR result.connection_ids
+          <> ARRAY['source:i95_shared:Northbound:234NO:185ND']::text[]
+       OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
+       OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192NO'
+       OR result.general_purpose_gaps->0->>'role' <> 'prefix'
+       OR result.general_purpose_gaps->0->>'i95_direction' <> 'NB'
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM false
+       OR result.i95_evidence->>'availability' <> 'northbound' THEN
+        RAISE EXCEPTION 'available TP1NB boundary route failed: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
     IF result.status <> 'currently_unavailable'
        OR result.reason->>'code' IS DISTINCT FROM 'i95_opposite_direction_open'
        OR result.reason->'details'->'required_i95_directions'
           <> jsonb_build_array('SB')
+       OR result.point_ids
+          <> ARRAY['i495:185SO', 'i95:217SD']::text[]
+       OR result.connection_ids
+          <> ARRAY['source:i95_shared:Southbound:185SO:217SD']::text[]
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
        OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192SD'
        OR result.general_purpose_gaps->0->>'role' <> 'suffix'
@@ -589,6 +612,10 @@ BEGIN
        OR result.reason->>'code' IS DISTINCT FROM 'i95_opposite_direction_open'
        OR result.reason->'details'->'required_i95_directions'
           <> jsonb_build_array('NB')
+       OR result.point_ids
+          <> ARRAY['i95:234NO', 'i495:185ND']::text[]
+       OR result.connection_ids
+          <> ARRAY['source:i95_shared:Northbound:234NO:185ND']::text[]
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
        OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192NO'
        OR result.general_purpose_gaps->0->>'role' <> 'prefix'
@@ -603,6 +630,15 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
     IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.point_ids
+          <> ARRAY['i495:185SO', 'i95:217SD']::text[]
+       OR result.connection_ids
+          <> ARRAY['source:i95_shared:Southbound:185SO:217SD']::text[]
+       OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
+       OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192SD'
+       OR result.general_purpose_gaps->0->>'role' <> 'suffix'
+       OR result.general_purpose_gaps->0->>'i95_direction' <> 'SB'
        OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
             IS DISTINCT FROM false
        OR result.i95_evidence->>'availability' <> 'southbound' THEN
@@ -797,60 +833,141 @@ BEGIN
 END $$;
 
 DO $$
-DECLARE result record;
+DECLARE
+    fixture record;
+    result record;
+    handoff_index integer;
+    tested_handoffs text[] := ARRAY[]::text[];
+    configured_handoffs text[];
 BEGIN
-    SELECT * INTO result
-    FROM oracle.validate_toll_route(
-        'greenway:1:entry:EB', 'dtr:10:exit:EB'
-    );
-    IF result.status <> 'valid'
-       OR result.connection_ids <> ARRAY[
-           'source:greenway:EB:1:28',
-           'greenway_to_dtr',
-           'source:dtr:EB:28:10'
-       ]::text[] THEN
-        RAISE EXCEPTION 'Greenway/DTR separation failed: %', row_to_json(result);
-    END IF;
+    FOR fixture IN
+        SELECT *
+        FROM (VALUES
+            (
+                'Greenway to DTR',
+                'greenway:1:entry:EB', 'dtr:10:exit:EB',
+                'greenway_to_dtr',
+                'greenway:28:exit:EB', 'dtr:28:entry:EB'
+            ),
+            (
+                'DTR to Greenway',
+                'dtr:10:entry:WB', 'greenway:1:exit:WB',
+                'dtr_to_greenway',
+                'dtr:28:exit:WB', 'greenway:28:entry:WB'
+            ),
+            (
+                'I-66 to I-495 south',
+                'i66:11:entry:WB', 'i495:191SD',
+                'i66_to_i495',
+                'i66:5:exit:WB', 'i495:187SO'
+            ),
+            (
+                'I-66 to I-495 north',
+                'i66:11:entry:WB', 'i495:181ND',
+                'i66_to_i495_north',
+                'i66:5:exit:WB', 'i495:187NO'
+            ),
+            (
+                'I-495 north to I-66',
+                'i495:191NO', 'i66:10:exit:EB',
+                'i495_to_i66',
+                'i495:187ND', 'i66:3:entry:EB'
+            ),
+            (
+                'I-495 south to I-66',
+                'i495:180SO', 'i66:10:exit:EB',
+                'i495_south_to_i66',
+                'i495:187SD', 'i66:5:entry:EB'
+            ),
+            (
+                'I-66 to DTR',
+                'i66:11:entry:WB', 'dtr:28:exit:WB',
+                'i66_to_dulles_toll_road',
+                'i66:6:exit:WB', 'dtr:66:entry:WB'
+            ),
+            (
+                'DTR to I-66',
+                'dtr:10:entry:EB', 'i66:10:exit:EB',
+                'dulles_toll_road_to_i66',
+                'dtr:66:exit:EB', 'i66:6:entry:EB'
+            ),
+            (
+                'DTR to I-495 south',
+                'dtr:10:entry:EB', 'i495:185SD',
+                'dulles_toll_road_to_i495',
+                'dtr:1819:exit:EB', 'i495:182SO'
+            ),
+            (
+                'DTR to I-495 north',
+                'dtr:10:entry:EB', 'i495:181ND',
+                'dulles_toll_road_to_i495_north',
+                'dtr:1819:exit:EB', 'i495:182NO'
+            ),
+            (
+                'westbound DTR to I-495 north',
+                'dtr:66:entry:WB', 'i495:181ND',
+                'dulles_toll_road_westbound_to_i495_north',
+                'dtr:1819:exit:WB', 'i495:182NO'
+            ),
+            (
+                'I-495 north to DTR',
+                'i495:191NO', 'dtr:10:exit:WB',
+                'i495_to_dulles_toll_road',
+                'i495:182ND', 'dtr:1819:entry:WB'
+            ),
+            (
+                'I-495 south to DTR',
+                'i495:180SO', 'dtr:10:exit:WB',
+                'i495_south_to_dulles_toll_road',
+                'i495:182SD', 'dtr:1819:entry:WB'
+            )
+        ) AS route_fixture(
+            name, origin_id, destination_id, connection_id,
+            from_point_id, to_point_id
+        )
+    LOOP
+        SELECT * INTO result
+        FROM oracle.validate_toll_route(
+            fixture.origin_id, fixture.destination_id
+        );
+        handoff_index := array_position(
+            result.connection_ids, fixture.connection_id
+        );
+        tested_handoffs := array_append(
+            tested_handoffs, fixture.connection_id
+        );
 
-    SELECT * INTO result
-    FROM oracle.validate_toll_route(
-        'dtr:10:entry:WB', 'greenway:1:exit:WB'
-    );
-    IF result.status <> 'valid'
-       OR NOT 'dtr_to_greenway' = ANY(result.connection_ids) THEN
-        RAISE EXCEPTION 'DTR/Greenway reverse handoff failed';
-    END IF;
+        IF result.status <> 'valid'
+           OR result.reason IS NOT NULL
+           OR result.point_ids[1] <> fixture.origin_id
+           OR result.point_ids[cardinality(result.point_ids)]
+              <> fixture.destination_id
+           OR result.i95_evidence IS NOT NULL
+           OR result.general_purpose_gaps <> '[]'::jsonb
+           OR cardinality(array_positions(
+               result.connection_ids, fixture.connection_id
+           )) <> 1
+           OR handoff_index IS NULL
+           OR result.connection_types[handoff_index] <> 'toll_handoff'
+           OR result.point_ids[handoff_index] <> fixture.from_point_id
+           OR result.point_ids[handoff_index + 1] <> fixture.to_point_id THEN
+            RAISE EXCEPTION '% handoff failed: %',
+                fixture.name, row_to_json(result);
+        END IF;
+    END LOOP;
 
-    SELECT * INTO result
-    FROM oracle.validate_toll_route('dtr:10:entry:EB', 'i495:181ND');
-    IF result.status <> 'valid'
-       OR NOT 'dulles_toll_road_to_i495_north' = ANY(result.connection_ids) THEN
-        RAISE EXCEPTION 'DTR/I-495 junction failed: %', row_to_json(result);
-    END IF;
+    SELECT array_agg(connection_id ORDER BY connection_id)
+    INTO configured_handoffs
+    FROM oracle.toll_connection
+    WHERE connection_type = 'toll_handoff';
 
-    SELECT * INTO result
-    FROM oracle.validate_toll_route('dtr:66:entry:WB', 'i495:181ND');
-    IF result.status <> 'valid'
-       OR NOT 'dulles_toll_road_westbound_to_i495_north'
-              = ANY(result.connection_ids) THEN
-        RAISE EXCEPTION 'westbound DTR/I-495 junction failed: %',
-            row_to_json(result);
-    END IF;
+    SELECT array_agg(connection_id ORDER BY connection_id)
+    INTO tested_handoffs
+    FROM unnest(tested_handoffs) AS connection_id;
 
-    SELECT * INTO result
-    FROM oracle.validate_toll_route(
-        'i66:11:entry:WB', 'dtr:28:exit:WB'
-    );
-    IF result.status <> 'valid'
-       OR NOT 'i66_to_dulles_toll_road' = ANY(result.connection_ids) THEN
-        RAISE EXCEPTION 'I-66/DTR junction failed: %', row_to_json(result);
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_toll_route('dtr:10:entry:EB', 'i66:10:exit:EB');
-    IF result.status <> 'valid'
-       OR NOT 'dulles_toll_road_to_i66' = ANY(result.connection_ids) THEN
-        RAISE EXCEPTION 'DTR/I-66 junction failed: %', row_to_json(result);
+    IF tested_handoffs IS DISTINCT FROM configured_handoffs THEN
+        RAISE EXCEPTION 'handoff fixtures do not match configured handoffs: % vs %',
+            tested_handoffs, configured_handoffs;
     END IF;
 
     SELECT * INTO result
