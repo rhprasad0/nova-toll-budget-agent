@@ -76,6 +76,20 @@ resource "aws_iam_role_policy" "loader" {
   policy = data.aws_iam_policy_document.loader.json
 }
 
+data "aws_iam_policy_document" "github_ci_oracle" {
+  statement {
+    sid       = "ConnectAsTollchatAgent"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_ci_oracle" {
+  name   = "nova-toll-v2-route-live-checks"
+  role   = data.aws_iam_role.github_ci.id
+  policy = data.aws_iam_policy_document.github_ci_oracle.json
+}
+
 resource "aws_security_group" "loader" {
   name        = "nova-toll-v2-pricing-loader"
   description = "v2 pricing loader Lambda ENIs"

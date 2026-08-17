@@ -1007,6 +1007,206 @@ BEGIN
     END IF;
 END $$;
 
+DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i495:185NO', 'greenway:3:exit:WB');
+    IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.point_ids IS DISTINCT FROM ARRAY[
+           'i495:185NO',
+           'i495:182ND',
+           'dtr:1819:entry:WB',
+           'dtr:28:exit:WB',
+           'greenway:28:entry:WB',
+           'greenway:3:exit:WB'
+       ]::text[]
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'source:i95_shared:Northbound:185NO:182ND',
+           'i495_to_dulles_toll_road',
+           'source:dtr:WB:1819:28',
+           'dtr_to_greenway',
+           'source:greenway:WB:28:3'
+       ]::text[]
+       OR result.connection_types IS DISTINCT FROM ARRAY[
+           'within_facility', 'toll_handoff', 'within_facility',
+           'toll_handoff', 'within_facility'
+       ]::text[]
+       OR result.general_purpose_gaps <> '[]'::jsonb
+       OR result.i95_evidence IS NOT NULL THEN
+        RAISE EXCEPTION 'I-495-to-Greenway composed route changed: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('greenway:1:entry:EB', 'i66:10:exit:EB');
+    IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.point_ids IS DISTINCT FROM ARRAY[
+           'greenway:1:entry:EB',
+           'greenway:28:exit:EB',
+           'dtr:28:entry:EB',
+           'dtr:66:exit:EB',
+           'i66:6:entry:EB',
+           'i66:10:exit:EB'
+       ]::text[]
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'source:greenway:EB:1:28',
+           'greenway_to_dtr',
+           'source:dtr:EB:28:66',
+           'dulles_toll_road_to_i66',
+           'source:i66:EB:6:10'
+       ]::text[]
+       OR result.connection_types IS DISTINCT FROM ARRAY[
+           'within_facility', 'toll_handoff', 'within_facility',
+           'toll_handoff', 'within_facility'
+       ]::text[]
+       OR result.general_purpose_gaps <> '[]'::jsonb
+       OR result.i95_evidence IS NOT NULL THEN
+        RAISE EXCEPTION 'Greenway-to-I-66 composed route changed: %',
+            row_to_json(result);
+    END IF;
+END $$;
+
+CREATE TEMP TABLE exhaustive_expected_routes ON COMMIT DROP AS
+WITH RECURSIVE walk(origin_point_id, point_id, visited_point_ids, depth) AS (
+    SELECT
+        point.point_id,
+        point.point_id,
+        ARRAY[point.point_id]::text[],
+        0
+    FROM oracle.toll_route_point AS point
+    WHERE point.point_type IN ('entry', 'airport')
+
+    UNION ALL
+
+    SELECT
+        walk.origin_point_id,
+        connection.to_point_id,
+        walk.visited_point_ids || connection.to_point_id,
+        walk.depth + 1
+    FROM walk
+    JOIN oracle.toll_route_point AS current_point
+      ON current_point.point_id = walk.point_id
+    JOIN oracle.toll_connection AS connection
+      ON connection.from_point_id = walk.point_id
+    WHERE walk.depth < 12
+      AND connection.to_point_id <> ALL(walk.visited_point_ids)
+      AND (
+          current_point.point_type <> 'airport'
+          OR current_point.point_id = walk.origin_point_id
+      )
+)
+SELECT DISTINCT
+    walk.origin_point_id,
+    walk.point_id AS destination_point_id
+FROM walk
+JOIN oracle.toll_route_point AS destination
+  ON destination.point_id = walk.point_id
+WHERE walk.depth > 0
+  AND destination.point_type IN ('exit', 'airport');
+
+CREATE TEMP TABLE exhaustive_actual_routes ON COMMIT DROP AS
+SELECT
+    origin.point_id AS origin_point_id,
+    destination.point_id AS destination_point_id,
+    route.*
+FROM oracle.toll_route_point AS origin
+CROSS JOIN oracle.toll_route_point AS destination
+CROSS JOIN LATERAL oracle.validate_toll_route(
+    origin.point_id, destination.point_id
+) AS route
+WHERE origin.point_type IN ('entry', 'airport')
+  AND destination.point_type IN ('exit', 'airport');
+
+DO $$
+DECLARE
+    expected_count integer;
+    actual_count integer;
+    difference_count integer;
+    invalid_path_count integer;
+BEGIN
+    SELECT count(*) INTO expected_count
+    FROM exhaustive_expected_routes;
+
+    SELECT count(*) INTO actual_count
+    FROM exhaustive_actual_routes
+    WHERE status IN ('valid', 'currently_unavailable', 'unknown_availability');
+
+    SELECT count(*) INTO difference_count
+    FROM (
+        (
+            SELECT origin_point_id, destination_point_id
+            FROM exhaustive_expected_routes
+            EXCEPT
+            SELECT origin_point_id, destination_point_id
+            FROM exhaustive_actual_routes
+            WHERE status IN (
+                'valid', 'currently_unavailable', 'unknown_availability'
+            )
+        )
+        UNION ALL
+        (
+            SELECT origin_point_id, destination_point_id
+            FROM exhaustive_actual_routes
+            WHERE status IN (
+                'valid', 'currently_unavailable', 'unknown_availability'
+            )
+            EXCEPT
+            SELECT origin_point_id, destination_point_id
+            FROM exhaustive_expected_routes
+        )
+    ) AS differences;
+
+    SELECT count(*) INTO invalid_path_count
+    FROM exhaustive_actual_routes AS actual
+    WHERE actual.status IN (
+              'valid', 'currently_unavailable', 'unknown_availability'
+          )
+      AND (
+          cardinality(actual.connection_ids) = 0
+          OR cardinality(actual.point_ids)
+             <> cardinality(actual.connection_ids) + 1
+          OR cardinality(actual.connection_types)
+             <> cardinality(actual.connection_ids)
+          OR actual.point_ids[1] <> actual.origin_point_id
+          OR actual.point_ids[cardinality(actual.point_ids)]
+             <> actual.destination_point_id
+          OR cardinality(actual.point_ids) <> (
+              SELECT count(DISTINCT point_id)
+              FROM unnest(actual.point_ids) AS point_id
+          )
+          OR cardinality(actual.connection_ids) <> (
+              SELECT count(DISTINCT connection_id)
+              FROM unnest(actual.connection_ids) AS connection_id
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM generate_subscripts(actual.connection_ids, 1) AS step(index)
+              LEFT JOIN oracle.toll_connection AS connection
+                ON connection.connection_id = actual.connection_ids[step.index]
+              WHERE connection.connection_id IS NULL
+                 OR connection.from_point_id <> actual.point_ids[step.index]
+                 OR connection.to_point_id <> actual.point_ids[step.index + 1]
+                 OR connection.connection_type
+                    <> actual.connection_types[step.index]
+          )
+      );
+
+    IF expected_count <> 2713
+       OR actual_count <> expected_count
+       OR difference_count <> 0
+       OR invalid_path_count <> 0 THEN
+        RAISE EXCEPTION
+            'exhaustive reachability changed: expected %, actual %, differences %, invalid paths %',
+            expected_count, actual_count, difference_count, invalid_path_count;
+    END IF;
+END $$;
+
+DROP TABLE exhaustive_actual_routes;
+DROP TABLE exhaustive_expected_routes;
+
 INSERT INTO oracle.toll_route_point (
     point_id, network_id, source_node_id, point_type, direction,
     label, aliases, source_metadata

@@ -38,3 +38,9 @@ def test_loader_network_and_data_access_are_scoped():
     assert '"${data.aws_s3_bucket.raw.arn}/raw/feed=i66/*"' in MAIN_TF
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_rds"' in MAIN_TF
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
+
+
+def test_timed_ci_can_connect_only_as_the_route_agent():
+    assert 'resource "aws_iam_role_policy" "github_ci_oracle"' in MAIN_TF
+    assert 'actions   = ["rds-db:connect"]' in MAIN_TF
+    assert "/tollchat_agent" in MAIN_TF
