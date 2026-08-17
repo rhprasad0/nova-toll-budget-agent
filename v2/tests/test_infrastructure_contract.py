@@ -3,6 +3,9 @@ from pathlib import Path
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+TIMED_CHECKS_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
+).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
 
@@ -40,7 +43,16 @@ def test_loader_network_and_data_access_are_scoped():
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
 
 
-def test_timed_ci_can_connect_only_as_the_route_agent():
-    assert 'resource "aws_iam_role_policy" "github_ci_oracle"' in MAIN_TF
-    assert 'actions   = ["rds-db:connect"]' in MAIN_TF
-    assert "/tollchat_agent" in MAIN_TF
+def test_timed_ci_has_a_dedicated_route_only_role():
+    policy = MAIN_TF.split('data "aws_iam_policy_document" "timed_checks"', maxsplit=1)[
+        1
+    ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
+
+    assert 'name               = "nova-toll-v2-timed-checks"' in MAIN_TF
+    assert 'actions   = ["rds:DescribeDBInstances"]' in policy
+    assert 'actions   = ["rds-db:connect"]' in policy
+    assert "/tollchat_agent" in policy
+    assert "ssm:" not in policy
+    assert "/pricing_reader" not in policy
+    assert "role/nova-toll-v2-timed-checks" in TIMED_CHECKS_WORKFLOW
+    assert "role/nova-toll-github-ci" not in TIMED_CHECKS_WORKFLOW

@@ -28,10 +28,6 @@ data "aws_db_instance" "main" {
   db_instance_identifier = "nova-toll-db"
 }
 
-data "aws_iam_role" "github_ci" {
-  name = "nova-toll-github-ci"
-}
-
 data "aws_security_group" "rds" {
   name   = "nova-toll-rds"
   vpc_id = data.aws_vpc.default.id
