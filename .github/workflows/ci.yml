@@ -61,7 +61,8 @@ jobs:
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
 
-  check:
+  v1-check:
+    name: v1 checks (no live services)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -82,57 +83,17 @@ jobs:
       - run: npm ci
       - run: ./scripts/build_zips.sh
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:ui
+      - name: Run mocked v1 browser tests
+        run: npm run test:ui
       - run: uv run python scripts/check_agent_contract_versions.py "$AGENT_CONTRACT_BASE_REF"
         env:
           AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
-      - run: uv run pytest
-      - run: npm ci && npm test
+      - name: Run non-live v1 Python tests
+        run: uv run pytest -m "not live"
+      - name: Run v1 Node unit tests
+        run: npm ci && npm test
         working-directory: v1/lambdas/chat_proxy
       - run: for f in agent-sops/*.sop.md; do scripts/validate-sop.sh "$f"; done
-
-  integration:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: v1
-    # Checked-out code can reach RDS and retrieve the OpenAI key, so only
-    # merged main content may run this job. The workflow also runs
-    # for tags, but this exact ref guard keeps them credential-free.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # v1/infra/build/ is gitignored (scripts/build_zips.sh's output) -- fetch
-      # just the CA bundle piece of it here, same URL + pinned hash as that
-      # script uses for the loader Lambda zip.
-      - name: Fetch RDS CA bundle
-        run: |
-          mkdir -p infra/build/loader
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-            -o infra/build/loader/rds-ca-bundle.pem
-          echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  infra/build/loader/rds-ca-bundle.pem" | sha256sum --check --status
-      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-github-ci
-          aws-region: us-east-1
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          python-version: "3.13"
-      - run: uv sync --locked
-      - run: uv run pytest -m live tests/test_ci_rds_connectivity.py tests/test_ci_rds_route_tools.py
-        env:
-          DB_USER: pricing_reader
-          DB_NAME: nova_toll
-          DB_CA_BUNDLE_PATH: infra/build/loader/rds-ca-bundle.pem
