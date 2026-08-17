@@ -100,9 +100,7 @@ def _load_source(source_key: str) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
-def _load_locations() -> tuple[
-    dict[str, dict[str, Any]], dict[str, dict[str, Any]]
-]:
+def _load_locations() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     value: object = json.loads(LOCATION_FILE.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{LOCATION_FILE} must contain an object")
@@ -130,19 +128,27 @@ def _location(
     source = sources.get(source_name) if isinstance(source_name, str) else None
     latitude = location.get("latitude")
     longitude = location.get("longitude")
-    if source is None or not isinstance(latitude, str) or not isinstance(longitude, str):
+    if (
+        source is None
+        or not isinstance(latitude, str)
+        or not isinstance(longitude, str)
+    ):
         raise ValueError(f"invalid curated location for {key}")
     quality = source.get("coordinate_quality")
     if quality not in {"approximate_interchange", "official_reference_point"}:
         raise ValueError(f"invalid coordinate quality for {key}")
-    return longitude, latitude, {
-        "coordinate_quality": quality,
-        "coordinate_source": {
-            source_key: source_value
-            for source_key, source_value in source.items()
-            if source_key != "coordinate_quality"
+    return (
+        longitude,
+        latitude,
+        {
+            "coordinate_quality": quality,
+            "coordinate_source": {
+                source_key: source_value
+                for source_key, source_value in source.items()
+                if source_key != "coordinate_quality"
+            },
         },
-    }
+    )
 
 
 def _source_context(source: dict[str, Any]) -> dict[str, Any]:
@@ -728,7 +734,9 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         longitude = float(point.longitude)
         latitude = float(point.latitude)
         if not (-78 <= longitude <= -76 and 38 <= latitude <= 40):
-            raise ValueError(f"coordinate outside Northern Virginia on {point.point_id}")
+            raise ValueError(
+                f"coordinate outside Northern Virginia on {point.point_id}"
+            )
         quality = point.source_metadata.get("coordinate_quality")
         if not isinstance(quality, str):
             raise ValueError(f"missing coordinate quality on {point.point_id}")
@@ -743,7 +751,9 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         "official_reference_point": 2,
     }
     if dict(quality_counts) != expected_quality_counts:
-        raise ValueError(f"unexpected coordinate quality counts: {dict(quality_counts)}")
+        raise ValueError(
+            f"unexpected coordinate quality counts: {dict(quality_counts)}"
+        )
     endpoint_pairs: set[tuple[str, str]] = set()
     for connection in connections.values():
         _validate_connection(points, connection)
