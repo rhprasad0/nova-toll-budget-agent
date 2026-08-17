@@ -103,3 +103,29 @@ def test_live_i95_state_matches_timed_window() -> None:
         assert evidence["availability"] == expected["availability"]
         assert evidence["northbound_link_status"] == expected["northbound_link_status"]
         assert evidence["southbound_link_status"] == expected["southbound_link_status"]
+
+
+def test_live_greenway_to_dca_golden_is_state_independent() -> None:
+    window_id = os.environ["TIMED_WINDOW_ID"]
+    assert window_id in _WINDOW_EXPECTATIONS, f"unknown timed window {window_id!r}"
+    _configure_rds_endpoint()
+
+    route = _validate(
+        "greenway:1:entry:EB", "airport_dca", f"{window_id}-greenway-to-dca"
+    )
+
+    assert route == {
+        "status": "no_supported_route",
+        "reason": {
+            "code": "no_supported_route",
+            "details": {
+                "origin_point_id": "greenway:1:entry:EB",
+                "destination_point_id": "airport_dca",
+            },
+        },
+        "point_ids": [],
+        "connection_ids": [],
+        "connection_types": [],
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+    }
