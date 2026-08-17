@@ -121,9 +121,7 @@ def git_text(base_ref: str, path: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def changed_repository_files(
-    base_ref: str, *, added_only: bool = False
-) -> list[str]:
+def changed_repository_files(base_ref: str, *, added_only: bool = False) -> list[str]:
     args = ["git", "diff", "--name-only"]
     if added_only:
         args.append("--diff-filter=A")
@@ -292,9 +290,7 @@ def main() -> int:
                 raise ValueError(f"new schema {schema.name} has no owned SQL changes")
             continue
         if schema.name == "pricing":
-            validate_schema_update(
-                previous, current, schema_changes, schema_additions
-            )
+            validate_schema_update(previous, current, schema_changes, schema_additions)
             continue
         if schema_changes and version_tuple(current) <= version_tuple(previous):
             raise ValueError(

@@ -49,7 +49,7 @@ createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql
 psql --dbname "$bootstrap_db" \
-  --file v2/db/migrations/002_create_oracle_schema.sql
+  --file v2/db/migrations/003_create_oracle_schema.sql
 psql --dbname "$bootstrap_db" --file v2/tests/restore_contract.sql
 
 if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000" ]]; then
@@ -142,7 +142,7 @@ if psql --dbname "$bootstrap_db" \
 fi
 
 if psql --dbname "$bootstrap_db" \
-  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  --file v2/db/migrations/003_create_oracle_schema.sql; then
   echo "bootstrap unexpectedly overwrote an existing oracle schema" >&2
   exit 1
 fi
@@ -210,7 +210,7 @@ SQL
 
 createdb --template template0 "$missing_pricing_db"
 if psql --dbname "$missing_pricing_db" \
-  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  --file v2/db/migrations/003_create_oracle_schema.sql; then
   echo "oracle unexpectedly installed without its pricing prerequisite" >&2
   exit 1
 fi
@@ -221,7 +221,7 @@ psql --dbname "$incompatible_pricing_db" \
 psql --dbname "$incompatible_pricing_db" --set ON_ERROR_STOP=1 \
   --command "UPDATE pricing.schema_version SET version = '2.0.0' WHERE singleton"
 if psql --dbname "$incompatible_pricing_db" \
-  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  --file v2/db/migrations/003_create_oracle_schema.sql; then
   echo "oracle unexpectedly accepted incompatible pricing 2.0.0" >&2
   exit 1
 fi
@@ -231,16 +231,16 @@ psql --dbname "$oracle_rollback_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql
 psql --dbname "$oracle_rollback_db" --file v2/tests/public_source_fixture.sql
 psql --dbname "$oracle_rollback_db" \
-  --file v2/db/migrations/002_create_oracle_schema.sql
+  --file v2/db/migrations/003_create_oracle_schema.sql
 
 if psql --dbname "$oracle_rollback_db" \
-  --file v2/db/migrations/002_create_oracle_schema.rollback.sql; then
+  --file v2/db/migrations/003_create_oracle_schema.rollback.sql; then
   echo "oracle rollback unexpectedly accepted a missing confirmation" >&2
   exit 1
 fi
 
 psql --dbname "$oracle_rollback_db" --set drop_oracle_confirmed=yes \
-  --file v2/db/migrations/002_create_oracle_schema.rollback.sql
+  --file v2/db/migrations/003_create_oracle_schema.rollback.sql
 psql --dbname "$oracle_rollback_db" \
   --file v2/tests/oracle_rollback_contract.sql
 
@@ -250,7 +250,7 @@ psql --dbname "$unsafe_agent_db" \
 psql --dbname postgres --set ON_ERROR_STOP=1 \
   --command "GRANT pg_read_all_data TO tollchat_agent"
 if psql --dbname "$unsafe_agent_db" \
-  --file v2/db/migrations/002_create_oracle_schema.sql; then
+  --file v2/db/migrations/003_create_oracle_schema.sql; then
   psql --dbname postgres --set ON_ERROR_STOP=1 \
     --command "REVOKE pg_read_all_data FROM tollchat_agent"
   echo "oracle unexpectedly accepted an agent with inherited privileges" >&2

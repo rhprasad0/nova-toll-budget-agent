@@ -60,7 +60,7 @@ After pricing `1.0.0` or newer exists, install the oracle additively:
 
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
-  -f v2/db/migrations/002_create_oracle_schema.sql
+  -f v2/db/migrations/003_create_oracle_schema.sql
 ```
 
 After the shadow loader is active, copy and verify the current v1 source rows:
