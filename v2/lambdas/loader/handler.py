@@ -46,6 +46,8 @@ SET current_at = EXCLUDED.current_at,
     zone_toll_rate_usd = EXCLUDED.zone_toll_rate_usd,
     link_status = EXCLUDED.link_status,
     s3_key = EXCLUDED.s3_key
+WHERE (trip_pricing_i95.calculated_at, trip_pricing_i95.s3_key)
+    < (EXCLUDED.calculated_at, EXCLUDED.s3_key)
 """
 
 UPSERT_I66_SQL = """
@@ -68,6 +70,8 @@ SET interval_start_at = EXCLUDED.interval_start_at,
     end_zone_name = EXCLUDED.end_zone_name,
     zone_toll_rate_usd = EXCLUDED.zone_toll_rate_usd,
     s3_key = EXCLUDED.s3_key
+WHERE (trip_pricing_i66.calculated_at, trip_pricing_i66.s3_key)
+    < (EXCLUDED.calculated_at, EXCLUDED.s3_key)
 """
 
 _FEED_CONFIG: dict[str, tuple[Any, str]] = {
@@ -169,13 +173,14 @@ def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
     )
     try:
         with conn.transaction(), conn.cursor() as cur:
-            for row in rows:
-                cur.execute(
-                    cast(LiteralString, upsert_sql),
-                    _row_params(row, s3_key=s3_key),
-                )
+            cur.executemany(
+                cast(LiteralString, upsert_sql),
+                [_row_params(row, s3_key=s3_key) for row in rows],
+            )
+            affected_rows = cur.rowcount
     finally:
         conn.close()
+    logger.info("V2_LOAD_ROWS %s %s", feed, affected_rows)
     logger.info("V2_LOAD_OK %s", feed)
     logger.info("V2_LOAD_OBJECT_OK %s %s", feed, s3_key)
 

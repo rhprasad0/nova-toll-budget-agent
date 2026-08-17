@@ -22,6 +22,14 @@ def test_upserts_are_schema_qualified_and_idempotent():
         "ON CONFLICT (interval_end_at, start_zone_id, end_zone_id)"
         in handler.UPSERT_I66_SQL
     )
+    assert (
+        "(trip_pricing_i95.calculated_at, trip_pricing_i95.s3_key)"
+        in handler.UPSERT_I95_SQL
+    )
+    assert (
+        "(trip_pricing_i66.calculated_at, trip_pricing_i66.s3_key)"
+        in handler.UPSERT_I66_SQL
+    )
 
 
 def test_eventbridge_object_is_normalized():
@@ -121,3 +129,51 @@ def test_i66_parser_contract():
     rows = parse_trip_pricing_xml(xml)
     assert len(rows) == 1
     assert str(rows[0].zone_toll_rate_usd) == "3.50"
+
+
+def test_load_batches_rows_and_keeps_success_markers_on_noop(monkeypatch, caplog):
+    class Cursor:
+        def __init__(self):
+            self.rowcount = 0
+            self.calls = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def executemany(self, sql, params):
+            self.calls.append((sql, params))
+
+    class Connection:
+        cursor_instance = Cursor()
+
+        def transaction(self):
+            return self
+
+        def cursor(self):
+            return self.cursor_instance
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def close(self):
+            return None
+
+    xml = '<root><opt IntervalDateTime="2026-08-16T11:55:00Z" IntervalEndDateTime="2026-08-16T12:00:00Z" CalculatedDateTime="2026-08-16T11:54:00Z" CorridorID="66" CorridorName="I-66" StartZoneID="1" StartZoneName="A" EndZoneID="2" EndZoneName="B" ZoneTollRate="3.50" /></root>'
+    rows = parse_trip_pricing_xml(xml)
+    monkeypatch.setattr(handler, "_connect", lambda **_kwargs: Connection())
+    for name in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER"):
+        monkeypatch.setenv(name, "5432" if name == "DB_PORT" else "test")
+
+    with caplog.at_level("INFO"):
+        handler._load("i66", rows, s3_key="raw/feed=i66/date=2026-08-17/1200Z.xml")
+
+    assert len(Connection.cursor_instance.calls) == 1
+    assert "V2_LOAD_ROWS i66 0" in caplog.text
+    assert "V2_LOAD_OK i66" in caplog.text
+    assert "V2_LOAD_OBJECT_OK i66" in caplog.text

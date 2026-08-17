@@ -225,6 +225,21 @@ resource "aws_sqs_queue_policy" "delivery_failure" {
   policy    = data.aws_iam_policy_document.delivery_failure.json
 }
 
+resource "aws_cloudwatch_log_metric_filter" "load_success" {
+  name           = "V2LoadSuccess"
+  log_group_name = aws_cloudwatch_log_group.loader.name
+  pattern        = "[..., event=\"V2_LOAD_OK\", feed]"
+
+  metric_transformation {
+    namespace = "NovaToll"
+    name      = "V2LoadSuccess"
+    value     = "1"
+    dimensions = {
+      feed = "$feed"
+    }
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "loader_errors" {
   alarm_name          = "toll-v2-pricing-loader-errors"
   namespace           = "AWS/Lambda"
@@ -236,6 +251,23 @@ resource "aws_cloudwatch_metric_alarm" "loader_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "freshness" {
+  for_each = toset(["i95", "i66"])
+
+  alarm_name          = "toll-v2-pricing-freshness-${each.key}"
+  alarm_description   = "No successful v2 ${each.key} load for 30 minutes. Follow v2/docs/pricing-shadow-rollout.md."
+  namespace           = "NovaToll"
+  metric_name         = "V2LoadSuccess"
+  dimensions          = { feed = each.key }
+  statistic           = "Sum"
+  period              = 600
+  evaluation_periods  = 3
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
   alarm_actions       = [data.aws_sns_topic.alerts.arn]
 }
 

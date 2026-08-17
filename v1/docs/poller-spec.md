@@ -54,7 +54,9 @@ Lambda has no internet without a NAT Gateway (~$32/mo). Splitting keeps the
 fetcher on the public Lambda network and gives the loader free S3 access via a
 gateway endpoint. Side effect: fetch and parse are fully decoupled — a parser
 bug never loses data; re-loading is done by re-touching raw objects (or a
-manual replay script) since the upsert is idempotent.
+manual replay script). Missing intervals insert normally, while an existing
+interval changes only when `(calculated_at, s3_key)` is newer than its stored
+revision.
 
 ## Data sources
 
@@ -222,7 +224,8 @@ DISTINCT` is needed (unlike the old shared table, which needed it to make
 i66's always-NULL `od_pair_id` dedup correctly). Both keys are `PRIMARY KEY`
 now rather than a separate `UNIQUE` + surrogate `id` — nothing references the
 old surrogate `id` now that the agent surface is gone. Re-delivered S3 events
-and replays remain harmless either way.
+and replays cannot overwrite a newer revision; a late missing interval still
+loads as historical data.
 
 **Roles:**
 
@@ -282,7 +285,9 @@ instead of stampeding t4g.micro's ~85 connections. On parse failure: log,
 alarm, exit nonzero — the raw object is safe and the exhausted event lands in
 the `OnFailure` SQS queue for replay after the fix. Dependency packaging:
 `psycopg[binary]` pinned and hash-verified (`pip install --require-hashes`)
-in the deployment zip.
+in the deployment zip. `LOAD_ROWS <feed> <count>` records how many rows the
+batched upsert changed without altering the success-marker contract used by
+freshness alarms and drills.
 
 ## Terraform
 

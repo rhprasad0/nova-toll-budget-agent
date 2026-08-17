@@ -31,7 +31,9 @@ DO UPDATE SET
     zone_toll_rate_usd = EXCLUDED.zone_toll_rate_usd,
     link_status = EXCLUDED.link_status,
     s3_key = EXCLUDED.s3_key,
-    ingested_at = LEAST(pricing.trip_pricing_i95.ingested_at, EXCLUDED.ingested_at);
+    ingested_at = LEAST(pricing.trip_pricing_i95.ingested_at, EXCLUDED.ingested_at)
+WHERE (pricing.trip_pricing_i95.calculated_at, pricing.trip_pricing_i95.s3_key)
+    < (EXCLUDED.calculated_at, EXCLUDED.s3_key);
 
 DO $$
 BEGIN
@@ -108,7 +110,9 @@ DO UPDATE SET
     end_zone_name = EXCLUDED.end_zone_name,
     zone_toll_rate_usd = EXCLUDED.zone_toll_rate_usd,
     s3_key = EXCLUDED.s3_key,
-    ingested_at = LEAST(pricing.trip_pricing_i66.ingested_at, EXCLUDED.ingested_at);
+    ingested_at = LEAST(pricing.trip_pricing_i66.ingested_at, EXCLUDED.ingested_at)
+WHERE (pricing.trip_pricing_i66.calculated_at, pricing.trip_pricing_i66.s3_key)
+    < (EXCLUDED.calculated_at, EXCLUDED.s3_key);
 
 DO $$
 BEGIN

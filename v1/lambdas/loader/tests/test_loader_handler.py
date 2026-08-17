@@ -28,6 +28,7 @@ def test_upsert_i95_sql_does_not_update_key_columns():
         "od_pair_id = ",
     ):
         assert key_column not in set_clause
+    assert "(trip_pricing_i95.calculated_at, trip_pricing_i95.s3_key)" in set_clause
 
 
 def test_upsert_i66_sql_conflict_key_matches_spec():
@@ -45,6 +46,7 @@ def test_upsert_i66_sql_does_not_update_key_columns():
         "end_zone_id = ",
     ):
         assert key_column not in set_clause
+    assert "(trip_pricing_i66.calculated_at, trip_pricing_i66.s3_key)" in set_clause
 
 
 @pytest.mark.parametrize(
@@ -141,3 +143,64 @@ def test_row_params_includes_s3_key_and_all_row_fields_i66():
     assert params["s3_key"] == "raw/feed=i66/date=2026-07-21/1440Z.xml"
     assert params["corridor_id"] == 1100
     assert "feed" not in params
+
+
+def test_load_batches_rows_and_keeps_success_markers_on_noop(monkeypatch, caplog):
+    class Cursor:
+        def __init__(self):
+            self.rowcount = 0
+            self.calls = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def executemany(self, sql, params):
+            self.calls.append((sql, params))
+
+    class Connection:
+        cursor_instance = Cursor()
+
+        def transaction(self):
+            return self
+
+        def cursor(self):
+            return self.cursor_instance
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def close(self):
+            return None
+
+    row = I66Row(
+        interval_start_at=None,  # type: ignore[arg-type]
+        interval_end_at=None,  # type: ignore[arg-type]
+        calculated_at=None,  # type: ignore[arg-type]
+        corridor_id=1100,
+        corridor_name="I-66 EB",
+        start_zone_id=100,
+        start_zone_name=None,
+        end_zone_id=200,
+        end_zone_name="B",
+        zone_toll_rate_usd=None,  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(handler, "_connect", lambda **_kwargs: Connection())
+    for name in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER"):
+        monkeypatch.setenv(name, "5432" if name == "DB_PORT" else "test")
+
+    with caplog.at_level("INFO"):
+        handler._load(
+            "i66", [row, row], s3_key="raw/feed=i66/date=2026-08-17/1200Z.xml"
+        )
+
+    assert len(Connection.cursor_instance.calls) == 1
+    assert len(Connection.cursor_instance.calls[0][1]) == 2
+    assert "LOAD_ROWS i66 0" in caplog.text
+    assert "LOAD_OK i66" in caplog.text
+    assert "LOAD_OBJECT_OK i66" in caplog.text
