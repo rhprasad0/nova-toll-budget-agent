@@ -12,13 +12,11 @@ incompatible_pricing_db="nova_toll_v2_oracle_incompatible_pricing_test"
 unsafe_agent_db="nova_toll_v2_oracle_unsafe_agent_test"
 
 cleanup_databases() {
-  dropdb --if-exists "$bootstrap_db"
-  dropdb --if-exists "$backfill_db"
-  dropdb --if-exists "$migration_db"
-  dropdb --if-exists "$oracle_rollback_db"
-  dropdb --if-exists "$missing_pricing_db"
-  dropdb --if-exists "$incompatible_pricing_db"
-  dropdb --if-exists "$unsafe_agent_db"
+  for database in "$bootstrap_db" "$backfill_db" "$migration_db" \
+    "$oracle_rollback_db" "$missing_pricing_db" "$incompatible_pricing_db" \
+    "$unsafe_agent_db"; do
+    dropdb --if-exists "$database"
+  done
 }
 
 cleanup() {

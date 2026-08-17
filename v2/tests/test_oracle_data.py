@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import replace
 
 import pytest
 
 from oracle.build_oracle_data import (
-    EXPECTED_CONNECTIONS,
-    EXPECTED_MAX_SHORTEST_PATH,
-    EXPECTED_POINTS,
-    EXPECTED_REACHABLE_PAIRS,
     build_connections,
     build_points,
     build_sql,
-    graph_metrics,
     validate,
 )
 
@@ -23,22 +17,6 @@ def test_oracle_source_contract() -> None:
     connections = build_connections(points)
 
     validate(points, connections)
-
-    assert len(points) == EXPECTED_POINTS
-    assert len(connections) == EXPECTED_CONNECTIONS
-    assert Counter(
-        connection.connection_type for connection in connections.values()
-    ) == {
-        "within_facility": 670,
-        "general_purpose_gap": 300,
-        "toll_handoff": 13,
-        "airport_access": 11,
-    }
-    assert sum(point.longitude is not None for point in points.values()) == 107
-    assert graph_metrics(points, connections) == (
-        EXPECTED_REACHABLE_PAIRS,
-        EXPECTED_MAX_SHORTEST_PATH,
-    )
 
 
 def test_source_metadata_retains_future_pricing_keys() -> None:

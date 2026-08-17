@@ -844,85 +844,72 @@ BEGIN
         SELECT *
         FROM (VALUES
             (
-                'Greenway to DTR',
                 'greenway:1:entry:EB', 'dtr:10:exit:EB',
                 'greenway_to_dtr',
                 'greenway:28:exit:EB', 'dtr:28:entry:EB'
             ),
             (
-                'DTR to Greenway',
                 'dtr:10:entry:WB', 'greenway:1:exit:WB',
                 'dtr_to_greenway',
                 'dtr:28:exit:WB', 'greenway:28:entry:WB'
             ),
             (
-                'I-66 to I-495 south',
                 'i66:11:entry:WB', 'i495:191SD',
                 'i66_to_i495',
                 'i66:5:exit:WB', 'i495:187SO'
             ),
             (
-                'I-66 to I-495 north',
                 'i66:11:entry:WB', 'i495:181ND',
                 'i66_to_i495_north',
                 'i66:5:exit:WB', 'i495:187NO'
             ),
             (
-                'I-495 north to I-66',
                 'i495:191NO', 'i66:10:exit:EB',
                 'i495_to_i66',
                 'i495:187ND', 'i66:3:entry:EB'
             ),
             (
-                'I-495 south to I-66',
                 'i495:180SO', 'i66:10:exit:EB',
                 'i495_south_to_i66',
                 'i495:187SD', 'i66:5:entry:EB'
             ),
             (
-                'I-66 to DTR',
                 'i66:11:entry:WB', 'dtr:28:exit:WB',
                 'i66_to_dulles_toll_road',
                 'i66:6:exit:WB', 'dtr:66:entry:WB'
             ),
             (
-                'DTR to I-66',
                 'dtr:10:entry:EB', 'i66:10:exit:EB',
                 'dulles_toll_road_to_i66',
                 'dtr:66:exit:EB', 'i66:6:entry:EB'
             ),
             (
-                'DTR to I-495 south',
                 'dtr:10:entry:EB', 'i495:185SD',
                 'dulles_toll_road_to_i495',
                 'dtr:1819:exit:EB', 'i495:182SO'
             ),
             (
-                'DTR to I-495 north',
                 'dtr:10:entry:EB', 'i495:181ND',
                 'dulles_toll_road_to_i495_north',
                 'dtr:1819:exit:EB', 'i495:182NO'
             ),
             (
-                'westbound DTR to I-495 north',
                 'dtr:66:entry:WB', 'i495:181ND',
                 'dulles_toll_road_westbound_to_i495_north',
                 'dtr:1819:exit:WB', 'i495:182NO'
             ),
             (
-                'I-495 north to DTR',
                 'i495:191NO', 'dtr:10:exit:WB',
                 'i495_to_dulles_toll_road',
                 'i495:182ND', 'dtr:1819:entry:WB'
             ),
             (
-                'I-495 south to DTR',
                 'i495:180SO', 'dtr:10:exit:WB',
                 'i495_south_to_dulles_toll_road',
                 'i495:182SD', 'dtr:1819:entry:WB'
             )
         ) AS route_fixture(
-            name, origin_id, destination_id, connection_id,
+            origin_id, destination_id, connection_id,
             from_point_id, to_point_id
         )
     LOOP
@@ -952,7 +939,7 @@ BEGIN
            OR result.point_ids[handoff_index] <> fixture.from_point_id
            OR result.point_ids[handoff_index + 1] <> fixture.to_point_id THEN
             RAISE EXCEPTION '% handoff failed: %',
-                fixture.name, row_to_json(result);
+                fixture.connection_id, row_to_json(result);
         END IF;
     END LOOP;
 

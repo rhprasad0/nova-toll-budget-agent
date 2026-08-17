@@ -71,8 +71,6 @@ def load_registry(text: str) -> tuple[RegisteredSchema, ...]:
         name = typed_item.get("name")
         canonical_sql = typed_item.get("canonical_sql")
         owned_paths = typed_item.get("owned_paths")
-        if owned_paths is None:
-            owned_paths = typed_item.get("owned_sql_paths")
         owned_objects = (
             cast(list[object], owned_paths) if isinstance(owned_paths, list) else []
         )

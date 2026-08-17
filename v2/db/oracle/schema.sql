@@ -344,6 +344,12 @@ DECLARE
     destination_incompatible boolean := false;
     alternatives jsonb;
 BEGIN
+    point_ids := ARRAY[]::text[];
+    connection_ids := ARRAY[]::text[];
+    connection_types := ARRAY[]::text[];
+    general_purpose_gaps := '[]'::jsonb;
+    i95_evidence := NULL;
+
     SELECT
         route_point.point_type,
         route_point.network_id,
@@ -365,11 +371,6 @@ BEGIN
             'code', 'origin_required',
             'details', jsonb_build_object()
         );
-        point_ids := ARRAY[]::text[];
-        connection_ids := ARRAY[]::text[];
-        connection_types := ARRAY[]::text[];
-        general_purpose_gaps := '[]'::jsonb;
-        i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
     ELSIF origin_role IS NULL THEN
@@ -378,11 +379,6 @@ BEGIN
             'code', 'origin_not_found',
             'details', jsonb_build_object('point_id', origin_point_id)
         );
-        point_ids := ARRAY[]::text[];
-        connection_ids := ARRAY[]::text[];
-        connection_types := ARRAY[]::text[];
-        general_purpose_gaps := '[]'::jsonb;
-        i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
     ELSIF origin_role NOT IN ('entry', 'airport') THEN
@@ -399,11 +395,6 @@ BEGIN
                 'alternatives', alternatives
             )
         );
-        point_ids := ARRAY[]::text[];
-        connection_ids := ARRAY[]::text[];
-        connection_types := ARRAY[]::text[];
-        general_purpose_gaps := '[]'::jsonb;
-        i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
     END IF;
@@ -430,11 +421,6 @@ BEGIN
             'code', 'destination_required',
             'details', jsonb_build_object()
         );
-        point_ids := ARRAY[]::text[];
-        connection_ids := ARRAY[]::text[];
-        connection_types := ARRAY[]::text[];
-        general_purpose_gaps := '[]'::jsonb;
-        i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
     ELSIF destination_role IS NULL THEN
@@ -443,11 +429,6 @@ BEGIN
             'code', 'destination_not_found',
             'details', jsonb_build_object('point_id', destination_point_id)
         );
-        point_ids := ARRAY[]::text[];
-        connection_ids := ARRAY[]::text[];
-        connection_types := ARRAY[]::text[];
-        general_purpose_gaps := '[]'::jsonb;
-        i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
     ELSIF destination_role NOT IN ('exit', 'airport') THEN
@@ -464,11 +445,6 @@ BEGIN
                 'alternatives', alternatives
             )
         );
-        point_ids := ARRAY[]::text[];
-        connection_ids := ARRAY[]::text[];
-        connection_types := ARRAY[]::text[];
-        general_purpose_gaps := '[]'::jsonb;
-        i95_evidence := NULL;
         RETURN NEXT;
         RETURN;
     END IF;
@@ -477,8 +453,9 @@ BEGIN
         SELECT direction_view.*
         FROM pricing.current_i95_direction AS direction_view
     ),
-    classified_i95 AS (
+    classified_i95_state AS (
         SELECT
+            raw_i95.*,
             CASE
                 WHEN raw_i95.northbound_corridor_name IS NULL
                   OR raw_i95.southbound_corridor_name IS NULL
@@ -488,21 +465,21 @@ BEGIN
                   OR raw_i95.southbound_interval_end_at IS NULL
                   OR raw_i95.northbound_calculated_at IS NULL
                   OR raw_i95.southbound_calculated_at IS NULL
-                    THEN 'unknown'
+                    THEN 'missing_source'
                 WHEN raw_i95.northbound_corridor_name <> 'I-95-NB'
                   OR raw_i95.southbound_corridor_name <> 'I-95-SB'
-                    THEN 'unknown'
+                    THEN 'invalid_source'
                 WHEN raw_i95.northbound_interval_end_at
                   <> raw_i95.southbound_interval_end_at
-                    THEN 'unknown'
+                    THEN 'interval_mismatch'
                 WHEN raw_i95.northbound_calculated_at > statement_timestamp()
                   OR raw_i95.southbound_calculated_at > statement_timestamp()
-                    THEN 'unknown'
+                    THEN 'future_evidence'
                 WHEN raw_i95.northbound_calculated_at
                        < statement_timestamp() - interval '20 minutes'
                   OR raw_i95.southbound_calculated_at
                        < statement_timestamp() - interval '20 minutes'
-                    THEN 'unknown'
+                    THEN 'stale_evidence'
                 WHEN raw_i95.northbound_link_status = 'NORTHBOUND_OPEN'
                   AND raw_i95.southbound_link_status = 'CLOSED'
                     THEN 'northbound'
@@ -512,58 +489,37 @@ BEGIN
                 WHEN raw_i95.northbound_link_status = 'CLOSED'
                   AND raw_i95.southbound_link_status = 'CLOSED'
                     THEN 'closed'
+                ELSE 'indeterminate_state'
+            END AS evidence_state
+        FROM raw_i95
+    ),
+    classified_i95 AS (
+        SELECT
+            CASE
+                WHEN state.evidence_state IN ('northbound', 'southbound', 'closed')
+                    THEN state.evidence_state
                 ELSE 'unknown'
             END AS availability,
             CASE
-                WHEN raw_i95.northbound_corridor_name IS NULL
-                  OR raw_i95.southbound_corridor_name IS NULL
-                  OR raw_i95.northbound_link_status IS NULL
-                  OR raw_i95.southbound_link_status IS NULL
-                  OR raw_i95.northbound_interval_end_at IS NULL
-                  OR raw_i95.southbound_interval_end_at IS NULL
-                  OR raw_i95.northbound_calculated_at IS NULL
-                  OR raw_i95.southbound_calculated_at IS NULL
-                    THEN 'i95_missing_source'
-                WHEN raw_i95.northbound_corridor_name <> 'I-95-NB'
-                  OR raw_i95.southbound_corridor_name <> 'I-95-SB'
-                    THEN 'i95_invalid_source'
-                WHEN raw_i95.northbound_interval_end_at
-                  <> raw_i95.southbound_interval_end_at
-                    THEN 'i95_interval_mismatch'
-                WHEN raw_i95.northbound_calculated_at > statement_timestamp()
-                  OR raw_i95.southbound_calculated_at > statement_timestamp()
-                    THEN 'i95_future_evidence'
-                WHEN raw_i95.northbound_calculated_at
-                       < statement_timestamp() - interval '20 minutes'
-                  OR raw_i95.southbound_calculated_at
-                       < statement_timestamp() - interval '20 minutes'
-                    THEN 'i95_stale_evidence'
-                WHEN raw_i95.northbound_link_status = 'NORTHBOUND_OPEN'
-                  AND raw_i95.southbound_link_status = 'CLOSED'
-                    THEN NULL
-                WHEN raw_i95.northbound_link_status = 'CLOSED'
-                  AND raw_i95.southbound_link_status = 'SOUTHBOUND_OPEN'
-                    THEN NULL
-                WHEN raw_i95.northbound_link_status = 'CLOSED'
-                  AND raw_i95.southbound_link_status = 'CLOSED'
-                    THEN NULL
-                ELSE 'i95_indeterminate_state'
+                WHEN state.evidence_state IN ('northbound', 'southbound', 'closed')
+                    THEN NULL::text
+                ELSE 'i95_' || state.evidence_state
             END AS unavailable_reason,
             CASE
-                WHEN raw_i95.direction_state = 'missing_source' THEN
+                WHEN state.direction_state = 'missing_source' THEN
                     jsonb_build_object('reason', 'missing_source')
                 ELSE jsonb_build_object(
-                    'northbound_corridor_name', raw_i95.northbound_corridor_name,
-                    'northbound_link_status', raw_i95.northbound_link_status,
-                    'northbound_interval_end_at', raw_i95.northbound_interval_end_at,
-                    'northbound_calculated_at', raw_i95.northbound_calculated_at,
-                    'southbound_corridor_name', raw_i95.southbound_corridor_name,
-                    'southbound_link_status', raw_i95.southbound_link_status,
-                    'southbound_interval_end_at', raw_i95.southbound_interval_end_at,
-                    'southbound_calculated_at', raw_i95.southbound_calculated_at
+                    'northbound_corridor_name', state.northbound_corridor_name,
+                    'northbound_link_status', state.northbound_link_status,
+                    'northbound_interval_end_at', state.northbound_interval_end_at,
+                    'northbound_calculated_at', state.northbound_calculated_at,
+                    'southbound_corridor_name', state.southbound_corridor_name,
+                    'southbound_link_status', state.southbound_link_status,
+                    'southbound_interval_end_at', state.southbound_interval_end_at,
+                    'southbound_calculated_at', state.southbound_calculated_at
                 )
             END AS raw_evidence
-        FROM raw_i95
+        FROM classified_i95_state AS state
     ),
     evidence AS (
         SELECT
