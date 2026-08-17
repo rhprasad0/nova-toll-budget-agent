@@ -67,6 +67,7 @@ DO $$
 DECLARE
     result record;
     alternatives jsonb;
+    alternative jsonb;
     public_keys text[];
 BEGIN
     SELECT * INTO result
@@ -153,6 +154,52 @@ BEGIN
        ) THEN
         RAISE EXCEPTION 'unknown destination reason was not explicit';
     END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_iad', 'i66:9:entry:EB');
+    alternatives := result.reason->'details'->'alternatives';
+    IF result.status <> 'invalid_destination'
+       OR result.reason->>'code' <> 'destination_not_exit'
+       OR result.reason->'details'->>'point_id' <> 'i66:9:entry:EB'
+       OR result.reason->'details'->>'point_type' <> 'entry'
+       OR result.reason->'details'->'allowed_point_types'
+          <> jsonb_build_array('exit', 'airport')
+       OR jsonb_array_length(alternatives) <> 2
+       OR alternatives->0->>'point_id' <> 'i66:12:exit:EB'
+       OR alternatives->0->>'source_node_id' <> '12'
+       OR alternatives->0->>'label' <> 'Fairfax Drive'
+       OR alternatives->1->>'point_id' <> 'i66:11:exit:EB'
+       OR alternatives->1->>'source_node_id' <> '11'
+       OR alternatives->1->>'label' <> 'Washington Blvd'
+       OR cardinality(result.point_ids) <> 0
+       OR cardinality(result.connection_ids) <> 0
+       OR cardinality(result.connection_types) <> 0
+       OR result.general_purpose_gaps <> '[]'::jsonb
+       OR result.i95_evidence IS NOT NULL THEN
+        RAISE EXCEPTION 'Glebe entry was accepted as a destination: %',
+            row_to_json(result);
+    END IF;
+    FOR alternative IN
+        SELECT value FROM jsonb_array_elements(alternatives)
+    LOOP
+        SELECT array_agg(key ORDER BY key) INTO public_keys
+        FROM jsonb_object_keys(alternative) AS key;
+        IF public_keys <> ARRAY[
+               'aliases', 'direction', 'label', 'location', 'network_id',
+               'point_id', 'point_type', 'source_node_id'
+           ]::text[]
+           OR alternative->>'network_id' <> 'i66'
+           OR alternative->>'point_type' <> 'exit'
+           OR alternative->>'direction' <> 'EB'
+           OR alternative->'aliases' <> '[]'::jsonb
+           OR alternative->'location' <> 'null'::jsonb
+           OR NOT pg_temp.structurally_reaches(
+               'airport_iad', alternative->>'point_id'
+           ) THEN
+            RAISE EXCEPTION 'Glebe destination alternative was invalid: %',
+                alternative;
+        END IF;
+    END LOOP;
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:202NO', 'i95:201ND');
@@ -285,11 +332,21 @@ DECLARE
     open_alternatives jsonb;
     closed_alternatives jsonb;
     stale_alternatives jsonb;
+    backlick_unknown jsonb;
+    backlick_northbound jsonb;
+    backlick_southbound jsonb;
+    backlick_closed jsonb;
+    backlick_stale jsonb;
+    backlick_alternatives jsonb;
+    alternative jsonb;
+    public_keys text[];
 BEGIN
     TRUNCATE pricing.trip_pricing_i95;
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:218SD', 'i95:201ND');
     unknown_alternatives := result.reason->'details'->'alternatives';
+    SELECT to_jsonb(route) INTO backlick_unknown
+    FROM oracle.validate_toll_route('i95:205SD', 'airport_iad') AS route;
 
     PERFORM pg_temp.set_i95_state(
         'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '1 minute'
@@ -297,6 +354,14 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:218SD', 'i95:201ND');
     open_alternatives := result.reason->'details'->'alternatives';
+    SELECT to_jsonb(route) INTO backlick_northbound
+    FROM oracle.validate_toll_route('i95:205SD', 'airport_iad') AS route;
+
+    PERFORM pg_temp.set_i95_state(
+        'CLOSED', 'SOUTHBOUND_OPEN', statement_timestamp() - interval '1 minute'
+    );
+    SELECT to_jsonb(route) INTO backlick_southbound
+    FROM oracle.validate_toll_route('i95:205SD', 'airport_iad') AS route;
 
     PERFORM pg_temp.set_i95_state(
         'CLOSED', 'CLOSED', statement_timestamp() - interval '1 minute'
@@ -304,6 +369,8 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:218SD', 'i95:201ND');
     closed_alternatives := result.reason->'details'->'alternatives';
+    SELECT to_jsonb(route) INTO backlick_closed
+    FROM oracle.validate_toll_route('i95:205SD', 'airport_iad') AS route;
 
     PERFORM pg_temp.set_i95_state(
         'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '21 minutes'
@@ -311,6 +378,8 @@ BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:218SD', 'i95:201ND');
     stale_alternatives := result.reason->'details'->'alternatives';
+    SELECT to_jsonb(route) INTO backlick_stale
+    FROM oracle.validate_toll_route('i95:205SD', 'airport_iad') AS route;
 
     IF unknown_alternatives IS DISTINCT FROM open_alternatives
        OR open_alternatives IS DISTINCT FROM closed_alternatives
@@ -319,6 +388,58 @@ BEGIN
        OR open_alternatives->1->>'point_id' <> 'i95:217NO' THEN
         RAISE EXCEPTION 'I-95 evidence changed ramp alternatives';
     END IF;
+
+    IF backlick_unknown IS DISTINCT FROM backlick_northbound
+       OR backlick_northbound IS DISTINCT FROM backlick_southbound
+       OR backlick_southbound IS DISTINCT FROM backlick_closed
+       OR backlick_closed IS DISTINCT FROM backlick_stale THEN
+        RAISE EXCEPTION 'I-95 evidence changed the Backlick invalid-origin response';
+    END IF;
+    backlick_alternatives :=
+        backlick_unknown->'reason'->'details'->'alternatives';
+    IF backlick_unknown->>'status' <> 'invalid_origin'
+       OR backlick_unknown->'reason'->>'code' <> 'origin_not_entry'
+       OR backlick_unknown->'reason'->'details'->>'point_id' <> 'i95:205SD'
+       OR backlick_unknown->'reason'->'details'->>'point_type' <> 'exit'
+       OR backlick_unknown->'reason'->'details'->'allowed_point_types'
+          <> jsonb_build_array('entry', 'airport')
+       OR jsonb_array_length(backlick_alternatives) <> 2
+       OR backlick_alternatives->0->>'point_id' <> 'i95:212NO'
+       OR backlick_alternatives->0->>'source_node_id' <> '212NO'
+       OR backlick_alternatives->0->>'label'
+          <> 'I-95 Near Franconia-Springfield Pkwy NB'
+       OR backlick_alternatives->1->>'point_id' <> 'i95:203NO'
+       OR backlick_alternatives->1->>'source_node_id' <> '203NO'
+       OR backlick_alternatives->1->>'label' <> 'Old Keene Mill Road/Route 644'
+       OR backlick_unknown->'point_ids' <> '[]'::jsonb
+       OR backlick_unknown->'connection_ids' <> '[]'::jsonb
+       OR backlick_unknown->'connection_types' <> '[]'::jsonb
+       OR backlick_unknown->'general_purpose_gaps' <> '[]'::jsonb
+       OR backlick_unknown->'i95_evidence' <> 'null'::jsonb THEN
+        RAISE EXCEPTION 'Backlick exit was accepted as an origin: %',
+            backlick_unknown;
+    END IF;
+    FOR alternative IN
+        SELECT value FROM jsonb_array_elements(backlick_alternatives)
+    LOOP
+        SELECT array_agg(key ORDER BY key) INTO public_keys
+        FROM jsonb_object_keys(alternative) AS key;
+        IF public_keys <> ARRAY[
+               'aliases', 'direction', 'label', 'location', 'network_id',
+               'point_id', 'point_type', 'source_node_id'
+           ]::text[]
+           OR alternative->>'network_id' <> 'i95'
+           OR alternative->>'point_type' <> 'entry'
+           OR alternative->>'direction' <> 'NB'
+           OR alternative->'aliases' <> '[]'::jsonb
+           OR alternative->'location'->>'type' <> 'Point'
+           OR NOT pg_temp.structurally_reaches(
+               alternative->>'point_id', 'airport_iad'
+           ) THEN
+            RAISE EXCEPTION 'Backlick origin alternative was invalid: %',
+                alternative;
+        END IF;
+    END LOOP;
 
     PERFORM pg_temp.set_i95_state(
         'CLOSED', 'CLOSED', statement_timestamp() - interval '1 minute'
