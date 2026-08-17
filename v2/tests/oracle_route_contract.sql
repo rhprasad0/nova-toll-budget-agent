@@ -385,8 +385,10 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
-    IF result.status <> 'valid'
-       OR result.reason IS NOT NULL
+    IF result.status <> 'currently_unavailable'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_opposite_direction_open'
+       OR result.reason->'details'->'required_i95_directions'
+          <> jsonb_build_array('SB')
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
        OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192SD'
        OR result.general_purpose_gaps->0->>'role' <> 'suffix'
@@ -395,6 +397,21 @@ BEGIN
             IS DISTINCT FROM true
        OR result.i95_evidence->>'availability' <> 'northbound' THEN
         RAISE EXCEPTION 'TP1SB general-purpose suffix failed: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_iad', 'i95:205SD');
+    IF result.status <> 'currently_unavailable'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_opposite_direction_open'
+       OR result.connection_types
+          <> ARRAY['airport_access', 'general_purpose_gap']::text[]
+       OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192SD'
+       OR result.general_purpose_gaps->0->>'role' <> 'suffix'
+       OR result.general_purpose_gaps->0->>'i95_direction' <> 'SB'
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'northbound state allowed IAD-to-Backlick route: %',
             row_to_json(result);
     END IF;
 END $$;
@@ -447,7 +464,10 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i95:234NO', 'i495:185ND');
-    IF result.status <> 'valid'
+    IF result.status <> 'currently_unavailable'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_opposite_direction_open'
+       OR result.reason->'details'->'required_i95_directions'
+          <> jsonb_build_array('NB')
        OR result.connection_types <> ARRAY['general_purpose_gap']::text[]
        OR result.general_purpose_gaps->0->>'boundary_point_id' <> 'i495:192NO'
        OR result.general_purpose_gaps->0->>'role' <> 'prefix'
@@ -466,6 +486,19 @@ BEGIN
             IS DISTINCT FROM false
        OR result.i95_evidence->>'availability' <> 'southbound' THEN
         RAISE EXCEPTION 'available I-95 direction incorrectly required fallback: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_iad', 'i95:205SD');
+    IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.connection_types
+          <> ARRAY['airport_access', 'general_purpose_gap']::text[]
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM false
+       OR result.i95_evidence->>'availability' <> 'southbound' THEN
+        RAISE EXCEPTION 'southbound state rejected IAD-to-Backlick route: %',
             row_to_json(result);
     END IF;
 END $$;
@@ -504,6 +537,19 @@ BEGIN
        OR result.connection_ids[1] <> 'dca_to_i95_south' THEN
         RAISE EXCEPTION 'closure allowed DCA southbound departure';
     END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_iad', 'i95:205SD');
+    IF result.status <> 'currently_unavailable'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_fully_closed'
+       OR result.reason->'details'->'required_i95_directions'
+          <> jsonb_build_array('SB')
+       OR (result.general_purpose_gaps->0->>'fallback_required')::boolean
+            IS DISTINCT FROM true
+       OR result.i95_evidence->>'availability' <> 'closed' THEN
+        RAISE EXCEPTION 'closure allowed IAD-to-Backlick route: %',
+            row_to_json(result);
+    END IF;
 END $$;
 
 SELECT pg_temp.set_i95_state(
@@ -538,11 +584,23 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
-    IF result.status <> 'valid'
-       OR result.reason IS NOT NULL
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_stale_evidence'
        OR result.general_purpose_gaps->0->>'fallback_required' IS NOT NULL
        OR result.i95_evidence->>'availability' <> 'unknown' THEN
         RAISE EXCEPTION 'unknown state did not preserve safe TP1 fallback: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('airport_iad', 'i95:205SD');
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' IS DISTINCT FROM 'i95_stale_evidence'
+       OR result.reason->'details'->'required_i95_directions'
+          <> jsonb_build_array('SB')
+       OR result.general_purpose_gaps->0->>'fallback_required' IS NOT NULL
+       OR result.i95_evidence->>'availability' <> 'unknown' THEN
+        RAISE EXCEPTION 'stale state resolved IAD-to-Backlick route: %',
             row_to_json(result);
     END IF;
 

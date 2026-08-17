@@ -622,8 +622,16 @@ BEGIN
                 )
             ELSE walk.walked_general_purpose_gaps
             END,
-            CASE WHEN connection.required_i95_direction IS NULL
-                THEN walk.required_i95_directions
+            CASE
+                WHEN connection.connection_type = 'general_purpose_gap' THEN
+                    array_append(
+                        walk.required_i95_directions,
+                        connection.source_metadata
+                            -> 'general_purpose_fallback'
+                            ->> 'i95_direction'
+                    )
+                WHEN connection.required_i95_direction IS NULL THEN
+                    walk.required_i95_directions
                 ELSE walk.required_i95_directions
                      || connection.required_i95_direction
             END,

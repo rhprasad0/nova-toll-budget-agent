@@ -56,7 +56,7 @@ The function returns exactly one row with this shape:
 | --- | --- | --- |
 | `invalid_origin` | Origin is missing, has the wrong role, or cannot form the requested directed route | No |
 | `invalid_destination` | Destination is missing, has the wrong role, or cannot form the requested directed route | No |
-| `valid` | At least one currently usable or supported-fallback path exists | Yes |
+| `valid` | At least one currently usable path exists | Yes |
 | `currently_unavailable` | Every structural proof requires a known unavailable I-95 direction | Yes |
 | `unknown_availability` | No usable proof exists without unknown I-95 evidence | Yes |
 | `no_supported_route` | Bounded traversal conclusively found no graph path | No |
@@ -177,7 +177,7 @@ Interpret `fallback_required` as follows:
 | --- | --- |
 | `true` | The needed I-95 direction is known unavailable; explain the GP prefix or suffix and name TP1 |
 | `false` | The needed I-95 direction is open; do not tell the user that GP travel is required |
-| null | I-95 state is unknown; the gap remains supported, but the top-level `status` alone determines whether the complete route is valid |
+| null | I-95 state is unknown; the top-level status is `unknown_availability` unless another usable path wins |
 
 A gap does not make the entire route free. It says only that the identified
 prefix or suffix uses general-purpose lanes when required. Pricing later must
@@ -211,12 +211,14 @@ availability could not be confirmed.
 ## Required agent behavior
 
 - Treat `valid` as supported by this oracle, not as turn-by-turn navigation.
-- When `fallback_required` is true, name TP1NB/TP1SB and clearly distinguish
-  the untolled GP prefix/suffix from the tolled portion.
+- When `fallback_required` is true for a suffix, explain that the Express
+  portion ends at TP1SB before the I-495/I-95 interchange and that the driver
+  would need general-purpose lanes for the rest of the trip.
+- When `fallback_required` is true for a prefix, explain that the driver would
+  need general-purpose lanes until TP1NB, where the tolled I-495 portion begins.
 - When it is false, do not claim that the fallback is mandatory.
-- When it is null, do not infer overall validity from the gap. Follow the
-  top-level `status`; for a `valid` route, disclose that the GP fallback may be
-  needed because current I-95 state could not be confirmed.
+- When it is null, follow the top-level `unknown_availability` status and say
+  that the required I-95 direction could not be confirmed.
 - Treat `currently_unavailable` as a current directional restriction, not a
   permanently invalid route.
 - Treat `unknown_availability` as inconclusive; do not guess a direction.
@@ -238,13 +240,13 @@ availability could not be confirmed.
 
 ## Examples
 
-### Westpark to Dumfries while I-95 is northbound
+### Dulles Airport to Backlick while I-95 is closed
 
 Call:
 
 ```sql
 SELECT *
-FROM oracle.validate_toll_route('i495:185SO', 'i95:217SD');
+FROM oracle.validate_toll_route('airport_iad', 'i95:205SD');
 ```
 
 Illustrative response excerpt (timestamp and corridor-name evidence fields are
@@ -252,14 +254,23 @@ omitted only for readability):
 
 ```json
 {
-  "status": "valid",
-  "reason": null,
-  "point_ids": ["i495:185SO", "i95:217SD"],
-  "connection_ids": ["source:i95_shared:Southbound:185SO:217SD"],
-  "connection_types": ["general_purpose_gap"],
+  "status": "currently_unavailable",
+  "reason": {
+    "code": "i95_fully_closed",
+    "details": {
+      "required_i95_directions": ["SB"],
+      "availability": "closed"
+    }
+  },
+  "point_ids": ["airport_iad", "i495:182SO", "i95:205SD"],
+  "connection_ids": [
+    "iad_to_i495_south",
+    "source:i95_shared:Southbound:182SO:205SD"
+  ],
+  "connection_types": ["airport_access", "general_purpose_gap"],
   "general_purpose_gaps": [
     {
-      "connection_id": "source:i95_shared:Southbound:185SO:217SD",
+      "connection_id": "source:i95_shared:Southbound:182SO:205SD",
       "boundary_point_id": "i495:192SD",
       "role": "suffix",
       "i95_direction": "SB",
@@ -267,21 +278,22 @@ omitted only for readability):
     }
   ],
   "i95_evidence": {
-    "availability": "northbound",
-    "northbound_link_status": "NORTHBOUND_OPEN",
+    "availability": "closed",
+    "northbound_link_status": "CLOSED",
     "southbound_link_status": "CLOSED"
   }
 }
 ```
 
-The agent should explain: use I-495 Express from Westpark to TP1SB, then use
-untolled general-purpose lanes to Dumfries. The function does not return or
-authorize a price.
+The agent should explain that this trip is currently unavailable as a complete
+Express route: the I-495 Express portion ends at TP1SB before the I-495/I-95
+interchange, and the driver would need general-purpose lanes for the remainder
+to Backlick. The function does not return or authorize a price.
 
 ### I-95 origin using a TP1NB prefix
 
-When northbound I-95 Express is unavailable, a supported I-95-origin to I-495
-trip remains `valid` with:
+When northbound I-95 Express is unavailable, an I-95-origin to I-495 trip is
+`currently_unavailable` with:
 
 ```json
 {

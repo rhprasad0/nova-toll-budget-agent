@@ -237,9 +237,10 @@ Time-dependent I-95 availability is a property of the movement, so
 from either endpoint. Same-facility I-95 connections require their travel
 direction. DCA arrivals require northbound I-95; DCA departures require the
 direction of their northbound or southbound I-395 entry. A
-`general_purpose_gap` has no I-95 requirement because its supported fallback
-uses general-purpose lanes to or from the TP1 boundary. The agent must disclose
-that such a route is not uninterrupted Express Lane travel. An
+`general_purpose_gap` keeps a null `required_i95_direction` column because its
+direction is recorded with its TP1 fallback metadata. Route validation treats
+that metadata direction as required for a currently usable complete Express
+trip. An
 `airport_access` connection is restricted to a trip whose origin or destination
 is that airport; an airport can never be an intermediate waypoint.
 
@@ -370,10 +371,11 @@ labels and aliases:
   general-purpose suffix to an I-95 destination.
 
 The associated I-495 pricing boundaries are zone `495001` (TP1NB) and zone
-`495101` (TP1SB). A published I-95/I-495 `general_purpose_gap` remains a valid
-route when I-95 is running the opposite direction because the I-495 tolled leg
-still exists and the unavailable I-95 portion can use general-purpose lanes.
-The route result discloses the gap; deciding which retained OD components are
+`495101` (TP1SB). A published I-95/I-495 `general_purpose_gap` is valid only
+when its recorded I-95 Express direction is open. When that direction is known
+unavailable, the result is `currently_unavailable` and discloses that the
+Express portion ends or begins at TP1 and general-purpose lanes would be needed
+for the remaining prefix or suffix. Deciding which retained OD components are
 chargeable belongs to later pricing integration.
 
 The southern I-95 Express boundary is represented by the existing source
@@ -447,16 +449,16 @@ A connection with `required_i95_direction` is currently usable only when that
 direction matches the open direction. Same-facility I-95 routes therefore
 remain direction-dependent. DCA arrival is usable only northbound, while each
 DCA departure is usable only in its recorded direction. A cross-facility
-`general_purpose_gap` has no live-I-95 requirement:
-it remains valid through the TP1 general-purpose prefix or suffix when the
-corresponding I-95 Express direction is unavailable. Fixed one-way restrictions
-recorded for I-66 and I-495 are always applied.
+`general_purpose_gap` likewise requires the I-95 direction recorded in its TP1
+fallback metadata for the complete Express trip to be usable. Fixed one-way
+restrictions recorded for I-66 and I-495 are always applied.
 
 For every selected `general_purpose_gap`, the route result compares its recorded
 I-95 direction with the live evidence. `fallback_required` is `true` when the
 needed Express direction is known unavailable, `false` when it is open, and
-null when availability is unknown. Unknown evidence does not invalidate the
-route because the general-purpose fallback remains supported.
+null when availability is unknown. Those states produce `currently_unavailable`,
+`valid`, and `unknown_availability`, respectively, unless another higher-priority
+usable path wins.
 
 ## Agent operations
 
@@ -513,9 +515,9 @@ returns a price or database-authored user-facing prose.
 
 The function returns `i95_evidence` whenever a selected path either requires an
 I-95 Express direction or contains a general-purpose gap. Consequently, a
-Westpark-to-Dumfries result can explain that TP1SB is a suffix and that the
-fallback is required while I-95 is northbound, even though the overall route
-status remains `valid`.
+Dulles-to-Backlick result can explain that TP1SB is a suffix, the Express
+portion ends before the I-495/I-95 interchange, and general-purpose lanes would
+be needed for the rest of the trip when southbound I-95 is unavailable.
 
 The origin is a toll entry or airport; the destination is a toll exit or
 airport. An airport point cannot appear between them. The query may cross
@@ -646,14 +648,14 @@ handoff itself has no price.
 - A known cross-road route succeeds only when all required connections exist.
 - TP1NB and TP1SB resolve to source movements `192NO` and `192SD` and retain
   pricing zones `495001` and `495101` in their provenance.
-- A southbound I-495 trip with an unavailable southbound I-95 continuation
-  remains valid with a disclosed TP1SB general-purpose suffix,
+- A southbound I-495 trip with an unavailable southbound I-95 continuation is
+  `currently_unavailable` with a disclosed TP1SB general-purpose suffix,
   `fallback_required = true`, and the live I-95 evidence.
-- An I-95 origin with unavailable northbound Express access can use a disclosed
-  general-purpose prefix to TP1NB and then begin its northbound I-495 toll leg.
+- An I-95 origin with unavailable northbound Express access is
+  `currently_unavailable` with a disclosed general-purpose prefix to TP1NB.
 - A gap matching the currently open I-95 direction reports
-  `fallback_required = false`; unknown evidence reports null, and the route's
-  top-level status—not the gap value—determines overall usability.
+  `fallback_required = false` and can be `valid`; unknown evidence reports null
+  and returns `unknown_availability` unless another usable path wins.
 - A route that combines a TP1 gap with a separately direction-gated connection
   can return `unknown_availability` while the gap's `fallback_required` is null.
 - Route 17 northbound entry and southbound exit remain normal route points, with
