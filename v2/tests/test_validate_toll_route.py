@@ -70,6 +70,31 @@ def _unavailable_row():
     }
 
 
+def _northbound_suffix_row():
+    row = _unavailable_row()
+    row.update(
+        {
+            "status": "valid",
+            "reason": None,
+            "point_ids": ["i495:182SO", "i95:2239ND", "airport_dca"],
+            "connection_ids": [
+                "source:i95_shared:Southbound:182SO:2239ND",
+                "i95_north_to_dca_from_i495_south",
+            ],
+            "connection_types": ["general_purpose_gap", "airport_access"],
+        }
+    )
+    row["general_purpose_gaps"][0].update(
+        {
+            "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
+            "i95_direction": "NB",
+            "fallback_required": False,
+        }
+    )
+    row["i95_evidence"]["availability"] = "northbound"
+    return row
+
+
 class _Cursor:
     def __init__(self, rows, error=None):
         self.rows = rows
@@ -151,7 +176,7 @@ def test_strands_loads_generated_strict_input_schema():
         {
             "origin_point_id": "origin",
             "destination_point_id": "destination",
-            "extra": "rejected",
+            "api_key": "TOP-SECRET",
         },
     ],
 )
@@ -174,6 +199,7 @@ def test_invalid_input_is_logged_and_never_connects(monkeypatch, caplog, input_d
     assert len(caplog.records) == 1
     assert caplog.records[0].toolUseId == "tool-123"
     assert caplog.records[0].failureStage == "input_validation"
+    assert "TOP-SECRET" not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -193,6 +219,7 @@ def test_invalid_input_is_logged_and_never_connects(monkeypatch, caplog, input_d
             "i95_evidence": None,
         },
         _unavailable_row(),
+        _northbound_suffix_row(),
         {
             "status": "no_supported_route",
             "reason": {

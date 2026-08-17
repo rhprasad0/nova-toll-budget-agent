@@ -44,7 +44,7 @@ ConnectionType = Literal[
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
 class _RouteInput(_Model):
@@ -166,11 +166,11 @@ class _Gap(_Model):
 
     @model_validator(mode="after")
     def _validate_alignment(self) -> Self:
-        expected = {
-            "prefix": ("i495:192NO", "NB"),
-            "suffix": ("i495:192SD", "SB"),
+        expected_boundary = {
+            "prefix": "i495:192NO",
+            "suffix": "i495:192SD",
         }[self.role]
-        if (self.boundary_point_id, self.i95_direction) != expected:
+        if self.boundary_point_id != expected_boundary:
             raise ValueError("general-purpose gap fields are not aligned")
         return self
 
