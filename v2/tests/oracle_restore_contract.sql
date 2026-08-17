@@ -44,7 +44,7 @@ BEGIN
         (SELECT count(*) FROM oracle.toll_connection
          WHERE connection_type = 'airport_access') AS airports
     INTO counts;
-    IF counts.points <> 220 OR counts.connections <> 994 OR counts.located <> 107
+    IF counts.points <> 220 OR counts.connections <> 994 OR counts.located <> 220
        OR counts.within_facility <> 670 OR counts.gaps <> 300
        OR counts.handoffs <> 13 OR counts.airports <> 11 THEN
         RAISE EXCEPTION 'unexpected oracle seed counts: %', row_to_json(counts);
@@ -54,7 +54,7 @@ END $$;
 DO $$
 BEGIN
     IF (SELECT count(*) FROM oracle.schema_version) <> 1
-       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.0.0' THEN
+       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.0.1' THEN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
@@ -109,12 +109,19 @@ BEGIN
         RAISE EXCEPTION 'modeled-junction OD routes were not retained';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_route_point
-        WHERE location IS NOT NULL
-          AND source_metadata->>'coordinate_quality' <> 'provisional_generalized') <> 0
+        WHERE location IS NULL) <> 0
        OR (SELECT count(*) FROM oracle.toll_route_point
-           WHERE location IS NULL
-             AND source_metadata->>'coordinate_quality' <> 'missing') <> 0 THEN
-        RAISE EXCEPTION 'coordinate quality does not match nullable geometry';
+           WHERE source_metadata->>'coordinate_quality' =
+                 'provisional_generalized') <> 107
+       OR (SELECT count(*) FROM oracle.toll_route_point
+           WHERE source_metadata->>'coordinate_quality' =
+                 'approximate_interchange'
+             AND source_metadata->'coordinate_source' IS NOT NULL) <> 111
+       OR (SELECT count(*) FROM oracle.toll_route_point
+           WHERE source_metadata->>'coordinate_quality' =
+                 'official_reference_point'
+             AND source_metadata->'coordinate_source' IS NOT NULL) <> 2 THEN
+        RAISE EXCEPTION 'coordinate quality or provenance is invalid';
     END IF;
 END $$;
 

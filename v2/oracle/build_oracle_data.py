@@ -12,6 +12,7 @@ from typing import Any, cast
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DIR = Path(__file__).resolve().parent / "sources"
 DEFAULT_OUTPUT = ROOT / "v2" / "db" / "oracle" / "data.sql"
+LOCATION_FILE = SOURCE_DIR / "route_point_locations.json"
 
 SOURCE_FILES = {
     "i95_shared": "i95.json",
@@ -99,6 +100,51 @@ def _load_source(source_key: str) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
+def _load_locations() -> tuple[
+    dict[str, dict[str, Any]], dict[str, dict[str, Any]]
+]:
+    value: object = json.loads(LOCATION_FILE.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{LOCATION_FILE} must contain an object")
+    raw = cast(dict[str, object], value)
+    sources = raw.get("sources")
+    locations = raw.get("locations")
+    if not isinstance(sources, dict) or not isinstance(locations, dict):
+        raise ValueError(f"{LOCATION_FILE} must contain sources and locations")
+    return cast(dict[str, dict[str, Any]], sources), cast(
+        dict[str, dict[str, Any]], locations
+    )
+
+
+def _location(
+    sources: dict[str, dict[str, Any]],
+    locations: dict[str, dict[str, Any]],
+    network_id: str,
+    source_node_id: str,
+) -> tuple[str, str, dict[str, Any]]:
+    key = f"{network_id}:{source_node_id}"
+    location = locations.get(key)
+    if location is None:
+        raise ValueError(f"missing curated location for {key}")
+    source_name = location.get("source")
+    source = sources.get(source_name) if isinstance(source_name, str) else None
+    latitude = location.get("latitude")
+    longitude = location.get("longitude")
+    if source is None or not isinstance(latitude, str) or not isinstance(longitude, str):
+        raise ValueError(f"invalid curated location for {key}")
+    quality = source.get("coordinate_quality")
+    if quality not in {"approximate_interchange", "official_reference_point"}:
+        raise ValueError(f"invalid coordinate quality for {key}")
+    return longitude, latitude, {
+        "coordinate_quality": quality,
+        "coordinate_source": {
+            source_key: source_value
+            for source_key, source_value in source.items()
+            if source_key != "coordinate_quality"
+        },
+    }
+
+
 def _source_context(source: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value for key, value in source.items() if key not in {"nodes", "pairs"}
@@ -160,6 +206,7 @@ def _alternative_ranking(
 
 def build_points() -> dict[str, Point]:
     points: dict[str, Point] = {}
+    location_sources, locations = _load_locations()
     shared = _load_source("i95_shared")
     shared_nodes = shared["nodes"]
     if not isinstance(shared_nodes, dict):
@@ -237,6 +284,9 @@ def build_points() -> dict[str, Point]:
         typed_nodes = cast(dict[str, dict[str, Any]], nodes)
         for source_node_id, raw_node in typed_nodes.items():
             label = str(raw_node["label"])
+            longitude, latitude, location_metadata = _location(
+                location_sources, locations, network_id, source_node_id
+            )
             for point_type, field in (("entry", "entry_in"), ("exit", "exit_in")):
                 raw_directions = raw_node.get(field, [])
                 if not isinstance(raw_directions, list):
@@ -253,8 +303,8 @@ def build_points() -> dict[str, Point]:
                         source,
                         "source_node",
                         raw_node,
-                        coordinate_quality="missing",
                     )
+                    metadata.update(location_metadata)
                     metadata.update(
                         _alternative_ranking(network_id, source_node_id, point_id)
                     )
@@ -265,8 +315,8 @@ def build_points() -> dict[str, Point]:
                         point_type=point_type,
                         direction=direction,
                         label=label,
-                        longitude=None,
-                        latitude=None,
+                        longitude=longitude,
+                        latitude=latitude,
                         aliases=(),
                         source_metadata=metadata,
                     )
@@ -275,22 +325,35 @@ def build_points() -> dict[str, Point]:
         ("airport_iad", "Washington Dulles International Airport"),
         ("airport_dca", "Ronald Reagan Washington National Airport"),
     ):
+        source_node_id = airport_id.removeprefix("airport_").upper()
+        longitude, latitude, location_metadata = _location(
+            location_sources, locations, airport_id, source_node_id
+        )
         points[airport_id] = Point(
             point_id=airport_id,
             network_id=airport_id,
-            source_node_id=airport_id.removeprefix("airport_").upper(),
+            source_node_id=source_node_id,
             point_type="airport",
             direction=None,
             label=label,
-            longitude=None,
-            latitude=None,
+            longitude=longitude,
+            latitude=latitude,
             aliases=(),
             source_metadata={
                 "curated": True,
                 "basis": "v2/docs/oracle-spec.md",
-                "coordinate_quality": "missing",
+                **location_metadata,
             },
         )
+
+    location_keys = {
+        f"{point.network_id}:{point.source_node_id}"
+        for point in points.values()
+        if point.source_metadata["coordinate_quality"]
+        in {"approximate_interchange", "official_reference_point"}
+    }
+    if location_keys != set(locations):
+        raise ValueError("curated location file contains unknown or unused points")
 
     return points
 
@@ -656,11 +719,31 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
         raise ValueError(
             f"expected {EXPECTED_CONNECTIONS} connections, found {len(connections)}"
         )
-    if sum(point.longitude is not None for point in points.values()) != 107:
-        raise ValueError("expected 107 provisional coordinates")
+    quality_counts: dict[str, int] = defaultdict(int)
     for point in points.values():
         if (point.longitude is None) != (point.latitude is None):
             raise ValueError(f"partial coordinate on {point.point_id}")
+        if point.longitude is None or point.latitude is None:
+            raise ValueError(f"missing coordinate on {point.point_id}")
+        longitude = float(point.longitude)
+        latitude = float(point.latitude)
+        if not (-78 <= longitude <= -76 and 38 <= latitude <= 40):
+            raise ValueError(f"coordinate outside Northern Virginia on {point.point_id}")
+        quality = point.source_metadata.get("coordinate_quality")
+        if not isinstance(quality, str):
+            raise ValueError(f"missing coordinate quality on {point.point_id}")
+        quality_counts[quality] += 1
+        if quality != "provisional_generalized" and not isinstance(
+            point.source_metadata.get("coordinate_source"), dict
+        ):
+            raise ValueError(f"missing coordinate source on {point.point_id}")
+    expected_quality_counts = {
+        "provisional_generalized": 107,
+        "approximate_interchange": 111,
+        "official_reference_point": 2,
+    }
+    if dict(quality_counts) != expected_quality_counts:
+        raise ValueError(f"unexpected coordinate quality counts: {dict(quality_counts)}")
     endpoint_pairs: set[tuple[str, str]] = set()
     for connection in connections.values():
         _validate_connection(points, connection)

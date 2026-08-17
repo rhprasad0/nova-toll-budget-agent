@@ -113,7 +113,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle starts at version `1.0.0`, stored as the single row in
+oracle is at version `1.0.1`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -203,14 +203,15 @@ example, a location supporting northbound entry and southbound exit is two
 route points, even if both rows share coordinates and a source node ID. This
 keeps a map marker from erasing access semantics.
 
-Locations are nullable in oracle `1.0.0`. The generalized I-95/I-495 frontend
-coordinates may be loaded only when their metadata marks them
-`provisional_generalized`; movements without a reviewed coordinate remain
-null. Exact GIS curation is a later oracle data release and does not change
-stable point IDs. Toll movements have one cardinal direction and are unique by
-network, source node, point type, and direction. Distinct source movements
-remain distinct even when their labels and coordinates match. The two airport
-points use `network_id` values `airport_iad` and `airport_dca`.
+Oracle `1.0.1` locates all route points. The generalized I-95/I-495 frontend
+coordinates remain marked `provisional_generalized`; I-66, DTR, and Greenway
+movements use shared interchange points marked `approximate_interchange`; and
+the two airports use FAA points marked `official_reference_point`. These
+locations provide coarse spatial context, not lane-level navigation. Toll
+movements have one cardinal direction and are unique by network, source node,
+point type, and direction. Distinct source movements remain distinct even when
+their labels and coordinates match. The two airport points use `network_id`
+values `airport_iad` and `airport_dca`.
 
 ### `oracle.toll_connection`
 
@@ -593,8 +594,8 @@ handoff itself has no price.
 - A toll movement has a source node and is unique by network, source node,
   point type, and direction, using PostgreSQL 17 null-safe uniqueness where
   needed for airport rows.
-- `location`, when present, is an `oracle.geography(Point,4326)`. Version 1.0.0
-  permits null locations and records coordinate quality in `source_metadata`.
+- `location` is an `oracle.geography(Point,4326)` in the `1.0.1` seed, and
+  `source_metadata` records its coordinate quality and provenance.
 - Both ends of every connection are non-null foreign keys to existing,
   different route points.
 - `connection_type` is constrained to the four documented values, and each
@@ -615,9 +616,10 @@ handoff itself has no price.
 
 - Every v1 access movement is imported without merging distinct roles or
   directions; non-access nodes are reported rather than exposed as ramps.
-- The initial 220-point seed has 107 coordinates marked
-  `provisional_generalized` and 113 null locations marked `missing`; no
-  provisional coordinate is represented as authoritative.
+- All 220 route points are located: 107 are marked
+  `provisional_generalized`, 111 are marked `approximate_interchange`, and two
+  are marked `official_reference_point`; no approximate coordinate is
+  represented as lane-level or survey-grade data.
 - All 970 v1 pairs resolve to expected directed connections, including all 300
   published I-95/I-495 routes.
 - Every I-95/I-495 connection preserves its ordered OD IDs and discloses the
@@ -682,7 +684,7 @@ handoff itself has no price.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.0.0`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.0.1`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

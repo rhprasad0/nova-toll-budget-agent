@@ -114,6 +114,23 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
     dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
       sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
     diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
+
+    if [[ "$schema_name" == "oracle" ]]; then
+      for database in "$bootstrap_db" "$migration_db"; do
+        psql --dbname "$database" --tuples-only --no-align --command "
+          SELECT jsonb_agg(
+              jsonb_build_object(
+                  'point_id', point_id,
+                  'location', oracle.ST_AsGeoJSON(location)::jsonb,
+                  'source_metadata', source_metadata
+              ) ORDER BY point_id
+          )
+          FROM oracle.toll_route_point
+        " >"$migration_source_dir/$database-points.json"
+      done
+      diff -u "$migration_source_dir/$bootstrap_db-points.json" \
+        "$migration_source_dir/$migration_db-points.json"
+    fi
   done
 fi
 

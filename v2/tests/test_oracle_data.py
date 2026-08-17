@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from dataclasses import replace
 
 import pytest
@@ -17,6 +18,27 @@ def test_oracle_source_contract() -> None:
     connections = build_connections(points)
 
     validate(points, connections)
+
+
+def test_all_route_points_have_coordinate_provenance() -> None:
+    points = build_points()
+
+    assert Counter(
+        point.source_metadata["coordinate_quality"] for point in points.values()
+    ) == {
+        "provisional_generalized": 107,
+        "approximate_interchange": 111,
+        "official_reference_point": 2,
+    }
+    locations: dict[tuple[str, str], set[tuple[str | None, str | None]]] = defaultdict(
+        set
+    )
+    for point in points.values():
+        assert point.longitude is not None and point.latitude is not None
+        locations[(point.network_id, point.source_node_id)].add(
+            (point.longitude, point.latitude)
+        )
+    assert all(len(coordinates) == 1 for coordinates in locations.values())
 
 
 def test_source_metadata_retains_future_pricing_keys() -> None:

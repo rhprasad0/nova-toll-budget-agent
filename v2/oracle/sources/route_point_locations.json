@@ -1,0 +1,102 @@
+{
+  "sources": {
+    "faa_dca": {
+      "coordinate_quality": "official_reference_point",
+      "method": "faa_airport_reference_point",
+      "provider": "Federal Aviation Administration",
+      "retrieved_at": "2026-08-17",
+      "source_id": "DCA",
+      "source_url": "https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=DCA"
+    },
+    "faa_iad": {
+      "coordinate_quality": "official_reference_point",
+      "method": "faa_airport_reference_point",
+      "provider": "Federal Aviation Administration",
+      "retrieved_at": "2026-08-17",
+      "source_id": "IAD",
+      "source_url": "https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=IAD"
+    },
+    "vdot_i66": {
+      "coordinate_quality": "approximate_interchange",
+      "evidence_url": "https://vdot.virginia.gov/projects/major-projects/66expresslanes/about/",
+      "method": "reviewed_interchange_projected_to_route_centerline",
+      "provider": "Virginia Department of Transportation",
+      "retrieved_at": "2026-08-17",
+      "source_feature_id": 97140,
+      "source_feature_name": "R-VA   IS00066EB",
+      "source_url": "https://services.arcgis.com/p5v98VHDX9Atv3l7/arcgis/rest/services/LRS_Route_Master/FeatureServer/0"
+    },
+    "vdot_sr267_dtr": {
+      "coordinate_quality": "approximate_interchange",
+      "evidence_url": "https://www.dullestollroad.com/maps-interchanges",
+      "method": "reviewed_interchange_projected_to_route_centerline",
+      "provider": "Virginia Department of Transportation",
+      "retrieved_at": "2026-08-17",
+      "source_feature_id": 5707,
+      "source_feature_name": "R-VA   SR00267EB",
+      "source_url": "https://services.arcgis.com/p5v98VHDX9Atv3l7/arcgis/rest/services/LRS_Route_Master/FeatureServer/0"
+    },
+    "vdot_sr267_greenway": {
+      "coordinate_quality": "approximate_interchange",
+      "evidence_url": "https://www.dullesgreenway.com/toll-calculator/",
+      "method": "reviewed_interchange_projected_to_route_centerline",
+      "provider": "Virginia Department of Transportation",
+      "retrieved_at": "2026-08-17",
+      "source_feature_id": 5707,
+      "source_feature_name": "R-VA   SR00267EB",
+      "source_url": "https://services.arcgis.com/p5v98VHDX9Atv3l7/arcgis/rest/services/LRS_Route_Master/FeatureServer/0"
+    },
+    "vdot_sr267_i66": {
+      "coordinate_quality": "approximate_interchange",
+      "evidence_url": "https://vdot.virginia.gov/projects/major-projects/66expresslanes/about/",
+      "method": "reviewed_interchange_projected_to_route_centerline",
+      "provider": "Virginia Department of Transportation",
+      "retrieved_at": "2026-08-17",
+      "source_feature_id": 5707,
+      "source_feature_name": "R-VA   SR00267EB",
+      "source_url": "https://services.arcgis.com/p5v98VHDX9Atv3l7/arcgis/rest/services/LRS_Route_Master/FeatureServer/0"
+    }
+  },
+  "locations": {
+    "airport_dca:DCA": {"latitude": "38.8514403", "longitude": "-77.0377214", "source": "faa_dca"},
+    "airport_iad:IAD": {"latitude": "38.9474564", "longitude": "-77.4599286", "source": "faa_iad"},
+    "dtr:10": {"latitude": "38.9545776", "longitude": "-77.3983638", "source": "vdot_sr267_dtr"},
+    "dtr:11": {"latitude": "38.9528520", "longitude": "-77.3739791", "source": "vdot_sr267_dtr"},
+    "dtr:12": {"latitude": "38.9519397", "longitude": "-77.3564815", "source": "vdot_sr267_dtr"},
+    "dtr:13": {"latitude": "38.9467082", "longitude": "-77.3379578", "source": "vdot_sr267_dtr"},
+    "dtr:14": {"latitude": "38.9475129", "longitude": "-77.3117472", "source": "vdot_sr267_dtr"},
+    "dtr:15": {"latitude": "38.9364969", "longitude": "-77.2679980", "source": "vdot_sr267_dtr"},
+    "dtr:16": {"latitude": "38.9338704", "longitude": "-77.2468048", "source": "vdot_sr267_dtr"},
+    "dtr:17": {"latitude": "38.9335214", "longitude": "-77.2332489", "source": "vdot_sr267_dtr"},
+    "dtr:1819": {"latitude": "38.9318591", "longitude": "-77.2126604", "source": "vdot_sr267_dtr"},
+    "dtr:28": {"latitude": "38.9646107", "longitude": "-77.4278587", "source": "vdot_sr267_dtr"},
+    "dtr:66": {"latitude": "38.8999364", "longitude": "-77.1849815", "source": "vdot_sr267_dtr"},
+    "greenway:1": {"latitude": "39.1000972", "longitude": "-77.5652813", "source": "vdot_sr267_greenway"},
+    "greenway:2A": {"latitude": "39.0867135", "longitude": "-77.5663725", "source": "vdot_sr267_greenway"},
+    "greenway:2B": {"latitude": "39.0734586", "longitude": "-77.5653713", "source": "vdot_sr267_greenway"},
+    "greenway:3": {"latitude": "39.0604467", "longitude": "-77.5623098", "source": "vdot_sr267_greenway"},
+    "greenway:4": {"latitude": "39.0368575", "longitude": "-77.5228923", "source": "vdot_sr267_greenway"},
+    "greenway:5": {"latitude": "39.0302984", "longitude": "-77.5083964", "source": "vdot_sr267_greenway"},
+    "greenway:6": {"latitude": "39.0107879", "longitude": "-77.4966979", "source": "vdot_sr267_greenway"},
+    "greenway:7": {"latitude": "38.9975485", "longitude": "-77.4784892", "source": "vdot_sr267_greenway"},
+    "greenway:8": {"latitude": "38.9906018", "longitude": "-77.4589620", "source": "vdot_sr267_greenway"},
+    "greenway:28": {"latitude": "38.9646107", "longitude": "-77.4278587", "source": "vdot_sr267_greenway"},
+    "i66:1": {"latitude": "38.8862187", "longitude": "-77.2189905", "source": "vdot_i66"},
+    "i66:10": {"latitude": "38.8914007", "longitude": "-77.1663129", "source": "vdot_i66"},
+    "i66:11": {"latitude": "38.8870753", "longitude": "-77.1603661", "source": "vdot_i66"},
+    "i66:12": {"latitude": "38.8899871", "longitude": "-77.1645989", "source": "vdot_i66"},
+    "i66:13": {"latitude": "38.8976751", "longitude": "-77.0942755", "source": "vdot_i66"},
+    "i66:14": {"latitude": "38.8967771", "longitude": "-77.0682271", "source": "vdot_i66"},
+    "i66:15": {"latitude": "38.8946960", "longitude": "-77.0679009", "source": "vdot_i66"},
+    "i66:16": {"latitude": "38.8916467", "longitude": "-77.0639945", "source": "vdot_i66"},
+    "i66:17": {"latitude": "38.8970859", "longitude": "-77.0804369", "source": "vdot_i66"},
+    "i66:2": {"latitude": "38.8862187", "longitude": "-77.2189905", "source": "vdot_i66"},
+    "i66:3": {"latitude": "38.8862187", "longitude": "-77.2189905", "source": "vdot_i66"},
+    "i66:4": {"latitude": "38.8987045", "longitude": "-77.1967508", "source": "vdot_i66"},
+    "i66:5": {"latitude": "38.8862187", "longitude": "-77.2189905", "source": "vdot_i66"},
+    "i66:6": {"latitude": "38.9001038", "longitude": "-77.1850131", "source": "vdot_i66"},
+    "i66:7": {"latitude": "38.9285321", "longitude": "-77.2035113", "source": "vdot_sr267_i66"},
+    "i66:8": {"latitude": "38.8856285", "longitude": "-77.1563453", "source": "vdot_i66"},
+    "i66:9": {"latitude": "38.8865049", "longitude": "-77.1176218", "source": "vdot_i66"}
+  }
+}
