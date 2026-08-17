@@ -30,13 +30,14 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest
+      - run: uv run python oracle/build_oracle_data.py --check
       - run: ./scripts/build_loader_zip.sh
 
   v2-database:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17.9
+        image: postgis/postgis:17-3.5
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
