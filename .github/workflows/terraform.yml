@@ -192,7 +192,7 @@ jobs:
             --set ON_ERROR_STOP=1 --no-psqlrc <<'SQL'
           DO $$
           BEGIN
-            IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.0'
+            IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.1'
                OR to_regclass('pricing.trip_pricing_i95') IS NULL
                OR to_regclass('pricing.trip_pricing_i66') IS NULL
                OR NOT has_schema_privilege('pricing_loader_writer', 'pricing', 'USAGE')
@@ -202,7 +202,7 @@ jobs:
                OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'SELECT')
                OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'INSERT')
                OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'UPDATE') THEN
-              RAISE EXCEPTION 'pricing 1.0.0 is not prepared for the v2 loader';
+              RAISE EXCEPTION 'pricing 1.0.1 is not prepared for the v2 loader';
             END IF;
           END $$;
           SQL
