@@ -36,6 +36,14 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/001_create_pricing_schema.sql
 ```
 
+Upgrade an existing pricing `1.0.0` database with the guarded, rerunnable
+migration:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql
+```
+
 After the shadow loader is active, copy and verify the current v1 source rows:
 
 ```sh

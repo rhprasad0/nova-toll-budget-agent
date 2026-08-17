@@ -24,6 +24,38 @@ createdb "$bootstrap_db"
 psql --dbname "$bootstrap_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql
 psql --dbname "$bootstrap_db" --file v2/tests/restore_contract.sql
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
+UPDATE pricing.schema_version SET version = '1.0.0' WHERE singleton;
+SQL
+psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.1' THEN
+    RAISE EXCEPTION 'pricing schema upgrade did not install 1.0.1';
+  END IF;
+END $$;
+SQL
+psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
+UPDATE pricing.schema_version SET version = '0.9.0' WHERE singleton;
+SQL
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql; then
+  echo "schema upgrade unexpectedly accepted version 0.9.0" >&2
+  exit 1
+fi
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '0.9.0' THEN
+    RAISE EXCEPTION 'failed schema upgrade changed the installed version';
+  END IF;
+END $$;
+UPDATE pricing.schema_version SET version = '1.0.1' WHERE singleton;
+SQL
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
 
