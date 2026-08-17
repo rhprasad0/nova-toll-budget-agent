@@ -37,6 +37,63 @@ BEGIN
 END
 $$;
 
+CREATE FUNCTION pg_temp.assert_greenway_to_dca(
+    expected_status text,
+    expected_reason text,
+    expected_availability text,
+    expected_fallback boolean
+) RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('greenway:1:entry:EB', 'airport_dca');
+
+    IF result.status IS DISTINCT FROM expected_status
+       OR result.reason->>'code' IS DISTINCT FROM expected_reason
+       OR result.point_ids IS DISTINCT FROM ARRAY[
+           'greenway:1:entry:EB',
+           'greenway:28:exit:EB',
+           'dtr:28:entry:EB',
+           'dtr:1819:exit:EB',
+           'i495:182SO',
+           'i95:2239ND',
+           'airport_dca'
+       ]::text[]
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'source:greenway:EB:1:28',
+           'greenway_to_dtr',
+           'source:dtr:EB:28:1819',
+           'dulles_toll_road_to_i495',
+           'source:i95_shared:Southbound:182SO:2239ND',
+           'i95_north_to_dca_from_i495_south'
+       ]::text[]
+       OR result.connection_types IS DISTINCT FROM ARRAY[
+           'within_facility',
+           'toll_handoff',
+           'within_facility',
+           'toll_handoff',
+           'general_purpose_gap',
+           'airport_access'
+       ]::text[]
+       OR result.general_purpose_gaps IS DISTINCT FROM jsonb_build_array(
+           jsonb_build_object(
+               'connection_id',
+                   'source:i95_shared:Southbound:182SO:2239ND',
+               'boundary_point_id', 'i495:192SD',
+               'role', 'suffix',
+               'i95_direction', 'NB',
+               'fallback_required', expected_fallback
+           )
+       )
+       OR result.i95_evidence->>'availability'
+          IS DISTINCT FROM expected_availability THEN
+        RAISE EXCEPTION 'Greenway-to-DCA golden changed: %', row_to_json(result);
+    END IF;
+END
+$$;
+
 CREATE FUNCTION pg_temp.structurally_reaches(
     origin_id text,
     destination_id text
@@ -313,15 +370,14 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('airport_iad', 'airport_dca');
-    IF result.status <> 'no_supported_route'
-       OR result.reason IS DISTINCT FROM jsonb_build_object(
-           'code', 'no_supported_route',
-           'details', jsonb_build_object(
-               'origin_point_id', 'airport_iad',
-               'destination_point_id', 'airport_dca'
-           )
-       ) THEN
-        RAISE EXCEPTION 'unsupported airport route changed: %', row_to_json(result);
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' <> 'i95_missing_source'
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'iad_to_i495_south',
+           'source:i95_shared:Southbound:182SO:2239ND',
+           'i95_north_to_dca_from_i495_south'
+       ]::text[] THEN
+        RAISE EXCEPTION 'IAD-to-DCA route changed: %', row_to_json(result);
     END IF;
 END $$;
 
@@ -486,6 +542,9 @@ BEGIN
           <> 'i95_north_to_dca' THEN
         RAISE EXCEPTION 'northbound DCA route failed: %', row_to_json(result);
     END IF;
+    PERFORM pg_temp.assert_greenway_to_dca(
+        'valid', NULL, 'northbound', false
+    );
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('airport_dca', 'i95:224ND');
@@ -588,6 +647,10 @@ BEGIN
     IF result.status <> 'currently_unavailable' THEN
         RAISE EXCEPTION 'southbound state allowed DCA route';
     END IF;
+    PERFORM pg_temp.assert_greenway_to_dca(
+        'currently_unavailable', 'i95_opposite_direction_open',
+        'southbound', true
+    );
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('airport_dca', 'i95:210SD');
@@ -680,6 +743,9 @@ BEGIN
        OR result.i95_evidence->>'availability' <> 'closed' THEN
         RAISE EXCEPTION 'known closure was not distinguished';
     END IF;
+    PERFORM pg_temp.assert_greenway_to_dca(
+        'currently_unavailable', 'i95_fully_closed', 'closed', true
+    );
 
     SELECT * INTO result
     FROM oracle.validate_toll_route('airport_dca', 'i95:224ND');
@@ -1194,7 +1260,7 @@ BEGIN
           )
       );
 
-    IF expected_count <> 2713
+    IF expected_count <> 2745
        OR actual_count <> expected_count
        OR difference_count <> 0
        OR invalid_path_count <> 0 THEN

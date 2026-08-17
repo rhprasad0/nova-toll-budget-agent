@@ -113,7 +113,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.0.1`, stored as the single row in
+oracle is at version `1.0.2`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -213,6 +213,10 @@ point type, and direction. Distinct source movements remain distinct even when
 their labels and coordinates match. The two airport points use `network_id`
 values `airport_iad` and `airport_dca`.
 
+For shared I-95/I-495 source nodes, `path` identifies the roadway travel
+direction. The source's top-level `direction` can instead describe the overall
+cross-facility trip, so `path` takes precedence when the two differ.
+
 ### `oracle.toll_connection`
 
 One row states that travel may proceed from one route point to another.
@@ -267,7 +271,7 @@ their shared source, but all published pairs are retained. Of the 970 pairs,
 | Source URL and import evidence | `source_metadata` |
 | OD IDs, zone IDs, and charges | `source_metadata` and retained source file |
 
-V2 defines two airport endpoints and eleven directed airport connections:
+V2 defines two airport endpoints and twelve directed airport connections:
 
 - IAD to and from I-66 node `6` through the airport-only, untolled Dulles
   Airport Access Highway;
@@ -275,7 +279,8 @@ V2 defines two airport endpoints and eleven directed airport connections:
   of the airport highway and the I-66/DTR handoff;
 - IAD to the northbound and southbound I-495 entries `182NO` and `182SO`;
 - the northbound and southbound I-495 exits `182ND` and `182SD` to IAD; and
-- the northbound I-95 exit `223ND` at Pentagon/Eads Street to DCA;
+- the northbound I-95 exits `223ND` and `2239ND` at Pentagon/Eads Street to
+  DCA;
 - DCA to northbound I-395 entry `224NO` near Pentagon/Eads; and
 - DCA to southbound I-395 entry `2233SO` at Pentagon/Eads.
 
@@ -285,9 +290,10 @@ make ordinary Dulles Toll Road travel free. The routing result preserves the
 airport-access classification but does not calculate a toll.
 
 DCA may be an origin in either I-395 direction. Northbound departures use entry
-`224NO`; southbound departures use entry `2233SO`. DCA remains a destination
-only from northbound exit `223ND`: there is no arrival connection from
-southbound exit `2239ND`.
+`224NO`; southbound departures use entry `2233SO`. DCA arrivals use `223ND`
+for ordinary northbound I-95 trips or `2239ND` for source-backed routes that
+start southbound on I-495 and continue northbound on I-95. Both require
+northbound I-95 availability.
 
 ### Required airport connections
 
@@ -302,12 +308,13 @@ southbound exit `2239ND`.
 | `i495_north_to_iad` | `i495:182ND` | `airport_iad` |
 | `i495_south_to_iad` | `i495:182SD` | `airport_iad` |
 | `i95_north_to_dca` | `i95:223ND` | `airport_dca` |
+| `i95_north_to_dca_from_i495_south` | `i95:2239ND` | `airport_dca` |
 | `dca_to_i95_north` | `airport_dca` | `i95:224NO` |
 | `dca_to_i95_south` | `airport_dca` | `i95:2233SO` |
 
 The two DTR rows preserve the v1 composed route without creating a false turn
 between opposite I-66 movements at node `6`; their metadata records the two
-logical connectors they replace. These eleven `airport_access` rows are the
+logical connectors they replace. These twelve `airport_access` rows are the
 complete airport connection set. They are never made reversible implicitly.
 
 ### Required junction connections
@@ -387,13 +394,13 @@ movements `234NO` and `235SD`. `234NO` is one logical northbound entry even
 though through traffic and Route 17/Route 3 local traffic reach it over
 different physical ramps; `235SD` is the corresponding southbound exit and
 general-purpose continuation. The source and pricing data expose one movement
-identity per direction, so oracle `1.0.0` records the physical access variants
+identity per direction, so oracle `1.0.1` records the physical access variants
 in metadata instead of inventing separately priced points.
 
 At the northern end of I-495, current pricing exposes only zone `495009`
 (TP9NB) for northbound destinations and zone `495109` (TP9SB) for southbound
 origins. It does not identify the dedicated GW Parkway ramps separately from
-the mainline Express/general-purpose transition. Oracle `1.0.0` therefore
+the mainline Express/general-purpose transition. Oracle `1.0.1` therefore
 retains one source-backed directed point per role. A later split requires a
 distinct operator point or pricing identity; geometry alone is insufficient.
 
@@ -411,6 +418,11 @@ Of those 300 pairs, 107 reference at least one OD ID from `1374` through
 `1389`. V1 excluded the entire junction when those products were unavailable
 from the live VDOT table. V2 defines modeled pricing for all 16 IDs, so that
 old pricing limitation is not a reason to discard the published routes.
+
+The source pair's top-level direction describes its I-495 entry or exit. Its
+I-95 availability requirement comes from the I-95 path instead. This matters
+for 21 southbound-I-495 routes ending on northbound I-395, including Route 267
+entry `182SO` to Pentagon/Eads exit `2239ND` via ODs `1047` and `1264`.
 
 Generalized frontend markers are not canonical coordinates. Initial data uses
 operator coordinates or reviewed ramp endpoints from authoritative GIS
@@ -647,12 +659,15 @@ handoff itself has no price.
   connections; IAD cannot be an intermediate waypoint.
 - I-495/IAD fixtures in both directions use `airport_access` without requiring
   a priced Dulles Toll Road leg.
-- DCA is reachable only from northbound I-95 exit `223ND` at Pentagon/Eads and
-  only while I-95 is northbound; southbound exit `2239ND` has no DCA edge.
+- DCA is reachable from `223ND` or the mixed-route exit `2239ND` at
+  Pentagon/Eads only while I-95 is northbound.
 - DCA departures use northbound entry `224NO` or southbound entry `2233SO` and
   are usable only while the corresponding I-95/395 direction is open.
 - Known one-way ramps cannot be used backward.
 - A known cross-road route succeeds only when all required connections exist.
+- Greenway to DCA follows Greenway, DTR, the published I-495-south/I-95-north
+  pair to `2239ND`, and the DCA connector; it is valid only when I-95 is
+  northbound and unavailable while southbound or closed.
 - TP1NB and TP1SB resolve to source movements `192NO` and `192SD` and retain
   pricing zones `495001` and `495101` in their provenance.
 - A southbound I-495 trip with an unavailable southbound I-95 continuation is
@@ -684,7 +699,7 @@ handoff itself has no price.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.0.1`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.0.2`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

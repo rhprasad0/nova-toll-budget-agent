@@ -68,7 +68,9 @@ def test_boundary_points_and_i95_requirements_are_explicit() -> None:
     same_facility = connections["source:i95_shared:Northbound:234NO:201ND"]
     gp_prefix = connections["source:i95_shared:Northbound:234NO:185ND"]
     gp_suffix = connections["source:i95_shared:Southbound:185SO:235SD"]
+    mixed_i495_i95 = connections["source:i95_shared:Southbound:182SO:2239ND"]
     dca_destination = connections["i95_north_to_dca"]
+    mixed_dca_destination = connections["i95_north_to_dca_from_i495_south"]
     dca_north = connections["dca_to_i95_north"]
     dca_south = connections["dca_to_i95_south"]
 
@@ -83,11 +85,55 @@ def test_boundary_points_and_i95_requirements_are_explicit() -> None:
         "boundary_point_id": "i495:192SD",
         "i95_direction": "SB",
     }
+    assert mixed_i495_i95.source_metadata["general_purpose_fallback"] == {
+        "boundary_point_id": "i495:192SD",
+        "i95_direction": "NB",
+    }
     assert dca_destination.required_i95_direction == "NB"
+    assert mixed_dca_destination.from_point_id == "i95:2239ND"
+    assert mixed_dca_destination.required_i95_direction == "NB"
     assert dca_north.to_point_id == "i95:224NO"
     assert dca_north.required_i95_direction == "NB"
     assert dca_south.to_point_id == "i95:2233SO"
     assert dca_south.required_i95_direction == "SB"
+
+
+def test_shared_point_directions_follow_their_roadway_paths() -> None:
+    points = build_points()
+    corrected: list[str] = []
+
+    for point in points.values():
+        if point.network_id not in {"i95", "i495"}:
+            continue
+        source_node = point.source_metadata["source_node"]
+        path = source_node["path"]
+        expected = (
+            "NB"
+            if path.endswith("North")
+            else "SB"
+            if path.endswith("South")
+            else {"Northbound": "NB", "Southbound": "SB"}[source_node["direction"]]
+        )
+        assert point.direction == expected
+        if (
+            source_node["direction"]
+            != {"NB": "Northbound", "SB": "Southbound"}[expected]
+        ):
+            corrected.append(point.point_id)
+
+    assert set(corrected) == {
+        "i495:1819ND",
+        "i495:1829ND",
+        "i495:1839ND",
+        "i495:1859ND",
+        "i495:1869ND",
+        "i495:1879ND",
+        "i495:1889ND",
+        "i495:1919ND",
+        "i95:2229ND",
+        "i95:2239ND",
+        "i95:2249ND",
+    }
 
 
 def test_alternative_rankings_retain_only_reviewed_v1_rules() -> None:

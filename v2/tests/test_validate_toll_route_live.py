@@ -105,27 +105,53 @@ def test_live_i95_state_matches_timed_window() -> None:
         assert evidence["southbound_link_status"] == expected["southbound_link_status"]
 
 
-def test_live_greenway_to_dca_golden_is_state_independent() -> None:
+def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
     window_id = os.environ["TIMED_WINDOW_ID"]
     assert window_id in _WINDOW_EXPECTATIONS, f"unknown timed window {window_id!r}"
+    expected = _WINDOW_EXPECTATIONS[window_id]
     _configure_rds_endpoint()
 
     route = _validate(
         "greenway:1:entry:EB", "airport_dca", f"{window_id}-greenway-to-dca"
     )
 
-    assert route == {
-        "status": "no_supported_route",
-        "reason": {
-            "code": "no_supported_route",
-            "details": {
-                "origin_point_id": "greenway:1:entry:EB",
-                "destination_point_id": "airport_dca",
-            },
-        },
-        "point_ids": [],
-        "connection_ids": [],
-        "connection_types": [],
-        "general_purpose_gaps": [],
-        "i95_evidence": None,
-    }
+    assert route["status"] == expected["northbound_status"]
+    assert _reason_code(route) == expected["northbound_reason"]
+    assert route["point_ids"] == [
+        "greenway:1:entry:EB",
+        "greenway:28:exit:EB",
+        "dtr:28:entry:EB",
+        "dtr:1819:exit:EB",
+        "i495:182SO",
+        "i95:2239ND",
+        "airport_dca",
+    ]
+    assert route["connection_ids"] == [
+        "source:greenway:EB:1:28",
+        "greenway_to_dtr",
+        "source:dtr:EB:28:1819",
+        "dulles_toll_road_to_i495",
+        "source:i95_shared:Southbound:182SO:2239ND",
+        "i95_north_to_dca_from_i495_south",
+    ]
+    assert route["connection_types"] == [
+        "within_facility",
+        "toll_handoff",
+        "within_facility",
+        "toll_handoff",
+        "general_purpose_gap",
+        "airport_access",
+    ]
+    assert route["general_purpose_gaps"] == [
+        {
+            "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
+            "boundary_point_id": "i495:192SD",
+            "role": "suffix",
+            "i95_direction": "NB",
+            "fallback_required": window_id != "i95_northbound",
+        }
+    ]
+    evidence = route["i95_evidence"]
+    assert evidence["availability"] == expected["availability"]
+    assert evidence["northbound_link_status"] == expected["northbound_link_status"]
+    assert evidence["southbound_link_status"] == expected["southbound_link_status"]
