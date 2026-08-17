@@ -90,6 +90,20 @@ def test_boundary_points_and_i95_requirements_are_explicit() -> None:
     assert dca_south.required_i95_direction == "SB"
 
 
+def test_alternative_rankings_retain_only_reviewed_v1_rules() -> None:
+    points = build_points()
+
+    assert points["i66:17:entry:WB"].source_metadata["alternative_ranking"] == {
+        "corridor_position": 8,
+        "preferred_point_ids": ["i66:12:exit:EB", "i66:13:exit:EB"],
+    }
+    assert points["greenway:2B:exit:WB"].source_metadata["alternative_ranking"] == {
+        "corridor_position": 1.1,
+        "preferred_point_ids": ["greenway:2A:entry:EB"],
+    }
+    assert "alternative_ranking" not in points["dtr:10:entry:EB"].source_metadata
+
+
 def test_both_dtr_approaches_reach_northbound_i495() -> None:
     connections = build_connections(build_points())
 

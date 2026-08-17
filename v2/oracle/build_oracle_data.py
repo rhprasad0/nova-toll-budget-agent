@@ -25,6 +25,46 @@ EXPECTED_CONNECTIONS = 994
 EXPECTED_REACHABLE_PAIRS = 2713
 EXPECTED_MAX_SHORTEST_PATH = 7
 
+CORRIDOR_POSITIONS = {
+    "i66": {
+        node_id: position
+        for position, node_ids in enumerate(
+            (
+                ("1",),
+                ("2", "3", "5"),
+                ("4",),
+                ("6",),
+                ("7",),
+                ("10",),
+                ("11",),
+                ("8", "9", "12"),
+                ("13", "17"),
+                ("14",),
+                ("15",),
+                ("16",),
+            )
+        )
+        for node_id in node_ids
+    },
+    "greenway": {
+        "1": 0,
+        "2A": 1,
+        "2B": 1.1,
+        "3": 2,
+        "4": 3,
+        "5": 4,
+        "6": 5,
+        "7": 6,
+        "8": 7,
+        "28": 8,
+    },
+}
+
+PREFERRED_ALTERNATIVES = {
+    "i66:17:entry:WB": ("i66:12:exit:EB", "i66:13:exit:EB"),
+    "greenway:2B:exit:WB": ("greenway:2A:entry:EB",),
+}
+
 
 @dataclass(frozen=True)
 class Point:
@@ -104,6 +144,18 @@ def _metadata(
     if coordinate_quality is not None:
         result["coordinate_quality"] = coordinate_quality
     return result
+
+
+def _alternative_ranking(
+    network_id: str, source_node_id: str, point_id: str
+) -> dict[str, Any]:
+    ranking: dict[str, Any] = {}
+    position = CORRIDOR_POSITIONS.get(network_id, {}).get(source_node_id)
+    if position is not None:
+        ranking["corridor_position"] = position
+    if preferences := PREFERRED_ALTERNATIVES.get(point_id):
+        ranking["preferred_point_ids"] = list(preferences)
+    return {"alternative_ranking": ranking} if ranking else {}
 
 
 def build_points() -> dict[str, Point]:
@@ -196,6 +248,16 @@ def build_points() -> dict[str, Point]:
                     point_id = _movement_point_id(
                         network_id, source_node_id, point_type, direction
                     )
+                    metadata = _metadata(
+                        network_id,
+                        source,
+                        "source_node",
+                        raw_node,
+                        coordinate_quality="missing",
+                    )
+                    metadata.update(
+                        _alternative_ranking(network_id, source_node_id, point_id)
+                    )
                     points[point_id] = Point(
                         point_id=point_id,
                         network_id=network_id,
@@ -206,13 +268,7 @@ def build_points() -> dict[str, Point]:
                         longitude=None,
                         latitude=None,
                         aliases=(),
-                        source_metadata=_metadata(
-                            network_id,
-                            source,
-                            "source_node",
-                            raw_node,
-                            coordinate_quality="missing",
-                        ),
+                        source_metadata=metadata,
                     )
 
     for airport_id, label in (

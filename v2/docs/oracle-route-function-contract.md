@@ -11,9 +11,10 @@ another **right now**. It follows the curated directed oracle graph, applies
 live I-95/395 direction state where required, and explains any supported
 general-purpose connection at the I-495/I-95 boundary.
 
-It does not resolve user language to point IDs, calculate a toll, find nearby
-ramps, provide navigation, or prove that an unsupported real-world route is
-impossible.
+For a known ramp that cannot serve the submitted trip, it may return up to two
+same-facility replacement ramps. It does not resolve user language to point
+IDs, calculate a toll, provide navigation, or prove that an unsupported
+real-world route is impossible.
 
 ## Agent tool boundary
 
@@ -53,8 +54,8 @@ The function returns exactly one row with this shape:
 
 | Status | Meaning | Path returned? |
 | --- | --- | --- |
-| `invalid_origin` | Origin is missing or is not an entry/airport | No |
-| `invalid_destination` | Destination is missing or is not an exit/airport | No |
+| `invalid_origin` | Origin is missing, has the wrong role, or cannot form the requested directed route | No |
+| `invalid_destination` | Destination is missing, has the wrong role, or cannot form the requested directed route | No |
 | `valid` | At least one currently usable or supported-fallback path exists | Yes |
 | `currently_unavailable` | Every structural proof requires a known unavailable I-95 direction | Yes |
 | `unknown_availability` | No usable proof exists without unknown I-95 evidence | Yes |
@@ -101,10 +102,12 @@ displaying either as a prewritten message.
 | --- | --- | --- |
 | `invalid_origin` | `origin_required` | Empty object |
 | `invalid_origin` | `origin_not_found` | Submitted `point_id` |
-| `invalid_origin` | `origin_not_entry` | `point_id`, actual `point_type`, and allowed point types |
+| `invalid_origin` | `origin_not_entry` | `point_id`, actual `point_type`, allowed point types, and `alternatives` |
+| `invalid_origin` | `origin_ramp_incompatible` | `point_id`, actual `point_type`, and `alternatives` |
 | `invalid_destination` | `destination_required` | Empty object |
 | `invalid_destination` | `destination_not_found` | Submitted `point_id` |
-| `invalid_destination` | `destination_not_exit` | `point_id`, actual `point_type`, and allowed point types |
+| `invalid_destination` | `destination_not_exit` | `point_id`, actual `point_type`, allowed point types, and `alternatives` |
+| `invalid_destination` | `destination_ramp_incompatible` | `point_id`, actual `point_type`, and `alternatives` |
 | `currently_unavailable` | `i95_opposite_direction_open` | Required directions and observed availability |
 | `currently_unavailable` | `i95_fully_closed` | Required directions and `closed` availability |
 | `unknown_availability` | `i95_missing_source` | Required directions and `unknown` availability |
@@ -120,6 +123,40 @@ Required I-95 directions are returned in structural-path order. The reason
 classification follows the same evidence precedence as availability: missing
 fields, invalid corridor identities, mismatched intervals, future evidence,
 stale evidence, and finally an indeterminate link state.
+
+## Invalid-ramp alternatives
+
+`origin_not_entry`, `destination_not_exit`, `origin_ramp_incompatible`, and
+`destination_ramp_incompatible` include an `alternatives` JSON array. Each
+item has exactly these public fields:
+
+| Field | Meaning |
+| --- | --- |
+| `point_id` | Stable replacement point ID |
+| `network_id` | Facility identifier; always matches the submitted ramp |
+| `source_node_id` | Source ramp identifier |
+| `point_type` | `entry` for an origin replacement or `exit` for a destination replacement |
+| `direction` | Supported movement direction |
+| `label` | Display label |
+| `aliases` | Ordered public aliases |
+| `location` | GeoJSON Point or null when coordinates are unavailable |
+
+The array contains at most two ramps. Each candidate forms a structural path
+to or from the unchanged opposite endpoint within the same 12-connection
+bound. Ranking uses reviewed corridor-local order, retained preferences, and a
+stable point-ID tie-break. Selection deliberately ignores live I-95
+availability; a follow-up call with the driver's chosen point applies normal
+availability rules. Missing and unknown point IDs do not receive suggestions.
+For role-correct same-corridor ramps, corridor order identifies which movement
+conflicts with the requested direction. When both conflict, origin recovery
+takes precedence.
+
+An alternative **changes the priced endpoint**. It is not a general-purpose
+lane route, turn-by-turn navigation advice, or proof that the driver can access
+the suggested ramp from the originally requested place. The submitted trip
+remains invalid: TollChat must present the choices, wait for the driver to
+select one, and call again with that exact point ID. It must never silently
+substitute or validate a suggestion.
 
 ## General-purpose gap contract
 
@@ -187,6 +224,13 @@ availability could not be confirmed.
   physical route exists.
 - Treat `traversal_limit_exceeded` as an internal inconclusive result, never as
   `no_supported_route`.
+- For an invalid-ramp alternative, explain that choosing it changes the priced
+  origin or destination, present only the returned choices, and wait for the
+  driver to choose.
+- Never describe a ramp alternative as general-purpose-lane routing,
+  navigation advice, or proof of access from the requested place.
+- Never substitute an alternative before a follow-up call with the selected
+  point ID.
 - Never invent a toll from this response. Pricing is a separate operation.
 - Preserve point and connection order when handing the result to later tools.
 - Surface a database/tool error as an operation failure; never fabricate one of

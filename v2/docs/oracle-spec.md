@@ -468,16 +468,19 @@ The application exposes one narrow, read-only database function:
 It is a `STABLE SECURITY DEFINER` function owned by `oracle_owner` and is the
 only initial oracle function executable by `tollchat_agent`. The application
 tool passes stable point IDs as bound parameters; it does not expose arbitrary
-SQL to the model.
+SQL to the model. A private helper ranks structurally compatible ramps but is
+not executable by the agent.
 
 ### Validate a toll route
 
 Given an origin route point and a destination route point, follow directed
 connections and return:
 
-- `invalid_origin` when the origin ID is missing or is not an entry/airport;
-- `invalid_destination` when the destination ID is missing or is not an
-  exit/airport;
+- `invalid_origin` when the origin ID is missing, has the wrong role, or is a
+  role-correct ramp that cannot form the requested directed route;
+- `invalid_destination` when the destination ID is missing, has the wrong
+  role, or is a role-correct ramp that cannot form the requested directed
+  route;
 - `valid` with the ordered route points, connection types, and any structured
   general-purpose fallback details;
 - `currently_unavailable` when every structural path requires a known
@@ -489,7 +492,7 @@ connections and return:
 - `traversal_limit_exceeded` when the safety bound prevents a conclusive
   answer.
 
-Origin validation takes precedence when both inputs are invalid. The function
+Origin validation takes precedence when both endpoints are incompatible. The function
 returns one structured row containing the status, a machine-readable JSON
 `reason` for every non-`valid` status, ordered point IDs, ordered connection IDs
 and types, `general_purpose_gaps`, and the I-95 evidence used when applicable.
@@ -526,6 +529,32 @@ fails unless every supported origin/destination fixture has a shortest proof
 of at most 12 connections. If several currently usable paths exist, the
 function returns the one with the fewest connections, breaking ties by the
 ordered connection IDs; it does not rely on recursive-CTE emission order.
+
+### Invalid-ramp alternatives
+
+A known invalid ramp may include up to two alternatives in
+`reason.details.alternatives`. Candidates stay on the submitted ramp's
+`network_id`, have the required entry or exit role, and structurally reach the
+unchanged opposite endpoint within the 12-connection limit. Their public shape
+is `point_id`, `network_id`, `source_node_id`, `point_type`, `direction`,
+`label`, `aliases`, and GeoJSON `location` or null; provenance metadata is not
+returned. Missing and unknown IDs retain their existing responses without
+suggestions.
+
+Ranking reuses the corridor-local I-66 and Greenway positions needed from v1,
+the reviewed Scott Street and Compass Creek preferences, geographic distance
+for located I-95/I-495 points, and a stable point-ID tie-break. Selection does
+not consult live I-95 evidence. Corridor order also attributes a role-correct
+direction conflict to the origin or destination; the origin wins when both
+conflict. The invalid result has empty path arrays, empty general-purpose gaps,
+and null evidence; only a follow-up call with the driver's selected point
+applies ordinary live-availability behavior.
+
+Choosing an alternative **changes the priced endpoint**. The suggestions are
+not general-purpose-lane routing, turn-by-turn navigation, or evidence that the
+driver can access the suggested ramp from the originally requested place.
+TollChat presents the returned choices and waits for an explicit selection; it
+never silently substitutes or validates a candidate.
 
 ## Pricing boundary
 
@@ -658,6 +687,10 @@ handoff itself has no price.
   PostGIS extension is installed in `public`.
 - The route operation reads I-95 state through the qualified
   `pricing.current_i95_direction` dependency.
+- Wrong-role and direction-incompatible ramps return no more than two ordered,
+  same-facility structural alternatives with only the documented public
+  metadata; their order is unchanged by open, closed, stale, or missing I-95
+  evidence.
 - Under `SET ROLE tollchat_agent`, route-function execution succeeds while
   direct reads or writes against oracle and pricing relations fail. `PUBLIC`
   cannot execute the function, `tollchat_agent` cannot call PostGIS functions
@@ -670,7 +703,8 @@ handoff itself has no price.
 
 - Turn-by-turn navigation, travel time, or shortest-path optimization.
 - Road centerlines, lane geometry, and pgRouting.
-- Nearby-access searches, radius filtering, and distance ranking.
+- Navigation-grade nearby-access searches and radius filtering; corridor-local
+  invalid-ramp recovery is not an access claim.
 - Individual incident or ramp-closure ingestion.
 - Pricing joins or toll calculation.
 - Facility tables or views, endpoint subtype tables, separate leg and transfer

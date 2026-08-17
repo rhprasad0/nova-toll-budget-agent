@@ -151,6 +151,168 @@ CREATE INDEX toll_connection_from_point_idx
 
 \ir data.sql
 
+CREATE FUNCTION oracle.ramp_alternatives(
+    submitted_point_id text,
+    unchanged_point_id text,
+    replace_origin boolean
+) RETURNS jsonb
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+WITH RECURSIVE
+submitted AS (
+    SELECT route_point.*
+    FROM oracle.toll_route_point AS route_point
+    WHERE route_point.point_id = submitted_point_id
+),
+candidate_points AS (
+    SELECT candidate.*
+    FROM oracle.toll_route_point AS candidate
+    CROSS JOIN submitted
+    WHERE candidate.network_id = submitted.network_id
+      AND candidate.point_type = CASE
+          WHEN replace_origin THEN 'entry'
+          ELSE 'exit'
+      END
+),
+seeds AS (
+    SELECT
+        candidate.point_id AS alternative_point_id,
+        candidate.point_id AS current_point_id,
+        ARRAY[candidate.point_id]::text[] AS walked_point_ids,
+        0 AS depth
+    FROM candidate_points AS candidate
+    WHERE replace_origin
+
+    UNION ALL
+
+    SELECT
+        NULL::text,
+        unchanged.point_id,
+        ARRAY[unchanged.point_id]::text[],
+        0
+    FROM oracle.toll_route_point AS unchanged
+    WHERE NOT replace_origin
+      AND unchanged.point_id = unchanged_point_id
+),
+walk AS (
+    SELECT
+        seeds.alternative_point_id,
+        seeds.current_point_id,
+        seeds.walked_point_ids,
+        seeds.depth
+    FROM seeds
+
+    UNION ALL
+
+    SELECT
+        walk.alternative_point_id,
+        next_point.point_id,
+        walk.walked_point_ids || next_point.point_id,
+        walk.depth + 1
+    FROM walk
+    JOIN oracle.toll_route_point AS current_point
+      ON current_point.point_id = walk.current_point_id
+    JOIN oracle.toll_connection AS connection
+      ON connection.from_point_id = walk.current_point_id
+    JOIN oracle.toll_route_point AS next_point
+      ON next_point.point_id = connection.to_point_id
+    WHERE walk.depth < 12
+      AND (NOT replace_origin OR walk.current_point_id <> unchanged_point_id)
+      AND NOT next_point.point_id = ANY(walk.walked_point_ids)
+      AND (
+          current_point.point_type <> 'airport'
+          OR (NOT replace_origin AND current_point.point_id = unchanged_point_id)
+      )
+      AND (
+          next_point.point_type <> 'airport'
+          OR (replace_origin AND next_point.point_id = unchanged_point_id)
+      )
+),
+reachable AS (
+    SELECT DISTINCT
+        CASE
+            WHEN replace_origin THEN walk.alternative_point_id
+            ELSE walk.current_point_id
+        END AS point_id
+    FROM walk
+    WHERE walk.depth > 0
+      AND (
+          (replace_origin AND walk.current_point_id = unchanged_point_id)
+          OR (
+              NOT replace_origin
+              AND EXISTS (
+                  SELECT 1
+                  FROM candidate_points AS candidate
+                  WHERE candidate.point_id = walk.current_point_id
+              )
+          )
+      )
+),
+ranked AS (
+    SELECT
+        candidate.*,
+        coalesce(preference.rank, 2147483647) AS preference_rank,
+        CASE
+            WHEN candidate.source_node_id = submitted.source_node_id THEN 0
+            WHEN candidate.location IS NOT NULL
+              AND submitted.location IS NOT NULL THEN
+                oracle.ST_Distance(candidate.location, submitted.location)
+            WHEN candidate.source_metadata
+                     -> 'alternative_ranking' ->> 'corridor_position' IS NOT NULL
+              AND submitted.source_metadata
+                     -> 'alternative_ranking' ->> 'corridor_position' IS NOT NULL THEN
+                abs(
+                    (candidate.source_metadata
+                        -> 'alternative_ranking' ->> 'corridor_position')::double precision
+                    - (submitted.source_metadata
+                        -> 'alternative_ranking' ->> 'corridor_position')::double precision
+                )
+            ELSE 'Infinity'::double precision
+        END AS distance
+    FROM reachable
+    JOIN candidate_points AS candidate USING (point_id)
+    CROSS JOIN submitted
+    LEFT JOIN LATERAL (
+        SELECT preferred.ordinality::integer AS rank
+        FROM jsonb_array_elements_text(
+            coalesce(
+                submitted.source_metadata
+                    -> 'alternative_ranking' -> 'preferred_point_ids',
+                '[]'::jsonb
+            )
+        ) WITH ORDINALITY AS preferred(point_id, ordinality)
+        WHERE preferred.point_id = candidate.point_id
+    ) AS preference ON true
+    ORDER BY
+        coalesce(preference.rank, 2147483647),
+        distance,
+        candidate.point_id
+    LIMIT 2
+)
+SELECT coalesce(
+    jsonb_agg(
+        jsonb_build_object(
+            'point_id', ranked.point_id,
+            'network_id', ranked.network_id,
+            'source_node_id', ranked.source_node_id,
+            'point_type', ranked.point_type,
+            'direction', ranked.direction,
+            'label', ranked.label,
+            'aliases', to_jsonb(ranked.aliases),
+            'location', CASE
+                WHEN ranked.location IS NULL THEN NULL
+                ELSE oracle.ST_AsGeoJSON(ranked.location)::jsonb
+            END
+        )
+        ORDER BY ranked.preference_rank, ranked.distance, ranked.point_id
+    ),
+    '[]'::jsonb
+)
+FROM ranked
+$function$;
+
 CREATE FUNCTION oracle.validate_toll_route(
     origin_point_id text,
     destination_point_id text
@@ -170,10 +332,30 @@ SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
     origin_role text;
+    origin_network text;
+    origin_direction text;
+    origin_position double precision;
     destination_role text;
+    destination_network text;
+    destination_direction text;
+    destination_position double precision;
+    requested_direction text;
+    origin_incompatible boolean := false;
+    destination_incompatible boolean := false;
+    alternatives jsonb;
 BEGIN
-    SELECT route_point.point_type
-    INTO origin_role
+    SELECT
+        route_point.point_type,
+        route_point.network_id,
+        route_point.direction,
+        CASE
+            WHEN route_point.network_id IN ('i95', 'i495') THEN
+                (route_point.source_metadata
+                    -> 'source_node' ->> 'latitude')::double precision
+            ELSE (route_point.source_metadata
+                    -> 'alternative_ranking' ->> 'corridor_position')::double precision
+        END
+    INTO origin_role, origin_network, origin_direction, origin_position
     FROM oracle.toll_route_point AS route_point
     WHERE route_point.point_id = origin_point_id;
 
@@ -204,13 +386,17 @@ BEGIN
         RETURN NEXT;
         RETURN;
     ELSIF origin_role NOT IN ('entry', 'airport') THEN
+        alternatives := oracle.ramp_alternatives(
+            origin_point_id, destination_point_id, true
+        );
         status := 'invalid_origin';
         reason := jsonb_build_object(
             'code', 'origin_not_entry',
             'details', jsonb_build_object(
                 'point_id', origin_point_id,
                 'point_type', origin_role,
-                'allowed_point_types', jsonb_build_array('entry', 'airport')
+                'allowed_point_types', jsonb_build_array('entry', 'airport'),
+                'alternatives', alternatives
             )
         );
         point_ids := ARRAY[]::text[];
@@ -222,8 +408,19 @@ BEGIN
         RETURN;
     END IF;
 
-    SELECT route_point.point_type
-    INTO destination_role
+    SELECT
+        route_point.point_type,
+        route_point.network_id,
+        route_point.direction,
+        CASE
+            WHEN route_point.network_id IN ('i95', 'i495') THEN
+                (route_point.source_metadata
+                    -> 'source_node' ->> 'latitude')::double precision
+            ELSE (route_point.source_metadata
+                    -> 'alternative_ranking' ->> 'corridor_position')::double precision
+        END
+    INTO destination_role, destination_network, destination_direction,
+         destination_position
     FROM oracle.toll_route_point AS route_point
     WHERE route_point.point_id = destination_point_id;
 
@@ -254,13 +451,17 @@ BEGIN
         RETURN NEXT;
         RETURN;
     ELSIF destination_role NOT IN ('exit', 'airport') THEN
+        alternatives := oracle.ramp_alternatives(
+            destination_point_id, origin_point_id, false
+        );
         status := 'invalid_destination';
         reason := jsonb_build_object(
             'code', 'destination_not_exit',
             'details', jsonb_build_object(
                 'point_id', destination_point_id,
                 'point_type', destination_role,
-                'allowed_point_types', jsonb_build_array('exit', 'airport')
+                'allowed_point_types', jsonb_build_array('exit', 'airport'),
+                'alternatives', alternatives
             )
         );
         point_ids := ARRAY[]::text[];
@@ -613,6 +814,76 @@ BEGIN
         choices.walked_connection_ids
     LIMIT 1;
 
+    IF status = 'no_supported_route' THEN
+        IF origin_network = destination_network
+           AND origin_position IS NOT NULL
+           AND destination_position IS NOT NULL
+           AND origin_position <> destination_position THEN
+            requested_direction := CASE
+                WHEN destination_position > origin_position
+                  AND origin_network IN ('i95', 'i495') THEN 'NB'
+                WHEN destination_position < origin_position
+                  AND origin_network IN ('i95', 'i495') THEN 'SB'
+                WHEN destination_position > origin_position
+                  AND origin_network IN ('i66', 'greenway') THEN 'EB'
+                WHEN destination_position < origin_position
+                  AND origin_network IN ('i66', 'greenway') THEN 'WB'
+            END;
+            origin_incompatible := origin_direction IS DISTINCT FROM requested_direction;
+            destination_incompatible :=
+                destination_direction IS DISTINCT FROM requested_direction;
+        END IF;
+
+        IF requested_direction IS NULL
+           OR origin_incompatible
+           OR (NOT origin_incompatible AND NOT destination_incompatible) THEN
+            alternatives := oracle.ramp_alternatives(
+                origin_point_id, destination_point_id, true
+            );
+            IF jsonb_array_length(alternatives) > 0 THEN
+                status := 'invalid_origin';
+                reason := jsonb_build_object(
+                    'code', 'origin_ramp_incompatible',
+                    'details', jsonb_build_object(
+                        'point_id', origin_point_id,
+                        'point_type', origin_role,
+                        'alternatives', alternatives
+                    )
+                );
+            END IF;
+        END IF;
+
+        IF status = 'no_supported_route'
+           AND (
+               requested_direction IS NULL
+               OR destination_incompatible
+               OR (NOT origin_incompatible AND NOT destination_incompatible)
+           ) THEN
+            alternatives := oracle.ramp_alternatives(
+                destination_point_id, origin_point_id, false
+            );
+            IF jsonb_array_length(alternatives) > 0 THEN
+                status := 'invalid_destination';
+                reason := jsonb_build_object(
+                    'code', 'destination_ramp_incompatible',
+                    'details', jsonb_build_object(
+                        'point_id', destination_point_id,
+                        'point_type', destination_role,
+                        'alternatives', alternatives
+                    )
+                );
+            END IF;
+        END IF;
+
+        IF status IN ('invalid_origin', 'invalid_destination') THEN
+            point_ids := ARRAY[]::text[];
+            connection_ids := ARRAY[]::text[];
+            connection_types := ARRAY[]::text[];
+            general_purpose_gaps := '[]'::jsonb;
+            i95_evidence := NULL;
+        END IF;
+    END IF;
+
     RETURN NEXT;
 END
 $function$;
@@ -621,6 +892,13 @@ REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
 GRANT USAGE ON TYPE oracle.geometry, oracle.geography TO oracle_owner;
+GRANT EXECUTE ON FUNCTION oracle.ST_Distance(
+    oracle.geography, oracle.geography, boolean
+) TO oracle_owner;
+GRANT EXECUTE ON FUNCTION oracle.ST_AsGeoJSON(
+    oracle.geography, integer, integer
+) TO oracle_owner;
+GRANT SELECT ON oracle.spatial_ref_sys TO oracle_owner;
 
 GRANT USAGE ON SCHEMA pricing TO oracle_owner;
 GRANT SELECT ON pricing.current_i95_direction TO oracle_owner;
@@ -631,6 +909,7 @@ TO tollchat_agent;
 ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_connection OWNER TO oracle_owner;
+ALTER FUNCTION oracle.ramp_alternatives(text, text, boolean) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_toll_route(text, text) OWNER TO oracle_owner;
 ALTER SCHEMA oracle OWNER TO oracle_owner;
 
