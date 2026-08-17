@@ -50,14 +50,15 @@ jobs:
       PGHOST: localhost
       PGPORT: 5432
       PGUSER: postgres
+      SCHEMA_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - run: python3 v2/scripts/check_schema_versions.py "$SCHEMA_BASE_REF"
+      - run: v2/scripts/run_db_tests.sh "$SCHEMA_BASE_REF"
         env:
-          SCHEMA_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-      - run: v2/scripts/run_db_tests.sh
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
 
   check:
     runs-on: ubuntu-latest
