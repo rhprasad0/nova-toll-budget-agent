@@ -1033,6 +1033,10 @@ SELECT
     '{"test_fixture":true}'::jsonb
 FROM generate_series(0, 12) AS index;
 
+UPDATE oracle.toll_connection
+SET required_i95_direction = 'NB'
+WHERE connection_id = 'test-depth-edge-0';
+
 INSERT INTO oracle.toll_connection VALUES (
     'test-depth-cycle', 'test-depth-6', 'test-depth-2',
     'within_facility', NULL, NULL, '{"test_fixture":true}'::jsonb
@@ -1112,8 +1116,11 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_toll_route('test-depth-0', 'test-depth-12');
-    IF result.status <> 'valid' OR cardinality(result.connection_ids) <> 12 THEN
-        RAISE EXCEPTION '12-edge route did not succeed: %', row_to_json(result);
+    IF result.status <> 'unknown_availability'
+       OR result.reason->>'code' <> 'i95_invalid_source'
+       OR cardinality(result.connection_ids) <> 12 THEN
+        RAISE EXCEPTION '12-edge uncertain route did not succeed: %',
+            row_to_json(result);
     END IF;
     SELECT * INTO result
     FROM oracle.validate_toll_route('test-depth-0', 'test-depth-13');

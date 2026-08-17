@@ -77,6 +77,31 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'existing tollchat_agent has an unexpected role membership';
     END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_database AS database,
+             LATERAL aclexplode(database.datacl) AS privilege
+        WHERE database.datname = current_database()
+          AND privilege.grantee = to_regrole('tollchat_agent')
+          AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_namespace AS namespace,
+             LATERAL aclexplode(namespace.nspacl) AS privilege
+        WHERE privilege.grantee = to_regrole('tollchat_agent')
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_class AS relation,
+             LATERAL aclexplode(relation.relacl) AS privilege
+        WHERE privilege.grantee = to_regrole('tollchat_agent')
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_attribute AS attribute,
+             LATERAL aclexplode(attribute.attacl) AS privilege
+        WHERE privilege.grantee = to_regrole('tollchat_agent')
+    ) THEN
+        RAISE EXCEPTION 'existing tollchat_agent has unexpected direct privileges';
+    END IF;
 END $$;
 
 GRANT rds_iam TO tollchat_agent;
@@ -702,6 +727,7 @@ BEGIN
             JOIN oracle.toll_route_point AS next_point
               ON next_point.point_id = connection.to_point_id
             WHERE frontier_walk.depth = 12
+              AND frontier_walk.current_point_id <> destination_point_id
               AND NOT next_point.point_id = ANY(frontier_walk.walked_point_ids)
               AND current_point.point_type <> 'airport'
               AND (

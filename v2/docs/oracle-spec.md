@@ -124,9 +124,12 @@ production SQL, and normative public-contract documents. The schema-version
 checker validates every registered schema and compares its canonical version
 with the pull request's base commit. A change to owned SQL or a normative
 contract document must advance that schema's version monotonically. A shared
-change must advance every schema whose contract it changes. A version change
-without a corresponding owned change, an unregistered production SQL file, a
-missing canonical version, or a contract change without the affected version
+change must advance every schema whose contract it changes. Every established
+schema bump must add an immutable `_upgrade_<schema>_<old>_to_<new>.sql`
+migration, which database CI applies to the previous schema and compares with
+the canonical bootstrap. A version change without a corresponding owned
+change, an unregistered production SQL file, a missing canonical version, a
+missing upgrade migration, or a contract change without the affected version
 bump fails CI.
 
 The v2 database CI job runs on PostgreSQL 17 with core PostGIS 3.5.x available
@@ -523,10 +526,12 @@ The origin is a toll entry or airport; the destination is a toll exit or
 airport. An airport point cannot appear between them. The query may cross
 networks only through recorded connections and does not infer a connection
 from physical proximity. Traversal rejects repeated point IDs and stops after
-12 connections. If the depth-12 frontier has an outgoing connection to an
-unvisited point, a proven `valid` path still wins; otherwise the function
-returns `traversal_limit_exceeded` ahead of `unknown_availability`,
-`currently_unavailable`, and `no_supported_route`. The data build also
+12 connections. If a non-destination depth-12 frontier has an outgoing
+connection to an unvisited point, a proven `valid` path still wins; otherwise
+the function returns `traversal_limit_exceeded` ahead of
+`unknown_availability`, `currently_unavailable`, and `no_supported_route`. An
+availability proof that reaches the requested destination at depth 12 is
+complete even when that point has outgoing connections. The data build also
 fails unless every supported origin/destination fixture has a shortest proof
 of at most 12 connections. If several currently usable paths exist, the
 function returns the one with the fewest connections, breaking ties by the
@@ -698,7 +703,8 @@ handoff itself has no price.
   cannot execute the function, `tollchat_agent` cannot call PostGIS functions
   directly, and a same-named temporary object cannot alter the route result.
 - Oracle installation rejects a pre-existing `tollchat_agent` that inherits
-  `pg_read_all_data`, `pricing_reader`, or any role other than `rds_iam`.
+  `pg_read_all_data`, `pricing_reader`, or any role other than `rds_iam`, or
+  that already has direct database-create, schema, or relation privileges.
 - No oracle operation reads or returns a toll price.
 
 ## Explicit non-goals

@@ -7,6 +7,7 @@
         "v2/db/oracle/*.sql",
         "v2/db/migrations/003_create_oracle_schema.sql",
         "v2/db/migrations/003_create_oracle_schema.rollback.sql",
+        "v2/db/migrations/*_upgrade_oracle_*_to_*.sql",
         "v2/docs/oracle-route-function-contract.md",
         "v2/docs/oracle-spec.md"
       ]
@@ -20,6 +21,7 @@
         "v2/db/roles.sql",
         "v2/db/migrations/001_create_pricing_schema.sql",
         "v2/db/migrations/001_create_pricing_schema.rollback.sql",
+        "v2/db/migrations/*_upgrade_pricing_*_to_*.sql",
         "v2/db/migrations/backfill.sql",
         "v2/db/migrations/verify_backfill.sql"
       ]

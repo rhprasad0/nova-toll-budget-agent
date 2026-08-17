@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPO_ROOT / "v2" / "db" / "application-schemas.json"
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 UPGRADE_MIGRATION = re.compile(
-    r"^v2/db/migrations/[0-9]{3}_upgrade_pricing_"
+    r"^v2/db/migrations/[0-9]{3}_upgrade_(?P<schema>[a-z][a-z0-9_]*)_"
     r"(?P<previous>[0-9]+_[0-9]+_[0-9]+)_to_"
     r"(?P<current>[0-9]+_[0-9]+_[0-9]+)\.sql$"
 )
@@ -155,9 +155,9 @@ def _owns(schema: RegisteredSchema, path: str) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in schema.owned_paths)
 
 
-def upgrade_versions(path: str) -> tuple[str, str] | None:
+def upgrade_versions(schema_name: str, path: str) -> tuple[str, str] | None:
     match = UPGRADE_MIGRATION.fullmatch(path)
-    if match is None:
+    if match is None or match.group("schema") != schema_name:
         return None
     previous = match.group("previous").replace("_", ".")
     current = match.group("current").replace("_", ".")
@@ -167,41 +167,53 @@ def upgrade_versions(path: str) -> tuple[str, str] | None:
 
 
 def validate_schema_update(
-    previous: str, current: str, changed: list[str], added: list[str]
+    schema_name: str,
+    previous: str,
+    current: str,
+    changed: list[str],
+    added: list[str],
 ) -> None:
-    changed_upgrades = [path for path in changed if upgrade_versions(path)]
+    changed_upgrades = [path for path in changed if upgrade_versions(schema_name, path)]
     modified_upgrades = sorted(set(changed_upgrades) - set(added))
     if modified_upgrades:
         raise ValueError(
-            f"released pricing upgrade migrations are immutable: "
+            f"released {schema_name} upgrade migrations are immutable: "
             f"{', '.join(modified_upgrades)}"
         )
 
-    added_upgrades = [path for path in added if upgrade_versions(path)]
+    added_upgrades = [path for path in added if upgrade_versions(schema_name, path)]
     for path in added_upgrades:
-        migration_previous, migration_current = upgrade_versions(path) or ("", "")
+        migration_previous, migration_current = upgrade_versions(schema_name, path) or (
+            "",
+            "",
+        )
         if migration_current != current or version_tuple(
             migration_current
         ) <= version_tuple(migration_previous):
             raise ValueError(
-                f"pricing upgrade migration does not target {current}: {path}"
+                f"{schema_name} upgrade migration does not target {current}: {path}"
             )
 
-    versioned_changes = [path for path in changed if not upgrade_versions(path)]
+    versioned_changes = [
+        path for path in changed if not upgrade_versions(schema_name, path)
+    ]
     if versioned_changes:
         if version_tuple(current) <= version_tuple(previous):
             raise ValueError(
-                f"v2 database SQL changed without advancing pricing {previous}; "
+                f"{schema_name} contract changed without advancing {previous}; "
                 f"current is {current}: {', '.join(versioned_changes)}"
             )
         if not any(
-            upgrade_versions(path) == (previous, current) for path in added_upgrades
+            upgrade_versions(schema_name, path) == (previous, current)
+            for path in added_upgrades
         ):
             raise ValueError(
-                f"pricing {previous} -> {current} lacks a new upgrade migration"
+                f"{schema_name} {previous} -> {current} lacks a new upgrade migration"
             )
     elif current != previous:
-        raise ValueError("pricing version changed without a v2 database SQL change")
+        raise ValueError(
+            f"{schema_name} version changed without an owned contract change"
+        )
 
 
 def main() -> int:
@@ -289,18 +301,9 @@ def main() -> int:
             if not schema_changes:
                 raise ValueError(f"new schema {schema.name} has no owned SQL changes")
             continue
-        if schema.name == "pricing":
-            validate_schema_update(previous, current, schema_changes, schema_additions)
-            continue
-        if schema_changes and version_tuple(current) <= version_tuple(previous):
-            raise ValueError(
-                f"{schema.name} contract changed without advancing {previous}; "
-                f"current is {current}: {', '.join(schema_changes)}"
-            )
-        if not schema_changes and current != previous:
-            raise ValueError(
-                f"{schema.name} version changed without owned database SQL changes"
-            )
+        validate_schema_update(
+            schema.name, previous, current, schema_changes, schema_additions
+        )
 
     rendered = ", ".join(
         f"{name}={version}" for name, version in sorted(current_versions.items())
