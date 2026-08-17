@@ -12,6 +12,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_SQL_PATH = REPO_ROOT / "v2" / "db" / "schema.sql"
 REGISTRY_PATH = REPO_ROOT / "v2" / "db" / "application-schemas.json"
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+UPGRADE_MIGRATION = re.compile(
+    r"^v2/db/migrations/[0-9]{3}_upgrade_pricing_"
+    r"(?P<previous>[0-9]+_[0-9]+_[0-9]+)_to_"
+    r"(?P<current>[0-9]+_[0-9]+_[0-9]+)\.sql$"
+)
 
 
 def version_tuple(value: str) -> tuple[int, int, int]:
@@ -47,15 +52,68 @@ def git_text(base_ref: str, path: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def changed_database_files(base_ref: str) -> list[str]:
+def database_files(base_ref: str, *, added_only: bool = False) -> list[str]:
+    args = ["git", "diff", "--name-only"]
+    if added_only:
+        args.append("--diff-filter=A")
+    args.extend([base_ref, "--", "v2/db"])
     result = subprocess.run(
-        ["git", "diff", "--name-only", base_ref, "--", "v2/db"],
+        args,
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,
     )
     return [line for line in result.stdout.splitlines() if line.endswith(".sql")]
+
+
+def upgrade_versions(path: str) -> tuple[str, str] | None:
+    match = UPGRADE_MIGRATION.fullmatch(path)
+    if match is None:
+        return None
+    previous = match.group("previous").replace("_", ".")
+    current = match.group("current").replace("_", ".")
+    version_tuple(previous)
+    version_tuple(current)
+    return previous, current
+
+
+def validate_schema_update(
+    previous: str, current: str, changed: list[str], added: list[str]
+) -> None:
+    changed_upgrades = [path for path in changed if upgrade_versions(path)]
+    modified_upgrades = sorted(set(changed_upgrades) - set(added))
+    if modified_upgrades:
+        raise ValueError(
+            f"released pricing upgrade migrations are immutable: "
+            f"{', '.join(modified_upgrades)}"
+        )
+
+    added_upgrades = [path for path in added if upgrade_versions(path)]
+    for path in added_upgrades:
+        migration_previous, migration_current = upgrade_versions(path) or ("", "")
+        if migration_current != current or version_tuple(
+            migration_current
+        ) <= version_tuple(migration_previous):
+            raise ValueError(
+                f"pricing upgrade migration does not target {current}: {path}"
+            )
+
+    versioned_changes = [path for path in changed if not upgrade_versions(path)]
+    if versioned_changes:
+        if version_tuple(current) <= version_tuple(previous):
+            raise ValueError(
+                f"v2 database SQL changed without advancing pricing {previous}; "
+                f"current is {current}: {', '.join(versioned_changes)}"
+            )
+        if not any(
+            upgrade_versions(path) == (previous, current) for path in added_upgrades
+        ):
+            raise ValueError(
+                f"pricing {previous} -> {current} lacks a new upgrade migration"
+            )
+    elif current != previous:
+        raise ValueError("pricing version changed without a v2 database SQL change")
 
 
 def main() -> int:
@@ -86,16 +144,11 @@ def main() -> int:
     )
     previous_sql = git_text(base_ref, "v2/db/schema.sql")
     previous = pricing_version(previous_sql) if previous_sql is not None else None
-    changed = changed_database_files(base_ref)
+    changed = database_files(base_ref)
+    added = database_files(base_ref, added_only=True)
 
-    if changed and previous is not None:
-        if version_tuple(current) <= version_tuple(previous):
-            raise ValueError(
-                f"v2 database SQL changed without advancing pricing {previous}; "
-                f"current is {current}: {', '.join(changed)}"
-            )
-    elif not changed and previous is not None and current != previous:
-        raise ValueError("pricing version changed without a v2 database SQL change")
+    if previous is not None:
+        validate_schema_update(previous, current, changed, added)
 
     print(f"pricing schema version {current} advances cleanly")
     return 0

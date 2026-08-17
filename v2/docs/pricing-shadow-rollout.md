@@ -14,17 +14,31 @@ VDOT -> v1 fetcher -> S3 raw object
 
 ## 1. Prepare the database manually
 
-Use the admin connection through Tailscale with TLS verification. Review the
-transaction first, then run:
+Use the admin connection through Tailscale with TLS verification. For a new
+database, review the bootstrap transaction first, then run:
 
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/001_create_pricing_schema.sql
 ```
 
-Confirm `pricing.schema_version` is exactly `1.0.1`, the two target tables are
-empty, and `pricing_loader_writer` has only `SELECT`, `INSERT`, and `UPDATE` on
-those tables. Do not run the backfill yet.
+Confirm the two target tables are empty. Do not run the backfill yet.
+
+For an existing pricing `1.0.0` database, run the guarded, rerunnable upgrade
+instead:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql
+```
+
+Every future pricing version bump must add its matching numbered upgrade
+migration in the same pull request; CI rejects a bump without one and rejects
+later edits to released migrations.
+
+After either path, confirm `pricing.schema_version` is exactly `1.0.1` and
+`pricing_loader_writer` has only `SELECT`, `INSERT`, and `UPDATE` on the two
+target tables.
 
 ## 2. Deploy the shadow path
 
