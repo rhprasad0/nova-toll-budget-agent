@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 V2_ROOT = Path(__file__).resolve().parents[1]
@@ -5,6 +6,9 @@ REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
 TIMED_CHECKS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
+).read_text()
+TIMED_SCHEDULE_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-timed-schedule.yml"
 ).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
@@ -56,3 +60,13 @@ def test_timed_ci_has_a_dedicated_route_only_role():
     assert "/pricing_reader" not in policy
     assert "role/nova-toll-v2-timed-checks" in TIMED_CHECKS_WORKFLOW
     assert "role/nova-toll-github-ci" not in TIMED_CHECKS_WORKFLOW
+
+
+def test_timed_ci_skips_stale_scheduled_runs():
+    schedules = re.findall(r'cron: "([^"]+)"', TIMED_SCHEDULE_WORKFLOW)
+    assert all(schedule.split()[-1].isdigit() for schedule in schedules)
+    assert "schedule: ${{ github.event.schedule || '' }}" in TIMED_SCHEDULE_WORKFLOW
+    assert "TIMED_SCHEDULE: ${{ inputs.schedule }}" in TIMED_CHECKS_WORKFLOW
+    assert 'python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"' in (
+        TIMED_CHECKS_WORKFLOW
+    )
