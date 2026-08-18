@@ -3,6 +3,10 @@ name: v2 reusable timed checks
 on:
   workflow_call:
     inputs:
+      schedule:
+        description: Cron schedule for freshness checks; empty for manual dispatches
+        required: false
+        type: string
       window_id:
         description: Stable identifier shared by every check in this timed window
         required: true
@@ -59,4 +63,13 @@ jobs:
         env:
           DB_CA_BUNDLE_PATH: infra/build/ca/rds-ca-bundle.pem
           DB_NAME: nova_toll
-        run: uv run pytest -m live tests/test_validate_toll_route_live.py -v
+          TIMED_SCHEDULE: ${{ inputs.schedule }}
+        run: |
+          if freshness=$(python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"); then
+            uv run pytest -m live tests/test_validate_toll_route_live.py -v
+          else
+            status=$?
+            if (( status != 3 )); then exit "$status"; fi
+            echo "::warning title=Stale timed check::$freshness"
+            printf '## Skipped stale timed check\n\n%s\n' "$freshness" >> "$GITHUB_STEP_SUMMARY"
+          fi
