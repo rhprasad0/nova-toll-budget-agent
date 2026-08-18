@@ -117,6 +117,16 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
       sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
     diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
 
+    psql --dbname "$migration_db" --file "$migration"
+    installed_version="$(
+      psql --dbname "$migration_db" --tuples-only --no-align \
+        --command "SELECT version FROM $schema_name.schema_version WHERE singleton"
+    )"
+    if [[ "$installed_version" != "$target_version" ]]; then
+      echo "$migration rerun changed version to $installed_version" >&2
+      exit 1
+    fi
+
     if [[ "$schema_name" == "oracle" ]]; then
       for database in "$bootstrap_db" "$migration_db"; do
         psql --dbname "$database" --tuples-only --no-align --command "
@@ -172,7 +182,26 @@ psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_restore_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_route_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_pricing_route_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_security_contract.sql
+
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
+UPDATE oracle.schema_version SET version = '0.9.0' WHERE singleton;
+SQL
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/007_upgrade_oracle_1_0_2_to_1_1_0.sql; then
+  echo "oracle schema upgrade unexpectedly accepted version 0.9.0" >&2
+  exit 1
+fi
+psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '0.9.0' THEN
+    RAISE EXCEPTION 'failed oracle schema upgrade changed the installed version';
+  END IF;
+END $$;
+UPDATE oracle.schema_version SET version = '1.1.0' WHERE singleton;
+SQL
 
 if psql --dbname "$bootstrap_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql; then

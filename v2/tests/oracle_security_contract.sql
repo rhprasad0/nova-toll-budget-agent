@@ -4,6 +4,8 @@ DO $$
 DECLARE
     executable_count integer;
     route_function record;
+    pricing_route_function record;
+    resolver_function record;
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
        OR NOT (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'tollchat_agent')
@@ -29,8 +31,20 @@ BEGIN
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.validate_toll_route(text,text)'::regprocedure)
           <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.validate_pricing_route(text[],text[])'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure)
+          <> 'oracle_owner'
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
-               WHERE oid = 'oracle.validate_toll_route(text,text)'::regprocedure) THEN
+               WHERE oid = 'oracle.validate_toll_route(text,text)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.validate_pricing_route(text[],text[])'::regprocedure)
+       OR (SELECT prosecdef FROM pg_catalog.pg_proc
+           WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure) THEN
         RAISE EXCEPTION 'oracle ownership or SECURITY DEFINER contract is wrong';
     END IF;
     SELECT
@@ -70,12 +84,64 @@ BEGIN
         RAISE EXCEPTION 'route function catalog contract is wrong: %',
             row_to_json(route_function);
     END IF;
+    SELECT
+        procedure.provolatile,
+        procedure.proconfig,
+        procedure.proargnames,
+        procedure.proallargtypes,
+        procedure.proargmodes
+    INTO pricing_route_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.validate_pricing_route(text[],text[])'::regprocedure;
+    IF pricing_route_function.provolatile <> 's'
+       OR pricing_route_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
+       OR pricing_route_function.proargnames IS DISTINCT FROM ARRAY[
+           'submitted_point_ids', 'submitted_connection_ids',
+           'status', 'reason', 'point_ids', 'connection_ids', 'connection_types',
+           'general_purpose_gaps', 'i95_evidence', 'facility_legs'
+       ]::text[]
+       OR pricing_route_function.proallargtypes IS DISTINCT FROM ARRAY[
+           'text[]'::regtype::oid,
+           'text[]'::regtype::oid,
+           'text'::regtype::oid,
+           'jsonb'::regtype::oid,
+           'text[]'::regtype::oid,
+           'text[]'::regtype::oid,
+           'text[]'::regtype::oid,
+           'jsonb'::regtype::oid,
+           'jsonb'::regtype::oid,
+           'jsonb'::regtype::oid
+       ]::oid[]
+       OR pricing_route_function.proargmodes IS DISTINCT FROM ARRAY[
+           'i'::"char", 'i'::"char",
+           't'::"char", 't'::"char", 't'::"char", 't'::"char",
+           't'::"char", 't'::"char", 't'::"char", 't'::"char"
+       ]::"char"[] THEN
+        RAISE EXCEPTION 'pricing route function catalog contract is wrong: %',
+            row_to_json(pricing_route_function);
+    END IF;
+    SELECT procedure.provolatile, procedure.proconfig
+    INTO resolver_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.resolve_toll_route(text,text)'::regprocedure;
+    IF resolver_function.provolatile <> 's'
+       OR resolver_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[] THEN
+        RAISE EXCEPTION 'route resolver catalog contract is wrong: %',
+            row_to_json(resolver_function);
+    END IF;
     IF has_schema_privilege('tollchat_agent', 'pricing', 'USAGE')
        OR has_table_privilege(
            'tollchat_agent', 'pricing.current_i95_direction', 'SELECT'
        )
        OR has_table_privilege(
            'tollchat_agent', 'oracle.toll_route_point', 'SELECT'
+       )
+       OR has_table_privilege(
+           'tollchat_agent', 'oracle.route_pricing_component', 'SELECT'
        )
        OR has_table_privilege(
            'tollchat_agent', 'oracle.toll_connection', 'INSERT,UPDATE,DELETE'
@@ -88,7 +154,11 @@ BEGIN
              LATERAL aclexplode(
                  coalesce(procedure.proacl, acldefault('f', procedure.proowner))
              ) AS privilege
-        WHERE procedure.oid = 'oracle.validate_toll_route(text,text)'::regprocedure
+        WHERE procedure.oid IN (
+                  'oracle.validate_toll_route(text,text)'::regprocedure,
+                  'oracle.validate_pricing_route(text[],text[])'::regprocedure,
+                  'oracle.resolve_toll_route(text,text)'::regprocedure
+              )
           AND privilege.grantee = 0
           AND privilege.privilege_type = 'EXECUTE'
     ) THEN
@@ -100,10 +170,19 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('tollchat_agent', procedure.oid, 'EXECUTE');
-    IF executable_count <> 1 OR NOT has_function_privilege(
-        'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
-    ) THEN
-        RAISE EXCEPTION 'agent executable surface is not exactly one function';
+    IF executable_count <> 2
+       OR NOT has_function_privilege(
+           'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.validate_pricing_route(text[],text[])',
+           'EXECUTE'
+       )
+       OR has_function_privilege(
+           'tollchat_agent', 'oracle.resolve_toll_route(text,text)', 'EXECUTE'
+       ) THEN
+        RAISE EXCEPTION 'agent executable surface is not exactly two validators';
     END IF;
 END $$;
 
@@ -117,6 +196,21 @@ BEGIN
     IF result.status <> 'valid' OR result.reason IS NOT NULL THEN
         RAISE EXCEPTION 'agent route execution failed';
     END IF;
+    SELECT * INTO result
+    FROM oracle.validate_pricing_route(
+        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
+        ARRAY['source:i66:EB:1:4']
+    );
+    IF result.status <> 'valid'
+       OR jsonb_array_length(result.facility_legs) <> 1 THEN
+        RAISE EXCEPTION 'agent pricing-route execution failed';
+    END IF;
+    BEGIN
+        PERFORM *
+        FROM oracle.resolve_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
+        RAISE EXCEPTION 'agent executed the private route resolver';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
     BEGIN
         PERFORM count(*) FROM oracle.toll_route_point;
         RAISE EXCEPTION 'agent read oracle table directly';
@@ -125,6 +219,11 @@ BEGIN
     BEGIN
         PERFORM count(*) FROM pricing.current_i95_direction;
         RAISE EXCEPTION 'agent read pricing view directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM oracle.route_pricing_component;
+        RAISE EXCEPTION 'agent read route pricing components directly';
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
     BEGIN
@@ -155,6 +254,14 @@ BEGIN
     FROM oracle.validate_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
     IF result.status <> 'valid' THEN
         RAISE EXCEPTION 'temporary shadow changed security-definer behavior';
+    END IF;
+    SELECT * INTO result
+    FROM oracle.validate_pricing_route(
+        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
+        ARRAY['source:i66:EB:1:4']
+    );
+    IF result.status <> 'valid' THEN
+        RAISE EXCEPTION 'temporary shadow changed pricing-route behavior';
     END IF;
 END $$;
 
