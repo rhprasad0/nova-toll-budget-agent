@@ -1,8 +1,9 @@
 resource "aws_db_instance" "main" {
-  identifier     = "nova-toll-db"
-  engine         = "postgres"
-  engine_version = "17"
-  instance_class = "db.t4g.micro"
+  identifier        = "nova-toll-db"
+  engine            = "postgres"
+  engine_version    = "17"
+  instance_class    = "db.t4g.small"
+  apply_immediately = true
 
   db_name  = "nova_toll"
   username = "nova_toll_admin"
