@@ -94,9 +94,10 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
 See the [shadow rollout runbook](docs/pricing-shadow-rollout.md) for deployment,
 verification, rollback, and deliberately guarded cleanup.
 
-The facility comparison views expose component readings and provenance. The
-caller validates the immutable route plan, aggregates its dynamic components,
-and adds scheduled tolls and route metadata required by the contracts.
+The current-pricing Strands tool accepts stable origin and destination point
+IDs plus the supported pricing profile. It validates the route through the
+oracle, retrieves and aggregates facility component readings, and adds
+scheduled tolls. Callers do not submit route plans or pricing components.
 
 The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
 events reach it through EventBridge while v1 keeps its direct S3 notification.
