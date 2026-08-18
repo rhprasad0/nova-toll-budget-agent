@@ -2,234 +2,124 @@
 
 ## Purpose
 
-Define the smallest useful response contract for TollChat's deterministic
-rolling-average pricing analysis. The analysis receives a canonical route plan
-and describes what that same trip recently cost without changing the route.
-
-The MVP uses the previous four weeks because recent prices are more useful to a
-traveler than a long-term average that hides current commuting patterns.
+Describe what the same canonical route cost at the current facility time during
+the prior three weeks. The MVP compares the route without changing it and does
+not widen the window when coverage is poor.
 
 ## Comparison method
 
-- Match the requested route, local weekday, and 15-minute departure slot.
-- Apply the same explicit pricing profile to every comparable route total.
-- Treat the start of that slot as the comparison instant and anchor the 28-day
-  window to that instant, not to the exact minute inside the requested slot.
-  For each observed or
-  modeled route component, select the latest source row within the slot
-  (`slot_start <= interval_end_at < slot_end`) before applying its availability
-  rule. Exclude the date if that selected row is missing, incomplete, closed, or
-  otherwise unavailable. Never fall back to an older usable row in the slot.
-- Use one comparable trip price from each eligible date in the half-open window
-  from 28 local days before the slot start through, but not including, that slot
-  start, for at most four comparable weekdays.
-- Preserve the requested physical occurrence when a fall-back hour repeats.
-  Ambiguous prior comparison slots use the later, standard-time occurrence;
-  nonexistent spring-forward slots are ineligible and reduce the expected count.
-- Calculate route totals for each date before calculating summary statistics.
-  Do not independently average legs and then combine them.
-- Exclude missing or incomplete route observations instead of treating them as
-  zero.
-- Report scheduled rates, such as Dulles Toll Road rates without observed price
-  history, as `schedule_derived`; preserve the schedule identifier and effective
-  interval, and never present them as observed averages.
-- Preserve `pricing_method` and `proxy_od_pair_id` for modeled components; never
-  present proxy-derived prices as observations.
-- Do not silently widen the time window or use older data when coverage is poor.
-
-For the adopted VDOT sources, map `pricing.trip_pricing_i95.calculated_at` and
-`pricing.trip_pricing_i66.calculated_at` to the observation time; modeled I-95 prices
-inherit the proxy row's `calculated_at`. Do not substitute I-95 `current_at`.
+- Record `evaluated_at` and use the same current facility anchors as the
+  [point-in-time contract](point-in-time-pricing-mvp-contract.md).
+- I-66 uses independent 6-minute bins. I-95/I-495 uses independent 10-minute
+  bins with one shared feed anchor.
+- For each component, use `prior_week` offsets 1, 2, and 3 from its facility
+  view. Current prices are not included in historical statistics.
+- Match the same Eastern local weekday and wall-clock bin. Components from
+  different facilities need not share source timestamps.
+- Use PostgreSQL's later standard-time occurrence for an ambiguous fall-back
+  target. A nonexistent spring-forward target is ineligible and reduces the
+  expected count.
+- For every route key and target bin, select the latest source row before
+  applying availability. Never fall back to an older usable row.
+- I-95/I-395 comparisons must satisfy both the canonical schedule and stored
+  direction sentinels. This excludes holiday and major-event regimes that run
+  opposite the canonical schedule.
+- Exclude a week unless every required route component is available. Missing
+  and unavailable components are not zero.
+- Calculate each complete route total before calculating statistics. Do not
+  average legs independently.
+- Preserve schedule and model provenance. Any statistic containing a modeled
+  component remains a provisional ballpark estimate.
 
 ## Pricing profile
 
-The historical MVP supports the same single profile as the
-[point-in-time contract](point-in-time-pricing-mvp-contract.md): a two-axle
-passenger vehicle paying with E-ZPass in toll mode. Reject a malformed profile
-as `invalid_request` and any other profile as `unsupported_pricing_profile`.
-Never silently substitute the supported profile.
+The historical MVP supports the same two-axle passenger E-ZPass toll-mode
+profile as the point-in-time contract. Reject malformed or unsupported
+profiles.
 
 ## Analysis response
-
-Money values are decimal strings in US dollars. Times are ISO 8601 values with
-an explicit Eastern offset so the calling agent can format them for users.
 
 ```json
 {
   "route_plan_id": "plan-123",
-  "method": "same_weekday_same_15_minute_slot",
+  "method": "same_weekday_same_facility_bins",
+  "evaluated_at": "2026-08-13T08:32:05-04:00",
   "source_kind": "mixed",
-  "requested_at": "2026-08-13T08:00:00-04:00",
   "pricing_profile": {
     "vehicle_class": "two_axle_passenger",
     "payment_method": "e_zpass",
     "transponder_mode": "toll"
   },
-  "window_start": "2026-07-16T08:00:00-04:00",
-  "window_end": "2026-08-13T08:00:00-04:00",
-  "latest_observation_at": "2026-08-06T08:00:00-04:00",
   "component_sources": [
     {
       "route_step_id": "step-1",
       "source_kind": "schedule_derived",
       "pricing_method": "published_schedule",
-      "schedules": [
-        {
-          "schedule_id": "dulles-toll-road-2026-rates",
-          "effective_from": "2026-01-01T00:00:00-05:00",
-          "effective_until": null
-        }
-      ]
+      "schedule_id": "dulles-toll-road-2026-rates"
     },
     {
       "route_step_id": "step-2",
       "source_kind": "observed",
-      "pricing_method": "source_observation"
-    }
-  ],
-  "comparable_period_count": 4,
-  "expected_comparable_period_count": 4,
-  "comparable_totals": [
-    {"departure_at": "2026-07-16T08:00:00-04:00", "total_usd": "7.10"},
-    {"departure_at": "2026-07-23T08:00:00-04:00", "total_usd": "9.00"},
-    {"departure_at": "2026-07-30T08:00:00-04:00", "total_usd": "9.50"},
-    {"departure_at": "2026-08-06T08:00:00-04:00", "total_usd": "13.60"}
-  ],
-  "mean_usd": "9.80",
-  "median_usd": "9.25",
-  "minimum_usd": "7.10",
-  "maximum_usd": "13.60",
-  "nearby_departures": [
-    {
-      "offset_minutes": -15,
-      "mean_usd": "8.40",
-      "comparable_period_count": 4
+      "pricing_method": "source_observation",
+      "facility": "i66",
+      "bin_minutes": 6
     },
     {
-      "offset_minutes": 15,
-      "mean_usd": "10.20",
-      "comparable_period_count": 4
+      "route_step_id": "step-3",
+      "source_kind": "observed",
+      "pricing_method": "source_observation",
+      "facility": "i95_i495",
+      "bin_minutes": 10
     }
-  ]
+  ],
+  "comparable_period_count": 3,
+  "expected_comparable_period_count": 3,
+  "comparable_totals": [
+    {"week_offset": 3, "departure_at": "2026-07-23T08:20:00-04:00", "total_usd": "7.10"},
+    {"week_offset": 2, "departure_at": "2026-07-30T08:20:00-04:00", "total_usd": "9.00"},
+    {"week_offset": 1, "departure_at": "2026-08-06T08:20:00-04:00", "total_usd": "13.60"}
+  ],
+  "mean_usd": "9.90",
+  "median_usd": "9.00",
+  "minimum_usd": "7.10",
+  "maximum_usd": "13.60",
+  "latest_observation_at": "2026-08-06T08:10:00-04:00"
 }
 ```
 
-### Required fields
+`expected_comparable_period_count` is normally three. It decreases only for an
+invalid local wall-clock target, such as the spring-forward gap. Missing,
+closed, exceptional-schedule, or otherwise unavailable data reduces
+`comparable_period_count`, not the expected count.
 
-| Field | Meaning |
-| --- | --- |
-| `route_plan_id` | Identifier of the immutable route plan supplied by the caller. |
-| `method` | Exact comparison method used. MVP value: `same_weekday_same_15_minute_slot`. |
-| `source_kind` | `observed`, `schedule_derived`, `modeled`, or `mixed`; `mixed` means the route total combines more than one source kind. |
-| `requested_at` | Requested departure time used to select comparable observations. |
-| `pricing_profile` | Vehicle and payment assumptions applied to every comparable route total. |
-| `window_start`, `window_end` | Half-open 28-day analysis window: `[window_start, window_end)`. |
-| `latest_observation_at` | Newest observation included across all comparable periods and route components; `null` when `source_kind` is `schedule_derived`. |
-| `component_sources` | Source kind and pricing method for each canonical route step, preserving schedule or model provenance when applicable. |
-| `comparable_period_count` | Number of complete comparable trip observations used. |
-| `expected_comparable_period_count` | Number expected under full coverage, normally four. |
-| `comparable_totals` | Departure instant and complete route total for every included period. |
-| `mean_usd` | Arithmetic mean of comparable route totals. |
-| `median_usd` | Median comparable route totals. |
-| `minimum_usd`, `maximum_usd` | Observed range; not a confidence interval. |
-| `nearby_departures` | Optional comparisons for the adjacent 15-minute slots. |
-
-A `schedule_derived` component source additionally requires every schedule used
-by its comparable totals, each with `schedule_id`, `effective_from`, and
-nullable `effective_until`. A `modeled` component source additionally requires
-its versioned `pricing_method` and `proxy_od_pair_id`:
-
-```json
-{
-  "route_step_id": "step-3",
-  "source_kind": "modeled",
-  "pricing_method": "identity_proxy_v1",
-  "proxy_od_pair_id": 1165
-}
-```
-
-Any comparable total or statistic containing a modeled component remains a
-provisional ballpark estimate. The caller must preserve that qualification for
-budget counts, ranges, medians, nearby-departure comparisons, and every other
-derived insight.
-
-## Caller-derived metrics
-
-The historical analysis does not query point-in-time pricing. When current and
-historical analyses are requested together, the caller may derive:
-
-```json
-{
-  "comparison_basis": "median",
-  "current_delta_usd": "4.95",
-  "current_delta_percent": "53.5",
-  "current_position": "above_recent_range",
-  "higher_than_count": 4
-}
-```
-
-Use the median as a "typical" comparison only with full 4-of-4 coverage. With
-partial coverage, call it the median of the available comparable trips and
-always disclose the count. Round percentage changes to one decimal place using
-decimal half-up rounding; return them as `null` when the comparison value is
-zero.
-
-When the user supplies a budget, the caller counts qualifying values in
-`comparable_totals` and may report the literal count, such as "the toll was $10
-or less on 3 of 4 comparable Thursdays."
-Annual projections require an explicit trip frequency:
-
-```text
-annual_estimate = mean_usd * one_way_trips_per_week * 52
-```
-
-## Failure contract
-
-Reject an invalid request or unsupported profile before querying history:
-
-```json
-{
-  "route_plan_id": "plan-123",
-  "error": "historical_pricing_unavailable",
-  "reason": "unsupported_pricing_profile",
-  "pricing_profile": {
-    "vehicle_class": "three_axle_vehicle",
-    "payment_method": "e_zpass",
-    "transponder_mode": "toll"
-  }
-}
-```
-
-An `invalid_request` response must identify each invalid field and reason.
-
-Return no summary prices when there are zero complete comparable observations:
+With partial coverage, return statistics for available complete periods and
+disclose both counts. With zero complete periods, return:
 
 ```json
 {
   "route_plan_id": "plan-123",
   "error": "insufficient_recent_history",
-  "pricing_profile": {
-    "vehicle_class": "two_axle_passenger",
-    "payment_method": "e_zpass",
-    "transponder_mode": "toll"
-  },
-  "window_start": "2026-07-16T08:00:00-04:00",
-  "window_end": "2026-08-13T08:00:00-04:00",
+  "evaluated_at": "2026-08-13T08:32:05-04:00",
   "comparable_period_count": 0,
-  "expected_comparable_period_count": 4
+  "expected_comparable_period_count": 3
 }
 ```
 
-For partial coverage, return the available statistics with the actual and
-expected counts. The calling agent must disclose that coverage rather than
-describing the result as a four-week average.
+## Caller-derived current comparison
+
+When current and historical pricing are requested together, the caller may
+compare the current total with the historical median and range. Use the median
+as a typical value only with full 3-of-3 coverage; otherwise call it the median
+of the available comparable trips.
+
+Round percentages to one decimal place using decimal half-up rounding and
+return `null` when the comparison value is zero. A budget answer reports the
+literal count of qualifying values rather than converting three observations
+into a probability.
 
 ## Deferred beyond MVP
 
-- Forecasting future prices.
-- Confidence intervals or volatility scores.
-- Seasonal and multi-year comparisons.
-- Travel-time savings, cost per minute saved, and arrival reliability.
-- Automatic widening of the comparison window.
-
-Add these only when their required data and user value are demonstrated.
+- Nearby-departure comparisons.
+- Automatic widening beyond three weeks.
+- Holiday/event override calendars.
+- Forecasts, confidence intervals, volatility scores, and seasonal history.

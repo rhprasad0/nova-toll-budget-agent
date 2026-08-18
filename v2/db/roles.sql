@@ -40,20 +40,8 @@ GRANT SELECT ON
     pricing.i95_modeled_od_proxy,
     pricing.modeled_trip_pricing_i95,
     pricing.modeled_current_trip_pricing_i95,
-    pricing.dynamic_pricing_observations
-TO pricing_reader;
-
-REVOKE ALL ON FUNCTION pricing._dynamic_pricing_component_errors(jsonb)
-FROM PUBLIC;
-REVOKE ALL ON FUNCTION
-    pricing.point_in_time_dynamic_route_pricing(timestamptz, jsonb),
-    pricing.historical_dynamic_route_pricing(timestamptz, jsonb)
-FROM PUBLIC;
-
-GRANT EXECUTE ON FUNCTION
-    pricing._dynamic_pricing_component_errors(jsonb),
-    pricing.point_in_time_dynamic_route_pricing(timestamptz, jsonb),
-    pricing.historical_dynamic_route_pricing(timestamptz, jsonb)
+    pricing.i66_pricing_comparisons,
+    pricing.i95_i495_pricing_comparisons
 TO pricing_reader;
 
 ALTER ROLE pricing_reader SET TimeZone TO 'America/New_York';

@@ -26,7 +26,7 @@ adopts them.
 - [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
 
 The independently deployable `pricing` application schema starts at semantic
-version **1.0.1**. Its version is stored in `pricing.schema_version`; CI tests
+version **1.1.0**. Its version is stored in `pricing.schema_version`; CI tests
 the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
@@ -54,6 +54,13 @@ migration:
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql
+```
+
+Then install the facility-specific comparison views with:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/006_upgrade_pricing_1_0_1_to_1_1_0.sql
 ```
 
 After pricing `1.0.0` or newer exists, install the oracle additively:
@@ -88,12 +95,9 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
 See the [shadow rollout runbook](docs/pricing-shadow-rollout.md) for deployment,
 verification, rollback, and deliberately guarded cleanup.
 
-The database functions return the dynamic subtotal and its source provenance.
-The caller remains responsible for supplying the complete immutable dynamic
-component list from the canonical route plan and for adding scheduled tolls,
-the pricing profile, and route metadata required by the adopted contracts.
-The defensive database boundary accepts at most 16 dynamic components, 128
-characters per route-step identifier, and 64 KiB of component JSON.
+The facility comparison views expose component readings and provenance. The
+caller validates the immutable route plan, aggregates its dynamic components,
+and adds scheduled tolls and route metadata required by the contracts.
 
 The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
 events reach it through EventBridge while v1 keeps its direct S3 notification.

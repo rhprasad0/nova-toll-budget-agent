@@ -76,6 +76,8 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
       pricing)
         psql --dbname "$migration_db" \
           --file "$migration_source_dir/v2/db/migrations/001_create_pricing_schema.sql"
+        psql --dbname "$migration_db" \
+          --file "$migration_source_dir/v2/db/migrations/003_create_oracle_schema.sql"
         ;;
       oracle)
         psql --dbname "$migration_db" \
@@ -164,7 +166,7 @@ BEGIN
     RAISE EXCEPTION 'failed schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE pricing.schema_version SET version = '1.0.1' WHERE singleton;
+UPDATE pricing.schema_version SET version = '1.1.0' WHERE singleton;
 SQL
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql

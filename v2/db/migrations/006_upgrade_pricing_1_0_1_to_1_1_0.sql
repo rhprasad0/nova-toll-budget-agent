@@ -1,3 +1,39 @@
+-- Guarded, rerunnable upgrade to facility-specific pricing comparisons.
+
+\set ON_ERROR_STOP on
+
+BEGIN;
+SET LOCAL search_path = pg_catalog, pg_temp;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
+SELECT pg_advisory_xact_lock(hashtext('tollchat-v2-pricing-schema-version'));
+
+DO $migration$
+DECLARE
+    current_version text;
+BEGIN
+    SELECT version INTO STRICT current_version
+    FROM pricing.schema_version
+    WHERE singleton;
+
+    IF current_version NOT IN ('1.0.1', '1.1.0') THEN
+        RAISE EXCEPTION 'expected pricing schema version 1.0.1 or 1.1.0, got %',
+            current_version;
+    END IF;
+
+    IF to_regclass('pricing.trip_pricing_i95') IS NULL
+       OR to_regclass('pricing.trip_pricing_i66') IS NULL
+       OR to_regrole('pricing_reader') IS NULL THEN
+        RAISE EXCEPTION 'pricing schema prerequisites are not ready';
+    END IF;
+END
+$migration$;
+
+DROP FUNCTION IF EXISTS pricing.point_in_time_dynamic_route_pricing(timestamptz, jsonb);
+DROP FUNCTION IF EXISTS pricing.historical_dynamic_route_pricing(timestamptz, jsonb);
+DROP FUNCTION IF EXISTS pricing._dynamic_pricing_component_errors(jsonb);
+DROP VIEW IF EXISTS pricing.dynamic_pricing_observations;
+
 -- Shared dynamic-pricing analysis surfaces. Included by the blank bootstrap
 -- and the additive online migration after the raw tables/current views exist.
 
@@ -481,3 +517,51 @@ COMMENT ON VIEW pricing.i66_pricing_comparisons IS
     'Current, two prior-cycle, and three prior-week I-66 observations in independent 6-minute bins';
 COMMENT ON VIEW pricing.i95_i495_pricing_comparisons IS
     'Current, two prior-cycle, and three prior-week I-95/I-495 observations in 10-minute bins with canonical I-95 schedule enforcement';
+
+GRANT SELECT ON
+    pricing.i66_pricing_comparisons,
+    pricing.i95_i495_pricing_comparisons
+TO pricing_reader;
+
+DO $migration$
+DECLARE
+    current_version text;
+    changed_rows integer;
+BEGIN
+    SELECT version INTO STRICT current_version
+    FROM pricing.schema_version
+    WHERE singleton;
+
+    IF current_version = '1.0.1' THEN
+        UPDATE pricing.schema_version
+        SET version = '1.1.0', installed_at = clock_timestamp()
+        WHERE singleton AND version = '1.0.1';
+
+        GET DIAGNOSTICS changed_rows = ROW_COUNT;
+        IF changed_rows <> 1 THEN
+            RAISE EXCEPTION 'expected one pricing schema version update, got %',
+                changed_rows;
+        END IF;
+    END IF;
+
+    IF to_regclass('pricing.i66_pricing_comparisons') IS NULL
+       OR to_regclass('pricing.i95_i495_pricing_comparisons') IS NULL
+       OR to_regclass('pricing.dynamic_pricing_observations') IS NOT NULL
+       OR to_regprocedure(
+            'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)'
+          ) IS NOT NULL
+       OR to_regprocedure(
+            'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)'
+          ) IS NOT NULL
+       OR NOT has_table_privilege(
+            'pricing_reader', 'pricing.i66_pricing_comparisons', 'SELECT'
+          )
+       OR NOT has_table_privilege(
+            'pricing_reader', 'pricing.i95_i495_pricing_comparisons', 'SELECT'
+          ) THEN
+        RAISE EXCEPTION 'pricing 1.1.0 comparison contract is not satisfied';
+    END IF;
+END
+$migration$;
+
+COMMIT;
