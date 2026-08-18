@@ -14,8 +14,7 @@ adopts them.
 
 ## Adopted contract
 
-- [Historical pricing MVP](docs/historical-pricing-mvp-contract.md)
-- [Point-in-time pricing and insights MVP](docs/point-in-time-pricing-mvp-contract.md)
+- [Current pricing MVP](docs/current-pricing-mvp-contract.md)
 - [Routing oracle](docs/oracle-spec.md)
 - [Agent-facing oracle route function](docs/oracle-route-function-contract.md)
 
