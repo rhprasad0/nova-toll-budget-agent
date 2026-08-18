@@ -30,9 +30,9 @@ the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.0.2**. It installs
+The independently versioned `oracle` schema is at **1.1.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
-exposes only `oracle.validate_toll_route(text, text)` to `tollchat_agent`.
+exposes the endpoint and internal exact-path validators to `tollchat_agent`.
 Regenerate and verify its checked-in seed with:
 
 ```sh
@@ -82,6 +82,13 @@ Then upgrade oracle `1.0.1` to `1.0.2`:
 ```bash
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/005_upgrade_oracle_1_0_1_to_1_0_2.sql
+```
+
+Then install the shared resolver and Python-facing exact-path validator:
+
+```bash
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/007_upgrade_oracle_1_0_2_to_1_1_0.sql
 ```
 
 After the shadow loader is active, copy and verify the current v1 source rows:

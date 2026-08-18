@@ -1,4 +1,4 @@
-"""Scheduled live checks for the v2 route-validation tool."""
+"""Scheduled live checks for both v2 route-validation functions."""
 
 import os
 from typing import Any, cast
@@ -76,7 +76,31 @@ def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]
     assert result["status"] == "success", result
     assert result["toolUseId"] == tool_use_id
     assert len(result["content"]) == 1
-    return cast(dict[str, Any], result["content"][0]["json"])
+    route = cast(dict[str, Any], result["content"][0]["json"])
+
+    connection = cast(
+        Any,
+        route_tool._connect(),  # pyright: ignore[reportPrivateUsage]
+    )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM oracle.validate_pricing_route(%s, %s)",
+                (route["point_ids"], route["connection_ids"]),
+            )
+            rows = cursor.fetchall()
+    finally:
+        connection.close()
+
+    assert len(rows) == 1
+    pricing_route = cast(dict[str, Any], rows[0])
+    assert set(pricing_route) == {*route, "facility_legs"}
+    assert {key: pricing_route[key] for key in route} == route
+    if route["status"] == "valid":
+        assert pricing_route["facility_legs"]
+    else:
+        assert pricing_route["facility_legs"] == []
+    return route
 
 
 def _reason_code(route: dict[str, Any]) -> str | None:

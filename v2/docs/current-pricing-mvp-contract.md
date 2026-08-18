@@ -50,6 +50,58 @@ status, return the route-validation result without prices, a total, or
 comparisons. A database or wrapper failure is a tool operation error, not a
 fabricated route or pricing status.
 
+For a valid result, bind its returned `point_ids` and `connection_ids` as
+PostgreSQL `text[]` parameters to `oracle.validate_pricing_route`. These arrays
+are database output carried internally by Python, never caller-submitted tool
+input. The second operation must return the same canonical route with status
+`valid` before pricing continues. A documented availability status is returned
+without prices; `invalid_route` indicates an internal operation failure. Its
+ordered `facility_legs` are the only route components passed to downstream
+facility pricing.
+
+### `facility_legs` JSON contract
+
+`facility_legs` is `[]` unless route status is `valid`. For a valid route it is
+an ordered array of pricing-bearing components:
+
+```json
+[
+  {
+    "route_step_id": "step-1",
+    "facility": "i95_i495",
+    "point_ids": ["i95:203NO", "i495:192NO"],
+    "connection_ids": ["source:i95_shared:Northbound:203NO:181ND"],
+    "pricing_key": {
+      "source_route_key": "Northbound:203NO:181ND",
+      "od_pair_id": 1144
+    }
+  }
+]
+```
+
+Every object has exactly these common fields:
+
+| Field | Contract |
+| --- | --- |
+| `route_step_id` | `step-N`, numbered from 1 after non-pricing connections and zero-price charges are omitted. |
+| `facility` | One of `i66`, `i95_i495`, `dtr`, or `greenway`. |
+| `point_ids` | Exactly two ordered point IDs covered by this pricing component. A two-OD I-95/I-495 connection is split at its boundary point. |
+| `connection_ids` | Exactly one canonical Oracle connection ID. Multiple pricing components may reference the same connection. |
+| `pricing_key` | Facility-specific stable identity described below. No price, label, or rate amount is returned by route validation. |
+
+`pricing_key` has no additional fields beyond its applicable variant:
+
+| Facility | Required `pricing_key` fields |
+| --- | --- |
+| `i66` | `source_route_key` (string), `start_zone_id` (integer), `end_zone_id` (integer) |
+| `i95_i495` | `source_route_key` (string), `od_pair_id` (integer) |
+| `dtr`, `greenway` | `source_route_key` (string), `charge_index` (1-based integer into the canonical connection's `source_pair.charges`) |
+
+Array order follows canonical connection order, then source component order.
+Handoffs, airport access, and zero-price charges do not produce legs. Downstream
+pricing operations must resolve each key and return the applicable price; they
+must not treat this validation output itself as a price.
+
 Pricing access follows the route function's least-privilege pattern. Each
 pricing operation is a narrow `SECURITY DEFINER` function with a fixed trusted
 search path, an owner limited to its required pricing relations, and only
