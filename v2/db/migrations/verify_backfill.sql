@@ -4,7 +4,7 @@
 
 DO $$
 BEGIN
-    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.1' THEN
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.1.0' THEN
         RAISE EXCEPTION 'unexpected pricing schema version';
     END IF;
 

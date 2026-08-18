@@ -15,7 +15,8 @@ BEGIN
         'pricing.i95_modeled_od_proxy',
         'pricing.modeled_trip_pricing_i95',
         'pricing.modeled_current_trip_pricing_i95',
-        'pricing.dynamic_pricing_observations'
+        'pricing.i66_pricing_comparisons',
+        'pricing.i95_i495_pricing_comparisons'
     ] LOOP
         IF to_regclass(relation_name) IS NULL THEN
             RAISE EXCEPTION 'missing relation: %', relation_name;
@@ -35,12 +36,15 @@ BEGIN
         RAISE EXCEPTION 'rewrite bootstrap must not create Transurban history';
     END IF;
 
-    IF to_regprocedure(
-        'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)'
-    ) IS NULL OR to_regprocedure(
-        'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)'
-    ) IS NULL THEN
-        RAISE EXCEPTION 'missing dynamic pricing functions';
+    IF to_regclass('pricing.dynamic_pricing_observations') IS NOT NULL
+       OR to_regprocedure(
+            'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)'
+          ) IS NOT NULL
+       OR to_regprocedure(
+            'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)'
+          ) IS NOT NULL
+       OR to_regprocedure('pricing._dynamic_pricing_component_errors(jsonb)') IS NOT NULL THEN
+        RAISE EXCEPTION 'retired dynamic pricing objects still exist';
     END IF;
 
     IF EXISTS (
@@ -71,37 +75,12 @@ BEGIN
         RAISE EXCEPTION 'pricing object owner differs from the bootstrap owner';
     END IF;
 
-    IF EXISTS (
-        SELECT 1
-        FROM pg_proc AS function
-        JOIN pg_namespace AS namespace ON namespace.oid = function.pronamespace
-        WHERE namespace.nspname = 'pricing'
-          AND function.proname IN (
-              '_dynamic_pricing_component_errors',
-              'point_in_time_dynamic_route_pricing',
-              'historical_dynamic_route_pricing'
-          )
-          AND NOT coalesce(
-              function.proconfig @> ARRAY['search_path=pg_catalog, pg_temp'],
-              false
-          )
-    ) THEN
-        RAISE EXCEPTION 'pricing function search_path is not hardened';
-    END IF;
-
     IF obj_description('pricing.i95_modeled_od_proxy'::regclass, 'pg_class') IS NULL
        OR obj_description('pricing.modeled_trip_pricing_i95'::regclass, 'pg_class') IS NULL
        OR obj_description('pricing.modeled_current_trip_pricing_i95'::regclass, 'pg_class') IS NULL
        OR obj_description('pricing.current_i95_direction'::regclass, 'pg_class') IS NULL
-       OR obj_description('pricing.dynamic_pricing_observations'::regclass, 'pg_class') IS NULL
-       OR obj_description(
-            'pricing.point_in_time_dynamic_route_pricing(timestamptz,jsonb)'::regprocedure,
-            'pg_proc'
-       ) IS NULL
-       OR obj_description(
-            'pricing.historical_dynamic_route_pricing(timestamptz,jsonb)'::regprocedure,
-            'pg_proc'
-       ) IS NULL THEN
+       OR obj_description('pricing.i66_pricing_comparisons'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.i95_i495_pricing_comparisons'::regclass, 'pg_class') IS NULL THEN
         RAISE EXCEPTION 'pricing analysis comments were not preserved';
     END IF;
 END $$;
@@ -143,9 +122,9 @@ END $$;
 
 DO $$
 BEGIN
-    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.0.1'
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.1.0'
        OR (SELECT count(*) FROM pricing.schema_version) <> 1 THEN
-        RAISE EXCEPTION 'pricing schema must expose exactly version 1.0.1';
+        RAISE EXCEPTION 'pricing schema must expose exactly version 1.1.0';
     END IF;
 
     IF NOT pg_has_role('pricing_loader_writer', 'rds_iam', 'MEMBER')
@@ -178,34 +157,9 @@ BEGIN
        OR NOT has_table_privilege('pricing_reader', 'pricing.i95_modeled_od_proxy', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.modeled_trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.modeled_current_trip_pricing_i95', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'pricing.dynamic_pricing_observations', 'SELECT')
-       OR NOT has_function_privilege(
-            'pricing_reader',
-            'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
-            'EXECUTE'
-       )
-       OR NOT has_function_privilege(
-            'pricing_reader',
-            'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
-            'EXECUTE'
-       ) THEN
+       OR NOT has_table_privilege('pricing_reader', 'pricing.i66_pricing_comparisons', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.i95_i495_pricing_comparisons', 'SELECT') THEN
         RAISE EXCEPTION 'pricing_reader is missing read privileges';
-    END IF;
-
-    IF has_function_privilege(
-        'public',
-        'pricing._dynamic_pricing_component_errors(jsonb)',
-        'EXECUTE'
-    ) OR has_function_privilege(
-        'public',
-        'pricing.point_in_time_dynamic_route_pricing(timestamp with time zone,jsonb)',
-        'EXECUTE'
-    ) OR has_function_privilege(
-        'public',
-        'pricing.historical_dynamic_route_pricing(timestamp with time zone,jsonb)',
-        'EXECUTE'
-    ) THEN
-        RAISE EXCEPTION 'dynamic pricing functions must not be executable by public';
     END IF;
 
     IF has_table_privilege('pricing_reader', 'pricing.trip_pricing_i95', 'INSERT,UPDATE,DELETE')
