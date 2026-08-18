@@ -10,6 +10,7 @@ TIMED_CHECKS_WORKFLOW = (
 TIMED_SCHEDULE_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-schedule.yml"
 ).read_text()
+TIMED_ROUTE_TEST = (V2_ROOT / "tests" / "test_validate_toll_route_live.py").read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
 
@@ -70,3 +71,13 @@ def test_timed_ci_skips_stale_scheduled_runs():
     assert 'python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"' in (
         TIMED_CHECKS_WORKFLOW
     )
+
+
+def test_timed_ci_checks_both_validators_in_every_i95_state():
+    for window_id in ("i95_northbound", "i95_reversal", "i95_southbound"):
+        assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
+        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
+        assert f'"{window_id}":' in TIMED_ROUTE_TEST
+
+    assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
+    assert "oracle.validate_pricing_route" in TIMED_ROUTE_TEST

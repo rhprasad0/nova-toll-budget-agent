@@ -24,8 +24,8 @@ env:
   TIMED_WINDOW_ID: ${{ inputs.window_id }}
 
 jobs:
-  route-tool:
-    name: route tool (${{ inputs.window_id }})
+  route-validation:
+    name: route validation (${{ inputs.window_id }})
     if: startsWith(inputs.window_id, 'i95_')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -59,7 +59,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: uv sync --locked
-      - name: Validate live I-95 route state
+      - name: Validate both live I-95 route functions
         env:
           DB_CA_BUNDLE_PATH: infra/build/ca/rds-ca-bundle.pem
           DB_NAME: nova_toll
