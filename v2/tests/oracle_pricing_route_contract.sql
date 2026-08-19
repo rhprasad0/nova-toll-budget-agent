@@ -284,6 +284,17 @@ BEGIN
                'route_step_id', 'step-2',
                'facility', 'dtr',
                'point_ids', jsonb_build_array(
+                   'greenway:28:exit:EB', 'dtr:28:entry:EB'
+               ),
+               'connection_ids', jsonb_build_array('greenway_to_dtr'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'greenway_to_dtr', 'charge_index', 1
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-3',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
                    'dtr:28:entry:EB', 'dtr:66:exit:EB'
                ),
                'connection_ids', jsonb_build_array(
@@ -294,7 +305,7 @@ BEGIN
                )
            ),
            jsonb_build_object(
-               'route_step_id', 'step-3',
+               'route_step_id', 'step-4',
                'facility', 'i66',
                'point_ids', jsonb_build_array(
                    'i66:6:entry:EB', 'i66:10:exit:EB'
@@ -348,6 +359,17 @@ BEGIN
            ),
            jsonb_build_object(
                'route_step_id', 'step-2',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
+                   'dtr:28:exit:WB', 'greenway:28:entry:WB'
+               ),
+               'connection_ids', jsonb_build_array('dtr_to_greenway'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'dtr_to_greenway', 'charge_index', 1
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-3',
                'facility', 'greenway',
                'point_ids', jsonb_build_array(
                    'greenway:28:entry:WB', 'greenway:1:exit:WB'
@@ -372,7 +394,13 @@ BEGIN
         SELECT 1
         FROM oracle.route_pricing_component AS component
         JOIN oracle.toll_connection AS connection USING (connection_id)
-        WHERE connection.connection_type IN ('toll_handoff', 'airport_access')
+        WHERE connection.connection_type = 'airport_access'
+           OR (
+               connection.connection_type = 'toll_handoff'
+               AND connection.connection_id NOT IN (
+                   'greenway_to_dtr', 'dtr_to_greenway'
+               )
+           )
     ) OR EXISTS (
         SELECT 1
         FROM oracle.route_pricing_component
@@ -384,9 +412,19 @@ BEGIN
         WHERE connection_id = 'source:greenway:EB:1:28'
     ) IS DISTINCT FROM jsonb_build_object(
         'label', 'Mainline plaza',
-        'price_off_peak_usd', '7.25',
-        'price_peak_usd', '7.80'
-    ) OR NOT EXISTS (
+        'price_off_peak_usd', '5.25',
+        'price_peak_usd', '5.80'
+    ) OR (
+        SELECT count(*)
+        FROM oracle.route_pricing_component
+        WHERE connection_id IN ('greenway_to_dtr', 'dtr_to_greenway')
+          AND facility = 'dtr'
+          AND charge = jsonb_build_object(
+              'label', 'Dulles Toll Road connection',
+              'price_off_peak_usd', '2.00',
+              'price_peak_usd', '2.00'
+          )
+    ) <> 2 OR NOT EXISTS (
         SELECT 1
         FROM oracle.route_pricing_component
         WHERE od_pair_id BETWEEN 1374 AND 1389

@@ -25,6 +25,11 @@ EXPECTED_POINTS = 220
 EXPECTED_CONNECTIONS = 995
 EXPECTED_REACHABLE_PAIRS = 2745
 EXPECTED_MAX_SHORTEST_PATH = 7
+_DTR_CONNECTION_CHARGE = {
+    "label": "Dulles Toll Road connection",
+    "price_off_peak_usd": "2.00",
+    "price_peak_usd": "2.00",
+}
 
 CORRIDOR_POSITIONS = {
     "i66": {
@@ -382,6 +387,7 @@ def _curated_connection(
     connection_type: str,
     required_i95_direction: str | None = None,
     evidence_url: str | None = None,
+    pricing_charge: dict[str, str] | None = None,
 ) -> Connection:
     source_metadata: dict[str, Any] = {
         "curated": True,
@@ -389,48 +395,18 @@ def _curated_connection(
     }
     if evidence_url is not None:
         source_metadata["evidence_url"] = evidence_url
+    if pricing_charge is not None:
+        source_metadata["pricing_facility"] = "dtr"
+        source_metadata["pricing_charge"] = pricing_charge
     return Connection(
         connection_id=connection_id,
         from_point_id=from_point_id,
         to_point_id=to_point_id,
         connection_type=connection_type,
         required_i95_direction=required_i95_direction,
-        source_route_key=None,
+        source_route_key=connection_id if pricing_charge is not None else None,
         source_metadata=source_metadata,
     )
-
-
-def _bundle_greenway_surcharge(
-    raw_pair: dict[str, Any],
-) -> tuple[dict[str, Any], bool]:
-    charges = cast(list[dict[str, Any]], raw_pair["charges"])
-    greenway_charge = {
-        "label": "Mainline plaza",
-        "price_off_peak_usd": "5.25",
-        "price_peak_usd": "5.80",
-    }
-    dtr_surcharge = {
-        "facility": "dulles_toll_road",
-        "label": "Mainline plaza",
-        "price_off_peak_usd": "2.00",
-        "price_peak_usd": "2.00",
-    }
-    if dtr_surcharge not in charges:
-        if any(charge.get("facility") is not None for charge in charges):
-            raise ValueError("unknown Greenway charge facility")
-        return raw_pair, False
-    if len(charges) != 2 or greenway_charge not in charges:
-        raise ValueError("Greenway surcharge source pair is not canonical")
-    return {
-        **raw_pair,
-        "charges": [
-            {
-                "label": "Mainline plaza",
-                "price_off_peak_usd": "7.25",
-                "price_peak_usd": "7.80",
-            }
-        ],
-    }, True
 
 
 def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
@@ -475,7 +451,6 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             source_metadata=source_metadata,
         )
 
-    bundled_greenway_surcharge_count = 0
     for network_id in ("i66", "dtr", "greenway"):
         source = _load_source(network_id)
         for raw_pair in cast(list[dict[str, Any]], source["pairs"]):
@@ -485,10 +460,6 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             from_id = _movement_point_id(network_id, entry, "entry", direction)
             to_id = _movement_point_id(network_id, exit_id, "exit", direction)
             connection_id = _source_connection_id(network_id, direction, entry, exit_id)
-            source_pair = raw_pair
-            if network_id == "greenway":
-                source_pair, bundled = _bundle_greenway_surcharge(raw_pair)
-                bundled_greenway_surcharge_count += bundled
             connections[connection_id] = Connection(
                 connection_id=connection_id,
                 from_point_id=from_id,
@@ -496,16 +467,8 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
                 connection_type="within_facility",
                 required_i95_direction=None,
                 source_route_key=f"{direction}:{entry}:{exit_id}",
-                source_metadata=_metadata(
-                    network_id, source, "source_pair", source_pair
-                ),
+                source_metadata=_metadata(network_id, source, "source_pair", raw_pair),
             )
-
-    if bundled_greenway_surcharge_count != 17:
-        raise ValueError(
-            "expected 17 bundled Greenway surcharges, found "
-            f"{bundled_greenway_surcharge_count}"
-        )
 
     curated = (
         _curated_connection(
@@ -513,12 +476,14 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             "greenway:28:exit:EB",
             "dtr:28:entry:EB",
             "toll_handoff",
+            pricing_charge=_DTR_CONNECTION_CHARGE,
         ),
         _curated_connection(
             "dtr_to_greenway",
             "dtr:28:exit:WB",
             "greenway:28:entry:WB",
             "toll_handoff",
+            pricing_charge=_DTR_CONNECTION_CHARGE,
         ),
         _curated_connection(
             "i66_to_i495",
@@ -730,6 +695,20 @@ def _validate_connection(points: dict[str, Point], connection: Connection) -> No
             raise ValueError(
                 f"toll handoff requires I-95 on {connection.connection_id}"
             )
+        priced = connection.connection_id in {"greenway_to_dtr", "dtr_to_greenway"}
+        if priced and (
+            connection.source_route_key != connection.connection_id
+            or connection.source_metadata.get("pricing_facility") != "dtr"
+            or connection.source_metadata.get("pricing_charge")
+            != _DTR_CONNECTION_CHARGE
+        ):
+            raise ValueError(f"invalid priced handoff {connection.connection_id}")
+        if not priced and (
+            connection.source_route_key is not None
+            or "pricing_facility" in connection.source_metadata
+            or "pricing_charge" in connection.source_metadata
+        ):
+            raise ValueError(f"unexpected priced handoff {connection.connection_id}")
     elif connection.connection_type == "airport_access":
         valid_roles = (
             from_point.point_type == "airport" and to_point.point_type == "entry"

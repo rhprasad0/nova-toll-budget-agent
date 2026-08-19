@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.1.1
+-- oracle schema version: 1.1.2
 
 \set ON_ERROR_STOP on
 
@@ -13,11 +13,11 @@ DECLARE
 BEGIN
     IF current_setting('server_version_num')::integer < 170000
        OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.1.1 requires PostgreSQL 17';
+        RAISE EXCEPTION 'oracle 1.1.2 requires PostgreSQL 17';
     END IF;
     IF to_regclass('pricing.schema_version') IS NULL
        OR to_regclass('pricing.current_i95_direction') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.1.1 requires pricing schema 1.x';
+        RAISE EXCEPTION 'oracle 1.1.2 requires pricing schema 1.x';
     END IF;
     EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
         INTO pricing_version;
@@ -25,7 +25,7 @@ BEGIN
     IF pricing_version IS NULL
        OR pricing_version_parts < ARRAY[1, 0, 0]
        OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.1.1 requires pricing schema 1.x; found %',
+        RAISE EXCEPTION 'oracle 1.1.2 requires pricing schema 1.x; found %',
             coalesce(pricing_version, '<missing>');
     END IF;
     IF to_regrole('rds_iam') IS NULL THEN
@@ -119,7 +119,7 @@ BEGIN
     FROM pg_catalog.pg_extension
     WHERE extname = 'postgis';
     IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.1.1 requires PostGIS 3.5.x; found %',
+        RAISE EXCEPTION 'oracle 1.1.2 requires PostGIS 3.5.x; found %',
             coalesce(installed_version, '<missing>');
     END IF;
 END $$;
@@ -132,7 +132,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.1.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.1.2');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -245,7 +245,27 @@ WHERE connection.connection_type = 'within_facility'
   AND (
       (component.value->>'price_peak_usd')::numeric > 0
       OR (component.value->>'price_off_peak_usd')::numeric > 0
-  );
+  )
+
+UNION ALL
+
+SELECT
+    connection.connection_id,
+    1,
+    connection.from_point_id,
+    connection.to_point_id,
+    NULL,
+    1,
+    connection.source_metadata->>'pricing_facility',
+    connection.source_route_key,
+    NULL,
+    NULL,
+    NULL,
+    connection.source_metadata->'pricing_charge'
+FROM oracle.toll_connection AS connection
+WHERE connection.connection_type = 'toll_handoff'
+  AND connection.source_metadata ? 'pricing_facility'
+  AND connection.source_metadata ? 'pricing_charge';
 
 CREATE FUNCTION oracle.ramp_alternatives(
     submitted_point_id text,

@@ -429,7 +429,7 @@ def test_route_failures_stream_failed_and_return_only_safe_error(
             "1",
             "28",
             datetime(2026, 8, 17, 8, 59, tzinfo=_EASTERN),
-            "7.80",
+            "5.80",
             "peak",
             "mainline_plaza",
         ),
@@ -438,7 +438,7 @@ def test_route_failures_stream_failed_and_return_only_safe_error(
             "1",
             "28",
             datetime(2026, 8, 17, 9, 0, tzinfo=_EASTERN),
-            "7.25",
+            "5.25",
             "off_peak",
             "mainline_plaza",
         ),
@@ -447,7 +447,7 @@ def test_route_failures_stream_failed_and_return_only_safe_error(
             "28",
             "1",
             datetime(2026, 8, 17, 16, 0, tzinfo=_EASTERN),
-            "7.80",
+            "5.80",
             "peak",
             "mainline_plaza",
         ),
@@ -465,7 +465,7 @@ def test_route_failures_stream_failed_and_return_only_safe_error(
             "28",
             "1",
             datetime(2026, 8, 17, 18, 30, tzinfo=_EASTERN),
-            "7.25",
+            "5.25",
             "off_peak",
             "mainline_plaza",
         ),
@@ -474,7 +474,7 @@ def test_route_failures_stream_failed_and_return_only_safe_error(
             "1",
             "28",
             datetime(2026, 8, 22, 7, 0, tzinfo=_EASTERN),
-            "7.25",
+            "5.25",
             "off_peak",
             "mainline_plaza",
         ),
@@ -483,7 +483,7 @@ def test_route_failures_stream_failed_and_return_only_safe_error(
             "1",
             "28",
             datetime(2026, 8, 17, 10, 30, tzinfo=UTC),
-            "7.80",
+            "5.80",
             "peak",
             "mainline_plaza",
         ),
@@ -560,7 +560,7 @@ def test_greenway_only_route_streams_progress_and_returns_total(monkeypatch):
         "components": [
             {
                 "route_step_id": "step-1",
-                "price_usd": "7.80",
+                "price_usd": "5.80",
                 "source_kind": "schedule_derived",
                 "pricing_method": "published_schedule",
                 "facility": "greenway",
@@ -574,7 +574,7 @@ def test_greenway_only_route_streams_progress_and_returns_total(monkeypatch):
                 },
             }
         ],
-        "total_usd": "7.80",
+        "total_usd": "5.80",
     }
 
 

@@ -682,7 +682,7 @@ def test_pricing_route_returns_typed_facility_legs(monkeypatch):
     assert connection.closed
 
 
-def test_pricing_route_rejects_priced_handoff(monkeypatch):
+def test_pricing_route_allows_greenway_dtr_handoff_charge(monkeypatch):
     row = {
         "status": "valid",
         "reason": None,
@@ -707,7 +707,37 @@ def test_pricing_route_rejects_priced_handoff(monkeypatch):
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
-    with pytest.raises(ValueError, match="non-priced connection"):
+    response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+        _validated_route(row)
+    )
+
+    assert response.facility_legs[0].facility == "dtr"
+    assert connection.closed
+
+
+def test_pricing_route_rejects_other_priced_handoff(monkeypatch):
+    row = {
+        **_valid_row(),
+        "point_ids": ["i66:5:exit:WB", "i495:187SO"],
+        "connection_ids": ["i66_to_i495"],
+        "connection_types": ["toll_handoff"],
+        "facility_legs": [
+            {
+                "route_step_id": "step-1",
+                "facility": "dtr",
+                "point_ids": ["i66:5:exit:WB", "i495:187SO"],
+                "connection_ids": ["i66_to_i495"],
+                "pricing_key": {
+                    "source_route_key": "i66_to_i495",
+                    "charge_index": 1,
+                },
+            }
+        ],
+    }
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with pytest.raises(ValueError, match="unexpected priced toll handoff"):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
             _validated_route(row)
         )

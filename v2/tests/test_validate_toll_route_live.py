@@ -227,10 +227,10 @@ def test_live_greenway_peak_price() -> None:
     assert payload["origin_point_id"] == origin
     assert payload["destination_point_id"] == destination
     assert payload["source_kind"] == "schedule_derived"
-    assert payload["total_usd"] == "7.80"
+    assert payload["total_usd"] == "5.80"
     assert len(payload["components"]) == 1
     component = payload["components"][0]
     assert component["facility"] == "greenway"
-    assert component["price_usd"] == "7.80"
+    assert component["price_usd"] == "5.80"
     assert component["rate_period"] == "peak"
     assert component["published_schedule"]["rate_name"] == "mainline_plaza"

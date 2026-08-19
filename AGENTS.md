@@ -12,6 +12,10 @@ Create all worktrees inside the project-root `.worktrees/` directory, which must
 
 Open pull requests ready for review. Do not create draft pull requests.
 
+Before opening a PR, apply every database migration newly added or still
+unapplied on the branch from its declared prior version in a disposable
+database, and verify the migrated schema matches the canonical bootstrap.
+
 # Version boundaries
 
 The complete deployed product lives under `v1/`; preserve its behavior unless the user explicitly requests a change there. Keep all v2 code, tests, evals, infrastructure, and documentation under `v2/`. V2 has no compatibility contract with v1: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
