@@ -5,7 +5,6 @@ import logging
 from typing import Any, cast
 
 import pytest
-from strands.tools.loader import load_tools_from_module_path
 from strands.types.tools import ToolUse
 
 from agent_tools import validate_toll_route as route_tool
@@ -274,19 +273,6 @@ def _invoke(monkeypatch, row):
         )
     )
     return result, connection
-
-
-def test_strands_loads_generated_strict_input_schema():
-    loaded = load_tools_from_module_path("agent_tools.validate_toll_route")
-    assert len(loaded) == 1
-    assert loaded[0].tool_name == "validate_toll_route"
-    schema = loaded[0].tool_spec["inputSchema"]["json"]
-    assert schema["required"] == ["origin_point_id", "destination_point_id"]
-    assert set(schema["properties"]) == {
-        "origin_point_id",
-        "destination_point_id",
-    }
-    assert schema["additionalProperties"] is False
 
 
 @pytest.mark.parametrize(

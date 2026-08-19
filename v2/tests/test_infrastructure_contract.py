@@ -73,11 +73,11 @@ def test_timed_ci_skips_stale_scheduled_runs():
     )
 
 
-def test_timed_ci_checks_both_validators_in_every_i95_state():
+def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
     for window_id in ("i95_northbound", "i95_reversal", "i95_southbound"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
         assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
         assert f'"{window_id}":' in TIMED_ROUTE_TEST
 
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
-    assert "_validate_pricing_route" in TIMED_ROUTE_TEST
+    assert "get_current_toll_price" in TIMED_ROUTE_TEST
