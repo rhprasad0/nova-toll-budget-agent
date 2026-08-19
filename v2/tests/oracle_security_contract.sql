@@ -6,6 +6,7 @@ DECLARE
     route_function record;
     pricing_route_function record;
     i66_pricing_function record;
+    i95_pricing_function record;
     resolver_function record;
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
@@ -41,6 +42,10 @@ BEGIN
              'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure)
           <> 'oracle_owner'
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
@@ -51,6 +56,9 @@ BEGIN
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure)
        OR (SELECT prosecdef FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure) THEN
         RAISE EXCEPTION 'oracle ownership or SECURITY DEFINER contract is wrong';
@@ -142,6 +150,17 @@ BEGIN
             row_to_json(i66_pricing_function);
     END IF;
     SELECT procedure.provolatile, procedure.proconfig
+    INTO i95_pricing_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure;
+    IF i95_pricing_function.provolatile <> 's'
+       OR i95_pricing_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[] THEN
+        RAISE EXCEPTION 'I-95/I-495 pricing function catalog contract is wrong: %',
+            row_to_json(i95_pricing_function);
+    END IF;
+    SELECT procedure.provolatile, procedure.proconfig
     INTO resolver_function
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
@@ -158,6 +177,9 @@ BEGIN
        )
        OR has_table_privilege(
            'tollchat_agent', 'pricing.i66_pricing_comparisons', 'SELECT'
+       )
+       OR has_table_privilege(
+           'tollchat_agent', 'pricing.i95_i495_pricing_comparisons', 'SELECT'
        )
        OR has_table_privilege(
            'tollchat_agent', 'oracle.toll_route_point', 'SELECT'
@@ -180,6 +202,7 @@ BEGIN
                   'oracle.validate_toll_route(text,text)'::regprocedure,
                   'oracle.validate_pricing_route(text,text)'::regprocedure,
                   'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure,
+                  'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure,
                   'oracle.resolve_toll_route(text,text)'::regprocedure
               )
           AND privilege.grantee = 0
@@ -193,7 +216,7 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('tollchat_agent', procedure.oid, 'EXECUTE');
-    IF executable_count <> 3
+    IF executable_count <> 4
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
@@ -207,13 +230,18 @@ BEGIN
            'oracle.get_i66_pricing_comparisons(integer,integer)',
            'EXECUTE'
        )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_i95_i495_pricing_comparisons(integer)',
+           'EXECUTE'
+       )
        OR to_regprocedure(
            'oracle.validate_pricing_route(text[],text[])'
        ) IS NOT NULL
        OR has_function_privilege(
            'tollchat_agent', 'oracle.resolve_toll_route(text,text)', 'EXECUTE'
        ) THEN
-        RAISE EXCEPTION 'agent executable surface is not exactly three functions';
+        RAISE EXCEPTION 'agent executable surface is not exactly four functions';
     END IF;
 END $$;
 
@@ -242,6 +270,13 @@ BEGIN
        OR result.availability_reason <> 'missing_observation' THEN
         RAISE EXCEPTION 'agent I-66 pricing diagnostic failed';
     END IF;
+    SELECT * INTO result
+    FROM oracle.get_i95_i495_pricing_comparisons(9999);
+    IF result.comparison_kind <> 'current'
+       OR result.available
+       OR result.availability_reason <> 'missing_observation' THEN
+        RAISE EXCEPTION 'agent I-95/I-495 pricing diagnostic failed';
+    END IF;
     BEGIN
         PERFORM *
         FROM oracle.resolve_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
@@ -261,6 +296,11 @@ BEGIN
     BEGIN
         PERFORM count(*) FROM pricing.i66_pricing_comparisons;
         RAISE EXCEPTION 'agent read I-66 pricing view directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM pricing.i95_i495_pricing_comparisons;
+        RAISE EXCEPTION 'agent read I-95/I-495 pricing view directly';
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
     BEGIN

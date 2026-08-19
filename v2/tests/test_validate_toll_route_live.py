@@ -9,7 +9,6 @@ import pytest
 from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools import get_current_toll_price as pricing_tool
-from agent_tools import validate_toll_route as route_validation
 
 pytestmark = pytest.mark.live
 
@@ -100,31 +99,39 @@ def _run_pricing_tool(tool_use: ToolUse) -> ToolResult:
 
 
 def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]:
-    tool_use = _tool_use(origin, destination, tool_use_id)
-    result = _run_pricing_tool(tool_use)
-    if result["status"] == "error":
-        assert result["content"] == [
-            {"text": f"Unable to get the current toll price. Reference: {tool_use_id}."}
-        ]
-        result = route_validation.validate_toll_route(
-            cast(
-                ToolUse,
-                {
-                    **tool_use,
-                    "name": "validate_toll_route",
-                    "input": {
-                        "origin_point_id": origin,
-                        "destination_point_id": destination,
-                    },
-                },
-            )
-        )
+    result = _run_pricing_tool(_tool_use(origin, destination, tool_use_id))
     assert result["status"] == "success", result
     assert result["toolUseId"] == tool_use_id
     assert len(result["content"]) == 1
     content = cast(Any, result["content"])
     route = cast(dict[str, Any], content[0]["json"])
     return route
+
+
+def _assert_priced(payload: dict[str, Any], origin: str, destination: str) -> None:
+    assert payload["origin_point_id"] == origin
+    assert payload["destination_point_id"] == destination
+    assert payload["method"] == "latest_complete_current_facility_prices"
+    assert float(payload["total_usd"]) > 0
+    assert any(
+        component["facility"] == "i95_i495" for component in payload["components"]
+    )
+
+
+def _assert_unavailable(
+    payload: dict[str, Any],
+    status: str | None,
+    reason: str | None,
+    expected: dict[str, Any],
+) -> None:
+    assert status is not None
+    assert reason is not None
+    assert payload["status"] == status
+    assert _reason_code(payload) == reason
+    evidence = payload["i95_evidence"]
+    assert evidence["availability"] == expected["availability"]
+    assert evidence["northbound_link_status"] == expected["northbound_link_status"]
+    assert evidence["southbound_link_status"] == expected["southbound_link_status"]
 
 
 def _reason_code(route: dict[str, Any]) -> str | None:
@@ -140,21 +147,36 @@ def test_live_i95_state_matches_timed_window() -> None:
     expected = _WINDOW_EXPECTATIONS[window_id]
     _configure_rds_endpoint()
 
-    northbound = _validate("i95:202NO", "i95:201ND", f"{window_id}-northbound")
-    southbound = _validate("i95:200SO", "i95:202SD", f"{window_id}-southbound")
+    northbound_origin, northbound_destination = "i95:203NO", "airport_dca"
+    southbound_origin, southbound_destination = "i95:200SO", "i95:202SD"
+    northbound = _validate(
+        northbound_origin, northbound_destination, f"{window_id}-northbound"
+    )
+    southbound = _validate(
+        southbound_origin, southbound_destination, f"{window_id}-southbound"
+    )
     i66 = _validate("i66:1:entry:EB", "i66:4:exit:EB", f"{window_id}-i66-pricing-route")
 
-    assert northbound["status"] == expected["northbound_status"]
-    assert _reason_code(northbound) == expected["northbound_reason"]
-    assert southbound["status"] == expected["southbound_status"]
-    assert _reason_code(southbound) == expected["southbound_reason"]
-    assert i66["status"] == "valid"
-
-    for route in (northbound, southbound):
-        evidence = route["i95_evidence"]
-        assert evidence["availability"] == expected["availability"]
-        assert evidence["northbound_link_status"] == expected["northbound_link_status"]
-        assert evidence["southbound_link_status"] == expected["southbound_link_status"]
+    if expected["northbound_status"] == "valid":
+        _assert_priced(northbound, northbound_origin, northbound_destination)
+    else:
+        _assert_unavailable(
+            northbound,
+            expected["northbound_status"],
+            expected["northbound_reason"],
+            expected,
+        )
+    if expected["southbound_status"] == "valid":
+        _assert_priced(southbound, southbound_origin, southbound_destination)
+    else:
+        _assert_unavailable(
+            southbound,
+            expected["southbound_status"],
+            expected["southbound_reason"],
+            expected,
+        )
+    assert i66["method"] == "latest_complete_current_facility_prices"
+    assert any(component["facility"] == "i66" for component in i66["components"])
 
 
 def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
@@ -165,13 +187,28 @@ def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
     expected = _WINDOW_EXPECTATIONS[window_id]
     _configure_rds_endpoint()
 
-    route = _validate(
+    payload = _validate(
         "greenway:1:entry:EB", "airport_dca", f"{window_id}-greenway-to-dca"
     )
 
-    assert route["status"] == expected["northbound_status"]
-    assert _reason_code(route) == expected["northbound_reason"]
-    assert route["point_ids"] == [
+    if expected["northbound_status"] == "valid":
+        _assert_priced(payload, "greenway:1:entry:EB", "airport_dca")
+        assert [component["facility"] for component in payload["components"]] == [
+            "greenway",
+            "dtr",
+            "dtr",
+            "i95_i495",
+            "i95_i495",
+        ]
+        return
+
+    _assert_unavailable(
+        payload,
+        expected["northbound_status"],
+        expected["northbound_reason"],
+        expected,
+    )
+    assert payload["point_ids"] == [
         "greenway:1:entry:EB",
         "greenway:28:exit:EB",
         "dtr:28:entry:EB",
@@ -180,7 +217,7 @@ def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
         "i95:2239ND",
         "airport_dca",
     ]
-    assert route["connection_ids"] == [
+    assert payload["connection_ids"] == [
         "source:greenway:EB:1:28",
         "greenway_to_dtr",
         "source:dtr:EB:28:1819",
@@ -188,7 +225,7 @@ def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
         "source:i95_shared:Southbound:182SO:2239ND",
         "i95_north_to_dca_from_i495_south",
     ]
-    assert route["connection_types"] == [
+    assert payload["connection_types"] == [
         "within_facility",
         "toll_handoff",
         "within_facility",
@@ -196,7 +233,7 @@ def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
         "general_purpose_gap",
         "airport_access",
     ]
-    assert route["general_purpose_gaps"] == [
+    assert payload["general_purpose_gaps"] == [
         {
             "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
             "boundary_point_id": "i495:192SD",
@@ -205,10 +242,6 @@ def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
             "fallback_required": window_id != "i95_northbound",
         }
     ]
-    evidence = route["i95_evidence"]
-    assert evidence["availability"] == expected["availability"]
-    assert evidence["northbound_link_status"] == expected["northbound_link_status"]
-    assert evidence["southbound_link_status"] == expected["southbound_link_status"]
 
 
 def test_live_greenway_peak_price() -> None:

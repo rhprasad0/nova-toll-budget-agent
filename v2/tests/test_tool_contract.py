@@ -64,8 +64,8 @@ def test_generated_contract_matches_versioned_digest():
 def test_manifest_accepts_additive_version_advance():
     previous = _manifest()
     current = copy.deepcopy(previous)
-    current["get_current_toll_price"]["current"] = "1.3.0"
-    current["get_current_toll_price"]["releases"]["1.3.0"] = "a" * 64
+    current["get_current_toll_price"]["current"] = "1.4.0"
+    current["get_current_toll_price"]["releases"]["1.4.0"] = "a" * 64
     version_check.validate_manifest_update(previous, current)
 
 

@@ -249,6 +249,68 @@ BEGIN
 END
 $$;
 
+DO $$
+DECLARE
+    fixture record;
+    result record;
+    facilities text[];
+BEGIN
+    FOR fixture IN
+        SELECT * FROM (VALUES
+            (
+                'dtr:10:entry:EB', 'i495:181ND',
+                ARRAY['dtr', 'dtr', 'i95_i495']::text[], 1038
+            ),
+            (
+                'i495:191NO', 'dtr:10:exit:WB',
+                ARRAY['i95_i495', 'dtr', 'dtr']::text[], 1014
+            ),
+            (
+                'i66:11:entry:WB', 'i495:181ND',
+                ARRAY['i66', 'i95_i495']::text[], 1034
+            ),
+            (
+                'i495:191NO', 'i66:10:exit:EB',
+                ARRAY['i95_i495', 'i66']::text[], 1010
+            )
+        ) AS expected(origin_id, destination_id, facilities, i95_od_pair_id)
+    LOOP
+        SELECT * INTO STRICT result
+        FROM oracle.validate_pricing_route(
+            fixture.origin_id, fixture.destination_id
+        );
+        SELECT array_agg(leg.value->>'facility' ORDER BY leg.ordinality)
+        INTO facilities
+        FROM jsonb_array_elements(result.facility_legs)
+             WITH ORDINALITY AS leg(value, ordinality);
+        IF result.status <> 'valid'
+           OR facilities IS DISTINCT FROM fixture.facilities
+           OR NOT jsonb_path_exists(
+               result.facility_legs,
+               '$[*].pricing_key.od_pair_id ? (@ == $od)',
+               jsonb_build_object('od', fixture.i95_od_pair_id)
+           ) THEN
+            RAISE EXCEPTION 'I-495 junction pricing route changed for % to %: %',
+                fixture.origin_id, fixture.destination_id, row_to_json(result);
+        END IF;
+    END LOOP;
+
+    SELECT * INTO STRICT result
+    FROM oracle.validate_pricing_route('i95:203NO', 'airport_dca');
+    IF result.status <> 'valid'
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'source:i95_shared:Northbound:203NO:223ND',
+           'i95_north_to_dca'
+       ]::text[]
+       OR jsonb_array_length(result.facility_legs) <> 1
+       OR result.facility_legs->0->>'facility' <> 'i95_i495'
+       OR result.facility_legs->0->'pricing_key'->>'od_pair_id' <> '1261' THEN
+        RAISE EXCEPTION 'Old Keene Mill to Reagan pricing route changed: %',
+            row_to_json(result);
+    END IF;
+END
+$$;
+
 SELECT pg_temp.set_i95_state('CLOSED', 'SOUTHBOUND_OPEN');
 
 DO $$
