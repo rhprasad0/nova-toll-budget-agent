@@ -372,17 +372,16 @@ def _price_dtr(
         ):
             raise ValueError("DTR facility leg does not match its pricing key")
 
-        ramp_points = _DTR_RAMP_POINTS | ({"16"} if direction == "EB" else set[str]())
         rate_names: list[Literal["ramp", "mainline_plaza"]] = []
-        if entry in ramp_points:
+        if entry in _DTR_RAMP_POINTS:
             rate_names.append("ramp")
         if (
             min(entry_position, exit_position)
-            <= _DTR_POINTS.index("15")
+            <= _DTR_POINTS.index("16")
             < max(entry_position, exit_position)
         ):
             rate_names.append("mainline_plaza")
-        if exit_ in ramp_points:
+        if exit_ in _DTR_RAMP_POINTS or (direction == "EB" and exit_ == "16"):
             rate_names.append("ramp")
         try:
             rate_name = rate_names[leg.pricing_key.charge_index - 1]

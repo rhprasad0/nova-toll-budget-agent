@@ -30,7 +30,7 @@ the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.2.0**. It installs
+The independently versioned `oracle` schema is at **1.2.1**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes endpoint-based route and pricing-route validators to `tollchat_agent`.
 Regenerate and verify its checked-in seed with:
@@ -111,6 +111,14 @@ Then make pricing-route resolution atomic for oracle `1.2.0`:
 ```bash
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/010_upgrade_oracle_1_1_2_to_1_2_0.sql
+```
+
+Then remove the nonexistent eastbound entrance toll at DTR Exit 16 for oracle
+`1.2.1`:
+
+```bash
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/011_upgrade_oracle_1_2_0_to_1_2_1.sql
 ```
 
 After the shadow loader is active, copy and verify the current v1 source rows:

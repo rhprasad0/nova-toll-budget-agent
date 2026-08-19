@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -567,11 +568,11 @@ def test_greenway_pricer_requires_aware_evaluation_time():
     ("direction", "entry", "exit_", "charge_index", "price", "rate_name"),
     [
         ("EB", "28", "10", 1, "2.00", "ramp"),
-        ("EB", "10", "16", 1, "2.00", "ramp"),
-        ("EB", "10", "16", 2, "4.00", "mainline_plaza"),
-        ("EB", "10", "16", 3, "2.00", "ramp"),
+        ("EB", "10", "17", 1, "2.00", "ramp"),
+        ("EB", "10", "17", 2, "4.00", "mainline_plaza"),
+        ("EB", "10", "17", 3, "2.00", "ramp"),
         ("WB", "66", "28", 1, "4.00", "mainline_plaza"),
-        ("EB", "16", "17", 1, "2.00", "ramp"),
+        ("EB", "16", "17", 1, "4.00", "mainline_plaza"),
         ("EB", "16", "17", 2, "2.00", "ramp"),
     ],
 )
@@ -589,6 +590,34 @@ def test_dtr_schedule_rates(direction, entry, exit_, charge_index, price, rate_n
     assert component.price_usd == Decimal(price)
     assert component.published_schedule.rate_name == rate_name
     assert component.component_evaluated_at.tzinfo == _EASTERN
+
+
+def test_dtr_pricer_matches_every_canonical_source_charge():
+    source = json.loads(
+        (
+            Path(__file__).parents[1] / "oracle" / "sources" / "dulles_toll_road.json"
+        ).read_text()
+    )
+
+    checked = 0
+    for pair in source["pairs"]:
+        for charge_index, charge in enumerate(pair["charges"], 1):
+            component = pricing_tool._price_dtr(
+                _dtr_leg(
+                    direction=pair["direction"],
+                    entry=pair["entry"],
+                    exit_=pair["exit"],
+                    charge_index=charge_index,
+                ),
+                datetime(2026, 8, 17, 12, tzinfo=_EASTERN),
+            )
+            assert component.price_usd == Decimal(charge["price_off_peak_usd"])
+            assert component.published_schedule.rate_name == (
+                "mainline_plaza" if charge["label"] == "Mainline plaza" else "ramp"
+            )
+            checked += 1
+
+    assert checked == 175
 
 
 @pytest.mark.parametrize("route_key", ["greenway_to_dtr", "dtr_to_greenway"])
