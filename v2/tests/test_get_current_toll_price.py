@@ -358,7 +358,13 @@ def _i95_rows(
         ),
         "od_pair_id": None if missing else od_pair_id or (1374 if modeled else 1261),
         "proxy_od_pair_id": 1146 if modeled and not missing else None,
-        "source_status": None if missing else "NORTHBOUND_OPEN",
+        "source_status": (
+            None
+            if missing
+            else "CLOSED"
+            if unavailable_reason == "exceptional_i95_schedule"
+            else "NORTHBOUND_OPEN"
+        ),
     }
     rows = [
         {
@@ -1191,7 +1197,13 @@ def test_i95_fetch_rejects_misaligned_row_sets(monkeypatch, mutation):
 
 
 @pytest.mark.parametrize(
-    "reason", ["missing_observation", "stale_observation", "facility_unavailable"]
+    "reason",
+    [
+        "missing_observation",
+        "stale_observation",
+        "facility_unavailable",
+        "exceptional_i95_schedule",
+    ],
 )
 def test_i95_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
     monkeypatch.setattr(
@@ -1204,9 +1216,10 @@ def test_i95_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
 
     assert isinstance(result, pricing_tool._UnavailableComponent)  # pyright: ignore[reportPrivateUsage]
     assert result.reason == reason
-    assert result.source_status == (
-        None if reason == "missing_observation" else "NORTHBOUND_OPEN"
-    )
+    assert result.source_status == {
+        "missing_observation": None,
+        "exceptional_i95_schedule": "CLOSED",
+    }.get(reason, "NORTHBOUND_OPEN")
     assert "price_usd" not in result.model_dump()
 
 

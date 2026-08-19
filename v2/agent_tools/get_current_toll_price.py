@@ -124,7 +124,12 @@ class _PricingUnavailableResponse(_Model):
 
 class _UnavailableComponent(_Model):
     route_step_id: str
-    reason: Literal["missing_observation", "stale_observation", "facility_unavailable"]
+    reason: Literal[
+        "missing_observation",
+        "stale_observation",
+        "facility_unavailable",
+        "exceptional_i95_schedule",
+    ]
     component_evaluated_at: datetime
     interval_end_at: datetime | None
     observed_at: datetime | None
@@ -356,9 +361,10 @@ def _validate_comparison_contract(
         value is None for value in values
     ):
         raise ValueError(f"stale {label} observation is incomplete")
-    elif row.availability_reason == "facility_unavailable" and any(
-        value is None for value in values[:-1]
-    ):
+    elif row.availability_reason in {
+        "facility_unavailable",
+        "exceptional_i95_schedule",
+    } and any(value is None for value in values[:-1]):
         raise ValueError(f"unavailable {label} observation is incomplete")
     if (row.interval_end_at is not None and row.interval_end_at > row.evaluated_at) or (
         row.observed_at is not None and row.observed_at > row.evaluated_at
@@ -412,7 +418,12 @@ class _I95ComparisonRow(_Model):
     price_usd: _Usd | None
     available: bool
     availability_reason: (
-        Literal["missing_observation", "stale_observation", "facility_unavailable"]
+        Literal[
+            "missing_observation",
+            "stale_observation",
+            "facility_unavailable",
+            "exceptional_i95_schedule",
+        ]
         | None
     )
     source_kind: Literal["observed", "modeled"] | None
@@ -814,6 +825,7 @@ def _price_i95(
                     "missing_observation",
                     "stale_observation",
                     "facility_unavailable",
+                    "exceptional_i95_schedule",
                 ],
                 current.availability_reason,
             ),

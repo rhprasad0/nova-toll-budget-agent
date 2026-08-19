@@ -25,7 +25,7 @@ adopts them.
 - [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
 
 The independently deployable `pricing` application schema starts at semantic
-version **1.1.0**. Its version is stored in `pricing.schema_version`; CI tests
+version **1.1.1**. Its version is stored in `pricing.schema_version`; CI tests
 the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
@@ -61,6 +61,13 @@ Then install the facility-specific comparison views with:
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/006_upgrade_pricing_1_0_1_to_1_1_0.sql
+```
+
+Then preserve exceptional I-95 schedule evidence as an explicit diagnostic:
+
+```bash
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/014_upgrade_pricing_1_1_0_to_1_1_1.sql
 ```
 
 After pricing `1.0.0` or newer exists, install the oracle additively:

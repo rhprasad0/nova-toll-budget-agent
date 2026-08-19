@@ -257,7 +257,7 @@ BEGIN
     RAISE EXCEPTION 'failed schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE pricing.schema_version SET version = '1.1.0' WHERE singleton;
+UPDATE pricing.schema_version SET version = '1.1.1' WHERE singleton;
 SQL
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql

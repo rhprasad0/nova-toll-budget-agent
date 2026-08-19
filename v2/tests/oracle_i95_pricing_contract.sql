@@ -209,4 +209,51 @@ BEGIN
     END IF;
 END $$;
 
+TRUNCATE pricing.trip_pricing_i95;
+
+-- A decisive event schedule that contradicts the canonical Tuesday morning
+-- direction must preserve the current source evidence through the bounded
+-- oracle function instead of degrading to a missing-observation fallback.
+INSERT INTO pricing.trip_pricing_i95 (
+    interval_end_at, current_at, calculated_at, corridor_id,
+    corridor_name, od_pair_id, od_pair_name, start_zone_id,
+    start_zone_name, end_zone_id, end_zone_name, zone_toll_rate_usd,
+    link_status, s3_key
+) VALUES
+    (
+        '2026-08-11 13:05:00+00', '2026-08-11 13:05:00+00',
+        '2026-08-11 12:55:00+00', 95, 'I-95-NB', 1132,
+        'northbound sentinel', 1, 'A', 2, 'B', 1.00,
+        'CLOSED', 'test/i95-exception-nb.csv'
+    ),
+    (
+        '2026-08-11 13:05:00+00', '2026-08-11 13:05:00+00',
+        '2026-08-11 12:55:00+00', 95, 'I-95-SB', 1151,
+        'southbound sentinel', 3, 'C', 4, 'D', 1.00,
+        'SOUTHBOUND_OPEN', 'test/i95-exception-sb.csv'
+    ),
+    (
+        '2026-08-11 13:05:00+00', '2026-08-11 13:05:00+00',
+        '2026-08-11 12:55:00+00', 95, 'I-95-NB', 5002,
+        'exceptional observed pair', 5, 'E', 6, 'F', 8.00,
+        'CLOSED', 'test/i95-exception-price.csv'
+    );
+
+DO $$
+DECLARE comparison record;
+BEGIN
+    SELECT * INTO STRICT comparison
+    FROM oracle.get_i95_i495_pricing_comparisons(5002)
+    WHERE comparison_kind = 'current';
+    IF comparison.available
+       OR comparison.availability_reason <> 'exceptional_i95_schedule'
+       OR comparison.price_usd <> 8.00
+       OR comparison.interval_end_at <> '2026-08-11 13:05:00+00'
+       OR comparison.observed_at <> '2026-08-11 12:55:00+00'
+       OR comparison.source_status <> 'CLOSED' THEN
+        RAISE EXCEPTION 'exceptional I-95 diagnostic lost evidence: %',
+            row_to_json(comparison);
+    END IF;
+END $$;
+
 ROLLBACK;
