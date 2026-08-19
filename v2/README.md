@@ -30,9 +30,10 @@ the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.3.0**. It installs
+The independently versioned `oracle` schema is at **1.4.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
-exposes endpoint-based route and pricing-route validators to `tollchat_agent`.
+exposes endpoint-based route validators and bounded I-66 pricing comparisons to
+`tollchat_agent`.
 Regenerate and verify its checked-in seed with:
 
 ```sh
@@ -121,6 +122,14 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/011_upgrade_oracle_1_2_0_to_1_3_0.sql
 ```
 
+Then expose current I-66 pricing through the least-privilege oracle `1.4.0`
+function:
+
+```bash
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/012_upgrade_oracle_1_3_0_to_1_4_0.sql
+```
+
 After the shadow loader is active, copy and verify the current v1 source rows:
 
 ```sh
@@ -133,10 +142,10 @@ verification, rollback, and deliberately guarded cleanup.
 
 The `get_current_toll_price` Strands tool accepts stable origin and destination
 point IDs plus the supported pricing profile. It validates the route through
-the oracle and currently prices Dulles Greenway and Dulles Toll Road legs from
-their published schedules, including trips that cross between those facilities;
-other facility pricing remains to be implemented. Callers do not submit route
-plans or pricing components.
+the oracle and prices I-66 from current observations plus Dulles Greenway and
+Dulles Toll Road from their published schedules. Mixed I-66/DTR trips preserve
+facility order and return one summed total. Other facility pricing remains to
+be implemented. Callers do not submit route plans or pricing components.
 
 Its generated input, output, progress-event, and safe-error schemas are locked
 by `agent_tools/contract-manifest.json`. Contract changes require a new,

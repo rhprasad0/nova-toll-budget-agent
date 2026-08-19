@@ -3,9 +3,10 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from datetime import date, datetime, time
-from decimal import Decimal
-from itertools import groupby
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+from itertools import groupby, pairwise
+from statistics import median
 from typing import Annotated, Any, Literal, Self, cast
 from zoneinfo import ZoneInfo
 
@@ -46,13 +47,19 @@ _DTR_RATES = {
 }
 _DTR_POINTS = ("28", "10", "11", "12", "13", "14", "15", "16", "17", "1819", "66")
 _DTR_RAMP_POINTS = {"10", "11", "12", "13", "14", "17"}
+_I66_SQL = "SELECT * FROM oracle.get_i66_pricing_comparisons(%s, %s)"
 
-type _ProgressStage = Literal["route_validation", "greenway_pricing", "dtr_pricing"]
+type _ProgressStage = Literal[
+    "route_validation", "i66_pricing", "greenway_pricing", "dtr_pricing"
+]
 type _ProgressStatus = Literal["running", "completed", "failed"]
 type _ProgressMessage = Literal[
     "Validating toll route",
     "Toll route validated",
     "Toll route validation failed",
+    "Pricing I-66 Express Lanes",
+    "I-66 Express Lanes pricing complete",
+    "I-66 Express Lanes pricing failed",
     "Pricing Dulles Greenway",
     "Dulles Greenway pricing complete",
     "Dulles Greenway pricing failed",
@@ -64,6 +71,9 @@ _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessag
     ("route_validation", "running"): "Validating toll route",
     ("route_validation", "completed"): "Toll route validated",
     ("route_validation", "failed"): "Toll route validation failed",
+    ("i66_pricing", "running"): "Pricing I-66 Express Lanes",
+    ("i66_pricing", "completed"): "I-66 Express Lanes pricing complete",
+    ("i66_pricing", "failed"): "I-66 Express Lanes pricing failed",
     ("greenway_pricing", "running"): "Pricing Dulles Greenway",
     ("greenway_pricing", "completed"): "Dulles Greenway pricing complete",
     ("greenway_pricing", "failed"): "Dulles Greenway pricing failed",
@@ -75,6 +85,9 @@ _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessag
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+
+
+type _Usd = Annotated[Decimal, Field(ge=0)]
 
 
 class _PricingProfile(_Model):
@@ -94,6 +107,23 @@ class _PricingUnavailableResponse(_Model):
     destination_point_id: str
     error: Literal["pricing_unavailable"]
     reason: Literal["unsupported_pricing_profile"]
+
+
+class _UnavailableComponent(_Model):
+    route_step_id: str
+    reason: Literal["missing_observation", "stale_observation"]
+    component_evaluated_at: datetime
+    interval_end_at: datetime | None
+    observed_at: datetime | None
+    source_status: None = None
+
+
+class _IncompleteRoutePriceResponse(_Model):
+    origin_point_id: str
+    destination_point_id: str
+    error: Literal["pricing_unavailable"]
+    reason: Literal["incomplete_route_price"]
+    unavailable_components: Annotated[list[_UnavailableComponent], Field(min_length=1)]
 
 
 class _NonValidRouteResponse(
@@ -186,8 +216,138 @@ class _DtrComponent(_Model):
     published_schedule: _DtrPublishedSchedule
 
 
+class _MovementSample(_Model):
+    cycle_offset: Literal[-2, -1, 0]
+    price_usd: _Usd
+
+
+class _RecentMovement(_Model):
+    method: Literal["same_facility_leg_three_cycles"]
+    direction: Literal["rising", "falling", "unchanged", "mixed"]
+    samples: Annotated[list[_MovementSample], Field(min_length=3, max_length=3)]
+    net_change_usd: Decimal
+    net_change_percent: Decimal | None
+
+
+class _WeekSample(_Model):
+    week_offset: Annotated[int, Field(ge=1, le=3)]
+    price_usd: _Usd
+
+
+class _PriorWeekComparison(_Model):
+    method: Literal["same_weekday_same_facility_bins"]
+    comparable_period_count: Annotated[int, Field(ge=1, le=3)]
+    expected_comparable_period_count: Annotated[int, Field(ge=1, le=3)]
+    comparable_prices: Annotated[list[_WeekSample], Field(min_length=1, max_length=3)]
+    median_usd: Decimal
+    minimum_usd: Decimal
+    maximum_usd: Decimal
+    current_delta_usd: Decimal
+    current_delta_percent: Decimal | None
+    position: Literal["below_recent_range", "within_recent_range", "above_recent_range"]
+    higher_than_count: Annotated[int, Field(ge=0, le=3)]
+
+
+class _I66Component(_Model):
+    route_step_id: str
+    price_usd: _Usd
+    source_kind: Literal["observed"]
+    pricing_method: Literal["source_observation"]
+    facility: Literal["i66"]
+    component_evaluated_at: datetime
+    bin_minutes: Literal[6]
+    bin_start: datetime
+    bin_end: datetime
+    interval_end_at: datetime
+    observed_at: datetime
+    recent_movement: _RecentMovement | None = None
+    prior_week_comparison: _PriorWeekComparison | None = None
+
+
+class _I66ComparisonRow(_Model):
+    evaluated_at: datetime
+    comparison_kind: Literal["current", "prior_cycle", "prior_week"]
+    comparison_offset: Annotated[int, Field(ge=0, le=3)]
+    bin_start_at: datetime | None
+    bin_end_at: datetime | None
+    interval_end_at: datetime | None
+    observed_at: datetime | None
+    price_usd: _Usd | None
+    available: bool
+    availability_reason: Literal["missing_observation", "stale_observation"] | None
+
+    @model_validator(mode="after")
+    def _validate_contract(self) -> Self:
+        expected_offsets = {
+            "current": {0},
+            "prior_cycle": {1, 2},
+            "prior_week": {1, 2, 3},
+        }
+        if self.comparison_offset not in expected_offsets[self.comparison_kind]:
+            raise ValueError("I-66 comparison kind and offset do not match")
+        timestamps = [
+            self.evaluated_at,
+            self.bin_start_at,
+            self.bin_end_at,
+            self.interval_end_at,
+            self.observed_at,
+        ]
+        if any(
+            value is not None and (value.tzinfo is None or value.utcoffset() is None)
+            for value in timestamps
+        ):
+            raise ValueError("I-66 comparison timestamps must be aware")
+        values = (
+            self.bin_start_at,
+            self.bin_end_at,
+            self.interval_end_at,
+            self.observed_at,
+            self.price_usd,
+        )
+        if self.available:
+            if any(value is None for value in values) or self.availability_reason:
+                raise ValueError("available I-66 comparison is incomplete")
+        elif self.comparison_kind != "current" or self.availability_reason is None:
+            raise ValueError("only current I-66 comparisons may be unavailable")
+        elif self.availability_reason == "missing_observation" and any(
+            value is not None for value in values
+        ):
+            raise ValueError("missing I-66 observation contains source values")
+        elif self.availability_reason == "stale_observation" and any(
+            value is None for value in values
+        ):
+            raise ValueError("stale I-66 observation is incomplete")
+        if (
+            self.interval_end_at is not None
+            and self.interval_end_at > self.evaluated_at
+        ) or (self.observed_at is not None and self.observed_at > self.evaluated_at):
+            raise ValueError("I-66 comparison contains future evidence")
+        if self.bin_start_at is not None:
+            bin_end = cast(datetime, self.bin_end_at)
+            interval_end = cast(datetime, self.interval_end_at)
+            if (
+                bin_end - self.bin_start_at != timedelta(minutes=6)
+                or not self.bin_start_at <= interval_end < bin_end
+            ):
+                raise ValueError("I-66 comparison bin is invalid")
+        age = (
+            self.evaluated_at - self.observed_at
+            if self.observed_at is not None
+            else None
+        )
+        if self.comparison_kind == "current" and (
+            (self.available and (age is None or age > timedelta(minutes=30)))
+            or (
+                self.availability_reason == "stale_observation"
+                and (age is None or age <= timedelta(minutes=30))
+            )
+        ):
+            raise ValueError("I-66 current freshness state is invalid")
+        return self
+
+
 type _PriceComponent = Annotated[
-    _GreenwayComponent | _DtrComponent, Field(discriminator="facility")
+    _I66Component | _GreenwayComponent | _DtrComponent, Field(discriminator="facility")
 ]
 
 
@@ -198,7 +358,7 @@ class _CurrentPriceResponse(_Model):
     evaluated_at: datetime
     maximum_observation_age_minutes: Literal[30]
     pricing_profile: _PricingProfile
-    source_kind: Literal["schedule_derived", "none"]
+    source_kind: Literal["observed", "schedule_derived", "mixed", "none"]
     components: list[_PriceComponent]
     total_usd: Decimal
 
@@ -206,6 +366,7 @@ class _CurrentPriceResponse(_Model):
 type _PricingOutput = (
     _CurrentPriceResponse
     | _PricingUnavailableResponse
+    | _IncompleteRoutePriceResponse
     | _NonValidRouteResponse
     | _PricingRouteUnavailableResponse
 )
@@ -267,6 +428,199 @@ def _progress(
 
 def _current_eastern_time() -> datetime:
     return datetime.now(_EASTERN)
+
+
+def _fetch_i66_prices(start_zone_id: int, end_zone_id: int) -> list[_I66ComparisonRow]:
+    """Fetch one bounded, diagnostic I-66 comparison set."""
+    connection = cast(Any, route_validation._connect())  # pyright: ignore[reportPrivateUsage]
+    database_error: Exception | None = None
+    rows: list[dict[str, Any]] = []
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(_I66_SQL, (start_zone_id, end_zone_id))
+            rows = cast(list[dict[str, Any]], cursor.fetchall())
+    except Exception as error:
+        database_error = error
+    try:
+        connection.close()
+    except Exception as error:
+        if database_error is None:
+            database_error = error
+        else:
+            database_error.add_note(
+                f"Connection close also failed: {type(error).__name__}"
+            )
+    if database_error is not None:
+        raise database_error
+
+    comparisons = [_I66ComparisonRow.model_validate(row) for row in rows]
+    identities = [
+        (comparison.comparison_kind, comparison.comparison_offset)
+        for comparison in comparisons
+    ]
+    if not 1 <= len(comparisons) <= 6 or len(identities) != len(set(identities)):
+        raise ValueError("I-66 pricing function returned an invalid row set")
+    if sum(comparison.comparison_kind == "current" for comparison in comparisons) != 1:
+        raise ValueError("I-66 pricing function must return exactly one current row")
+    return comparisons
+
+
+def _percent(change: Decimal, baseline: Decimal) -> Decimal | None:
+    return (
+        None
+        if baseline == 0
+        else (change * 100 / baseline).quantize(Decimal("0.1"), ROUND_HALF_UP)
+    )
+
+
+def _expected_prior_weeks(bin_start: datetime) -> int:
+    local = bin_start.astimezone(_EASTERN)
+    local_wall_time = local.replace(tzinfo=None)
+    return sum(
+        (
+            candidate := (local_wall_time - timedelta(days=7 * offset)).replace(
+                tzinfo=_EASTERN
+            )
+        )
+        .astimezone(UTC)
+        .astimezone(_EASTERN)
+        .replace(tzinfo=None)
+        == candidate.replace(tzinfo=None)
+        for offset in range(1, 4)
+    )
+
+
+def _price_i66(
+    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+) -> _I66Component | _UnavailableComponent:
+    """Price one validated I-66 facility leg from current observations."""
+    route_key = leg.pricing_key.source_route_key
+    parts = route_key.split(":")
+    if len(parts) != 3 or parts[0] not in {"EB", "WB"} or not all(parts[1:]):
+        raise ValueError("I-66 pricing key is malformed")
+    direction, entry, exit_ = parts
+    if leg.connection_ids != [f"source:i66:{route_key}"] or leg.point_ids != [
+        f"i66:{entry}:entry:{direction}",
+        f"i66:{exit_}:exit:{direction}",
+    ]:
+        raise ValueError("I-66 facility leg does not match its pricing key")
+
+    rows = _fetch_i66_prices(leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id)
+    current = next(row for row in rows if row.comparison_kind == "current")
+    evaluated_at = current.evaluated_at.astimezone(_EASTERN)
+    if not current.available:
+        return _UnavailableComponent(
+            route_step_id=leg.route_step_id,
+            reason=cast(
+                Literal["missing_observation", "stale_observation"],
+                current.availability_reason,
+            ),
+            component_evaluated_at=evaluated_at,
+            interval_end_at=(
+                current.interval_end_at.astimezone(_EASTERN)
+                if current.interval_end_at
+                else None
+            ),
+            observed_at=(
+                current.observed_at.astimezone(_EASTERN)
+                if current.observed_at
+                else None
+            ),
+        )
+
+    current_price = cast(Decimal, current.price_usd)
+    current_bin_start = cast(datetime, current.bin_start_at)
+    current_bin_end = cast(datetime, current.bin_end_at)
+    current_interval_end = cast(datetime, current.interval_end_at)
+    current_observed_at = cast(datetime, current.observed_at)
+    cycle_rows = sorted(
+        (row for row in rows if row.comparison_kind == "prior_cycle"),
+        key=lambda row: row.comparison_offset,
+        reverse=True,
+    )
+    recent_movement = None
+    if len(cycle_rows) == 2:
+        cycle_prices = [cast(Decimal, row.price_usd) for row in cycle_rows] + [
+            current_price
+        ]
+        changes = [later - earlier for earlier, later in pairwise(cycle_prices)]
+        direction_name: Literal["rising", "falling", "unchanged", "mixed"] = (
+            "rising"
+            if all(change > 0 for change in changes)
+            else "falling"
+            if all(change < 0 for change in changes)
+            else "unchanged"
+            if all(change == 0 for change in changes)
+            else "mixed"
+        )
+        net_change = current_price - cycle_prices[0]
+        recent_movement = _RecentMovement(
+            method="same_facility_leg_three_cycles",
+            direction=direction_name,
+            samples=[
+                _MovementSample(cycle_offset=cast(Any, offset), price_usd=price)
+                for offset, price in zip((-2, -1, 0), cycle_prices, strict=True)
+            ],
+            net_change_usd=net_change,
+            net_change_percent=_percent(net_change, cycle_prices[0]),
+        )
+
+    week_rows = sorted(
+        (row for row in rows if row.comparison_kind == "prior_week"),
+        key=lambda row: row.comparison_offset,
+        reverse=True,
+    )
+    prior_week_comparison = None
+    if week_rows:
+        week_prices = [cast(Decimal, row.price_usd) for row in week_rows]
+        week_median = median(week_prices)
+        current_delta = current_price - week_median
+        minimum = min(week_prices)
+        maximum = max(week_prices)
+        position: Literal[
+            "below_recent_range", "within_recent_range", "above_recent_range"
+        ] = (
+            "below_recent_range"
+            if current_price < minimum
+            else "above_recent_range"
+            if current_price > maximum
+            else "within_recent_range"
+        )
+        prior_week_comparison = _PriorWeekComparison(
+            method="same_weekday_same_facility_bins",
+            comparable_period_count=len(week_rows),
+            expected_comparable_period_count=_expected_prior_weeks(current_bin_start),
+            comparable_prices=[
+                _WeekSample(
+                    week_offset=row.comparison_offset,
+                    price_usd=cast(Decimal, row.price_usd),
+                )
+                for row in week_rows
+            ],
+            median_usd=week_median,
+            minimum_usd=minimum,
+            maximum_usd=maximum,
+            current_delta_usd=current_delta,
+            current_delta_percent=_percent(current_delta, week_median),
+            position=position,
+            higher_than_count=sum(current_price > price for price in week_prices),
+        )
+
+    return _I66Component(
+        route_step_id=leg.route_step_id,
+        price_usd=current_price,
+        source_kind="observed",
+        pricing_method="source_observation",
+        facility="i66",
+        component_evaluated_at=evaluated_at,
+        bin_minutes=6,
+        bin_start=current_bin_start.astimezone(_EASTERN),
+        bin_end=current_bin_end.astimezone(_EASTERN),
+        interval_end_at=current_interval_end.astimezone(_EASTERN),
+        observed_at=current_observed_at.astimezone(_EASTERN),
+        recent_movement=recent_movement,
+        prior_week_comparison=prior_week_comparison,
+    )
 
 
 def _price_greenway(
@@ -410,6 +764,16 @@ def _success(
     evaluated_at: datetime,
     components: list[_PriceComponent],
 ) -> ToolResult:
+    source_kinds: set[Literal["observed", "schedule_derived"]] = {
+        component.source_kind for component in components
+    }
+    source_kind: Literal["observed", "schedule_derived", "mixed", "none"] = (
+        "none"
+        if not source_kinds
+        else next(iter(source_kinds))
+        if len(source_kinds) == 1
+        else "mixed"
+    )
     response = _CurrentPriceResponse(
         origin_point_id=request.origin_point_id,
         destination_point_id=request.destination_point_id,
@@ -417,7 +781,7 @@ def _success(
         evaluated_at=evaluated_at,
         maximum_observation_age_minutes=30,
         pricing_profile=request.pricing_profile,
-        source_kind="schedule_derived" if components else "none",
+        source_kind=source_kind,
         components=components,
         total_usd=sum(
             (component.price_usd for component in components), Decimal()
@@ -426,7 +790,7 @@ def _success(
     return {
         "toolUseId": "unknown",
         "status": "success",
-        "content": [{"json": response.model_dump(mode="json")}],
+        "content": [{"json": response.model_dump(mode="json", exclude_none=True)}],
     }
 
 
@@ -513,46 +877,86 @@ async def get_current_toll_price(
         return
 
     if any(
-        leg.facility not in {"greenway", "dtr"} for leg in pricing_route.facility_legs
+        leg.facility not in {"i66", "greenway", "dtr"}
+        for leg in pricing_route.facility_legs
     ):
         yield _operation_error(tool_use_id)
         return
 
     components: list[_PriceComponent] = []
+    unavailable_components: list[_UnavailableComponent] = []
+    database_evaluated_at: datetime | None = None
     for facility, legs in groupby(
         pricing_route.facility_legs, key=lambda leg: leg.facility
     ):
-        stage: Literal["greenway_pricing", "dtr_pricing"] = (
-            "greenway_pricing" if facility == "greenway" else "dtr_pricing"
-        )
+        stage: _ProgressStage = {
+            "i66": "i66_pricing",
+            "greenway": "greenway_pricing",
+            "dtr": "dtr_pricing",
+        }[facility]  # pyright: ignore[reportAssignmentType]
         yield _progress(stage, "running")
         try:
-            components.extend(
-                _price_greenway(
-                    cast(
-                        route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
-                        leg,
-                    ),
-                    evaluated_at,
+            facility_legs = list(legs)
+            if facility == "i66":
+                for leg in facility_legs:
+                    priced = await asyncio.to_thread(
+                        _price_i66,
+                        cast(
+                            route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                            leg,
+                        ),
+                    )
+                    if database_evaluated_at is None:
+                        database_evaluated_at = priced.component_evaluated_at
+                    if isinstance(priced, _UnavailableComponent):
+                        unavailable_components.append(priced)
+                    else:
+                        components.append(priced)
+            elif facility == "greenway":
+                components.extend(
+                    _price_greenway(
+                        cast(
+                            route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                            leg,
+                        ),
+                        evaluated_at,
+                    )
+                    for leg in facility_legs
                 )
-                if facility == "greenway"
-                else _price_dtr(
-                    cast(
-                        route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
-                        leg,
-                    ),
-                    evaluated_at,
+            else:
+                components.extend(
+                    _price_dtr(
+                        cast(
+                            route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                            leg,
+                        ),
+                        evaluated_at,
+                    )
+                    for leg in facility_legs
                 )
-                for leg in legs
-            )
         except Exception as error:
             yield _progress(stage, "failed")
             yield _error(tool_use_id, stage, error)
             return
         yield _progress(stage, "completed")
 
+    if unavailable_components:
+        response = _IncompleteRoutePriceResponse(
+            origin_point_id=request.origin_point_id,
+            destination_point_id=request.destination_point_id,
+            error="pricing_unavailable",
+            reason="incomplete_route_price",
+            unavailable_components=unavailable_components,
+        )
+        yield {
+            "toolUseId": tool_use_id,
+            "status": "success",
+            "content": [{"json": response.model_dump(mode="json")}],
+        }
+        return
+
     try:
-        result = _success(request, evaluated_at, components)
+        result = _success(request, database_evaluated_at or evaluated_at, components)
         result["toolUseId"] = tool_use_id
     except Exception as error:
         yield _error(tool_use_id, "response_serialization", error)

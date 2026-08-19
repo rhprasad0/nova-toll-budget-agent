@@ -52,12 +52,13 @@ PostGIS objects through `oracle`, for example
 `oracle.geography(Point,4326)` and `oracle.ST_DWithin`.
 
 Pricing objects live separately in the `pricing` schema. The oracle tables do
-not contain prices or foreign keys to pricing tables. The only initial
-cross-schema dependency is a read of `pricing.current_i95_direction` for live
-I-95/395 availability. That dependency is one-way: pricing does not depend on
-the oracle. Oracle `1.0.x` installation requires a compatible
+not contain prices or foreign keys to pricing tables. Its cross-schema reads
+are `pricing.current_i95_direction` for live I-95/395 availability and
+`pricing.i66_pricing_comparisons` for bounded current-price lookups. Those
+dependencies are one-way: pricing does not depend on the oracle. Oracle
+installation requires a compatible
 `pricing.schema_version` in the `>=1.0.0,<2.0.0` range and verifies that
-`pricing.current_i95_direction` exists before creating the route function.
+both pricing views exist before creating their dependent functions.
 
 ### Ownership and runtime access
 
@@ -65,8 +66,8 @@ the oracle. Oracle `1.0.x` installation requires a compatible
 the two TollChat tables, and every agent-callable function there. The privileged
 migration principal retains ownership of the PostGIS extension and its objects.
 `oracle_owner` receives only the PostGIS privileges required by its functions,
-plus `USAGE` on `pricing` and `SELECT` on
-`pricing.current_i95_direction`; it receives no other pricing privileges.
+plus `USAGE` on `pricing` and `SELECT` on `pricing.current_i95_direction` and
+`pricing.i66_pricing_comparisons`; it receives no other pricing privileges.
 
 `tollchat_agent` is the dedicated IAM-authenticated login role for the v2
 agent. It receives `rds_iam`, `USAGE` on `oracle`, and explicit `EXECUTE` grants
@@ -103,9 +104,10 @@ The blank bootstrap and additive deployment use this order:
    default `PUBLIC` function execution with the required `oracle_owner` grants.
 4. Create `oracle.schema_version`, the two application tables, constraints,
    indexes, and curated data; assign the application objects to `oracle_owner`.
-5. Grant `oracle_owner` its single pricing-view dependency, create the shared
-   resolver and two endpoint-based route validators, revoke `PUBLIC` execution,
-   and grant only the validator signatures to `tollchat_agent`.
+5. Grant `oracle_owner` its pricing-view dependencies, create the shared
+   resolver, two endpoint-based route validators, and bounded I-66 pricing
+   operation, revoke `PUBLIC` execution, and grant only those signatures to
+   `tollchat_agent`.
 
 The migration aborts rather than installing PostGIS in `public`, falling back
 to an unqualified pricing view, or leaving a partially granted function.
@@ -113,7 +115,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.3.0`, stored as the single row in
+oracle is at version `1.4.0`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -486,13 +488,12 @@ usable path wins.
 The normative caller behavior and response examples are defined in the
 [agent-facing route-function contract](oracle-route-function-contract.md).
 
-The application exposes one narrow, read-only database function:
-`oracle.validate_toll_route(origin_point_id text, destination_point_id text)`.
-It is a `STABLE SECURITY DEFINER` function owned by `oracle_owner` and is the
-only initial oracle function executable by `tollchat_agent`. The application
-tool passes stable point IDs as bound parameters; it does not expose arbitrary
-SQL to the model. A private helper ranks structurally compatible ramps but is
-not executable by the agent.
+The application exposes three narrow, read-only database functions: endpoint
+route validation, endpoint pricing-route validation, and bounded I-66 pricing
+comparisons by start/end zone. Each is `STABLE SECURITY DEFINER`, owned by
+`oracle_owner`, and accepts only bound parameters. The application never
+exposes arbitrary SQL to the model. Private routing helpers are not executable
+by the agent.
 
 ### Validate a toll route
 
@@ -704,7 +705,7 @@ DTR connection charge; only crossing either directed handoff adds it.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.3.0`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.4.0`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer
@@ -727,7 +728,8 @@ DTR connection charge; only crossing either directed handoff adds it.
 - Oracle installation rejects a pre-existing `tollchat_agent` that inherits
   `pg_read_all_data`, `pricing_reader`, or any role other than `rds_iam`, or
   that already has direct database-create, schema, or relation privileges.
-- No oracle operation reads or returns a toll price.
+- Route validation never reads or returns a toll price; the separate I-66
+  pricing operation returns at most six validated comparison rows.
 
 ## Explicit non-goals
 

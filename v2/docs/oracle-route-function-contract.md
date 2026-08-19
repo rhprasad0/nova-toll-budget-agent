@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted for oracle schema `1.3.0`
+- **Status:** Adopted for oracle schema `1.4.0`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 
@@ -350,6 +350,7 @@ fields above plus ordered `facility_legs` derived from committed connection
 metadata. Existing endpoint and live-availability statuses retain their
 meanings; only `valid` results contain facility legs.
 
-`tollchat_agent` may execute both validators but cannot execute the private
-`oracle.resolve_toll_route(text, text)` function or select its underlying
-tables and component view directly.
+`tollchat_agent` may execute both validators and the bounded
+`oracle.get_i66_pricing_comparisons(integer, integer)` operation. It cannot
+execute the private `oracle.resolve_toll_route(text, text)` function or select
+the underlying oracle or pricing relations directly.
