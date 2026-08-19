@@ -37,8 +37,7 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
-        ARRAY['source:i66:EB:1:4']
+        'i66:1:entry:EB', 'i66:4:exit:EB'
     );
     IF result.status <> 'valid'
        OR result.reason IS NOT NULL
@@ -72,86 +71,15 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(NULL, NULL);
-    IF result.status <> 'invalid_route'
-       OR result.reason->>'code' <> 'route_required' THEN
-        RAISE EXCEPTION 'null route was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(ARRAY[]::text[], ARRAY[]::text[]);
-    IF result.reason->>'code' <> 'route_required' THEN
-        RAISE EXCEPTION 'empty route was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        ARRAY[['i66:1:entry:EB', 'i66:4:exit:EB']],
-        ARRAY['source:i66:EB:1:4']
-    );
-    IF result.reason->>'code' <> 'route_shape_mismatch' THEN
-        RAISE EXCEPTION 'multidimensional route was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        '[0:1]={i66:1:entry:EB,i66:4:exit:EB}'::text[],
-        ARRAY['source:i66:EB:1:4']
-    );
-    IF result.reason->>'code' <> 'route_shape_mismatch' THEN
-        RAISE EXCEPTION 'non-1-based route was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', NULL]::text[],
-        ARRAY['source:i66:EB:1:4']
-    );
-    IF result.reason->>'code' <> 'route_shape_mismatch' THEN
-        RAISE EXCEPTION 'route with null point was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
-        ARRAY[NULL]::text[]
-    );
-    IF result.reason->>'code' <> 'route_shape_mismatch' THEN
-        RAISE EXCEPTION 'route with null connection was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        array_fill('point'::text, ARRAY[14]),
-        array_fill('connection'::text, ARRAY[13])
-    );
-    IF result.reason->>'code' <> 'route_shape_mismatch' THEN
-        RAISE EXCEPTION 'oversized route was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', 'i66:1:entry:EB'],
-        ARRAY['source:i66:EB:1:4']
-    );
-    IF result.reason->>'code' <> 'route_shape_mismatch' THEN
-        RAISE EXCEPTION 'cyclic route was accepted';
-    END IF;
-
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
-        ARRAY['wrong-connection']
-    );
-    IF result.reason->>'code' <> 'route_not_canonical'
-       OR cardinality(result.point_ids) <> 0
+    IF result.status <> 'invalid_origin'
+       OR result.reason->>'code' <> 'origin_required'
        OR result.facility_legs <> '[]'::jsonb THEN
-        RAISE EXCEPTION 'noncanonical route was accepted';
+        RAISE EXCEPTION 'null endpoints changed';
     END IF;
 
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['unknown-origin', 'i66:4:exit:EB'],
-        ARRAY['wrong-connection']
+        'unknown-origin', 'i66:4:exit:EB'
     );
     IF result.status <> 'invalid_origin'
        OR result.reason->>'code' <> 'origin_not_found' THEN
@@ -168,8 +96,7 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['i95:203NO', 'i495:181ND'],
-        ARRAY['source:i95_shared:Northbound:203NO:181ND']
+        'i95:203NO', 'i495:181ND'
     );
     IF result.status <> 'valid'
        OR jsonb_array_length(result.facility_legs) <> 2
@@ -200,8 +127,7 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['i95:203NO', 'i495:181ND'],
-        ARRAY['source:i95_shared:Northbound:203NO:181ND']
+        'i95:203NO', 'i495:181ND'
     );
     IF result.status <> 'currently_unavailable'
        OR result.reason->>'code' <> 'i95_opposite_direction_open'
@@ -218,8 +144,7 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['greenway:1:entry:EB', 'greenway:28:exit:EB'],
-        ARRAY['source:greenway:EB:1:28']
+        'greenway:1:entry:EB', 'greenway:28:exit:EB'
     );
     IF result.status <> 'valid'
        OR jsonb_array_length(result.facility_legs) <> 1
@@ -233,8 +158,7 @@ BEGIN
 
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['dtr:10:entry:EB', 'dtr:16:exit:EB'],
-        ARRAY['source:dtr:EB:10:16']
+        'dtr:10:entry:EB', 'dtr:16:exit:EB'
     );
     IF result.status <> 'valid'
        OR jsonb_array_length(result.facility_legs) <> 3 THEN
@@ -249,21 +173,7 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY[
-            'greenway:1:entry:EB',
-            'greenway:28:exit:EB',
-            'dtr:28:entry:EB',
-            'dtr:66:exit:EB',
-            'i66:6:entry:EB',
-            'i66:10:exit:EB'
-        ],
-        ARRAY[
-            'source:greenway:EB:1:28',
-            'greenway_to_dtr',
-            'source:dtr:EB:28:66',
-            'dulles_toll_road_to_i66',
-            'source:i66:EB:6:10'
-        ]
+        'greenway:1:entry:EB', 'i66:10:exit:EB'
     );
     IF result.status <> 'valid'
        OR result.facility_legs IS DISTINCT FROM jsonb_build_array(
@@ -332,17 +242,7 @@ DECLARE
 BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY[
-            'dtr:66:entry:WB',
-            'dtr:28:exit:WB',
-            'greenway:28:entry:WB',
-            'greenway:1:exit:WB'
-        ],
-        ARRAY[
-            'source:dtr:WB:66:28',
-            'dtr_to_greenway',
-            'source:greenway:WB:28:1'
-        ]
+        'dtr:66:entry:WB', 'greenway:1:exit:WB'
     );
     IF result.status <> 'valid'
        OR result.facility_legs IS DISTINCT FROM jsonb_build_array(

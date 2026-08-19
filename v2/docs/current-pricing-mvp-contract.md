@@ -44,20 +44,14 @@ The wrapper follows the existing `validate_toll_route` pattern:
   and
 - never return unvalidated database rows to the agent.
 
-First call `oracle.validate_toll_route` with the submitted point IDs. Continue
-to pricing only when its status is `valid`. For every other documented route
-status, return the route-validation result without prices, a total, or
-comparisons. A database or wrapper failure is a tool operation error, not a
-fabricated route or pricing status.
-
-For a valid result, bind its returned `point_ids` and `connection_ids` as
-PostgreSQL `text[]` parameters to `oracle.validate_pricing_route`. These arrays
-are database output carried internally by Python, never caller-submitted tool
-input. The second operation must return the same canonical route with status
-`valid` before pricing continues. A documented availability status is returned
-without prices; `invalid_route` indicates an internal operation failure. Its
-ordered `facility_legs` are the only route components passed to downstream
-facility pricing.
+Call `oracle.validate_pricing_route` once with the submitted point IDs. It
+atomically resolves the canonical route and derives ordered `facility_legs`
+from committed connection metadata. Continue to pricing only when its status
+is `valid`. For every other documented route status, return the validated route
+without prices, a total, or comparisons. A database or wrapper failure is a
+tool operation error, not a fabricated route or pricing status. The returned
+`facility_legs` are the only route components passed to downstream facility
+pricing.
 
 ### `facility_legs` JSON contract
 

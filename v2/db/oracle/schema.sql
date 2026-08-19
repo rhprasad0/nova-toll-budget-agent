@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.1.2
+-- oracle schema version: 1.2.0
 
 \set ON_ERROR_STOP on
 
@@ -13,11 +13,11 @@ DECLARE
 BEGIN
     IF current_setting('server_version_num')::integer < 170000
        OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.1.2 requires PostgreSQL 17';
+        RAISE EXCEPTION 'oracle 1.2.0 requires PostgreSQL 17';
     END IF;
     IF to_regclass('pricing.schema_version') IS NULL
        OR to_regclass('pricing.current_i95_direction') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.1.2 requires pricing schema 1.x';
+        RAISE EXCEPTION 'oracle 1.2.0 requires pricing schema 1.x';
     END IF;
     EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
         INTO pricing_version;
@@ -25,7 +25,7 @@ BEGIN
     IF pricing_version IS NULL
        OR pricing_version_parts < ARRAY[1, 0, 0]
        OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.1.2 requires pricing schema 1.x; found %',
+        RAISE EXCEPTION 'oracle 1.2.0 requires pricing schema 1.x; found %',
             coalesce(pricing_version, '<missing>');
     END IF;
     IF to_regrole('rds_iam') IS NULL THEN
@@ -119,7 +119,7 @@ BEGIN
     FROM pg_catalog.pg_extension
     WHERE extname = 'postgis';
     IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.1.2 requires PostGIS 3.5.x; found %',
+        RAISE EXCEPTION 'oracle 1.2.0 requires PostGIS 3.5.x; found %',
             coalesce(installed_version, '<missing>');
     END IF;
 END $$;
@@ -132,7 +132,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.1.2');
+INSERT INTO oracle.schema_version (version) VALUES ('1.2.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -999,8 +999,8 @@ FROM oracle.resolve_toll_route($1, $2) AS route
 $function$;
 
 CREATE FUNCTION oracle.validate_pricing_route(
-    submitted_point_ids text[],
-    submitted_connection_ids text[]
+    origin_point_id text,
+    destination_point_id text
 ) RETURNS TABLE (
     status text,
     reason jsonb,
@@ -1026,65 +1026,8 @@ BEGIN
     i95_evidence := NULL;
     facility_legs := '[]'::jsonb;
 
-    IF submitted_point_ids IS NULL
-       OR submitted_connection_ids IS NULL
-       OR cardinality(submitted_point_ids) = 0
-       OR cardinality(submitted_connection_ids) = 0 THEN
-        status := 'invalid_route';
-        reason := jsonb_build_object(
-            'code', 'route_required',
-            'details', jsonb_build_object()
-        );
-        RETURN NEXT;
-        RETURN;
-    END IF;
-
-    IF array_ndims(submitted_point_ids) <> 1
-       OR array_ndims(submitted_connection_ids) <> 1
-       OR array_lower(submitted_point_ids, 1) <> 1
-       OR array_lower(submitted_connection_ids, 1) <> 1
-       OR cardinality(submitted_point_ids) > 13
-       OR cardinality(submitted_connection_ids) > 12
-       OR cardinality(submitted_point_ids)
-            <> cardinality(submitted_connection_ids) + 1
-       OR array_position(submitted_point_ids, NULL) IS NOT NULL
-       OR array_position(submitted_connection_ids, NULL) IS NOT NULL
-       OR cardinality(submitted_point_ids) <> (
-           SELECT count(DISTINCT submitted_point_id)
-           FROM unnest(submitted_point_ids) AS submitted(submitted_point_id)
-       ) THEN
-        status := 'invalid_route';
-        reason := jsonb_build_object(
-            'code', 'route_shape_mismatch',
-            'details', jsonb_build_object()
-        );
-        RETURN NEXT;
-        RETURN;
-    END IF;
-
     SELECT * INTO STRICT resolved
-    FROM oracle.resolve_toll_route(
-        submitted_point_ids[1],
-        submitted_point_ids[cardinality(submitted_point_ids)]
-    );
-
-    IF cardinality(resolved.point_ids) = 0 THEN
-        status := resolved.status;
-        reason := resolved.reason;
-        RETURN NEXT;
-        RETURN;
-    END IF;
-
-    IF submitted_point_ids IS DISTINCT FROM resolved.point_ids
-       OR submitted_connection_ids IS DISTINCT FROM resolved.connection_ids THEN
-        status := 'invalid_route';
-        reason := jsonb_build_object(
-            'code', 'route_not_canonical',
-            'details', jsonb_build_object()
-        );
-        RETURN NEXT;
-        RETURN;
-    END IF;
+    FROM oracle.resolve_toll_route(origin_point_id, destination_point_id);
 
     status := resolved.status;
     reason := resolved.reason;
@@ -1187,7 +1130,7 @@ GRANT SELECT ON pricing.current_i95_direction TO oracle_owner;
 GRANT USAGE ON SCHEMA oracle TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
 TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text[], text[])
+GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text, text)
 TO tollchat_agent;
 
 ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
@@ -1197,7 +1140,7 @@ ALTER VIEW oracle.route_pricing_component OWNER TO oracle_owner;
 ALTER FUNCTION oracle.ramp_alternatives(text, text, boolean) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.resolve_toll_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_toll_route(text, text) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.validate_pricing_route(text[], text[]) OWNER TO oracle_owner;
+ALTER FUNCTION oracle.validate_pricing_route(text, text) OWNER TO oracle_owner;
 ALTER SCHEMA oracle OWNER TO oracle_owner;
 
 COMMIT;

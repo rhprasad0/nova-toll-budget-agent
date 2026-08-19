@@ -167,10 +167,8 @@ def _pricing_route_row():
     }
 
 
-def _validated_route(row):
-    return route_tool._RouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        {key: value for key, value in row.items() if key != "facility_legs"}
-    )
+def _endpoints(row):
+    return row["point_ids"][0], row["point_ids"][-1]
 
 
 def _availability_transition_row(status):
@@ -662,12 +660,11 @@ def test_incompatible_ramp_alternatives_follow_contract(monkeypatch, alternative
 
 def test_pricing_route_returns_typed_facility_legs(monkeypatch):
     row = _pricing_route_row()
-    route = _validated_route(row)
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
     response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        route
+        *_endpoints(row)
     )
 
     assert [leg.model_dump(mode="json") for leg in response.facility_legs] == row[
@@ -676,7 +673,7 @@ def test_pricing_route_returns_typed_facility_legs(monkeypatch):
     assert connection.cursor_instance.calls == [
         (
             "SELECT * FROM oracle.validate_pricing_route(%s, %s)",
-            (route.point_ids, route.connection_ids),
+            _endpoints(row),
         )
     ]
     assert connection.closed
@@ -708,7 +705,7 @@ def test_pricing_route_allows_greenway_dtr_handoff_charge(monkeypatch):
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
     response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        _validated_route(row)
+        *_endpoints(row)
     )
 
     assert response.facility_legs[0].facility == "dtr"
@@ -739,7 +736,7 @@ def test_pricing_route_rejects_other_priced_handoff(monkeypatch):
 
     with pytest.raises(ValueError, match="unexpected priced toll handoff"):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(row)
+            *_endpoints(row)
         )
 
     assert connection.closed
@@ -751,7 +748,7 @@ def test_pricing_route_allows_valid_route_without_tolls(monkeypatch):
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
     response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        _validated_route(row)
+        *_endpoints(row)
     )
     assert response.status == "valid"
     assert response.facility_legs == []
@@ -760,35 +757,18 @@ def test_pricing_route_allows_valid_route_without_tolls(monkeypatch):
 
 @pytest.mark.parametrize("status", ["currently_unavailable", "unknown_availability"])
 def test_pricing_route_returns_typed_availability_transition(monkeypatch, status):
-    route = _validated_route(_northbound_suffix_row())
     row = _availability_transition_row(status)
     connection = _Connection([row])
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
     response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        route
+        *_endpoints(row)
     )
 
     assert response.status == status
     assert response.facility_legs == []
-    assert response.point_ids == route.point_ids
-    assert response.connection_ids == route.connection_ids
-    assert connection.closed
-
-
-def test_pricing_route_rejects_static_gap_change(monkeypatch):
-    row = _availability_transition_row("currently_unavailable")
-    row["general_purpose_gaps"][0].update(
-        {"boundary_point_id": "i495:192NO", "role": "prefix"}
-    )
-    connection = _Connection([row])
-    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
-
-    with pytest.raises(ValueError, match="topology does not match"):
-        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(_northbound_suffix_row())
-        )
-
+    assert response.point_ids == row["point_ids"]
+    assert response.connection_ids == row["connection_ids"]
     assert connection.closed
 
 
@@ -802,7 +782,7 @@ def test_pricing_route_rejects_valid_status_with_required_fallback(monkeypatch):
 
     with pytest.raises(ValueError, match="valid routes cannot require a fallback"):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(_northbound_suffix_row())
+            *_endpoints(row)
         )
 
     assert connection.closed
@@ -816,33 +796,12 @@ def test_pricing_route_rejects_legs_on_availability_transition(monkeypatch, capl
 
     with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(_northbound_suffix_row())
+            *_endpoints(row)
         )
 
     assert connection.closed
     assert len(caplog.records) == 1
     assert caplog.records[0].failureStage == "response_validation"
-
-
-def test_pricing_route_rejects_nonvalid_route_before_connecting(monkeypatch, caplog):
-    monkeypatch.setattr(
-        route_tool,
-        "_connect",
-        lambda: pytest.fail("nonvalid route opened a database connection"),
-    )
-
-    with (
-        caplog.at_level(logging.ERROR),
-        pytest.raises(ValueError, match="requires a valid route"),
-    ):
-        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(_unavailable_row())
-        )
-
-    assert len(caplog.records) == 1
-    assert caplog.records[0].operation == "validate_pricing_route"
-    assert caplog.records[0].failureStage == "input_validation"
-    assert caplog.records[0].exceptionType == "ValueError"
 
 
 @pytest.mark.parametrize(
@@ -882,7 +841,7 @@ def test_pricing_route_contract_violations_are_logged(monkeypatch, caplog, mutat
 
     with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(original)
+            *_endpoints(original)
         )
 
     assert connection.closed
@@ -906,7 +865,7 @@ def test_pricing_route_rejects_noncanonical_charge_order(
         pytest.raises(ValueError, match="charge indexes are not ordered"),
     ):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(row)
+            *_endpoints(row)
         )
 
     assert connection.closed
@@ -920,7 +879,7 @@ def test_pricing_route_allows_omitted_zero_price_charge_indexes(monkeypatch):
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
     response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-        _validated_route(row)
+        *_endpoints(row)
     )
 
     assert [
@@ -939,7 +898,7 @@ def test_pricing_route_rejects_mixed_source_keys_on_one_connection(monkeypatch):
 
     with pytest.raises(ValueError, match="mixes source route keys"):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(row)
+            *_endpoints(row)
         )
 
     assert connection.closed
@@ -947,7 +906,7 @@ def test_pricing_route_rejects_mixed_source_keys_on_one_connection(monkeypatch):
 
 @pytest.mark.parametrize("rows", [[], [_pricing_route_row(), _pricing_route_row()]])
 def test_pricing_route_requires_exactly_one_row(monkeypatch, caplog, rows):
-    route = _validated_route(_pricing_route_row())
+    route = _pricing_route_row()
     connection = _Connection(rows)
     monkeypatch.setattr(route_tool, "_connect", lambda: connection)
 
@@ -956,7 +915,7 @@ def test_pricing_route_requires_exactly_one_row(monkeypatch, caplog, rows):
         pytest.raises(ValueError, match="must return exactly one row"),
     ):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            route
+            *_endpoints(route)
         )
 
     assert connection.closed
@@ -977,7 +936,7 @@ def test_pricing_route_connection_failure_is_safely_logged(monkeypatch, caplog):
         pytest.raises(RuntimeError, match="password=do-not-log"),
     ):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(_pricing_route_row())
+            *_endpoints(_pricing_route_row())
         )
 
     assert len(caplog.records) == 1
@@ -1004,7 +963,7 @@ def test_pricing_route_database_failures_are_safely_logged(
 
     with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError):
         route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            _validated_route(_pricing_route_row())
+            *_endpoints(_pricing_route_row())
         )
 
     assert connection.closed

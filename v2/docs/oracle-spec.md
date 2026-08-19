@@ -104,8 +104,8 @@ The blank bootstrap and additive deployment use this order:
 4. Create `oracle.schema_version`, the two application tables, constraints,
    indexes, and curated data; assign the application objects to `oracle_owner`.
 5. Grant `oracle_owner` its single pricing-view dependency, create the shared
-   resolver and two route validators, revoke `PUBLIC` execution, and grant only
-   the validator signatures to `tollchat_agent`.
+   resolver and two endpoint-based route validators, revoke `PUBLIC` execution,
+   and grant only the validator signatures to `tollchat_agent`.
 
 The migration aborts rather than installing PostGIS in `public`, falling back
 to an unqualified pricing view, or leaving a partially granted function.
@@ -113,7 +113,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.1.2`, stored as the single row in
+oracle is at version `1.2.0`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -700,7 +700,7 @@ DTR connection charge; only crossing either directed handoff adds it.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.1.2`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.2.0`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

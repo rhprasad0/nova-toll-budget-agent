@@ -13,11 +13,10 @@ from pydantic import (
     ConfigDict,
     Field,
     TypeAdapter,
-    ValidationError,
     model_validator,
 )
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
-from strands.types.tools import ToolContext, ToolResult, ToolSpec, ToolUse
+from strands.types.tools import ToolContext, ToolResult, ToolSpec
 
 from agent_tools import validate_toll_route as route_validation
 
@@ -343,48 +342,10 @@ async def get_current_toll_price(
 
     yield _progress("route_validation", "running")
     try:
-        route_result = await asyncio.to_thread(
-            route_validation.validate_toll_route,
-            cast(
-                ToolUse,
-                {
-                    "toolUseId": tool_use_id,
-                    "name": "validate_toll_route",
-                    "input": {
-                        "origin_point_id": request.origin_point_id,
-                        "destination_point_id": request.destination_point_id,
-                    },
-                },
-            ),
-        )
-        if route_result["status"] == "error":
-            yield _progress("route_validation", "failed")
-            yield _operation_error(tool_use_id)
-            return
-    except Exception as error:
-        yield _progress("route_validation", "failed")
-        yield _error(tool_use_id, "route_validation", error)
-        return
-
-    try:
-        content = cast(Any, route_result["content"])
-        route = route_validation._RouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-            content[0]["json"]
-        )
-    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as error:
-        yield _progress("route_validation", "failed")
-        yield _error(tool_use_id, "route_response_validation", error)
-        return
-
-    if route.status != "valid":
-        yield _progress("route_validation", "completed")
-        yield route_result
-        return
-
-    try:
         pricing_route = await asyncio.to_thread(
             route_validation._validate_pricing_route,  # pyright: ignore[reportPrivateUsage]
-            route,
+            request.origin_point_id,
+            request.destination_point_id,
         )
     except Exception as error:
         yield _progress("route_validation", "failed")
@@ -395,10 +356,20 @@ async def get_current_toll_price(
 
     if pricing_route.status != "valid":
         try:
+            response = (
+                _PricingRouteUnavailableResponse.model_validate(
+                    pricing_route.model_dump()
+                )
+                if pricing_route.status
+                in {"currently_unavailable", "unknown_availability"}
+                else _NonValidRouteResponse.model_validate(
+                    pricing_route.model_dump(exclude={"facility_legs"})
+                )
+            )
             yield {
                 "toolUseId": tool_use_id,
                 "status": "success",
-                "content": [{"json": pricing_route.model_dump(mode="json")}],
+                "content": [{"json": response.model_dump(mode="json")}],
             }
         except Exception as error:
             yield _error(tool_use_id, "response_serialization", error)

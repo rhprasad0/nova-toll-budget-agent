@@ -111,9 +111,8 @@ def _greenway_leg(
 def _pricing_route(
     row: dict[str, Any], legs: list[dict[str, Any]]
 ) -> pricing_tool.route_validation._PricingRouteResponse:  # pyright: ignore[reportPrivateUsage]
-    route = pricing_tool.route_validation._RouteResponse.model_validate(row)  # pyright: ignore[reportPrivateUsage]
     return pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        {**row, "facility_legs": legs}, context={"route": route}
+        {**row, "facility_legs": legs}
     )
 
 
@@ -157,11 +156,6 @@ def _result(events: list[dict[str, Any]]) -> ToolResult:
 def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
     row = _route_row()
     response = _pricing_route(row, legs)
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: _route_result(row),
-    )
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",
@@ -217,7 +211,7 @@ def test_malformed_input_fails_safely_without_route_validation(
     mutation(input_data)
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "validate_toll_route",
+        "_validate_pricing_route",
         lambda *_args, **_kwargs: pytest.fail("invalid input reached the database"),
     )
 
@@ -241,7 +235,7 @@ def test_unsupported_profile_short_circuits_without_progress(monkeypatch):
     input_data["pricing_profile"]["transponder_mode"] = "hov"
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "validate_toll_route",
+        "_validate_pricing_route",
         lambda *_args, **_kwargs: pytest.fail("unsupported profile reached RDS"),
     )
 
@@ -261,16 +255,12 @@ def test_unsupported_profile_short_circuits_without_progress(monkeypatch):
 
 
 def test_nonvalid_route_streams_completed_validation_without_pricing(monkeypatch):
-    route_result = _route_result(_route_row("invalid_origin"))
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: route_result,
-    )
+    row = _route_row("invalid_origin")
+    response = _pricing_route(row, [])
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",
-        lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
+        lambda *_args, **_kwargs: response,
     )
 
     events = _run_tool()
@@ -281,10 +271,10 @@ def test_nonvalid_route_streams_completed_validation_without_pricing(monkeypatch
         ("route_validation", "running"),
         ("route_validation", "completed"),
     ]
-    assert _result(events) == route_result
+    assert _result(events) == _route_result(row)
 
 
-def test_pricing_route_availability_transition_is_not_reported_as_free(monkeypatch):
+def test_unavailable_pricing_route_is_not_reported_as_free(monkeypatch):
     row = {
         "status": "valid",
         "reason": None,
@@ -294,7 +284,6 @@ def test_pricing_route_availability_transition_is_not_reported_as_free(monkeypat
         "general_purpose_gaps": [],
         "i95_evidence": _i95_evidence("northbound"),
     }
-    route = pricing_tool.route_validation._RouteResponse.model_validate(row)  # pyright: ignore[reportPrivateUsage]
     transition_row = {
         **row,
         "status": "currently_unavailable",
@@ -309,12 +298,7 @@ def test_pricing_route_availability_transition_is_not_reported_as_free(monkeypat
         "facility_legs": [],
     }
     transition = pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        transition_row, context={"route": route}
-    )
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: _route_result(row),
+        transition_row
     )
     monkeypatch.setattr(
         pricing_tool.route_validation,
@@ -347,43 +331,17 @@ def test_pricing_route_availability_transition_is_not_reported_as_free(monkeypat
     assert "components" not in payload
 
 
-@pytest.mark.parametrize("stage", ["route_result", "route_exception", "pricing_route"])
-def test_route_failures_stream_failed_and_return_only_safe_error(
-    monkeypatch, caplog, stage
-):
-    secret = f"private-{stage}"
+def test_route_failure_streams_failed_and_returns_only_safe_error(monkeypatch, caplog):
+    secret = "private-pricing-route"
 
     def fail(*_args, **_kwargs):
         raise RuntimeError(secret)
 
-    if stage == "route_result":
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "validate_toll_route",
-            lambda *_args, **_kwargs: {
-                "toolUseId": "tool-123",
-                "status": "error",
-                "content": [{"text": "secret internal route failure"}],
-            },
-        )
-    elif stage == "route_exception":
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "validate_toll_route",
-            fail,
-        )
-    else:
-        row = _route_row()
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "validate_toll_route",
-            lambda *_args, **_kwargs: _route_result(row),
-        )
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "_validate_pricing_route",
-            fail,
-        )
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        fail,
+    )
 
     with caplog.at_level(logging.ERROR):
         events = _run_tool()
@@ -616,11 +574,6 @@ def test_unimplemented_facility_returns_safe_error(monkeypatch):
         },
     }
     response = _pricing_route(row, [leg])
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: _route_result(row),
-    )
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",

@@ -33,7 +33,7 @@ BEGIN
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid =
-             'oracle.validate_pricing_route(text[],text[])'::regprocedure)
+             'oracle.validate_pricing_route(text,text)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure)
@@ -42,7 +42,7 @@ BEGIN
                WHERE oid = 'oracle.validate_toll_route(text,text)'::regprocedure)
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
-                 'oracle.validate_pricing_route(text[],text[])'::regprocedure)
+                 'oracle.validate_pricing_route(text,text)'::regprocedure)
        OR (SELECT prosecdef FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure) THEN
         RAISE EXCEPTION 'oracle ownership or SECURITY DEFINER contract is wrong';
@@ -93,18 +93,18 @@ BEGIN
     INTO pricing_route_function
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
-        'oracle.validate_pricing_route(text[],text[])'::regprocedure;
+        'oracle.validate_pricing_route(text,text)'::regprocedure;
     IF pricing_route_function.provolatile <> 's'
        OR pricing_route_function.proconfig IS DISTINCT FROM
           ARRAY['search_path=pg_catalog, pg_temp']::text[]
        OR pricing_route_function.proargnames IS DISTINCT FROM ARRAY[
-           'submitted_point_ids', 'submitted_connection_ids',
+           'origin_point_id', 'destination_point_id',
            'status', 'reason', 'point_ids', 'connection_ids', 'connection_types',
            'general_purpose_gaps', 'i95_evidence', 'facility_legs'
        ]::text[]
        OR pricing_route_function.proallargtypes IS DISTINCT FROM ARRAY[
-           'text[]'::regtype::oid,
-           'text[]'::regtype::oid,
+           'text'::regtype::oid,
+           'text'::regtype::oid,
            'text'::regtype::oid,
            'jsonb'::regtype::oid,
            'text[]'::regtype::oid,
@@ -154,9 +154,9 @@ BEGIN
              LATERAL aclexplode(
                  coalesce(procedure.proacl, acldefault('f', procedure.proowner))
              ) AS privilege
-        WHERE procedure.oid IN (
+              WHERE procedure.oid IN (
                   'oracle.validate_toll_route(text,text)'::regprocedure,
-                  'oracle.validate_pricing_route(text[],text[])'::regprocedure,
+                  'oracle.validate_pricing_route(text,text)'::regprocedure,
                   'oracle.resolve_toll_route(text,text)'::regprocedure
               )
           AND privilege.grantee = 0
@@ -176,9 +176,12 @@ BEGIN
        )
        OR NOT has_function_privilege(
            'tollchat_agent',
-           'oracle.validate_pricing_route(text[],text[])',
+           'oracle.validate_pricing_route(text,text)',
            'EXECUTE'
        )
+       OR to_regprocedure(
+           'oracle.validate_pricing_route(text[],text[])'
+       ) IS NOT NULL
        OR has_function_privilege(
            'tollchat_agent', 'oracle.resolve_toll_route(text,text)', 'EXECUTE'
        ) THEN
@@ -198,8 +201,7 @@ BEGIN
     END IF;
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
-        ARRAY['source:i66:EB:1:4']
+        'i66:1:entry:EB', 'i66:4:exit:EB'
     );
     IF result.status <> 'valid'
        OR jsonb_array_length(result.facility_legs) <> 1 THEN
@@ -257,8 +259,7 @@ BEGIN
     END IF;
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
-        ARRAY['i66:1:entry:EB', 'i66:4:exit:EB'],
-        ARRAY['source:i66:EB:1:4']
+        'i66:1:entry:EB', 'i66:4:exit:EB'
     );
     IF result.status <> 'valid' THEN
         RAISE EXCEPTION 'temporary shadow changed pricing-route behavior';
