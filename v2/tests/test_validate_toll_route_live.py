@@ -1,4 +1,4 @@
-"""Scheduled live checks for both v2 route-validation functions."""
+"""Scheduled live checks for v2 current toll route validation."""
 
 import os
 from typing import Any, cast
@@ -6,7 +6,7 @@ from typing import Any, cast
 import boto3
 import pytest
 
-from agent_tools import validate_toll_route as route_tool
+from agent_tools import get_current_toll_price as pricing_tool
 
 pytestmark = pytest.mark.live
 
@@ -62,13 +62,18 @@ def _configure_rds_endpoint() -> None:
 def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]:
     result = cast(
         Any,
-        route_tool.validate_toll_route(
+        pricing_tool.get_current_toll_price(
             {
                 "toolUseId": tool_use_id,
-                "name": "validate_toll_route",
+                "name": "get_current_toll_price",
                 "input": {
                     "origin_point_id": origin,
                     "destination_point_id": destination,
+                    "pricing_profile": {
+                        "vehicle_class": "two_axle_passenger",
+                        "payment_method": "e_zpass",
+                        "transponder_mode": "toll",
+                    },
                 },
             }
         ),
@@ -79,20 +84,9 @@ def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]
     route = cast(dict[str, Any], result["content"][0]["json"])
 
     if route["status"] == "valid":
-        validated_route = route_tool._RouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-            route
-        )
-        pricing_route = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
-            validated_route
-        )
-        if pricing_route.status == "valid":
-            assert pricing_route.facility_legs
-        else:
-            assert pricing_route.status in {
-                "currently_unavailable",
-                "unknown_availability",
-            }
-            assert pricing_route.facility_legs == []
+        assert route["facility_legs"]
+    elif "facility_legs" in route:
+        assert route["facility_legs"] == []
     return route
 
 

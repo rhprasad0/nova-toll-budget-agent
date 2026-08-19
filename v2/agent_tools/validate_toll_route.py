@@ -1,4 +1,4 @@
-"""Strands tool for the v2 PostgreSQL toll-route oracle."""
+"""Internal wrappers for the v2 PostgreSQL toll-route oracle."""
 
 import logging
 import os
@@ -14,7 +14,7 @@ from pydantic import (
     ValidationInfo,
     model_validator,
 )
-from strands.types.tools import ToolResult, ToolSpec, ToolUse
+from strands.types.tools import ToolResult, ToolUse
 
 logger = logging.getLogger(__name__)
 
@@ -596,13 +596,6 @@ class _PricingRouteResponse(_RouteResponse):
             elif any(leg.point_ids != endpoints for leg in legs):
                 raise ValueError("facility leg points are not aligned to the route")
         return self
-
-
-TOOL_SPEC: ToolSpec = {
-    "name": "validate_toll_route",
-    "description": "Validate a route between two stable oracle toll point IDs.",
-    "inputSchema": {"json": _RouteInput.model_json_schema()},
-}
 
 
 def _connect() -> object:
