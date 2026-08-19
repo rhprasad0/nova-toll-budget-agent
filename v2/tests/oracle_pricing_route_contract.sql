@@ -101,6 +101,104 @@ DO $$
 DECLARE
     result record;
 BEGIN
+    SELECT * INTO STRICT result
+    FROM oracle.validate_pricing_route(
+        'dtr:10:entry:EB', 'i66:10:exit:EB'
+    );
+    IF result.status <> 'valid'
+       OR result.facility_legs IS DISTINCT FROM jsonb_build_array(
+           jsonb_build_object(
+               'route_step_id', 'step-1',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
+                   'dtr:10:entry:EB', 'dtr:66:exit:EB'
+               ),
+               'connection_ids', jsonb_build_array('source:dtr:EB:10:66'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'EB:10:66', 'charge_index', 1
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-2',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
+                   'dtr:10:entry:EB', 'dtr:66:exit:EB'
+               ),
+               'connection_ids', jsonb_build_array('source:dtr:EB:10:66'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'EB:10:66', 'charge_index', 2
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-3',
+               'facility', 'i66',
+               'point_ids', jsonb_build_array(
+                   'i66:6:entry:EB', 'i66:10:exit:EB'
+               ),
+               'connection_ids', jsonb_build_array('source:i66:EB:6:10'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'EB:6:10',
+                   'start_zone_id', 3110,
+                   'end_zone_id', 3110
+               )
+           )
+       ) THEN
+        RAISE EXCEPTION 'eastbound DTR/I-66 pricing route is invalid: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO STRICT result
+    FROM oracle.validate_pricing_route(
+        'i66:11:entry:WB', 'dtr:10:exit:WB'
+    );
+    IF result.status <> 'valid'
+       OR result.facility_legs IS DISTINCT FROM jsonb_build_array(
+           jsonb_build_object(
+               'route_step_id', 'step-1',
+               'facility', 'i66',
+               'point_ids', jsonb_build_array(
+                   'i66:11:entry:WB', 'i66:6:exit:WB'
+               ),
+               'connection_ids', jsonb_build_array('source:i66:WB:11:6'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'WB:11:6',
+                   'start_zone_id', 3220,
+                   'end_zone_id', 3220
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-2',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
+                   'dtr:66:entry:WB', 'dtr:10:exit:WB'
+               ),
+               'connection_ids', jsonb_build_array('source:dtr:WB:66:10'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'WB:66:10', 'charge_index', 1
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-3',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
+                   'dtr:66:entry:WB', 'dtr:10:exit:WB'
+               ),
+               'connection_ids', jsonb_build_array('source:dtr:WB:66:10'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'WB:66:10', 'charge_index', 2
+               )
+           )
+       ) THEN
+        RAISE EXCEPTION 'westbound I-66/DTR pricing route is invalid: %',
+            row_to_json(result);
+    END IF;
+END
+$$;
+
+DO $$
+DECLARE
+    result record;
+BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(NULL, NULL);
     IF result.status <> 'invalid_origin'

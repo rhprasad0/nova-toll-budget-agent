@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -221,6 +221,95 @@ def _dtr_handoff_leg(
             "pricing_key": {"source_route_key": route_key, "charge_index": 1},
         }
     )
+
+
+def _i66_leg(
+    *,
+    route_step_id: str = "step-1",
+    direction: str = "EB",
+    entry: str = "6",
+    exit_: str = "10",
+    start_zone_id: int = 3110,
+    end_zone_id: int = 3110,
+) -> pricing_tool.route_validation._I66FacilityLeg:  # pyright: ignore[reportPrivateUsage]
+    route_key = f"{direction}:{entry}:{exit_}"
+    return pricing_tool.route_validation._I66FacilityLeg.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {
+            "route_step_id": route_step_id,
+            "facility": "i66",
+            "point_ids": [
+                f"i66:{entry}:entry:{direction}",
+                f"i66:{exit_}:exit:{direction}",
+            ],
+            "connection_ids": [f"source:i66:{route_key}"],
+            "pricing_key": {
+                "source_route_key": route_key,
+                "start_zone_id": start_zone_id,
+                "end_zone_id": end_zone_id,
+            },
+        }
+    )
+
+
+def _i66_rows(
+    *, unavailable_reason: str | None = None
+) -> list[pricing_tool._I66ComparisonRow]:  # pyright: ignore[reportPrivateUsage]
+    evaluated_at = datetime(2026, 8, 13, 8, 32, 6, tzinfo=_EASTERN)
+    bin_start = datetime(2026, 8, 13, 8, 24, tzinfo=_EASTERN)
+    rows = [
+        {
+            "evaluated_at": evaluated_at,
+            "comparison_kind": "current",
+            "comparison_offset": 0,
+            "bin_start_at": bin_start
+            if unavailable_reason != "missing_observation"
+            else None,
+            "bin_end_at": bin_start.replace(minute=30)
+            if unavailable_reason != "missing_observation"
+            else None,
+            "interval_end_at": bin_start.replace(minute=29)
+            if unavailable_reason != "missing_observation"
+            else None,
+            "observed_at": (
+                evaluated_at - timedelta(minutes=31)
+                if unavailable_reason == "stale_observation"
+                else bin_start.replace(minute=22)
+                if unavailable_reason is None
+                else None
+            ),
+            "price_usd": Decimal("7.20")
+            if unavailable_reason != "missing_observation"
+            else None,
+            "available": unavailable_reason is None,
+            "availability_reason": unavailable_reason,
+        }
+    ]
+    if unavailable_reason is None:
+        rows.extend(
+            {
+                "evaluated_at": evaluated_at,
+                "comparison_kind": kind,
+                "comparison_offset": offset,
+                "bin_start_at": bin_start,
+                "bin_end_at": bin_start.replace(minute=30),
+                "interval_end_at": bin_start.replace(minute=29),
+                "observed_at": bin_start.replace(minute=22),
+                "price_usd": Decimal(price),
+                "available": True,
+                "availability_reason": None,
+            }
+            for kind, offset, price in [
+                ("prior_cycle", 1, "6.20"),
+                ("prior_cycle", 2, "5.10"),
+                ("prior_week", 1, "5.20"),
+                ("prior_week", 2, "5.00"),
+                ("prior_week", 3, "4.10"),
+            ]
+        )
+    return [
+        pricing_tool._I66ComparisonRow.model_validate(row)  # pyright: ignore[reportPrivateUsage]
+        for row in rows
+    ]
 
 
 def _pricing_route(
@@ -886,37 +975,307 @@ def test_iad_terminal_connectors_return_zero_toll(
     assert payload["total_usd"] == "0.00"
 
 
-def test_unimplemented_facility_returns_safe_error(monkeypatch):
+def test_i66_pricer_returns_current_price_and_comparisons(monkeypatch):
+    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", lambda *_args: _i66_rows())
+
+    component = pricing_tool._price_i66(_i66_leg())
+
+    assert isinstance(component, pricing_tool._I66Component)  # pyright: ignore[reportPrivateUsage]
+    assert component.price_usd == Decimal("7.20")
+    assert component.recent_movement is not None
+    assert component.recent_movement.direction == "rising"
+    assert component.recent_movement.net_change_usd == Decimal("2.10")
+    assert component.recent_movement.net_change_percent == Decimal("41.2")
+    assert component.prior_week_comparison is not None
+    assert component.prior_week_comparison.median_usd == Decimal("5.00")
+    assert component.prior_week_comparison.current_delta_percent == Decimal("44.0")
+    assert component.prior_week_comparison.position == "above_recent_range"
+    assert component.prior_week_comparison.higher_than_count == 3
+
+
+def test_i66_pricer_omits_incomplete_history(monkeypatch):
+    monkeypatch.setattr(
+        pricing_tool,
+        "_fetch_i66_prices",
+        lambda *_args: _i66_rows()[:1],
+    )
+
+    component = pricing_tool._price_i66(_i66_leg())
+
+    assert isinstance(component, pricing_tool._I66Component)  # pyright: ignore[reportPrivateUsage]
+    assert component.recent_movement is None
+    assert component.prior_week_comparison is None
+
+
+def test_prior_week_expectation_excludes_nonexistent_spring_forward_bin():
+    assert (
+        pricing_tool._expected_prior_weeks(  # pyright: ignore[reportPrivateUsage]
+            datetime(2026, 3, 22, 2, 0, tzinfo=_EASTERN)
+        )
+        == 2
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda row: row.update({"comparison_offset": 1}),
+        lambda row: row.update(
+            {"evaluated_at": datetime(2026, 8, 13, 8, 32)}  # noqa: DTZ001
+        ),
+        lambda row: row.update(
+            {"observed_at": row["evaluated_at"] + timedelta(minutes=1)}
+        ),
+        lambda row: row.update(
+            {
+                "available": False,
+                "availability_reason": "missing_observation",
+            }
+        ),
+    ],
+)
+def test_i66_comparison_row_rejects_invalid_database_data(mutation):
+    row = _i66_rows()[0].model_dump(mode="python")
+    mutation(row)
+
+    with pytest.raises(ValueError):
+        pricing_tool._I66ComparisonRow.model_validate(row)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("reason", ["missing_observation", "stale_observation"])
+def test_i66_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
+    monkeypatch.setattr(
+        pricing_tool,
+        "_fetch_i66_prices",
+        lambda *_args: _i66_rows(unavailable_reason=reason),
+    )
+
+    result = pricing_tool._price_i66(_i66_leg())
+
+    assert isinstance(result, pricing_tool._UnavailableComponent)  # pyright: ignore[reportPrivateUsage]
+    assert result.reason == reason
+    assert "price_usd" not in result.model_dump()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda data: data.update({"connection_ids": ["source:i66:EB:7:10"]}),
+        lambda data: data.update({"point_ids": ["i66:7:entry:EB", "i66:10:exit:EB"]}),
+        lambda data: data["pricing_key"].update({"source_route_key": "bad-key"}),
+    ],
+)
+def test_i66_pricer_rejects_misaligned_leg(monkeypatch, mutation):
+    data = _i66_leg().model_dump(mode="python")
+    mutation(data)
+    leg = pricing_tool.route_validation._I66FacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", lambda *_args: _i66_rows())
+
+    with pytest.raises(ValueError, match="I-66"):
+        pricing_tool._price_i66(leg)
+
+
+@pytest.mark.parametrize(
+    ("input_data", "row", "legs", "facilities", "expected_i66_zone_pair"),
+    [
+        (
+            {
+                **_input(),
+                "origin_point_id": "dtr:10:entry:EB",
+                "destination_point_id": "i66:10:exit:EB",
+            },
+            {
+                **_route_row(),
+                "point_ids": [
+                    "dtr:10:entry:EB",
+                    "dtr:66:exit:EB",
+                    "i66:6:entry:EB",
+                    "i66:10:exit:EB",
+                ],
+                "connection_ids": [
+                    "source:dtr:EB:10:66",
+                    "dulles_toll_road_to_i66",
+                    "source:i66:EB:6:10",
+                ],
+                "connection_types": [
+                    "within_facility",
+                    "toll_handoff",
+                    "within_facility",
+                ],
+            },
+            [
+                _dtr_leg(route_step_id="step-1", entry="10", exit_="66").model_dump(
+                    mode="json"
+                ),
+                _dtr_leg(
+                    route_step_id="step-2", entry="10", exit_="66", charge_index=2
+                ).model_dump(mode="json"),
+                _i66_leg(route_step_id="step-3").model_dump(mode="json"),
+            ],
+            ["dtr", "dtr", "i66"],
+            (3110, 3110),
+        ),
+        (
+            {
+                **_input(),
+                "origin_point_id": "i66:11:entry:WB",
+                "destination_point_id": "dtr:10:exit:WB",
+            },
+            {
+                **_route_row(),
+                "point_ids": [
+                    "i66:11:entry:WB",
+                    "i66:6:exit:WB",
+                    "dtr:66:entry:WB",
+                    "dtr:10:exit:WB",
+                ],
+                "connection_ids": [
+                    "source:i66:WB:11:6",
+                    "i66_to_dulles_toll_road",
+                    "source:dtr:WB:66:10",
+                ],
+                "connection_types": [
+                    "within_facility",
+                    "toll_handoff",
+                    "within_facility",
+                ],
+            },
+            [
+                _i66_leg(
+                    route_step_id="step-1",
+                    direction="WB",
+                    entry="11",
+                    exit_="6",
+                    start_zone_id=3220,
+                    end_zone_id=3220,
+                ).model_dump(mode="json"),
+                _dtr_leg(
+                    route_step_id="step-2", direction="WB", entry="66", exit_="10"
+                ).model_dump(mode="json"),
+                _dtr_leg(
+                    route_step_id="step-3",
+                    direction="WB",
+                    entry="66",
+                    exit_="10",
+                    charge_index=2,
+                ).model_dump(mode="json"),
+            ],
+            ["i66", "dtr", "dtr"],
+            (3220, 3220),
+        ),
+    ],
+)
+def test_i66_dtr_junction_prices_both_directions(
+    monkeypatch, input_data, row, legs, facilities, expected_i66_zone_pair
+):
     row = {
-        **_route_row(),
-        "point_ids": ["i66:1:entry:EB", "i66:4:exit:EB"],
-        "connection_ids": ["source:i66:EB:1:4"],
+        **row,
     }
-    leg = {
-        "route_step_id": "step-1",
-        "facility": "i66",
-        "point_ids": row["point_ids"],
-        "connection_ids": row["connection_ids"],
-        "pricing_key": {
-            "source_route_key": "EB:1:4",
-            "start_zone_id": 1,
-            "end_zone_id": 4,
-        },
-    }
-    response = _pricing_route(row, [leg])
+    response = _pricing_route(row, legs)
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",
         lambda *_args, **_kwargs: response,
     )
+    requested_i66_zone_pairs: list[tuple[int, int]] = []
 
-    events = _run_tool()
+    def fetch_i66_prices(start_zone_id: int, end_zone_id: int):
+        requested_i66_zone_pairs.append((start_zone_id, end_zone_id))
+        return _i66_rows()
 
-    assert [event["stage"] for event in _progress_events(events)] == [
+    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", fetch_i66_prices)
+
+    events = _run_tool(input_data)
+
+    progress = _progress_events(events)
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    pricing_stages = (
+        ["dtr_pricing", "i66_pricing"]
+        if facilities[0] == "dtr"
+        else ["i66_pricing", "dtr_pricing"]
+    )
+    assert [event["stage"] for event in progress if event["status"] == "running"] == [
         "route_validation",
-        "route_validation",
+        *pricing_stages,
+    ]
+    assert [component["facility"] for component in payload["components"]] == facilities
+    assert requested_i66_zone_pairs == [expected_i66_zone_pair]
+    assert payload["source_kind"] == "mixed"
+    assert payload["total_usd"] == "13.20"
+
+
+def test_i66_unavailable_returns_no_partial_price(monkeypatch):
+    row = {
+        **_route_row(),
+        "point_ids": ["i66:6:entry:EB", "i66:10:exit:EB"],
+        "connection_ids": ["source:i66:EB:6:10"],
+    }
+    response = _pricing_route(row, [_i66_leg().model_dump(mode="json")])
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_fetch_i66_prices",
+        lambda *_args: _i66_rows(unavailable_reason="stale_observation"),
+    )
+
+    events = _run_tool(
+        {
+            **_input(),
+            "origin_point_id": "i66:6:entry:EB",
+            "destination_point_id": "i66:10:exit:EB",
+        }
+    )
+
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    assert payload["reason"] == "incomplete_route_price"
+    assert payload["unavailable_components"][0]["reason"] == "stale_observation"
+    assert "components" not in payload
+    assert "total_usd" not in payload
+
+
+def test_i66_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
+    secret = "private I-66 crash"
+    row = {
+        **_route_row(),
+        "point_ids": ["i66:6:entry:EB", "i66:10:exit:EB"],
+        "connection_ids": ["source:i66:EB:6:10"],
+    }
+    response = _pricing_route(row, [_i66_leg().model_dump(mode="json")])
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_fetch_i66_prices",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError(secret)),
+    )
+
+    with caplog.at_level(logging.ERROR):
+        events = _run_tool(
+            {
+                **_input(),
+                "origin_point_id": "i66:6:entry:EB",
+                "destination_point_id": "i66:10:exit:EB",
+            }
+        )
+
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "completed"),
+        ("i66_pricing", "running"),
+        ("i66_pricing", "failed"),
     ]
     assert _result(events)["status"] == "error"
+    assert secret not in str(_progress_events(events))
+    assert secret not in caplog.text
 
 
 def test_greenway_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):

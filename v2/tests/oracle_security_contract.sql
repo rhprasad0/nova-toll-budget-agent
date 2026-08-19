@@ -5,6 +5,7 @@ DECLARE
     executable_count integer;
     route_function record;
     pricing_route_function record;
+    i66_pricing_function record;
     resolver_function record;
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
@@ -36,6 +37,10 @@ BEGIN
              'oracle.validate_pricing_route(text,text)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure)
           <> 'oracle_owner'
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
@@ -43,6 +48,9 @@ BEGIN
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.validate_pricing_route(text,text)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure)
        OR (SELECT prosecdef FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure) THEN
         RAISE EXCEPTION 'oracle ownership or SECURITY DEFINER contract is wrong';
@@ -123,6 +131,17 @@ BEGIN
             row_to_json(pricing_route_function);
     END IF;
     SELECT procedure.provolatile, procedure.proconfig
+    INTO i66_pricing_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure;
+    IF i66_pricing_function.provolatile <> 's'
+       OR i66_pricing_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[] THEN
+        RAISE EXCEPTION 'I-66 pricing function catalog contract is wrong: %',
+            row_to_json(i66_pricing_function);
+    END IF;
+    SELECT procedure.provolatile, procedure.proconfig
     INTO resolver_function
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
@@ -136,6 +155,9 @@ BEGIN
     IF has_schema_privilege('tollchat_agent', 'pricing', 'USAGE')
        OR has_table_privilege(
            'tollchat_agent', 'pricing.current_i95_direction', 'SELECT'
+       )
+       OR has_table_privilege(
+           'tollchat_agent', 'pricing.i66_pricing_comparisons', 'SELECT'
        )
        OR has_table_privilege(
            'tollchat_agent', 'oracle.toll_route_point', 'SELECT'
@@ -157,6 +179,7 @@ BEGIN
               WHERE procedure.oid IN (
                   'oracle.validate_toll_route(text,text)'::regprocedure,
                   'oracle.validate_pricing_route(text,text)'::regprocedure,
+                  'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure,
                   'oracle.resolve_toll_route(text,text)'::regprocedure
               )
           AND privilege.grantee = 0
@@ -170,7 +193,7 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('tollchat_agent', procedure.oid, 'EXECUTE');
-    IF executable_count <> 2
+    IF executable_count <> 3
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
@@ -179,13 +202,18 @@ BEGIN
            'oracle.validate_pricing_route(text,text)',
            'EXECUTE'
        )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_i66_pricing_comparisons(integer,integer)',
+           'EXECUTE'
+       )
        OR to_regprocedure(
            'oracle.validate_pricing_route(text[],text[])'
        ) IS NOT NULL
        OR has_function_privilege(
            'tollchat_agent', 'oracle.resolve_toll_route(text,text)', 'EXECUTE'
        ) THEN
-        RAISE EXCEPTION 'agent executable surface is not exactly two validators';
+        RAISE EXCEPTION 'agent executable surface is not exactly three functions';
     END IF;
 END $$;
 
@@ -207,6 +235,13 @@ BEGIN
        OR jsonb_array_length(result.facility_legs) <> 1 THEN
         RAISE EXCEPTION 'agent pricing-route execution failed';
     END IF;
+    SELECT * INTO result
+    FROM oracle.get_i66_pricing_comparisons(3100, 3110);
+    IF result.comparison_kind <> 'current'
+       OR result.available
+       OR result.availability_reason <> 'missing_observation' THEN
+        RAISE EXCEPTION 'agent I-66 pricing diagnostic failed';
+    END IF;
     BEGIN
         PERFORM *
         FROM oracle.resolve_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
@@ -221,6 +256,11 @@ BEGIN
     BEGIN
         PERFORM count(*) FROM pricing.current_i95_direction;
         RAISE EXCEPTION 'agent read pricing view directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM pricing.i66_pricing_comparisons;
+        RAISE EXCEPTION 'agent read I-66 pricing view directly';
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
     BEGIN

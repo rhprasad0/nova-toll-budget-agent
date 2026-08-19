@@ -1,10 +1,11 @@
 {
   "get_current_toll_price": {
-    "current": "1.1.0",
+    "current": "1.2.0",
     "releases": {
       "1.0.0": "b9176bd110453b481ffe5c9d701e2038489835411ce66f6b6825e34ddf70c7c4",
       "1.0.1": "b9176bd110453b481ffe5c9d701e2038489835411ce66f6b6825e34ddf70c7c4",
-      "1.1.0": "79f0ed4767f7fd8d59a04863e21bfeab5e01b85526f9d0bc01cea25c6827e959"
+      "1.1.0": "79f0ed4767f7fd8d59a04863e21bfeab5e01b85526f9d0bc01cea25c6827e959",
+      "1.2.0": "a1ab1e06658ff1692827de59bd4136a5643d79c87204ad6dab8178397bb03215"
     }
   }
 }
