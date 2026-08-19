@@ -463,7 +463,7 @@ class _I66PricingKey(_Model):
 
 class _I95PricingKey(_Model):
     source_route_key: str
-    od_pair_id: int
+    od_pair_id: Annotated[int, Field(gt=0)]
 
 
 class _ChargePricingKey(_Model):

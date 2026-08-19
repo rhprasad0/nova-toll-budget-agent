@@ -144,6 +144,7 @@ DECLARE
     corridor text;
     route_status text;
     matching_rows integer;
+    exceptional_rows integer;
 BEGIN
     FOR test_case IN SELECT * FROM schedule_case ORDER BY local_at LOOP
         TRUNCATE pricing.trip_pricing_i95;
@@ -160,16 +161,24 @@ BEGIN
             5001, corridor, 5.00, route_status, instant, instant - interval '10 minutes'
         );
 
-        SELECT count(*) INTO matching_rows
+        SELECT
+            count(*),
+            count(*) FILTER (
+                WHERE available = false
+                  AND availability_reason = 'exceptional_i95_schedule'
+            )
+        INTO matching_rows, exceptional_rows
         FROM pricing.i95_i495_pricing_comparisons
         WHERE price_source = 'i95_observed'
           AND od_pair_id = 5001
           AND comparison_kind = 'current';
 
-        IF (test_case.expected_direction IS NULL AND matching_rows <> 0)
-           OR (test_case.expected_direction IS NOT NULL AND matching_rows <> 1) THEN
-            RAISE EXCEPTION 'canonical schedule boundary failed at %, expected %, rows %',
-                test_case.local_at, test_case.expected_direction, matching_rows;
+        IF matching_rows <> 1
+           OR (test_case.expected_direction IS NULL AND exceptional_rows <> 1)
+           OR (test_case.expected_direction IS NOT NULL AND exceptional_rows <> 0) THEN
+            RAISE EXCEPTION 'canonical schedule boundary failed at %, expected %, rows %, exceptional %',
+                test_case.local_at, test_case.expected_direction,
+                matching_rows, exceptional_rows;
         END IF;
     END LOOP;
 END $$;
@@ -228,7 +237,8 @@ END $$;
 TRUNCATE pricing.trip_pricing_i95;
 
 -- A holiday/event direction that contradicts the canonical Tuesday morning
--- schedule excludes current I-95 but preserves independently eligible history.
+-- schedule preserves current evidence as an explicit unavailable diagnostic
+-- while retaining independently eligible history.
 SELECT pg_temp.insert_direction('2026-08-11 13:05:00+00', 'SOUTHBOUND_OPEN');
 SELECT pg_temp.insert_i95_price(5002, 'I-95-NB', 8.00, 'CLOSED', '2026-08-11 13:05:00+00', '2026-08-11 12:55:00+00');
 SELECT pg_temp.insert_i95_price(5003, 'I-495-SB', 4.00, 'NO_DETERMINATION', '2026-08-11 13:05:00+00', '2026-08-11 12:55:00+00');
@@ -237,10 +247,15 @@ SELECT pg_temp.insert_i95_price(5002, 'I-95-NB', 7.00, 'NORTHBOUND_OPEN', '2026-
 
 DO $$
 BEGIN
-    IF EXISTS (
+    IF NOT EXISTS (
         SELECT 1 FROM pricing.i95_i495_pricing_comparisons
-        WHERE corridor_name IN ('I-95-NB', 'I-95-SB')
+        WHERE od_pair_id = 5002
           AND comparison_kind = 'current'
+          AND available = false
+          AND availability_reason = 'exceptional_i95_schedule'
+          AND interval_end_at = '2026-08-11 13:05:00+00'
+          AND observed_at = '2026-08-11 12:55:00+00'
+          AND source_status = 'CLOSED'
     ) OR NOT EXISTS (
         SELECT 1 FROM pricing.i95_i495_pricing_comparisons
         WHERE od_pair_id = 5002 AND comparison_kind = 'prior_week'
@@ -249,7 +264,7 @@ BEGIN
         SELECT 1 FROM pricing.i95_i495_pricing_comparisons
         WHERE od_pair_id = 5003 AND comparison_kind = 'current'
     ) THEN
-        RAISE EXCEPTION 'exceptional current I-95 leaked or valid history/I-495 was filtered';
+        RAISE EXCEPTION 'exceptional I-95 diagnostic or valid history/I-495 was filtered';
     END IF;
 END $$;
 

@@ -39,11 +39,18 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/006_upgrade_pricing_1_0_1_to_1_1_0.sql
 ```
 
+Then preserve exceptional I-95 schedule diagnostics in pricing `1.1.1`:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/014_upgrade_pricing_1_1_0_to_1_1_1.sql
+```
+
 Every future pricing version bump must add its matching numbered upgrade
 migration in the same pull request; CI rejects a bump without one and rejects
 later edits to released migrations.
 
-After either path, confirm `pricing.schema_version` is exactly `1.1.0` and
+After either path, confirm `pricing.schema_version` is exactly `1.1.1` and
 `pricing_loader_writer` has only `SELECT`, `INSERT`, and `UPDATE` on the two
 target tables.
 
@@ -51,7 +58,7 @@ target tables.
 
 Merge to `main` only after database preparation. CI applies v1 first to enable
 S3 EventBridge delivery while retaining the v1 notification. It then connects
-as `pricing_reader`, refuses deployment unless pricing 1.1.0 and the writer
+as `pricing_reader`, refuses deployment unless pricing 1.1.1 and the writer
 grants exist, and applies the isolated `v2/infra` state.
 
 Verify the EventBridge rule and Lambda are enabled, both failure queues are

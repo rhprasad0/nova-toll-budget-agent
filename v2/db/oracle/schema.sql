@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.4.0
+-- oracle schema version: 1.5.0
 
 \set ON_ERROR_STOP on
 
@@ -13,12 +13,12 @@ DECLARE
 BEGIN
     IF current_setting('server_version_num')::integer < 170000
        OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.4.0 requires PostgreSQL 17';
+        RAISE EXCEPTION 'oracle 1.5.0 requires PostgreSQL 17';
     END IF;
     IF to_regclass('pricing.schema_version') IS NULL
        OR to_regclass('pricing.current_i95_direction') IS NULL
        OR to_regclass('pricing.i66_pricing_comparisons') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.4.0 requires pricing schema 1.x';
+        RAISE EXCEPTION 'oracle 1.5.0 requires pricing schema 1.x';
     END IF;
     EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
         INTO pricing_version;
@@ -26,7 +26,7 @@ BEGIN
     IF pricing_version IS NULL
        OR pricing_version_parts < ARRAY[1, 0, 0]
        OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.4.0 requires pricing schema 1.x; found %',
+        RAISE EXCEPTION 'oracle 1.5.0 requires pricing schema 1.x; found %',
             coalesce(pricing_version, '<missing>');
     END IF;
     IF to_regrole('rds_iam') IS NULL THEN
@@ -120,7 +120,7 @@ BEGIN
     FROM pg_catalog.pg_extension
     WHERE extname = 'postgis';
     IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.4.0 requires PostGIS 3.5.x; found %',
+        RAISE EXCEPTION 'oracle 1.5.0 requires PostGIS 3.5.x; found %',
             coalesce(installed_version, '<missing>');
     END IF;
 END $$;
@@ -133,7 +133,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.4.0');
+INSERT INTO oracle.schema_version (version) VALUES ('1.5.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -1189,6 +1189,85 @@ ORDER BY
     comparison_offset
 $function$;
 
+CREATE FUNCTION oracle.get_i95_i495_pricing_comparisons(
+    requested_od_pair_id integer
+) RETURNS TABLE (
+    evaluated_at timestamptz,
+    comparison_kind text,
+    comparison_offset integer,
+    bin_start_at timestamptz,
+    bin_end_at timestamptz,
+    interval_end_at timestamptz,
+    observed_at timestamptz,
+    price_usd numeric,
+    available boolean,
+    availability_reason text,
+    source_kind text,
+    pricing_method text,
+    od_pair_id integer,
+    proxy_od_pair_id integer,
+    source_status text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+WITH selected AS MATERIALIZED (
+    SELECT
+        comparison.evaluated_at,
+        comparison.comparison_kind,
+        comparison.comparison_offset,
+        comparison.bin_start_at,
+        comparison.bin_end_at,
+        comparison.interval_end_at,
+        comparison.observed_at,
+        comparison.price_usd,
+        comparison.available,
+        comparison.availability_reason,
+        comparison.source_kind,
+        comparison.pricing_method,
+        comparison.od_pair_id,
+        comparison.proxy_od_pair_id,
+        comparison.source_status
+    FROM pricing.i95_i495_pricing_comparisons AS comparison
+    WHERE comparison.od_pair_id = requested_od_pair_id
+      AND (comparison.comparison_kind = 'current' OR comparison.available)
+), diagnostic AS (
+    SELECT
+        statement_timestamp() AS evaluated_at,
+        'current'::text AS comparison_kind,
+        0 AS comparison_offset,
+        NULL::timestamptz AS bin_start_at,
+        NULL::timestamptz AS bin_end_at,
+        NULL::timestamptz AS interval_end_at,
+        NULL::timestamptz AS observed_at,
+        NULL::numeric AS price_usd,
+        false AS available,
+        'missing_observation'::text AS availability_reason,
+        NULL::text AS source_kind,
+        NULL::text AS pricing_method,
+        NULL::integer AS od_pair_id,
+        NULL::integer AS proxy_od_pair_id,
+        NULL::text AS source_status
+    WHERE NOT EXISTS (
+        SELECT 1 FROM selected WHERE selected.comparison_kind = 'current'
+    )
+), combined AS (
+    SELECT * FROM selected
+    UNION ALL
+    SELECT * FROM diagnostic
+)
+SELECT * FROM combined
+ORDER BY
+    CASE comparison_kind
+        WHEN 'current' THEN 0
+        WHEN 'prior_cycle' THEN 1
+        ELSE 2
+    END,
+    comparison_offset
+$function$;
+
 REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
@@ -1203,13 +1282,16 @@ GRANT SELECT ON oracle.spatial_ref_sys TO oracle_owner;
 
 GRANT USAGE ON SCHEMA pricing TO oracle_owner;
 GRANT SELECT ON pricing.current_i95_direction,
-    pricing.i66_pricing_comparisons TO oracle_owner;
+    pricing.i66_pricing_comparisons,
+    pricing.i95_i495_pricing_comparisons TO oracle_owner;
 GRANT USAGE ON SCHEMA oracle TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text, text)
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.get_i66_pricing_comparisons(integer, integer)
+TO tollchat_agent;
+GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)
 TO tollchat_agent;
 
 ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
@@ -1221,6 +1303,8 @@ ALTER FUNCTION oracle.resolve_toll_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_toll_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_pricing_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.get_i66_pricing_comparisons(integer, integer)
+OWNER TO oracle_owner;
+ALTER FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)
 OWNER TO oracle_owner;
 ALTER SCHEMA oracle OWNER TO oracle_owner;
 

@@ -81,6 +81,57 @@ def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
 
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
     assert "get_current_toll_price" in TIMED_ROUTE_TEST
+    assert "route_validation.validate_toll_route" not in TIMED_ROUTE_TEST
+
+
+def test_timed_ci_covers_three_real_i95_states_monday_through_saturday():
+    expected = {
+        1: {
+            "i95_northbound": "17 6",
+            "i95_reversal": "17 11",
+            "i95_southbound": "17 14",
+        },
+        2: {
+            "i95_northbound": "17 6",
+            "i95_reversal": "47 1",
+            "i95_southbound": "17 14",
+        },
+        3: {
+            "i95_northbound": "17 6",
+            "i95_reversal": "47 1",
+            "i95_southbound": "17 14",
+        },
+        4: {
+            "i95_northbound": "17 6",
+            "i95_reversal": "47 1",
+            "i95_southbound": "17 14",
+        },
+        5: {
+            "i95_northbound": "17 6",
+            "i95_reversal": "47 1",
+            "i95_southbound": "17 14",
+        },
+        6: {
+            "i95_northbound": "17 18",
+            "i95_reversal": "17 15",
+            "i95_southbound": "17 10",
+        },
+    }
+
+    for weekday, windows in expected.items():
+        schedules = [f"{clock} * * {weekday}" for clock in windows.values()]
+        assert len(schedules) == len(set(schedules)) == 3
+        for schedule in schedules:
+            assert TIMED_SCHEDULE_WORKFLOW.count(f'cron: "{schedule}"') == 1
+        for window_id, clock in windows.items():
+            schedule = f"{clock} * * {weekday}"
+            assert re.search(
+                rf'^.*"{re.escape(schedule)}".*window_id="{window_id}"',
+                TIMED_SCHEDULE_WORKFLOW,
+                re.MULTILINE,
+            )
+
+    assert not re.search(r'cron: "[^\"]+ \* \* 0"', TIMED_SCHEDULE_WORKFLOW)
 
 
 def test_timed_ci_checks_both_greenway_peak_windows():

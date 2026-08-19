@@ -1,5 +1,7 @@
 """Agent-facing current toll pricing tool."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
@@ -48,15 +50,23 @@ _DTR_RATES = {
 _DTR_POINTS = ("28", "10", "11", "12", "13", "14", "15", "16", "17", "1819", "66")
 _DTR_RAMP_POINTS = {"10", "11", "12", "13", "14", "17"}
 _I66_SQL = "SELECT * FROM oracle.get_i66_pricing_comparisons(%s, %s)"
+_I95_SQL = "SELECT * FROM oracle.get_i95_i495_pricing_comparisons(%s)"
 
 type _ProgressStage = Literal[
-    "route_validation", "i66_pricing", "greenway_pricing", "dtr_pricing"
+    "route_validation",
+    "i95_i495_pricing",
+    "i66_pricing",
+    "greenway_pricing",
+    "dtr_pricing",
 ]
 type _ProgressStatus = Literal["running", "completed", "failed"]
 type _ProgressMessage = Literal[
     "Validating toll route",
     "Toll route validated",
     "Toll route validation failed",
+    "Pricing I-95/I-495 Express Lanes",
+    "I-95/I-495 Express Lanes pricing complete",
+    "I-95/I-495 Express Lanes pricing failed",
     "Pricing I-66 Express Lanes",
     "I-66 Express Lanes pricing complete",
     "I-66 Express Lanes pricing failed",
@@ -71,6 +81,9 @@ _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessag
     ("route_validation", "running"): "Validating toll route",
     ("route_validation", "completed"): "Toll route validated",
     ("route_validation", "failed"): "Toll route validation failed",
+    ("i95_i495_pricing", "running"): "Pricing I-95/I-495 Express Lanes",
+    ("i95_i495_pricing", "completed"): "I-95/I-495 Express Lanes pricing complete",
+    ("i95_i495_pricing", "failed"): "I-95/I-495 Express Lanes pricing failed",
     ("i66_pricing", "running"): "Pricing I-66 Express Lanes",
     ("i66_pricing", "completed"): "I-66 Express Lanes pricing complete",
     ("i66_pricing", "failed"): "I-66 Express Lanes pricing failed",
@@ -111,11 +124,16 @@ class _PricingUnavailableResponse(_Model):
 
 class _UnavailableComponent(_Model):
     route_step_id: str
-    reason: Literal["missing_observation", "stale_observation"]
+    reason: Literal[
+        "missing_observation",
+        "stale_observation",
+        "facility_unavailable",
+        "exceptional_i95_schedule",
+    ]
     component_evaluated_at: datetime
     interval_end_at: datetime | None
     observed_at: datetime | None
-    source_status: None = None
+    source_status: str | None = None
 
 
 class _IncompleteRoutePriceResponse(_Model):
@@ -264,6 +282,113 @@ class _I66Component(_Model):
     prior_week_comparison: _PriorWeekComparison | None = None
 
 
+class _I95Component(_Model):
+    route_step_id: str
+    price_usd: _Usd
+    source_kind: Literal["observed", "modeled"]
+    pricing_method: Literal["source_observation", "identity_proxy_v1"]
+    facility: Literal["i95_i495"]
+    component_evaluated_at: datetime
+    bin_minutes: Literal[10]
+    bin_start: datetime
+    bin_end: datetime
+    interval_end_at: datetime
+    observed_at: datetime
+    od_pair_id: Annotated[int, Field(gt=0)]
+    proxy_od_pair_id: Annotated[int, Field(gt=0)] | None = None
+    source_status: Annotated[str, Field(min_length=1)]
+    recent_movement: _RecentMovement | None = None
+    prior_week_comparison: _PriorWeekComparison | None = None
+
+    @model_validator(mode="after")
+    def _validate_provenance(self) -> Self:
+        if (
+            self.source_kind == "observed"
+            and (
+                self.pricing_method != "source_observation"
+                or self.proxy_od_pair_id is not None
+            )
+        ) or (
+            self.source_kind == "modeled"
+            and (
+                self.pricing_method != "identity_proxy_v1"
+                or self.proxy_od_pair_id is None
+            )
+        ):
+            raise ValueError("I-95/I-495 pricing provenance is inconsistent")
+        return self
+
+
+def _validate_comparison_contract(
+    row: _I66ComparisonRow | _I95ComparisonRow, *, label: str, bin_minutes: int
+) -> None:
+    expected_offsets = {
+        "current": {0},
+        "prior_cycle": {1, 2},
+        "prior_week": {1, 2, 3},
+    }
+    if row.comparison_offset not in expected_offsets[row.comparison_kind]:
+        raise ValueError(f"{label} comparison kind and offset do not match")
+    timestamps = [
+        row.evaluated_at,
+        row.bin_start_at,
+        row.bin_end_at,
+        row.interval_end_at,
+        row.observed_at,
+    ]
+    if any(
+        value is not None and (value.tzinfo is None or value.utcoffset() is None)
+        for value in timestamps
+    ):
+        raise ValueError(f"{label} comparison timestamps must be aware")
+    values = (
+        row.bin_start_at,
+        row.bin_end_at,
+        row.interval_end_at,
+        row.observed_at,
+        row.price_usd,
+    )
+    if row.available:
+        if any(value is None for value in values) or row.availability_reason:
+            raise ValueError(f"available {label} comparison is incomplete")
+    elif row.comparison_kind != "current" or row.availability_reason is None:
+        raise ValueError(f"only current {label} comparisons may be unavailable")
+    elif row.availability_reason == "missing_observation" and any(
+        value is not None for value in values
+    ):
+        raise ValueError(f"missing {label} observation contains source values")
+    elif row.availability_reason == "stale_observation" and any(
+        value is None for value in values
+    ):
+        raise ValueError(f"stale {label} observation is incomplete")
+    elif row.availability_reason in {
+        "facility_unavailable",
+        "exceptional_i95_schedule",
+    } and any(value is None for value in values[:-1]):
+        raise ValueError(f"unavailable {label} observation is incomplete")
+    if (row.interval_end_at is not None and row.interval_end_at > row.evaluated_at) or (
+        row.observed_at is not None and row.observed_at > row.evaluated_at
+    ):
+        raise ValueError(f"{label} comparison contains future evidence")
+    if row.bin_start_at is not None:
+        bin_end = cast(datetime, row.bin_end_at)
+        interval_end = cast(datetime, row.interval_end_at)
+        if (
+            bin_end - row.bin_start_at != timedelta(minutes=bin_minutes)
+            or not row.bin_start_at <= interval_end < bin_end
+        ):
+            raise ValueError(f"{label} comparison bin is invalid")
+    age = row.evaluated_at - row.observed_at if row.observed_at is not None else None
+    if row.comparison_kind == "current" and (
+        (row.available and (age is None or age > timedelta(minutes=30)))
+        or (
+            row.availability_reason == "stale_observation"
+            and (age is None or age <= timedelta(minutes=30))
+        )
+    ):
+        raise ValueError(f"{label} current freshness state is invalid")
+
+
 class _I66ComparisonRow(_Model):
     evaluated_at: datetime
     comparison_kind: Literal["current", "prior_cycle", "prior_week"]
@@ -278,76 +403,72 @@ class _I66ComparisonRow(_Model):
 
     @model_validator(mode="after")
     def _validate_contract(self) -> Self:
-        expected_offsets = {
-            "current": {0},
-            "prior_cycle": {1, 2},
-            "prior_week": {1, 2, 3},
-        }
-        if self.comparison_offset not in expected_offsets[self.comparison_kind]:
-            raise ValueError("I-66 comparison kind and offset do not match")
-        timestamps = [
-            self.evaluated_at,
-            self.bin_start_at,
-            self.bin_end_at,
-            self.interval_end_at,
-            self.observed_at,
+        _validate_comparison_contract(self, label="I-66", bin_minutes=6)
+        return self
+
+
+class _I95ComparisonRow(_Model):
+    evaluated_at: datetime
+    comparison_kind: Literal["current", "prior_cycle", "prior_week"]
+    comparison_offset: Annotated[int, Field(ge=0, le=3)]
+    bin_start_at: datetime | None
+    bin_end_at: datetime | None
+    interval_end_at: datetime | None
+    observed_at: datetime | None
+    price_usd: _Usd | None
+    available: bool
+    availability_reason: (
+        Literal[
+            "missing_observation",
+            "stale_observation",
+            "facility_unavailable",
+            "exceptional_i95_schedule",
         ]
-        if any(
-            value is not None and (value.tzinfo is None or value.utcoffset() is None)
-            for value in timestamps
-        ):
-            raise ValueError("I-66 comparison timestamps must be aware")
-        values = (
-            self.bin_start_at,
-            self.bin_end_at,
-            self.interval_end_at,
-            self.observed_at,
-            self.price_usd,
+        | None
+    )
+    source_kind: Literal["observed", "modeled"] | None
+    pricing_method: Literal["source_observation", "identity_proxy_v1"] | None
+    od_pair_id: Annotated[int, Field(gt=0)] | None
+    proxy_od_pair_id: Annotated[int, Field(gt=0)] | None
+    source_status: Annotated[str, Field(min_length=1)] | None
+
+    @model_validator(mode="after")
+    def _validate_contract(self) -> Self:
+        _validate_comparison_contract(self, label="I-95/I-495", bin_minutes=10)
+        provenance = (
+            self.source_kind,
+            self.pricing_method,
+            self.od_pair_id,
+            self.source_status,
         )
-        if self.available:
-            if any(value is None for value in values) or self.availability_reason:
-                raise ValueError("available I-66 comparison is incomplete")
-        elif self.comparison_kind != "current" or self.availability_reason is None:
-            raise ValueError("only current I-66 comparisons may be unavailable")
-        elif self.availability_reason == "missing_observation" and any(
-            value is not None for value in values
-        ):
-            raise ValueError("missing I-66 observation contains source values")
-        elif self.availability_reason == "stale_observation" and any(
-            value is None for value in values
-        ):
-            raise ValueError("stale I-66 observation is incomplete")
-        if (
-            self.interval_end_at is not None
-            and self.interval_end_at > self.evaluated_at
-        ) or (self.observed_at is not None and self.observed_at > self.evaluated_at):
-            raise ValueError("I-66 comparison contains future evidence")
-        if self.bin_start_at is not None:
-            bin_end = cast(datetime, self.bin_end_at)
-            interval_end = cast(datetime, self.interval_end_at)
+        if self.availability_reason == "missing_observation":
             if (
-                bin_end - self.bin_start_at != timedelta(minutes=6)
-                or not self.bin_start_at <= interval_end < bin_end
+                any(value is not None for value in provenance)
+                or self.proxy_od_pair_id is not None
             ):
-                raise ValueError("I-66 comparison bin is invalid")
-        age = (
-            self.evaluated_at - self.observed_at
-            if self.observed_at is not None
-            else None
-        )
-        if self.comparison_kind == "current" and (
-            (self.available and (age is None or age > timedelta(minutes=30)))
-            or (
-                self.availability_reason == "stale_observation"
-                and (age is None or age <= timedelta(minutes=30))
+                raise ValueError("missing I-95/I-495 observation contains provenance")
+        elif any(value is None for value in provenance):
+            raise ValueError("I-95/I-495 observation provenance is incomplete")
+        elif (
+            self.source_kind == "observed"
+            and (
+                self.pricing_method != "source_observation"
+                or self.proxy_od_pair_id is not None
+            )
+        ) or (
+            self.source_kind == "modeled"
+            and (
+                self.pricing_method != "identity_proxy_v1"
+                or self.proxy_od_pair_id is None
             )
         ):
-            raise ValueError("I-66 current freshness state is invalid")
+            raise ValueError("I-95/I-495 observation provenance is inconsistent")
         return self
 
 
 type _PriceComponent = Annotated[
-    _I66Component | _GreenwayComponent | _DtrComponent, Field(discriminator="facility")
+    _I95Component | _I66Component | _GreenwayComponent | _DtrComponent,
+    Field(discriminator="facility"),
 ]
 
 
@@ -358,7 +479,7 @@ class _CurrentPriceResponse(_Model):
     evaluated_at: datetime
     maximum_observation_age_minutes: Literal[30]
     pricing_profile: _PricingProfile
-    source_kind: Literal["observed", "schedule_derived", "mixed", "none"]
+    source_kind: Literal["observed", "modeled", "schedule_derived", "mixed", "none"]
     components: list[_PriceComponent]
     total_usd: Decimal
 
@@ -430,14 +551,13 @@ def _current_eastern_time() -> datetime:
     return datetime.now(_EASTERN)
 
 
-def _fetch_i66_prices(start_zone_id: int, end_zone_id: int) -> list[_I66ComparisonRow]:
-    """Fetch one bounded, diagnostic I-66 comparison set."""
+def _fetch_rows(sql: str, params: tuple[int, ...]) -> list[dict[str, Any]]:
     connection = cast(Any, route_validation._connect())  # pyright: ignore[reportPrivateUsage]
     database_error: Exception | None = None
     rows: list[dict[str, Any]] = []
     try:
         with connection.cursor() as cursor:
-            cursor.execute(_I66_SQL, (start_zone_id, end_zone_id))
+            cursor.execute(sql, params)
             rows = cast(list[dict[str, Any]], cursor.fetchall())
     except Exception as error:
         database_error = error
@@ -452,16 +572,52 @@ def _fetch_i66_prices(start_zone_id: int, end_zone_id: int) -> list[_I66Comparis
             )
     if database_error is not None:
         raise database_error
+    return rows
 
-    comparisons = [_I66ComparisonRow.model_validate(row) for row in rows]
+
+def _validate_row_set(
+    comparisons: list[_I66ComparisonRow] | list[_I95ComparisonRow], label: str
+) -> None:
     identities = [
         (comparison.comparison_kind, comparison.comparison_offset)
         for comparison in comparisons
     ]
     if not 1 <= len(comparisons) <= 6 or len(identities) != len(set(identities)):
-        raise ValueError("I-66 pricing function returned an invalid row set")
+        raise ValueError(f"{label} pricing function returned an invalid row set")
     if sum(comparison.comparison_kind == "current" for comparison in comparisons) != 1:
-        raise ValueError("I-66 pricing function must return exactly one current row")
+        raise ValueError(
+            f"{label} pricing function must return exactly one current row"
+        )
+
+
+def _fetch_i66_prices(start_zone_id: int, end_zone_id: int) -> list[_I66ComparisonRow]:
+    """Fetch one bounded, diagnostic I-66 comparison set."""
+    rows = _fetch_rows(_I66_SQL, (start_zone_id, end_zone_id))
+
+    comparisons = [_I66ComparisonRow.model_validate(row) for row in rows]
+    _validate_row_set(comparisons, "I-66")
+    return comparisons
+
+
+def _fetch_i95_prices(od_pair_id: int) -> list[_I95ComparisonRow]:
+    """Fetch one bounded, diagnostic I-95/I-495 comparison set."""
+    rows = _fetch_rows(_I95_SQL, (od_pair_id,))
+    comparisons = [_I95ComparisonRow.model_validate(row) for row in rows]
+    _validate_row_set(comparisons, "I-95/I-495")
+    if any(row.od_pair_id not in {None, od_pair_id} for row in comparisons):
+        raise ValueError("I-95/I-495 pricing function returned the wrong OD pair")
+    provenance = {
+        (
+            row.source_kind,
+            row.pricing_method,
+            row.od_pair_id,
+            row.proxy_od_pair_id,
+        )
+        for row in comparisons
+        if row.od_pair_id is not None
+    }
+    if len(provenance) > 1:
+        raise ValueError("I-95/I-495 pricing function mixed provenance")
     return comparisons
 
 
@@ -490,49 +646,11 @@ def _expected_prior_weeks(bin_start: datetime) -> int:
     )
 
 
-def _price_i66(
-    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-) -> _I66Component | _UnavailableComponent:
-    """Price one validated I-66 facility leg from current observations."""
-    route_key = leg.pricing_key.source_route_key
-    parts = route_key.split(":")
-    if len(parts) != 3 or parts[0] not in {"EB", "WB"} or not all(parts[1:]):
-        raise ValueError("I-66 pricing key is malformed")
-    direction, entry, exit_ = parts
-    if leg.connection_ids != [f"source:i66:{route_key}"] or leg.point_ids != [
-        f"i66:{entry}:entry:{direction}",
-        f"i66:{exit_}:exit:{direction}",
-    ]:
-        raise ValueError("I-66 facility leg does not match its pricing key")
-
-    rows = _fetch_i66_prices(leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id)
-    current = next(row for row in rows if row.comparison_kind == "current")
-    evaluated_at = current.evaluated_at.astimezone(_EASTERN)
-    if not current.available:
-        return _UnavailableComponent(
-            route_step_id=leg.route_step_id,
-            reason=cast(
-                Literal["missing_observation", "stale_observation"],
-                current.availability_reason,
-            ),
-            component_evaluated_at=evaluated_at,
-            interval_end_at=(
-                current.interval_end_at.astimezone(_EASTERN)
-                if current.interval_end_at
-                else None
-            ),
-            observed_at=(
-                current.observed_at.astimezone(_EASTERN)
-                if current.observed_at
-                else None
-            ),
-        )
-
-    current_price = cast(Decimal, current.price_usd)
-    current_bin_start = cast(datetime, current.bin_start_at)
-    current_bin_end = cast(datetime, current.bin_end_at)
-    current_interval_end = cast(datetime, current.interval_end_at)
-    current_observed_at = cast(datetime, current.observed_at)
+def _comparison_summaries(
+    rows: list[_I66ComparisonRow] | list[_I95ComparisonRow],
+    current_price: Decimal,
+    current_bin_start: datetime,
+) -> tuple[_RecentMovement | None, _PriorWeekComparison | None]:
     cycle_rows = sorted(
         (row for row in rows if row.comparison_kind == "prior_cycle"),
         key=lambda row: row.comparison_offset,
@@ -605,6 +723,55 @@ def _price_i66(
             position=position,
             higher_than_count=sum(current_price > price for price in week_prices),
         )
+    return recent_movement, prior_week_comparison
+
+
+def _price_i66(
+    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+) -> _I66Component | _UnavailableComponent:
+    """Price one validated I-66 facility leg from current observations."""
+    route_key = leg.pricing_key.source_route_key
+    parts = route_key.split(":")
+    if len(parts) != 3 or parts[0] not in {"EB", "WB"} or not all(parts[1:]):
+        raise ValueError("I-66 pricing key is malformed")
+    direction, entry, exit_ = parts
+    if leg.connection_ids != [f"source:i66:{route_key}"] or leg.point_ids != [
+        f"i66:{entry}:entry:{direction}",
+        f"i66:{exit_}:exit:{direction}",
+    ]:
+        raise ValueError("I-66 facility leg does not match its pricing key")
+
+    rows = _fetch_i66_prices(leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id)
+    current = next(row for row in rows if row.comparison_kind == "current")
+    evaluated_at = current.evaluated_at.astimezone(_EASTERN)
+    if not current.available:
+        return _UnavailableComponent(
+            route_step_id=leg.route_step_id,
+            reason=cast(
+                Literal["missing_observation", "stale_observation"],
+                current.availability_reason,
+            ),
+            component_evaluated_at=evaluated_at,
+            interval_end_at=(
+                current.interval_end_at.astimezone(_EASTERN)
+                if current.interval_end_at
+                else None
+            ),
+            observed_at=(
+                current.observed_at.astimezone(_EASTERN)
+                if current.observed_at
+                else None
+            ),
+        )
+
+    current_price = cast(Decimal, current.price_usd)
+    current_bin_start = cast(datetime, current.bin_start_at)
+    current_bin_end = cast(datetime, current.bin_end_at)
+    current_interval_end = cast(datetime, current.interval_end_at)
+    current_observed_at = cast(datetime, current.observed_at)
+    recent_movement, prior_week_comparison = _comparison_summaries(
+        rows, current_price, current_bin_start
+    )
 
     return _I66Component(
         route_step_id=leg.route_step_id,
@@ -618,6 +785,87 @@ def _price_i66(
         bin_end=current_bin_end.astimezone(_EASTERN),
         interval_end_at=current_interval_end.astimezone(_EASTERN),
         observed_at=current_observed_at.astimezone(_EASTERN),
+        recent_movement=recent_movement,
+        prior_week_comparison=prior_week_comparison,
+    )
+
+
+def _price_i95(
+    leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+) -> _I95Component | _UnavailableComponent:
+    """Price one validated I-95/I-495 facility leg from current observations."""
+    route_key = leg.pricing_key.source_route_key
+    parts = route_key.split(":")
+    boundary = "i495:192NO" if parts[0] == "Northbound" else "i495:192SD"
+    if (
+        len(parts) != 3
+        or parts[0] not in {"Northbound", "Southbound"}
+        or not all(parts[1:])
+        or leg.connection_ids != [f"source:i95_shared:{route_key}"]
+        or not all(point.split(":", 1)[0] in {"i95", "i495"} for point in leg.point_ids)
+        or not (
+            (leg.point_ids[0].endswith(f":{parts[1]}") or leg.point_ids[0] == boundary)
+            and (
+                leg.point_ids[1].endswith(f":{parts[2]}")
+                or leg.point_ids[1] == boundary
+            )
+            and leg.point_ids != [boundary, boundary]
+        )
+    ):
+        raise ValueError("I-95/I-495 facility leg does not match its pricing key")
+
+    rows = _fetch_i95_prices(leg.pricing_key.od_pair_id)
+    current = next(row for row in rows if row.comparison_kind == "current")
+    evaluated_at = current.evaluated_at.astimezone(_EASTERN)
+    if not current.available:
+        return _UnavailableComponent(
+            route_step_id=leg.route_step_id,
+            reason=cast(
+                Literal[
+                    "missing_observation",
+                    "stale_observation",
+                    "facility_unavailable",
+                    "exceptional_i95_schedule",
+                ],
+                current.availability_reason,
+            ),
+            component_evaluated_at=evaluated_at,
+            interval_end_at=(
+                current.interval_end_at.astimezone(_EASTERN)
+                if current.interval_end_at
+                else None
+            ),
+            observed_at=(
+                current.observed_at.astimezone(_EASTERN)
+                if current.observed_at
+                else None
+            ),
+            source_status=current.source_status,
+        )
+
+    current_price = cast(Decimal, current.price_usd)
+    current_bin_start = cast(datetime, current.bin_start_at)
+    recent_movement, prior_week_comparison = _comparison_summaries(
+        rows, current_price, current_bin_start
+    )
+    return _I95Component(
+        route_step_id=leg.route_step_id,
+        price_usd=current_price,
+        source_kind=cast(Literal["observed", "modeled"], current.source_kind),
+        pricing_method=cast(
+            Literal["source_observation", "identity_proxy_v1"],
+            current.pricing_method,
+        ),
+        facility="i95_i495",
+        component_evaluated_at=evaluated_at,
+        bin_minutes=10,
+        bin_start=current_bin_start.astimezone(_EASTERN),
+        bin_end=cast(datetime, current.bin_end_at).astimezone(_EASTERN),
+        interval_end_at=cast(datetime, current.interval_end_at).astimezone(_EASTERN),
+        observed_at=cast(datetime, current.observed_at).astimezone(_EASTERN),
+        od_pair_id=cast(int, current.od_pair_id),
+        proxy_od_pair_id=current.proxy_od_pair_id,
+        source_status=cast(str, current.source_status),
         recent_movement=recent_movement,
         prior_week_comparison=prior_week_comparison,
     )
@@ -764,10 +1012,10 @@ def _success(
     evaluated_at: datetime,
     components: list[_PriceComponent],
 ) -> ToolResult:
-    source_kinds: set[Literal["observed", "schedule_derived"]] = {
+    source_kinds: set[Literal["observed", "modeled", "schedule_derived"]] = {
         component.source_kind for component in components
     }
-    source_kind: Literal["observed", "schedule_derived", "mixed", "none"] = (
+    source_kind: Literal["observed", "modeled", "schedule_derived", "mixed", "none"] = (
         "none"
         if not source_kinds
         else next(iter(source_kinds))
@@ -877,7 +1125,7 @@ async def get_current_toll_price(
         return
 
     if any(
-        leg.facility not in {"i66", "greenway", "dtr"}
+        leg.facility not in {"i95_i495", "i66", "greenway", "dtr"}
         for leg in pricing_route.facility_legs
     ):
         yield _operation_error(tool_use_id)
@@ -890,6 +1138,7 @@ async def get_current_toll_price(
         pricing_route.facility_legs, key=lambda leg: leg.facility
     ):
         stage: _ProgressStage = {
+            "i95_i495": "i95_i495_pricing",
             "i66": "i66_pricing",
             "greenway": "greenway_pricing",
             "dtr": "dtr_pricing",
@@ -897,7 +1146,22 @@ async def get_current_toll_price(
         yield _progress(stage, "running")
         try:
             facility_legs = list(legs)
-            if facility == "i66":
+            if facility == "i95_i495":
+                for leg in facility_legs:
+                    priced = await asyncio.to_thread(
+                        _price_i95,
+                        cast(
+                            route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                            leg,
+                        ),
+                    )
+                    if database_evaluated_at is None:
+                        database_evaluated_at = priced.component_evaluated_at
+                    if isinstance(priced, _UnavailableComponent):
+                        unavailable_components.append(priced)
+                    else:
+                        components.append(priced)
+            elif facility == "i66":
                 for leg in facility_legs:
                     priced = await asyncio.to_thread(
                         _price_i66,
