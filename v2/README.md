@@ -109,10 +109,14 @@ See the [shadow rollout runbook](docs/pricing-shadow-rollout.md) for deployment,
 verification, rollback, and deliberately guarded cleanup.
 
 The `get_current_toll_price` Strands tool accepts stable origin and destination
-point IDs plus the supported pricing profile. Its current scaffold validates
-the route through the oracle and returns ordered `facility_legs`; facility
-pricing, aggregation, and totals remain to be implemented. Callers do not
-submit route plans or pricing components.
+point IDs plus the supported pricing profile. It validates the route through
+the oracle and currently prices Greenway legs from the published schedule;
+other facility pricing remains to be implemented. Callers do not submit route
+plans or pricing components.
+
+Its generated input, output, progress-event, and safe-error schemas are locked
+by `agent_tools/contract-manifest.json`. Contract changes require a new,
+increasing SemVer release and digest; CI rejects rewrites of published releases.
 
 The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
 events reach it through EventBridge while v1 keeps its direct S3 notification.

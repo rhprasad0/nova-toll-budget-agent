@@ -5,10 +5,17 @@ import logging
 from collections.abc import AsyncGenerator
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, Self, cast
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 from strands.types.tools import ToolContext, ToolResult, ToolSpec, ToolUse
 
@@ -29,6 +36,25 @@ _GREENWAY_RATES = {
     ("mainline_plaza", "peak"): Decimal("7.80"),
 }
 
+type _ProgressStage = Literal["route_validation", "greenway_pricing"]
+type _ProgressStatus = Literal["running", "completed", "failed"]
+type _ProgressMessage = Literal[
+    "Validating toll route",
+    "Toll route validated",
+    "Toll route validation failed",
+    "Pricing Dulles Greenway",
+    "Dulles Greenway pricing complete",
+    "Dulles Greenway pricing failed",
+]
+_PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessage] = {
+    ("route_validation", "running"): "Validating toll route",
+    ("route_validation", "completed"): "Toll route validated",
+    ("route_validation", "failed"): "Toll route validation failed",
+    ("greenway_pricing", "running"): "Pricing Dulles Greenway",
+    ("greenway_pricing", "completed"): "Dulles Greenway pricing complete",
+    ("greenway_pricing", "failed"): "Dulles Greenway pricing failed",
+}
+
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
@@ -41,9 +67,69 @@ class _PricingProfile(_Model):
 
 
 class _PricingRequest(_Model):
+    origin_point_id: str = Field(description="Stable oracle origin point ID")
+    destination_point_id: str = Field(description="Stable oracle destination point ID")
+    pricing_profile: _PricingProfile
+
+
+class _PricingUnavailableResponse(_Model):
     origin_point_id: str
     destination_point_id: str
-    pricing_profile: _PricingProfile
+    error: Literal["pricing_unavailable"]
+    reason: Literal["unsupported_pricing_profile"]
+
+
+class _NonValidRouteResponse(
+    route_validation._RouteResponse  # pyright: ignore[reportPrivateUsage]
+):
+    status: Literal[  # pyright: ignore[reportIncompatibleVariableOverride]
+        "invalid_origin",
+        "invalid_destination",
+        "currently_unavailable",
+        "unknown_availability",
+        "no_supported_route",
+        "traversal_limit_exceeded",
+    ]
+
+
+class _PricingRouteUnavailableResponse(
+    route_validation._RouteResponse  # pyright: ignore[reportPrivateUsage]
+):
+    status: Literal[  # pyright: ignore[reportIncompatibleVariableOverride]
+        "currently_unavailable", "unknown_availability"
+    ]
+    facility_legs: Annotated[
+        list[route_validation._FacilityLeg],  # pyright: ignore[reportPrivateUsage]
+        Field(max_length=0),
+    ]
+
+
+class _ProgressEvent(_Model):
+    stage: _ProgressStage
+    status: _ProgressStatus
+    message: _ProgressMessage
+
+    @model_validator(mode="after")
+    def _validate_message(self) -> Self:
+        if self.message != _PROGRESS_MESSAGES[(self.stage, self.status)]:
+            raise ValueError("progress message does not match stage and status")
+        return self
+
+
+class _ErrorContent(_Model):
+    text: str
+
+
+class _OperationError(_Model):
+    toolUseId: str
+    status: Literal["error"]
+    content: Annotated[list[_ErrorContent], Field(min_length=1, max_length=1)]
+
+    @model_validator(mode="after")
+    def _validate_message(self) -> Self:
+        if self.content[0].text != _SAFE_ERROR.format(tool_use_id=self.toolUseId):
+            raise ValueError("operation error message does not match tool-use ID")
+        return self
 
 
 class _PublishedSchedule(_Model):
@@ -76,26 +162,40 @@ class _CurrentPriceResponse(_Model):
     total_usd: Decimal
 
 
+type _PricingOutput = (
+    _CurrentPriceResponse
+    | _PricingUnavailableResponse
+    | _NonValidRouteResponse
+    | _PricingRouteUnavailableResponse
+)
+_OUTPUT_ADAPTER: TypeAdapter[_PricingOutput] = TypeAdapter(_PricingOutput)
+
+
 _SUPPORTED_PROFILE = _PricingProfile(
     vehicle_class="two_axle_passenger",
     payment_method="e_zpass",
     transponder_mode="toll",
 )
 
-_INPUT_SCHEMA: dict[str, Any] = _PricingRequest.model_json_schema()
+_INPUT_SCHEMA: dict[str, Any] = _PricingRequest.model_json_schema(mode="validation")
+_OUTPUT_SCHEMA = _OUTPUT_ADAPTER.json_schema(mode="serialization")
+_PROGRESS_SCHEMA = _ProgressEvent.model_json_schema(mode="serialization")
+_OPERATION_ERROR_SCHEMA = _OperationError.model_json_schema(mode="serialization")
 TOOL_SPEC: ToolSpec = {
     "name": "get_current_toll_price",
     "description": "Validate a canonical toll route and get its current price.",
     "inputSchema": {"json": _INPUT_SCHEMA},
+    "outputSchema": {"json": _OUTPUT_SCHEMA},
 }
 
 
 def _operation_error(tool_use_id: str) -> ToolResult:
-    return {
-        "toolUseId": tool_use_id,
-        "status": "error",
-        "content": [{"text": _SAFE_ERROR.format(tool_use_id=tool_use_id)}],
-    }
+    error = _OperationError(
+        toolUseId=tool_use_id,
+        status="error",
+        content=[_ErrorContent(text=_SAFE_ERROR.format(tool_use_id=tool_use_id))],
+    )
+    return cast(ToolResult, error.model_dump(mode="json"))
 
 
 def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
@@ -113,18 +213,15 @@ def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
 
 
 def _progress(
-    stage: Literal["route_validation", "greenway_pricing"],
-    status: Literal["running", "completed", "failed"],
+    stage: _ProgressStage,
+    status: _ProgressStatus,
 ) -> dict[str, str]:
-    messages = {
-        ("route_validation", "running"): "Validating toll route",
-        ("route_validation", "completed"): "Toll route validated",
-        ("route_validation", "failed"): "Toll route validation failed",
-        ("greenway_pricing", "running"): "Pricing Dulles Greenway",
-        ("greenway_pricing", "completed"): "Dulles Greenway pricing complete",
-        ("greenway_pricing", "failed"): "Dulles Greenway pricing failed",
-    }
-    return {"stage": stage, "status": status, "message": messages[(stage, status)]}
+    event = _ProgressEvent(
+        stage=stage,
+        status=status,
+        message=_PROGRESS_MESSAGES[(stage, status)],
+    )
+    return cast(dict[str, str], event.model_dump(mode="json"))
 
 
 def _current_eastern_time() -> datetime:
@@ -211,7 +308,7 @@ def _success(
 @tool(
     name=TOOL_SPEC["name"],
     description=TOOL_SPEC["description"],
-    inputSchema=_INPUT_SCHEMA,
+    inputSchema=TOOL_SPEC["inputSchema"],
     context="tool_context",
 )
 async def get_current_toll_price(
@@ -231,19 +328,16 @@ async def get_current_toll_price(
         return
 
     if request.pricing_profile != _SUPPORTED_PROFILE:
+        response = _PricingUnavailableResponse(
+            origin_point_id=request.origin_point_id,
+            destination_point_id=request.destination_point_id,
+            error="pricing_unavailable",
+            reason="unsupported_pricing_profile",
+        )
         yield {
             "toolUseId": tool_use_id,
             "status": "success",
-            "content": [
-                {
-                    "json": {
-                        "origin_point_id": request.origin_point_id,
-                        "destination_point_id": request.destination_point_id,
-                        "error": "pricing_unavailable",
-                        "reason": "unsupported_pricing_profile",
-                    }
-                }
-            ],
+            "content": [{"json": response.model_dump(mode="json")}],
         }
         return
 
@@ -346,3 +440,16 @@ async def get_current_toll_price(
 
     yield _progress("greenway_pricing", "completed")
     yield result
+
+
+get_current_toll_price.tool_spec = TOOL_SPEC
+TOOL_CONTRACT = {
+    "toolSpec": TOOL_SPEC,
+    "progressEventSchema": _PROGRESS_SCHEMA,
+    "progressMessages": {
+        f"{stage}.{status}": message
+        for (stage, status), message in _PROGRESS_MESSAGES.items()
+    },
+    "operationErrorSchema": _OPERATION_ERROR_SCHEMA,
+    "operationErrorTemplate": _SAFE_ERROR,
+}
