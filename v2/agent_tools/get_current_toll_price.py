@@ -5,6 +5,7 @@ import logging
 from collections.abc import AsyncGenerator
 from datetime import date, datetime, time
 from decimal import Decimal
+from itertools import groupby
 from typing import Annotated, Any, Literal, Self, cast
 from zoneinfo import ZoneInfo
 
@@ -34,8 +35,19 @@ _GREENWAY_RATES = {
     ("mainline_plaza", "off_peak"): Decimal("5.25"),
     ("mainline_plaza", "peak"): Decimal("5.80"),
 }
+_DTR_SCHEDULE_ID = "dulles_toll_road_2023_rates"
+_DTR_SOURCE_URL = (
+    "https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate"
+)
+_DTR_RETRIEVED_AT = date(2026, 7, 26)
+_DTR_RATES = {
+    "ramp": Decimal("2.00"),
+    "mainline_plaza": Decimal("4.00"),
+}
+_DTR_POINTS = ("28", "10", "11", "12", "13", "14", "15", "16", "17", "1819", "66")
+_DTR_RAMP_POINTS = {"10", "11", "12", "13", "14", "17"}
 
-type _ProgressStage = Literal["route_validation", "greenway_pricing"]
+type _ProgressStage = Literal["route_validation", "greenway_pricing", "dtr_pricing"]
 type _ProgressStatus = Literal["running", "completed", "failed"]
 type _ProgressMessage = Literal[
     "Validating toll route",
@@ -44,6 +56,9 @@ type _ProgressMessage = Literal[
     "Pricing Dulles Greenway",
     "Dulles Greenway pricing complete",
     "Dulles Greenway pricing failed",
+    "Pricing Dulles Toll Road",
+    "Dulles Toll Road pricing complete",
+    "Dulles Toll Road pricing failed",
 ]
 _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessage] = {
     ("route_validation", "running"): "Validating toll route",
@@ -52,6 +67,9 @@ _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessag
     ("greenway_pricing", "running"): "Pricing Dulles Greenway",
     ("greenway_pricing", "completed"): "Dulles Greenway pricing complete",
     ("greenway_pricing", "failed"): "Dulles Greenway pricing failed",
+    ("dtr_pricing", "running"): "Pricing Dulles Toll Road",
+    ("dtr_pricing", "completed"): "Dulles Toll Road pricing complete",
+    ("dtr_pricing", "failed"): "Dulles Toll Road pricing failed",
 }
 
 
@@ -149,6 +167,30 @@ class _GreenwayComponent(_Model):
     published_schedule: _PublishedSchedule
 
 
+class _DtrPublishedSchedule(_Model):
+    schedule_id: Literal["dulles_toll_road_2023_rates"]
+    rate_name: Literal["ramp", "mainline_plaza"]
+    source_url: Literal[
+        "https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate"
+    ]
+    retrieved_at: date
+
+
+class _DtrComponent(_Model):
+    route_step_id: str
+    price_usd: Decimal
+    source_kind: Literal["schedule_derived"]
+    pricing_method: Literal["published_schedule"]
+    facility: Literal["dtr"]
+    component_evaluated_at: datetime
+    published_schedule: _DtrPublishedSchedule
+
+
+type _PriceComponent = Annotated[
+    _GreenwayComponent | _DtrComponent, Field(discriminator="facility")
+]
+
+
 class _CurrentPriceResponse(_Model):
     origin_point_id: str
     destination_point_id: str
@@ -157,7 +199,7 @@ class _CurrentPriceResponse(_Model):
     maximum_observation_age_minutes: Literal[30]
     pricing_profile: _PricingProfile
     source_kind: Literal["schedule_derived", "none"]
-    components: list[_GreenwayComponent]
+    components: list[_PriceComponent]
     total_usd: Decimal
 
 
@@ -279,10 +321,95 @@ def _price_greenway(
     )
 
 
+def _price_dtr(
+    leg: route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    evaluated_at: datetime,
+) -> _DtrComponent:
+    """Price one validated DTR charge from the published schedule."""
+    if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
+        raise ValueError("DTR pricing requires an aware evaluation time")
+
+    route_key = leg.pricing_key.source_route_key
+    if route_key in {"greenway_to_dtr", "dtr_to_greenway"}:
+        expected_points = {
+            "greenway_to_dtr": [
+                "greenway:28:exit:EB",
+                "dtr:28:entry:EB",
+            ],
+            "dtr_to_greenway": [
+                "dtr:28:exit:WB",
+                "greenway:28:entry:WB",
+            ],
+        }[route_key]
+        if (
+            leg.pricing_key.charge_index != 1
+            or leg.connection_ids != [route_key]
+            or leg.point_ids != expected_points
+        ):
+            raise ValueError("DTR handoff leg does not match its pricing key")
+        rate_name: Literal["ramp", "mainline_plaza"] = "ramp"
+    else:
+        parts = route_key.split(":")
+        if (
+            len(parts) != 3
+            or parts[0] not in {"EB", "WB"}
+            or parts[1] not in _DTR_POINTS
+            or parts[2] not in _DTR_POINTS
+        ):
+            raise ValueError("DTR pricing key is malformed")
+        direction, entry, exit_ = parts
+        entry_position = _DTR_POINTS.index(entry)
+        exit_position = _DTR_POINTS.index(exit_)
+        if (direction == "EB") != (entry_position < exit_position):
+            raise ValueError("DTR pricing key direction is malformed")
+        expected_points = [
+            f"dtr:{entry}:entry:{direction}",
+            f"dtr:{exit_}:exit:{direction}",
+        ]
+        if (
+            leg.connection_ids != [f"source:dtr:{route_key}"]
+            or leg.point_ids != expected_points
+        ):
+            raise ValueError("DTR facility leg does not match its pricing key")
+
+        ramp_points = _DTR_RAMP_POINTS | ({"16"} if direction == "EB" else set[str]())
+        rate_names: list[Literal["ramp", "mainline_plaza"]] = []
+        if entry in ramp_points:
+            rate_names.append("ramp")
+        if (
+            min(entry_position, exit_position)
+            <= _DTR_POINTS.index("15")
+            < max(entry_position, exit_position)
+        ):
+            rate_names.append("mainline_plaza")
+        if exit_ in ramp_points:
+            rate_names.append("ramp")
+        try:
+            rate_name = rate_names[leg.pricing_key.charge_index - 1]
+        except IndexError as error:
+            raise ValueError("DTR charge index is malformed") from error
+
+    local_time = evaluated_at.astimezone(_EASTERN)
+    return _DtrComponent(
+        route_step_id=leg.route_step_id,
+        price_usd=_DTR_RATES[rate_name],
+        source_kind="schedule_derived",
+        pricing_method="published_schedule",
+        facility="dtr",
+        component_evaluated_at=local_time,
+        published_schedule=_DtrPublishedSchedule(
+            schedule_id=_DTR_SCHEDULE_ID,
+            rate_name=rate_name,
+            source_url=_DTR_SOURCE_URL,
+            retrieved_at=_DTR_RETRIEVED_AT,
+        ),
+    )
+
+
 def _success(
     request: _PricingRequest,
     evaluated_at: datetime,
-    components: list[_GreenwayComponent],
+    components: list[_PriceComponent],
 ) -> ToolResult:
     response = _CurrentPriceResponse(
         origin_point_id=request.origin_point_id,
@@ -386,30 +513,51 @@ async def get_current_toll_price(
             yield _error(tool_use_id, "response_serialization", error)
         return
 
-    if any(leg.facility != "greenway" for leg in pricing_route.facility_legs):
+    if any(
+        leg.facility not in {"greenway", "dtr"} for leg in pricing_route.facility_legs
+    ):
         yield _operation_error(tool_use_id)
         return
 
-    yield _progress("greenway_pricing", "running")
-    try:
-        components = [
-            _price_greenway(
-                cast(
-                    route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
-                    leg,
-                ),
-                evaluated_at,
+    components: list[_PriceComponent] = []
+    for facility, legs in groupby(
+        pricing_route.facility_legs, key=lambda leg: leg.facility
+    ):
+        stage: Literal["greenway_pricing", "dtr_pricing"] = (
+            "greenway_pricing" if facility == "greenway" else "dtr_pricing"
+        )
+        yield _progress(stage, "running")
+        try:
+            components.extend(
+                _price_greenway(
+                    cast(
+                        route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                        leg,
+                    ),
+                    evaluated_at,
+                )
+                if facility == "greenway"
+                else _price_dtr(
+                    cast(
+                        route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                        leg,
+                    ),
+                    evaluated_at,
+                )
+                for leg in legs
             )
-            for leg in pricing_route.facility_legs
-        ]
+        except Exception as error:
+            yield _progress(stage, "failed")
+            yield _error(tool_use_id, stage, error)
+            return
+        yield _progress(stage, "completed")
+
+    try:
         result = _success(request, evaluated_at, components)
         result["toolUseId"] = tool_use_id
     except Exception as error:
-        yield _progress("greenway_pricing", "failed")
-        yield _error(tool_use_id, "greenway_pricing", error)
+        yield _error(tool_use_id, "response_serialization", error)
         return
-
-    yield _progress("greenway_pricing", "completed")
     yield result
 
 

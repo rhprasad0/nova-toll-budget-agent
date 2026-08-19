@@ -134,6 +134,10 @@ search path, an owner limited to its required pricing relations, and only
   model method and proxy identifier. Never relabel them as observed.
 - Schedule-derived components use the published rate applicable at
   `evaluated_at`, preserving schedule identity and effective dates.
+- Dulles Toll Road schedule components use the published two-axle E-ZPass rates:
+  `$4.00` for a mainline-plaza charge and `$2.00` for each ramp charge. The
+  Greenway/DTR handoff is a DTR ramp charge. DTR rates do not vary by time of
+  day.
 - Return a route total only when every required component has a usable current
   price. Missing or unavailable prices are not zero.
 - An empty component list and `total_usd: "0.00"` mean the validated route is

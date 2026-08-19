@@ -125,7 +125,8 @@ verification, rollback, and deliberately guarded cleanup.
 
 The `get_current_toll_price` Strands tool accepts stable origin and destination
 point IDs plus the supported pricing profile. It validates the route through
-the oracle and currently prices Greenway legs from the published schedule;
+the oracle and currently prices Dulles Greenway and Dulles Toll Road legs from
+their published schedules, including trips that cross between those facilities;
 other facility pricing remains to be implemented. Callers do not submit route
 plans or pricing components.
 

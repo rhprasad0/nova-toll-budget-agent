@@ -178,6 +178,50 @@ def _greenway_leg(
     )
 
 
+def _dtr_leg(
+    *,
+    route_step_id: str = "step-1",
+    direction: str = "EB",
+    entry: str = "10",
+    exit_: str = "16",
+    charge_index: int = 1,
+) -> pricing_tool.route_validation._DtrFacilityLeg:  # pyright: ignore[reportPrivateUsage]
+    route_key = f"{direction}:{entry}:{exit_}"
+    return pricing_tool.route_validation._DtrFacilityLeg.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {
+            "route_step_id": route_step_id,
+            "facility": "dtr",
+            "point_ids": [
+                f"dtr:{entry}:entry:{direction}",
+                f"dtr:{exit_}:exit:{direction}",
+            ],
+            "connection_ids": [f"source:dtr:{route_key}"],
+            "pricing_key": {
+                "source_route_key": route_key,
+                "charge_index": charge_index,
+            },
+        }
+    )
+
+
+def _dtr_handoff_leg(
+    route_key: str, route_step_id: str
+) -> pricing_tool.route_validation._DtrFacilityLeg:  # pyright: ignore[reportPrivateUsage]
+    point_ids = {
+        "greenway_to_dtr": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
+        "dtr_to_greenway": ["dtr:28:exit:WB", "greenway:28:entry:WB"],
+    }[route_key]
+    return pricing_tool.route_validation._DtrFacilityLeg.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {
+            "route_step_id": route_step_id,
+            "facility": "dtr",
+            "point_ids": point_ids,
+            "connection_ids": [route_key],
+            "pricing_key": {"source_route_key": route_key, "charge_index": 1},
+        }
+    )
+
+
 def _pricing_route(
     row: dict[str, Any], legs: list[dict[str, Any]]
 ) -> pricing_tool.route_validation._PricingRouteResponse:  # pyright: ignore[reportPrivateUsage]
@@ -519,6 +563,71 @@ def test_greenway_pricer_requires_aware_evaluation_time():
         )
 
 
+@pytest.mark.parametrize(
+    ("direction", "entry", "exit_", "charge_index", "price", "rate_name"),
+    [
+        ("EB", "28", "10", 1, "2.00", "ramp"),
+        ("EB", "10", "16", 1, "2.00", "ramp"),
+        ("EB", "10", "16", 2, "4.00", "mainline_plaza"),
+        ("EB", "10", "16", 3, "2.00", "ramp"),
+        ("WB", "66", "28", 1, "4.00", "mainline_plaza"),
+        ("EB", "16", "17", 1, "2.00", "ramp"),
+        ("EB", "16", "17", 2, "2.00", "ramp"),
+    ],
+)
+def test_dtr_schedule_rates(direction, entry, exit_, charge_index, price, rate_name):
+    component = pricing_tool._price_dtr(
+        _dtr_leg(
+            direction=direction,
+            entry=entry,
+            exit_=exit_,
+            charge_index=charge_index,
+        ),
+        datetime(2026, 8, 17, 10, 0, tzinfo=UTC),
+    )
+
+    assert component.price_usd == Decimal(price)
+    assert component.published_schedule.rate_name == rate_name
+    assert component.component_evaluated_at.tzinfo == _EASTERN
+
+
+@pytest.mark.parametrize("route_key", ["greenway_to_dtr", "dtr_to_greenway"])
+def test_dtr_handoff_is_a_ramp_charge(route_key):
+    component = pricing_tool._price_dtr(
+        _dtr_handoff_leg(route_key, "step-1"),
+        datetime(2026, 8, 17, 12, tzinfo=_EASTERN),
+    )
+
+    assert component.price_usd == Decimal("2.00")
+    assert component.published_schedule.rate_name == "ramp"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda data: data["pricing_key"].update({"charge_index": 4}),
+        lambda data: data.update({"connection_ids": ["source:dtr:EB:10:17"]}),
+        lambda data: data.update({"point_ids": ["dtr:10:entry:EB", "dtr:17:exit:EB"]}),
+        lambda data: data["pricing_key"].update({"source_route_key": "WB:10:16"}),
+    ],
+)
+def test_dtr_pricer_rejects_misaligned_legs(mutation):
+    data = _dtr_leg().model_dump(mode="python")
+    mutation(data)
+    leg = pricing_tool.route_validation._DtrFacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
+
+    with pytest.raises(ValueError, match="DTR"):
+        pricing_tool._price_dtr(leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN))
+
+
+def test_dtr_pricer_requires_aware_evaluation_time():
+    with pytest.raises(ValueError, match="aware"):
+        pricing_tool._price_dtr(
+            _dtr_leg(),
+            datetime(2026, 8, 17, 8),  # noqa: DTZ001
+        )
+
+
 def test_greenway_only_route_streams_progress_and_returns_total(monkeypatch):
     leg = _greenway_leg().model_dump(mode="json")
     _install_route(monkeypatch, [leg])
@@ -565,6 +674,114 @@ def test_greenway_only_route_streams_progress_and_returns_total(monkeypatch):
         ],
         "total_usd": "5.80",
     }
+
+
+@pytest.mark.parametrize(
+    ("input_data", "row", "legs", "stages", "facilities", "total"),
+    [
+        (
+            {
+                **_input(),
+                "destination_point_id": "dtr:10:exit:EB",
+            },
+            {
+                **_route_row(),
+                "point_ids": [
+                    "greenway:1:entry:EB",
+                    "greenway:28:exit:EB",
+                    "dtr:28:entry:EB",
+                    "dtr:10:exit:EB",
+                ],
+                "connection_ids": [
+                    "source:greenway:EB:1:28",
+                    "greenway_to_dtr",
+                    "source:dtr:EB:28:10",
+                ],
+                "connection_types": [
+                    "within_facility",
+                    "toll_handoff",
+                    "within_facility",
+                ],
+            },
+            [
+                _greenway_leg().model_dump(mode="json"),
+                _dtr_handoff_leg("greenway_to_dtr", "step-2").model_dump(mode="json"),
+                _dtr_leg(route_step_id="step-3", entry="28", exit_="10").model_dump(
+                    mode="json"
+                ),
+            ],
+            ["greenway_pricing", "dtr_pricing"],
+            ["greenway", "dtr", "dtr"],
+            "9.25",
+        ),
+        (
+            {
+                **_input(),
+                "origin_point_id": "dtr:66:entry:WB",
+                "destination_point_id": "greenway:1:exit:WB",
+            },
+            {
+                **_route_row(),
+                "point_ids": [
+                    "dtr:66:entry:WB",
+                    "dtr:28:exit:WB",
+                    "greenway:28:entry:WB",
+                    "greenway:1:exit:WB",
+                ],
+                "connection_ids": [
+                    "source:dtr:WB:66:28",
+                    "dtr_to_greenway",
+                    "source:greenway:WB:28:1",
+                ],
+                "connection_types": [
+                    "within_facility",
+                    "toll_handoff",
+                    "within_facility",
+                ],
+            },
+            [
+                _dtr_leg(
+                    route_step_id="step-1",
+                    direction="WB",
+                    entry="66",
+                    exit_="28",
+                ).model_dump(mode="json"),
+                _dtr_handoff_leg("dtr_to_greenway", "step-2").model_dump(mode="json"),
+                _greenway_leg(direction="WB", entry="28", exit_="1")
+                .model_copy(update={"route_step_id": "step-3"})
+                .model_dump(mode="json"),
+            ],
+            ["dtr_pricing", "greenway_pricing"],
+            ["dtr", "dtr", "greenway"],
+            "11.25",
+        ),
+    ],
+)
+def test_greenway_dtr_routes_price_every_component_in_route_order(
+    monkeypatch, input_data, row, legs, stages, facilities, total
+):
+    response = _pricing_route(row, legs)
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_current_eastern_time",
+        lambda: datetime(2026, 8, 17, 12, tzinfo=_EASTERN),
+    )
+
+    events = _run_tool(input_data)
+
+    progress = _progress_events(events)
+    assert [event["stage"] for event in progress if event["status"] == "running"] == [
+        "route_validation",
+        *stages,
+    ]
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    assert [component["facility"] for component in payload["components"]] == facilities
+    assert payload["total_usd"] == total
 
 
 def test_valid_no_toll_route_returns_zero_without_pricing_progress(monkeypatch):
@@ -643,6 +860,54 @@ def test_greenway_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog
         ("route_validation", "completed"),
         ("greenway_pricing", "running"),
         ("greenway_pricing", "failed"),
+    ]
+    assert _result(events)["status"] == "error"
+    assert secret not in str(_progress_events(events))
+    assert secret not in caplog.text
+
+
+def test_dtr_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
+    secret = "private DTR crash"
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    row = {
+        **_route_row(),
+        "point_ids": ["dtr:28:entry:EB", "dtr:10:exit:EB"],
+        "connection_ids": ["source:dtr:EB:28:10"],
+    }
+    response = _pricing_route(
+        row,
+        [_dtr_leg(entry="28", exit_="10").model_dump(mode="json")],
+    )
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_price_dtr",
+        fail,
+    )
+
+    with caplog.at_level(logging.ERROR):
+        events = _run_tool(
+            {
+                **_input(),
+                "origin_point_id": "dtr:28:entry:EB",
+                "destination_point_id": "dtr:10:exit:EB",
+            }
+        )
+
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "completed"),
+        ("dtr_pricing", "running"),
+        ("dtr_pricing", "failed"),
     ]
     assert _result(events)["status"] == "error"
     assert secret not in str(_progress_events(events))
