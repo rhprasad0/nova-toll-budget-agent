@@ -1,436 +1,134 @@
--- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.3.0
+-- Correct DTR pricing metadata and allow untolled IAD terminal connectors.
 
 \set ON_ERROR_STOP on
 
 BEGIN;
 SET LOCAL search_path = pg_catalog, pg_temp;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
+SELECT pg_advisory_xact_lock(hashtext('tollchat-v2-oracle-schema-version'));
 
-DO $$
+DO $migration$
 DECLARE
-    pricing_version text;
-    pricing_version_parts integer[];
+    current_version text;
 BEGIN
-    IF current_setting('server_version_num')::integer < 170000
-       OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.3.0 requires PostgreSQL 17';
-    END IF;
-    IF to_regclass('pricing.schema_version') IS NULL
-       OR to_regclass('pricing.current_i95_direction') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.3.0 requires pricing schema 1.x';
-    END IF;
-    EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
-        INTO pricing_version;
-    pricing_version_parts := string_to_array(pricing_version, '.')::integer[];
-    IF pricing_version IS NULL
-       OR pricing_version_parts < ARRAY[1, 0, 0]
-       OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.3.0 requires pricing schema 1.x; found %',
-            coalesce(pricing_version, '<missing>');
-    END IF;
-    IF to_regrole('rds_iam') IS NULL THEN
-        RAISE EXCEPTION 'oracle requires the RDS IAM database role';
-    END IF;
-END $$;
+    SELECT version INTO STRICT current_version
+    FROM oracle.schema_version
+    WHERE singleton;
 
-DO $$
-BEGIN
-    CREATE ROLE oracle_owner NOLOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    CREATE ROLE tollchat_agent LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname = 'oracle_owner'
-          AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
-               OR rolreplication OR rolbypassrls)
-    ) THEN
-        RAISE EXCEPTION 'existing oracle_owner role is not a scoped NOLOGIN owner';
+    IF current_version NOT IN ('1.2.0', '1.3.0') THEN
+        RAISE EXCEPTION 'expected oracle schema version 1.2.0 or 1.3.0, got %',
+            current_version;
     END IF;
-    IF EXISTS (
-        SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname = 'tollchat_agent'
-          AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
-               OR rolreplication OR rolbypassrls)
-    ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent role is not a scoped LOGIN role';
-    END IF;
-    IF EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_auth_members AS membership
-        JOIN pg_catalog.pg_roles AS member_role
-          ON member_role.oid = membership.member
-        JOIN pg_catalog.pg_roles AS granted_role
-          ON granted_role.oid = membership.roleid
-        WHERE member_role.rolname = 'tollchat_agent'
-          AND granted_role.rolname <> 'rds_iam'
-    ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent has an unexpected role membership';
-    END IF;
-    IF EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_database AS database,
-             LATERAL aclexplode(database.datacl) AS privilege
-        WHERE database.datname = current_database()
-          AND privilege.grantee = to_regrole('tollchat_agent')
-          AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_namespace AS namespace,
-             LATERAL aclexplode(namespace.nspacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_class AS relation,
-             LATERAL aclexplode(relation.relacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_attribute AS attribute,
-             LATERAL aclexplode(attribute.attacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
-    ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent has unexpected direct privileges';
-    END IF;
-END $$;
+END
+$migration$;
 
-GRANT rds_iam TO tollchat_agent;
+SELECT version = '1.2.0' AS oracle_upgrade_needed
+FROM oracle.schema_version
+WHERE singleton
+\gset
 
-CREATE SCHEMA oracle;
-REVOKE ALL ON SCHEMA oracle FROM PUBLIC;
+\if :oracle_upgrade_needed
 
-CREATE EXTENSION postgis WITH SCHEMA oracle;
-
-DO $$
+DO $dtr$
 DECLARE
-    installed_version text;
+    changed_rows integer;
 BEGIN
-    SELECT extversion INTO installed_version
-    FROM pg_catalog.pg_extension
-    WHERE extname = 'postgis';
-    IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.3.0 requires PostGIS 3.5.x; found %',
-            coalesce(installed_version, '<missing>');
-    END IF;
-END $$;
+    WITH dtr_connections AS (
+        SELECT
+            connection.connection_id,
+            array_position(
+                ARRAY[
+                    '28', '10', '11', '12', '13', '14',
+                    '15', '16', '17', '1819', '66'
+                ]::text[],
+                split_part(connection.source_route_key, ':', 2)
+            ) AS entry_position,
+            array_position(
+                ARRAY[
+                    '28', '10', '11', '12', '13', '14',
+                    '15', '16', '17', '1819', '66'
+                ]::text[],
+                split_part(connection.source_route_key, ':', 3)
+            ) AS exit_position
+        FROM oracle.toll_connection AS connection
+        JOIN oracle.toll_route_point AS origin
+          ON origin.point_id = connection.from_point_id
+        WHERE connection.connection_type = 'within_facility'
+          AND origin.network_id = 'dtr'
+    ), ramp_charges AS (
+        SELECT
+            dtr.connection_id,
+            charge.value AS charge,
+            CASE
+                WHEN charge.value->>'label' LIKE 'Entrance ramp%'
+                THEN 1
+                ELSE 3
+            END AS component_order,
+            charge.ordinality
+        FROM dtr_connections AS dtr
+        JOIN oracle.toll_connection AS connection
+          ON connection.connection_id = dtr.connection_id
+        CROSS JOIN LATERAL jsonb_array_elements(
+            connection.source_metadata #> '{source_pair,charges}'
+        ) WITH ORDINALITY AS charge(value, ordinality)
+        WHERE charge.value->>'label' <> 'Mainline plaza'
+          AND charge.value->>'label'
+              <> 'Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)'
+    ), desired_components AS (
+        SELECT
+            ramp.connection_id,
+            ramp.charge,
+            ramp.component_order,
+            ramp.ordinality
+        FROM ramp_charges AS ramp
 
-CREATE TABLE oracle.schema_version (
-    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-    version text NOT NULL CHECK (
-        version ~ '^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$'
-    ),
-    installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
-);
+        UNION ALL
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.3.0');
-
-CREATE TABLE oracle.toll_route_point (
-    point_id text PRIMARY KEY,
-    network_id text NOT NULL CHECK (
-        network_id IN (
-            'i95', 'i495', 'i66', 'dtr', 'greenway',
-            'airport_iad', 'airport_dca'
-        )
-    ),
-    source_node_id text NOT NULL,
-    point_type text NOT NULL CHECK (point_type IN ('entry', 'exit', 'airport')),
-    direction text CHECK (direction IN ('NB', 'SB', 'EB', 'WB')),
-    label text NOT NULL CHECK (label <> ''),
-    location oracle.geography(Point, 4326),
-    aliases text[] NOT NULL DEFAULT ARRAY[]::text[],
-    source_metadata jsonb NOT NULL CHECK (jsonb_typeof(source_metadata) = 'object'),
-    CHECK ((point_type = 'airport') = (direction IS NULL)),
-    CHECK ((point_type = 'airport') = (network_id LIKE 'airport_%')),
-    UNIQUE NULLS NOT DISTINCT (network_id, source_node_id, point_type, direction)
-);
-
-CREATE TABLE oracle.toll_connection (
-    connection_id text PRIMARY KEY,
-    from_point_id text NOT NULL REFERENCES oracle.toll_route_point (point_id),
-    to_point_id text NOT NULL REFERENCES oracle.toll_route_point (point_id),
-    connection_type text NOT NULL CHECK (
-        connection_type IN (
-            'within_facility', 'toll_handoff',
-            'general_purpose_gap', 'airport_access'
-        )
-    ),
-    required_i95_direction text CHECK (required_i95_direction IN ('NB', 'SB')),
-    source_route_key text,
-    source_metadata jsonb NOT NULL CHECK (jsonb_typeof(source_metadata) = 'object'),
-    CHECK (from_point_id <> to_point_id),
-    UNIQUE (from_point_id, to_point_id)
-);
-
-CREATE INDEX toll_connection_from_point_idx
-    ON oracle.toll_connection (from_point_id);
-
-\ir data.sql
-
-CREATE VIEW oracle.route_pricing_component AS
-SELECT
-    connection.connection_id,
-    component.ordinality::integer AS component_order,
-    connection.from_point_id,
-    connection.to_point_id,
-    connection.source_metadata
-        #>> '{general_purpose_fallback,boundary_point_id}' AS boundary_point_id,
-    jsonb_array_length(connection.source_metadata #> '{source_pair,ods}')
-        AS component_count,
-    'i95_i495'::text AS facility,
-    connection.source_route_key,
-    component.value::integer AS od_pair_id,
-    NULL::integer AS start_zone_id,
-    NULL::integer AS end_zone_id,
-    NULL::jsonb AS charge
-FROM oracle.toll_connection AS connection
-CROSS JOIN LATERAL jsonb_array_elements_text(
-    connection.source_metadata #> '{source_pair,ods}'
-) WITH ORDINALITY AS component(value, ordinality)
-WHERE connection.connection_type IN ('within_facility', 'general_purpose_gap')
-
-UNION ALL
-
-SELECT
-    connection.connection_id,
-    1,
-    connection.from_point_id,
-    connection.to_point_id,
-    NULL,
-    1,
-    'i66',
-    connection.source_route_key,
-    NULL,
-    (connection.source_metadata #>> '{source_pair,start_zone}')::integer,
-    (connection.source_metadata #>> '{source_pair,end_zone}')::integer,
-    NULL
-FROM oracle.toll_connection AS connection
-JOIN oracle.toll_route_point AS origin
-  ON origin.point_id = connection.from_point_id
-WHERE connection.connection_type = 'within_facility'
-  AND origin.network_id = 'i66'
-
-UNION ALL
-
-SELECT
-    connection.connection_id,
-    component.ordinality::integer,
-    connection.from_point_id,
-    connection.to_point_id,
-    NULL,
-    jsonb_array_length(connection.source_metadata #> '{source_pair,charges}'),
-    origin.network_id,
-    connection.source_route_key,
-    NULL,
-    NULL,
-    NULL,
-    component.value
-FROM oracle.toll_connection AS connection
-JOIN oracle.toll_route_point AS origin
-  ON origin.point_id = connection.from_point_id
-CROSS JOIN LATERAL jsonb_array_elements(
-    connection.source_metadata #> '{source_pair,charges}'
-) WITH ORDINALITY AS component(value, ordinality)
-WHERE connection.connection_type = 'within_facility'
-  AND origin.network_id IN ('dtr', 'greenway')
-  AND (
-      (component.value->>'price_peak_usd')::numeric > 0
-      OR (component.value->>'price_off_peak_usd')::numeric > 0
-  )
-
-UNION ALL
-
-SELECT
-    connection.connection_id,
-    1,
-    connection.from_point_id,
-    connection.to_point_id,
-    NULL,
-    1,
-    connection.source_metadata->>'pricing_facility',
-    connection.source_route_key,
-    NULL,
-    NULL,
-    NULL,
-    connection.source_metadata->'pricing_charge'
-FROM oracle.toll_connection AS connection
-WHERE connection.connection_type = 'toll_handoff'
-  AND connection.source_metadata ? 'pricing_facility'
-  AND connection.source_metadata ? 'pricing_charge';
-
-CREATE FUNCTION oracle.ramp_alternatives(
-    submitted_point_id text,
-    unchanged_point_id text,
-    replace_origin boolean
-) RETURNS jsonb
-LANGUAGE sql
-STABLE
-SET search_path = pg_catalog, pg_temp
-AS $function$
-WITH RECURSIVE
-submitted AS (
-    SELECT route_point.*
-    FROM oracle.toll_route_point AS route_point
-    WHERE route_point.point_id = submitted_point_id
-),
-candidate_points AS (
-    SELECT candidate.*
-    FROM oracle.toll_route_point AS candidate
-    CROSS JOIN submitted
-    WHERE candidate.network_id = submitted.network_id
-      AND candidate.point_type = CASE
-          WHEN replace_origin THEN 'entry'
-          ELSE 'exit'
-      END
-),
-seeds AS (
-    SELECT
-        candidate.point_id AS alternative_point_id,
-        candidate.point_id AS current_point_id,
-        ARRAY[candidate.point_id]::text[] AS walked_point_ids,
-        0 AS depth
-    FROM candidate_points AS candidate
-    WHERE replace_origin
-
-    UNION ALL
-
-    SELECT
-        NULL::text,
-        unchanged.point_id,
-        ARRAY[unchanged.point_id]::text[],
-        0
-    FROM oracle.toll_route_point AS unchanged
-    WHERE NOT replace_origin
-      AND unchanged.point_id = unchanged_point_id
-),
-walk AS (
-    SELECT
-        seeds.alternative_point_id,
-        seeds.current_point_id,
-        seeds.walked_point_ids,
-        seeds.depth
-    FROM seeds
-
-    UNION ALL
-
-    SELECT
-        walk.alternative_point_id,
-        next_point.point_id,
-        walk.walked_point_ids || next_point.point_id,
-        walk.depth + 1
-    FROM walk
-    JOIN oracle.toll_route_point AS current_point
-      ON current_point.point_id = walk.current_point_id
-    JOIN oracle.toll_connection AS connection
-      ON connection.from_point_id = walk.current_point_id
-    JOIN oracle.toll_route_point AS next_point
-      ON next_point.point_id = connection.to_point_id
-    WHERE walk.depth < 12
-      AND (NOT replace_origin OR walk.current_point_id <> unchanged_point_id)
-      AND NOT next_point.point_id = ANY(walk.walked_point_ids)
-      AND (
-          current_point.point_type <> 'airport'
-          OR (NOT replace_origin AND current_point.point_id = unchanged_point_id)
-      )
-      AND (
-          next_point.point_type <> 'airport'
-          OR (replace_origin AND next_point.point_id = unchanged_point_id)
-      )
-),
-reachable AS (
-    SELECT DISTINCT
-        CASE
-            WHEN replace_origin THEN walk.alternative_point_id
-            ELSE walk.current_point_id
-        END AS point_id
-    FROM walk
-    WHERE walk.depth > 0
-      AND (
-          (replace_origin AND walk.current_point_id = unchanged_point_id)
-          OR (
-              NOT replace_origin
-              AND EXISTS (
-                  SELECT 1
-                  FROM candidate_points AS candidate
-                  WHERE candidate.point_id = walk.current_point_id
-              )
-          )
-      )
-),
-ranked AS (
-    SELECT
-        candidate.*,
-        coalesce(preference.rank, 2147483647) AS preference_rank,
-        CASE
-            WHEN candidate.source_node_id = submitted.source_node_id THEN 0
-            WHEN candidate.source_metadata
-                     -> 'alternative_ranking' ->> 'corridor_position' IS NOT NULL
-              AND submitted.source_metadata
-                     -> 'alternative_ranking' ->> 'corridor_position' IS NOT NULL THEN
-                abs(
-                    (candidate.source_metadata
-                        -> 'alternative_ranking' ->> 'corridor_position')::double precision
-                    - (submitted.source_metadata
-                        -> 'alternative_ranking' ->> 'corridor_position')::double precision
+        SELECT
+            dtr.connection_id,
+            jsonb_build_object(
+                'label', 'Mainline plaza',
+                'price_off_peak_usd', '4.00',
+                'price_peak_usd', '4.00'
+            ),
+            2,
+            0
+        FROM dtr_connections AS dtr
+        WHERE least(dtr.entry_position, dtr.exit_position) <= 8
+          AND 8 < greatest(dtr.entry_position, dtr.exit_position)
+    ), desired_charges AS (
+        SELECT
+            dtr.connection_id,
+            coalesce((
+                SELECT jsonb_agg(
+                    component.charge
+                    ORDER BY component.component_order, component.ordinality
                 )
-            WHEN candidate.network_id IN ('i95', 'i495')
-              AND candidate.location IS NOT NULL
-              AND submitted.location IS NOT NULL THEN
-                oracle.ST_Distance(candidate.location, submitted.location)
-            ELSE 'Infinity'::double precision
-        END AS distance
-    FROM reachable
-    JOIN candidate_points AS candidate USING (point_id)
-    CROSS JOIN submitted
-    LEFT JOIN LATERAL (
-        SELECT preferred.ordinality::integer AS rank
-        FROM jsonb_array_elements_text(
-            coalesce(
-                submitted.source_metadata
-                    -> 'alternative_ranking' -> 'preferred_point_ids',
-                '[]'::jsonb
-            )
-        ) WITH ORDINALITY AS preferred(point_id, ordinality)
-        WHERE preferred.point_id = candidate.point_id
-    ) AS preference ON true
-    ORDER BY
-        coalesce(preference.rank, 2147483647),
-        distance,
-        candidate.point_id
-    LIMIT 2
-)
-SELECT coalesce(
-    jsonb_agg(
-        jsonb_build_object(
-            'point_id', ranked.point_id,
-            'network_id', ranked.network_id,
-            'source_node_id', ranked.source_node_id,
-            'point_type', ranked.point_type,
-            'direction', ranked.direction,
-            'label', ranked.label,
-            'aliases', to_jsonb(ranked.aliases),
-            'location', CASE
-                WHEN ranked.location IS NULL THEN NULL
-                ELSE oracle.ST_AsGeoJSON(ranked.location)::jsonb
-            END
-        )
-        ORDER BY ranked.preference_rank, ranked.distance, ranked.point_id
-    ),
-    '[]'::jsonb
-)
-FROM ranked
-$function$;
+                FROM desired_components AS component
+                WHERE component.connection_id = dtr.connection_id
+            ), '[]'::jsonb) AS charges
+        FROM dtr_connections AS dtr
+    )
+    UPDATE oracle.toll_connection AS connection
+    SET source_metadata = jsonb_set(
+        connection.source_metadata,
+        '{source_pair,charges}',
+        desired.charges
+    )
+    FROM desired_charges AS desired
+    WHERE connection.connection_id = desired.connection_id
+      AND connection.source_metadata #> '{source_pair,charges}'
+          IS DISTINCT FROM desired.charges;
 
-CREATE FUNCTION oracle.resolve_toll_route(
+    GET DIAGNOSTICS changed_rows = ROW_COUNT;
+    IF changed_rows <> 20 THEN
+        RAISE EXCEPTION 'expected 20 corrected DTR pairs, got %', changed_rows;
+    END IF;
+END
+$dtr$;
+
+CREATE OR REPLACE FUNCTION oracle.resolve_toll_route(
     origin_point_id text,
     destination_point_id text
 ) RETURNS TABLE (
@@ -980,177 +678,100 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION oracle.validate_toll_route(
-    origin_point_id text,
-    destination_point_id text
-) RETURNS TABLE (
-    status text,
-    reason jsonb,
-    point_ids text[],
-    connection_ids text[],
-    connection_types text[],
-    general_purpose_gaps jsonb,
-    i95_evidence jsonb
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
-SELECT
-    route.status,
-    route.reason,
-    route.point_ids,
-    route.connection_ids,
-    route.connection_types,
-    route.general_purpose_gaps,
-    route.i95_evidence
-FROM oracle.resolve_toll_route($1, $2) AS route
-$function$;
+UPDATE oracle.schema_version
+SET version = '1.3.0', installed_at = clock_timestamp()
+WHERE singleton AND version = '1.2.0';
 
-CREATE FUNCTION oracle.validate_pricing_route(
-    origin_point_id text,
-    destination_point_id text
-) RETURNS TABLE (
-    status text,
-    reason jsonb,
-    point_ids text[],
-    connection_ids text[],
-    connection_types text[],
-    general_purpose_gaps jsonb,
-    i95_evidence jsonb,
-    facility_legs jsonb
-)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
+\endif
+
+DO $migration$
 DECLARE
-    resolved record;
+    expected record;
+    result record;
 BEGIN
-    point_ids := ARRAY[]::text[];
-    connection_ids := ARRAY[]::text[];
-    connection_types := ARRAY[]::text[];
-    general_purpose_gaps := '[]'::jsonb;
-    i95_evidence := NULL;
-    facility_legs := '[]'::jsonb;
-
-    SELECT * INTO STRICT resolved
-    FROM oracle.resolve_toll_route(origin_point_id, destination_point_id);
-
-    status := resolved.status;
-    reason := resolved.reason;
-    point_ids := resolved.point_ids;
-    connection_ids := resolved.connection_ids;
-    connection_types := resolved.connection_types;
-    general_purpose_gaps := resolved.general_purpose_gaps;
-    i95_evidence := resolved.i95_evidence;
-
-    IF resolved.status <> 'valid' THEN
-        RETURN NEXT;
-        RETURN;
+    IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.3.0' THEN
+        RAISE EXCEPTION 'oracle 1.3.0 is not installed';
     END IF;
 
-    WITH components AS (
-        SELECT
-            step.connection_index,
-            component.component_order,
-            component.from_point_id,
-            component.to_point_id,
-            component.boundary_point_id,
-            component.component_count,
-            component.facility,
-            component.source_route_key,
-            component.od_pair_id,
-            component.start_zone_id,
-            component.end_zone_id,
-            component.charge
-        FROM generate_subscripts(connection_ids, 1)
-             AS step(connection_index)
-        JOIN oracle.route_pricing_component AS component
-          ON component.connection_id = connection_ids[step.connection_index]
-    ), numbered AS (
-        SELECT
-            components.*,
-            row_number() OVER (
-                ORDER BY components.connection_index, components.component_order
-            ) AS route_step_number
-        FROM components
-    )
-    SELECT coalesce(
-        jsonb_agg(
-            jsonb_build_object(
-                'route_step_id', 'step-' || numbered.route_step_number,
-                'facility', numbered.facility,
-                'point_ids', CASE
-                    WHEN numbered.boundary_point_id IS NOT NULL
-                     AND numbered.component_count = 2
-                     AND numbered.component_order = 1 THEN jsonb_build_array(
-                        numbered.from_point_id, numbered.boundary_point_id
-                    )
-                    WHEN numbered.boundary_point_id IS NOT NULL
-                     AND numbered.component_count = 2
-                     AND numbered.component_order = 2 THEN jsonb_build_array(
-                        numbered.boundary_point_id, numbered.to_point_id
-                    )
-                    ELSE jsonb_build_array(
-                        point_ids[numbered.connection_index],
-                        point_ids[numbered.connection_index + 1]
-                    )
-                END,
-                'connection_ids', jsonb_build_array(
-                    connection_ids[numbered.connection_index]
-                ),
-                'pricing_key', jsonb_strip_nulls(jsonb_build_object(
-                    'source_route_key', numbered.source_route_key,
-                    'od_pair_id', numbered.od_pair_id,
-                    'start_zone_id', numbered.start_zone_id,
-                    'end_zone_id', numbered.end_zone_id,
-                    'charge_index', CASE
-                        WHEN numbered.charge IS NOT NULL
-                        THEN numbered.component_order
-                    END
-                ))
-            )
-            ORDER BY numbered.connection_index, numbered.component_order
-        ),
-        '[]'::jsonb
-    ) INTO facility_legs
-    FROM numbered;
+    IF EXISTS (
+        SELECT 1
+        FROM oracle.toll_connection AS connection
+        JOIN oracle.toll_route_point AS origin
+          ON origin.point_id = connection.from_point_id
+        LEFT JOIN LATERAL jsonb_array_elements(
+            connection.source_metadata #> '{source_pair,charges}'
+        ) AS charge(value) ON true
+        WHERE origin.network_id = 'dtr'
+          AND connection.connection_type = 'within_facility'
+        GROUP BY connection.connection_id, connection.source_route_key
+        HAVING count(*) FILTER (
+            WHERE charge.value->>'label'
+                = 'Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)'
+        ) <> 0
+           OR count(*) FILTER (
+               WHERE charge.value->>'label' = 'Mainline plaza'
+           ) <> CASE
+               WHEN least(
+                   array_position(
+                       ARRAY[
+                           '28', '10', '11', '12', '13', '14',
+                           '15', '16', '17', '1819', '66'
+                       ]::text[],
+                       split_part(connection.source_route_key, ':', 2)
+                   ),
+                   array_position(
+                       ARRAY[
+                           '28', '10', '11', '12', '13', '14',
+                           '15', '16', '17', '1819', '66'
+                       ]::text[],
+                       split_part(connection.source_route_key, ':', 3)
+                   )
+               ) <= 8
+                AND 8 < greatest(
+                   array_position(
+                       ARRAY[
+                           '28', '10', '11', '12', '13', '14',
+                           '15', '16', '17', '1819', '66'
+                       ]::text[],
+                       split_part(connection.source_route_key, ':', 2)
+                   ),
+                   array_position(
+                       ARRAY[
+                           '28', '10', '11', '12', '13', '14',
+                           '15', '16', '17', '1819', '66'
+                       ]::text[],
+                       split_part(connection.source_route_key, ':', 3)
+                   )
+               ) THEN 1
+               ELSE 0
+           END
+    ) THEN
+        RAISE EXCEPTION 'oracle 1.3.0 DTR correction is not installed';
+    END IF;
 
-    RETURN NEXT;
+    FOR expected IN
+        SELECT * FROM (VALUES
+            ('i66:6:entry:EB', 'iad_to_i66'),
+            ('dtr:66:entry:WB', 'iad_to_dtr_via_i66'),
+            ('i495:182NO', 'iad_to_i495_north'),
+            ('i495:182SO', 'iad_to_i495_south')
+        ) AS connector(destination_id, connection_id)
+    LOOP
+        SELECT * INTO STRICT result
+        FROM oracle.resolve_toll_route('airport_iad', expected.destination_id);
+
+        IF result.status <> 'valid'
+           OR result.point_ids
+              <> ARRAY['airport_iad', expected.destination_id]
+           OR result.connection_ids <> ARRAY[expected.connection_id]
+           OR result.connection_types <> ARRAY['airport_access']
+           OR result.general_purpose_gaps <> '[]'::jsonb
+           OR result.i95_evidence IS NOT NULL THEN
+            RAISE EXCEPTION 'IAD connector % is not an untolled terminal: %',
+                expected.destination_id, row_to_json(result);
+        END IF;
+    END LOOP;
 END
-$function$;
-
-REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
-REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
-GRANT USAGE ON TYPE oracle.geometry, oracle.geography TO oracle_owner;
-GRANT EXECUTE ON FUNCTION oracle.ST_Distance(
-    oracle.geography, oracle.geography, boolean
-) TO oracle_owner;
-GRANT EXECUTE ON FUNCTION oracle.ST_AsGeoJSON(
-    oracle.geography, integer, integer
-) TO oracle_owner;
-GRANT SELECT ON oracle.spatial_ref_sys TO oracle_owner;
-
-GRANT USAGE ON SCHEMA pricing TO oracle_owner;
-GRANT SELECT ON pricing.current_i95_direction TO oracle_owner;
-GRANT USAGE ON SCHEMA oracle TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
-TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text, text)
-TO tollchat_agent;
-
-ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
-ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;
-ALTER TABLE oracle.toll_connection OWNER TO oracle_owner;
-ALTER VIEW oracle.route_pricing_component OWNER TO oracle_owner;
-ALTER FUNCTION oracle.ramp_alternatives(text, text, boolean) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.resolve_toll_route(text, text) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.validate_toll_route(text, text) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.validate_pricing_route(text, text) OWNER TO oracle_owner;
-ALTER SCHEMA oracle OWNER TO oracle_owner;
+$migration$;
 
 COMMIT;

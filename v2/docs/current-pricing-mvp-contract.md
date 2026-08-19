@@ -143,6 +143,9 @@ search path, an owner limited to its required pricing relations, and only
   price. Missing or unavailable prices are not zero.
 - An empty component list and `total_usd: "0.00"` mean the validated route is
   known to contain no toll.
+- Direct `airport_iad` routes terminating at their curated I-66, DTR, or I-495
+  `airport_access` entry connector return that zero-toll result. Other entry
+  points remain invalid destinations.
 
 Map `pricing.trip_pricing_i95.calculated_at` and
 `pricing.trip_pricing_i66.calculated_at` to `observed_at`. Do not substitute

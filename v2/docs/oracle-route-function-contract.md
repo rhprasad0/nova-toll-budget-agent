@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted for oracle schema `1.2.1`
+- **Status:** Adopted for oracle schema `1.3.0`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 
@@ -23,7 +23,7 @@ The agent-facing tool accepts exactly two stable point IDs:
 | Input | Required meaning |
 | --- | --- |
 | `origin_point_id` | An oracle `entry` or airport point |
-| `destination_point_id` | An oracle `exit` or airport point |
+| `destination_point_id` | An oracle `exit` or airport point, or a direct curated IAD airport-access entry connector |
 
 The tool wrapper must pass both values as bound parameters. It must not expose
 arbitrary SQL, accept labels in place of IDs, infer connections from proximity,
@@ -312,6 +312,9 @@ and begins the tolled I-495 trip there.
 - Dulles International Airport is an explicit external endpoint. Its
   `airport_access` connections may use the untolled Airport Access Highway;
   this does not make an ordinary Dulles Toll Road trip free.
+- A direct IAD route may terminate at its curated I-66, DTR, or I-495 entry
+  connector. These terminal `airport_access` routes are valid and untolled;
+  other entry points remain invalid destinations.
 - Reagan National Airport departures may enter I-395 northbound at `224NO` or
   southbound at `2233SO` near Pentagon/Eads, subject to the corresponding live
   direction. Reagan remains an arrival destination only through northbound

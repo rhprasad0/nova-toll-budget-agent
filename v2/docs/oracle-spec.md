@@ -113,7 +113,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.2.1`, stored as the single row in
+oracle is at version `1.3.0`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -288,6 +288,10 @@ The four IAD/I-495 connections let airport traffic use the untolled Airport
 Access Highway without requiring a priced Dulles Toll Road leg. They do not
 make ordinary Dulles Toll Road travel free. The routing result preserves the
 airport-access classification but does not calculate a toll.
+
+An outbound IAD route may terminate directly at any of its four curated entry
+connectors: I-66, DTR via I-66, or either I-495 direction. This exception does
+not make unrelated entry points valid destinations.
 
 DCA may be an origin in either I-395 direction. Northbound departures use entry
 `224NO`; southbound departures use entry `2233SO`. DCA arrivals use `223ND`
@@ -700,7 +704,7 @@ DTR connection charge; only crossing either directed handoff adds it.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.2.1`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.3.0`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

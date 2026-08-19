@@ -520,6 +520,37 @@ BEGIN
     END IF;
 END $$;
 
+DO $$
+DECLARE
+    connector record;
+    result record;
+BEGIN
+    FOR connector IN
+        SELECT * FROM (VALUES
+            ('i66:6:entry:EB', 'iad_to_i66'),
+            ('dtr:66:entry:WB', 'iad_to_dtr_via_i66'),
+            ('i495:182NO', 'iad_to_i495_north'),
+            ('i495:182SO', 'iad_to_i495_south')
+        ) AS expected(destination_id, connection_id)
+    LOOP
+        SELECT * INTO result
+        FROM oracle.validate_toll_route(
+            'airport_iad', connector.destination_id
+        );
+        IF result.status <> 'valid'
+           OR result.reason IS NOT NULL
+           OR result.point_ids
+              <> ARRAY['airport_iad', connector.destination_id]
+           OR result.connection_ids <> ARRAY[connector.connection_id]
+           OR result.connection_types <> ARRAY['airport_access']
+           OR result.general_purpose_gaps <> '[]'::jsonb
+           OR result.i95_evidence IS NOT NULL THEN
+            RAISE EXCEPTION 'IAD terminal connector failed: %',
+                row_to_json(result);
+        END IF;
+    END LOOP;
+END $$;
+
 SELECT pg_temp.set_i95_state(
     'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '1 minute'
 );

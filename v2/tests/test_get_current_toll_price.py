@@ -833,6 +833,59 @@ def test_valid_no_toll_route_returns_zero_without_pricing_progress(monkeypatch):
     assert payload["total_usd"] == "0.00"
 
 
+@pytest.mark.parametrize(
+    ("destination", "connection_id"),
+    [
+        ("i66:6:entry:EB", "iad_to_i66"),
+        ("dtr:66:entry:WB", "iad_to_dtr_via_i66"),
+        ("i495:182NO", "iad_to_i495_north"),
+        ("i495:182SO", "iad_to_i495_south"),
+    ],
+)
+def test_iad_terminal_connectors_return_zero_toll(
+    monkeypatch, destination, connection_id
+):
+    row = {
+        "status": "valid",
+        "reason": None,
+        "point_ids": ["airport_iad", destination],
+        "connection_ids": [connection_id],
+        "connection_types": ["airport_access"],
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+    }
+    response = _pricing_route(row, [])
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_current_eastern_time",
+        lambda: datetime(2026, 8, 19, 12, tzinfo=_EASTERN),
+    )
+
+    events = _run_tool(
+        {
+            **_input(),
+            "origin_point_id": "airport_iad",
+            "destination_point_id": destination,
+        }
+    )
+
+    assert [event["stage"] for event in _progress_events(events)] == [
+        "route_validation",
+        "route_validation",
+    ]
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    assert payload["origin_point_id"] == "airport_iad"
+    assert payload["destination_point_id"] == destination
+    assert payload["source_kind"] == "none"
+    assert payload["components"] == []
+    assert payload["total_usd"] == "0.00"
+
+
 def test_unimplemented_facility_returns_safe_error(monkeypatch):
     row = {
         **_route_row(),
