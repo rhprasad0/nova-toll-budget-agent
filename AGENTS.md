@@ -12,9 +12,16 @@ Create all worktrees inside the project-root `.worktrees/` directory, which must
 
 Open pull requests ready for review. Do not create draft pull requests.
 
-Before opening a PR, apply every database migration newly added or still
-unapplied on the branch from its declared prior version in a disposable
-database, and verify the migrated schema matches the canonical bootstrap.
+Before opening a PR, complete both database migration checks below. Do not
+treat the disposable check as a substitute for applying migrations to RDS.
+
+1. Apply every migration newly added or still unapplied on the branch from its
+   declared prior version in a disposable database, and verify the migrated
+   schema matches the canonical bootstrap.
+2. Using the `nova-toll` AWS profile, read the deployed schema versions from
+   the live `nova-toll-db` RDS database, apply every pending repository
+   migration in dependency order, and verify the deployed versions match the
+   branch. Do not open the PR until the live migrations succeed.
 
 # Version boundaries
 
