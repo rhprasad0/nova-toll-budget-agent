@@ -113,7 +113,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.1.0`, stored as the single row in
+oracle is at version `1.1.1`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -362,8 +362,8 @@ Dulles Toll Road and I-495 require five directed handoffs:
 | `i495_south_to_dulles_toll_road` | `i495:182SD` | `dtr:1819` |
 
 These handoffs are connectivity facts, not priced route legs. They are never
-made reversible implicitly; only the thirteen rows above authorize travel across
-the four junctions.
+made reversible implicitly; only the thirteen rows above authorize travel
+across the four junctions.
 
 The two northbound I-495 handoffs from DTR are distinct movements. One starts
 from the eastbound DTR exit at node `1819`; the other starts from the westbound
@@ -593,9 +593,9 @@ connection. IDs `1374` through `1389` resolve through
 modeled rather than observed. Deploying those views is a database-migration
 concern outside this routing specification.
 
-A Greenway/Dulles Toll Road route retains two separate facility legs around
-the Route 28 handoff. Future pricing maps those legs independently; the
-handoff itself has no price.
+A Greenway/Dulles Toll Road route retains separate Greenway and DTR roadway
+legs around the Route 28 handoff. The Greenway mainline fee includes the
+source's $2 surcharge; the handoff itself has no price.
 
 ## Minimum integrity rules
 
@@ -699,7 +699,7 @@ handoff itself has no price.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.1.0`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.1.1`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

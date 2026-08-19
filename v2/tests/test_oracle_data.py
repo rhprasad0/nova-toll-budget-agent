@@ -56,6 +56,43 @@ def test_source_metadata_retains_future_pricing_keys() -> None:
     assert greenway.source_metadata["source_pair"]["charges"]
 
 
+def test_greenway_and_dtr_pricing_metadata_stays_discrete() -> None:
+    connections = build_connections(build_points())
+
+    bundled_charges = 0
+    for connection in connections.values():
+        if not connection.connection_id.startswith("source:greenway:"):
+            continue
+        charges = connection.source_metadata["source_pair"]["charges"]
+        assert all("facility" not in charge for charge in charges)
+        if charges == [
+            {
+                "label": "Mainline plaza",
+                "price_off_peak_usd": "7.25",
+                "price_peak_usd": "7.80",
+            }
+        ]:
+            bundled_charges += 1
+    assert bundled_charges == 17
+    assert connections["source:greenway:EB:1:2A"].source_metadata["source_pair"][
+        "charges"
+    ] == [
+        {
+            "label": "Secondary plaza",
+            "price_off_peak_usd": "4.55",
+            "price_peak_usd": "5.10",
+        }
+    ]
+
+    for connection_id in ("greenway_to_dtr", "dtr_to_greenway"):
+        handoff = connections[connection_id]
+        assert handoff.source_route_key is None
+        assert handoff.source_metadata == {
+            "curated": True,
+            "basis": "v2/docs/oracle-spec.md",
+        }
+
+
 def test_boundary_points_and_i95_requirements_are_explicit() -> None:
     points = build_points()
     connections = build_connections(points)

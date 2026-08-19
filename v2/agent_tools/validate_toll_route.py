@@ -2,6 +2,7 @@
 
 import logging
 import os
+from itertools import pairwise
 from typing import Annotated, Any, Literal, Self, cast
 
 import boto3
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _DB_USER = "tollchat_agent"
 _SQL = "SELECT * FROM oracle.validate_toll_route(%s, %s)"
+_PRICING_SQL = "SELECT * FROM oracle.validate_pricing_route(%s, %s)"
 _SAFE_ERROR = "Unable to validate the toll route. Reference: {tool_use_id}."
 
 Status = Literal[
@@ -40,6 +42,14 @@ ConnectionType = Literal[
     "toll_handoff",
     "general_purpose_gap",
     "airport_access",
+]
+type _PricingFailureStage = Literal[
+    "input_validation",
+    "connection",
+    "query",
+    "connection_close",
+    "response_validation",
+    "unexpected",
 ]
 
 
@@ -419,6 +429,173 @@ class _RouteResponse(_Model):
             )
             if gap.fallback_required is not expected_fallback:
                 raise ValueError("gap fallback does not match I-95 evidence")
+        fallbacks = [gap.fallback_required for gap in self.general_purpose_gaps]
+        if self.status == "valid" and any(
+            fallback is not False for fallback in fallbacks
+        ):
+            raise ValueError("valid routes cannot require a fallback")
+        if (
+            self.status == "currently_unavailable"
+            and fallbacks
+            and (
+                not any(fallback is True for fallback in fallbacks)
+                or any(fallback is None for fallback in fallbacks)
+            )
+        ):
+            raise ValueError("unavailable routes must require a known fallback")
+        if self.status == "unknown_availability" and any(
+            fallback is not None for fallback in fallbacks
+        ):
+            raise ValueError("unknown routes require unknown fallback state")
+
+
+class _FacilityLegBase(_Model):
+    route_step_id: Annotated[str, Field(pattern=r"^step-[1-9][0-9]*$")]
+    point_ids: Annotated[list[str], Field(min_length=2, max_length=2)]
+    connection_ids: Annotated[list[str], Field(min_length=1, max_length=1)]
+
+
+class _I66PricingKey(_Model):
+    source_route_key: str
+    start_zone_id: int
+    end_zone_id: int
+
+
+class _I95PricingKey(_Model):
+    source_route_key: str
+    od_pair_id: int
+
+
+class _ChargePricingKey(_Model):
+    source_route_key: str
+    charge_index: Annotated[int, Field(ge=1)]
+
+
+class _I66FacilityLeg(_FacilityLegBase):
+    facility: Literal["i66"]
+    pricing_key: _I66PricingKey  # gitleaks:allow -- type annotation, not a secret
+
+
+class _I95FacilityLeg(_FacilityLegBase):
+    facility: Literal["i95_i495"]
+    pricing_key: _I95PricingKey  # gitleaks:allow -- type annotation, not a secret
+
+
+class _DtrFacilityLeg(_FacilityLegBase):
+    facility: Literal["dtr"]
+    pricing_key: _ChargePricingKey
+
+
+class _GreenwayFacilityLeg(_FacilityLegBase):
+    facility: Literal["greenway"]
+    pricing_key: _ChargePricingKey
+
+
+type _FacilityLeg = Annotated[
+    _I66FacilityLeg | _I95FacilityLeg | _DtrFacilityLeg | _GreenwayFacilityLeg,
+    Field(discriminator="facility"),
+]
+
+
+class _PricingRouteResponse(_RouteResponse):
+    facility_legs: list[_FacilityLeg]
+
+    @model_validator(mode="after")
+    def _validate_pricing_contract(self, info: ValidationInfo) -> Self:
+        route = info.context.get("route") if info.context else None
+        if not isinstance(route, _RouteResponse):
+            raise ValueError("validated route context is required")
+        if self.status not in {
+            "valid",
+            "currently_unavailable",
+            "unknown_availability",
+        }:
+            raise ValueError("pricing route returned an invalid status")
+        if (
+            self.point_ids != route.point_ids
+            or self.connection_ids != route.connection_ids
+            or self.connection_types != route.connection_types
+            or [
+                (
+                    gap.connection_id,
+                    gap.boundary_point_id,
+                    gap.role,
+                    gap.i95_direction,
+                )
+                for gap in self.general_purpose_gaps
+            ]
+            != [
+                (
+                    gap.connection_id,
+                    gap.boundary_point_id,
+                    gap.role,
+                    gap.i95_direction,
+                )
+                for gap in route.general_purpose_gaps
+            ]
+        ):
+            raise ValueError(
+                "pricing route topology does not match the validated route"
+            )
+        if self.status != "valid":
+            if self.facility_legs:
+                raise ValueError(
+                    "unavailable pricing routes cannot contain facility legs"
+                )
+            return self
+
+        expected_steps = [
+            f"step-{index}" for index in range(1, len(self.facility_legs) + 1)
+        ]
+        if [leg.route_step_id for leg in self.facility_legs] != expected_steps:
+            raise ValueError("facility leg steps are not sequential")
+
+        try:
+            connection_positions = [
+                self.connection_ids.index(leg.connection_ids[0])
+                for leg in self.facility_legs
+            ]
+        except ValueError as error:
+            raise ValueError("facility leg connection is not in the route") from error
+        if connection_positions != sorted(connection_positions):
+            raise ValueError("facility legs do not follow canonical route order")
+
+        for position in sorted(set(connection_positions)):
+            legs = [
+                leg
+                for leg, leg_position in zip(
+                    self.facility_legs, connection_positions, strict=True
+                )
+                if leg_position == position
+            ]
+            endpoints = self.point_ids[position : position + 2]
+            if self.connection_types[position] in {"toll_handoff", "airport_access"}:
+                raise ValueError("non-priced connection returned a facility leg")
+            if any(leg.facility != legs[0].facility for leg in legs):
+                raise ValueError("facility leg group mixes facilities")
+            if len({leg.pricing_key.source_route_key for leg in legs}) != 1:
+                raise ValueError("facility leg group mixes source route keys")
+            charge_indexes = [
+                leg.pricing_key.charge_index
+                for leg in legs
+                if isinstance(leg.pricing_key, _ChargePricingKey)
+            ]
+            if charge_indexes and charge_indexes != sorted(set(charge_indexes)):
+                raise ValueError("facility leg charge indexes are not ordered")
+            if legs[0].facility == "i95_i495":
+                if (
+                    len(legs) > 2
+                    or legs[0].point_ids[0] != endpoints[0]
+                    or legs[-1].point_ids[1] != endpoints[1]
+                    or any(
+                        first.point_ids[1] != second.point_ids[0]
+                        for first, second in pairwise(legs)
+                    )
+                ):
+                    raise ValueError("I-95 facility legs are not aligned to the route")
+            elif any(leg.point_ids != endpoints for leg in legs):
+                raise ValueError("facility leg points are not aligned to the route")
+        return self
 
 
 TOOL_SPEC: ToolSpec = {
@@ -473,6 +650,80 @@ def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
         "status": "error",
         "content": [{"text": _SAFE_ERROR.format(tool_use_id=tool_use_id)}],
     }
+
+
+def _log_pricing_error(stage: _PricingFailureStage, error: Exception) -> None:
+    safe_error = RuntimeError(f"{type(error).__name__} during {stage}")
+    for note in getattr(error, "__notes__", []):
+        if note.startswith("Connection close also failed: "):
+            safe_error.add_note(note)
+    logger.error(
+        "validate_pricing_route failed",
+        extra={
+            "operation": "validate_pricing_route",
+            "failureStage": stage,
+            "exceptionType": type(error).__name__,
+        },
+        exc_info=(type(safe_error), safe_error, error.__traceback__),
+    )
+
+
+def _validate_pricing_route(  # pyright: ignore[reportUnusedFunction]
+    route: _RouteResponse,
+) -> _PricingRouteResponse:
+    """Return the strictly validated pricing result for a valid route."""
+    try:
+        if route.status != "valid":
+            raise ValueError("pricing route validation requires a valid route")
+    except Exception as error:
+        _log_pricing_error("input_validation", error)
+        raise
+
+    try:
+        connection = cast(Any, _connect())
+    except Exception as error:
+        _log_pricing_error("connection", error)
+        raise
+
+    database_error: tuple[_PricingFailureStage, Exception] | None = None
+    rows: list[dict[str, Any]] = []
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                _PRICING_SQL,
+                (route.point_ids, route.connection_ids),
+            )
+            rows = cast(list[dict[str, Any]], cursor.fetchall())
+    except Exception as error:
+        database_error = ("query", error)
+
+    try:
+        connection.close()
+    except Exception as error:
+        if database_error is None:
+            database_error = ("connection_close", error)
+        else:
+            database_error[1].add_note(
+                f"Connection close also failed: {type(error).__name__}"
+            )
+
+    if database_error is not None:
+        _log_pricing_error(*database_error)
+        raise database_error[1]
+
+    try:
+        if len(rows) != 1:
+            raise ValueError("pricing route oracle must return exactly one row")
+        response = _PricingRouteResponse.model_validate(
+            rows[0], context={"route": route}
+        )
+    except (ValidationError, ValueError) as error:
+        _log_pricing_error("response_validation", error)
+        raise
+    except Exception as error:
+        _log_pricing_error("unexpected", error)
+        raise
+    return response
 
 
 def validate_toll_route(tool_use: ToolUse, **_: Any) -> ToolResult:  # noqa: ANN401
