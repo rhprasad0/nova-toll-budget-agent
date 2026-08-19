@@ -501,42 +501,7 @@ class _PricingRouteResponse(_RouteResponse):
     facility_legs: list[_FacilityLeg]
 
     @model_validator(mode="after")
-    def _validate_pricing_contract(self, info: ValidationInfo) -> Self:
-        route = info.context.get("route") if info.context else None
-        if not isinstance(route, _RouteResponse):
-            raise ValueError("validated route context is required")
-        if self.status not in {
-            "valid",
-            "currently_unavailable",
-            "unknown_availability",
-        }:
-            raise ValueError("pricing route returned an invalid status")
-        if (
-            self.point_ids != route.point_ids
-            or self.connection_ids != route.connection_ids
-            or self.connection_types != route.connection_types
-            or [
-                (
-                    gap.connection_id,
-                    gap.boundary_point_id,
-                    gap.role,
-                    gap.i95_direction,
-                )
-                for gap in self.general_purpose_gaps
-            ]
-            != [
-                (
-                    gap.connection_id,
-                    gap.boundary_point_id,
-                    gap.role,
-                    gap.i95_direction,
-                )
-                for gap in route.general_purpose_gaps
-            ]
-        ):
-            raise ValueError(
-                "pricing route topology does not match the validated route"
-            )
+    def _validate_pricing_contract(self) -> Self:
         if self.status != "valid":
             if self.facility_legs:
                 raise ValueError(
@@ -672,12 +637,17 @@ def _log_pricing_error(stage: _PricingFailureStage, error: Exception) -> None:
 
 
 def _validate_pricing_route(  # pyright: ignore[reportUnusedFunction]
-    route: _RouteResponse,
+    origin_point_id: str,
+    destination_point_id: str,
 ) -> _PricingRouteResponse:
-    """Return the strictly validated pricing result for a valid route."""
+    """Return the strictly validated route and its pricing components."""
     try:
-        if route.status != "valid":
-            raise ValueError("pricing route validation requires a valid route")
+        route_input = _RouteInput.model_validate(
+            {
+                "origin_point_id": origin_point_id,
+                "destination_point_id": destination_point_id,
+            }
+        )
     except Exception as error:
         _log_pricing_error("input_validation", error)
         raise
@@ -694,7 +664,7 @@ def _validate_pricing_route(  # pyright: ignore[reportUnusedFunction]
         with connection.cursor() as cursor:
             cursor.execute(
                 _PRICING_SQL,
-                (route.point_ids, route.connection_ids),
+                (route_input.origin_point_id, route_input.destination_point_id),
             )
             rows = cast(list[dict[str, Any]], cursor.fetchall())
     except Exception as error:
@@ -718,7 +688,7 @@ def _validate_pricing_route(  # pyright: ignore[reportUnusedFunction]
         if len(rows) != 1:
             raise ValueError("pricing route oracle must return exactly one row")
         response = _PricingRouteResponse.model_validate(
-            rows[0], context={"route": route}
+            rows[0], context={"request": route_input}
         )
     except (ValidationError, ValueError) as error:
         _log_pricing_error("response_validation", error)

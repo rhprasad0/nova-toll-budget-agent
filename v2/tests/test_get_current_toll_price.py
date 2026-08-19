@@ -41,29 +41,99 @@ def _tool_use(input_data: Any) -> ToolUse:
     )
 
 
-def _route_row(status: str = "valid") -> dict[str, Any]:
-    if status == "valid":
-        return {
-            "status": "valid",
-            "reason": None,
-            "point_ids": ["greenway:1:entry:EB", "greenway:28:exit:EB"],
-            "connection_ids": ["source:greenway:EB:1:28"],
-            "connection_types": ["within_facility"],
-            "general_purpose_gaps": [],
-            "i95_evidence": None,
-        }
+def _route_row() -> dict[str, Any]:
     return {
-        "status": "invalid_origin",
-        "reason": {
-            "code": "origin_not_found",
-            "details": {"point_id": "greenway:1:entry:EB"},
-        },
+        "status": "valid",
+        "reason": None,
+        "point_ids": ["greenway:1:entry:EB", "greenway:28:exit:EB"],
+        "connection_ids": ["source:greenway:EB:1:28"],
+        "connection_types": ["within_facility"],
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+    }
+
+
+def _nonvalid_route_rows() -> list[dict[str, Any]]:
+    origin = "greenway:1:entry:EB"
+    destination = "greenway:28:exit:EB"
+    empty_path = {
         "point_ids": [],
         "connection_ids": [],
         "connection_types": [],
         "general_purpose_gaps": [],
         "i95_evidence": None,
     }
+    return [
+        {
+            **empty_path,
+            "status": "invalid_origin",
+            "reason": {
+                "code": "origin_not_found",
+                "details": {"point_id": origin},
+            },
+        },
+        {
+            **empty_path,
+            "status": "invalid_destination",
+            "reason": {
+                "code": "destination_not_found",
+                "details": {"point_id": destination},
+            },
+        },
+        {
+            **empty_path,
+            "status": "no_supported_route",
+            "reason": {
+                "code": "no_supported_route",
+                "details": {
+                    "origin_point_id": origin,
+                    "destination_point_id": destination,
+                },
+            },
+        },
+        {
+            **empty_path,
+            "status": "traversal_limit_exceeded",
+            "reason": {
+                "code": "traversal_limit_exceeded",
+                "details": {
+                    "origin_point_id": origin,
+                    "destination_point_id": destination,
+                    "maximum_connections": 12,
+                },
+            },
+        },
+        {
+            "status": "currently_unavailable",
+            "reason": {
+                "code": "i95_fully_closed",
+                "details": {
+                    "required_i95_directions": ["NB"],
+                    "availability": "closed",
+                },
+            },
+            "point_ids": ["i95:202NO", "i95:201ND"],
+            "connection_ids": ["source:i95_shared:Northbound:202NO:201ND"],
+            "connection_types": ["within_facility"],
+            "general_purpose_gaps": [],
+            "i95_evidence": _i95_evidence("closed"),
+        },
+        {
+            "status": "unknown_availability",
+            "reason": {
+                "code": "i95_missing_source",
+                "details": {
+                    "required_i95_directions": ["NB"],
+                    "availability": "unknown",
+                },
+            },
+            "point_ids": ["i95:202NO", "i95:201ND"],
+            "connection_ids": ["source:i95_shared:Northbound:202NO:201ND"],
+            "connection_types": ["within_facility"],
+            "general_purpose_gaps": [],
+            "i95_evidence": {"availability": "unknown", "reason": "missing_source"},
+        },
+    ]
 
 
 def _route_result(row: dict[str, Any]) -> ToolResult:
@@ -111,9 +181,8 @@ def _greenway_leg(
 def _pricing_route(
     row: dict[str, Any], legs: list[dict[str, Any]]
 ) -> pricing_tool.route_validation._PricingRouteResponse:  # pyright: ignore[reportPrivateUsage]
-    route = pricing_tool.route_validation._RouteResponse.model_validate(row)  # pyright: ignore[reportPrivateUsage]
     return pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        {**row, "facility_legs": legs}, context={"route": route}
+        {**row, "facility_legs": legs}
     )
 
 
@@ -157,11 +226,6 @@ def _result(events: list[dict[str, Any]]) -> ToolResult:
 def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
     row = _route_row()
     response = _pricing_route(row, legs)
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: _route_result(row),
-    )
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",
@@ -217,7 +281,7 @@ def test_malformed_input_fails_safely_without_route_validation(
     mutation(input_data)
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "validate_toll_route",
+        "_validate_pricing_route",
         lambda *_args, **_kwargs: pytest.fail("invalid input reached the database"),
     )
 
@@ -241,7 +305,7 @@ def test_unsupported_profile_short_circuits_without_progress(monkeypatch):
     input_data["pricing_profile"]["transponder_mode"] = "hov"
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "validate_toll_route",
+        "_validate_pricing_route",
         lambda *_args, **_kwargs: pytest.fail("unsupported profile reached RDS"),
     )
 
@@ -260,20 +324,30 @@ def test_unsupported_profile_short_circuits_without_progress(monkeypatch):
     ]
 
 
-def test_nonvalid_route_streams_completed_validation_without_pricing(monkeypatch):
-    route_result = _route_result(_route_row("invalid_origin"))
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: route_result,
-    )
+@pytest.mark.parametrize("row", _nonvalid_route_rows(), ids=lambda row: row["status"])
+def test_nonvalid_routes_complete_validation_without_pricing(monkeypatch, row):
+    response = _pricing_route(row, [])
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",
-        lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
+        lambda *_args, **_kwargs: response,
     )
 
-    events = _run_tool()
+    monkeypatch.setattr(
+        pricing_tool,
+        "_success",
+        lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
+    )
+    input_data = _input()
+    if row["point_ids"]:
+        input_data.update(
+            {
+                "origin_point_id": row["point_ids"][0],
+                "destination_point_id": row["point_ids"][-1],
+            }
+        )
+
+    events = _run_tool(input_data)
 
     assert [
         (event["stage"], event["status"]) for event in _progress_events(events)
@@ -281,109 +355,24 @@ def test_nonvalid_route_streams_completed_validation_without_pricing(monkeypatch
         ("route_validation", "running"),
         ("route_validation", "completed"),
     ]
-    assert _result(events) == route_result
-
-
-def test_pricing_route_availability_transition_is_not_reported_as_free(monkeypatch):
-    row = {
-        "status": "valid",
-        "reason": None,
-        "point_ids": ["i95:202NO", "i95:201ND"],
-        "connection_ids": ["source:i95_shared:Northbound:202NO:201ND"],
-        "connection_types": ["within_facility"],
-        "general_purpose_gaps": [],
-        "i95_evidence": _i95_evidence("northbound"),
-    }
-    route = pricing_tool.route_validation._RouteResponse.model_validate(row)  # pyright: ignore[reportPrivateUsage]
-    transition_row = {
-        **row,
-        "status": "currently_unavailable",
-        "reason": {
-            "code": "i95_fully_closed",
-            "details": {
-                "required_i95_directions": ["NB"],
-                "availability": "closed",
-            },
-        },
-        "i95_evidence": _i95_evidence("closed"),
-        "facility_legs": [],
-    }
-    transition = pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        transition_row, context={"route": route}
-    )
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: _route_result(row),
-    )
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "_validate_pricing_route",
-        lambda *_args, **_kwargs: transition,
-    )
-    monkeypatch.setattr(
-        pricing_tool,
-        "_success",
-        lambda *_args, **_kwargs: pytest.fail("availability transition became free"),
-    )
-    input_data = _input()
-    input_data.update(
-        {
-            "origin_point_id": "i95:202NO",
-            "destination_point_id": "i95:201ND",
-        }
-    )
-
-    events = _run_tool(input_data)
-
-    assert [event["status"] for event in _progress_events(events)] == [
-        "running",
-        "completed",
-    ]
     payload = cast(Any, _result(events))["content"][0]["json"]
-    assert payload["status"] == "currently_unavailable"
-    assert payload["facility_legs"] == []
+    assert payload["status"] == row["status"]
+    assert ("facility_legs" in payload) is bool(row["point_ids"])
     assert "total_usd" not in payload
     assert "components" not in payload
 
 
-@pytest.mark.parametrize("stage", ["route_result", "route_exception", "pricing_route"])
-def test_route_failures_stream_failed_and_return_only_safe_error(
-    monkeypatch, caplog, stage
-):
-    secret = f"private-{stage}"
+def test_route_failure_streams_failed_and_returns_only_safe_error(monkeypatch, caplog):
+    secret = "private-pricing-route"
 
     def fail(*_args, **_kwargs):
         raise RuntimeError(secret)
 
-    if stage == "route_result":
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "validate_toll_route",
-            lambda *_args, **_kwargs: {
-                "toolUseId": "tool-123",
-                "status": "error",
-                "content": [{"text": "secret internal route failure"}],
-            },
-        )
-    elif stage == "route_exception":
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "validate_toll_route",
-            fail,
-        )
-    else:
-        row = _route_row()
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "validate_toll_route",
-            lambda *_args, **_kwargs: _route_result(row),
-        )
-        monkeypatch.setattr(
-            pricing_tool.route_validation,
-            "_validate_pricing_route",
-            fail,
-        )
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        fail,
+    )
 
     with caplog.at_level(logging.ERROR):
         events = _run_tool()
@@ -616,11 +605,6 @@ def test_unimplemented_facility_returns_safe_error(monkeypatch):
         },
     }
     response = _pricing_route(row, [leg])
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda *_args, **_kwargs: _route_result(row),
-    )
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",

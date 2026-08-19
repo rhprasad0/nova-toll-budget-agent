@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted for oracle schema `1.1.2`
+- **Status:** Adopted for oracle schema `1.2.0`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 
@@ -335,19 +335,17 @@ The database implementation and graph invariants remain specified in the
 
 ## Internal pricing-route validation
 
-The later Python pricing wrapper may bind its already selected route arrays to:
+The Python pricing wrapper binds the submitted endpoints directly to:
 
 ```sql
 SELECT *
-FROM oracle.validate_pricing_route($1::text[], $2::text[]);
+FROM oracle.validate_pricing_route($1, $2);
 ```
 
-The arrays are an internal Python-to-SQL protocol and remain forbidden in the
-agent tool request. The function accepts only the canonical point and
-connection arrays selected by the shared resolver. It returns the seven route
+The function resolves the canonical route once and returns the seven route
 fields above plus ordered `facility_legs` derived from committed connection
-metadata. Invalid array shape or a noncanonical path returns `invalid_route`;
-the existing endpoint and live-availability statuses retain their meanings.
+metadata. Existing endpoint and live-availability statuses retain their
+meanings; only `valid` results contain facility legs.
 
 `tollchat_agent` may execute both validators but cannot execute the private
 `oracle.resolve_toll_route(text, text)` function or select its underlying
