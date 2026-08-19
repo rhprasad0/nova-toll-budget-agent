@@ -569,8 +569,18 @@ class _PricingRouteResponse(_RouteResponse):
                 if leg_position == position
             ]
             endpoints = self.point_ids[position : position + 2]
-            if self.connection_types[position] in {"toll_handoff", "airport_access"}:
+            connection_type = self.connection_types[position]
+            if connection_type == "airport_access":
                 raise ValueError("non-priced connection returned a facility leg")
+            if connection_type == "toll_handoff" and (
+                self.connection_ids[position]
+                not in {"greenway_to_dtr", "dtr_to_greenway"}
+                or len(legs) != 1
+                or legs[0].facility != "dtr"
+                or legs[0].pricing_key.source_route_key != self.connection_ids[position]
+                or legs[0].pricing_key.charge_index != 1
+            ):
+                raise ValueError("unexpected priced toll handoff")
             if any(leg.facility != legs[0].facility for leg in legs):
                 raise ValueError("facility leg group mixes facilities")
             if len({leg.pricing_key.source_route_key for leg in legs}) != 1:

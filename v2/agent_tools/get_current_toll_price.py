@@ -32,8 +32,8 @@ _GREENWAY_RETRIEVED_AT = date(2026, 8, 4)
 _GREENWAY_RATES = {
     ("secondary_plaza", "off_peak"): Decimal("4.55"),
     ("secondary_plaza", "peak"): Decimal("5.10"),
-    ("mainline_plaza", "off_peak"): Decimal("7.25"),
-    ("mainline_plaza", "peak"): Decimal("7.80"),
+    ("mainline_plaza", "off_peak"): Decimal("5.25"),
+    ("mainline_plaza", "peak"): Decimal("5.80"),
 }
 
 type _ProgressStage = Literal["route_validation", "greenway_pricing"]

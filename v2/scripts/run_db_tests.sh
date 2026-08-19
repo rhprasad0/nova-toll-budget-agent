@@ -131,6 +131,37 @@ WHERE connection_id = 'source:greenway:EB:1:28';
 SQL
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.1.2" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+UPDATE oracle.toll_connection
+SET source_metadata = jsonb_set(
+  source_metadata,
+  '{source_pair,charges,0,price_peak_usd}',
+  '"7.81"'::jsonb
+)
+WHERE connection_id = 'source:greenway:EB:1:28';
+SQL
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.1.2 upgrade accepted malformed Greenway charges" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.1.1' THEN
+    RAISE EXCEPTION 'failed conditional DTR migration changed the installed version';
+  END IF;
+END $$;
+UPDATE oracle.toll_connection
+SET source_metadata = jsonb_set(
+  source_metadata,
+  '{source_pair,charges,0,price_peak_usd}',
+  '"7.80"'::jsonb
+)
+WHERE connection_id = 'source:greenway:EB:1:28';
+SQL
+    fi
+
     psql --dbname "$migration_db" --file "$migration"
 
     installed_version="$(
@@ -248,6 +279,11 @@ if psql --dbname "$bootstrap_db" \
   echo "oracle 1.1.1 upgrade unexpectedly accepted version 0.9.0" >&2
   exit 1
 fi
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/009_upgrade_oracle_1_1_1_to_1_1_2.sql; then
+  echo "oracle 1.1.2 upgrade unexpectedly accepted version 0.9.0" >&2
+  exit 1
+fi
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
 DO $$
 BEGIN
@@ -255,7 +291,7 @@ BEGIN
     RAISE EXCEPTION 'failed oracle schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE oracle.schema_version SET version = '1.1.1' WHERE singleton;
+UPDATE oracle.schema_version SET version = '1.1.2' WHERE singleton;
 SQL
 
 if psql --dbname "$bootstrap_db" \

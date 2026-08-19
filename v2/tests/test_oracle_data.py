@@ -59,7 +59,7 @@ def test_source_metadata_retains_future_pricing_keys() -> None:
 def test_greenway_and_dtr_pricing_metadata_stays_discrete() -> None:
     connections = build_connections(build_points())
 
-    bundled_charges = 0
+    mainline_charges = 0
     for connection in connections.values():
         if not connection.connection_id.startswith("source:greenway:"):
             continue
@@ -68,12 +68,12 @@ def test_greenway_and_dtr_pricing_metadata_stays_discrete() -> None:
         if charges == [
             {
                 "label": "Mainline plaza",
-                "price_off_peak_usd": "7.25",
-                "price_peak_usd": "7.80",
+                "price_off_peak_usd": "5.25",
+                "price_peak_usd": "5.80",
             }
         ]:
-            bundled_charges += 1
-    assert bundled_charges == 17
+            mainline_charges += 1
+    assert mainline_charges == 17
     assert connections["source:greenway:EB:1:2A"].source_metadata["source_pair"][
         "charges"
     ] == [
@@ -86,10 +86,16 @@ def test_greenway_and_dtr_pricing_metadata_stays_discrete() -> None:
 
     for connection_id in ("greenway_to_dtr", "dtr_to_greenway"):
         handoff = connections[connection_id]
-        assert handoff.source_route_key is None
+        assert handoff.source_route_key == connection_id
         assert handoff.source_metadata == {
             "curated": True,
             "basis": "v2/docs/oracle-spec.md",
+            "pricing_facility": "dtr",
+            "pricing_charge": {
+                "label": "Dulles Toll Road connection",
+                "price_off_peak_usd": "2.00",
+                "price_peak_usd": "2.00",
+            },
         }
 
 
