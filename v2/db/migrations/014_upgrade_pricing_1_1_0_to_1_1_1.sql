@@ -296,7 +296,7 @@ FROM selected;
 COMMENT ON VIEW pricing.i95_i495_pricing_comparisons IS
     'Current, two prior-cycle, and three prior-week I-95/I-495 observations in 10-minute bins with canonical I-95 schedule enforcement';
 
-GRANT SELECT ON pricing.i95_i495_pricing_comparisons TO pricing_reader;
+GRANT SELECT ON pricing.i95_i495_pricing_comparisons TO pricing_reader, oracle_owner;
 
 UPDATE pricing.schema_version
 SET version = '1.1.1', installed_at = clock_timestamp()
