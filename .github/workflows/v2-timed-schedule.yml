@@ -41,6 +41,26 @@ on:
       timezone: "America/New_York"
     - cron: "17 18 * * 6"
       timezone: "America/New_York"
+    - cron: "23 7 * * 1"
+      timezone: "America/New_York"
+    - cron: "23 7 * * 2"
+      timezone: "America/New_York"
+    - cron: "23 7 * * 3"
+      timezone: "America/New_York"
+    - cron: "23 7 * * 4"
+      timezone: "America/New_York"
+    - cron: "23 7 * * 5"
+      timezone: "America/New_York"
+    - cron: "23 17 * * 1"
+      timezone: "America/New_York"
+    - cron: "23 17 * * 2"
+      timezone: "America/New_York"
+    - cron: "23 17 * * 3"
+      timezone: "America/New_York"
+    - cron: "23 17 * * 4"
+      timezone: "America/New_York"
+    - cron: "23 17 * * 5"
+      timezone: "America/New_York"
   workflow_dispatch:
     inputs:
       window_id:
@@ -51,6 +71,8 @@ on:
           - i95_northbound
           - i95_reversal
           - i95_southbound
+          - greenway_eb_peak
+          - greenway_wb_peak
 
 concurrency:
   group: v2-timed-live-${{ github.event.schedule || inputs.window_id }}
@@ -74,6 +96,8 @@ jobs:
               "17 6 * * 1"|"17 6 * * 2"|"17 6 * * 3"|"17 6 * * 4"|"17 6 * * 5"|"17 18 * * 6") window_id="i95_northbound" ;;
               "17 14 * * 1"|"17 14 * * 2"|"17 14 * * 3"|"17 14 * * 4"|"17 14 * * 5"|"17 10 * * 6") window_id="i95_southbound" ;;
               "17 11 * * 1"|"47 1 * * 2"|"47 1 * * 3"|"47 1 * * 4"|"47 1 * * 5"|"17 15 * * 6") window_id="i95_reversal" ;;
+              "23 7 * * 1"|"23 7 * * 2"|"23 7 * * 3"|"23 7 * * 4"|"23 7 * * 5") window_id="greenway_eb_peak" ;;
+              "23 17 * * 1"|"23 17 * * 2"|"23 17 * * 3"|"23 17 * * 4"|"23 17 * * 5") window_id="greenway_wb_peak" ;;
               *) echo "Unmapped schedule: $SCHEDULE" >&2; exit 1 ;;
             esac
           fi

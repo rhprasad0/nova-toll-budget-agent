@@ -81,3 +81,17 @@ def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
 
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
     assert "get_current_toll_price" in TIMED_ROUTE_TEST
+
+
+def test_timed_ci_checks_both_greenway_peak_windows():
+    for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
+        assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
+        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
+        assert f'"{window_id}":' in TIMED_ROUTE_TEST
+
+    for weekday in range(1, 6):
+        assert f'cron: "23 7 * * {weekday}"' in TIMED_SCHEDULE_WORKFLOW
+        assert f'cron: "23 17 * * {weekday}"' in TIMED_SCHEDULE_WORKFLOW
+
+    assert "test_live_greenway_peak_price" in TIMED_ROUTE_TEST
+    assert "if: startsWith(inputs.window_id, 'i95_')" not in TIMED_CHECKS_WORKFLOW

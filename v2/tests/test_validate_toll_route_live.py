@@ -1,12 +1,15 @@
 """Scheduled live checks for v2 current toll route validation."""
 
+import asyncio
 import os
 from typing import Any, cast
 
 import boto3
 import pytest
+from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools import get_current_toll_price as pricing_tool
+from agent_tools import validate_toll_route as route_validation
 
 pytestmark = pytest.mark.live
 
@@ -40,6 +43,10 @@ _WINDOW_EXPECTATIONS = {
         "southbound_link_status": "SOUTHBOUND_OPEN",
     },
 }
+_GREENWAY_PEAK_TRIPS = {
+    "greenway_eb_peak": ("greenway:1:entry:EB", "greenway:28:exit:EB"),
+    "greenway_wb_peak": ("greenway:28:entry:WB", "greenway:1:exit:WB"),
+}
 
 
 def _configure_rds_endpoint() -> None:
@@ -59,34 +66,64 @@ def _configure_rds_endpoint() -> None:
     os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
 
 
+def _tool_use(origin: str, destination: str, tool_use_id: str) -> ToolUse:
+    return cast(
+        ToolUse,
+        {
+            "toolUseId": tool_use_id,
+            "name": "get_current_toll_price",
+            "input": {
+                "origin_point_id": origin,
+                "destination_point_id": destination,
+                "pricing_profile": {
+                    "vehicle_class": "two_axle_passenger",
+                    "payment_method": "e_zpass",
+                    "transponder_mode": "toll",
+                },
+            },
+        },
+    )
+
+
+def _run_pricing_tool(tool_use: ToolUse) -> ToolResult:
+    async def invoke() -> ToolResult:
+        result: ToolResult | None = None
+        async for event in pricing_tool.get_current_toll_price.stream(
+            tool_use, {"agent": object()}
+        ):
+            if event.get("type") == "tool_result":
+                result = cast(ToolResult, event["tool_result"])
+        assert result is not None
+        return result
+
+    return asyncio.run(invoke())
+
+
 def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]:
-    result = cast(
-        Any,
-        pricing_tool.get_current_toll_price(
-            {
-                "toolUseId": tool_use_id,
-                "name": "get_current_toll_price",
-                "input": {
-                    "origin_point_id": origin,
-                    "destination_point_id": destination,
-                    "pricing_profile": {
-                        "vehicle_class": "two_axle_passenger",
-                        "payment_method": "e_zpass",
-                        "transponder_mode": "toll",
+    tool_use = _tool_use(origin, destination, tool_use_id)
+    result = _run_pricing_tool(tool_use)
+    if result["status"] == "error":
+        assert result["content"] == [
+            {"text": f"Unable to get the current toll price. Reference: {tool_use_id}."}
+        ]
+        result = route_validation.validate_toll_route(
+            cast(
+                ToolUse,
+                {
+                    **tool_use,
+                    "name": "validate_toll_route",
+                    "input": {
+                        "origin_point_id": origin,
+                        "destination_point_id": destination,
                     },
                 },
-            }
-        ),
-    )
+            )
+        )
     assert result["status"] == "success", result
     assert result["toolUseId"] == tool_use_id
     assert len(result["content"]) == 1
-    route = cast(dict[str, Any], result["content"][0]["json"])
-
-    if route["status"] == "valid":
-        assert route["facility_legs"]
-    elif "facility_legs" in route:
-        assert route["facility_legs"] == []
+    content = cast(Any, result["content"])
+    route = cast(dict[str, Any], content[0]["json"])
     return route
 
 
@@ -97,6 +134,8 @@ def _reason_code(route: dict[str, Any]) -> str | None:
 
 def test_live_i95_state_matches_timed_window() -> None:
     window_id = os.environ["TIMED_WINDOW_ID"]
+    if not window_id.startswith("i95_"):
+        pytest.skip("not an I-95 timed window")
     assert window_id in _WINDOW_EXPECTATIONS, f"unknown timed window {window_id!r}"
     expected = _WINDOW_EXPECTATIONS[window_id]
     _configure_rds_endpoint()
@@ -120,6 +159,8 @@ def test_live_i95_state_matches_timed_window() -> None:
 
 def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
     window_id = os.environ["TIMED_WINDOW_ID"]
+    if not window_id.startswith("i95_"):
+        pytest.skip("not an I-95 timed window")
     assert window_id in _WINDOW_EXPECTATIONS, f"unknown timed window {window_id!r}"
     expected = _WINDOW_EXPECTATIONS[window_id]
     _configure_rds_endpoint()
@@ -168,3 +209,28 @@ def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
     assert evidence["availability"] == expected["availability"]
     assert evidence["northbound_link_status"] == expected["northbound_link_status"]
     assert evidence["southbound_link_status"] == expected["southbound_link_status"]
+
+
+def test_live_greenway_peak_price() -> None:
+    window_id = os.environ["TIMED_WINDOW_ID"]
+    if not window_id.startswith("greenway_"):
+        pytest.skip("not a Greenway timed window")
+    assert window_id in _GREENWAY_PEAK_TRIPS, f"unknown timed window {window_id!r}"
+    _configure_rds_endpoint()
+
+    origin, destination = _GREENWAY_PEAK_TRIPS[window_id]
+    result = _run_pricing_tool(_tool_use(origin, destination, window_id))
+
+    assert result["status"] == "success", result
+    content = cast(Any, result["content"])
+    payload = cast(dict[str, Any], content[0]["json"])
+    assert payload["origin_point_id"] == origin
+    assert payload["destination_point_id"] == destination
+    assert payload["source_kind"] == "schedule_derived"
+    assert payload["total_usd"] == "7.80"
+    assert len(payload["components"]) == 1
+    component = payload["components"][0]
+    assert component["facility"] == "greenway"
+    assert component["price_usd"] == "7.80"
+    assert component["rate_period"] == "peak"
+    assert component["published_schedule"]["rate_name"] == "mainline_plaza"

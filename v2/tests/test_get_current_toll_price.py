@@ -1,7 +1,11 @@
 # pyright: basic
 
+import asyncio
 import logging
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 import pytest
 from strands.tools.loader import load_tools_from_module_path
@@ -9,11 +13,13 @@ from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools import get_current_toll_price as pricing_tool
 
+_EASTERN = ZoneInfo("America/New_York")
+
 
 def _input() -> dict[str, Any]:
     return {
-        "origin_point_id": "i66:1:entry:EB",
-        "destination_point_id": "i66:4:exit:EB",
+        "origin_point_id": "greenway:1:entry:EB",
+        "destination_point_id": "greenway:28:exit:EB",
         "pricing_profile": {
             "vehicle_class": "two_axle_passenger",
             "payment_method": "e_zpass",
@@ -38,8 +44,8 @@ def _route_row(status: str = "valid") -> dict[str, Any]:
         return {
             "status": "valid",
             "reason": None,
-            "point_ids": ["i66:1:entry:EB", "i66:4:exit:EB"],
-            "connection_ids": ["source:i66:EB:1:4"],
+            "point_ids": ["greenway:1:entry:EB", "greenway:28:exit:EB"],
+            "connection_ids": ["source:greenway:EB:1:28"],
             "connection_types": ["within_facility"],
             "general_purpose_gaps": [],
             "i95_evidence": None,
@@ -48,7 +54,7 @@ def _route_row(status: str = "valid") -> dict[str, Any]:
         "status": "invalid_origin",
         "reason": {
             "code": "origin_not_found",
-            "details": {"point_id": "i66:1:entry:EB"},
+            "details": {"point_id": "greenway:1:entry:EB"},
         },
         "point_ids": [],
         "connection_ids": [],
@@ -66,12 +72,97 @@ def _route_result(row: dict[str, Any]) -> ToolResult:
     }
 
 
+def _i95_evidence(availability: str) -> dict[str, str]:
+    return {
+        "availability": availability,
+        "northbound_corridor_name": "I-95 NB",
+        "northbound_link_status": (
+            "NORTHBOUND_OPEN" if availability == "northbound" else "CLOSED"
+        ),
+        "northbound_interval_end_at": "2026-08-17T12:00:00+00:00",
+        "northbound_calculated_at": "2026-08-17T11:59:00+00:00",
+        "southbound_corridor_name": "I-95 SB",
+        "southbound_link_status": "CLOSED",
+        "southbound_interval_end_at": "2026-08-17T12:00:00+00:00",
+        "southbound_calculated_at": "2026-08-17T11:59:00+00:00",
+    }
+
+
+def _greenway_leg(
+    *, direction: str = "EB", entry: str = "1", exit_: str = "28"
+) -> pricing_tool.route_validation._GreenwayFacilityLeg:  # pyright: ignore[reportPrivateUsage]
+    route_key = f"{direction}:{entry}:{exit_}"
+    return pricing_tool.route_validation._GreenwayFacilityLeg.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {
+            "route_step_id": "step-1",
+            "facility": "greenway",
+            "point_ids": [
+                f"greenway:{entry}:entry:{direction}",
+                f"greenway:{exit_}:exit:{direction}",
+            ],
+            "connection_ids": [f"source:greenway:{route_key}"],
+            "pricing_key": {"source_route_key": route_key, "charge_index": 1},
+        }
+    )
+
+
+def _pricing_route(
+    row: dict[str, Any], legs: list[dict[str, Any]]
+) -> pricing_tool.route_validation._PricingRouteResponse:  # pyright: ignore[reportPrivateUsage]
+    route = pricing_tool.route_validation._RouteResponse.model_validate(row)  # pyright: ignore[reportPrivateUsage]
+    return pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {**row, "facility_legs": legs}, context={"route": route}
+    )
+
+
+def _run_tool(input_data: Any | None = None) -> list[dict[str, Any]]:
+    async def collect() -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        async for event in pricing_tool.get_current_toll_price.stream(
+            _tool_use(_input() if input_data is None else input_data),
+            {"agent": object()},
+        ):
+            events.append(dict(event))
+        return events
+
+    return asyncio.run(collect())
+
+
+def _progress_events(events: list[dict[str, Any]]) -> list[dict[str, str]]:
+    progress = []
+    for event in events:
+        if event.get("type") != "tool_stream":
+            continue
+        data = event["tool_stream_event"]["data"]
+        if isinstance(data, dict) and "stage" in data:
+            progress.append(cast(dict[str, str], data))
+    return progress
+
+
+def _result(events: list[dict[str, Any]]) -> ToolResult:
+    return cast(ToolResult, events[-1]["tool_result"])
+
+
+def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
+    row = _route_row()
+    response = _pricing_route(row, legs)
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "validate_toll_route",
+        lambda *_args, **_kwargs: _route_result(row),
+    )
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+
+
 def test_strands_loads_exact_strict_input_schema():
     assert not hasattr(pricing_tool.route_validation, "TOOL_SPEC")
     loaded = load_tools_from_module_path("agent_tools.get_current_toll_price")
-    assert len(loaded) == 1
-    assert loaded[0].tool_name == "get_current_toll_price"
-    schema = loaded[0].tool_spec["inputSchema"]["json"]
+    assert loaded == [pricing_tool.get_current_toll_price]
+    schema = loaded[0].tool_spec["inputSchema"]
     assert schema["required"] == [
         "origin_point_id",
         "destination_point_id",
@@ -113,9 +204,10 @@ def test_malformed_input_fails_safely_without_route_validation(
     )
 
     with caplog.at_level(logging.ERROR):
-        result = pricing_tool.get_current_toll_price(_tool_use(input_data))
+        events = _run_tool(input_data)
 
-    assert result == {
+    assert _progress_events(events) == []
+    assert _result(events) == {
         "toolUseId": "tool-123",
         "status": "error",
         "content": [
@@ -126,7 +218,7 @@ def test_malformed_input_fails_safely_without_route_validation(
     assert "TOP-SECRET" not in caplog.text
 
 
-def test_unsupported_profile_short_circuits_before_route_validation(monkeypatch):
+def test_unsupported_profile_short_circuits_without_progress(monkeypatch):
     input_data = _input()
     input_data["pricing_profile"]["transponder_mode"] = "hov"
     monkeypatch.setattr(
@@ -135,25 +227,22 @@ def test_unsupported_profile_short_circuits_before_route_validation(monkeypatch)
         lambda *_args, **_kwargs: pytest.fail("unsupported profile reached RDS"),
     )
 
-    result = pricing_tool.get_current_toll_price(_tool_use(input_data))
+    events = _run_tool(input_data)
 
-    assert result == {
-        "toolUseId": "tool-123",
-        "status": "success",
-        "content": [
-            {
-                "json": {
-                    "origin_point_id": "i66:1:entry:EB",
-                    "destination_point_id": "i66:4:exit:EB",
-                    "error": "pricing_unavailable",
-                    "reason": "unsupported_pricing_profile",
-                }
+    assert _progress_events(events) == []
+    assert _result(events)["content"] == [
+        {
+            "json": {
+                "origin_point_id": "greenway:1:entry:EB",
+                "destination_point_id": "greenway:28:exit:EB",
+                "error": "pricing_unavailable",
+                "reason": "unsupported_pricing_profile",
             }
-        ],
-    }
+        }
+    ]
 
 
-def test_nonvalid_route_is_returned_without_pricing(monkeypatch):
+def test_nonvalid_route_streams_completed_validation_without_pricing(monkeypatch):
     route_result = _route_result(_route_row("invalid_origin"))
     monkeypatch.setattr(
         pricing_tool.route_validation,
@@ -166,89 +255,90 @@ def test_nonvalid_route_is_returned_without_pricing(monkeypatch):
         lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
     )
 
-    assert pricing_tool.get_current_toll_price(_tool_use(_input())) == route_result
+    events = _run_tool()
+
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "completed"),
+    ]
+    assert _result(events) == route_result
 
 
-def test_route_exception_is_logged_safely(monkeypatch, caplog):
-    secret = "secret route crash"
-
-    def fail_route(*_args, **_kwargs):
-        raise RuntimeError(secret)
-
+def test_pricing_route_availability_transition_is_not_reported_as_free(monkeypatch):
+    row = {
+        "status": "valid",
+        "reason": None,
+        "point_ids": ["i95:202NO", "i95:201ND"],
+        "connection_ids": ["source:i95_shared:Northbound:202NO:201ND"],
+        "connection_types": ["within_facility"],
+        "general_purpose_gaps": [],
+        "i95_evidence": _i95_evidence("northbound"),
+    }
+    route = pricing_tool.route_validation._RouteResponse.model_validate(row)  # pyright: ignore[reportPrivateUsage]
+    transition_row = {
+        **row,
+        "status": "currently_unavailable",
+        "reason": {
+            "code": "i95_fully_closed",
+            "details": {
+                "required_i95_directions": ["NB"],
+                "availability": "closed",
+            },
+        },
+        "i95_evidence": _i95_evidence("closed"),
+        "facility_legs": [],
+    }
+    transition = pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
+        transition_row, context={"route": route}
+    )
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "validate_toll_route",
-        fail_route,
-    )
-
-    with caplog.at_level(logging.ERROR):
-        result = pricing_tool.get_current_toll_price(_tool_use(_input()))
-
-    assert result == {
-        "toolUseId": "tool-123",
-        "status": "error",
-        "content": [
-            {"text": "Unable to get the current toll price. Reference: tool-123."}
-        ],
-    }
-    assert caplog.records[0].failureStage == "route_validation"
-    assert caplog.records[0].exceptionType == "RuntimeError"
-    assert secret not in caplog.text
-
-
-def test_valid_route_returns_ordered_facility_legs(monkeypatch):
-    route_row = _route_row()
-    route = pricing_tool.route_validation._RouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        route_row
-    )
-    pricing_row = {
-        **route_row,
-        "facility_legs": [
-            {
-                "route_step_id": "step-1",
-                "facility": "i66",
-                "point_ids": ["i66:1:entry:EB", "i66:4:exit:EB"],
-                "connection_ids": ["source:i66:EB:1:4"],
-                "pricing_key": {
-                    "source_route_key": "EB:1:4",
-                    "start_zone_id": 1,
-                    "end_zone_id": 4,
-                },
-            }
-        ],
-    }
-    pricing_route = pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
-        pricing_row, context={"route": route}
-    )
-    route_calls = []
-    pricing_calls = []
-    monkeypatch.setattr(
-        pricing_tool.route_validation,
-        "validate_toll_route",
-        lambda tool_use: route_calls.append(tool_use) or _route_result(route_row),
+        lambda *_args, **_kwargs: _route_result(row),
     )
     monkeypatch.setattr(
         pricing_tool.route_validation,
         "_validate_pricing_route",
-        lambda validated_route: pricing_calls.append(validated_route) or pricing_route,
+        lambda *_args, **_kwargs: transition,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_success",
+        lambda *_args, **_kwargs: pytest.fail("availability transition became free"),
+    )
+    input_data = _input()
+    input_data.update(
+        {
+            "origin_point_id": "i95:202NO",
+            "destination_point_id": "i95:201ND",
+        }
     )
 
-    result = pricing_tool.get_current_toll_price(_tool_use(_input()))
+    events = _run_tool(input_data)
 
-    assert cast(Any, route_calls[0])["input"] == {
-        "origin_point_id": "i66:1:entry:EB",
-        "destination_point_id": "i66:4:exit:EB",
-    }
-    assert pricing_calls == [route]
-    assert result == _route_result(pricing_row)
-    payload = cast(Any, result)["content"][0]["json"]
+    assert [event["status"] for event in _progress_events(events)] == [
+        "running",
+        "completed",
+    ]
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    assert payload["status"] == "currently_unavailable"
+    assert payload["facility_legs"] == []
     assert "total_usd" not in payload
     assert "components" not in payload
 
 
-@pytest.mark.parametrize("stage", ["route", "pricing"])
-def test_operation_failures_return_only_safe_tool_error(monkeypatch, stage):
-    if stage == "route":
+@pytest.mark.parametrize("stage", ["route_result", "route_exception", "pricing_route"])
+def test_route_failures_stream_failed_and_return_only_safe_error(
+    monkeypatch, caplog, stage
+):
+    secret = f"private-{stage}"
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    if stage == "route_result":
         monkeypatch.setattr(
             pricing_tool.route_validation,
             "validate_toll_route",
@@ -258,26 +348,300 @@ def test_operation_failures_return_only_safe_tool_error(monkeypatch, stage):
                 "content": [{"text": "secret internal route failure"}],
             },
         )
-    else:
+    elif stage == "route_exception":
         monkeypatch.setattr(
             pricing_tool.route_validation,
             "validate_toll_route",
-            lambda *_args, **_kwargs: _route_result(_route_row()),
+            fail,
+        )
+    else:
+        row = _route_row()
+        monkeypatch.setattr(
+            pricing_tool.route_validation,
+            "validate_toll_route",
+            lambda *_args, **_kwargs: _route_result(row),
         )
         monkeypatch.setattr(
             pricing_tool.route_validation,
             "_validate_pricing_route",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                RuntimeError("secret pricing failure")
-            ),
+            fail,
         )
 
-    result = pricing_tool.get_current_toll_price(_tool_use(_input()))
+    with caplog.at_level(logging.ERROR):
+        events = _run_tool()
 
-    assert result == {
-        "toolUseId": "tool-123",
-        "status": "error",
-        "content": [
-            {"text": "Unable to get the current toll price. Reference: tool-123."}
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "failed"),
+    ]
+    result = _result(events)
+    assert result["status"] == "error"
+    assert result["content"] == [
+        {"text": "Unable to get the current toll price. Reference: tool-123."}
+    ]
+    assert secret not in str(_progress_events(events))
+    assert secret not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("direction", "entry", "exit_", "evaluated_at", "price", "period", "rate_name"),
+    [
+        (
+            "EB",
+            "1",
+            "2A",
+            datetime(2026, 8, 17, 6, 29, tzinfo=_EASTERN),
+            "4.55",
+            "off_peak",
+            "secondary_plaza",
+        ),
+        (
+            "EB",
+            "1",
+            "2A",
+            datetime(2026, 8, 17, 6, 30, tzinfo=_EASTERN),
+            "5.10",
+            "peak",
+            "secondary_plaza",
+        ),
+        (
+            "EB",
+            "1",
+            "28",
+            datetime(2026, 8, 17, 8, 59, tzinfo=_EASTERN),
+            "7.80",
+            "peak",
+            "mainline_plaza",
+        ),
+        (
+            "EB",
+            "1",
+            "28",
+            datetime(2026, 8, 17, 9, 0, tzinfo=_EASTERN),
+            "7.25",
+            "off_peak",
+            "mainline_plaza",
+        ),
+        (
+            "WB",
+            "28",
+            "1",
+            datetime(2026, 8, 17, 16, 0, tzinfo=_EASTERN),
+            "7.80",
+            "peak",
+            "mainline_plaza",
+        ),
+        (
+            "WB",
+            "8",
+            "1",
+            datetime(2026, 8, 17, 18, 29, tzinfo=_EASTERN),
+            "5.10",
+            "peak",
+            "secondary_plaza",
+        ),
+        (
+            "WB",
+            "28",
+            "1",
+            datetime(2026, 8, 17, 18, 30, tzinfo=_EASTERN),
+            "7.25",
+            "off_peak",
+            "mainline_plaza",
+        ),
+        (
+            "EB",
+            "1",
+            "28",
+            datetime(2026, 8, 22, 7, 0, tzinfo=_EASTERN),
+            "7.25",
+            "off_peak",
+            "mainline_plaza",
+        ),
+        (
+            "EB",
+            "1",
+            "28",
+            datetime(2026, 8, 17, 10, 30, tzinfo=UTC),
+            "7.80",
+            "peak",
+            "mainline_plaza",
+        ),
+    ],
+)
+def test_greenway_schedule_rates(
+    direction, entry, exit_, evaluated_at, price, period, rate_name
+):
+    component = pricing_tool._price_greenway(
+        _greenway_leg(direction=direction, entry=entry, exit_=exit_), evaluated_at
+    )
+
+    assert component.price_usd == Decimal(price)
+    assert component.rate_period == period
+    assert component.published_schedule.rate_name == rate_name
+    assert component.component_evaluated_at.tzinfo == _EASTERN
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda data: data["pricing_key"].update({"charge_index": 2}),
+        lambda data: data.update({"connection_ids": ["source:greenway:EB:1:8"]}),
+        lambda data: data.update(
+            {"point_ids": ["greenway:1:entry:EB", "greenway:8:exit:EB"]}
+        ),
+        lambda data: data["pricing_key"].update({"source_route_key": "bad-key"}),
+    ],
+)
+def test_greenway_pricer_rejects_misaligned_legs(mutation):
+    data = _greenway_leg().model_dump(mode="python")
+    mutation(data)
+    leg = pricing_tool.route_validation._GreenwayFacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
+
+    with pytest.raises(ValueError, match="Greenway"):
+        pricing_tool._price_greenway(leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN))
+
+
+def test_greenway_pricer_requires_aware_evaluation_time():
+    with pytest.raises(ValueError, match="aware"):
+        pricing_tool._price_greenway(
+            _greenway_leg(),
+            datetime(2026, 8, 17, 8),  # noqa: DTZ001
+        )
+
+
+def test_greenway_only_route_streams_progress_and_returns_total(monkeypatch):
+    leg = _greenway_leg().model_dump(mode="json")
+    _install_route(monkeypatch, [leg])
+    evaluated_at = datetime(2026, 8, 17, 6, 30, tzinfo=_EASTERN)
+    monkeypatch.setattr(pricing_tool, "_current_eastern_time", lambda: evaluated_at)
+
+    events = _run_tool()
+
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "completed"),
+        ("greenway_pricing", "running"),
+        ("greenway_pricing", "completed"),
+    ]
+    result = _result(events)
+    assert result["status"] == "success"
+    payload = cast(Any, result)["content"][0]["json"]
+    assert payload == {
+        "origin_point_id": "greenway:1:entry:EB",
+        "destination_point_id": "greenway:28:exit:EB",
+        "method": "latest_complete_current_facility_prices",
+        "evaluated_at": "2026-08-17T06:30:00-04:00",
+        "maximum_observation_age_minutes": 30,
+        "pricing_profile": _input()["pricing_profile"],
+        "source_kind": "schedule_derived",
+        "components": [
+            {
+                "route_step_id": "step-1",
+                "price_usd": "7.80",
+                "source_kind": "schedule_derived",
+                "pricing_method": "published_schedule",
+                "facility": "greenway",
+                "component_evaluated_at": "2026-08-17T06:30:00-04:00",
+                "rate_period": "peak",
+                "published_schedule": {
+                    "schedule_id": "dulles_greenway_toll_calculator_2026-08-04",
+                    "rate_name": "mainline_plaza",
+                    "source_url": "https://www.dullesgreenway.com/toll-calculator/",
+                    "retrieved_at": "2026-08-04",
+                },
+            }
         ],
+        "total_usd": "7.80",
     }
+
+
+def test_valid_no_toll_route_returns_zero_without_pricing_progress(monkeypatch):
+    _install_route(monkeypatch, [])
+    monkeypatch.setattr(
+        pricing_tool,
+        "_current_eastern_time",
+        lambda: datetime(2026, 8, 22, 12, tzinfo=_EASTERN),
+    )
+
+    events = _run_tool()
+
+    assert [event["stage"] for event in _progress_events(events)] == [
+        "route_validation",
+        "route_validation",
+    ]
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    assert payload["source_kind"] == "none"
+    assert payload["components"] == []
+    assert payload["total_usd"] == "0.00"
+
+
+def test_unimplemented_facility_returns_safe_error(monkeypatch):
+    row = {
+        **_route_row(),
+        "point_ids": ["i66:1:entry:EB", "i66:4:exit:EB"],
+        "connection_ids": ["source:i66:EB:1:4"],
+    }
+    leg = {
+        "route_step_id": "step-1",
+        "facility": "i66",
+        "point_ids": row["point_ids"],
+        "connection_ids": row["connection_ids"],
+        "pricing_key": {
+            "source_route_key": "EB:1:4",
+            "start_zone_id": 1,
+            "end_zone_id": 4,
+        },
+    }
+    response = _pricing_route(row, [leg])
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "validate_toll_route",
+        lambda *_args, **_kwargs: _route_result(row),
+    )
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "_validate_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+
+    events = _run_tool()
+
+    assert [event["stage"] for event in _progress_events(events)] == [
+        "route_validation",
+        "route_validation",
+    ]
+    assert _result(events)["status"] == "error"
+
+
+def test_greenway_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
+    secret = "private Greenway crash"
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    _install_route(monkeypatch, [_greenway_leg().model_dump(mode="json")])
+    monkeypatch.setattr(
+        pricing_tool,
+        "_price_greenway",
+        fail,
+    )
+
+    with caplog.at_level(logging.ERROR):
+        events = _run_tool()
+
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "completed"),
+        ("greenway_pricing", "running"),
+        ("greenway_pricing", "failed"),
+    ]
+    assert _result(events)["status"] == "error"
+    assert secret not in str(_progress_events(events))
+    assert secret not in caplog.text
