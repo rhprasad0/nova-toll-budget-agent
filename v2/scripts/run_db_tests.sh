@@ -289,6 +289,11 @@ if psql --dbname "$bootstrap_db" \
   echo "oracle 1.2.0 upgrade unexpectedly accepted version 0.9.0" >&2
   exit 1
 fi
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/011_upgrade_oracle_1_2_0_to_1_3_0.sql; then
+  echo "oracle 1.3.0 upgrade unexpectedly accepted version 0.9.0" >&2
+  exit 1
+fi
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
 DO $$
 BEGIN
@@ -296,7 +301,7 @@ BEGIN
     RAISE EXCEPTION 'failed oracle schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE oracle.schema_version SET version = '1.2.0' WHERE singleton;
+UPDATE oracle.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
 
 if psql --dbname "$bootstrap_db" \

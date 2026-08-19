@@ -193,11 +193,6 @@
   {
    "charges": [
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -348,11 +343,6 @@
      "price_peak_usd": "2.00"
     },
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -518,11 +508,6 @@
      "price_peak_usd": "2.00"
     },
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -688,11 +673,6 @@
      "price_peak_usd": "2.00"
     },
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -858,11 +838,6 @@
      "price_peak_usd": "2.00"
     },
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1028,11 +1003,6 @@
      "price_peak_usd": "2.00"
     },
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1167,11 +1137,6 @@
   {
    "charges": [
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 16 - SR 7 (Leesburg Pike)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1223,24 +1188,13 @@
    "exit": "66"
   },
   {
-   "charges": [
-    {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    }
-   ],
+   "charges": [],
    "direction": "WB",
    "entry": "16",
    "exit": "28"
   },
   {
    "charges": [
-    {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
     {
      "label": "Exit ramp at Exit 10 - SR 657",
      "price_off_peak_usd": "2.00",
@@ -1254,11 +1208,6 @@
   {
    "charges": [
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 11 - SR 286 (Fairfax County Pkwy)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1270,11 +1219,6 @@
   },
   {
    "charges": [
-    {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
     {
      "label": "Exit ramp at Exit 12 - SR 602 (Reston Pkwy)",
      "price_off_peak_usd": "2.00",
@@ -1288,11 +1232,6 @@
   {
    "charges": [
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 13 - SR 828 (Wiehle Ave)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1305,11 +1244,6 @@
   {
    "charges": [
     {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    },
-    {
      "label": "Exit ramp at Exit 14 - SR 674 (Hunter Mill Rd)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
@@ -1320,13 +1254,7 @@
    "exit": "14"
   },
   {
-   "charges": [
-    {
-     "label": "Mainline plaza",
-     "price_off_peak_usd": "4.00",
-     "price_peak_usd": "4.00"
-    }
-   ],
+   "charges": [],
    "direction": "WB",
    "entry": "16",
    "exit": "15"
@@ -1334,9 +1262,9 @@
   {
    "charges": [
     {
-     "label": "Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)",
-     "price_off_peak_usd": "2.00",
-     "price_peak_usd": "2.00"
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
     },
     {
      "label": "Exit ramp at Exit 17 - SR 684 (Spring Hill Rd)",
@@ -1351,9 +1279,9 @@
   {
    "charges": [
     {
-     "label": "Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)",
-     "price_off_peak_usd": "2.00",
-     "price_peak_usd": "2.00"
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
     }
    ],
    "direction": "EB",
@@ -1363,9 +1291,9 @@
   {
    "charges": [
     {
-     "label": "Entrance ramp at Exit 16 - SR 7 (Leesburg Pike)",
-     "price_off_peak_usd": "2.00",
-     "price_peak_usd": "2.00"
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
     }
    ],
    "direction": "EB",
@@ -1522,6 +1450,11 @@
      "label": "Entrance ramp at Exit 17 - SR 684 (Spring Hill Rd)",
      "price_off_peak_usd": "2.00",
      "price_peak_usd": "2.00"
+    },
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
     }
    ],
    "direction": "WB",
@@ -1662,7 +1595,13 @@
    "exit": "15"
   },
   {
-   "charges": [],
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "1819",
    "exit": "16"
@@ -1795,7 +1734,13 @@
    "exit": "15"
   },
   {
-   "charges": [],
+   "charges": [
+    {
+     "label": "Mainline plaza",
+     "price_off_peak_usd": "4.00",
+     "price_peak_usd": "4.00"
+    }
+   ],
    "direction": "WB",
    "entry": "66",
    "exit": "16"

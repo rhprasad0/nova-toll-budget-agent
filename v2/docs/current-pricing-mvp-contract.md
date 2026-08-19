@@ -134,10 +134,18 @@ search path, an owner limited to its required pricing relations, and only
   model method and proxy identifier. Never relabel them as observed.
 - Schedule-derived components use the published rate applicable at
   `evaluated_at`, preserving schedule identity and effective dates.
+- Dulles Toll Road schedule components use the published two-axle E-ZPass rates:
+  `$4.00` for a mainline-plaza charge and `$2.00` for each ramp charge. The
+  Greenway/DTR handoff is a DTR ramp charge. DTR rates do not vary by time of
+  day. The mainline plaza lies between Exits 16 and 17; Exit 16's ramp toll
+  applies only when exiting eastbound, not when entering.
 - Return a route total only when every required component has a usable current
   price. Missing or unavailable prices are not zero.
 - An empty component list and `total_usd: "0.00"` mean the validated route is
   known to contain no toll.
+- Direct `airport_iad` routes terminating at their curated I-66, DTR, or I-495
+  `airport_access` entry connector return that zero-toll result. Other entry
+  points remain invalid destinations.
 
 Map `pricing.trip_pricing_i95.calculated_at` and
 `pricing.trip_pricing_i66.calculated_at` to `observed_at`. Do not substitute
