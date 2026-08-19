@@ -98,9 +98,11 @@ Every object has exactly these common fields:
 | `dtr`, `greenway` | `source_route_key` (string), `charge_index` (1-based integer into the canonical connection's `source_pair.charges`) |
 
 Array order follows canonical connection order, then source component order.
-Handoffs, airport access, and zero-price charges do not produce legs. Downstream
-pricing operations must resolve each key and return the applicable price; they
-must not treat this validation output itself as a price.
+The Greenway mainline charge includes its published $2 surcharge; DTR roadway
+charges remain separate. Handoffs, airport access, and zero-price charges do
+not produce legs. Downstream pricing operations must resolve each key and
+return the applicable price; they must not treat this validation output itself
+as a price.
 
 Pricing access follows the route function's least-privilege pattern. Each
 pricing operation is a narrow `SECURITY DEFINER` function with a fixed trusted

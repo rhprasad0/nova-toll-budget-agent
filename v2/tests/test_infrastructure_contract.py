@@ -80,4 +80,4 @@ def test_timed_ci_checks_both_validators_in_every_i95_state():
         assert f'"{window_id}":' in TIMED_ROUTE_TEST
 
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
-    assert "oracle.validate_pricing_route" in TIMED_ROUTE_TEST
+    assert "_validate_pricing_route" in TIMED_ROUTE_TEST

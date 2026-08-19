@@ -78,28 +78,21 @@ def _validate(origin: str, destination: str, tool_use_id: str) -> dict[str, Any]
     assert len(result["content"]) == 1
     route = cast(dict[str, Any], result["content"][0]["json"])
 
-    connection = cast(
-        Any,
-        route_tool._connect(),  # pyright: ignore[reportPrivateUsage]
-    )
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT * FROM oracle.validate_pricing_route(%s, %s)",
-                (route["point_ids"], route["connection_ids"]),
-            )
-            rows = cursor.fetchall()
-    finally:
-        connection.close()
-
-    assert len(rows) == 1
-    pricing_route = cast(dict[str, Any], rows[0])
-    assert set(pricing_route) == {*route, "facility_legs"}
-    assert {key: pricing_route[key] for key in route} == route
     if route["status"] == "valid":
-        assert pricing_route["facility_legs"]
-    else:
-        assert pricing_route["facility_legs"] == []
+        validated_route = route_tool._RouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
+            route
+        )
+        pricing_route = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            validated_route
+        )
+        if pricing_route.status == "valid":
+            assert pricing_route.facility_legs
+        else:
+            assert pricing_route.status in {
+                "currently_unavailable",
+                "unknown_availability",
+            }
+            assert pricing_route.facility_legs == []
     return route
 
 
@@ -116,11 +109,13 @@ def test_live_i95_state_matches_timed_window() -> None:
 
     northbound = _validate("i95:202NO", "i95:201ND", f"{window_id}-northbound")
     southbound = _validate("i95:200SO", "i95:202SD", f"{window_id}-southbound")
+    i66 = _validate("i66:1:entry:EB", "i66:4:exit:EB", f"{window_id}-i66-pricing-route")
 
     assert northbound["status"] == expected["northbound_status"]
     assert _reason_code(northbound) == expected["northbound_reason"]
     assert southbound["status"] == expected["southbound_status"]
     assert _reason_code(southbound) == expected["southbound_reason"]
+    assert i66["status"] == "valid"
 
     for route in (northbound, southbound):
         evidence = route["i95_evidence"]

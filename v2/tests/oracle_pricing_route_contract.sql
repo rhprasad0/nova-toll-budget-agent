@@ -222,15 +222,13 @@ BEGIN
         ARRAY['source:greenway:EB:1:28']
     );
     IF result.status <> 'valid'
-       OR jsonb_array_length(result.facility_legs) <> 2
+       OR jsonb_array_length(result.facility_legs) <> 1
        OR result.facility_legs->0->>'facility' <> 'greenway'
-       OR result.facility_legs->1->>'facility' <> 'dtr'
        OR result.facility_legs->0->'pricing_key'->>'charge_index' <> '1'
-       OR result.facility_legs->1->'pricing_key'->>'charge_index' <> '2'
        OR jsonb_path_exists(
            result.facility_legs, '$.**.price_peak_usd'
        ) THEN
-        RAISE EXCEPTION 'Greenway embedded charge changed: %', row_to_json(result);
+        RAISE EXCEPTION 'Greenway discrete charge changed: %', row_to_json(result);
     END IF;
 
     SELECT * INTO result
@@ -286,19 +284,6 @@ BEGIN
                'route_step_id', 'step-2',
                'facility', 'dtr',
                'point_ids', jsonb_build_array(
-                   'greenway:1:entry:EB', 'greenway:28:exit:EB'
-               ),
-               'connection_ids', jsonb_build_array(
-                   'source:greenway:EB:1:28'
-               ),
-               'pricing_key', jsonb_build_object(
-                   'source_route_key', 'EB:1:28', 'charge_index', 2
-               )
-           ),
-           jsonb_build_object(
-               'route_step_id', 'step-3',
-               'facility', 'dtr',
-               'point_ids', jsonb_build_array(
                    'dtr:28:entry:EB', 'dtr:66:exit:EB'
                ),
                'connection_ids', jsonb_build_array(
@@ -309,7 +294,7 @@ BEGIN
                )
            ),
            jsonb_build_object(
-               'route_step_id', 'step-4',
+               'route_step_id', 'step-3',
                'facility', 'i66',
                'point_ids', jsonb_build_array(
                    'i66:6:entry:EB', 'i66:10:exit:EB'
@@ -331,12 +316,76 @@ END
 $$;
 
 DO $$
+DECLARE
+    result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_pricing_route(
+        ARRAY[
+            'dtr:66:entry:WB',
+            'dtr:28:exit:WB',
+            'greenway:28:entry:WB',
+            'greenway:1:exit:WB'
+        ],
+        ARRAY[
+            'source:dtr:WB:66:28',
+            'dtr_to_greenway',
+            'source:greenway:WB:28:1'
+        ]
+    );
+    IF result.status <> 'valid'
+       OR result.facility_legs IS DISTINCT FROM jsonb_build_array(
+           jsonb_build_object(
+               'route_step_id', 'step-1',
+               'facility', 'dtr',
+               'point_ids', jsonb_build_array(
+                   'dtr:66:entry:WB', 'dtr:28:exit:WB'
+               ),
+               'connection_ids', jsonb_build_array('source:dtr:WB:66:28'),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'WB:66:28', 'charge_index', 1
+               )
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-2',
+               'facility', 'greenway',
+               'point_ids', jsonb_build_array(
+                   'greenway:28:entry:WB', 'greenway:1:exit:WB'
+               ),
+               'connection_ids', jsonb_build_array(
+                   'source:greenway:WB:28:1'
+               ),
+               'pricing_key', jsonb_build_object(
+                   'source_route_key', 'WB:28:1', 'charge_index', 1
+               )
+           )
+       ) THEN
+        RAISE EXCEPTION 'westbound Greenway/DTR separation changed: %',
+            row_to_json(result);
+    END IF;
+END
+$$;
+
+DO $$
 BEGIN
     IF EXISTS (
         SELECT 1
         FROM oracle.route_pricing_component AS component
         JOIN oracle.toll_connection AS connection USING (connection_id)
         WHERE connection.connection_type IN ('toll_handoff', 'airport_access')
+    ) OR EXISTS (
+        SELECT 1
+        FROM oracle.route_pricing_component
+        GROUP BY connection_id
+        HAVING count(DISTINCT facility) <> 1
+    ) OR (
+        SELECT charge
+        FROM oracle.route_pricing_component
+        WHERE connection_id = 'source:greenway:EB:1:28'
+    ) IS DISTINCT FROM jsonb_build_object(
+        'label', 'Mainline plaza',
+        'price_off_peak_usd', '7.25',
+        'price_peak_usd', '7.80'
     ) OR NOT EXISTS (
         SELECT 1
         FROM oracle.route_pricing_component

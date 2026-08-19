@@ -100,6 +100,37 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
       exit 1
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.1.1" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+UPDATE oracle.toll_connection
+SET source_metadata = jsonb_set(
+  source_metadata,
+  '{source_pair,charges,1,price_peak_usd}',
+  '"2.01"'::jsonb
+)
+WHERE connection_id = 'source:greenway:EB:1:28';
+SQL
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.1.1 upgrade accepted malformed Greenway charges" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.1.0' THEN
+    RAISE EXCEPTION 'failed Greenway migration changed the installed version';
+  END IF;
+END $$;
+UPDATE oracle.toll_connection
+SET source_metadata = jsonb_set(
+  source_metadata,
+  '{source_pair,charges,1,price_peak_usd}',
+  '"2.00"'::jsonb
+)
+WHERE connection_id = 'source:greenway:EB:1:28';
+SQL
+    fi
+
     psql --dbname "$migration_db" --file "$migration"
 
     installed_version="$(
@@ -142,6 +173,25 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
       done
       diff -u "$migration_source_dir/$bootstrap_db-points.json" \
         "$migration_source_dir/$migration_db-points.json"
+
+      for database in "$bootstrap_db" "$migration_db"; do
+        psql --dbname "$database" --tuples-only --no-align --command "
+          SELECT jsonb_agg(
+              jsonb_build_object(
+                  'connection_id', connection_id,
+                  'from_point_id', from_point_id,
+                  'to_point_id', to_point_id,
+                  'connection_type', connection_type,
+                  'required_i95_direction', required_i95_direction,
+                  'source_route_key', source_route_key,
+                  'source_metadata', source_metadata
+              ) ORDER BY connection_id
+          )
+          FROM oracle.toll_connection
+        " >"$migration_source_dir/$database-connections.json"
+      done
+      diff -u "$migration_source_dir/$bootstrap_db-connections.json" \
+        "$migration_source_dir/$migration_db-connections.json"
     fi
   done
 fi
@@ -193,6 +243,11 @@ if psql --dbname "$bootstrap_db" \
   echo "oracle schema upgrade unexpectedly accepted version 0.9.0" >&2
   exit 1
 fi
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/008_upgrade_oracle_1_1_0_to_1_1_1.sql; then
+  echo "oracle 1.1.1 upgrade unexpectedly accepted version 0.9.0" >&2
+  exit 1
+fi
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
 DO $$
 BEGIN
@@ -200,7 +255,7 @@ BEGIN
     RAISE EXCEPTION 'failed oracle schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE oracle.schema_version SET version = '1.1.0' WHERE singleton;
+UPDATE oracle.schema_version SET version = '1.1.1' WHERE singleton;
 SQL
 
 if psql --dbname "$bootstrap_db" \

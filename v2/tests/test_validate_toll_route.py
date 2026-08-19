@@ -95,6 +95,127 @@ def _northbound_suffix_row():
     return row
 
 
+def _pricing_route_row():
+    route = {
+        "status": "valid",
+        "reason": None,
+        "point_ids": ["point-1", "point-2", "point-3", "point-4", "point-5"],
+        "connection_ids": [
+            "connection-1",
+            "connection-2",
+            "connection-3",
+            "connection-4",
+        ],
+        "connection_types": ["within_facility"] * 4,
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+    }
+    return {
+        **route,
+        "facility_legs": [
+            {
+                "route_step_id": "step-1",
+                "facility": "i66",
+                "point_ids": ["point-1", "point-2"],
+                "connection_ids": ["connection-1"],
+                "pricing_key": {
+                    "source_route_key": "EB:1:2",
+                    "start_zone_id": 1,
+                    "end_zone_id": 2,
+                },
+            },
+            {
+                "route_step_id": "step-2",
+                "facility": "i95_i495",
+                "point_ids": ["point-2", "i495:192NO"],
+                "connection_ids": ["connection-2"],
+                "pricing_key": {
+                    "source_route_key": "Northbound:2:3",
+                    "od_pair_id": 1144,
+                },
+            },
+            {
+                "route_step_id": "step-3",
+                "facility": "i95_i495",
+                "point_ids": ["i495:192NO", "point-3"],
+                "connection_ids": ["connection-2"],
+                "pricing_key": {
+                    "source_route_key": "Northbound:2:3",
+                    "od_pair_id": 1092,
+                },
+            },
+            {
+                "route_step_id": "step-4",
+                "facility": "dtr",
+                "point_ids": ["point-3", "point-4"],
+                "connection_ids": ["connection-3"],
+                "pricing_key": {
+                    "source_route_key": "EB:3:4",
+                    "charge_index": 1,
+                },
+            },
+            {
+                "route_step_id": "step-5",
+                "facility": "greenway",
+                "point_ids": ["point-4", "point-5"],
+                "connection_ids": ["connection-4"],
+                "pricing_key": {
+                    "source_route_key": "EB:4:5",
+                    "charge_index": 2,
+                },
+            },
+        ],
+    }
+
+
+def _validated_route(row):
+    return route_tool._RouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {key: value for key, value in row.items() if key != "facility_legs"}
+    )
+
+
+def _availability_transition_row(status):
+    row = copy.deepcopy(_northbound_suffix_row())
+    evidence = copy.deepcopy(_unavailable_row()["i95_evidence"])
+    if status == "currently_unavailable":
+        reason_code = "i95_fully_closed"
+        availability = "closed"
+        fallback_required = True
+    else:
+        reason_code = "i95_stale_evidence"
+        availability = "unknown"
+        fallback_required = None
+    evidence["availability"] = availability
+    row.update(
+        {
+            "status": status,
+            "reason": {
+                "code": reason_code,
+                "details": {
+                    "required_i95_directions": ["NB"],
+                    "availability": availability,
+                },
+            },
+            "i95_evidence": evidence,
+            "facility_legs": [],
+        }
+    )
+    row["general_purpose_gaps"][0]["fallback_required"] = fallback_required
+    return row
+
+
+def _dtr_charge_row(charge_indexes):
+    row = _pricing_route_row()
+    first = row["facility_legs"][3]
+    first["pricing_key"]["charge_index"] = charge_indexes[0]
+    second = copy.deepcopy(first)
+    second["route_step_id"] = "step-5"
+    second["pricing_key"]["charge_index"] = charge_indexes[1]
+    row["facility_legs"].insert(4, second)
+    row["facility_legs"][5]["route_step_id"] = "step-6"
+    return row
+
+
 class _Cursor:
     def __init__(self, rows, error=None):
         self.rows = rows
@@ -551,3 +672,330 @@ def test_incompatible_ramp_alternatives_follow_contract(monkeypatch, alternative
     result, connection = _invoke(monkeypatch, row)
     assert result["status"] == "error"
     assert connection.closed
+
+
+def test_pricing_route_returns_typed_facility_legs(monkeypatch):
+    row = _pricing_route_row()
+    route = _validated_route(row)
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+        route
+    )
+
+    assert [leg.model_dump(mode="json") for leg in response.facility_legs] == row[
+        "facility_legs"
+    ]
+    assert connection.cursor_instance.calls == [
+        (
+            "SELECT * FROM oracle.validate_pricing_route(%s, %s)",
+            (route.point_ids, route.connection_ids),
+        )
+    ]
+    assert connection.closed
+
+
+def test_pricing_route_rejects_priced_handoff(monkeypatch):
+    row = {
+        "status": "valid",
+        "reason": None,
+        "point_ids": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
+        "connection_ids": ["greenway_to_dtr"],
+        "connection_types": ["toll_handoff"],
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+        "facility_legs": [
+            {
+                "route_step_id": "step-1",
+                "facility": "dtr",
+                "point_ids": ["greenway:28:exit:EB", "dtr:28:entry:EB"],
+                "connection_ids": ["greenway_to_dtr"],
+                "pricing_key": {
+                    "source_route_key": "greenway_to_dtr",
+                    "charge_index": 1,
+                },
+            }
+        ],
+    }
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with pytest.raises(ValueError, match="non-priced connection"):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(row)
+        )
+
+    assert connection.closed
+
+
+def test_pricing_route_allows_valid_route_without_tolls(monkeypatch):
+    row = {**_valid_row(), "facility_legs": []}
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+        _validated_route(row)
+    )
+    assert response.status == "valid"
+    assert response.facility_legs == []
+    assert connection.closed
+
+
+@pytest.mark.parametrize("status", ["currently_unavailable", "unknown_availability"])
+def test_pricing_route_returns_typed_availability_transition(monkeypatch, status):
+    route = _validated_route(_northbound_suffix_row())
+    row = _availability_transition_row(status)
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+        route
+    )
+
+    assert response.status == status
+    assert response.facility_legs == []
+    assert response.point_ids == route.point_ids
+    assert response.connection_ids == route.connection_ids
+    assert connection.closed
+
+
+def test_pricing_route_rejects_static_gap_change(monkeypatch):
+    row = _availability_transition_row("currently_unavailable")
+    row["general_purpose_gaps"][0].update(
+        {"boundary_point_id": "i495:192NO", "role": "prefix"}
+    )
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with pytest.raises(ValueError, match="topology does not match"):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(_northbound_suffix_row())
+        )
+
+    assert connection.closed
+
+
+def test_pricing_route_rejects_valid_status_with_required_fallback(monkeypatch):
+    row = copy.deepcopy(_northbound_suffix_row())
+    row["i95_evidence"]["availability"] = "southbound"
+    row["general_purpose_gaps"][0]["fallback_required"] = True
+    row["facility_legs"] = []
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with pytest.raises(ValueError, match="valid routes cannot require a fallback"):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(_northbound_suffix_row())
+        )
+
+    assert connection.closed
+
+
+def test_pricing_route_rejects_legs_on_availability_transition(monkeypatch, caplog):
+    row = _availability_transition_row("currently_unavailable")
+    row["facility_legs"] = _pricing_route_row()["facility_legs"][:1]
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(_northbound_suffix_row())
+        )
+
+    assert connection.closed
+    assert len(caplog.records) == 1
+    assert caplog.records[0].failureStage == "response_validation"
+
+
+def test_pricing_route_rejects_nonvalid_route_before_connecting(monkeypatch, caplog):
+    monkeypatch.setattr(
+        route_tool,
+        "_connect",
+        lambda: pytest.fail("nonvalid route opened a database connection"),
+    )
+
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(ValueError, match="requires a valid route"),
+    ):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(_unavailable_row())
+        )
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].operation == "validate_pricing_route"
+    assert caplog.records[0].failureStage == "input_validation"
+    assert caplog.records[0].exceptionType == "ValueError"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda row: row["facility_legs"][0].update({"unexpected": "secret-row"}),
+        lambda row: row["facility_legs"][0]["pricing_key"].update({"od_pair_id": 1144}),
+        lambda row: row["facility_legs"][1].update({"route_step_id": "step-7"}),
+        lambda row: row["facility_legs"][1].update(
+            {"connection_ids": ["unknown-connection"]}
+        ),
+        lambda row: row["facility_legs"][0].update(
+            {"point_ids": ["wrong-point", "point-2"]}
+        ),
+        lambda row: row["facility_legs"][0].update(
+            {"connection_ids": ["connection-4"]}
+        ),
+        lambda row: row.update(
+            {
+                "point_ids": [
+                    "different-point",
+                    "point-2",
+                    "point-3",
+                    "point-4",
+                    "point-5",
+                ]
+            }
+        ),
+    ],
+)
+def test_pricing_route_contract_violations_are_logged(monkeypatch, caplog, mutation):
+    original = _pricing_route_row()
+    row = copy.deepcopy(original)
+    mutation(row)
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(original)
+        )
+
+    assert connection.closed
+    assert len(caplog.records) == 1
+    assert caplog.records[0].failureStage == "response_validation"
+    assert caplog.records[0].exceptionType in {"ValidationError", "ValueError"}
+    assert "secret-row" not in caplog.text
+    assert "different-point" not in caplog.text
+
+
+@pytest.mark.parametrize("charge_indexes", [(2, 1), (1, 1)])
+def test_pricing_route_rejects_noncanonical_charge_order(
+    monkeypatch, caplog, charge_indexes
+):
+    row = _dtr_charge_row(charge_indexes)
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(ValueError, match="charge indexes are not ordered"),
+    ):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(row)
+        )
+
+    assert connection.closed
+    assert len(caplog.records) == 1
+    assert caplog.records[0].failureStage == "response_validation"
+
+
+def test_pricing_route_allows_omitted_zero_price_charge_indexes(monkeypatch):
+    row = _dtr_charge_row((1, 3))
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    response = route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+        _validated_route(row)
+    )
+
+    assert [
+        leg.pricing_key.charge_index
+        for leg in response.facility_legs
+        if leg.connection_ids == ["connection-3"]
+        and isinstance(leg.pricing_key, route_tool._ChargePricingKey)  # pyright: ignore[reportPrivateUsage]
+    ] == [1, 3]
+
+
+def test_pricing_route_rejects_mixed_source_keys_on_one_connection(monkeypatch):
+    row = _dtr_charge_row((1, 2))
+    row["facility_legs"][4]["pricing_key"]["source_route_key"] = "wrong-route"
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with pytest.raises(ValueError, match="mixes source route keys"):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(row)
+        )
+
+    assert connection.closed
+
+
+@pytest.mark.parametrize("rows", [[], [_pricing_route_row(), _pricing_route_row()]])
+def test_pricing_route_requires_exactly_one_row(monkeypatch, caplog, rows):
+    route = _validated_route(_pricing_route_row())
+    connection = _Connection(rows)
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(ValueError, match="must return exactly one row"),
+    ):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            route
+        )
+
+    assert connection.closed
+    assert len(caplog.records) == 1
+    assert caplog.records[0].failureStage == "response_validation"
+
+
+def test_pricing_route_connection_failure_is_safely_logged(monkeypatch, caplog):
+    secret = "password=do-not-log"
+
+    def fail_connection():
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(route_tool, "_connect", fail_connection)
+
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(RuntimeError, match="password=do-not-log"),
+    ):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(_pricing_route_row())
+        )
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].failureStage == "connection"
+    assert caplog.records[0].exceptionType == "RuntimeError"
+    assert "password=do-not-log" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("query_error", "close_error", "expected_stage"),
+    [
+        (RuntimeError("query-secret"), None, "query"),
+        (None, RuntimeError("close-secret"), "connection_close"),
+        (RuntimeError("query-secret"), RuntimeError("close-secret"), "query"),
+    ],
+)
+def test_pricing_route_database_failures_are_safely_logged(
+    monkeypatch, caplog, query_error, close_error, expected_stage
+):
+    connection = _Connection(
+        [_pricing_route_row()], query_error=query_error, close_error=close_error
+    )
+    monkeypatch.setattr(route_tool, "_connect", lambda: connection)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError):
+        route_tool._validate_pricing_route(  # pyright: ignore[reportPrivateUsage]
+            _validated_route(_pricing_route_row())
+        )
+
+    assert connection.closed
+    assert len(caplog.records) == 1
+    assert caplog.records[0].failureStage == expected_stage
+    assert caplog.records[0].exceptionType == "RuntimeError"
+    assert "query-secret" not in caplog.text
+    assert "close-secret" not in caplog.text
+    if query_error is not None and close_error is not None:
+        assert "Connection close also failed: RuntimeError" in caplog.text

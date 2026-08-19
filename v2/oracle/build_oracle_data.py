@@ -400,6 +400,39 @@ def _curated_connection(
     )
 
 
+def _bundle_greenway_surcharge(
+    raw_pair: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    charges = cast(list[dict[str, Any]], raw_pair["charges"])
+    greenway_charge = {
+        "label": "Mainline plaza",
+        "price_off_peak_usd": "5.25",
+        "price_peak_usd": "5.80",
+    }
+    dtr_surcharge = {
+        "facility": "dulles_toll_road",
+        "label": "Mainline plaza",
+        "price_off_peak_usd": "2.00",
+        "price_peak_usd": "2.00",
+    }
+    if dtr_surcharge not in charges:
+        if any(charge.get("facility") is not None for charge in charges):
+            raise ValueError("unknown Greenway charge facility")
+        return raw_pair, False
+    if len(charges) != 2 or greenway_charge not in charges:
+        raise ValueError("Greenway surcharge source pair is not canonical")
+    return {
+        **raw_pair,
+        "charges": [
+            {
+                "label": "Mainline plaza",
+                "price_off_peak_usd": "7.25",
+                "price_peak_usd": "7.80",
+            }
+        ],
+    }, True
+
+
 def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
     connections: dict[str, Connection] = {}
     shared = _load_source("i95_shared")
@@ -442,6 +475,7 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             source_metadata=source_metadata,
         )
 
+    bundled_greenway_surcharge_count = 0
     for network_id in ("i66", "dtr", "greenway"):
         source = _load_source(network_id)
         for raw_pair in cast(list[dict[str, Any]], source["pairs"]):
@@ -451,6 +485,10 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             from_id = _movement_point_id(network_id, entry, "entry", direction)
             to_id = _movement_point_id(network_id, exit_id, "exit", direction)
             connection_id = _source_connection_id(network_id, direction, entry, exit_id)
+            source_pair = raw_pair
+            if network_id == "greenway":
+                source_pair, bundled = _bundle_greenway_surcharge(raw_pair)
+                bundled_greenway_surcharge_count += bundled
             connections[connection_id] = Connection(
                 connection_id=connection_id,
                 from_point_id=from_id,
@@ -458,8 +496,16 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
                 connection_type="within_facility",
                 required_i95_direction=None,
                 source_route_key=f"{direction}:{entry}:{exit_id}",
-                source_metadata=_metadata(network_id, source, "source_pair", raw_pair),
+                source_metadata=_metadata(
+                    network_id, source, "source_pair", source_pair
+                ),
             )
+
+    if bundled_greenway_surcharge_count != 17:
+        raise ValueError(
+            "expected 17 bundled Greenway surcharges, found "
+            f"{bundled_greenway_surcharge_count}"
+        )
 
     curated = (
         _curated_connection(
