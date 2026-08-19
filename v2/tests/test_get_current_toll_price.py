@@ -1,6 +1,7 @@
 # pyright: basic
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -9,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from strands.tools.loader import load_tools_from_module_path
+from strands.tools.registry import ToolRegistry
 from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools import get_current_toll_price as pricing_tool
@@ -135,12 +137,21 @@ def _progress_events(events: list[dict[str, Any]]) -> list[dict[str, str]]:
             continue
         data = event["tool_stream_event"]["data"]
         if isinstance(data, dict) and "stage" in data:
-            progress.append(cast(dict[str, str], data))
+            validated = pricing_tool._ProgressEvent.model_validate(data)  # pyright: ignore[reportPrivateUsage]
+            progress.append(cast(dict[str, str], validated.model_dump(mode="json")))
     return progress
 
 
 def _result(events: list[dict[str, Any]]) -> ToolResult:
-    return cast(ToolResult, events[-1]["tool_result"])
+    result = cast(ToolResult, events[-1]["tool_result"])
+    if result["status"] == "error":
+        pricing_tool._OperationError.model_validate(result)  # pyright: ignore[reportPrivateUsage]
+    else:
+        content = cast(Any, result["content"])
+        pricing_tool._OUTPUT_ADAPTER.validate_json(  # pyright: ignore[reportPrivateUsage]
+            json.dumps(content[0]["json"])
+        )
+    return result
 
 
 def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
@@ -162,7 +173,11 @@ def test_strands_loads_exact_strict_input_schema():
     assert not hasattr(pricing_tool.route_validation, "TOOL_SPEC")
     loaded = load_tools_from_module_path("agent_tools.get_current_toll_price")
     assert loaded == [pricing_tool.get_current_toll_price]
-    schema = loaded[0].tool_spec["inputSchema"]
+    registry = ToolRegistry()
+    registry.register_tool(loaded[0])
+    registered_spec = registry.get_all_tools_config()["get_current_toll_price"]
+    assert registered_spec == pricing_tool.TOOL_SPEC
+    schema = registered_spec["inputSchema"]["json"]
     assert schema["required"] == [
         "origin_point_id",
         "destination_point_id",
@@ -181,6 +196,9 @@ def test_strands_loads_exact_strict_input_schema():
         "transponder_mode",
     }
     assert profile_schema["additionalProperties"] is False
+    assert registered_spec["outputSchema"]["json"] == (
+        pricing_tool._OUTPUT_ADAPTER.json_schema(mode="serialization")  # pyright: ignore[reportPrivateUsage]
+    )
 
 
 @pytest.mark.parametrize(
