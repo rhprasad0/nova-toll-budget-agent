@@ -1,21 +1,21 @@
-# Annualized Toll Ballparks and Train Alternative
+# Annualized Toll Ballparks
 
 ## Product promise
 
 TollChat answers one recurring-commute question:
 
 > What have lower-cost, typical, and high-cost toll days looked like for my
-> schedule when annualized, and what would one selected WMATA or VRE trip cost?
+> schedule when annualized?
 
 It converts route-specific historical toll evidence into three transparent
-annualized daily scenarios and presents one station-to-station rail itinerary.
-It describes historical prices; it does not forecast annual spending.
+annualized daily scenarios. It describes historical prices; it does not
+forecast annual spending.
 
 ## Intended user
 
 A Northern Virginia commuter evaluating a new workplace or office-attendance
 schedule who knows when they expect to commute but cannot turn variable tolls
-and fragmented transit information into comparable ballparks.
+into comparable ballparks.
 
 ## Required inputs
 
@@ -23,13 +23,9 @@ and fragmented transit information into comparable ballparks.
 - Actual office weekdays and planned annual commute days after holidays or PTO.
 - One usual outbound and return departure time in `America/New_York`.
 - The supported two-axle E-ZPass toll profile.
-- One candidate rail origin and destination station.
-- Rail service weekday and desired arrival and return-departure times.
-- Optional user-supplied station parking and first/last-mile costs.
 
 If the user supplies only a departure window, TollChat uses one disclosed
-anchor time. It does not silently invent a schedule, station, parking cost, or
-first/last-mile trip.
+anchor time. It does not silently invent a work schedule.
 
 ## Product output
 
@@ -86,54 +82,26 @@ missingness prominently, but do not suppress otherwise valid paired dates.
 Detailed distribution statistics belong in expandable evidence, not the
 decision summary. Return unavailable only when no complete paired date exists.
 
-### Train alternative
-
-For one user-selected WMATA, VRE, or documented cross-system itinerary, show:
-
-- origin and destination stations;
-- current outbound and return single-trip fares;
-- annualized fare and known station-parking cost using the same commute days;
-- scheduled one-way duration and transfer count; and
-- first/last-mile and parking-availability limitations.
-
-Use single-trip fares for the MVP. Fare-product optimization requires a
-calendar-aware model and is out of scope. Scheduled travel time is not a
-reliability prediction, and unknown costs remain visibly excluded.
-
-### Comparison
-
-Present two explicitly different baskets side by side:
-
-- **Driving:** annualized tolls only.
-- **Rail:** annualized single-trip fares plus explicitly included parking.
-
-Do not calculate a cost difference, rank the options, or compare rail schedule
-time with driving time. The comparison exposes known costs and missing inputs;
-it does not claim either basket represents total commute cost.
-
 ## Trust contract
 
 Every answer must:
 
 - identify the route, directions, departure times, weekdays, and pricing
   profile;
-- identify the rail itinerary, service day, and transfers;
-- cite each toll, fare, schedule, and parking source with its observation or
-  effective time and retrieval time;
+- cite each toll source with its observation or effective time and retrieval
+  time;
 - report the target 12-week window, actual available window, eligible dates,
   paired dates, coverage, and exclusions by reason;
 - state the pricing regime and percentile convention;
 - keep matching, pairing, percentile selection, and arithmetic in deterministic
   code rather than model reasoning;
-- distinguish observed, modeled, fixed, scheduled, user-supplied, and unknown
-  values; and
+- distinguish observed, modeled, fixed, and unknown values; and
 - make the displayed calculation reproducible from an immutable evidence
   manifest.
 
 A partial answer with explicit gaps is valid. A fabricated or mismatched route,
-fare, transfer, price, date pair, or zero-cost assumption is not. Never describe
-the ballparks as expected spending, annual percentiles, forecasts, or chances
-of overrun.
+price, date pair, or zero-cost assumption is not. Never describe the ballparks
+as expected spending, annual percentiles, forecasts, or chances of overrun.
 
 ## Evaluation contract
 
@@ -145,11 +113,9 @@ The initial eval set must verify:
 4. Planned-weekday weighting and weighted nearest-rank P25/P50/P90 selection.
 5. Pricing-regime boundaries and separation of modeled from observed prices.
 6. Decimal annualization with each fixed component counted exactly once.
-7. Correct station, service day, single-trip fare, duration, and transfers.
-8. Consistent annual commute days across toll and rail calculations.
-9. Complete source, timestamp, coverage, assumption, and exclusion disclosure.
-10. Partial-window and sparse-data labeling, using all valid paired dates and
-    returning unavailable only when none exist.
+7. Complete source, timestamp, coverage, assumption, and exclusion disclosure.
+8. Partial-window and sparse-data labeling, using all valid paired dates and
+   returning unavailable only when none exist.
 
 Invented or mismatched evidence, incorrect arithmetic, and prohibited forecast
 language are zero-tolerance failures. Release also requires frozen numerical
@@ -161,17 +127,24 @@ tool evidence.
 - Annual spending forecasts, expected budgets, exceedance probabilities, or
   guarantees.
 - Salary, tax, benefits, fuel, depreciation, or comprehensive job-offer advice.
-- Fare-product optimization or commuter-benefit tax treatment.
-- Door-to-door multimodal routing or automatic nearest-station selection.
-- Traffic, train reliability, disruption, or parking-availability prediction.
-- Bus-only itineraries, rideshare pricing, relocation, or negotiation advice.
+- Train, bus, rideshare, relocation, or negotiation advice.
 
 These belong only after the narrow product passes its accuracy, provenance,
 and degraded-data evals.
 
+## Future train alternative
+
+After the toll-ballpark MVP, TollChat may offer a train itinerary when it can
+establish that WMATA or VRE is a viable alternative for the user's trip. The
+agent, not the user, is responsible for discovering the stations and itinerary.
+
+A separate product and evaluation contract must define viability, schedules,
+fares, transfers, parking, first/last-mile limits, freshness, and degraded-data
+behavior. Train inputs and outputs are not part of the initial MVP or its
+release gate.
+
 ## MVP success
 
-Given one supported recurring toll itinerary and one selected train itinerary,
-a user can reproduce all annualized scenarios, understand that they describe
-historical daily prices rather than future annual risk, and see which costs are
-known, included, or missing before choosing how to commute.
+Given one supported recurring toll itinerary, a user can reproduce all
+annualized scenarios, understand that they describe historical daily prices
+rather than future annual risk, and see which toll evidence is known or missing.
