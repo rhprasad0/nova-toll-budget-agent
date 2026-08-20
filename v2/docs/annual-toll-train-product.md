@@ -7,8 +7,9 @@ TollChat answers one recurring-commute question:
 > What have lower-cost, typical, and high-cost toll days looked like for my
 > schedule when annualized?
 
-It converts route-specific historical toll evidence into three transparent
-annualized daily scenarios. It describes historical prices; it does not
+It converts route-specific historical toll evidence into transparent low,
+middle, and high annualized daily scenarios. Observed and modeled evidence are
+presented separately. The product describes historical prices; it does not
 forecast annual spending.
 
 ## Intended user
@@ -38,26 +39,36 @@ the result as partial history. Sample size or coverage never gates the
 ballparks; both are displayed so the result becomes better supported as
 observations accumulate.
 
-For each eligible historical date, pair the outbound and return prices from the
-same local date and add them before calculating a percentile. Both legs must
-match the exact route, direction, usual departure time, pricing profile, and
-pricing regime. Exclude an incomplete pair instead of substituting zero or a
-price from another date.
+For each eligible historical date and source cohort, pair the outbound and
+return prices from the same local date and add them before calculating a
+percentile. Both legs must match the exact route, direction, usual departure
+time, pricing profile, pricing regime, and source kind. Exclude an incomplete
+pair instead of substituting zero or a price from another date.
 
 Use the requested office weekdays in their planned-calendar proportions, not
 in proportion to whichever source rows survived ingestion. Select one price
 per leg and date with a documented source-revision and freshness rule. Do not
-pool modeled and observed dynamic prices or observations from different
-pricing regimes.
+pool observations from different pricing regimes.
 
-Show three ballparks from the weighted empirical distribution of complete
-paired-day dynamic toll totals:
+Calculate the same three ballparks independently for each available source
+cohort:
 
 | Ballpark | Statistic | Meaning |
 | --- | --- | --- |
 | Low | 25th percentile | Lower-cost historical day. |
 | Middle | Median | Typical historical day. |
 | High | 90th percentile | High-cost historical day, not a ceiling. |
+
+Show **observed prices** first. Show **provisional modeled prices** in a
+separate section with their own sample period, paired-date count, coverage,
+exclusions, percentiles, and annualized scenarios. Never pool observed and
+modeled rows or use one cohort to fill a missing leg in the other. If only one
+cohort has complete pairs, show it and mark the other unavailable.
+
+The modeled section must identify its model method and proxy and state that
+modeled trips tend to underestimate observed prices, citing the named
+evaluation evidence supporting that limitation. Modeled results are not a
+conservative or high-side estimate.
 
 Use a versioned weighted nearest-rank percentile convention. Add applicable
 published fixed round-trip charges once to each paired-day statistic, then
@@ -69,18 +80,19 @@ annualized scenario = (paired-day dynamic statistic
                       × planned annual commute days
 ```
 
-Every result carries this label:
+Every result carries its source kind in this label:
 
-> Historical paired-day scenarios, annualized for N commute days. These are not
-> forecasts or annual percentiles. Based on X complete paired days from DATE
-> through DATE within the most recent 12 weeks available.
+> SOURCE_KIND historical paired-day scenarios, annualized for N commute days.
+> These are not forecasts or annual percentiles. Based on X complete paired
+> days from DATE through DATE within the most recent 12 weeks available.
 
-Display only the sample period, complete paired-date count, eligible-date
-coverage, exclusions, fixed charges, calculation, and three ballparks in the
-primary answer. Mark missing requested weekdays and possible price-related
-missingness prominently, but do not suppress otherwise valid paired dates.
-Detailed distribution statistics belong in expandable evidence, not the
-decision summary. Return unavailable only when no complete paired date exists.
+For each cohort, display only the sample period, complete paired-date count,
+eligible-date coverage, exclusions, fixed charges, calculation, and three
+ballparks in the primary answer. Mark missing requested weekdays and possible
+price-related missingness prominently, but do not suppress otherwise valid
+paired dates. Detailed distribution statistics belong in expandable evidence,
+not the decision summary. Return unavailable only when neither cohort has a
+complete paired date.
 
 ## Trust contract
 
@@ -91,8 +103,10 @@ Every answer must:
 - cite each toll source with its observation or effective time and retrieval
   time;
 - report the target 12-week window, actual available window, eligible dates,
-  paired dates, coverage, and exclusions by reason;
-- state the pricing regime and percentile convention;
+  paired dates, coverage, and exclusions by reason for each source cohort;
+- state the pricing regime, source kind, and percentile convention;
+- identify the model method, proxy, and supporting limitation evidence for
+  every modeled result;
 - keep matching, pairing, percentile selection, and arithmetic in deterministic
   code rather than model reasoning;
 - distinguish observed, modeled, fixed, and unknown values; and
@@ -100,8 +114,9 @@ Every answer must:
   manifest.
 
 A partial answer with explicit gaps is valid. A fabricated or mismatched route,
-price, date pair, or zero-cost assumption is not. Never describe the ballparks
-as expected spending, annual percentiles, forecasts, or chances of overrun.
+price, date pair, source kind, or zero-cost assumption is not. Never describe
+the ballparks as expected spending, annual percentiles, forecasts, or chances
+of overrun.
 
 ## Evaluation contract
 
@@ -111,16 +126,21 @@ The initial eval set must verify:
 2. Same-date outbound/return pairing and missing-leg exclusion.
 3. Deterministic duplicate, revision, and freshness selection.
 4. Planned-weekday weighting and weighted nearest-rank P25/P50/P90 selection.
-5. Pricing-regime boundaries and separation of modeled from observed prices.
-6. Decimal annualization with each fixed component counted exactly once.
-7. Complete source, timestamp, coverage, assumption, and exclusion disclosure.
-8. Partial-window and sparse-data labeling, using all valid paired dates and
-   returning unavailable only when none exist.
+5. Pricing-regime boundaries and strict separation of modeled from observed
+   prices, including missing-leg handling.
+6. Modeled method, proxy, underestimation limitation, and supporting-evidence
+   disclosure.
+7. Decimal annualization with each fixed component counted exactly once per
+   cohort.
+8. Complete source, timestamp, coverage, assumption, and exclusion disclosure.
+9. Partial-window and sparse-data labeling, using all valid paired dates and
+   returning unavailable only when neither cohort has any.
 
-Invented or mismatched evidence, incorrect arithmetic, and prohibited forecast
-language are zero-tolerance failures. Release also requires frozen numerical
-fixtures, degraded-data cases, and agent-response checks for faithfulness to
-tool evidence.
+Pooling source cohorts, presenting modeled prices as observed, invented or
+mismatched evidence, incorrect arithmetic, and prohibited forecast language are
+zero-tolerance failures. Release also requires frozen numerical fixtures,
+degraded-data cases, and agent-response checks for faithfulness to tool
+evidence.
 
 ## Explicitly out of scope
 
