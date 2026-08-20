@@ -497,6 +497,71 @@ type _FacilityLeg = Annotated[
 ]
 
 
+def _validate_facility_leg_alignment(
+    point_ids: list[str],
+    connection_ids: list[str],
+    connection_types: list[ConnectionType],
+    facility_legs: list[_FacilityLeg],
+) -> None:
+    expected_steps = [f"step-{index}" for index in range(1, len(facility_legs) + 1)]
+    if [leg.route_step_id for leg in facility_legs] != expected_steps:
+        raise ValueError("facility leg steps are not sequential")
+
+    try:
+        connection_positions = [
+            connection_ids.index(leg.connection_ids[0]) for leg in facility_legs
+        ]
+    except ValueError as error:
+        raise ValueError("facility leg connection is not in the route") from error
+    if connection_positions != sorted(connection_positions):
+        raise ValueError("facility legs do not follow canonical route order")
+
+    for position in sorted(set(connection_positions)):
+        legs = [
+            leg
+            for leg, leg_position in zip(
+                facility_legs, connection_positions, strict=True
+            )
+            if leg_position == position
+        ]
+        endpoints = point_ids[position : position + 2]
+        connection_type = connection_types[position]
+        if connection_type == "airport_access":
+            raise ValueError("non-priced connection returned a facility leg")
+        if connection_type == "toll_handoff" and (
+            connection_ids[position] not in {"greenway_to_dtr", "dtr_to_greenway"}
+            or len(legs) != 1
+            or legs[0].facility != "dtr"
+            or legs[0].pricing_key.source_route_key != connection_ids[position]
+            or legs[0].pricing_key.charge_index != 1
+        ):
+            raise ValueError("unexpected priced toll handoff")
+        if any(leg.facility != legs[0].facility for leg in legs):
+            raise ValueError("facility leg group mixes facilities")
+        if len({leg.pricing_key.source_route_key for leg in legs}) != 1:
+            raise ValueError("facility leg group mixes source route keys")
+        charge_indexes = [
+            leg.pricing_key.charge_index
+            for leg in legs
+            if isinstance(leg.pricing_key, _ChargePricingKey)
+        ]
+        if charge_indexes and charge_indexes != sorted(set(charge_indexes)):
+            raise ValueError("facility leg charge indexes are not ordered")
+        if legs[0].facility == "i95_i495":
+            if (
+                len(legs) > 2
+                or legs[0].point_ids[0] != endpoints[0]
+                or legs[-1].point_ids[1] != endpoints[1]
+                or any(
+                    first.point_ids[1] != second.point_ids[0]
+                    for first, second in pairwise(legs)
+                )
+            ):
+                raise ValueError("I-95 facility legs are not aligned to the route")
+        elif any(leg.point_ids != endpoints for leg in legs):
+            raise ValueError("facility leg points are not aligned to the route")
+
+
 class _PricingRouteResponse(_RouteResponse):
     facility_legs: list[_FacilityLeg]
 
@@ -509,67 +574,12 @@ class _PricingRouteResponse(_RouteResponse):
                 )
             return self
 
-        expected_steps = [
-            f"step-{index}" for index in range(1, len(self.facility_legs) + 1)
-        ]
-        if [leg.route_step_id for leg in self.facility_legs] != expected_steps:
-            raise ValueError("facility leg steps are not sequential")
-
-        try:
-            connection_positions = [
-                self.connection_ids.index(leg.connection_ids[0])
-                for leg in self.facility_legs
-            ]
-        except ValueError as error:
-            raise ValueError("facility leg connection is not in the route") from error
-        if connection_positions != sorted(connection_positions):
-            raise ValueError("facility legs do not follow canonical route order")
-
-        for position in sorted(set(connection_positions)):
-            legs = [
-                leg
-                for leg, leg_position in zip(
-                    self.facility_legs, connection_positions, strict=True
-                )
-                if leg_position == position
-            ]
-            endpoints = self.point_ids[position : position + 2]
-            connection_type = self.connection_types[position]
-            if connection_type == "airport_access":
-                raise ValueError("non-priced connection returned a facility leg")
-            if connection_type == "toll_handoff" and (
-                self.connection_ids[position]
-                not in {"greenway_to_dtr", "dtr_to_greenway"}
-                or len(legs) != 1
-                or legs[0].facility != "dtr"
-                or legs[0].pricing_key.source_route_key != self.connection_ids[position]
-                or legs[0].pricing_key.charge_index != 1
-            ):
-                raise ValueError("unexpected priced toll handoff")
-            if any(leg.facility != legs[0].facility for leg in legs):
-                raise ValueError("facility leg group mixes facilities")
-            if len({leg.pricing_key.source_route_key for leg in legs}) != 1:
-                raise ValueError("facility leg group mixes source route keys")
-            charge_indexes = [
-                leg.pricing_key.charge_index
-                for leg in legs
-                if isinstance(leg.pricing_key, _ChargePricingKey)
-            ]
-            if charge_indexes and charge_indexes != sorted(set(charge_indexes)):
-                raise ValueError("facility leg charge indexes are not ordered")
-            if legs[0].facility == "i95_i495":
-                if (
-                    len(legs) > 2
-                    or legs[0].point_ids[0] != endpoints[0]
-                    or legs[-1].point_ids[1] != endpoints[1]
-                    or any(
-                        first.point_ids[1] != second.point_ids[0]
-                        for first, second in pairwise(legs)
-                    )
-                ):
-                    raise ValueError("I-95 facility legs are not aligned to the route")
-            elif any(leg.point_ids != endpoints for leg in legs):
-                raise ValueError("facility leg points are not aligned to the route")
+        _validate_facility_leg_alignment(
+            self.point_ids,
+            self.connection_ids,
+            self.connection_types,
+            self.facility_legs,
+        )
         return self
 
 

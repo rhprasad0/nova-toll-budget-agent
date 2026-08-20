@@ -182,11 +182,13 @@ class _BallparkRouteDb(_Model):
             )
         ):
             raise ValueError("unavailable ballpark routes must be pathless")
-        expected_steps = [
-            f"step-{index}" for index in range(1, len(self.facility_legs) + 1)
-        ]
-        if [leg.route_step_id for leg in self.facility_legs] != expected_steps:
-            raise ValueError("ballpark route steps are not sequential")
+        if self.status == "valid":
+            route_validation._validate_facility_leg_alignment(  # pyright: ignore[reportPrivateUsage]
+                self.point_ids,
+                self.connection_ids,
+                self.connection_types,
+                self.facility_legs,
+            )
         return self
 
 
@@ -944,79 +946,94 @@ async def get_annual_toll_ballpark(
         return
 
     connection: _Connection | None = None
-    yield _progress("route_validation", "running")
     try:
-        connection = cast(
-            _Connection,
-            await asyncio.to_thread(route_validation._connect),  # pyright: ignore[reportPrivateUsage]
-        )
-        evaluated_at, routes, eligible_dates = await asyncio.to_thread(
-            _begin_and_validate_routes, connection, request
-        )
-    except Exception as error:
-        yield _progress("route_validation", "failed")
-        if connection is not None:
-            try:
-                await asyncio.to_thread(_close, connection, rollback=True)
-            except Exception as close_error:
-                error.add_note(f"Cleanup also failed: {type(close_error).__name__}")
-        yield _error(tool_use_id, "route_validation", error)
-        return
-    yield _progress("route_validation", "completed")
-
-    if routes.outbound.status != "valid" or routes.return_.status != "valid":
+        yield _progress("route_validation", "running")
         try:
-            await asyncio.to_thread(_close, connection, rollback=True)
-            yield _tool_result(
-                tool_use_id,
-                _RouteUnavailableResponse(
-                    error="ballpark_unavailable",
-                    reason="route_unavailable",
-                    routes=routes,
-                ),
+            connection = cast(
+                _Connection,
+                await asyncio.to_thread(route_validation._connect),  # pyright: ignore[reportPrivateUsage]
+            )
+            evaluated_at, routes, eligible_dates = await asyncio.to_thread(
+                _begin_and_validate_routes, connection, request
             )
         except Exception as error:
-            yield _error(tool_use_id, "response_serialization", error)
-        return
+            yield _progress("route_validation", "failed")
+            yield _error(tool_use_id, "route_validation", error)
+            return
+        yield _progress("route_validation", "completed")
 
-    yield _progress("historical_pricing", "running")
-    try:
-        outbound, return_ = await asyncio.to_thread(
-            _fetch_history,
-            connection,
-            routes,
-            request,
-            eligible_dates,
-            evaluated_at,
-        )
-        await asyncio.to_thread(_close, connection, rollback=False)
-    except Exception as error:
-        yield _progress("historical_pricing", "failed")
+        if routes.outbound.status != "valid" or routes.return_.status != "valid":
+            try:
+                result = _tool_result(
+                    tool_use_id,
+                    _RouteUnavailableResponse(
+                        error="ballpark_unavailable",
+                        reason="route_unavailable",
+                        routes=routes,
+                    ),
+                )
+                await asyncio.to_thread(_close, connection, rollback=True)
+                connection = None
+                yield result
+            except Exception as error:
+                yield _error(tool_use_id, "response_serialization", error)
+            return
+
+        yield _progress("historical_pricing", "running")
         try:
-            await asyncio.to_thread(_close, connection, rollback=True)
-        except Exception as close_error:
-            error.add_note(f"Cleanup also failed: {type(close_error).__name__}")
-        yield _error(tool_use_id, "historical_pricing", error)
-        return
-    yield _progress("historical_pricing", "completed")
+            outbound, return_ = await asyncio.to_thread(
+                _fetch_history,
+                connection,
+                routes,
+                request,
+                eligible_dates,
+                evaluated_at,
+            )
+            completed_connection = connection
+            connection = None
+            await asyncio.to_thread(_close, completed_connection, rollback=False)
+        except Exception as error:
+            yield _progress("historical_pricing", "failed")
+            yield _error(tool_use_id, "historical_pricing", error)
+            return
+        yield _progress("historical_pricing", "completed")
 
-    yield _progress("ballpark_calculation", "running")
-    try:
-        response = _calculate(
-            request,
-            evaluated_at,
-            routes,
-            eligible_dates,
-            outbound,
-            return_,
-        )
-        result = _tool_result(tool_use_id, response)
-    except Exception as error:
-        yield _progress("ballpark_calculation", "failed")
-        yield _error(tool_use_id, "ballpark_calculation", error)
-        return
-    yield _progress("ballpark_calculation", "completed")
-    yield result
+        yield _progress("ballpark_calculation", "running")
+        try:
+            response = _calculate(
+                request,
+                evaluated_at,
+                routes,
+                eligible_dates,
+                outbound,
+                return_,
+            )
+            result = _tool_result(tool_use_id, response)
+        except Exception as error:
+            yield _progress("ballpark_calculation", "failed")
+            yield _error(tool_use_id, "ballpark_calculation", error)
+            return
+        yield _progress("ballpark_calculation", "completed")
+        yield result
+    finally:
+        if connection is not None:
+            cleanup_connection = connection
+            connection = None
+            try:
+                await asyncio.to_thread(_close, cleanup_connection, rollback=True)
+            except Exception as error:
+                safe_error = RuntimeError(
+                    f"{type(error).__name__} during connection_cleanup"
+                )
+                logger.error(
+                    "get_annual_toll_ballpark cleanup failed",
+                    extra={
+                        "toolUseId": tool_use_id,
+                        "failureStage": "connection_cleanup",
+                        "exceptionType": type(error).__name__,
+                    },
+                    exc_info=(type(safe_error), safe_error, error.__traceback__),
+                )
 
 
 get_annual_toll_ballpark.tool_spec = TOOL_SPEC

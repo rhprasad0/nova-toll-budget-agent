@@ -248,6 +248,13 @@ def test_sample_models_reject_bad_time_and_provenance():
         )
 
 
+def test_route_rejects_pricing_leg_from_an_unrelated_connection():
+    route = _greenway_route().model_dump(mode="python")
+    route["facility_legs"][0]["connection_ids"] = ["unrelated-connection"]
+    with pytest.raises(ValidationError, match="connection is not in the route"):
+        ballpark._BallparkRoute.model_validate(route)
+
+
 def test_zero_toll_calendar_is_complete_and_dst_independent():
     request = ballpark._BallparkRequest.model_validate(
         {**_input(), "weekdays": ["sunday"], "planned_annual_commute_days": 53}
@@ -439,6 +446,46 @@ def test_streams_all_stages_and_returns_zero_toll(monkeypatch):
     assert payload["scenarios"]["middle"]["annualized_usd"] == "0.00"
 
 
+def test_closing_stream_after_validation_rolls_back_and_closes(monkeypatch):
+    connection = object()
+    closed: list[tuple[object, bool]] = []
+    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: connection)
+    monkeypatch.setattr(
+        ballpark,
+        "_begin_and_validate_routes",
+        lambda *_args: (
+            datetime(2026, 8, 20, tzinfo=_EASTERN),
+            _routes(),
+            [date(2026, 8, 19)],
+        ),
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_close",
+        lambda value, *, rollback: closed.append((value, rollback)),
+    )
+
+    async def close_after_validation() -> None:
+        stream = ballpark.get_annual_toll_ballpark.stream(
+            _tool_use(_input()), {"agent": object()}
+        )
+        async for event in stream:
+            if event.get("type") != "tool_stream":
+                continue
+            progress = event["tool_stream_event"]["data"]
+            if (
+                isinstance(progress, dict)
+                and progress.get("stage") == ("route_validation")
+                and progress.get("status") == "completed"
+            ):
+                await stream.aclose()
+                return
+        pytest.fail("route validation never completed")
+
+    asyncio.run(close_after_validation())
+    assert closed == [(connection, True)]
+
+
 def test_nonvalid_route_stops_before_historical_pricing(monkeypatch):
     routes = ballpark._Routes.model_validate(
         {
@@ -465,6 +512,28 @@ def test_nonvalid_route_stops_before_historical_pricing(monkeypatch):
     ]
     content = cast(Any, result["content"])
     assert content[0]["json"]["reason"] == "route_unavailable"
+
+
+def test_nonvalid_route_cleanup_failure_returns_operation_error(monkeypatch):
+    routes = ballpark._Routes.model_validate(
+        {
+            "outbound": _route("outbound", status="no_supported_route"),
+            "return": _route("return"),
+        }
+    )
+    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: object())
+    monkeypatch.setattr(
+        ballpark,
+        "_begin_and_validate_routes",
+        lambda *_args: (datetime(2026, 8, 20, tzinfo=_EASTERN), routes, []),
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_close",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("close failed")),
+    )
+    _, result = asyncio.run(_invoke(_input()))
+    assert result["status"] == "error"
 
 
 def test_history_failure_is_safe(monkeypatch, caplog):
