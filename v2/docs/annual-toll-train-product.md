@@ -2,161 +2,180 @@
 
 ## Product promise
 
-TollChat answers one recurring-commute question:
+TollChat answers one screening question for a recurring commute:
 
-> What have lower-cost, typical, and high-cost toll days looked like for my
-> schedule when annualized?
+> Could the toll cost be large enough that I should investigate before
+> accepting this offer?
 
-It converts route-specific historical toll evidence into transparent low,
-middle, and high annualized daily scenarios. Observed and modeled evidence are
-presented separately. The product describes historical prices; it does not
-forecast annual spending.
+It converts recent route-specific toll prices into low, middle, and high
+annualized scenarios. Observed and provisional modeled component prices may be
+mixed into one complete route total. The result is a prompt for further
+inquiry, not a forecast, quote, or budget.
 
 ## Intended user
 
 A Northern Virginia commuter evaluating a new workplace or office-attendance
 schedule who knows when they expect to commute but cannot turn variable tolls
-into comparable ballparks.
+into a useful annual ballpark.
 
 ## Required inputs
 
-- Driving origin and destination, resolved to one canonical toll itinerary.
+- Driving origin and destination, resolved to canonical outbound and return
+  toll itineraries.
 - Actual office weekdays and planned annual commute days after holidays or PTO.
 - One usual outbound and return departure time in `America/New_York`.
 - The supported two-axle E-ZPass toll profile.
 
+The MVP supports only commutes whose outbound and return trips occur on the
+same local calendar date; the return departure time must be later than the
+outbound departure time. Reject overnight schedules instead of pairing them to
+the wrong date.
+
 If the user supplies only a departure window, TollChat uses one disclosed
-anchor time. It does not silently invent a work schedule. Holidays, PTO, and
-the resulting annual commute-day count remain the user's inputs; TollChat does
-not allocate those days among weekdays.
+anchor time. It does not invent a work schedule. Holidays, PTO, and the annual
+commute-day count remain user inputs.
 
 ## Product output
 
-### Annualized toll ballparks
+### Recent daily sample
 
-Use the most recent 12 weeks of history within the current pricing regime: end
-on the latest fully ingested local date and include that date plus the prior 83
-local dates. If less history exists, use every available recent date and label
-the result as partial history. Sample size or coverage never gates the
-ballparks; both are displayed so the result becomes better supported as
-observations accumulate.
+Use the most recent 12 weeks: end on the latest completed local date and include
+that date plus the prior 83 local dates. If less history is available, use every
+available recent date and label the result as partial history. Sample size never
+gates the ballpark; always disclose it.
 
-For each eligible historical date, build the complete canonical route price for
-the outbound and return trips, then add those trips before calculating a
-percentile. Both trips must match the exact route, direction, usual departure
-time, pricing profile, and pricing regime. Exclude an incomplete pair instead
-of substituting zero or a price from another date.
+Eligible dates are requested-weekday dates inside that 84-day target window.
+Define coverage as complete paired days divided by eligible dates, both overall
+and for each requested weekday.
 
-Use one complete paired-day total per requested weekday and date, without
-calendar weighting or imputation. Select one price per component, leg, and date
-with a documented source-revision and freshness rule. If a requested weekday
-has no complete pair, use the remaining valid paired dates and disclose the
-missing weekday. Do not pool observations from different pricing regimes.
+For each requested weekday and date:
 
-Classify each complete paired-day route total by its dynamic components:
+1. Match the exact outbound and return routes, directions, departure times, and
+   pricing profile.
+2. Select at most one price for every required component from the matching
+   facility bin. Prefer an observed price when both observed and modeled prices
+   exist.
+3. Apply currently published fixed charges to every sampled day. Disclose that
+   they are current rates, not historical rates effective on each sample date.
+4. Sum a trip only when every required component has a price.
+5. Add outbound and return trips only when both are complete on the same local
+   date.
 
-- **observed:** every dynamic component is observed;
-- **modeled:** every dynamic component is modeled; or
-- **mixed:** the route contains both observed and modeled dynamic components.
+Observed and provisional modeled component prices belong to the same daily
+sample. Do not create separate source cohorts. Set `uses_modeled = true` when
+any selected component in any complete paired day was modeled.
 
-Published fixed-price components do not change that classification. A mixed
-route total must include every required observed and modeled component while
-preserving each component's provenance. Calculate the same three ballparks
-independently for each available route-total cohort:
+Exclude incomplete dates instead of substituting zero, borrowing a price from
+another date, or imputing one. If a requested weekday has no complete pair, use
+the remaining complete dates and disclose the missing weekday. Return
+unavailable only when there are no complete paired days.
+
+Report complete-pair counts by requested weekday. If the counts are unequal,
+describe the result as applying to the **sampled weekdays** and name every
+missing or underrepresented weekday; do not add statistical weighting.
+
+### Annualized scenarios
+
+Calculate one set of nearest-rank statistics over complete daily round-trip
+totals:
 
 | Ballpark | Statistic | Meaning |
 | --- | --- | --- |
-| Low | 25th percentile | Lower-cost historical day. |
-| Middle | Median | Typical historical day. |
-| High | 90th percentile | High-cost historical day, not a ceiling. |
+| Low | 25th percentile | Lower-cost recent toll day. |
+| Middle | 50th percentile | Middle recent toll day. |
+| High | 90th percentile | High-cost recent toll day, not a ceiling. |
 
-Never pool complete route totals from different cohorts into one percentile
-sample. Show the cohort or cohorts supported by the canonical route and data;
-do not clutter the primary answer with inapplicable categories. Modeled and
-mixed results must identify each model method and proxy and carry this concise
-warning:
+For sorted values `x[1]` through `x[n]`, nearest-rank percentile `p` is
+`x[ceil(p × n)]`. Use that rule for P25, P50, and P90, including sparse
+samples.
 
-> This ballpark uses provisional modeled prices that may be low. Treat it as a
-> starting point for further inquiry, not a final budget.
-
-The committed evaluation supports only a provisional ballpark description and
-does not establish signed bias. Do not claim that modeled prices tend to
-underestimate until committed signed-bias evidence supports that statement.
-
-Use a versioned nearest-rank percentile convention. Add applicable
-published fixed round-trip charges once to each paired-day statistic, then
-annualize deterministically:
+Annualize each statistic with decimal arithmetic:
 
 ```text
-annualized scenario = (paired-day dynamic statistic
-                       + fixed round-trip charges)
+annualized scenario = complete daily round-trip statistic
                       × planned annual commute days
 ```
 
-Every result carries its source kind in this label:
+The multiplication creates annualized recent daily scenarios. It does not
+estimate the distribution of future annual spending.
 
-> SOURCE_KIND historical paired-day scenarios, annualized for N commute days.
-> These are not forecasts or annual percentiles. Based on X complete paired
-> days from DATE through DATE within the most recent 12 weeks available.
+### Primary answer
 
-For each cohort, display only the sample period, complete paired-date count,
-eligible-date coverage, exclusions, fixed charges, calculation, and three
-ballparks in the primary answer. Mark missing requested weekdays and possible
-price-related missingness prominently, but do not suppress otherwise valid
-paired dates. Detailed distribution statistics belong in expandable evidence,
-not the decision summary. Return unavailable only when no cohort has a complete
-paired date.
+Show only:
+
+- route, directions, departure times, weekdays, and pricing profile;
+- 12-week target window and actual available date range;
+- eligible dates, complete paired days, coverage, and missing weekdays;
+- complete-pair counts for each requested weekday;
+- recent daily P25, P50, and P90 values;
+- planned annual commute days and the displayed calculation;
+- low, middle, and high annualized scenarios;
+- whether provisional modeled prices were used;
+- when applicable, that current published fixed rates were applied to every
+  sampled day.
+
+When any modeled price was used, show:
+
+> Includes provisional modeled toll prices that may differ from operator
+> prices, sometimes materially. This is a prompt to investigate the commute
+> cost, not a budget or forecast.
+
+The intended takeaway is:
+
+> Recent prices suggest this commute could annualize to roughly **$X–$Y** for
+> your schedule. That may be material to the offer; investigate before deciding.
+
+`$X–$Y` means the annualized P25 through annualized P90. If weekday coverage is
+unequal, replace “for your schedule” with “for the sampled weekdays.”
 
 ## Trust contract
 
 Every answer must:
 
-- identify the route, directions, departure times, weekdays, and pricing
-  profile;
-- cite each toll source with its observation or effective time and retrieval
-  time;
-- report the target 12-week window, actual available window, eligible dates,
-  paired dates, coverage, and exclusions by reason for each source cohort;
-- state the pricing regime, source kind, and percentile convention;
-- identify the model method, proxy, and supporting limitation evidence for
-  every modeled result;
-- keep matching, pairing, percentile selection, and arithmetic in deterministic
-  code rather than model reasoning;
-- distinguish observed, modeled, and mixed route totals while preserving every
-  component's observed, modeled, fixed, or unknown source; and
-- make the displayed calculation reproducible from an immutable evidence
-  manifest.
+- use the exact validated routes, schedule, and supported pricing profile;
+- reject overnight schedules;
+- require every route component and same-date outbound/return pair;
+- preserve selected sample dates, prices, observation times, pricing methods,
+  and modeled proxy IDs in deterministic tool evidence;
+- report the target window, available date range, eligible-date count, complete
+  counts and coverage overall and by requested weekday, and every missing or
+  underrepresented weekday;
+- keep matching, summing, percentile selection, and annualization in
+  deterministic code rather than model reasoning;
+- disclose modeled-price use whenever any selected component was modeled;
+- disclose when current fixed rates were applied across historical sample
+  dates; and
+- describe the result as recent price context, never expected spending, an
+  annual percentile, a forecast, a quote, or a chance of overrun.
 
 A partial answer with explicit gaps is valid. A fabricated or mismatched route,
-price, date pair, source kind, or zero-cost assumption is not. Never describe
-the ballparks as expected spending, annual percentiles, forecasts, or chances
-of overrun.
+price, date pair, or zero-cost assumption is not.
 
 ## Evaluation contract
 
 The initial eval set must verify:
 
-1. Exact route, direction, profile, weekday, and departure-time matching.
-2. Same-date outbound/return pairing and missing-leg exclusion.
-3. Deterministic duplicate, revision, and freshness selection.
-4. Requested-weekday filtering and nearest-rank P25/P50/P90 selection without
-   calendar weighting or imputation.
-5. Pricing-regime boundaries; observed, modeled, and mixed route-total
-   classification; and complete-component handling.
-6. Modeled method, proxy, provisional limitation, and supported-claim
-   disclosure.
-7. Decimal annualization with each fixed component counted exactly once per
-   cohort.
-8. Complete source, timestamp, coverage, assumption, and exclusion disclosure.
-9. Partial-window and sparse-data labeling, using all valid paired dates and
-   returning unavailable only when no cohort has any.
+1. Exact route, direction, profile, weekday, and departure-time matching, plus
+   overnight-schedule rejection.
+2. Facility-bin selection and observed-price preference when both sources
+   exist.
+3. Complete component handling, same-date outbound/return pairing, and
+   incomplete-date exclusion.
+4. Observed and modeled price mixing with correct top-level `uses_modeled`.
+5. Current published fixed charges included exactly once in each applicable
+   daily trip, with the historical-rate limitation disclosed.
+6. Requested-weekday filtering and nearest-rank P25/P50/P90 selection using
+   `ceil(p × n)`, without weighting or imputation.
+7. Decimal annualization using the user-supplied commute-day count.
+8. Partial-window, sparse-data, per-weekday counts, defined coverage, and
+   sampled-weekday wording when coverage is unequal.
+9. Unavailable returned only when no complete paired day exists.
+10. Agent language faithful to the directional estimate and modeled warning.
 
-Pooling complete route totals from different cohorts, dropping a required
-component from a mixed total, presenting modeled prices as observed, invented
-or mismatched evidence, incorrect arithmetic, and prohibited forecast language
-are zero-tolerance failures. Release also requires frozen numerical fixtures,
-degraded-data cases, and agent-response checks for faithfulness to tool
-evidence.
+Mismatched evidence, a missing component treated as free, incorrect arithmetic,
+hidden modeled-price use, and forecast or budget claims are zero-tolerance
+failures. Release requires frozen numerical fixtures and degraded-data cases,
+not a separate evidence-storage system.
 
 ## Explicitly out of scope
 
@@ -165,22 +184,19 @@ evidence.
 - Salary, tax, benefits, fuel, depreciation, or comprehensive job-offer advice.
 - Train, bus, rideshare, relocation, or negotiation advice.
 
-These belong only after the narrow product passes its accuracy, provenance,
-and degraded-data evals.
-
 ## Future train alternative
 
 After the toll-ballpark MVP, TollChat may offer a train itinerary when it can
 establish that WMATA or VRE is a viable alternative for the user's trip. The
 agent, not the user, is responsible for discovering the stations and itinerary.
 
-A separate product and evaluation contract must define viability, schedules,
-fares, transfers, parking, first/last-mile limits, freshness, and degraded-data
-behavior. Train inputs and outputs are not part of the initial MVP or its
-release gate.
+A separate product contract must define viability, schedules, fares,
+transfers, parking, first/last-mile limits, freshness, and degraded-data
+behavior. Train inputs and outputs are not part of this MVP.
 
 ## MVP success
 
-Given one supported recurring toll itinerary, a user can reproduce all
-annualized scenarios, understand that they describe historical daily prices
-rather than future annual risk, and see which toll evidence is known or missing.
+Given one supported recurring toll itinerary, a user can see whether recent
+tolls may materially change how they view an offer, understand the limited
+sample and any modeled-price use, and know that the result calls for
+investigation rather than reliance as a budget.
