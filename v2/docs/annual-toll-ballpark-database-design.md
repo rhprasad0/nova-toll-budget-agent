@@ -12,7 +12,8 @@ The result mixes observed and provisional modeled prices into one clearly
 labeled estimate. It is recent price context, not a forecast, quote, or budget.
 
 This design implements the
-[annualized toll ballpark product](annual-toll-train-product.md).
+[annualized toll ballpark product](annual-toll-train-product.md) and its
+[agent tool contract](annual-toll-ballpark-tool-contract.md).
 
 ## Smallest design
 
@@ -20,13 +21,14 @@ Mirror the current pricing tool:
 
 | Object | Decision |
 | --- | --- |
-| `oracle.validate_pricing_route` | Reuse for outbound and return routes. |
+| `oracle.validate_ballpark_route` | Add schedule-independent structural validation for outbound and return routes. |
+| `oracle.validate_pricing_route` | Leave unchanged for the current pricing tool. |
 | `oracle.route_pricing_component` | Reuse for ordered dynamic and fixed components. |
-| Existing fixed-rate schedule logic | Reuse current published DTR and Greenway rates. |
+| Existing fixed-rate catalogs | Reuse current published DTR and Greenway rates; classify Greenway periods at each sampled trip time. |
 | `pricing.modeled_trip_pricing_i95` | Reuse for provisional I-95 proxy prices. |
 | `pricing.i66_ballpark_samples` | Add one 12-week I-66 history view. |
 | `pricing.i95_i495_ballpark_samples` | Add one 12-week I-95/I-495 view containing observed and modeled rows. |
-| Two narrow `oracle` functions | Add parameterized, least-privilege access to the views. |
+| Two ballpark sample functions | Add parameterized, least-privilege access to the views. |
 | Current pricing tool pattern | Reuse to assemble route totals in deterministic Python. |
 
 Do not add pricing-regime tables, ingestion watermarks, revision timestamps,
@@ -50,13 +52,27 @@ The new views therefore expose recent binned rows. Thin functions accept the
 user's local departure time and bounded eligible-date list, select matching
 samples, and keep direct table access away from the agent role.
 
+## Why not reuse current route validation unchanged?
+
+`oracle.validate_pricing_route` correctly gates current pricing on live I-95
+reversible-lane availability. That cannot validate a historical round trip:
+when one direction is open now, the opposite direction normally is not.
+
+Add `oracle.validate_ballpark_route(text, text)` to validate structural
+connectivity and return ordered pricing legs without consulting live I-95
+state. It returns only `valid`, `invalid_origin`, `invalid_destination`,
+`no_supported_route`, or `traversal_limit_exceeded`. Historical sample
+selection remains responsible for canonical and observed direction checks at
+each requested date and time. The current pricing function and contract do not
+change.
+
 ## Data flow
 
 ```mermaid
 flowchart LR
     RAW[Existing pricing tables] --> VIEWS[Two 12-week sample views]
     MODELED[Existing I-95 modeled view] --> VIEWS
-    ROUTE[Validated outbound and return routes] --> TOOL[Deterministic tool code]
+    ROUTE[Schedule-independent route oracle] --> TOOL[Deterministic tool code]
     CALENDAR[84-day requested-weekday calendar] --> TOOL
     VIEWS --> FUNCS[Thin parameterized functions]
     FUNCS --> TOOL
@@ -67,8 +83,11 @@ flowchart LR
 
 ## View contracts
 
-Both views cover the most recent 84 completed local dates. They are ordinary
-views over existing tables, not stored or refreshed copies.
+Both views cover the most recent 84 completed local dates relative to
+`transaction_timestamp()`. They are ordinary views over existing tables, not
+stored or refreshed copies. The tool queries them inside one read-only
+repeatable-read transaction so every facility sees the same window and source
+snapshot.
 
 ### `pricing.i66_ballpark_samples`
 
@@ -128,48 +147,74 @@ become zero-dollar samples.
 
 ## Thin access functions
 
-The functions follow the existing `SECURITY DEFINER` pricing boundary:
+The three functions follow the existing `SECURITY DEFINER` pricing boundary:
+
+```sql
+oracle.validate_ballpark_route(
+    origin_point_id text,
+    destination_point_id text
+)
+```
+
+The route function returns structural route fields and ordered
+`facility_legs` using `oracle.route_pricing_component`. It does not read live
+I-95 evidence or return current-availability statuses. Non-valid routes return
+an empty component list. Structural general-purpose gaps use
+`fallback_required = null` because no live direction was evaluated.
+
+The two sample functions are:
 
 ```sql
 oracle.get_i66_ballpark_samples(
     requested_start_zone_id integer,
     requested_end_zone_id integer,
     requested_local_time time,
-    requested_dates date[]
+    requested_dates date[],
+    requested_evaluated_at timestamptz
 )
 
 oracle.get_i95_i495_ballpark_samples(
     requested_od_pair_id integer,
     requested_local_time time,
-    requested_dates date[]
+    requested_dates date[],
+    requested_evaluated_at timestamptz
 )
 ```
 
 Each function:
 
-1. validates the requested time and at most 84 completed local dates;
+1. validates that `requested_evaluated_at = transaction_timestamp()`, plus the
+   requested time and at most 84 completed local dates;
 2. matches each requested date and local time to the facility bin;
-3. rejects future or out-of-window dates;
-4. selects at most one row per component and date, preferring observed over
-   modeled if both exist; and
-5. returns a bounded set ordered by date.
+3. rejects future or out-of-window dates and rows whose `interval_end_at` or
+   `observed_at` is later than the shared evaluation anchor;
+4. returns no sample when the requested wall time is nonexistent or ambiguous
+   on a daylight-saving transition date;
+5. ranks candidates by observed before modeled, latest `interval_end_at`, then
+   latest `observed_at`; I-95/I-495 uses ascending source start and end zone
+   IDs as its final stable tie-breakers, matching the current comparison view;
+   and
+6. returns the first candidate per component and date in a bounded set ordered
+   by date.
 
-The functions return the view columns above. They do not calculate route
+The sample functions return the view columns above. They do not calculate route
 totals, percentiles, or annualized values.
 
 ## Tool calculation
 
 The deterministic tool code should:
 
-1. Validate the outbound and return routes and reject an overnight schedule.
+1. Validate both routes with `oracle.validate_ballpark_route` and reject an
+   overnight schedule.
 2. Generate every requested-weekday date in the 84-day target window before
    querying prices. This calendar also supports routes containing only fixed
    charges.
-3. Call the applicable history function for every dynamic route component,
-   passing the same eligible-date list.
-4. Apply current published DTR and Greenway charges to every sampled day with
-   the existing schedule logic, and disclose that they are not historical
-   rates.
+3. Obtain one database transaction timestamp and call every dynamic history
+   function with that anchor and the same eligible-date list.
+4. Select the current published DTR and Greenway rate catalogs at the shared
+   anchor. Classify Greenway peak or off-peak using each sample date and that
+   direction's departure time, then disclose that the applied rates are not
+   historical rates.
 5. Sum a trip only when every required component has a price.
 6. Pair outbound and return trips only when both are complete on the same local
    date.
@@ -222,10 +267,11 @@ counts instead of adding statistical weights.
 
 ## Product-contract alignment
 
-The product contract and this design both require a 12-week mixed sample,
-same-day commute inputs, complete same-date round trips, modeled-price and
-current-fixed-rate disclosure, defined coverage, returned calculation evidence,
-decimal arithmetic, and no forecast or budget claims.
+The product, tool, and database contracts require a 12-week mixed sample,
+schedule-independent structural route validation, same-day commute inputs,
+complete same-date round trips, modeled-price and current-fixed-rate disclosure,
+defined coverage, returned calculation evidence, decimal arithmetic, and no
+forecast or budget claims.
 
 ## Explicitly skipped
 
