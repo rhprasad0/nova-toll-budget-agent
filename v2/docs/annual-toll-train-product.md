@@ -35,6 +35,13 @@ first/last-mile trip.
 
 ### Annualized toll ballparks
 
+Use the most recent 12 weeks of history within the current pricing regime: end
+on the latest fully ingested local date and include that date plus the prior 83
+local dates. If less history exists, use every available recent date and label
+the result as partial history. Sample size or coverage never gates the
+ballparks; both are displayed so the result becomes better supported as
+observations accumulate.
+
 For each eligible historical date, pair the outbound and return prices from the
 same local date and add them before calculating a percentile. Both legs must
 match the exact route, direction, usual departure time, pricing profile, and
@@ -69,19 +76,15 @@ annualized scenario = (paired-day dynamic statistic
 Every result carries this label:
 
 > Historical paired-day scenarios, annualized for N commute days. These are not
-> forecasts or annual percentiles.
+> forecasts or annual percentiles. Based on X complete paired days from DATE
+> through DATE within the most recent 12 weeks available.
 
 Display only the sample period, complete paired-date count, eligible-date
 coverage, exclusions, fixed charges, calculation, and three ballparks in the
-primary answer. Detailed distribution statistics belong in expandable
-evidence, not the decision summary.
-
-The initial publication rule requires at least 100 complete paired dates,
-representation of every requested weekday, and at least 90% eligible-date
-coverage within one pricing regime. These are release policies to validate
-against real coverage and stability, not universal statistical thresholds.
-Suppress the ballparks when missingness may be related to price or any rule is
-not met.
+primary answer. Mark missing requested weekdays and possible price-related
+missingness prominently, but do not suppress otherwise valid paired dates.
+Detailed distribution statistics belong in expandable evidence, not the
+decision summary. Return unavailable only when no complete paired date exists.
 
 ### Train alternative
 
@@ -117,7 +120,8 @@ Every answer must:
 - identify the rail itinerary, service day, and transfers;
 - cite each toll, fare, schedule, and parking source with its observation or
   effective time and retrieval time;
-- report eligible dates, paired dates, coverage, and exclusions by reason;
+- report the target 12-week window, actual available window, eligible dates,
+  paired dates, coverage, and exclusions by reason;
 - state the pricing regime and percentile convention;
 - keep matching, pairing, percentile selection, and arithmetic in deterministic
   code rather than model reasoning;
@@ -144,7 +148,8 @@ The initial eval set must verify:
 7. Correct station, service day, single-trip fare, duration, and transfers.
 8. Consistent annual commute days across toll and rail calculations.
 9. Complete source, timestamp, coverage, assumption, and exclusion disclosure.
-10. Safe abstention for stale, sparse, closed, missing, or conflicting data.
+10. Partial-window and sparse-data labeling, using all valid paired dates and
+    returning unavailable only when none exist.
 
 Invented or mismatched evidence, incorrect arithmetic, and prohibited forecast
 language are zero-tolerance failures. Release also requires frozen numerical
