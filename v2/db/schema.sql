@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL pricing bootstrap.
--- pricing schema version: 1.1.1
+-- pricing schema version: 1.2.0
 
 \set ON_ERROR_STOP on
 
@@ -17,7 +17,7 @@ CREATE TABLE pricing.schema_version (
     installed_at timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO pricing.schema_version (version) VALUES ('1.1.1');
+INSERT INTO pricing.schema_version (version) VALUES ('1.2.0');
 
 CREATE TABLE pricing.trip_pricing_i95 (
     interval_end_at    timestamptz NOT NULL,

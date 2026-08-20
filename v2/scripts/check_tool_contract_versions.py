@@ -1,4 +1,4 @@
-"""Reject rewritten current-pricing tool-contract releases."""
+"""Reject rewritten v2 tool-contract releases."""
 
 import json
 import re
@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-_CONTRACT = "get_current_toll_price"
 _MANIFEST_PATH = (
     Path(__file__).resolve().parent.parent / "agent_tools" / "contract-manifest.json"
 )
@@ -24,12 +23,10 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
-def _contract(manifest: dict[str, Any]) -> tuple[str, dict[str, str]]:
-    if set(manifest) != {_CONTRACT}:
-        raise ValueError(f"manifest must contain only {_CONTRACT}")
-    entry = cast(dict[str, Any], manifest[_CONTRACT])
+def _contract(manifest: dict[str, Any], name: str) -> tuple[str, dict[str, str]]:
+    entry = cast(dict[str, Any], manifest[name])
     if set(entry) != {"current", "releases"}:
-        raise ValueError(f"{_CONTRACT} must contain current and releases")
+        raise ValueError(f"{name} must contain current and releases")
 
     current = cast(str, entry["current"])
     releases = cast(dict[str, str], entry["releases"])
@@ -49,23 +46,33 @@ def _contract(manifest: dict[str, Any]) -> tuple[str, dict[str, str]]:
 
 
 def validate_manifest_update(previous: dict[str, Any], current: dict[str, Any]) -> None:
-    previous_version, previous_releases = _contract(previous)
-    current_version, current_releases = _contract(current)
+    removed = set(previous) - set(current)
+    if removed:
+        raise ValueError(f"manifest removes contracts: {', '.join(sorted(removed))}")
 
-    for version, digest in previous_releases.items():
-        if current_releases.get(version) != digest:
-            raise ValueError(f"manifest rewrites {_CONTRACT} release {version}")
-    new_releases = set(current_releases) - set(previous_releases)
-    if current_version == previous_version:
-        if new_releases:
-            raise ValueError("manifest adds releases without advancing current")
-        return
-    if _version_tuple(current_version) <= _version_tuple(previous_version):
-        raise ValueError(
-            f"{_CONTRACT} version {current_version} must advance beyond {previous_version}"
-        )
-    if new_releases != {current_version}:
-        raise ValueError("manifest must add exactly the new current release")
+    for name in sorted(current):
+        current_version, current_releases = _contract(current, name)
+        if name not in previous:
+            if current_version != "1.0.0" or set(current_releases) != {"1.0.0"}:
+                raise ValueError(f"new contract {name} must start at 1.0.0")
+            continue
+
+        previous_version, previous_releases = _contract(previous, name)
+
+        for version, digest in previous_releases.items():
+            if current_releases.get(version) != digest:
+                raise ValueError(f"manifest rewrites {name} release {version}")
+        new_releases = set(current_releases) - set(previous_releases)
+        if current_version == previous_version:
+            if new_releases:
+                raise ValueError("manifest adds releases without advancing current")
+            continue
+        if _version_tuple(current_version) <= _version_tuple(previous_version):
+            raise ValueError(
+                f"{name} version {current_version} must advance beyond {previous_version}"
+            )
+        if new_releases != {current_version}:
+            raise ValueError("manifest must add exactly the new current release")
 
 
 def _comparison_ref(base_ref: str) -> str | None:
@@ -103,7 +110,8 @@ def main() -> int:
         return 2
 
     current = cast(dict[str, Any], json.loads(_MANIFEST_PATH.read_text()))
-    _contract(current)
+    for name in current:
+        _contract(current, name)
     base_ref = _comparison_ref(sys.argv[1])
     if base_ref is None:
         print("root commit has no prior contract manifest")
@@ -115,7 +123,7 @@ def main() -> int:
         return 0
 
     validate_manifest_update(previous, current)
-    print("current-pricing contract manifest advances cleanly")
+    print("tool contract manifest advances cleanly")
     return 0
 
 

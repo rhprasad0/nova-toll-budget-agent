@@ -1,437 +1,41 @@
--- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.6.0
+-- Add schedule-independent routes and bounded ballpark sample functions.
 
 \set ON_ERROR_STOP on
 
 BEGIN;
 SET LOCAL search_path = pg_catalog, pg_temp;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
+SELECT pg_advisory_xact_lock(hashtext('tollchat-v2-oracle-schema-version'));
 
-DO $$
+DO $migration$
 DECLARE
-    pricing_version text;
-    pricing_version_parts integer[];
+    current_version text;
 BEGIN
-    IF current_setting('server_version_num')::integer < 170000
-       OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.6.0 requires PostgreSQL 17';
+    SELECT version INTO STRICT current_version
+    FROM oracle.schema_version
+    WHERE singleton;
+
+    IF current_version NOT IN ('1.5.0', '1.6.0') THEN
+        RAISE EXCEPTION 'expected oracle schema version 1.5.0 or 1.6.0, got %',
+            current_version;
     END IF;
-    IF to_regclass('pricing.schema_version') IS NULL
-       OR to_regclass('pricing.current_i95_direction') IS NULL
-       OR to_regclass('pricing.i66_pricing_comparisons') IS NULL
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.2.0'
        OR to_regclass('pricing.i66_ballpark_samples') IS NULL
-       OR to_regclass('pricing.i95_i495_ballpark_samples') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.6.0 requires pricing schema 1.2.x';
+       OR to_regclass('pricing.i95_i495_ballpark_samples') IS NULL
+       OR to_regrole('oracle_owner') IS NULL
+       OR to_regrole('tollchat_agent') IS NULL THEN
+        RAISE EXCEPTION 'oracle 1.6.0 requires pricing 1.2.0';
     END IF;
-    EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
-        INTO pricing_version;
-    pricing_version_parts := string_to_array(pricing_version, '.')::integer[];
-    IF pricing_version IS NULL
-       OR pricing_version_parts < ARRAY[1, 2, 0]
-       OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.6.0 requires pricing schema 1.2.x; found %',
-            coalesce(pricing_version, '<missing>');
-    END IF;
-    IF to_regrole('rds_iam') IS NULL THEN
-        RAISE EXCEPTION 'oracle requires the RDS IAM database role';
-    END IF;
-END $$;
+END
+$migration$;
 
-DO $$
-BEGIN
-    CREATE ROLE oracle_owner NOLOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
+SELECT version = '1.5.0' AS oracle_upgrade_needed
+FROM oracle.schema_version
+WHERE singleton
+\gset
 
-DO $$
-BEGIN
-    CREATE ROLE tollchat_agent LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname = 'oracle_owner'
-          AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
-               OR rolreplication OR rolbypassrls)
-    ) THEN
-        RAISE EXCEPTION 'existing oracle_owner role is not a scoped NOLOGIN owner';
-    END IF;
-    IF EXISTS (
-        SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname = 'tollchat_agent'
-          AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
-               OR rolreplication OR rolbypassrls)
-    ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent role is not a scoped LOGIN role';
-    END IF;
-    IF EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_auth_members AS membership
-        JOIN pg_catalog.pg_roles AS member_role
-          ON member_role.oid = membership.member
-        JOIN pg_catalog.pg_roles AS granted_role
-          ON granted_role.oid = membership.roleid
-        WHERE member_role.rolname = 'tollchat_agent'
-          AND granted_role.rolname <> 'rds_iam'
-    ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent has an unexpected role membership';
-    END IF;
-    IF EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_database AS database,
-             LATERAL aclexplode(database.datacl) AS privilege
-        WHERE database.datname = current_database()
-          AND privilege.grantee = to_regrole('tollchat_agent')
-          AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_namespace AS namespace,
-             LATERAL aclexplode(namespace.nspacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_class AS relation,
-             LATERAL aclexplode(relation.relacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_attribute AS attribute,
-             LATERAL aclexplode(attribute.attacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
-    ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent has unexpected direct privileges';
-    END IF;
-END $$;
-
-GRANT rds_iam TO tollchat_agent;
-
-CREATE SCHEMA oracle;
-REVOKE ALL ON SCHEMA oracle FROM PUBLIC;
-
-CREATE EXTENSION postgis WITH SCHEMA oracle;
-
-DO $$
-DECLARE
-    installed_version text;
-BEGIN
-    SELECT extversion INTO installed_version
-    FROM pg_catalog.pg_extension
-    WHERE extname = 'postgis';
-    IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.6.0 requires PostGIS 3.5.x; found %',
-            coalesce(installed_version, '<missing>');
-    END IF;
-END $$;
-
-CREATE TABLE oracle.schema_version (
-    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-    version text NOT NULL CHECK (
-        version ~ '^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$'
-    ),
-    installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
-);
-
-INSERT INTO oracle.schema_version (version) VALUES ('1.6.0');
-
-CREATE TABLE oracle.toll_route_point (
-    point_id text PRIMARY KEY,
-    network_id text NOT NULL CHECK (
-        network_id IN (
-            'i95', 'i495', 'i66', 'dtr', 'greenway',
-            'airport_iad', 'airport_dca'
-        )
-    ),
-    source_node_id text NOT NULL,
-    point_type text NOT NULL CHECK (point_type IN ('entry', 'exit', 'airport')),
-    direction text CHECK (direction IN ('NB', 'SB', 'EB', 'WB')),
-    label text NOT NULL CHECK (label <> ''),
-    location oracle.geography(Point, 4326),
-    aliases text[] NOT NULL DEFAULT ARRAY[]::text[],
-    source_metadata jsonb NOT NULL CHECK (jsonb_typeof(source_metadata) = 'object'),
-    CHECK ((point_type = 'airport') = (direction IS NULL)),
-    CHECK ((point_type = 'airport') = (network_id LIKE 'airport_%')),
-    UNIQUE NULLS NOT DISTINCT (network_id, source_node_id, point_type, direction)
-);
-
-CREATE TABLE oracle.toll_connection (
-    connection_id text PRIMARY KEY,
-    from_point_id text NOT NULL REFERENCES oracle.toll_route_point (point_id),
-    to_point_id text NOT NULL REFERENCES oracle.toll_route_point (point_id),
-    connection_type text NOT NULL CHECK (
-        connection_type IN (
-            'within_facility', 'toll_handoff',
-            'general_purpose_gap', 'airport_access'
-        )
-    ),
-    required_i95_direction text CHECK (required_i95_direction IN ('NB', 'SB')),
-    source_route_key text,
-    source_metadata jsonb NOT NULL CHECK (jsonb_typeof(source_metadata) = 'object'),
-    CHECK (from_point_id <> to_point_id),
-    UNIQUE (from_point_id, to_point_id)
-);
-
-CREATE INDEX toll_connection_from_point_idx
-    ON oracle.toll_connection (from_point_id);
-
-\ir data.sql
-
-CREATE VIEW oracle.route_pricing_component AS
-SELECT
-    connection.connection_id,
-    component.ordinality::integer AS component_order,
-    connection.from_point_id,
-    connection.to_point_id,
-    connection.source_metadata
-        #>> '{general_purpose_fallback,boundary_point_id}' AS boundary_point_id,
-    jsonb_array_length(connection.source_metadata #> '{source_pair,ods}')
-        AS component_count,
-    'i95_i495'::text AS facility,
-    connection.source_route_key,
-    component.value::integer AS od_pair_id,
-    NULL::integer AS start_zone_id,
-    NULL::integer AS end_zone_id,
-    NULL::jsonb AS charge
-FROM oracle.toll_connection AS connection
-CROSS JOIN LATERAL jsonb_array_elements_text(
-    connection.source_metadata #> '{source_pair,ods}'
-) WITH ORDINALITY AS component(value, ordinality)
-WHERE connection.connection_type IN ('within_facility', 'general_purpose_gap')
-
-UNION ALL
-
-SELECT
-    connection.connection_id,
-    1,
-    connection.from_point_id,
-    connection.to_point_id,
-    NULL,
-    1,
-    'i66',
-    connection.source_route_key,
-    NULL,
-    (connection.source_metadata #>> '{source_pair,start_zone}')::integer,
-    (connection.source_metadata #>> '{source_pair,end_zone}')::integer,
-    NULL
-FROM oracle.toll_connection AS connection
-JOIN oracle.toll_route_point AS origin
-  ON origin.point_id = connection.from_point_id
-WHERE connection.connection_type = 'within_facility'
-  AND origin.network_id = 'i66'
-
-UNION ALL
-
-SELECT
-    connection.connection_id,
-    component.ordinality::integer,
-    connection.from_point_id,
-    connection.to_point_id,
-    NULL,
-    jsonb_array_length(connection.source_metadata #> '{source_pair,charges}'),
-    origin.network_id,
-    connection.source_route_key,
-    NULL,
-    NULL,
-    NULL,
-    component.value
-FROM oracle.toll_connection AS connection
-JOIN oracle.toll_route_point AS origin
-  ON origin.point_id = connection.from_point_id
-CROSS JOIN LATERAL jsonb_array_elements(
-    connection.source_metadata #> '{source_pair,charges}'
-) WITH ORDINALITY AS component(value, ordinality)
-WHERE connection.connection_type = 'within_facility'
-  AND origin.network_id IN ('dtr', 'greenway')
-  AND (
-      (component.value->>'price_peak_usd')::numeric > 0
-      OR (component.value->>'price_off_peak_usd')::numeric > 0
-  )
-
-UNION ALL
-
-SELECT
-    connection.connection_id,
-    1,
-    connection.from_point_id,
-    connection.to_point_id,
-    NULL,
-    1,
-    connection.source_metadata->>'pricing_facility',
-    connection.source_route_key,
-    NULL,
-    NULL,
-    NULL,
-    connection.source_metadata->'pricing_charge'
-FROM oracle.toll_connection AS connection
-WHERE connection.connection_type = 'toll_handoff'
-  AND connection.source_metadata ? 'pricing_facility'
-  AND connection.source_metadata ? 'pricing_charge';
-
-CREATE FUNCTION oracle.ramp_alternatives(
-    submitted_point_id text,
-    unchanged_point_id text,
-    replace_origin boolean
-) RETURNS jsonb
-LANGUAGE sql
-STABLE
-SET search_path = pg_catalog, pg_temp
-AS $function$
-WITH RECURSIVE
-submitted AS (
-    SELECT route_point.*
-    FROM oracle.toll_route_point AS route_point
-    WHERE route_point.point_id = submitted_point_id
-),
-candidate_points AS (
-    SELECT candidate.*
-    FROM oracle.toll_route_point AS candidate
-    CROSS JOIN submitted
-    WHERE candidate.network_id = submitted.network_id
-      AND candidate.point_type = CASE
-          WHEN replace_origin THEN 'entry'
-          ELSE 'exit'
-      END
-),
-seeds AS (
-    SELECT
-        candidate.point_id AS alternative_point_id,
-        candidate.point_id AS current_point_id,
-        ARRAY[candidate.point_id]::text[] AS walked_point_ids,
-        0 AS depth
-    FROM candidate_points AS candidate
-    WHERE replace_origin
-
-    UNION ALL
-
-    SELECT
-        NULL::text,
-        unchanged.point_id,
-        ARRAY[unchanged.point_id]::text[],
-        0
-    FROM oracle.toll_route_point AS unchanged
-    WHERE NOT replace_origin
-      AND unchanged.point_id = unchanged_point_id
-),
-walk AS (
-    SELECT
-        seeds.alternative_point_id,
-        seeds.current_point_id,
-        seeds.walked_point_ids,
-        seeds.depth
-    FROM seeds
-
-    UNION ALL
-
-    SELECT
-        walk.alternative_point_id,
-        next_point.point_id,
-        walk.walked_point_ids || next_point.point_id,
-        walk.depth + 1
-    FROM walk
-    JOIN oracle.toll_route_point AS current_point
-      ON current_point.point_id = walk.current_point_id
-    JOIN oracle.toll_connection AS connection
-      ON connection.from_point_id = walk.current_point_id
-    JOIN oracle.toll_route_point AS next_point
-      ON next_point.point_id = connection.to_point_id
-    WHERE walk.depth < 12
-      AND (NOT replace_origin OR walk.current_point_id <> unchanged_point_id)
-      AND NOT next_point.point_id = ANY(walk.walked_point_ids)
-      AND (
-          current_point.point_type <> 'airport'
-          OR (NOT replace_origin AND current_point.point_id = unchanged_point_id)
-      )
-      AND (
-          next_point.point_type <> 'airport'
-          OR (replace_origin AND next_point.point_id = unchanged_point_id)
-      )
-),
-reachable AS (
-    SELECT DISTINCT
-        CASE
-            WHEN replace_origin THEN walk.alternative_point_id
-            ELSE walk.current_point_id
-        END AS point_id
-    FROM walk
-    WHERE walk.depth > 0
-      AND (
-          (replace_origin AND walk.current_point_id = unchanged_point_id)
-          OR (
-              NOT replace_origin
-              AND EXISTS (
-                  SELECT 1
-                  FROM candidate_points AS candidate
-                  WHERE candidate.point_id = walk.current_point_id
-              )
-          )
-      )
-),
-ranked AS (
-    SELECT
-        candidate.*,
-        coalesce(preference.rank, 2147483647) AS preference_rank,
-        CASE
-            WHEN candidate.source_node_id = submitted.source_node_id THEN 0
-            WHEN candidate.source_metadata
-                     -> 'alternative_ranking' ->> 'corridor_position' IS NOT NULL
-              AND submitted.source_metadata
-                     -> 'alternative_ranking' ->> 'corridor_position' IS NOT NULL THEN
-                abs(
-                    (candidate.source_metadata
-                        -> 'alternative_ranking' ->> 'corridor_position')::double precision
-                    - (submitted.source_metadata
-                        -> 'alternative_ranking' ->> 'corridor_position')::double precision
-                )
-            WHEN candidate.network_id IN ('i95', 'i495')
-              AND candidate.location IS NOT NULL
-              AND submitted.location IS NOT NULL THEN
-                oracle.ST_Distance(candidate.location, submitted.location)
-            ELSE 'Infinity'::double precision
-        END AS distance
-    FROM reachable
-    JOIN candidate_points AS candidate USING (point_id)
-    CROSS JOIN submitted
-    LEFT JOIN LATERAL (
-        SELECT preferred.ordinality::integer AS rank
-        FROM jsonb_array_elements_text(
-            coalesce(
-                submitted.source_metadata
-                    -> 'alternative_ranking' -> 'preferred_point_ids',
-                '[]'::jsonb
-            )
-        ) WITH ORDINALITY AS preferred(point_id, ordinality)
-        WHERE preferred.point_id = candidate.point_id
-    ) AS preference ON true
-    ORDER BY
-        coalesce(preference.rank, 2147483647),
-        distance,
-        candidate.point_id
-    LIMIT 2
-)
-SELECT coalesce(
-    jsonb_agg(
-        jsonb_build_object(
-            'point_id', ranked.point_id,
-            'network_id', ranked.network_id,
-            'source_node_id', ranked.source_node_id,
-            'point_type', ranked.point_type,
-            'direction', ranked.direction,
-            'label', ranked.label,
-            'aliases', to_jsonb(ranked.aliases),
-            'location', CASE
-                WHEN ranked.location IS NULL THEN NULL
-                ELSE oracle.ST_AsGeoJSON(ranked.location)::jsonb
-            END
-        )
-        ORDER BY ranked.preference_rank, ranked.distance, ranked.point_id
-    ),
-    '[]'::jsonb
-)
-FROM ranked
-$function$;
+\if :oracle_upgrade_needed
 
 CREATE FUNCTION oracle.resolve_toll_route_internal(
     origin_point_id text,
@@ -990,7 +594,7 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION oracle.resolve_toll_route(
+CREATE OR REPLACE FUNCTION oracle.resolve_toll_route(
     origin_point_id text,
     destination_point_id text
 ) RETURNS TABLE (
@@ -1011,33 +615,6 @@ SELECT *
 FROM oracle.resolve_toll_route_internal($1, $2, true)
 $function$;
 
-CREATE FUNCTION oracle.validate_toll_route(
-    origin_point_id text,
-    destination_point_id text
-) RETURNS TABLE (
-    status text,
-    reason jsonb,
-    point_ids text[],
-    connection_ids text[],
-    connection_types text[],
-    general_purpose_gaps jsonb,
-    i95_evidence jsonb
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
-SELECT
-    route.status,
-    route.reason,
-    route.point_ids,
-    route.connection_ids,
-    route.connection_types,
-    route.general_purpose_gaps,
-    route.i95_evidence
-FROM oracle.resolve_toll_route($1, $2) AS route
-$function$;
 
 CREATE FUNCTION oracle.route_pricing_legs(
     resolved_point_ids text[],
@@ -1116,7 +693,7 @@ SELECT coalesce(
 FROM numbered
 $function$;
 
-CREATE FUNCTION oracle.validate_pricing_route(
+CREATE OR REPLACE FUNCTION oracle.validate_pricing_route(
     origin_point_id text,
     destination_point_id text
 ) RETURNS TABLE (
@@ -1212,149 +789,6 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION oracle.get_i66_pricing_comparisons(
-    requested_start_zone_id integer,
-    requested_end_zone_id integer
-) RETURNS TABLE (
-    evaluated_at timestamptz,
-    comparison_kind text,
-    comparison_offset integer,
-    bin_start_at timestamptz,
-    bin_end_at timestamptz,
-    interval_end_at timestamptz,
-    observed_at timestamptz,
-    price_usd numeric,
-    available boolean,
-    availability_reason text
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
-WITH selected AS MATERIALIZED (
-    SELECT
-        comparison.evaluated_at,
-        comparison.comparison_kind,
-        comparison.comparison_offset,
-        comparison.bin_start_at,
-        comparison.bin_end_at,
-        comparison.interval_end_at,
-        comparison.observed_at,
-        comparison.price_usd,
-        comparison.available,
-        comparison.availability_reason
-    FROM pricing.i66_pricing_comparisons AS comparison
-    WHERE comparison.start_zone_id = requested_start_zone_id
-      AND comparison.end_zone_id = requested_end_zone_id
-), diagnostic AS (
-    SELECT
-        statement_timestamp() AS evaluated_at,
-        'current'::text AS comparison_kind,
-        0 AS comparison_offset,
-        NULL::timestamptz AS bin_start_at,
-        NULL::timestamptz AS bin_end_at,
-        NULL::timestamptz AS interval_end_at,
-        NULL::timestamptz AS observed_at,
-        NULL::numeric AS price_usd,
-        false AS available,
-        'missing_observation'::text AS availability_reason
-    WHERE NOT EXISTS (
-        SELECT 1 FROM selected WHERE selected.comparison_kind = 'current'
-    )
-), combined AS (
-    SELECT * FROM selected
-    UNION ALL
-    SELECT * FROM diagnostic
-)
-SELECT * FROM combined
-ORDER BY
-    CASE comparison_kind
-        WHEN 'current' THEN 0
-        WHEN 'prior_cycle' THEN 1
-        ELSE 2
-    END,
-    comparison_offset
-$function$;
-
-CREATE FUNCTION oracle.get_i95_i495_pricing_comparisons(
-    requested_od_pair_id integer
-) RETURNS TABLE (
-    evaluated_at timestamptz,
-    comparison_kind text,
-    comparison_offset integer,
-    bin_start_at timestamptz,
-    bin_end_at timestamptz,
-    interval_end_at timestamptz,
-    observed_at timestamptz,
-    price_usd numeric,
-    available boolean,
-    availability_reason text,
-    source_kind text,
-    pricing_method text,
-    od_pair_id integer,
-    proxy_od_pair_id integer,
-    source_status text
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
-AS $function$
-WITH selected AS MATERIALIZED (
-    SELECT
-        comparison.evaluated_at,
-        comparison.comparison_kind,
-        comparison.comparison_offset,
-        comparison.bin_start_at,
-        comparison.bin_end_at,
-        comparison.interval_end_at,
-        comparison.observed_at,
-        comparison.price_usd,
-        comparison.available,
-        comparison.availability_reason,
-        comparison.source_kind,
-        comparison.pricing_method,
-        comparison.od_pair_id,
-        comparison.proxy_od_pair_id,
-        comparison.source_status
-    FROM pricing.i95_i495_pricing_comparisons AS comparison
-    WHERE comparison.od_pair_id = requested_od_pair_id
-      AND (comparison.comparison_kind = 'current' OR comparison.available)
-), diagnostic AS (
-    SELECT
-        statement_timestamp() AS evaluated_at,
-        'current'::text AS comparison_kind,
-        0 AS comparison_offset,
-        NULL::timestamptz AS bin_start_at,
-        NULL::timestamptz AS bin_end_at,
-        NULL::timestamptz AS interval_end_at,
-        NULL::timestamptz AS observed_at,
-        NULL::numeric AS price_usd,
-        false AS available,
-        'missing_observation'::text AS availability_reason,
-        NULL::text AS source_kind,
-        NULL::text AS pricing_method,
-        NULL::integer AS od_pair_id,
-        NULL::integer AS proxy_od_pair_id,
-        NULL::text AS source_status
-    WHERE NOT EXISTS (
-        SELECT 1 FROM selected WHERE selected.comparison_kind = 'current'
-    )
-), combined AS (
-    SELECT * FROM selected
-    UNION ALL
-    SELECT * FROM diagnostic
-)
-SELECT * FROM combined
-ORDER BY
-    CASE comparison_kind
-        WHEN 'current' THEN 0
-        WHEN 'prior_cycle' THEN 1
-        ELSE 2
-    END,
-    comparison_offset
-$function$;
 
 CREATE FUNCTION oracle.validate_ballpark_sample_request(
     requested_local_time time,
@@ -1596,33 +1030,26 @@ BEGIN
 END
 $function$;
 
-REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
-REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
-GRANT USAGE ON TYPE oracle.geometry, oracle.geography TO oracle_owner;
-GRANT EXECUTE ON FUNCTION oracle.ST_Distance(
-    oracle.geography, oracle.geography, boolean
-) TO oracle_owner;
-GRANT EXECUTE ON FUNCTION oracle.ST_AsGeoJSON(
-    oracle.geography, integer, integer
-) TO oracle_owner;
-GRANT SELECT ON oracle.spatial_ref_sys TO oracle_owner;
 
-GRANT USAGE ON SCHEMA pricing TO oracle_owner;
-GRANT SELECT ON pricing.current_i95_direction,
-    pricing.i66_pricing_comparisons,
-    pricing.i95_i495_pricing_comparisons,
+GRANT SELECT ON
     pricing.i66_ballpark_samples,
-    pricing.i95_i495_ballpark_samples TO oracle_owner;
-GRANT USAGE ON SCHEMA oracle TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
-TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text, text)
-TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.get_i66_pricing_comparisons(integer, integer)
-TO tollchat_agent;
-GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)
-TO tollchat_agent;
+    pricing.i95_i495_ballpark_samples
+TO oracle_owner;
+
+REVOKE ALL ON FUNCTION oracle.resolve_toll_route_internal(text, text, boolean)
+FROM PUBLIC;
+REVOKE ALL ON FUNCTION oracle.route_pricing_legs(text[], text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION oracle.validate_ballpark_route(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION oracle.validate_ballpark_sample_request(
+    time, date[], timestamptz
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION oracle.get_i66_ballpark_samples(
+    integer, integer, time, date[], timestamptz
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION oracle.get_i95_i495_ballpark_samples(
+    integer, time, date[], timestamptz
+) FROM PUBLIC;
+
 GRANT EXECUTE ON FUNCTION oracle.validate_ballpark_route(text, text)
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.get_i66_ballpark_samples(
@@ -1632,22 +1059,12 @@ GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_ballpark_samples(
     integer, time, date[], timestamptz
 ) TO tollchat_agent;
 
-ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
-ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;
-ALTER TABLE oracle.toll_connection OWNER TO oracle_owner;
-ALTER VIEW oracle.route_pricing_component OWNER TO oracle_owner;
-ALTER FUNCTION oracle.ramp_alternatives(text, text, boolean) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.resolve_toll_route_internal(text, text, boolean)
 OWNER TO oracle_owner;
-ALTER FUNCTION oracle.resolve_toll_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.route_pricing_legs(text[], text[]) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.validate_toll_route(text, text) OWNER TO oracle_owner;
+ALTER FUNCTION oracle.resolve_toll_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_pricing_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_ballpark_route(text, text) OWNER TO oracle_owner;
-ALTER FUNCTION oracle.get_i66_pricing_comparisons(integer, integer)
-OWNER TO oracle_owner;
-ALTER FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)
-OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_ballpark_sample_request(time, date[], timestamptz)
 OWNER TO oracle_owner;
 ALTER FUNCTION oracle.get_i66_ballpark_samples(
@@ -1656,6 +1073,57 @@ ALTER FUNCTION oracle.get_i66_ballpark_samples(
 ALTER FUNCTION oracle.get_i95_i495_ballpark_samples(
     integer, time, date[], timestamptz
 ) OWNER TO oracle_owner;
-ALTER SCHEMA oracle OWNER TO oracle_owner;
+
+UPDATE oracle.schema_version
+SET version = '1.6.0', installed_at = clock_timestamp()
+WHERE singleton AND version = '1.5.0';
+
+\endif
+
+DO $migration$
+DECLARE
+    executable_count integer;
+BEGIN
+    IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.6.0'
+       OR NOT has_function_privilege(
+           'tollchat_agent', 'oracle.validate_ballpark_route(text,text)', 'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)',
+           'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)',
+           'EXECUTE'
+       )
+       OR has_table_privilege(
+           'tollchat_agent', 'pricing.i66_ballpark_samples', 'SELECT'
+       )
+       OR has_table_privilege(
+           'tollchat_agent', 'pricing.i95_i495_ballpark_samples', 'SELECT'
+       )
+       OR NOT has_table_privilege(
+           'oracle_owner', 'pricing.i66_ballpark_samples', 'SELECT'
+       )
+       OR NOT has_table_privilege(
+           'oracle_owner', 'pricing.i95_i495_ballpark_samples', 'SELECT'
+       ) THEN
+        RAISE EXCEPTION 'oracle 1.6.0 ballpark security contract is not installed';
+    END IF;
+
+    SELECT count(*) INTO executable_count
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = procedure.pronamespace
+    WHERE namespace.nspname = 'oracle'
+      AND has_function_privilege('tollchat_agent', procedure.oid, 'EXECUTE');
+    IF executable_count <> 7 THEN
+        RAISE EXCEPTION 'tollchat_agent executable function count is %',
+            executable_count;
+    END IF;
+END
+$migration$;
 
 COMMIT;

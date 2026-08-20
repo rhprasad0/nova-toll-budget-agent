@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_tools import get_annual_toll_ballpark as ballpark_tool
 from agent_tools import get_current_toll_price as pricing_tool
 from scripts import check_tool_contract_versions as version_check
 
@@ -59,6 +60,40 @@ def test_generated_contract_matches_versioned_digest():
     assert (
         _digest(pricing_tool.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
     )
+
+
+def test_ballpark_runtime_contract_matches_models_and_manifest():
+    assert ballpark_tool.get_annual_toll_ballpark.tool_spec == ballpark_tool.TOOL_SPEC
+    assert ballpark_tool.TOOL_SPEC["inputSchema"] == {
+        "json": ballpark_tool._BallparkRequest.model_json_schema(mode="validation")
+    }
+    assert ballpark_tool.TOOL_SPEC.get("outputSchema") == {
+        "json": ballpark_tool._OUTPUT_ADAPTER.json_schema(mode="serialization")
+    }
+    expected = {
+        "toolSpec": ballpark_tool.TOOL_SPEC,
+        "progressEventSchema": ballpark_tool._ProgressEvent.model_json_schema(
+            mode="serialization"
+        ),
+        "progressMessages": {
+            f"{stage}.{status}": message
+            for (stage, status), message in ballpark_tool._PROGRESS_MESSAGES.items()
+        },
+        "operationErrorSchema": ballpark_tool._OperationError.model_json_schema(
+            mode="serialization"
+        ),
+        "operationErrorTemplate": ballpark_tool._SAFE_ERROR,
+    }
+    assert expected == ballpark_tool.TOOL_CONTRACT
+    manifest = _manifest()["get_annual_toll_ballpark"]
+    assert _digest(expected) == manifest["releases"][manifest["current"]]
+
+
+def test_manifest_accepts_new_contract_at_one_dot_zero_dot_zero():
+    current = _manifest()
+    previous = copy.deepcopy(current)
+    previous.pop("get_annual_toll_ballpark")
+    version_check.validate_manifest_update(previous, current)
 
 
 def test_manifest_accepts_additive_version_advance():

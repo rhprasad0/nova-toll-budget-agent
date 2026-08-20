@@ -1,4 +1,10 @@
 {
+  "get_annual_toll_ballpark": {
+    "current": "1.0.0",
+    "releases": {
+      "1.0.0": "2f970b0593d3a8f1233c3ba8c874c3613ee63478b612703c3ec641db12f368e2"
+    }
+  },
   "get_current_toll_price": {
     "current": "1.3.0",
     "releases": {

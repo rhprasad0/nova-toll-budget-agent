@@ -25,12 +25,12 @@ adopts them.
 - [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
 
 The independently deployable `pricing` application schema starts at semantic
-version **1.1.1**. Its version is stored in `pricing.schema_version`; CI tests
+version **1.2.0**. Its version is stored in `pricing.schema_version`; CI tests
 the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.5.0**. It installs
+The independently versioned `oracle` schema is at **1.6.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes endpoint-based route validators plus bounded I-66 and I-95/I-495
 pricing comparisons to `tollchat_agent`.
@@ -145,6 +145,21 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/013_upgrade_oracle_1_4_0_to_1_5_0.sql
 ```
 
+Then add the bounded 12-week pricing sample views:
+
+```bash
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/015_upgrade_pricing_1_1_1_to_1_2_0.sql
+```
+
+Finally add schedule-independent ballpark routing and least-privilege sample
+functions:
+
+```bash
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/016_upgrade_oracle_1_5_0_to_1_6_0.sql
+```
+
 After the shadow loader is active, copy and verify the current v1 source rows:
 
 ```sh
@@ -167,6 +182,13 @@ submit route plans or pricing components.
 Its generated input, output, progress-event, and safe-error schemas are locked
 by `agent_tools/contract-manifest.json`. Contract changes require a new,
 increasing SemVer release and digest; CI rejects rewrites of published releases.
+
+The `get_annual_toll_ballpark` tool validates outbound and return routes without
+consulting live I-95 direction, samples complete same-date round trips from the
+latest 12 weeks, and returns nearest-rank P25/P50/P90 daily values annualized by
+the caller's planned commute days. Results remain recent historical context—not
+a quote, forecast, or budget—and disclose modeled prices and current fixed-rate
+assumptions.
 
 The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
 events reach it through EventBridge while v1 keeps its direct S3 notification.
