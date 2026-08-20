@@ -144,8 +144,10 @@ step missing. The date remains in the coverage denominator and appears in
 `excluded_dates`; the tool does not invent a more specific cause than the
 pricing functions return.
 
-If a requested wall time is nonexistent or occurs twice on a daylight-saving
-transition date, exclude that date instead of choosing an offset for the user.
+If a requested wall time for a direction with pricing legs is nonexistent or
+occurs twice on a daylight-saving transition date, exclude that date instead
+of choosing an offset for the user. A direction with no pricing legs remains a
+known zero-toll trip and does not require resolving its wall time to an instant.
 
 A structurally valid route with no pricing legs is a known zero-toll trip. A
 fixed-only route is sampled from the eligible-date calendar without requiring
@@ -564,9 +566,11 @@ The initial contract fixtures must cover:
    I-95 direction gating.
 3. The 84-day Eastern window and exactly 12 eligible dates per requested
    weekday, including one transaction anchor, no post-anchor evidence, and
-   DST-transition exclusion for non-unique wall times.
+   DST-transition exclusion for non-unique wall times on routes with pricing
+   legs.
 4. Complete same-date pairing, missing-step exclusion, fixed-only routes, and
-   known zero-toll routes.
+   known zero-toll routes, including a zero-toll DST-transition date whose wall
+   time does not need resolution.
 5. Historical I-95 included only when canonical and observed directions match;
    reversal or closed windows, decisive opposite direction, and missing or
    conflicting sentinels excluded; I-495 samples unaffected by that gate.
