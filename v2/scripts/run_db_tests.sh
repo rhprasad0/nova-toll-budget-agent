@@ -314,6 +314,7 @@ psql --dbname "$bootstrap_db" --file v2/tests/pricing_ballpark_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_restore_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_route_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_prompt_points_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_pricing_route_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i66_pricing_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i95_pricing_contract.sql

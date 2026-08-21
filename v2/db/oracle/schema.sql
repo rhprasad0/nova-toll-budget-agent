@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.8.0
+-- oracle schema version: 1.9.0
 
 \set ON_ERROR_STOP on
 
@@ -150,7 +150,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.8.0');
+INSERT INTO oracle.schema_version (version) VALUES ('1.9.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -193,6 +193,34 @@ CREATE INDEX toll_connection_from_point_idx
     ON oracle.toll_connection (from_point_id);
 
 \ir data.sql
+
+CREATE FUNCTION oracle.get_toll_route_prompt_points() RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+SELECT coalesce(
+    jsonb_agg(
+        jsonb_build_object(
+            'point_id', route_point.point_id,
+            'network_id', route_point.network_id,
+            'source_node_id', route_point.source_node_id,
+            'point_type', route_point.point_type,
+            'direction', route_point.direction,
+            'label', route_point.label,
+            'aliases', to_jsonb(route_point.aliases),
+            'location', CASE
+                WHEN route_point.location IS NULL THEN NULL
+                ELSE oracle.ST_AsGeoJSON(route_point.location, 15, 0)::jsonb
+            END
+        )
+        ORDER BY route_point.point_id
+    ),
+    '[]'::jsonb
+)
+FROM oracle.toll_route_point AS route_point
+$function$;
 
 CREATE VIEW oracle.route_pricing_component AS
 SELECT
@@ -1988,6 +2016,8 @@ GRANT SELECT ON pricing.current_i95_direction,
     pricing.i66_ballpark_samples,
     pricing.i95_i495_ballpark_samples TO oracle_owner;
 GRANT USAGE ON SCHEMA oracle TO tollchat_agent, pricing_caller;
+GRANT EXECUTE ON FUNCTION oracle.get_toll_route_prompt_points()
+TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text, text)
@@ -2012,6 +2042,7 @@ ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_connection OWNER TO oracle_owner;
 ALTER VIEW oracle.route_pricing_component OWNER TO oracle_owner;
+ALTER FUNCTION oracle.get_toll_route_prompt_points() OWNER TO oracle_owner;
 ALTER FUNCTION oracle.ramp_alternatives(text, text, boolean) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.resolve_toll_route_internal(text, text, boolean)
 OWNER TO oracle_owner;
