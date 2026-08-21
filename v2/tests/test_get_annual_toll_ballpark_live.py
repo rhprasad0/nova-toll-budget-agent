@@ -120,7 +120,7 @@ def _raw_scenarios(
     samples: list[dict[date, Decimal]] = []
     connection = cast(
         Any,
-        ballpark.route_validation._connect(),  # pyright: ignore[reportPrivateUsage]
+        ballpark.route_validation.connect_to_database(),
     )
     try:
         with connection.cursor() as cursor:

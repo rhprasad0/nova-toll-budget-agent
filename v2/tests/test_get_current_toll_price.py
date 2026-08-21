@@ -470,7 +470,7 @@ def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
     response = _pricing_route(row, legs)
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
 
@@ -523,7 +523,7 @@ def test_malformed_input_fails_safely_without_route_validation(
     mutation(input_data)
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: pytest.fail("invalid input reached the database"),
     )
 
@@ -547,7 +547,7 @@ def test_unsupported_profile_short_circuits_without_progress(monkeypatch):
     input_data["pricing_profile"]["transponder_mode"] = "hov"
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: pytest.fail("unsupported profile reached RDS"),
     )
 
@@ -571,13 +571,13 @@ def test_nonvalid_routes_complete_validation_without_pricing(monkeypatch, row):
     response = _pricing_route(row, [])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
 
     monkeypatch.setattr(
         pricing_tool,
-        "_success",
+        "_build_success_result",
         lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
     )
     input_data = _input()
@@ -612,7 +612,7 @@ def test_route_failure_streams_failed_and_returns_only_safe_error(monkeypatch, c
 
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         fail,
     )
 
@@ -723,7 +723,7 @@ def test_route_failure_streams_failed_and_returns_only_safe_error(monkeypatch, c
 def test_greenway_schedule_rates(
     direction, entry, exit_, evaluated_at, price, period, rate_name
 ):
-    component = pricing_tool._price_greenway(
+    component = pricing_tool.price_greenway_leg(
         _greenway_leg(direction=direction, entry=entry, exit_=exit_), evaluated_at
     )
 
@@ -750,12 +750,14 @@ def test_greenway_pricer_rejects_misaligned_legs(mutation):
     leg = pricing_tool.route_validation._GreenwayFacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
 
     with pytest.raises(ValueError, match="Greenway"):
-        pricing_tool._price_greenway(leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN))
+        pricing_tool.price_greenway_leg(
+            leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN)
+        )
 
 
 def test_greenway_pricer_requires_aware_evaluation_time():
     with pytest.raises(ValueError, match="aware"):
-        pricing_tool._price_greenway(
+        pricing_tool.price_greenway_leg(
             _greenway_leg(),
             datetime(2026, 8, 17, 8),  # noqa: DTZ001
         )
@@ -774,7 +776,7 @@ def test_greenway_pricer_requires_aware_evaluation_time():
     ],
 )
 def test_dtr_schedule_rates(direction, entry, exit_, charge_index, price, rate_name):
-    component = pricing_tool._price_dtr(
+    component = pricing_tool.price_dtr_leg(
         _dtr_leg(
             direction=direction,
             entry=entry,
@@ -799,7 +801,7 @@ def test_dtr_pricer_matches_every_canonical_source_charge():
     checked = 0
     for pair in source["pairs"]:
         for charge_index, charge in enumerate(pair["charges"], 1):
-            component = pricing_tool._price_dtr(
+            component = pricing_tool.price_dtr_leg(
                 _dtr_leg(
                     direction=pair["direction"],
                     entry=pair["entry"],
@@ -819,7 +821,7 @@ def test_dtr_pricer_matches_every_canonical_source_charge():
 
 @pytest.mark.parametrize("route_key", ["greenway_to_dtr", "dtr_to_greenway"])
 def test_dtr_handoff_is_a_ramp_charge(route_key):
-    component = pricing_tool._price_dtr(
+    component = pricing_tool.price_dtr_leg(
         _dtr_handoff_leg(route_key, "step-1"),
         datetime(2026, 8, 17, 12, tzinfo=_EASTERN),
     )
@@ -843,12 +845,12 @@ def test_dtr_pricer_rejects_misaligned_legs(mutation):
     leg = pricing_tool.route_validation._DtrFacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
 
     with pytest.raises(ValueError, match="DTR"):
-        pricing_tool._price_dtr(leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN))
+        pricing_tool.price_dtr_leg(leg, datetime(2026, 8, 17, 8, 0, tzinfo=_EASTERN))
 
 
 def test_dtr_pricer_requires_aware_evaluation_time():
     with pytest.raises(ValueError, match="aware"):
-        pricing_tool._price_dtr(
+        pricing_tool.price_dtr_leg(
             _dtr_leg(),
             datetime(2026, 8, 17, 8),  # noqa: DTZ001
         )
@@ -989,7 +991,7 @@ def test_greenway_dtr_routes_price_every_component_in_route_order(
     response = _pricing_route(row, legs)
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
@@ -1054,7 +1056,7 @@ def test_iad_terminal_connectors_return_zero_toll(
     response = _pricing_route(row, [])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
@@ -1084,9 +1086,11 @@ def test_iad_terminal_connectors_return_zero_toll(
 
 
 def test_i66_pricer_returns_current_price_and_comparisons(monkeypatch):
-    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", lambda *_args: _i66_rows())
+    monkeypatch.setattr(
+        pricing_tool, "_fetch_i66_comparisons", lambda *_args: _i66_rows()
+    )
 
-    component = pricing_tool._price_i66(_i66_leg())
+    component = pricing_tool._price_i66_leg(_i66_leg())
 
     assert isinstance(component, pricing_tool._I66Component)  # pyright: ignore[reportPrivateUsage]
     assert component.price_usd == Decimal("7.20")
@@ -1113,7 +1117,7 @@ def test_i95_pricer_returns_current_price_comparisons_and_provenance(
 ):
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i95_prices",
+        "_fetch_i95_i495_comparisons",
         lambda *_args: _i95_rows(source_kind=source_kind),
     )
 
@@ -1127,7 +1131,7 @@ def test_i95_pricer_returns_current_price_comparisons_and_provenance(
             point_ids=["i495:192NO", "i95:201ND"],
         )
     )
-    component = pricing_tool._price_i95(leg)
+    component = pricing_tool._price_i95_i495_leg(leg)
 
     assert isinstance(component, pricing_tool._I95Component)  # pyright: ignore[reportPrivateUsage]
     assert component.price_usd == Decimal("8.20")
@@ -1142,7 +1146,8 @@ def test_i95_pricer_returns_current_price_comparisons_and_provenance(
     assert component.prior_week_comparison is not None
     assert component.prior_week_comparison.median_usd == Decimal("6.00")
     assert component.prior_week_comparison.position == "above_recent_range"
-    response = pricing_tool._success(  # pyright: ignore[reportPrivateUsage]
+    response = pricing_tool._build_success_result(  # pyright: ignore[reportPrivateUsage]
+        "tool-123",
         pricing_tool._PricingRequest.model_validate(_input()),  # pyright: ignore[reportPrivateUsage]
         component.component_evaluated_at,
         [component],
@@ -1190,10 +1195,10 @@ def test_i95_comparison_row_rejects_invalid_database_data(mutation):
 def test_i95_fetch_rejects_misaligned_row_sets(monkeypatch, mutation):
     rows = [row.model_dump(mode="python") for row in _i95_rows()]
     mutation(rows)
-    monkeypatch.setattr(pricing_tool, "_fetch_rows", lambda *_args: rows)
+    monkeypatch.setattr(pricing_tool, "_fetch_pricing_rows", lambda *_args: rows)
 
     with pytest.raises(ValueError, match="I-95/I-495"):
-        pricing_tool._fetch_i95_prices(1261)  # pyright: ignore[reportPrivateUsage]
+        pricing_tool._fetch_i95_i495_comparisons(1261)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.parametrize(
@@ -1208,11 +1213,11 @@ def test_i95_fetch_rejects_misaligned_row_sets(monkeypatch, mutation):
 def test_i95_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i95_prices",
+        "_fetch_i95_i495_comparisons",
         lambda *_args: _i95_rows(unavailable_reason=reason),
     )
 
-    result = pricing_tool._price_i95(_i95_leg())
+    result = pricing_tool._price_i95_i495_leg(_i95_leg())
 
     assert isinstance(result, pricing_tool._UnavailableComponent)  # pyright: ignore[reportPrivateUsage]
     assert result.reason == reason
@@ -1237,10 +1242,12 @@ def test_i95_pricer_rejects_misaligned_leg(monkeypatch, mutation):
     data = _i95_leg().model_dump(mode="python")
     mutation(data)
     leg = pricing_tool.route_validation._I95FacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(pricing_tool, "_fetch_i95_prices", lambda *_args: _i95_rows())
+    monkeypatch.setattr(
+        pricing_tool, "_fetch_i95_i495_comparisons", lambda *_args: _i95_rows()
+    )
 
     with pytest.raises(ValueError, match="I-95/I-495"):
-        pricing_tool._price_i95(leg)
+        pricing_tool._price_i95_i495_leg(leg)
 
 
 def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch):
@@ -1257,10 +1264,12 @@ def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch):
     response = _pricing_route(row, [_i95_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
-    monkeypatch.setattr(pricing_tool, "_fetch_i95_prices", lambda *_args: _i95_rows())
+    monkeypatch.setattr(
+        pricing_tool, "_fetch_i95_i495_comparisons", lambda *_args: _i95_rows()
+    )
 
     events = _run_tool(
         {
@@ -1466,7 +1475,7 @@ def test_i495_junctions_price_every_facility(
     response = _pricing_route(row, [leg.model_dump(mode="json") for leg in legs])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     requested_od_pairs: list[int] = []
@@ -1475,8 +1484,10 @@ def test_i495_junctions_price_every_facility(
         requested_od_pairs.append(requested_od_pair_id)
         return _i95_rows(od_pair_id=requested_od_pair_id)
 
-    monkeypatch.setattr(pricing_tool, "_fetch_i95_prices", fetch_i95_prices)
-    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", lambda *_args: _i66_rows())
+    monkeypatch.setattr(pricing_tool, "_fetch_i95_i495_comparisons", fetch_i95_prices)
+    monkeypatch.setattr(
+        pricing_tool, "_fetch_i66_comparisons", lambda *_args: _i66_rows()
+    )
 
     events = _run_tool(
         {
@@ -1505,12 +1516,12 @@ def test_i95_unavailable_returns_no_partial_price(monkeypatch):
     response = _pricing_route(row, [_i95_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i95_prices",
+        "_fetch_i95_i495_comparisons",
         lambda *_args: _i95_rows(unavailable_reason="stale_observation"),
     )
 
@@ -1540,12 +1551,12 @@ def test_i95_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
     response = _pricing_route(row, [_i95_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i95_prices",
+        "_fetch_i95_i495_comparisons",
         lambda *_args: (_ for _ in ()).throw(RuntimeError(secret)),
     )
 
@@ -1574,11 +1585,11 @@ def test_i95_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
 def test_i66_pricer_omits_incomplete_history(monkeypatch):
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i66_prices",
+        "_fetch_i66_comparisons",
         lambda *_args: _i66_rows()[:1],
     )
 
-    component = pricing_tool._price_i66(_i66_leg())
+    component = pricing_tool._price_i66_leg(_i66_leg())
 
     assert isinstance(component, pricing_tool._I66Component)  # pyright: ignore[reportPrivateUsage]
     assert component.recent_movement is None
@@ -1587,7 +1598,7 @@ def test_i66_pricer_omits_incomplete_history(monkeypatch):
 
 def test_prior_week_expectation_excludes_nonexistent_spring_forward_bin():
     assert (
-        pricing_tool._expected_prior_weeks(  # pyright: ignore[reportPrivateUsage]
+        pricing_tool._count_valid_prior_week_bins(  # pyright: ignore[reportPrivateUsage]
             datetime(2026, 3, 22, 2, 0, tzinfo=_EASTERN)
         )
         == 2
@@ -1624,11 +1635,11 @@ def test_i66_comparison_row_rejects_invalid_database_data(mutation):
 def test_i66_pricer_preserves_unavailable_diagnostic(monkeypatch, reason):
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i66_prices",
+        "_fetch_i66_comparisons",
         lambda *_args: _i66_rows(unavailable_reason=reason),
     )
 
-    result = pricing_tool._price_i66(_i66_leg())
+    result = pricing_tool._price_i66_leg(_i66_leg())
 
     assert isinstance(result, pricing_tool._UnavailableComponent)  # pyright: ignore[reportPrivateUsage]
     assert result.reason == reason
@@ -1647,10 +1658,12 @@ def test_i66_pricer_rejects_misaligned_leg(monkeypatch, mutation):
     data = _i66_leg().model_dump(mode="python")
     mutation(data)
     leg = pricing_tool.route_validation._I66FacilityLeg.model_validate(data)  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", lambda *_args: _i66_rows())
+    monkeypatch.setattr(
+        pricing_tool, "_fetch_i66_comparisons", lambda *_args: _i66_rows()
+    )
 
     with pytest.raises(ValueError, match="I-66"):
-        pricing_tool._price_i66(leg)
+        pricing_tool._price_i66_leg(leg)
 
 
 @pytest.mark.parametrize(
@@ -1752,7 +1765,7 @@ def test_i66_dtr_junction_prices_both_directions(
     response = _pricing_route(row, legs)
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     requested_i66_zone_pairs: list[tuple[int, int]] = []
@@ -1761,7 +1774,7 @@ def test_i66_dtr_junction_prices_both_directions(
         requested_i66_zone_pairs.append((start_zone_id, end_zone_id))
         return _i66_rows()
 
-    monkeypatch.setattr(pricing_tool, "_fetch_i66_prices", fetch_i66_prices)
+    monkeypatch.setattr(pricing_tool, "_fetch_i66_comparisons", fetch_i66_prices)
 
     events = _run_tool(input_data)
 
@@ -1791,12 +1804,12 @@ def test_i66_unavailable_returns_no_partial_price(monkeypatch):
     response = _pricing_route(row, [_i66_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i66_prices",
+        "_fetch_i66_comparisons",
         lambda *_args: _i66_rows(unavailable_reason="stale_observation"),
     )
 
@@ -1825,12 +1838,12 @@ def test_i66_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
     response = _pricing_route(row, [_i66_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
         pricing_tool,
-        "_fetch_i66_prices",
+        "_fetch_i66_comparisons",
         lambda *_args: (_ for _ in ()).throw(RuntimeError(secret)),
     )
 
@@ -1865,7 +1878,7 @@ def test_greenway_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog
     _install_route(monkeypatch, [_greenway_leg().model_dump(mode="json")])
     monkeypatch.setattr(
         pricing_tool,
-        "_price_greenway",
+        "price_greenway_leg",
         fail,
     )
 
@@ -1902,12 +1915,12 @@ def test_dtr_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
     )
     monkeypatch.setattr(
         pricing_tool.route_validation,
-        "_validate_pricing_route",
+        "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
         pricing_tool,
-        "_price_dtr",
+        "price_dtr_leg",
         fail,
     )
 

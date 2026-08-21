@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.7.0
+-- oracle schema version: 1.7.1
 
 \set ON_ERROR_STOP on
 
@@ -13,14 +13,14 @@ DECLARE
 BEGIN
     IF current_setting('server_version_num')::integer < 170000
        OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.7.0 requires PostgreSQL 17';
+        RAISE EXCEPTION 'oracle 1.7.1 requires PostgreSQL 17';
     END IF;
     IF to_regclass('pricing.schema_version') IS NULL
        OR to_regclass('pricing.current_i95_direction') IS NULL
        OR to_regclass('pricing.i66_pricing_comparisons') IS NULL
        OR to_regclass('pricing.i66_ballpark_samples') IS NULL
        OR to_regclass('pricing.i95_i495_ballpark_samples') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.7.0 requires pricing schema 1.2.x';
+        RAISE EXCEPTION 'oracle 1.7.1 requires pricing schema >=1.2.0,<2.0.0';
     END IF;
     EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
         INTO pricing_version;
@@ -28,7 +28,7 @@ BEGIN
     IF pricing_version IS NULL
        OR pricing_version_parts < ARRAY[1, 2, 0]
        OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.7.0 requires pricing schema 1.2.x; found %',
+        RAISE EXCEPTION 'oracle 1.7.1 requires pricing schema >=1.2.0,<2.0.0; found %',
             coalesce(pricing_version, '<missing>');
     END IF;
     IF to_regrole('rds_iam') IS NULL THEN
@@ -122,7 +122,7 @@ BEGIN
     FROM pg_catalog.pg_extension
     WHERE extname = 'postgis';
     IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.7.0 requires PostGIS 3.5.x; found %',
+        RAISE EXCEPTION 'oracle 1.7.1 requires PostGIS 3.5.x; found %',
             coalesce(installed_version, '<missing>');
     END IF;
 END $$;
@@ -135,7 +135,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.7.0');
+INSERT INTO oracle.schema_version (version) VALUES ('1.7.1');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,

@@ -78,7 +78,7 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
-def _money(value: Decimal) -> Decimal:
+def _round_usd(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
@@ -171,7 +171,7 @@ class _BallparkRouteDb(_Model):
                 gap.fallback_required is not None for gap in self.general_purpose_gaps
             ):
                 raise ValueError("ballpark gaps cannot include live fallback decisions")
-            route_validation._validate_facility_leg_alignment(  # pyright: ignore[reportPrivateUsage]
+            route_validation.validate_facility_leg_alignment(
                 self.point_ids,
                 self.connection_ids,
                 self.connection_types,
@@ -363,7 +363,7 @@ class _SummaryRow(_Model):
             cast(Decimal, self.p90_annualized_usd),
         ]
         if daily != sorted(daily) or annualized != [
-            _money(value * annual_days) for value in daily
+            _round_usd(value * annual_days) for value in daily
         ]:
             raise ValueError("annual ballpark scenarios are inconsistent")
         returned_facilities = [item.facility for item in self.facility_scenarios]
@@ -394,7 +394,7 @@ class _SummaryRow(_Model):
             if (
                 facility_daily != sorted(facility_daily)
                 or facility_annualized
-                != [_money(value * annual_days) for value in facility_daily]
+                != [_round_usd(value * annual_days) for value in facility_daily]
                 or facility.uses_current_fixed_rates != fixed
                 or (fixed and facility.uses_modeled)
             ):
@@ -458,7 +458,7 @@ TOOL_SPEC: ToolSpec = {
 }
 
 
-def _progress(stage: _ProgressStage, status: _ProgressStatus) -> dict[str, str]:
+def _progress_event(stage: _ProgressStage, status: _ProgressStatus) -> dict[str, str]:
     return cast(
         dict[str, str],
         _ProgressEvent(
@@ -467,7 +467,7 @@ def _progress(stage: _ProgressStage, status: _ProgressStatus) -> dict[str, str]:
     )
 
 
-def _operation_error(tool_use_id: str) -> ToolResult:
+def _operation_error_result(tool_use_id: str) -> ToolResult:
     return cast(
         ToolResult,
         _OperationError(
@@ -478,7 +478,9 @@ def _operation_error(tool_use_id: str) -> ToolResult:
     )
 
 
-def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
+def _log_failure_and_build_error_result(
+    tool_use_id: str, stage: str, error: Exception
+) -> ToolResult:
     safe_error = RuntimeError(f"{type(error).__name__} during {stage}")
     logger.error(
         "get_annual_toll_ballpark failed",
@@ -489,10 +491,10 @@ def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
         },
         exc_info=(type(safe_error), safe_error, error.__traceback__),
     )
-    return _operation_error(tool_use_id)
+    return _operation_error_result(tool_use_id)
 
 
-def _begin_and_validate_routes(
+def _start_transaction_and_fetch_routes_and_dates(
     connection: _Connection, request: _BallparkRequest
 ) -> tuple[datetime, tuple[_BallparkRouteDb, _BallparkRouteDb], list[date]]:
     with connection.cursor() as cursor:
@@ -524,7 +526,9 @@ def _begin_and_validate_routes(
     return evaluated_at.astimezone(_EASTERN), (routes[0], routes[1]), dates
 
 
-def _resolve_wall_time(sample_date: date, departure_time: time) -> datetime | None:
+def _resolve_unambiguous_eastern_datetime(
+    sample_date: date, departure_time: time
+) -> datetime | None:
     naive = datetime.combine(sample_date, departure_time)
     candidates = {
         candidate.astimezone(UTC)
@@ -538,7 +542,9 @@ def _resolve_wall_time(sample_date: date, departure_time: time) -> datetime | No
     return next(iter(candidates)).astimezone(_EASTERN) if len(candidates) == 1 else None
 
 
-def _route_status(request: _DirectionRequest, route: _BallparkRouteDb) -> _RouteStatus:
+def _build_route_status(
+    request: _DirectionRequest, route: _BallparkRouteDb
+) -> _RouteStatus:
     return _RouteStatus(
         origin_point_id=request.origin_point_id,
         destination_point_id=request.destination_point_id,
@@ -547,7 +553,7 @@ def _route_status(request: _DirectionRequest, route: _BallparkRouteDb) -> _Route
     )
 
 
-def _summary_inputs(
+def _build_summary_query_inputs(
     routes: tuple[_BallparkRouteDb, _BallparkRouteDb],
     request: _BallparkRequest,
     dates: list[date],
@@ -559,7 +565,8 @@ def _summary_inputs(
         ("return", routes[1], request.return_),
     ):
         resolved = {
-            day: _resolve_wall_time(day, direction.parsed_time()) for day in dates
+            day: _resolve_unambiguous_eastern_datetime(day, direction.parsed_time())
+            for day in dates
         }
         for leg in route.facility_legs:
             item: dict[str, Any] = {
@@ -581,13 +588,11 @@ def _summary_inputs(
                 for sample_date, sample_at in resolved.items():
                     if sample_at is not None:
                         if leg.facility == "greenway":
-                            component = current_pricing._price_greenway(  # pyright: ignore[reportPrivateUsage]
+                            component = current_pricing.price_greenway_leg(
                                 leg, sample_at
                             )
                         elif leg.facility == "dtr":
-                            component = current_pricing._price_dtr(  # pyright: ignore[reportPrivateUsage]
-                                leg, sample_at
-                            )
+                            component = current_pricing.price_dtr_leg(leg, sample_at)
                         else:  # narrowed by the enclosing fixed-facility check
                             raise AssertionError("unreachable facility")
                         fixed_prices.append(
@@ -601,11 +606,11 @@ def _summary_inputs(
     return legs, fixed_prices
 
 
-def _scenario(daily: Decimal, annualized: Decimal) -> _Scenario:
+def _scenario_from_totals(daily: Decimal, annualized: Decimal) -> _Scenario:
     return _Scenario(daily_round_trip_usd=daily, annualized_usd=annualized)
 
 
-def _json_scenarios(value: _ScenariosDb) -> _Scenarios:
+def _parse_database_scenarios(value: _ScenariosDb) -> _Scenarios:
     return _Scenarios(
         p25=_Scenario(
             daily_round_trip_usd=Decimal(value.p25.daily_round_trip_usd),
@@ -622,7 +627,7 @@ def _json_scenarios(value: _ScenariosDb) -> _Scenarios:
     )
 
 
-def _fetch_summary(
+def _fetch_and_validate_summary(
     connection: _Connection,
     routes: tuple[_BallparkRouteDb, _BallparkRouteDb],
     request: _BallparkRequest,
@@ -631,7 +636,7 @@ def _fetch_summary(
 ) -> _SummaryRow:
     from psycopg.types.json import Jsonb
 
-    legs, fixed_prices = _summary_inputs(routes, request, dates)
+    legs, fixed_prices = _build_summary_query_inputs(routes, request, dates)
     with connection.cursor() as cursor:
         cursor.execute(
             _SUMMARY_SQL,
@@ -659,7 +664,7 @@ def _fetch_summary(
     )
 
 
-def _response(
+def _build_ballpark_response(
     request: _BallparkRequest, evaluated_at: datetime, summary: _SummaryRow
 ) -> _BallparkSuccess | _NoCompleteResponse:
     target_end = evaluated_at.date() - timedelta(days=1)
@@ -683,7 +688,7 @@ def _response(
             sample_count=item.sample_count,
             uses_modeled=item.uses_modeled,
             uses_current_fixed_rates=item.uses_current_fixed_rates,
-            scenarios=_json_scenarios(item.scenarios),
+            scenarios=_parse_database_scenarios(item.scenarios),
         )
         for item in summary.facility_scenarios
     ]
@@ -730,15 +735,15 @@ def _response(
             end_date=cast(date, summary.available_end_date),
         ),
         scenarios=_Scenarios(
-            p25=_scenario(
+            p25=_scenario_from_totals(
                 cast(Decimal, summary.p25_daily_usd),
                 cast(Decimal, summary.p25_annualized_usd),
             ),
-            p50=_scenario(
+            p50=_scenario_from_totals(
                 cast(Decimal, summary.p50_daily_usd),
                 cast(Decimal, summary.p50_annualized_usd),
             ),
-            p90=_scenario(
+            p90=_scenario_from_totals(
                 cast(Decimal, summary.p90_daily_usd),
                 cast(Decimal, summary.p90_annualized_usd),
             ),
@@ -746,7 +751,7 @@ def _response(
     )
 
 
-def _tool_result(tool_use_id: str, response: _BallparkOutput) -> ToolResult:
+def _build_success_result(tool_use_id: str, response: _BallparkOutput) -> ToolResult:
     return {
         "toolUseId": tool_use_id,
         "status": "success",
@@ -760,7 +765,7 @@ def _tool_result(tool_use_id: str, response: _BallparkOutput) -> ToolResult:
     }
 
 
-def _close(connection: _Connection, *, rollback: bool) -> None:
+def _close_connection(connection: _Connection, *, rollback: bool) -> None:
     error: Exception | None = None
     if rollback:
         try:
@@ -797,10 +802,12 @@ async def get_annual_toll_ballpark(
             tool_use_id = tool_data["toolUseId"]
         request = _BallparkRequest.model_validate(tool_data.get("input"))
     except Exception as error:
-        yield _error(tool_use_id, "input_validation", error)
+        yield _log_failure_and_build_error_result(
+            tool_use_id, "input_validation", error
+        )
         return
     if request.return_.parsed_time() <= request.outbound.parsed_time():
-        yield _tool_result(
+        yield _build_success_result(
             tool_use_id,
             _SimpleUnavailableResponse(
                 error="ballpark_unavailable", reason="overnight_schedule"
@@ -810,62 +817,75 @@ async def get_annual_toll_ballpark(
 
     connection: _Connection | None = None
     try:
-        yield _progress("route_validation", "running")
+        yield _progress_event("route_validation", "running")
         try:
-            connect = route_validation._connect  # pyright: ignore[reportPrivateUsage]
+            connect = route_validation.connect_to_database
             connection = cast(_Connection, await asyncio.to_thread(connect))
             evaluated_at, routes, dates = await asyncio.to_thread(
-                _begin_and_validate_routes, connection, request
+                _start_transaction_and_fetch_routes_and_dates, connection, request
             )
         except Exception as error:
-            yield _progress("route_validation", "failed")
-            yield _error(tool_use_id, "route_validation", error)
+            yield _progress_event("route_validation", "failed")
+            yield _log_failure_and_build_error_result(
+                tool_use_id, "route_validation", error
+            )
             return
-        yield _progress("route_validation", "completed")
+        yield _progress_event("route_validation", "completed")
         if routes[0].status != "valid" or routes[1].status != "valid":
-            yield _tool_result(
+            yield _build_success_result(
                 tool_use_id,
                 _RouteUnavailableResponse.model_validate(
                     {
                         "error": "ballpark_unavailable",
                         "reason": "route_unavailable",
-                        "outbound": _route_status(request.outbound, routes[0]),
-                        "return": _route_status(request.return_, routes[1]),
+                        "outbound": _build_route_status(request.outbound, routes[0]),
+                        "return": _build_route_status(request.return_, routes[1]),
                     }
                 ),
             )
             return
 
-        yield _progress("historical_pricing", "running")
+        yield _progress_event("historical_pricing", "running")
         try:
             summary = await asyncio.to_thread(
-                _fetch_summary, connection, routes, request, dates, evaluated_at
+                _fetch_and_validate_summary,
+                connection,
+                routes,
+                request,
+                dates,
+                evaluated_at,
             )
             completed_connection = cast(_Connection, connection)
             await asyncio.to_thread(completed_connection.commit)
-            await asyncio.to_thread(_close, completed_connection, rollback=False)
+            await asyncio.to_thread(
+                _close_connection, completed_connection, rollback=False
+            )
             connection = None
         except Exception as error:
-            yield _progress("historical_pricing", "failed")
-            yield _error(tool_use_id, "historical_pricing", error)
+            yield _progress_event("historical_pricing", "failed")
+            yield _log_failure_and_build_error_result(
+                tool_use_id, "historical_pricing", error
+            )
             return
-        yield _progress("historical_pricing", "completed")
+        yield _progress_event("historical_pricing", "completed")
 
-        yield _progress("ballpark_calculation", "running")
+        yield _progress_event("ballpark_calculation", "running")
         try:
-            result = _tool_result(
-                tool_use_id, _response(request, evaluated_at, summary)
+            result = _build_success_result(
+                tool_use_id, _build_ballpark_response(request, evaluated_at, summary)
             )
         except Exception as error:
-            yield _progress("ballpark_calculation", "failed")
-            yield _error(tool_use_id, "ballpark_calculation", error)
+            yield _progress_event("ballpark_calculation", "failed")
+            yield _log_failure_and_build_error_result(
+                tool_use_id, "ballpark_calculation", error
+            )
             return
-        yield _progress("ballpark_calculation", "completed")
+        yield _progress_event("ballpark_calculation", "completed")
         yield result
     finally:
         if connection is not None:
             try:
-                await asyncio.to_thread(_close, connection, rollback=True)
+                await asyncio.to_thread(_close_connection, connection, rollback=True)
             except Exception as error:
                 safe_error = RuntimeError(
                     f"{type(error).__name__} during connection_cleanup"

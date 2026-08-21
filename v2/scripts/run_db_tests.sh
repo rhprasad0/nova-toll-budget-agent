@@ -107,6 +107,11 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
       exit 1
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.7.1" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE pricing.schema_version SET version = '1.2.1' WHERE singleton"
+    fi
+
     if [[ "$schema_name:$target_version" == "oracle:1.1.1" ]]; then
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
 UPDATE oracle.toll_connection
