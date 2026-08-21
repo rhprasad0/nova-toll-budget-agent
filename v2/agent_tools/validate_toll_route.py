@@ -497,7 +497,7 @@ type _FacilityLeg = Annotated[
 ]
 
 
-def _validate_facility_leg_alignment(
+def validate_facility_leg_alignment(
     point_ids: list[str],
     connection_ids: list[str],
     connection_types: list[ConnectionType],
@@ -574,7 +574,7 @@ class _PricingRouteResponse(_RouteResponse):
                 )
             return self
 
-        _validate_facility_leg_alignment(
+        validate_facility_leg_alignment(
             self.point_ids,
             self.connection_ids,
             self.connection_types,
@@ -583,7 +583,7 @@ class _PricingRouteResponse(_RouteResponse):
         return self
 
 
-def _connect() -> object:
+def connect_to_database() -> object:
     import psycopg
     from psycopg.rows import dict_row
 
@@ -613,7 +613,9 @@ def _connect() -> object:
     )
 
 
-def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
+def _log_failure_and_build_error_result(
+    tool_use_id: str, stage: str, error: Exception
+) -> ToolResult:
     logger.error(
         "validate_toll_route failed",
         extra={
@@ -646,7 +648,7 @@ def _log_pricing_error(stage: _PricingFailureStage, error: Exception) -> None:
     )
 
 
-def _validate_pricing_route(  # pyright: ignore[reportUnusedFunction]
+def fetch_validated_pricing_route(
     origin_point_id: str,
     destination_point_id: str,
 ) -> _PricingRouteResponse:
@@ -663,7 +665,7 @@ def _validate_pricing_route(  # pyright: ignore[reportUnusedFunction]
         raise
 
     try:
-        connection = cast(Any, _connect())
+        connection = cast(Any, connect_to_database())
     except Exception as error:
         _log_pricing_error("connection", error)
         raise
@@ -719,12 +721,14 @@ def validate_toll_route(tool_use: ToolUse, **_: Any) -> ToolResult:  # noqa: ANN
             tool_use_id = candidate_id
         route_input = _RouteInput.model_validate(tool_data.get("input"))
     except Exception as error:
-        return _error(tool_use_id, "input_validation", error)
+        return _log_failure_and_build_error_result(
+            tool_use_id, "input_validation", error
+        )
 
     try:
-        connection = cast(Any, _connect())
+        connection = cast(Any, connect_to_database())
     except Exception as error:
-        return _error(tool_use_id, "connection", error)
+        return _log_failure_and_build_error_result(tool_use_id, "connection", error)
 
     database_error: tuple[str, Exception] | None = None
     rows: list[dict[str, Any]] = []
@@ -747,7 +751,7 @@ def validate_toll_route(tool_use: ToolUse, **_: Any) -> ToolResult:  # noqa: ANN
             database_error[1].add_note(f"Connection close also failed: {error!r}")
 
     if database_error is not None:
-        return _error(tool_use_id, *database_error)
+        return _log_failure_and_build_error_result(tool_use_id, *database_error)
 
     try:
         if len(rows) != 1:
@@ -756,9 +760,11 @@ def validate_toll_route(tool_use: ToolUse, **_: Any) -> ToolResult:  # noqa: ANN
             rows[0], context={"request": route_input}
         )
     except (ValidationError, ValueError) as error:
-        return _error(tool_use_id, "response_validation", error)
+        return _log_failure_and_build_error_result(
+            tool_use_id, "response_validation", error
+        )
     except Exception as error:
-        return _error(tool_use_id, "unexpected", error)
+        return _log_failure_and_build_error_result(tool_use_id, "unexpected", error)
 
     try:
         content = response.model_dump(mode="json")
@@ -768,4 +774,4 @@ def validate_toll_route(tool_use: ToolUse, **_: Any) -> ToolResult:  # noqa: ANN
             "content": [{"json": content}],
         }
     except Exception as error:
-        return _error(tool_use_id, "unexpected", error)
+        return _log_failure_and_build_error_result(tool_use_id, "unexpected", error)

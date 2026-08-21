@@ -185,7 +185,7 @@ def test_request_is_strict_and_profile_is_implicit(mutation):
 def test_overnight_fails_before_database(monkeypatch):
     monkeypatch.setattr(
         ballpark.route_validation,
-        "_connect",
+        "connect_to_database",
         lambda: pytest.fail("database should not be opened"),
     )
     data = _input()
@@ -198,11 +198,17 @@ def test_overnight_fails_before_database(monkeypatch):
 
 
 def test_wall_time_resolution_rejects_dst_gap_and_fold():
-    assert ballpark._resolve_wall_time(date(2026, 3, 8), time(2, 30)) is None
-    assert ballpark._resolve_wall_time(date(2025, 11, 2), time(1, 30)) is None
-    assert ballpark._resolve_wall_time(date(2026, 3, 9), time(8)) == datetime(
-        2026, 3, 9, 8, tzinfo=_EASTERN
+    assert (
+        ballpark._resolve_unambiguous_eastern_datetime(date(2026, 3, 8), time(2, 30))
+        is None
     )
+    assert (
+        ballpark._resolve_unambiguous_eastern_datetime(date(2025, 11, 2), time(1, 30))
+        is None
+    )
+    assert ballpark._resolve_unambiguous_eastern_datetime(
+        date(2026, 3, 9), time(8)
+    ) == datetime(2026, 3, 9, 8, tzinfo=_EASTERN)
 
 
 def test_fixed_rates_are_computed_for_each_sample_date():
@@ -213,7 +219,7 @@ def test_fixed_rates_are_computed_for_each_sample_date():
             "planned_annual_commute_days": 100,
         }
     )
-    legs, prices = ballpark._summary_inputs(
+    legs, prices = ballpark._build_summary_query_inputs(
         (_greenway_route(), _route()),
         request,
         [date(2026, 8, 17), date(2026, 8, 22)],
@@ -228,7 +234,7 @@ def test_fixed_rates_are_computed_for_each_sample_date():
 
 def test_compact_response_uses_database_scenarios():
     request = ballpark._BallparkRequest.model_validate(_input())
-    response = ballpark._response(
+    response = ballpark._build_ballpark_response(
         request, datetime(2026, 8, 20, 12, tzinfo=_EASTERN), _summary()
     )
     output = response.model_dump(mode="json")
@@ -243,7 +249,7 @@ def test_compact_response_uses_database_scenarios():
 
 
 def test_no_complete_response_keeps_compact_coverage():
-    response = ballpark._response(
+    response = ballpark._build_ballpark_response(
         ballpark._BallparkRequest.model_validate(_input()),
         datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
         _summary(complete=0),
@@ -277,17 +283,19 @@ def test_streams_stages_and_returns_summary(monkeypatch):
             "close": lambda self: None,
         },
     )()
-    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: connection)
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_database", lambda: connection
+    )
     monkeypatch.setattr(
         ballpark,
-        "_begin_and_validate_routes",
+        "_start_transaction_and_fetch_routes_and_dates",
         lambda *_: (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
             [date(2026, 8, 19)],
         ),
     )
-    monkeypatch.setattr(ballpark, "_fetch_summary", lambda *_: _summary())
+    monkeypatch.setattr(ballpark, "_fetch_and_validate_summary", lambda *_: _summary())
     events, result = asyncio.run(_invoke(_input()))
     assert [(event["stage"], event["status"]) for event in events] == [
         ("route_validation", "running"),
@@ -303,10 +311,12 @@ def test_streams_stages_and_returns_summary(monkeypatch):
 
 def test_route_unavailable_stops_before_summary(monkeypatch):
     connection = object()
-    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: connection)
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_database", lambda: connection
+    )
     monkeypatch.setattr(
         ballpark,
-        "_begin_and_validate_routes",
+        "_start_transaction_and_fetch_routes_and_dates",
         lambda *_: (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(status="no_supported_route"), _route()),
@@ -314,9 +324,11 @@ def test_route_unavailable_stops_before_summary(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        ballpark, "_fetch_summary", lambda *_: pytest.fail("summary should not run")
+        ballpark,
+        "_fetch_and_validate_summary",
+        lambda *_: pytest.fail("summary should not run"),
     )
-    monkeypatch.setattr(ballpark, "_close", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
     _, result = asyncio.run(_invoke(_input()))
     output = cast(Any, result["content"])[0]["json"]
     assert output["reason"] == "route_unavailable"
@@ -324,10 +336,12 @@ def test_route_unavailable_stops_before_summary(monkeypatch):
 
 def test_history_failure_is_safe(monkeypatch, caplog):
     secret = "private historical row"
-    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: object())
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_database", lambda: object()
+    )
     monkeypatch.setattr(
         ballpark,
-        "_begin_and_validate_routes",
+        "_start_transaction_and_fetch_routes_and_dates",
         lambda *_: (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
@@ -336,23 +350,25 @@ def test_history_failure_is_safe(monkeypatch, caplog):
     )
     monkeypatch.setattr(
         ballpark,
-        "_fetch_summary",
+        "_fetch_and_validate_summary",
         lambda *_: (_ for _ in ()).throw(RuntimeError(secret)),
     )
-    monkeypatch.setattr(ballpark, "_close", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
     with caplog.at_level("ERROR"):
         events, result = asyncio.run(_invoke(_input()))
-    assert events[-1] == ballpark._progress("historical_pricing", "failed")
+    assert events[-1] == ballpark._progress_event("historical_pricing", "failed")
     assert result["status"] == "error"
     assert secret not in caplog.text
 
 
 def test_cleanup_failure_is_safe(monkeypatch, caplog):
     secret = "private cleanup detail"
-    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: object())
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_database", lambda: object()
+    )
     monkeypatch.setattr(
         ballpark,
-        "_begin_and_validate_routes",
+        "_start_transaction_and_fetch_routes_and_dates",
         lambda *_: (
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(status="no_supported_route"), _route()),
@@ -361,7 +377,7 @@ def test_cleanup_failure_is_safe(monkeypatch, caplog):
     )
     monkeypatch.setattr(
         ballpark,
-        "_close",
+        "_close_connection",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
     )
     with caplog.at_level("ERROR"):

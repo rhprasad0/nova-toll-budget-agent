@@ -512,7 +512,7 @@ TOOL_SPEC: ToolSpec = {
 }
 
 
-def _operation_error(tool_use_id: str) -> ToolResult:
+def _operation_error_result(tool_use_id: str) -> ToolResult:
     error = _OperationError(
         toolUseId=tool_use_id,
         status="error",
@@ -521,7 +521,9 @@ def _operation_error(tool_use_id: str) -> ToolResult:
     return cast(ToolResult, error.model_dump(mode="json"))
 
 
-def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
+def _log_failure_and_build_error_result(
+    tool_use_id: str, stage: str, error: Exception
+) -> ToolResult:
     safe_error = RuntimeError(f"{type(error).__name__} during {stage}")
     logger.error(
         "get_current_toll_price failed",
@@ -532,10 +534,10 @@ def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
         },
         exc_info=(type(safe_error), safe_error, error.__traceback__),
     )
-    return _operation_error(tool_use_id)
+    return _operation_error_result(tool_use_id)
 
 
-def _progress(
+def _progress_event(
     stage: _ProgressStage,
     status: _ProgressStatus,
 ) -> dict[str, str]:
@@ -551,8 +553,8 @@ def _current_eastern_time() -> datetime:
     return datetime.now(_EASTERN)
 
 
-def _fetch_rows(sql: str, params: tuple[int, ...]) -> list[dict[str, Any]]:
-    connection = cast(Any, route_validation._connect())  # pyright: ignore[reportPrivateUsage]
+def _fetch_pricing_rows(sql: str, params: tuple[int, ...]) -> list[dict[str, Any]]:
+    connection = cast(Any, route_validation.connect_to_database())
     database_error: Exception | None = None
     rows: list[dict[str, Any]] = []
     try:
@@ -575,7 +577,7 @@ def _fetch_rows(sql: str, params: tuple[int, ...]) -> list[dict[str, Any]]:
     return rows
 
 
-def _validate_row_set(
+def _validate_comparison_rows(
     comparisons: list[_I66ComparisonRow] | list[_I95ComparisonRow], label: str
 ) -> None:
     identities = [
@@ -590,20 +592,22 @@ def _validate_row_set(
         )
 
 
-def _fetch_i66_prices(start_zone_id: int, end_zone_id: int) -> list[_I66ComparisonRow]:
+def _fetch_i66_comparisons(
+    start_zone_id: int, end_zone_id: int
+) -> list[_I66ComparisonRow]:
     """Fetch one bounded, diagnostic I-66 comparison set."""
-    rows = _fetch_rows(_I66_SQL, (start_zone_id, end_zone_id))
+    rows = _fetch_pricing_rows(_I66_SQL, (start_zone_id, end_zone_id))
 
     comparisons = [_I66ComparisonRow.model_validate(row) for row in rows]
-    _validate_row_set(comparisons, "I-66")
+    _validate_comparison_rows(comparisons, "I-66")
     return comparisons
 
 
-def _fetch_i95_prices(od_pair_id: int) -> list[_I95ComparisonRow]:
+def _fetch_i95_i495_comparisons(od_pair_id: int) -> list[_I95ComparisonRow]:
     """Fetch one bounded, diagnostic I-95/I-495 comparison set."""
-    rows = _fetch_rows(_I95_SQL, (od_pair_id,))
+    rows = _fetch_pricing_rows(_I95_SQL, (od_pair_id,))
     comparisons = [_I95ComparisonRow.model_validate(row) for row in rows]
-    _validate_row_set(comparisons, "I-95/I-495")
+    _validate_comparison_rows(comparisons, "I-95/I-495")
     if any(row.od_pair_id not in {None, od_pair_id} for row in comparisons):
         raise ValueError("I-95/I-495 pricing function returned the wrong OD pair")
     provenance = {
@@ -621,7 +625,7 @@ def _fetch_i95_prices(od_pair_id: int) -> list[_I95ComparisonRow]:
     return comparisons
 
 
-def _percent(change: Decimal, baseline: Decimal) -> Decimal | None:
+def _percent_change(change: Decimal, baseline: Decimal) -> Decimal | None:
     return (
         None
         if baseline == 0
@@ -629,7 +633,7 @@ def _percent(change: Decimal, baseline: Decimal) -> Decimal | None:
     )
 
 
-def _expected_prior_weeks(bin_start: datetime) -> int:
+def _count_valid_prior_week_bins(bin_start: datetime) -> int:
     local = bin_start.astimezone(_EASTERN)
     local_wall_time = local.replace(tzinfo=None)
     return sum(
@@ -646,7 +650,7 @@ def _expected_prior_weeks(bin_start: datetime) -> int:
     )
 
 
-def _comparison_summaries(
+def _build_price_comparisons(
     rows: list[_I66ComparisonRow] | list[_I95ComparisonRow],
     current_price: Decimal,
     current_bin_start: datetime,
@@ -680,7 +684,7 @@ def _comparison_summaries(
                 for offset, price in zip((-2, -1, 0), cycle_prices, strict=True)
             ],
             net_change_usd=net_change,
-            net_change_percent=_percent(net_change, cycle_prices[0]),
+            net_change_percent=_percent_change(net_change, cycle_prices[0]),
         )
 
     week_rows = sorted(
@@ -707,7 +711,9 @@ def _comparison_summaries(
         prior_week_comparison = _PriorWeekComparison(
             method="same_weekday_same_facility_bins",
             comparable_period_count=len(week_rows),
-            expected_comparable_period_count=_expected_prior_weeks(current_bin_start),
+            expected_comparable_period_count=_count_valid_prior_week_bins(
+                current_bin_start
+            ),
             comparable_prices=[
                 _WeekSample(
                     week_offset=row.comparison_offset,
@@ -719,14 +725,14 @@ def _comparison_summaries(
             minimum_usd=minimum,
             maximum_usd=maximum,
             current_delta_usd=current_delta,
-            current_delta_percent=_percent(current_delta, week_median),
+            current_delta_percent=_percent_change(current_delta, week_median),
             position=position,
             higher_than_count=sum(current_price > price for price in week_prices),
         )
     return recent_movement, prior_week_comparison
 
 
-def _price_i66(
+def _price_i66_leg(
     leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
 ) -> _I66Component | _UnavailableComponent:
     """Price one validated I-66 facility leg from current observations."""
@@ -741,7 +747,9 @@ def _price_i66(
     ]:
         raise ValueError("I-66 facility leg does not match its pricing key")
 
-    rows = _fetch_i66_prices(leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id)
+    rows = _fetch_i66_comparisons(
+        leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id
+    )
     current = next(row for row in rows if row.comparison_kind == "current")
     evaluated_at = current.evaluated_at.astimezone(_EASTERN)
     if not current.available:
@@ -769,7 +777,7 @@ def _price_i66(
     current_bin_end = cast(datetime, current.bin_end_at)
     current_interval_end = cast(datetime, current.interval_end_at)
     current_observed_at = cast(datetime, current.observed_at)
-    recent_movement, prior_week_comparison = _comparison_summaries(
+    recent_movement, prior_week_comparison = _build_price_comparisons(
         rows, current_price, current_bin_start
     )
 
@@ -790,7 +798,7 @@ def _price_i66(
     )
 
 
-def _price_i95(
+def _price_i95_i495_leg(
     leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
 ) -> _I95Component | _UnavailableComponent:
     """Price one validated I-95/I-495 facility leg from current observations."""
@@ -814,7 +822,7 @@ def _price_i95(
     ):
         raise ValueError("I-95/I-495 facility leg does not match its pricing key")
 
-    rows = _fetch_i95_prices(leg.pricing_key.od_pair_id)
+    rows = _fetch_i95_i495_comparisons(leg.pricing_key.od_pair_id)
     current = next(row for row in rows if row.comparison_kind == "current")
     evaluated_at = current.evaluated_at.astimezone(_EASTERN)
     if not current.available:
@@ -845,7 +853,7 @@ def _price_i95(
 
     current_price = cast(Decimal, current.price_usd)
     current_bin_start = cast(datetime, current.bin_start_at)
-    recent_movement, prior_week_comparison = _comparison_summaries(
+    recent_movement, prior_week_comparison = _build_price_comparisons(
         rows, current_price, current_bin_start
     )
     return _I95Component(
@@ -871,7 +879,7 @@ def _price_i95(
     )
 
 
-def _price_greenway(
+def price_greenway_leg(
     leg: route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
     evaluated_at: datetime,
 ) -> _GreenwayComponent:
@@ -923,7 +931,7 @@ def _price_greenway(
     )
 
 
-def _price_dtr(
+def price_dtr_leg(
     leg: route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
     evaluated_at: datetime,
 ) -> _DtrComponent:
@@ -1007,7 +1015,8 @@ def _price_dtr(
     )
 
 
-def _success(
+def _build_success_result(
+    tool_use_id: str,
     request: _PricingRequest,
     evaluated_at: datetime,
     components: list[_PriceComponent],
@@ -1036,7 +1045,7 @@ def _success(
         ).quantize(Decimal("0.01")),
     )
     return {
-        "toolUseId": "unknown",
+        "toolUseId": tool_use_id,
         "status": "success",
         "content": [{"json": response.model_dump(mode="json", exclude_none=True)}],
     }
@@ -1061,7 +1070,9 @@ async def get_current_toll_price(
             tool_use_id = candidate_id
         request = _PricingRequest.model_validate(tool_data.get("input"))
     except Exception as error:
-        yield _error(tool_use_id, "input_validation", error)
+        yield _log_failure_and_build_error_result(
+            tool_use_id, "input_validation", error
+        )
         return
 
     if request.pricing_profile != _SUPPORTED_PROFILE:
@@ -1078,19 +1089,21 @@ async def get_current_toll_price(
         }
         return
 
-    yield _progress("route_validation", "running")
+    yield _progress_event("route_validation", "running")
     try:
         pricing_route = await asyncio.to_thread(
-            route_validation._validate_pricing_route,  # pyright: ignore[reportPrivateUsage]
+            route_validation.fetch_validated_pricing_route,
             request.origin_point_id,
             request.destination_point_id,
         )
     except Exception as error:
-        yield _progress("route_validation", "failed")
-        yield _error(tool_use_id, "pricing_route_validation", error)
+        yield _progress_event("route_validation", "failed")
+        yield _log_failure_and_build_error_result(
+            tool_use_id, "pricing_route_validation", error
+        )
         return
 
-    yield _progress("route_validation", "completed")
+    yield _progress_event("route_validation", "completed")
 
     if pricing_route.status != "valid":
         try:
@@ -1110,25 +1123,28 @@ async def get_current_toll_price(
                 "content": [{"json": response.model_dump(mode="json")}],
             }
         except Exception as error:
-            yield _error(tool_use_id, "response_serialization", error)
+            yield _log_failure_and_build_error_result(
+                tool_use_id, "response_serialization", error
+            )
         return
 
     evaluated_at = _current_eastern_time()
 
     if not pricing_route.facility_legs:
         try:
-            result = _success(request, evaluated_at, [])
-            result["toolUseId"] = tool_use_id
+            result = _build_success_result(tool_use_id, request, evaluated_at, [])
             yield result
         except Exception as error:
-            yield _error(tool_use_id, "response_serialization", error)
+            yield _log_failure_and_build_error_result(
+                tool_use_id, "response_serialization", error
+            )
         return
 
     if any(
         leg.facility not in {"i95_i495", "i66", "greenway", "dtr"}
         for leg in pricing_route.facility_legs
     ):
-        yield _operation_error(tool_use_id)
+        yield _operation_error_result(tool_use_id)
         return
 
     components: list[_PriceComponent] = []
@@ -1143,13 +1159,13 @@ async def get_current_toll_price(
             "greenway": "greenway_pricing",
             "dtr": "dtr_pricing",
         }[facility]  # pyright: ignore[reportAssignmentType]
-        yield _progress(stage, "running")
+        yield _progress_event(stage, "running")
         try:
             facility_legs = list(legs)
             if facility == "i95_i495":
                 for leg in facility_legs:
                     priced = await asyncio.to_thread(
-                        _price_i95,
+                        _price_i95_i495_leg,
                         cast(
                             route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
                             leg,
@@ -1164,7 +1180,7 @@ async def get_current_toll_price(
             elif facility == "i66":
                 for leg in facility_legs:
                     priced = await asyncio.to_thread(
-                        _price_i66,
+                        _price_i66_leg,
                         cast(
                             route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
                             leg,
@@ -1178,7 +1194,7 @@ async def get_current_toll_price(
                         components.append(priced)
             elif facility == "greenway":
                 components.extend(
-                    _price_greenway(
+                    price_greenway_leg(
                         cast(
                             route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
                             leg,
@@ -1189,7 +1205,7 @@ async def get_current_toll_price(
                 )
             else:
                 components.extend(
-                    _price_dtr(
+                    price_dtr_leg(
                         cast(
                             route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
                             leg,
@@ -1199,10 +1215,10 @@ async def get_current_toll_price(
                     for leg in facility_legs
                 )
         except Exception as error:
-            yield _progress(stage, "failed")
-            yield _error(tool_use_id, stage, error)
+            yield _progress_event(stage, "failed")
+            yield _log_failure_and_build_error_result(tool_use_id, stage, error)
             return
-        yield _progress(stage, "completed")
+        yield _progress_event(stage, "completed")
 
     if unavailable_components:
         response = _IncompleteRoutePriceResponse(
@@ -1220,10 +1236,16 @@ async def get_current_toll_price(
         return
 
     try:
-        result = _success(request, database_evaluated_at or evaluated_at, components)
-        result["toolUseId"] = tool_use_id
+        result = _build_success_result(
+            tool_use_id,
+            request,
+            database_evaluated_at or evaluated_at,
+            components,
+        )
     except Exception as error:
-        yield _error(tool_use_id, "response_serialization", error)
+        yield _log_failure_and_build_error_result(
+            tool_use_id, "response_serialization", error
+        )
         return
     yield result
 
