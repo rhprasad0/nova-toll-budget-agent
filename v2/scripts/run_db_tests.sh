@@ -174,6 +174,24 @@ WHERE connection_id = 'source:greenway:EB:1:28';
 SQL
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.8.0" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "GRANT CREATE ON SCHEMA oracle TO pricing_caller"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.8.0 upgrade accepted an unsafe pricing caller" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.7.1' THEN
+    RAISE EXCEPTION 'failed role validation changed the oracle version';
+  END IF;
+END $$;
+REVOKE CREATE ON SCHEMA oracle FROM pricing_caller;
+SQL
+    fi
+
     psql --dbname "$migration_db" --file "$migration"
 
     installed_version="$(

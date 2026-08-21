@@ -67,6 +67,16 @@ BEGIN
           AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
     ) OR EXISTS (
         SELECT 1
+        FROM pg_catalog.pg_namespace AS namespace,
+             LATERAL aclexplode(namespace.nspacl) AS privilege
+        WHERE privilege.grantee = to_regrole('pricing_caller')
+          AND (
+              (SELECT version FROM oracle.schema_version WHERE singleton) = '1.7.1'
+              OR namespace.nspname <> 'oracle'
+              OR privilege.privilege_type <> 'USAGE'
+          )
+    ) OR EXISTS (
+        SELECT 1
         FROM pg_catalog.pg_class AS relation,
              LATERAL aclexplode(relation.relacl) AS privilege
         WHERE privilege.grantee = to_regrole('pricing_caller')
@@ -153,6 +163,18 @@ BEGIN
        )
        OR has_schema_privilege('pricing_caller', 'pricing', 'USAGE')
        OR has_schema_privilege('tollchat_agent', 'pricing', 'USAGE')
+       OR NOT has_schema_privilege('pricing_caller', 'oracle', 'USAGE')
+       OR has_schema_privilege('pricing_caller', 'oracle', 'CREATE')
+       OR EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_namespace AS namespace,
+                LATERAL aclexplode(namespace.nspacl) AS privilege
+           WHERE privilege.grantee = to_regrole('pricing_caller')
+             AND (
+                 namespace.nspname <> 'oracle'
+                 OR privilege.privilege_type <> 'USAGE'
+             )
+       )
        OR EXISTS (
            SELECT 1
            FROM pg_catalog.pg_class AS relation
