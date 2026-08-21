@@ -18,7 +18,8 @@ from strands.types.tools import ToolResult, ToolUse
 
 logger = logging.getLogger(__name__)
 
-_DB_USER = "tollchat_agent"
+_AGENT_DB_USER = "tollchat_agent"
+_PRICING_DB_USER = "pricing_caller"
 _SQL = "SELECT * FROM oracle.validate_toll_route(%s, %s)"
 _PRICING_SQL = "SELECT * FROM oracle.validate_pricing_route(%s, %s)"
 _SAFE_ERROR = "Unable to validate the toll route. Reference: {tool_use_id}."
@@ -583,7 +584,7 @@ class _PricingRouteResponse(_RouteResponse):
         return self
 
 
-def connect_to_database() -> object:
+def _connect_to_database(user: str) -> object:
     import psycopg
     from psycopg.rows import dict_row
 
@@ -595,7 +596,7 @@ def connect_to_database() -> object:
         rds.generate_db_auth_token(
             DBHostname=host,
             Port=port,
-            DBUsername=_DB_USER,
+            DBUsername=user,
         ),
     )
     return cast(
@@ -604,13 +605,21 @@ def connect_to_database() -> object:
             host=host,
             port=port,
             dbname=os.environ["DB_NAME"],
-            user=_DB_USER,
+            user=user,
             password=token,
             sslmode="verify-full",
             sslrootcert=os.environ["DB_CA_BUNDLE_PATH"],
             row_factory=cast(Any, dict_row),
         ),
     )
+
+
+def connect_to_database() -> object:
+    return _connect_to_database(_AGENT_DB_USER)
+
+
+def connect_to_pricing_database() -> object:
+    return _connect_to_database(_PRICING_DB_USER)
 
 
 def _log_failure_and_build_error_result(
@@ -665,7 +674,7 @@ def fetch_validated_pricing_route(
         raise
 
     try:
-        connection = cast(Any, connect_to_database())
+        connection = cast(Any, connect_to_pricing_database())
     except Exception as error:
         _log_pricing_error("connection", error)
         raise

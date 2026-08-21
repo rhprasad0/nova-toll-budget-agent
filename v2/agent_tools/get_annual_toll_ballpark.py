@@ -819,7 +819,7 @@ async def get_annual_toll_ballpark(
     try:
         yield _progress_event("route_validation", "running")
         try:
-            connect = route_validation.connect_to_database
+            connect = route_validation.connect_to_pricing_database
             connection = cast(_Connection, await asyncio.to_thread(connect))
             evaluated_at, routes, dates = await asyncio.to_thread(
                 _start_transaction_and_fetch_routes_and_dates, connection, request

@@ -51,7 +51,7 @@ def test_loader_network_and_data_access_are_scoped():
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
 
 
-def test_timed_ci_has_a_dedicated_route_only_role():
+def test_timed_ci_uses_the_internal_pricing_caller():
     policy = MAIN_TF.split('data "aws_iam_policy_document" "timed_checks"', maxsplit=1)[
         1
     ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
@@ -59,7 +59,8 @@ def test_timed_ci_has_a_dedicated_route_only_role():
     assert 'name               = "nova-toll-v2-timed-checks"' in MAIN_TF
     assert 'actions   = ["rds:DescribeDBInstances"]' in policy
     assert 'actions   = ["rds-db:connect"]' in policy
-    assert "/tollchat_agent" in policy
+    assert "/pricing_caller" in policy
+    assert "/tollchat_agent" not in policy
     assert "ssm:" not in policy
     assert "/pricing_reader" not in policy
     assert "role/nova-toll-v2-timed-checks" in TIMED_CHECKS_WORKFLOW

@@ -78,6 +78,23 @@ The loader batches each object and updates an existing interval only when its
 of changed rows; `V2_LOAD_OK` and `V2_LOAD_OBJECT_OK` still mark every
 successful commit, including an idempotent replay.
 
+### Deploy the pricing-caller boundary
+
+Oracle `1.8.0` moves every Python-internal pricing operation from
+`tollchat_agent` to `pricing_caller`. Apply the matching application and IAM
+change in the same maintenance window as the guarded database migration; the
+old Python wrapper cannot price routes after the agent grants are revoked.
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/019_upgrade_oracle_1_7_1_to_1_8_0.sql
+```
+
+Confirm `oracle.schema_version` is `1.8.0`, `tollchat_agent` can execute only
+`oracle.validate_toll_route(text, text)`, and `pricing_caller` can execute only
+the seven documented internal pricing functions. Neither role may read an
+Oracle or pricing relation directly.
+
 ## 3. Backfill and prove parity
 
 With the shadow loader still running, execute the idempotent backfill:

@@ -2,7 +2,8 @@
 
 DO $$
 DECLARE
-    executable_count integer;
+    agent_executable_count integer;
+    pricing_executable_count integer;
     route_function record;
     pricing_route_function record;
     i66_pricing_function record;
@@ -11,7 +12,9 @@ DECLARE
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
        OR NOT (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'tollchat_agent')
-       OR NOT pg_has_role('tollchat_agent', 'rds_iam', 'MEMBER') THEN
+       OR NOT (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'pricing_caller')
+       OR NOT pg_has_role('tollchat_agent', 'rds_iam', 'MEMBER')
+       OR NOT pg_has_role('pricing_caller', 'rds_iam', 'MEMBER') THEN
         RAISE EXCEPTION 'oracle roles do not have the required attributes';
     END IF;
     IF EXISTS (
@@ -21,10 +24,10 @@ BEGIN
           ON member_role.oid = membership.member
         JOIN pg_catalog.pg_roles AS granted_role
           ON granted_role.oid = membership.roleid
-        WHERE member_role.rolname = 'tollchat_agent'
+        WHERE member_role.rolname IN ('tollchat_agent', 'pricing_caller')
           AND granted_role.rolname <> 'rds_iam'
     ) THEN
-        RAISE EXCEPTION 'tollchat_agent retained an unexpected membership';
+        RAISE EXCEPTION 'runtime role retained an unexpected membership';
     END IF;
     IF (SELECT pg_get_userbyid(nspowner) FROM pg_catalog.pg_namespace
         WHERE nspname = 'oracle') <> 'oracle_owner'
@@ -200,31 +203,25 @@ BEGIN
             row_to_json(resolver_function);
     END IF;
     IF has_schema_privilege('tollchat_agent', 'pricing', 'USAGE')
-       OR has_table_privilege(
-           'tollchat_agent', 'pricing.current_i95_direction', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'pricing.i66_pricing_comparisons', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'pricing.i95_i495_pricing_comparisons', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'pricing.i66_ballpark_samples', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'pricing.i95_i495_ballpark_samples', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'oracle.toll_route_point', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'oracle.route_pricing_component', 'SELECT'
-       )
-       OR has_table_privilege(
-           'tollchat_agent', 'oracle.toll_connection', 'INSERT,UPDATE,DELETE'
+       OR has_schema_privilege('pricing_caller', 'pricing', 'USAGE')
+       OR EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_class AS relation
+           JOIN pg_catalog.pg_namespace AS namespace
+             ON namespace.oid = relation.relnamespace
+           WHERE namespace.nspname IN ('oracle', 'pricing')
+             AND (
+                 has_table_privilege(
+                     'tollchat_agent', relation.oid,
+                     'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+                 )
+                 OR has_table_privilege(
+                     'pricing_caller', relation.oid,
+                     'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+                 )
+             )
        ) THEN
-        RAISE EXCEPTION 'tollchat_agent has direct relation access';
+        RAISE EXCEPTION 'runtime role has direct relation access';
     END IF;
     IF EXISTS (
         SELECT 1
@@ -251,48 +248,58 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'PUBLIC can execute the route function';
     END IF;
-    SELECT count(*) INTO executable_count
+    SELECT count(*) INTO agent_executable_count
     FROM pg_catalog.pg_proc AS procedure
     JOIN pg_catalog.pg_namespace AS namespace
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('tollchat_agent', procedure.oid, 'EXECUTE');
-    IF executable_count <> 8
+    SELECT count(*) INTO pricing_executable_count
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = procedure.pronamespace
+    WHERE namespace.nspname = 'oracle'
+      AND has_function_privilege('pricing_caller', procedure.oid, 'EXECUTE');
+    IF agent_executable_count <> 1
+       OR pricing_executable_count <> 7
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
+       OR has_function_privilege(
+           'pricing_caller', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
+       )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.validate_pricing_route(text,text)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.get_i66_pricing_comparisons(integer,integer)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.get_i95_i495_pricing_comparisons(integer)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.validate_ballpark_route(text,text)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
-           'tollchat_agent',
+           'pricing_caller',
            'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)',
            'EXECUTE'
        )
@@ -315,7 +322,7 @@ BEGIN
            'oracle.validate_ballpark_sample_request(time,date[],timestamptz)',
            'EXECUTE'
        ) THEN
-        RAISE EXCEPTION 'agent executable surface is not exactly eight functions';
+        RAISE EXCEPTION 'runtime executable surfaces are not exactly 1 and 7 functions';
     END IF;
 END $$;
 
@@ -329,51 +336,13 @@ BEGIN
     IF result.status <> 'valid' OR result.reason IS NOT NULL THEN
         RAISE EXCEPTION 'agent route execution failed';
     END IF;
-    SELECT * INTO result
-    FROM oracle.validate_pricing_route(
-        'i66:1:entry:EB', 'i66:4:exit:EB'
-    );
-    IF result.status <> 'valid'
-       OR jsonb_array_length(result.facility_legs) <> 1 THEN
-        RAISE EXCEPTION 'agent pricing-route execution failed';
-    END IF;
-    SELECT * INTO result
-    FROM oracle.get_i66_pricing_comparisons(3100, 3110);
-    IF result.comparison_kind <> 'current'
-       OR result.available
-       OR result.availability_reason <> 'missing_observation' THEN
-        RAISE EXCEPTION 'agent I-66 pricing diagnostic failed';
-    END IF;
-    SELECT * INTO result
-    FROM oracle.get_i95_i495_pricing_comparisons(9999);
-    IF result.comparison_kind <> 'current'
-       OR result.available
-       OR result.availability_reason <> 'missing_observation' THEN
-        RAISE EXCEPTION 'agent I-95/I-495 pricing diagnostic failed';
-    END IF;
-    SELECT * INTO result
-    FROM oracle.validate_ballpark_route(
-        'i66:1:entry:EB', 'i66:4:exit:EB'
-    );
-    IF result.status <> 'valid'
-       OR jsonb_array_length(result.facility_legs) <> 1 THEN
-        RAISE EXCEPTION 'agent ballpark route execution failed';
-    END IF;
-    PERFORM * FROM oracle.get_i66_ballpark_samples(
-        3100, 3110, time '08:00',
-        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
-        transaction_timestamp()
-    );
-    PERFORM * FROM oracle.get_i95_i495_ballpark_samples(
-        9999, time '08:00',
-        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
-        transaction_timestamp()
-    );
-    PERFORM * FROM oracle.get_annual_ballpark_summary(
-        '[]'::jsonb, time '08:00', time '17:30',
-        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
-        '[]'::jsonb, 1, transaction_timestamp()
-    );
+    BEGIN
+        PERFORM * FROM oracle.validate_pricing_route(
+            'i66:1:entry:EB', 'i66:4:exit:EB'
+        );
+        RAISE EXCEPTION 'agent executed internal pricing-route validation';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
     BEGIN
         PERFORM *
         FROM oracle.resolve_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
@@ -444,6 +413,86 @@ BEGIN
     IF result.status <> 'valid' THEN
         RAISE EXCEPTION 'temporary shadow changed security-definer behavior';
     END IF;
+END $$;
+
+RESET ROLE;
+DROP TABLE toll_route_point;
+
+SET ROLE pricing_caller;
+
+DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_pricing_route(
+        'i66:1:entry:EB', 'i66:4:exit:EB'
+    );
+    IF result.status <> 'valid'
+       OR jsonb_array_length(result.facility_legs) <> 1 THEN
+        RAISE EXCEPTION 'pricing caller route execution failed';
+    END IF;
+    SELECT * INTO result
+    FROM oracle.get_i66_pricing_comparisons(3100, 3110);
+    IF result.comparison_kind <> 'current'
+       OR result.available
+       OR result.availability_reason <> 'missing_observation' THEN
+        RAISE EXCEPTION 'pricing caller I-66 diagnostic failed';
+    END IF;
+    SELECT * INTO result
+    FROM oracle.get_i95_i495_pricing_comparisons(9999);
+    IF result.comparison_kind <> 'current'
+       OR result.available
+       OR result.availability_reason <> 'missing_observation' THEN
+        RAISE EXCEPTION 'pricing caller I-95/I-495 diagnostic failed';
+    END IF;
+    SELECT * INTO result
+    FROM oracle.validate_ballpark_route(
+        'i66:1:entry:EB', 'i66:4:exit:EB'
+    );
+    IF result.status <> 'valid'
+       OR jsonb_array_length(result.facility_legs) <> 1 THEN
+        RAISE EXCEPTION 'pricing caller ballpark route execution failed';
+    END IF;
+    PERFORM * FROM oracle.get_i66_ballpark_samples(
+        3100, 3110, time '08:00',
+        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
+        transaction_timestamp()
+    );
+    PERFORM * FROM oracle.get_i95_i495_ballpark_samples(
+        9999, time '08:00',
+        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
+        transaction_timestamp()
+    );
+    PERFORM * FROM oracle.get_annual_ballpark_summary(
+        '[]'::jsonb, time '08:00', time '17:30',
+        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
+        '[]'::jsonb, 1, transaction_timestamp()
+    );
+    BEGIN
+        PERFORM * FROM oracle.validate_toll_route(
+            'i66:1:entry:EB', 'i66:4:exit:EB'
+        );
+        RAISE EXCEPTION 'pricing caller executed agent route validation';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM oracle.toll_route_point;
+        RAISE EXCEPTION 'pricing caller read oracle table directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM pricing.current_i95_direction;
+        RAISE EXCEPTION 'pricing caller read pricing view directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+END $$;
+
+CREATE TEMP TABLE toll_route_point (point_id text, point_type text);
+INSERT INTO toll_route_point VALUES ('i66:1:entry:EB', 'exit');
+
+DO $$
+DECLARE result record;
+BEGIN
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
         'i66:1:entry:EB', 'i66:4:exit:EB'

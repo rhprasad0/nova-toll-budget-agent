@@ -185,7 +185,7 @@ def test_request_is_strict_and_profile_is_implicit(mutation):
 def test_overnight_fails_before_database(monkeypatch):
     monkeypatch.setattr(
         ballpark.route_validation,
-        "connect_to_database",
+        "connect_to_pricing_database",
         lambda: pytest.fail("database should not be opened"),
     )
     data = _input()
@@ -284,7 +284,7 @@ def test_streams_stages_and_returns_summary(monkeypatch):
         },
     )()
     monkeypatch.setattr(
-        ballpark.route_validation, "connect_to_database", lambda: connection
+        ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
     monkeypatch.setattr(
         ballpark,
@@ -312,7 +312,7 @@ def test_streams_stages_and_returns_summary(monkeypatch):
 def test_route_unavailable_stops_before_summary(monkeypatch):
     connection = object()
     monkeypatch.setattr(
-        ballpark.route_validation, "connect_to_database", lambda: connection
+        ballpark.route_validation, "connect_to_pricing_database", lambda: connection
     )
     monkeypatch.setattr(
         ballpark,
@@ -337,7 +337,7 @@ def test_route_unavailable_stops_before_summary(monkeypatch):
 def test_history_failure_is_safe(monkeypatch, caplog):
     secret = "private historical row"
     monkeypatch.setattr(
-        ballpark.route_validation, "connect_to_database", lambda: object()
+        ballpark.route_validation, "connect_to_pricing_database", lambda: object()
     )
     monkeypatch.setattr(
         ballpark,
@@ -364,7 +364,7 @@ def test_history_failure_is_safe(monkeypatch, caplog):
 def test_cleanup_failure_is_safe(monkeypatch, caplog):
     secret = "private cleanup detail"
     monkeypatch.setattr(
-        ballpark.route_validation, "connect_to_database", lambda: object()
+        ballpark.route_validation, "connect_to_pricing_database", lambda: object()
     )
     monkeypatch.setattr(
         ballpark,

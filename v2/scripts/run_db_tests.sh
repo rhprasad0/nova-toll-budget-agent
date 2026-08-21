@@ -174,6 +174,27 @@ WHERE connection_id = 'source:greenway:EB:1:28';
 SQL
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.8.0" ]]; then
+      for runtime_role in tollchat_agent pricing_caller; do
+        psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+          --command "GRANT CREATE ON SCHEMA oracle TO $runtime_role"
+        if psql --dbname "$migration_db" --file "$migration"; then
+          echo "oracle 1.8.0 upgrade accepted unsafe $runtime_role grants" >&2
+          exit 1
+        fi
+        psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+          --variable runtime_role="$runtime_role" <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.7.1' THEN
+    RAISE EXCEPTION 'failed role validation changed the oracle version';
+  END IF;
+END $$;
+REVOKE CREATE ON SCHEMA oracle FROM :runtime_role;
+SQL
+      done
+    fi
+
     psql --dbname "$migration_db" --file "$migration"
 
     installed_version="$(
@@ -484,5 +505,33 @@ SQL
 if psql --dbname "$unsafe_agent_db" \
   --file v2/db/migrations/003_create_oracle_schema.sql; then
   echo "oracle unexpectedly accepted an agent with direct privileges" >&2
+  exit 1
+fi
+
+psql --dbname "$unsafe_agent_db" --set ON_ERROR_STOP=1 <<'SQL'
+REVOKE CREATE ON DATABASE nova_toll_v2_oracle_unsafe_agent_test FROM tollchat_agent;
+REVOKE USAGE ON SCHEMA pricing FROM tollchat_agent;
+REVOKE SELECT ON pricing.current_i95_direction FROM tollchat_agent;
+SQL
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command "GRANT pg_read_all_data TO pricing_caller"
+if psql --dbname "$unsafe_agent_db" \
+  --file v2/db/migrations/003_create_oracle_schema.sql; then
+  psql --dbname postgres --set ON_ERROR_STOP=1 \
+    --command "REVOKE pg_read_all_data FROM pricing_caller"
+  echo "oracle unexpectedly accepted a pricing caller with inherited privileges" >&2
+  exit 1
+fi
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command "REVOKE pg_read_all_data FROM pricing_caller"
+
+psql --dbname "$unsafe_agent_db" --set ON_ERROR_STOP=1 <<'SQL'
+GRANT CREATE ON DATABASE nova_toll_v2_oracle_unsafe_agent_test TO pricing_caller;
+GRANT USAGE ON SCHEMA pricing TO pricing_caller;
+GRANT SELECT ON pricing.current_i95_direction TO pricing_caller;
+SQL
+if psql --dbname "$unsafe_agent_db" \
+  --file v2/db/migrations/003_create_oracle_schema.sql; then
+  echo "oracle unexpectedly accepted a pricing caller with direct privileges" >&2
   exit 1
 fi

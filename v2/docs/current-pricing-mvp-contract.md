@@ -37,7 +37,7 @@ The wrapper follows the existing `validate_toll_route` pattern:
 
 - validate strict request and response models and hide submitted values from
   validation errors;
-- connect with RDS IAM as `tollchat_agent` over verified TLS;
+- connect with RDS IAM as `pricing_caller` over verified TLS;
 - use fixed SQL with bound parameters and require each database operation to
   return its documented bounded result;
 - expose only safe operation errors carrying the Strands tool-use reference;
@@ -101,8 +101,9 @@ treat this validation output itself as a price.
 Pricing access follows the route function's least-privilege pattern. Each
 pricing operation is a narrow `SECURITY DEFINER` function with a fixed trusted
 search path, an owner limited to its required pricing relations, and only
-`EXECUTE` granted to `tollchat_agent`. Do not grant the agent role direct
-`SELECT` access to pricing tables or views.
+`EXECUTE` granted to `pricing_caller`. Do not grant either runtime role direct
+`SELECT` access to pricing tables or views; `tollchat_agent` retains only the
+agent-facing route validator.
 
 ## Pricing method
 

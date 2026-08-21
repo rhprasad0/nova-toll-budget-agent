@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.7.1
+-- oracle schema version: 1.8.0
 
 \set ON_ERROR_STOP on
 
@@ -13,14 +13,14 @@ DECLARE
 BEGIN
     IF current_setting('server_version_num')::integer < 170000
        OR current_setting('server_version_num')::integer >= 180000 THEN
-        RAISE EXCEPTION 'oracle 1.7.1 requires PostgreSQL 17';
+        RAISE EXCEPTION 'oracle 1.8.0 requires PostgreSQL 17';
     END IF;
     IF to_regclass('pricing.schema_version') IS NULL
        OR to_regclass('pricing.current_i95_direction') IS NULL
        OR to_regclass('pricing.i66_pricing_comparisons') IS NULL
        OR to_regclass('pricing.i66_ballpark_samples') IS NULL
        OR to_regclass('pricing.i95_i495_ballpark_samples') IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.7.1 requires pricing schema >=1.2.0,<2.0.0';
+        RAISE EXCEPTION 'oracle 1.8.0 requires pricing schema >=1.2.0,<2.0.0';
     END IF;
     EXECUTE 'SELECT version FROM pricing.schema_version WHERE singleton'
         INTO pricing_version;
@@ -28,7 +28,7 @@ BEGIN
     IF pricing_version IS NULL
        OR pricing_version_parts < ARRAY[1, 2, 0]
        OR pricing_version_parts >= ARRAY[2, 0, 0] THEN
-        RAISE EXCEPTION 'oracle 1.7.1 requires pricing schema >=1.2.0,<2.0.0; found %',
+        RAISE EXCEPTION 'oracle 1.8.0 requires pricing schema >=1.2.0,<2.0.0; found %',
             coalesce(pricing_version, '<missing>');
     END IF;
     IF to_regrole('rds_iam') IS NULL THEN
@@ -52,6 +52,13 @@ END $$;
 
 DO $$
 BEGIN
+    CREATE ROLE pricing_caller LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles
         WHERE rolname = 'oracle_owner'
@@ -62,11 +69,11 @@ BEGIN
     END IF;
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname = 'tollchat_agent'
+        WHERE rolname IN ('tollchat_agent', 'pricing_caller')
           AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
                OR rolreplication OR rolbypassrls)
     ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent role is not a scoped LOGIN role';
+        RAISE EXCEPTION 'existing runtime role is not a scoped LOGIN role';
     END IF;
     IF EXISTS (
         SELECT 1
@@ -75,39 +82,47 @@ BEGIN
           ON member_role.oid = membership.member
         JOIN pg_catalog.pg_roles AS granted_role
           ON granted_role.oid = membership.roleid
-        WHERE member_role.rolname = 'tollchat_agent'
+        WHERE member_role.rolname IN ('tollchat_agent', 'pricing_caller')
           AND granted_role.rolname <> 'rds_iam'
     ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent has an unexpected role membership';
+        RAISE EXCEPTION 'existing runtime role has an unexpected role membership';
     END IF;
     IF EXISTS (
         SELECT 1
         FROM pg_catalog.pg_database AS database,
              LATERAL aclexplode(database.datacl) AS privilege
         WHERE database.datname = current_database()
-          AND privilege.grantee = to_regrole('tollchat_agent')
+          AND privilege.grantee IN (
+              to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+          )
           AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_namespace AS namespace,
              LATERAL aclexplode(namespace.nspacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
+        WHERE privilege.grantee IN (
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+        )
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_class AS relation,
              LATERAL aclexplode(relation.relacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
+        WHERE privilege.grantee IN (
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+        )
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_attribute AS attribute,
              LATERAL aclexplode(attribute.attacl) AS privilege
-        WHERE privilege.grantee = to_regrole('tollchat_agent')
+        WHERE privilege.grantee IN (
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+        )
     ) THEN
-        RAISE EXCEPTION 'existing tollchat_agent has unexpected direct privileges';
+        RAISE EXCEPTION 'existing runtime role has unexpected direct privileges';
     END IF;
 END $$;
 
-GRANT rds_iam TO tollchat_agent;
+GRANT rds_iam TO tollchat_agent, pricing_caller;
 
 CREATE SCHEMA oracle;
 REVOKE ALL ON SCHEMA oracle FROM PUBLIC;
@@ -122,7 +137,7 @@ BEGIN
     FROM pg_catalog.pg_extension
     WHERE extname = 'postgis';
     IF installed_version !~ '^3[.]5([.]|$)' THEN
-        RAISE EXCEPTION 'oracle 1.7.1 requires PostGIS 3.5.x; found %',
+        RAISE EXCEPTION 'oracle 1.8.0 requires PostGIS 3.5.x; found %',
             coalesce(installed_version, '<missing>');
     END IF;
 END $$;
@@ -135,7 +150,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.7.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.8.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -1972,26 +1987,26 @@ GRANT SELECT ON pricing.current_i95_direction,
     pricing.i95_i495_pricing_comparisons,
     pricing.i66_ballpark_samples,
     pricing.i95_i495_ballpark_samples TO oracle_owner;
-GRANT USAGE ON SCHEMA oracle TO tollchat_agent;
+GRANT USAGE ON SCHEMA oracle TO tollchat_agent, pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_pricing_route(text, text)
-TO tollchat_agent;
+TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_i66_pricing_comparisons(integer, integer)
-TO tollchat_agent;
+TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)
-TO tollchat_agent;
+TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.validate_ballpark_route(text, text)
-TO tollchat_agent;
+TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_i66_ballpark_samples(
     integer, integer, time, date[], timestamptz
-) TO tollchat_agent;
+) TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_ballpark_samples(
     integer, time, date[], timestamptz
-) TO tollchat_agent;
+) TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_annual_ballpark_summary(
     jsonb, time, time, date[], jsonb, integer, timestamptz
-) TO tollchat_agent;
+) TO pricing_caller;
 
 ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;
