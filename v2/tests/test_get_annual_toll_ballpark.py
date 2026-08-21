@@ -345,3 +345,25 @@ def test_history_failure_is_safe(monkeypatch, caplog):
     assert events[-1] == ballpark._progress("historical_pricing", "failed")
     assert result["status"] == "error"
     assert secret not in caplog.text
+
+
+def test_cleanup_failure_is_safe(monkeypatch, caplog):
+    secret = "private cleanup detail"
+    monkeypatch.setattr(ballpark.route_validation, "_connect", lambda: object())
+    monkeypatch.setattr(
+        ballpark,
+        "_begin_and_validate_routes",
+        lambda *_: (
+            datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+            (_route(status="no_supported_route"), _route()),
+            [date(2026, 8, 19)],
+        ),
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_close",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
+    )
+    with caplog.at_level("ERROR"):
+        asyncio.run(_invoke(_input()))
+    assert secret not in caplog.text

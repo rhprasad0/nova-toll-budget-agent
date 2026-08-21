@@ -867,6 +867,9 @@ async def get_annual_toll_ballpark(
             try:
                 await asyncio.to_thread(_close, connection, rollback=True)
             except Exception as error:
+                safe_error = RuntimeError(
+                    f"{type(error).__name__} during connection_cleanup"
+                )
                 logger.error(
                     "get_annual_toll_ballpark cleanup failed",
                     extra={
@@ -874,7 +877,7 @@ async def get_annual_toll_ballpark(
                         "failureStage": "connection_cleanup",
                         "exceptionType": type(error).__name__,
                     },
-                    exc_info=(type(error), error, error.__traceback__),
+                    exc_info=(type(safe_error), safe_error, error.__traceback__),
                 )
 
 
