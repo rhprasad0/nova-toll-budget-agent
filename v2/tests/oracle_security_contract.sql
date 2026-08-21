@@ -8,6 +8,7 @@ DECLARE
     pricing_route_function record;
     i66_pricing_function record;
     i95_pricing_function record;
+    prompt_points_function record;
     resolver_function record;
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
@@ -65,10 +66,17 @@ BEGIN
              'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.get_toll_route_prompt_points()'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure)
           <> 'oracle_owner'
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid = 'oracle.validate_toll_route(text,text)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_toll_route_prompt_points()'::regprocedure)
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.validate_pricing_route(text,text)'::regprocedure)
@@ -192,6 +200,17 @@ BEGIN
             row_to_json(i95_pricing_function);
     END IF;
     SELECT procedure.provolatile, procedure.proconfig
+    INTO prompt_points_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.get_toll_route_prompt_points()'::regprocedure;
+    IF prompt_points_function.provolatile <> 's'
+       OR prompt_points_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[] THEN
+        RAISE EXCEPTION 'prompt-points function catalog contract is wrong: %',
+            row_to_json(prompt_points_function);
+    END IF;
+    SELECT procedure.provolatile, procedure.proconfig
     INTO resolver_function
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
@@ -234,6 +253,7 @@ BEGIN
                   'oracle.validate_pricing_route(text,text)'::regprocedure,
                   'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure,
                   'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure,
+                  'oracle.get_toll_route_prompt_points()'::regprocedure,
                   'oracle.resolve_toll_route(text,text)'::regprocedure,
                   'oracle.resolve_toll_route_internal(text,text,boolean)'::regprocedure,
                   'oracle.route_pricing_legs(text[],text[])'::regprocedure,
@@ -260,13 +280,23 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('pricing_caller', procedure.oid, 'EXECUTE');
-    IF agent_executable_count <> 1
+    IF agent_executable_count <> 2
        OR pricing_executable_count <> 7
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
        OR has_function_privilege(
            'pricing_caller', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_toll_route_prompt_points()',
+           'EXECUTE'
+       )
+       OR has_function_privilege(
+           'pricing_caller',
+           'oracle.get_toll_route_prompt_points()',
+           'EXECUTE'
        )
        OR NOT has_function_privilege(
            'pricing_caller',
@@ -322,7 +352,7 @@ BEGIN
            'oracle.validate_ballpark_sample_request(time,date[],timestamptz)',
            'EXECUTE'
        ) THEN
-        RAISE EXCEPTION 'runtime executable surfaces are not exactly 1 and 7 functions';
+        RAISE EXCEPTION 'runtime executable surfaces are not exactly 2 and 7 functions';
     END IF;
 END $$;
 
@@ -331,6 +361,9 @@ SET ROLE tollchat_agent;
 DO $$
 DECLARE result record;
 BEGIN
+    IF jsonb_array_length(oracle.get_toll_route_prompt_points()) <> 220 THEN
+        RAISE EXCEPTION 'agent prompt-point execution failed';
+    END IF;
     SELECT * INTO result
     FROM oracle.validate_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
     IF result.status <> 'valid' OR result.reason IS NOT NULL THEN
@@ -423,6 +456,11 @@ SET ROLE pricing_caller;
 DO $$
 DECLARE result record;
 BEGIN
+    BEGIN
+        PERFORM oracle.get_toll_route_prompt_points();
+        RAISE EXCEPTION 'pricing caller executed agent prompt-point retrieval';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
     SELECT * INTO result
     FROM oracle.validate_pricing_route(
         'i66:1:entry:EB', 'i66:4:exit:EB'

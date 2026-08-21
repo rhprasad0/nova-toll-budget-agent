@@ -1,6 +1,6 @@
 # TollChat v2 routing oracle
 
-- **Status:** Adopted for oracle schema `1.8.0`
+- **Status:** Adopted for oracle schema `1.9.1`
 - **Scope:** V2 directed toll-road reachability and least-privilege pricing access
 
 ## Purpose
@@ -9,8 +9,9 @@ The v2 oracle answers one question: can a supported toll-road entry reach a
 supported exit, including across explicitly recorded road connections?
 
 It is not a navigation system and does not model roadway geometry, proximity,
-or travel time. PostGIS coordinates are retained for a later spatial phase but
-are not queried by the routing operation.
+or travel time. PostGIS coordinates support bounded prompt-point retrieval and
+same-facility alternative ranking; route reachability never infers connections
+from proximity.
 
 ## Scope
 
@@ -68,13 +69,14 @@ plus `USAGE` on `pricing` and `SELECT` on the five required availability,
 comparison, and ballpark sample views; it receives no other pricing privileges.
 
 `tollchat_agent` and `pricing_caller` are distinct IAM-authenticated login
-roles. The agent role can execute only `validate_toll_route`; the Python-only
-pricing role can execute the seven endpoint-validation, current-price, and
-annual-ballpark operations. Both receive `rds_iam` and `USAGE` on `oracle`, but
-no direct table or view access in `oracle` or `pricing`, write privilege, or
-schema-creation privilege. An additive install rejects either pre-existing
-runtime role when it has inherited membership other than `rds_iam` or direct
-privileges outside its exact function surface.
+roles. The agent role can execute only `validate_toll_route` and the bounded
+`get_toll_route_prompt_points` function; the Python-only pricing role can
+execute the seven endpoint-validation, current-price, and annual-ballpark
+operations. Both receive `rds_iam` and `USAGE` on `oracle`, but no direct table
+or view access in `oracle` or `pricing`, write privilege, or schema-creation
+privilege. An additive install rejects either pre-existing runtime role when it
+has inherited membership other than `rds_iam` or direct privileges outside its
+exact function surface.
 
 Agent-callable functions are `SECURITY DEFINER`, owned by `oracle_owner`, use
 fixed SQL without dynamic execution, qualify every application and extension
@@ -102,10 +104,11 @@ The blank bootstrap and additive deployment use this order:
 4. Create `oracle.schema_version`, the two application tables, constraints,
    indexes, and curated data; assign the application objects to `oracle_owner`.
 5. Grant `oracle_owner` its pricing-view dependencies, create the shared
-   resolver, three endpoint-based route validators, current comparison
-   operations, historical sample operations, and annual aggregation; revoke
-   `PUBLIC` execution, grant route validation only to `tollchat_agent`, and
-   grant the seven internal pricing signatures only to `pricing_caller`.
+   resolver, bounded prompt-point retrieval, three endpoint-based route
+   validators, current comparison operations, historical sample operations,
+   and annual aggregation; revoke `PUBLIC` execution, grant prompt retrieval
+   and route validation only to `tollchat_agent`, and grant the seven internal
+   pricing signatures only to `pricing_caller`.
 
 The migration aborts rather than installing PostGIS in `public`, falling back
 to an unqualified pricing view, or leaving a partially granted function.
@@ -113,7 +116,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.8.0`, stored as the single row in
+oracle is at version `1.9.1`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -216,6 +219,12 @@ values `airport_iad` and `airport_dca`.
 For shared I-95/I-495 source nodes, `path` identifies the roadway travel
 direction. The source's top-level `direction` can instead describe the overall
 cross-facility trip, so `path` takes precedence when the two differ.
+
+Oracle `1.9.1` qualifies the five Washington movements by their usable toll
+approach while retaining the upstream names as aliases. I-66 has one qualified
+Washington label; I-395 distinguishes its southbound entry, ordinary
+I-95/I-395 northbound exit, and the northbound exit reached from southbound
+I-495. Stable point IDs and source metadata do not change.
 
 ### `oracle.toll_connection`
 
@@ -700,7 +709,7 @@ DTR connection charge; only crossing either directed handoff adds it.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.8.0`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.9.1`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer
@@ -716,10 +725,10 @@ DTR connection charge; only crossing either directed handoff adds it.
   same-facility structural alternatives with only the documented public
   metadata; their order is unchanged by open, closed, stale, or missing I-95
   evidence.
-- Under `SET ROLE tollchat_agent`, route-function execution succeeds while
-  direct reads or writes against oracle and pricing relations fail. `PUBLIC`
-  cannot execute the function, `tollchat_agent` cannot call PostGIS functions
-  directly, and a same-named temporary object cannot alter the route result.
+- Under `SET ROLE tollchat_agent`, route and prompt-point execution succeeds
+  while direct reads or writes against oracle and pricing relations fail.
+  `PUBLIC` cannot execute either function, `tollchat_agent` cannot call PostGIS
+  functions directly, and a same-named temporary object cannot alter results.
 - Under `SET ROLE pricing_caller`, all seven internal pricing operations
   succeed while agent route validation and direct relation access fail.
 - Oracle installation rejects a pre-existing runtime role that inherits

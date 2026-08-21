@@ -239,12 +239,19 @@ SQL
       exit 1
     fi
 
-    if [[ "$schema_name" == "oracle" ]]; then
+    if [[ "$schema_name" == "oracle" \
+      && "$target_version" == "$bootstrap_version" ]]; then
       for database in "$bootstrap_db" "$migration_db"; do
         psql --dbname "$database" --tuples-only --no-align --command "
           SELECT jsonb_agg(
               jsonb_build_object(
                   'point_id', point_id,
+                  'network_id', network_id,
+                  'source_node_id', source_node_id,
+                  'point_type', point_type,
+                  'direction', direction,
+                  'label', label,
+                  'aliases', aliases,
                   'location', oracle.ST_AsGeoJSON(location)::jsonb,
                   'source_metadata', source_metadata
               ) ORDER BY point_id
@@ -314,6 +321,7 @@ psql --dbname "$bootstrap_db" --file v2/tests/pricing_ballpark_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_restore_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_route_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_prompt_points_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_pricing_route_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i66_pricing_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i95_pricing_contract.sql

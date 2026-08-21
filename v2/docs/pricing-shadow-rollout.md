@@ -95,6 +95,28 @@ Confirm `oracle.schema_version` is `1.8.0`, `tollchat_agent` can execute only
 the seven documented internal pricing functions. Neither role may read an
 Oracle or pricing relation directly.
 
+Then add the bounded prompt-point surface for the v2 agent:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/020_upgrade_oracle_1_8_0_to_1_9_0.sql
+```
+
+Confirm `oracle.schema_version` is `1.9.0`, the prompt function returns 220
+ordered points, and `tollchat_agent` can execute exactly prompt retrieval and
+route validation. Direct Oracle and pricing relation access remains forbidden.
+
+Then install the route-qualified Washington prompt labels:
+
+```sh
+psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
+  -f v2/db/migrations/021_upgrade_oracle_1_9_0_to_1_9_1.sql
+```
+
+Confirm `oracle.schema_version` is `1.9.1`; the five Washington entry/exit
+points retain their stable IDs and expose the qualified labels documented by
+the canonical seed.
+
 ## 3. Backfill and prove parity
 
 With the shadow loader still running, execute the idempotent backfill:

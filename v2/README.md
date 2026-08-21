@@ -31,10 +31,10 @@ the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.8.0**. It installs
+The independently versioned `oracle` schema is at **1.9.1**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
-exposes agent route validation to `tollchat_agent` and bounded internal pricing
-operations to `pricing_caller`.
+exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
+and internal pricing operations to `pricing_caller`.
 Regenerate and verify its checked-in seed with:
 
 ```sh
@@ -78,6 +78,17 @@ latest 12 weeks, and returns nearest-rank P25/P50/P90 daily values annualized by
 the caller's planned commute days. Results remain recent historical context—not
 a quote, forecast, or budget—and disclose modeled prices and current fixed-rate
 assumptions.
+
+The v2 Strands agent in `agent/` loads the bounded entry/exit labels, aliases,
+and coordinates from RDS once at startup, then exposes exactly the current-price
+and annual-ballpark tools. It fails startup if that prompt data is unavailable
+or invalid.
+
+Its stable developer prompt uses OpenAI's explicit provider-managed prompt cache
+with a 30-minute TTL. Strands exposes cache reuse through
+`AgentResult.metrics.accumulated_usage` as `cacheReadInputTokens` and
+`cacheWriteInputTokens`; toll prices, annual ballparks, final answers, and RDS
+prompt-point queries are not application-cached.
 
 The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
 events reach it through EventBridge while v1 keeps its direct S3 notification.
