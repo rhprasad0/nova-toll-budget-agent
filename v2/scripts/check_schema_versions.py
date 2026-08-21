@@ -182,16 +182,14 @@ def validate_schema_update(
         )
 
     added_upgrades = [path for path in added if upgrade_versions(schema_name, path)]
-    for path in added_upgrades:
-        migration_previous, migration_current = upgrade_versions(schema_name, path) or (
-            "",
-            "",
-        )
-        if migration_current != current or version_tuple(
-            migration_current
-        ) <= version_tuple(migration_previous):
+    added_versions = [
+        (path, *cast(tuple[str, str], upgrade_versions(schema_name, path)))
+        for path in added_upgrades
+    ]
+    for path, migration_previous, migration_current in added_versions:
+        if version_tuple(migration_current) <= version_tuple(migration_previous):
             raise ValueError(
-                f"{schema_name} upgrade migration does not target {current}: {path}"
+                f"{schema_name} upgrade migration is not monotonic: {path}"
             )
 
     versioned_changes = [
@@ -203,17 +201,31 @@ def validate_schema_update(
                 f"{schema_name} contract changed without advancing {previous}; "
                 f"current is {current}: {', '.join(versioned_changes)}"
             )
-        if not any(
-            upgrade_versions(schema_name, path) == (previous, current)
-            for path in added_upgrades
-        ):
+        remaining = added_versions.copy()
+        chain_version = previous
+        while chain_version != current:
+            matches = [item for item in remaining if item[1] == chain_version]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"{schema_name} {previous} -> {current} lacks a new upgrade "
+                    "migration chain contiguous from previous to current"
+                )
+            migration = matches[0]
+            remaining.remove(migration)
+            chain_version = migration[2]
+        if remaining:
             raise ValueError(
-                f"{schema_name} {previous} -> {current} lacks a new upgrade migration"
+                f"{schema_name} {previous} -> {current} has upgrade migrations "
+                f"outside its chain: {', '.join(item[0] for item in remaining)}"
             )
     elif current != previous:
         raise ValueError(
             f"{schema_name} version changed without an owned contract change"
         )
+    elif any(
+        migration_current != current for _, _, migration_current in added_versions
+    ):
+        raise ValueError(f"{schema_name} upgrade migration does not target {current}")
 
 
 def main() -> int:

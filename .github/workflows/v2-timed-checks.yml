@@ -65,7 +65,10 @@ jobs:
           TIMED_SCHEDULE: ${{ inputs.schedule }}
         run: |
           if freshness=$(python3 scripts/check_timed_window.py "$TIMED_SCHEDULE"); then
-            uv run pytest -m live tests/test_validate_toll_route_live.py -v
+            uv run pytest -m live \
+              tests/test_validate_toll_route_live.py \
+              tests/test_get_annual_toll_ballpark_live.py \
+              -v
           else
             status=$?
             if (( status != 3 )); then exit "$status"; fi

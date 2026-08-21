@@ -28,8 +28,9 @@ Mirror the current pricing tool:
 | `pricing.modeled_trip_pricing_i95` | Reuse for provisional I-95 proxy prices. |
 | `pricing.i66_ballpark_samples` | Add one 12-week I-66 history view. |
 | `pricing.i95_i495_ballpark_samples` | Add one 12-week I-95/I-495 view containing observed and modeled rows. |
-| Two ballpark sample functions | Add parameterized, least-privilege access to the views. |
-| Current pricing tool pattern | Reuse to assemble route totals in deterministic Python. |
+| Two ballpark sample functions | Reuse parameterized, least-privilege access to the views. |
+| `oracle.get_annual_ballpark_summary` | Add one bounded call that intersects complete dates and returns facility plus exact combined P25/P50/P90 values. |
+| Current pricing tool pattern | Dispatch fixed facilities in Python and dynamic facilities through Oracle. |
 
 Do not add pricing-regime tables, ingestion watermarks, revision timestamps,
 materialized views, separate source cohorts, or an immutable evidence store.
@@ -72,13 +73,13 @@ change.
 flowchart LR
     RAW[Existing pricing tables] --> VIEWS[Two 12-week sample views]
     MODELED[Existing I-95 modeled view] --> VIEWS
-    ROUTE[Schedule-independent route oracle] --> TOOL[Deterministic tool code]
+    ROUTE[Schedule-independent route oracle] --> TOOL[Compact tool wrapper]
     CALENDAR[84-day requested-weekday calendar] --> TOOL
     VIEWS --> FUNCS[Thin parameterized functions]
-    FUNCS --> TOOL
-    FIXED[Existing fixed-rate schedules] --> TOOL
-    TOOL --> DAYS[Complete same-date round trips]
-    DAYS --> RESULT[One mixed P25 / P50 / P90 ballpark]
+    FUNCS --> AGG[Oracle summary function]
+    FIXED[Python fixed-rate prices] --> AGG
+    TOOL --> AGG
+    AGG --> RESULT[Facility and combined P25 / P50 / P90]
 ```
 
 ## View contracts
@@ -147,7 +148,7 @@ become zero-dollar samples.
 
 ## Thin access functions
 
-The three functions follow the existing `SECURITY DEFINER` pricing boundary:
+The four functions follow the existing `SECURITY DEFINER` pricing boundary:
 
 ```sql
 oracle.validate_ballpark_route(
@@ -197,8 +198,26 @@ Each function:
 6. returns the first candidate per component and date in a bounded set ordered
    by date.
 
-The sample functions return the view columns above. They do not calculate route
-totals, percentiles, or annualized values.
+The sample functions return the view columns above. The agent role retains
+execute access during the migration-first rollout. The compact wrapper calls:
+
+```sql
+oracle.get_annual_ballpark_summary(
+    requested_legs jsonb,
+    requested_outbound_time time,
+    requested_return_time time,
+    requested_dates date[],
+    requested_fixed_prices jsonb,
+    requested_annual_days integer,
+    requested_evaluated_at timestamptz
+)
+```
+
+This function strictly validates the JSON shapes, composite direction/step
+identities, date cardinality, fixed cent values, and transaction anchor. It
+calls the sample functions, requires every route leg on a common date, then
+returns compact coverage and scenario values. Direct pricing-view access is
+still unavailable to `tollchat_agent`.
 
 ## Tool calculation
 
@@ -209,22 +228,11 @@ The deterministic tool code should:
 2. Generate every requested-weekday date in the 84-day target window before
    querying prices. This calendar also supports routes containing only fixed
    charges.
-3. Obtain one database transaction timestamp and call every dynamic history
-   function with that anchor and the same eligible-date list.
-4. Select the current published DTR and Greenway rate catalogs at the shared
-   anchor. Classify Greenway peak or off-peak using each sample date and that
-   direction's departure time, then disclose that the applied rates are not
-   historical rates.
-5. Sum a trip only when every required component has a price.
-6. Pair outbound and return trips only when both are complete on the same local
-   date.
-7. Mix all complete daily totals into one sample, regardless of whether their
-   components were observed or modeled.
-8. Set `uses_modeled = true` when any selected component was modeled.
-9. Calculate nearest-rank P25, P50, and P90 as `x[ceil(p × n)]` over sorted
-   complete daily round-trip totals.
-10. Multiply each statistic by the user's planned annual commute days using
-   decimal arithmetic.
+3. Obtain one database transaction timestamp.
+4. Calculate DTR and Greenway fixed prices in Python for each date and wall
+   time, then send them with the validated dynamic legs to the summary function.
+5. Consume the returned facility and combined P25/P50/P90 values without
+   fetching raw samples.
 
 ```text
 annualized scenario = complete daily round-trip statistic
@@ -237,17 +245,20 @@ more confident lie.
 
 ## User-facing result
 
-Return one low, middle, and high directional estimate with:
+Return P25, P50, and P90 scenarios with:
 
 - route and schedule;
 - 12-week date range;
 - eligible dates, complete round-trip counts, and coverage overall and by
   requested weekday;
-- every missing or underrepresented weekday;
 - annual commute days;
-- recent daily P25, P50, and P90 values;
+- facility and exact combined daily and annualized values;
 - whether any modeled components were used; and
 - when applicable, that current fixed rates were applied to every sampled day.
+
+Do not return raw complete days, excluded dates, route paths, pricing keys, or
+component evidence. Combined percentiles come from same-date route totals;
+facility percentiles must never be added together.
 
 When modeled prices appear anywhere in the sample, show:
 
@@ -270,7 +281,7 @@ counts instead of adding statistical weights.
 The product, tool, and database contracts require a 12-week mixed sample,
 schedule-independent structural route validation, same-day commute inputs,
 complete same-date round trips, modeled-price and current-fixed-rate disclosure,
-defined coverage, returned calculation evidence, decimal arithmetic, and no
+defined coverage, compact facility scenarios, decimal arithmetic, and no
 forecast or budget claims.
 
 ## Explicitly skipped

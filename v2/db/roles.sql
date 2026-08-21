@@ -41,7 +41,9 @@ GRANT SELECT ON
     pricing.modeled_trip_pricing_i95,
     pricing.modeled_current_trip_pricing_i95,
     pricing.i66_pricing_comparisons,
-    pricing.i95_i495_pricing_comparisons
+    pricing.i95_i495_pricing_comparisons,
+    pricing.i66_ballpark_samples,
+    pricing.i95_i495_ballpark_samples
 TO pricing_reader;
 
 ALTER ROLE pricing_reader SET TimeZone TO 'America/New_York';

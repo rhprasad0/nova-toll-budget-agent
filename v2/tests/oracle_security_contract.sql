@@ -46,6 +46,22 @@ BEGIN
              'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.validate_ballpark_route(text,text)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
+             'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure)
           <> 'oracle_owner'
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
@@ -59,6 +75,18 @@ BEGIN
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.validate_ballpark_route(text,text)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)'::regprocedure)
        OR (SELECT prosecdef FROM pg_catalog.pg_proc
            WHERE oid = 'oracle.resolve_toll_route(text,text)'::regprocedure) THEN
         RAISE EXCEPTION 'oracle ownership or SECURITY DEFINER contract is wrong';
@@ -182,6 +210,12 @@ BEGIN
            'tollchat_agent', 'pricing.i95_i495_pricing_comparisons', 'SELECT'
        )
        OR has_table_privilege(
+           'tollchat_agent', 'pricing.i66_ballpark_samples', 'SELECT'
+       )
+       OR has_table_privilege(
+           'tollchat_agent', 'pricing.i95_i495_ballpark_samples', 'SELECT'
+       )
+       OR has_table_privilege(
            'tollchat_agent', 'oracle.toll_route_point', 'SELECT'
        )
        OR has_table_privilege(
@@ -203,7 +237,14 @@ BEGIN
                   'oracle.validate_pricing_route(text,text)'::regprocedure,
                   'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure,
                   'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure,
-                  'oracle.resolve_toll_route(text,text)'::regprocedure
+                  'oracle.resolve_toll_route(text,text)'::regprocedure,
+                  'oracle.resolve_toll_route_internal(text,text,boolean)'::regprocedure,
+                  'oracle.route_pricing_legs(text[],text[])'::regprocedure,
+                  'oracle.validate_ballpark_route(text,text)'::regprocedure,
+                  'oracle.validate_ballpark_sample_request(time,date[],timestamptz)'::regprocedure,
+                  'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure,
+                  'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)'::regprocedure,
+                  'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)'::regprocedure
               )
           AND privilege.grantee = 0
           AND privilege.privilege_type = 'EXECUTE'
@@ -216,7 +257,7 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('tollchat_agent', procedure.oid, 'EXECUTE');
-    IF executable_count <> 4
+    IF executable_count <> 8
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
@@ -235,13 +276,46 @@ BEGIN
            'oracle.get_i95_i495_pricing_comparisons(integer)',
            'EXECUTE'
        )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.validate_ballpark_route(text,text)',
+           'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)',
+           'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)',
+           'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'tollchat_agent',
+           'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)',
+           'EXECUTE'
+       )
        OR to_regprocedure(
            'oracle.validate_pricing_route(text[],text[])'
        ) IS NOT NULL
        OR has_function_privilege(
            'tollchat_agent', 'oracle.resolve_toll_route(text,text)', 'EXECUTE'
+       )
+       OR has_function_privilege(
+           'tollchat_agent',
+           'oracle.resolve_toll_route_internal(text,text,boolean)',
+           'EXECUTE'
+       )
+       OR has_function_privilege(
+           'tollchat_agent', 'oracle.route_pricing_legs(text[],text[])', 'EXECUTE'
+       )
+       OR has_function_privilege(
+           'tollchat_agent',
+           'oracle.validate_ballpark_sample_request(time,date[],timestamptz)',
+           'EXECUTE'
        ) THEN
-        RAISE EXCEPTION 'agent executable surface is not exactly four functions';
+        RAISE EXCEPTION 'agent executable surface is not exactly eight functions';
     END IF;
 END $$;
 
@@ -277,6 +351,29 @@ BEGIN
        OR result.availability_reason <> 'missing_observation' THEN
         RAISE EXCEPTION 'agent I-95/I-495 pricing diagnostic failed';
     END IF;
+    SELECT * INTO result
+    FROM oracle.validate_ballpark_route(
+        'i66:1:entry:EB', 'i66:4:exit:EB'
+    );
+    IF result.status <> 'valid'
+       OR jsonb_array_length(result.facility_legs) <> 1 THEN
+        RAISE EXCEPTION 'agent ballpark route execution failed';
+    END IF;
+    PERFORM * FROM oracle.get_i66_ballpark_samples(
+        3100, 3110, time '08:00',
+        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
+        transaction_timestamp()
+    );
+    PERFORM * FROM oracle.get_i95_i495_ballpark_samples(
+        9999, time '08:00',
+        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
+        transaction_timestamp()
+    );
+    PERFORM * FROM oracle.get_annual_ballpark_summary(
+        '[]'::jsonb, time '08:00', time '17:30',
+        ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
+        '[]'::jsonb, 1, transaction_timestamp()
+    );
     BEGIN
         PERFORM *
         FROM oracle.resolve_toll_route('i66:1:entry:EB', 'i66:4:exit:EB');
@@ -301,6 +398,16 @@ BEGIN
     BEGIN
         PERFORM count(*) FROM pricing.i95_i495_pricing_comparisons;
         RAISE EXCEPTION 'agent read I-95/I-495 pricing view directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM pricing.i66_ballpark_samples;
+        RAISE EXCEPTION 'agent read I-66 ballpark view directly';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM count(*) FROM pricing.i95_i495_ballpark_samples;
+        RAISE EXCEPTION 'agent read I-95/I-495 ballpark view directly';
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
     BEGIN
@@ -343,6 +450,13 @@ BEGIN
     );
     IF result.status <> 'valid' THEN
         RAISE EXCEPTION 'temporary shadow changed pricing-route behavior';
+    END IF;
+    SELECT * INTO result
+    FROM oracle.validate_ballpark_route(
+        'i66:1:entry:EB', 'i66:4:exit:EB'
+    );
+    IF result.status <> 'valid' THEN
+        RAISE EXCEPTION 'temporary shadow changed ballpark-route behavior';
     END IF;
 END $$;
 

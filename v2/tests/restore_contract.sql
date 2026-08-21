@@ -16,7 +16,9 @@ BEGIN
         'pricing.modeled_trip_pricing_i95',
         'pricing.modeled_current_trip_pricing_i95',
         'pricing.i66_pricing_comparisons',
-        'pricing.i95_i495_pricing_comparisons'
+        'pricing.i95_i495_pricing_comparisons',
+        'pricing.i66_ballpark_samples',
+        'pricing.i95_i495_ballpark_samples'
     ] LOOP
         IF to_regclass(relation_name) IS NULL THEN
             RAISE EXCEPTION 'missing relation: %', relation_name;
@@ -80,7 +82,9 @@ BEGIN
        OR obj_description('pricing.modeled_current_trip_pricing_i95'::regclass, 'pg_class') IS NULL
        OR obj_description('pricing.current_i95_direction'::regclass, 'pg_class') IS NULL
        OR obj_description('pricing.i66_pricing_comparisons'::regclass, 'pg_class') IS NULL
-       OR obj_description('pricing.i95_i495_pricing_comparisons'::regclass, 'pg_class') IS NULL THEN
+       OR obj_description('pricing.i95_i495_pricing_comparisons'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.i66_ballpark_samples'::regclass, 'pg_class') IS NULL
+       OR obj_description('pricing.i95_i495_ballpark_samples'::regclass, 'pg_class') IS NULL THEN
         RAISE EXCEPTION 'pricing analysis comments were not preserved';
     END IF;
 END $$;
@@ -122,9 +126,9 @@ END $$;
 
 DO $$
 BEGIN
-    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.1.1'
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.2.0'
        OR (SELECT count(*) FROM pricing.schema_version) <> 1 THEN
-        RAISE EXCEPTION 'pricing schema must expose exactly version 1.1.1';
+        RAISE EXCEPTION 'pricing schema must expose exactly version 1.2.0';
     END IF;
 
     IF NOT pg_has_role('pricing_loader_writer', 'rds_iam', 'MEMBER')
@@ -158,7 +162,9 @@ BEGIN
        OR NOT has_table_privilege('pricing_reader', 'pricing.modeled_trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.modeled_current_trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.i66_pricing_comparisons', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'pricing.i95_i495_pricing_comparisons', 'SELECT') THEN
+       OR NOT has_table_privilege('pricing_reader', 'pricing.i95_i495_pricing_comparisons', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.i66_ballpark_samples', 'SELECT')
+       OR NOT has_table_privilege('pricing_reader', 'pricing.i95_i495_ballpark_samples', 'SELECT') THEN
         RAISE EXCEPTION 'pricing_reader is missing read privileges';
     END IF;
 

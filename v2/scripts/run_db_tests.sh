@@ -56,7 +56,7 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
   git archive "$base_ref" v2/db | tar -x --directory "$migration_source_dir"
   mapfile -t added_migrations < <(
     git diff --diff-filter=A --name-only "$base_ref" -- \
-      'v2/db/migrations/*_upgrade_*_*_to_*.sql'
+      'v2/db/migrations/*_upgrade_*_*_to_*.sql' | sort
   )
 
   for migration in "${added_migrations[@]}"; do
@@ -90,6 +90,13 @@ if [[ -n "$base_ref" && "$base_ref" != "0000000000000000000000000000000000000000
         exit 1
         ;;
     esac
+
+    for prerequisite in "${added_migrations[@]}"; do
+      if [[ "$prerequisite" == "$migration" ]]; then
+        break
+      fi
+      psql --dbname "$migration_db" --file "$prerequisite"
+    done
 
     installed_version="$(
       psql --dbname "$migration_db" --tuples-only --no-align \
@@ -173,11 +180,28 @@ SQL
       exit 1
     fi
 
-    dump_schema --schema-only --schema "$schema_name" --no-owner "$bootstrap_db" | \
-      sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/bootstrap.sql"
-    dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
-      sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
-    diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
+    bootstrap_version="$(
+      psql --dbname "$bootstrap_db" --tuples-only --no-align \
+        --command "SELECT version FROM $schema_name.schema_version WHERE singleton"
+    )"
+    if [[ "$target_version" == "$bootstrap_version" ]]; then
+      dump_schema --schema-only --schema "$schema_name" --no-owner "$bootstrap_db" | \
+        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/bootstrap.sql"
+      dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
+        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
+      diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
+    fi
+
+    if [[ "$schema_name:$target_version" == "pricing:1.2.0" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "REVOKE SELECT ON pricing.i66_ballpark_samples FROM oracle_owner"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "pricing 1.2.0 rerun accepted a missing oracle_owner grant" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "GRANT SELECT ON pricing.i66_ballpark_samples TO oracle_owner"
+    fi
 
     psql --dbname "$migration_db" --file "$migration"
     installed_version="$(
@@ -257,15 +281,17 @@ BEGIN
     RAISE EXCEPTION 'failed schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE pricing.schema_version SET version = '1.1.1' WHERE singleton;
+UPDATE pricing.schema_version SET version = '1.2.0' WHERE singleton;
 SQL
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/pricing_ballpark_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/monotonic_upsert_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_restore_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_route_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_pricing_route_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i66_pricing_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i95_pricing_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_ballpark_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_security_contract.sql
 
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
@@ -306,6 +332,11 @@ if psql --dbname "$bootstrap_db" \
   echo "oracle 1.5.0 upgrade unexpectedly accepted version 0.9.0" >&2
   exit 1
 fi
+if psql --dbname "$bootstrap_db" \
+  --file v2/db/migrations/016_upgrade_oracle_1_5_0_to_1_6_0.sql; then
+  echo "oracle 1.6.0 upgrade unexpectedly accepted version 0.9.0" >&2
+  exit 1
+fi
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'
 DO $$
 BEGIN
@@ -313,7 +344,7 @@ BEGIN
     RAISE EXCEPTION 'failed oracle schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE oracle.schema_version SET version = '1.5.0' WHERE singleton;
+UPDATE oracle.schema_version SET version = '1.6.0' WHERE singleton;
 SQL
 
 if psql --dbname "$bootstrap_db" \
