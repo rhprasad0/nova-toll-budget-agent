@@ -158,7 +158,7 @@ class _CachedResponsesModel(OpenAIResponsesModel):
         if event["chunk_type"] == "metadata":
             details = getattr(event["data"], "input_tokens_details", None)
             written = getattr(details, "cache_write_tokens", None)
-            if isinstance(written, int):
+            if isinstance(written, int) and written > 0:
                 cast(Any, chunk)["metadata"]["usage"]["cacheWriteInputTokens"] = written
         return chunk
 

@@ -84,6 +84,12 @@ and coordinates from RDS once at startup, then exposes exactly the current-price
 and annual-ballpark tools. It fails startup if that prompt data is unavailable
 or invalid.
 
+Its stable developer prompt uses OpenAI's explicit provider-managed prompt cache
+with a 30-minute TTL. Strands exposes cache reuse through
+`AgentResult.metrics.accumulated_usage` as `cacheReadInputTokens` and
+`cacheWriteInputTokens`; toll prices, annual ballparks, final answers, and RDS
+prompt-point queries are not application-cached.
+
 The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
 events reach it through EventBridge while v1 keeps its direct S3 notification.
 Both paths are idempotent on their table keys and share no deployment state.

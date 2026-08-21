@@ -10,7 +10,7 @@ import boto3
 import pytest
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 
-from agent.toll_agent import build_agent
+from agent.toll_agent import build_agent, load_prompt_points
 
 pytestmark = pytest.mark.live
 
@@ -41,6 +41,19 @@ def _invoke(prompt: str):
     recorder = _ToolRecorder()
     agent = build_agent(hooks=[recorder])
     return str(agent(prompt)), recorder.calls, agent
+
+
+def test_live_prompt_cache_is_reused_by_fresh_agents():
+    _configure_rds()
+    prompt_points = load_prompt_points()
+    prompt = "Briefly say whether you can estimate current and annual tolls."
+
+    for request_number in range(4):
+        recorder = _ToolRecorder()
+        result = build_agent(prompt_points=prompt_points, hooks=[recorder])(prompt)
+        assert recorder.calls == []
+        if request_number:
+            assert result.metrics.accumulated_usage.get("cacheReadInputTokens", 0) > 0
 
 
 @pytest.mark.parametrize(

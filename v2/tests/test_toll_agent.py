@@ -248,6 +248,38 @@ def test_agent_uses_luna_ssm_and_explicit_prompt_cache(monkeypatch):
     assert "test-key" not in json.dumps(request)
 
 
+def test_agent_normalizes_positive_prompt_cache_metrics_only():
+    model = toll_agent._CachedResponsesModel(
+        model_id="test", client_args={"api_key": "test"}
+    )
+    event = {
+        "chunk_type": "metadata",
+        "data": SimpleNamespace(
+            input_tokens=1000,
+            output_tokens=20,
+            total_tokens=1020,
+            input_tokens_details=SimpleNamespace(
+                cached_tokens=700,
+                cache_write_tokens=300,
+            ),
+        ),
+    }
+
+    usage = cast(Any, model._format_chunk(event))["metadata"]["usage"]
+
+    assert usage["cacheReadInputTokens"] == 700
+    assert usage["cacheWriteInputTokens"] == 300
+
+    event["data"].input_tokens_details = SimpleNamespace(
+        cached_tokens=0,
+        cache_write_tokens=0,
+    )
+    usage = cast(Any, model._format_chunk(event))["metadata"]["usage"]
+
+    assert "cacheReadInputTokens" not in usage
+    assert "cacheWriteInputTokens" not in usage
+
+
 def test_empty_ssm_parameter_is_rejected(monkeypatch):
     client = SimpleNamespace(get_parameter=lambda **_: {"Parameter": {"Value": ""}})
     monkeypatch.setattr(toll_agent.boto3, "client", lambda *_args, **_kwargs: client)
