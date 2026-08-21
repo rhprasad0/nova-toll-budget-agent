@@ -112,9 +112,9 @@ data "aws_iam_policy_document" "timed_checks" {
   }
 
   statement {
-    sid       = "ConnectAsTollchatAgent"
+    sid       = "ConnectAsPricingCaller"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller"]
   }
 }
 

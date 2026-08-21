@@ -554,7 +554,7 @@ def _current_eastern_time() -> datetime:
 
 
 def _fetch_pricing_rows(sql: str, params: tuple[int, ...]) -> list[dict[str, Any]]:
-    connection = cast(Any, route_validation.connect_to_database())
+    connection = cast(Any, route_validation.connect_to_pricing_database())
     database_error: Exception | None = None
     rows: list[dict[str, Any]] = []
     try:
