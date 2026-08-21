@@ -11,6 +11,8 @@ SELECT pg_advisory_xact_lock(hashtext('tollchat-v2-oracle-schema-version'));
 DO $migration$
 DECLARE
     current_version text;
+    pricing_version text;
+    pricing_version_parts integer[];
 BEGIN
     SELECT version INTO STRICT current_version
     FROM oracle.schema_version
@@ -20,11 +22,16 @@ BEGIN
         RAISE EXCEPTION 'expected oracle schema version 1.7.0 or 1.7.1, got %',
             current_version;
     END IF;
-    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.2.0'
+    SELECT version INTO STRICT pricing_version
+    FROM pricing.schema_version
+    WHERE singleton;
+    pricing_version_parts := string_to_array(pricing_version, '.')::integer[];
+    IF pricing_version_parts < ARRAY[1, 2, 0]
+       OR pricing_version_parts >= ARRAY[2, 0, 0]
        OR to_regprocedure(
            'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)'
        ) IS NULL THEN
-        RAISE EXCEPTION 'oracle 1.7.1 requires the oracle 1.7.0 contract and pricing 1.2.0';
+        RAISE EXCEPTION 'oracle 1.7.1 requires the oracle 1.7.0 contract and pricing >=1.2.0,<2.0.0';
     END IF;
 END
 $migration$;
