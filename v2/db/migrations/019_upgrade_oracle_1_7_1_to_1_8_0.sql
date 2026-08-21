@@ -164,12 +164,16 @@ BEGIN
        OR has_schema_privilege('pricing_caller', 'pricing', 'USAGE')
        OR has_schema_privilege('tollchat_agent', 'pricing', 'USAGE')
        OR NOT has_schema_privilege('pricing_caller', 'oracle', 'USAGE')
+       OR NOT has_schema_privilege('tollchat_agent', 'oracle', 'USAGE')
        OR has_schema_privilege('pricing_caller', 'oracle', 'CREATE')
+       OR has_schema_privilege('tollchat_agent', 'oracle', 'CREATE')
        OR EXISTS (
            SELECT 1
            FROM pg_catalog.pg_namespace AS namespace,
                 LATERAL aclexplode(namespace.nspacl) AS privilege
-           WHERE privilege.grantee = to_regrole('pricing_caller')
+           WHERE privilege.grantee IN (
+               to_regrole('pricing_caller'), to_regrole('tollchat_agent')
+           )
              AND (
                  namespace.nspname <> 'oracle'
                  OR privilege.privilege_type <> 'USAGE'

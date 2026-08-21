@@ -175,21 +175,24 @@ SQL
     fi
 
     if [[ "$schema_name:$target_version" == "oracle:1.8.0" ]]; then
-      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
-        --command "GRANT CREATE ON SCHEMA oracle TO pricing_caller"
-      if psql --dbname "$migration_db" --file "$migration"; then
-        echo "oracle 1.8.0 upgrade accepted an unsafe pricing caller" >&2
-        exit 1
-      fi
-      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+      for runtime_role in tollchat_agent pricing_caller; do
+        psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+          --command "GRANT CREATE ON SCHEMA oracle TO $runtime_role"
+        if psql --dbname "$migration_db" --file "$migration"; then
+          echo "oracle 1.8.0 upgrade accepted unsafe $runtime_role grants" >&2
+          exit 1
+        fi
+        psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+          --variable runtime_role="$runtime_role" <<'SQL'
 DO $$
 BEGIN
   IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.7.1' THEN
     RAISE EXCEPTION 'failed role validation changed the oracle version';
   END IF;
 END $$;
-REVOKE CREATE ON SCHEMA oracle FROM pricing_caller;
+REVOKE CREATE ON SCHEMA oracle FROM :runtime_role;
 SQL
+      done
     fi
 
     psql --dbname "$migration_db" --file "$migration"
