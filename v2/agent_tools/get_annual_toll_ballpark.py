@@ -7,11 +7,17 @@ import logging
 from collections.abc import AsyncGenerator
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from math import ceil
 from typing import Annotated, Any, Literal, Self, cast
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationInfo,
+    model_validator,
+)
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 from strands.types.tools import ToolContext, ToolResult, ToolSpec
 
@@ -19,13 +25,13 @@ from agent_tools import get_current_toll_price as current_pricing
 from agent_tools import validate_toll_route as route_validation
 
 logger = logging.getLogger(__name__)
-
 _SAFE_ERROR = "Unable to calculate the annual toll ballpark. Reference: {tool_use_id}."
 _EASTERN = ZoneInfo("America/New_York")
 _METHOD = "recent_complete_same_date_round_trips"
 _ROUTE_SQL = "SELECT * FROM oracle.validate_ballpark_route(%s, %s)"
-_I66_SQL = "SELECT * FROM oracle.get_i66_ballpark_samples(%s, %s, %s, %s, %s)"
-_I95_SQL = "SELECT * FROM oracle.get_i95_i495_ballpark_samples(%s, %s, %s, %s)"
+_SUMMARY_SQL = """SELECT * FROM oracle.get_annual_ballpark_summary(
+    %s, %s, %s, %s, %s, %s, %s
+)"""
 _WEEKDAYS = (
     "monday",
     "tuesday",
@@ -37,17 +43,9 @@ _WEEKDAYS = (
 )
 
 type _Weekday = Literal[
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
 ]
-type _Row = dict[str, Any]
 type _Connection = Any
-type _Cursor = Any
 type _ProgressStage = Literal[
     "route_validation", "historical_pricing", "ballpark_calculation"
 ]
@@ -80,10 +78,15 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
-class _PricingProfile(_Model):
-    vehicle_class: str
-    payment_method: str
-    transponder_mode: str
+def _money(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _coverage_percent(complete: int, eligible: int) -> str:
+    percent = (Decimal(complete) * 100 / Decimal(eligible)).quantize(
+        Decimal("0.1"), rounding=ROUND_HALF_UP
+    )
+    return f"{percent:.1f}"
 
 
 class _DirectionRequest(_Model):
@@ -102,13 +105,12 @@ class _BallparkRequest(_Model):
     return_: _DirectionRequest = Field(alias="return")
     weekdays: Annotated[list[_Weekday], Field(min_length=1, max_length=7)]
     planned_annual_commute_days: Annotated[int, Field(ge=1, le=366)]
-    pricing_profile: _PricingProfile
 
     @model_validator(mode="after")
     def _validate_request(self) -> Self:
         if len(self.weekdays) != len(set(self.weekdays)):
             raise ValueError("weekdays must be unique")
-        if self.planned_annual_commute_days > min(366, 53 * len(self.weekdays)):
+        if self.planned_annual_commute_days > 53 * len(self.weekdays):
             raise ValueError("planned annual commute days exceed requested weekdays")
         return self
 
@@ -159,12 +161,9 @@ class _BallparkRouteDb(_Model):
     @model_validator(mode="after")
     def _validate_route(self) -> Self:
         if self.status == "valid":
-            if self.reason is not None:
-                raise ValueError("valid ballpark routes cannot include a reason")
-            if (
-                not self.connection_ids
-                or len(self.point_ids) != len(self.connection_ids) + 1
-            ):
+            if self.reason is not None or not self.connection_ids:
+                raise ValueError("valid ballpark route is incomplete")
+            if len(self.point_ids) != len(self.connection_ids) + 1:
                 raise ValueError("ballpark route path arrays are not aligned")
             if len(self.connection_types) != len(self.connection_ids):
                 raise ValueError("ballpark route connections are not aligned")
@@ -172,6 +171,12 @@ class _BallparkRouteDb(_Model):
                 gap.fallback_required is not None for gap in self.general_purpose_gaps
             ):
                 raise ValueError("ballpark gaps cannot include live fallback decisions")
+            route_validation._validate_facility_leg_alignment(  # pyright: ignore[reportPrivateUsage]
+                self.point_ids,
+                self.connection_ids,
+                self.connection_types,
+                self.facility_legs,
+            )
         elif any(
             (
                 self.point_ids,
@@ -182,149 +187,14 @@ class _BallparkRouteDb(_Model):
             )
         ):
             raise ValueError("unavailable ballpark routes must be pathless")
-        if self.status == "valid":
-            route_validation._validate_facility_leg_alignment(  # pyright: ignore[reportPrivateUsage]
-                self.point_ids,
-                self.connection_ids,
-                self.connection_types,
-                self.facility_legs,
-            )
         return self
 
 
-class _BallparkRoute(_BallparkRouteDb):
+class _RouteStatus(_Model):
     origin_point_id: str
     destination_point_id: str
-    departure_time: str
-
-
-class _Routes(_Model):
-    outbound: _BallparkRoute
-    return_: _BallparkRoute = Field(alias="return")
-
-
-class _I66SampleRow(_Model):
-    sample_date: date
-    sample_isodow: Annotated[int, Field(ge=1, le=7)]
-    bin_start_at: datetime
-    bin_end_at: datetime
-    interval_end_at: datetime
-    observed_at: datetime
-    start_zone_id: int
-    end_zone_id: int
-    price_usd: Annotated[Decimal, Field(ge=0)]
-    uses_modeled: Literal[False]
-    pricing_method: Literal["source_observation"]
-
-    @model_validator(mode="after")
-    def _validate_sample(self) -> Self:
-        _validate_sample_times(self, 6)
-        return self
-
-
-class _I95SampleRow(_Model):
-    sample_date: date
-    sample_isodow: Annotated[int, Field(ge=1, le=7)]
-    bin_start_at: datetime
-    bin_end_at: datetime
-    interval_end_at: datetime
-    observed_at: datetime
-    od_pair_id: Annotated[int, Field(gt=0)]
-    price_usd: Annotated[Decimal, Field(ge=0)]
-    uses_modeled: bool
-    pricing_method: Literal["source_observation", "identity_proxy_v1"]
-    proxy_od_pair_id: Annotated[int, Field(gt=0)] | None
-
-    @model_validator(mode="after")
-    def _validate_sample(self) -> Self:
-        _validate_sample_times(self, 10)
-        if self.uses_modeled != (self.pricing_method == "identity_proxy_v1"):
-            raise ValueError("I-95/I-495 sample provenance is inconsistent")
-        if self.uses_modeled != (self.proxy_od_pair_id is not None):
-            raise ValueError("I-95/I-495 proxy provenance is inconsistent")
-        return self
-
-
-def _validate_sample_times(row: _I66SampleRow | _I95SampleRow, minutes: int) -> None:
-    timestamps = (
-        row.bin_start_at,
-        row.bin_end_at,
-        row.interval_end_at,
-        row.observed_at,
-    )
-    if any(value.tzinfo is None or value.utcoffset() is None for value in timestamps):
-        raise ValueError("ballpark sample timestamps must be aware")
-    if (
-        row.bin_end_at - row.bin_start_at != timedelta(minutes=minutes)
-        or not row.bin_start_at <= row.interval_end_at < row.bin_end_at
-        or row.interval_end_at.astimezone(_EASTERN).date() != row.sample_date
-        or row.sample_date.isoweekday() != row.sample_isodow
-    ):
-        raise ValueError("ballpark sample time fields are inconsistent")
-
-
-class _DynamicComponentBase(_Model):
-    route_step_id: str
-    price_usd: Decimal
-    bin_start_at: datetime
-    bin_end_at: datetime
-    interval_end_at: datetime
-    observed_at: datetime
-
-
-class _I66Component(_DynamicComponentBase):
-    facility: Literal["i66"]
-    source_kind: Literal["observed"]
-    pricing_method: Literal["source_observation"]
-    start_zone_id: int
-    end_zone_id: int
-
-
-class _I95Component(_DynamicComponentBase):
-    facility: Literal["i95_i495"]
-    source_kind: Literal["observed", "modeled"]
-    pricing_method: Literal["source_observation", "identity_proxy_v1"]
-    od_pair_id: int
-    proxy_od_pair_id: int | None
-
-
-type _PriceComponent = Annotated[
-    _I66Component
-    | _I95Component
-    | current_pricing._GreenwayComponent  # pyright: ignore[reportPrivateUsage]
-    | current_pricing._DtrComponent,  # pyright: ignore[reportPrivateUsage]
-    Field(discriminator="facility"),
-]
-
-
-class _DirectionPrice(_Model):
-    total_usd: Decimal
-    components: list[_PriceComponent]
-
-
-class _CompleteDay(_Model):
-    sample_date: date
-    weekday: _Weekday
-    uses_modeled: bool
-    outbound: _DirectionPrice
-    return_: _DirectionPrice = Field(alias="return")
-    round_trip_total_usd: Decimal
-
-
-class _ExcludedDate(_Model):
-    sample_date: date
-    weekday: _Weekday
-    missing_outbound_route_step_ids: list[str]
-    missing_return_route_step_ids: list[str]
-
-    @model_validator(mode="after")
-    def _validate_missing(self) -> Self:
-        if (
-            not self.missing_outbound_route_step_ids
-            and not self.missing_return_route_step_ids
-        ):
-            raise ValueError("excluded dates require a missing route step")
-        return self
+    status: str
+    reason: route_validation.Reason | None
 
 
 class _TargetWindow(_Model):
@@ -340,30 +210,196 @@ class _DateRange(_Model):
 
 class _WeekdayCoverage(_Model):
     weekday: _Weekday
-    eligible_date_count: int
-    complete_pair_count: int
-    coverage_percent: str
+    eligible_date_count: Annotated[int, Field(ge=1)]
+    complete_pair_count: Annotated[int, Field(ge=0)]
+    coverage_percent: Annotated[str, Field(pattern=r"^(?:100[.]0|[0-9]{1,2}[.][0-9])$")]
 
 
 class _Coverage(_Model):
-    eligible_date_count: int
-    complete_pair_count: int
-    coverage_percent: str
-    by_weekday: list[_WeekdayCoverage]
+    eligible_date_count: Annotated[int, Field(ge=1)]
+    complete_pair_count: Annotated[int, Field(ge=0)]
+    coverage_percent: Annotated[str, Field(pattern=r"^(?:100[.]0|[0-9]{1,2}[.][0-9])$")]
+    by_weekday: Annotated[list[_WeekdayCoverage], Field(min_length=1, max_length=7)]
 
 
 class _Scenario(_Model):
-    percentile: Literal[25, 50, 90]
-    rank: int
-    sample_count: int
-    daily_round_trip_usd: Decimal
-    annualized_usd: Decimal
+    daily_round_trip_usd: Annotated[Decimal, Field(ge=0)]
+    annualized_usd: Annotated[Decimal, Field(ge=0)]
 
 
 class _Scenarios(_Model):
-    low: _Scenario
-    middle: _Scenario
-    high: _Scenario
+    p25: _Scenario
+    p50: _Scenario
+    p90: _Scenario
+
+
+class _FacilityBallpark(_Model):
+    facility: Literal["i66", "i95_i495", "greenway", "dtr"]
+    sample_count: Annotated[int, Field(ge=1, le=84)]
+    uses_modeled: bool
+    uses_current_fixed_rates: bool
+    scenarios: _Scenarios
+
+
+class _WeekdayCoverageDb(_Model):
+    sample_isodow: Annotated[int, Field(ge=1, le=7)]
+    eligible_date_count: Annotated[int, Field(ge=1, le=84)]
+    complete_pair_count: Annotated[int, Field(ge=0, le=84)]
+    coverage_percent: Annotated[str, Field(pattern=r"^(?:100[.]0|[0-9]{1,2}[.][0-9])$")]
+
+
+class _ScenarioDb(_Model):
+    daily_round_trip_usd: Annotated[
+        str, Field(pattern=r"^(?:0|[1-9][0-9]*)[.][0-9]{2}$")
+    ]
+    annualized_usd: Annotated[str, Field(pattern=r"^(?:0|[1-9][0-9]*)[.][0-9]{2}$")]
+
+
+class _ScenariosDb(_Model):
+    p25: _ScenarioDb
+    p50: _ScenarioDb
+    p90: _ScenarioDb
+
+
+class _FacilitySummaryDb(_Model):
+    facility: Literal["i66", "i95_i495", "greenway", "dtr"]
+    sample_count: Annotated[int, Field(ge=1, le=84)]
+    uses_modeled: bool
+    uses_current_fixed_rates: bool
+    scenarios: _ScenariosDb
+
+
+class _SummaryRow(_Model):
+    eligible_date_count: Annotated[int, Field(ge=1, le=84)]
+    complete_pair_count: Annotated[int, Field(ge=0, le=84)]
+    coverage_percent: Annotated[str, Field(pattern=r"^(?:100[.]0|[0-9]{1,2}[.][0-9])$")]
+    coverage_by_weekday: Annotated[
+        list[_WeekdayCoverageDb], Field(min_length=1, max_length=7)
+    ]
+    available_start_date: date | None
+    available_end_date: date | None
+    sample_status: Literal["complete", "partial"]
+    uses_modeled: bool
+    uses_current_fixed_rates: bool
+    facility_scenarios: Annotated[list[_FacilitySummaryDb], Field(max_length=4)]
+    p25_daily_usd: Annotated[Decimal, Field(ge=0)] | None
+    p50_daily_usd: Annotated[Decimal, Field(ge=0)] | None
+    p90_daily_usd: Annotated[Decimal, Field(ge=0)] | None
+    p25_annualized_usd: Annotated[Decimal, Field(ge=0)] | None
+    p50_annualized_usd: Annotated[Decimal, Field(ge=0)] | None
+    p90_annualized_usd: Annotated[Decimal, Field(ge=0)] | None
+
+    @model_validator(mode="after")
+    def _validate_summary(self, info: ValidationInfo) -> Self:
+        context = info.context
+        if not isinstance(context, dict):
+            raise ValueError("annual ballpark summary validation context is missing")
+        typed_context = cast(dict[str, Any], context)
+        dates = cast(list[date], typed_context.get("dates"))
+        annual_days = cast(int, typed_context.get("annual_days"))
+        expected_facilities = cast(list[str], typed_context.get("facilities"))
+        expected_weekdays = sorted({sample_date.isoweekday() for sample_date in dates})
+        returned_weekdays = [item.sample_isodow for item in self.coverage_by_weekday]
+        if (
+            self.eligible_date_count != len(dates)
+            or self.complete_pair_count > self.eligible_date_count
+            or self.coverage_percent
+            != _coverage_percent(self.complete_pair_count, self.eligible_date_count)
+            or returned_weekdays != expected_weekdays
+            or sum(item.eligible_date_count for item in self.coverage_by_weekday)
+            != self.eligible_date_count
+            or sum(item.complete_pair_count for item in self.coverage_by_weekday)
+            != self.complete_pair_count
+            or any(
+                item.eligible_date_count
+                != sum(day.isoweekday() == item.sample_isodow for day in dates)
+                or item.complete_pair_count > item.eligible_date_count
+                or item.coverage_percent
+                != _coverage_percent(item.complete_pair_count, item.eligible_date_count)
+                for item in self.coverage_by_weekday
+            )
+        ):
+            raise ValueError("annual ballpark coverage is inconsistent")
+
+        values = (
+            self.p25_daily_usd,
+            self.p50_daily_usd,
+            self.p90_daily_usd,
+            self.p25_annualized_usd,
+            self.p50_annualized_usd,
+            self.p90_annualized_usd,
+        )
+        if self.complete_pair_count == 0:
+            if (
+                self.sample_status != "partial"
+                or self.available_start_date is not None
+                or self.available_end_date is not None
+                or any(value is not None for value in values)
+                or self.facility_scenarios
+                or self.uses_modeled
+                or self.uses_current_fixed_rates
+            ):
+                raise ValueError("empty annual ballpark summary is inconsistent")
+            return self
+
+        if (
+            self.sample_status
+            != ("complete" if self.complete_pair_count == len(dates) else "partial")
+            or self.available_start_date not in dates
+            or self.available_end_date not in dates
+            or cast(date, self.available_start_date)
+            > cast(date, self.available_end_date)
+            or any(value is None for value in values)
+        ):
+            raise ValueError("complete annual ballpark summary is inconsistent")
+        daily = [
+            cast(Decimal, self.p25_daily_usd),
+            cast(Decimal, self.p50_daily_usd),
+            cast(Decimal, self.p90_daily_usd),
+        ]
+        annualized = [
+            cast(Decimal, self.p25_annualized_usd),
+            cast(Decimal, self.p50_annualized_usd),
+            cast(Decimal, self.p90_annualized_usd),
+        ]
+        if daily != sorted(daily) or annualized != [
+            _money(value * annual_days) for value in daily
+        ]:
+            raise ValueError("annual ballpark scenarios are inconsistent")
+        returned_facilities = [item.facility for item in self.facility_scenarios]
+        if (
+            returned_facilities != expected_facilities
+            or any(
+                item.sample_count != self.complete_pair_count
+                for item in self.facility_scenarios
+            )
+            or self.uses_modeled
+            != any(item.uses_modeled for item in self.facility_scenarios)
+            or self.uses_current_fixed_rates
+            != any(item.uses_current_fixed_rates for item in self.facility_scenarios)
+        ):
+            raise ValueError("annual ballpark facility summary is inconsistent")
+        for facility in self.facility_scenarios:
+            facility_daily = [
+                Decimal(facility.scenarios.p25.daily_round_trip_usd),
+                Decimal(facility.scenarios.p50.daily_round_trip_usd),
+                Decimal(facility.scenarios.p90.daily_round_trip_usd),
+            ]
+            facility_annualized = [
+                Decimal(facility.scenarios.p25.annualized_usd),
+                Decimal(facility.scenarios.p50.annualized_usd),
+                Decimal(facility.scenarios.p90.annualized_usd),
+            ]
+            fixed = facility.facility in {"greenway", "dtr"}
+            if (
+                facility_daily != sorted(facility_daily)
+                or facility_annualized
+                != [_money(value * annual_days) for value in facility_daily]
+                or facility.uses_current_fixed_rates != fixed
+                or (fixed and facility.uses_modeled)
+            ):
+                raise ValueError("annual ballpark facility scenarios are inconsistent")
+        return self
 
 
 class _BallparkResponseBase(_Model):
@@ -373,21 +409,16 @@ class _BallparkResponseBase(_Model):
     target_window: _TargetWindow
     weekdays: list[_Weekday]
     planned_annual_commute_days: int
-    pricing_profile: _PricingProfile
-    routes: _Routes
     coverage: _Coverage
-    missing_weekdays: list[_Weekday]
-    underrepresented_weekdays: list[_Weekday]
     uses_modeled: bool
     uses_current_fixed_rates: bool
-    excluded_dates: list[_ExcludedDate]
+    facilities: list[_FacilityBallpark]
 
 
 class _BallparkSuccess(_BallparkResponseBase):
     sample_status: Literal["complete", "partial"]
     available_date_range: _DateRange
     scenarios: _Scenarios
-    complete_days: Annotated[list[_CompleteDay], Field(min_length=1, max_length=84)]
 
 
 class _NoCompleteResponse(_BallparkResponseBase):
@@ -398,13 +429,14 @@ class _NoCompleteResponse(_BallparkResponseBase):
 
 class _SimpleUnavailableResponse(_Model):
     error: Literal["ballpark_unavailable"]
-    reason: Literal["unsupported_pricing_profile", "overnight_schedule"]
+    reason: Literal["overnight_schedule"]
 
 
 class _RouteUnavailableResponse(_Model):
     error: Literal["ballpark_unavailable"]
     reason: Literal["route_unavailable"]
-    routes: _Routes
+    outbound: _RouteStatus
+    return_: _RouteStatus = Field(alias="return")
 
 
 type _BallparkOutput = (
@@ -414,19 +446,13 @@ type _BallparkOutput = (
     | _RouteUnavailableResponse
 )
 _OUTPUT_ADAPTER: TypeAdapter[_BallparkOutput] = TypeAdapter(_BallparkOutput)
-
-_SUPPORTED_PROFILE = _PricingProfile(
-    vehicle_class="two_axle_passenger",
-    payment_method="e_zpass",
-    transponder_mode="toll",
-)
 _INPUT_SCHEMA: dict[str, Any] = _BallparkRequest.model_json_schema(mode="validation")
 _OUTPUT_SCHEMA = _OUTPUT_ADAPTER.json_schema(mode="serialization")
 _PROGRESS_SCHEMA = _ProgressEvent.model_json_schema(mode="serialization")
 _OPERATION_ERROR_SCHEMA = _OperationError.model_json_schema(mode="serialization")
 TOOL_SPEC: ToolSpec = {
     "name": "get_annual_toll_ballpark",
-    "description": "Validate a round-trip toll commute and calculate a recent annualized ballpark.",
+    "description": "Validate a round-trip toll commute and return compact annual toll scenarios.",
     "inputSchema": {"json": _INPUT_SCHEMA},
     "outputSchema": {"json": _OUTPUT_SCHEMA},
 }
@@ -436,20 +462,20 @@ def _progress(stage: _ProgressStage, status: _ProgressStatus) -> dict[str, str]:
     return cast(
         dict[str, str],
         _ProgressEvent(
-            stage=stage,
-            status=status,
-            message=_PROGRESS_MESSAGES[(stage, status)],
+            stage=stage, status=status, message=_PROGRESS_MESSAGES[(stage, status)]
         ).model_dump(mode="json"),
     )
 
 
 def _operation_error(tool_use_id: str) -> ToolResult:
-    result = _OperationError(
-        toolUseId=tool_use_id,
-        status="error",
-        content=[_ErrorContent(text=_SAFE_ERROR.format(tool_use_id=tool_use_id))],
+    return cast(
+        ToolResult,
+        _OperationError(
+            toolUseId=tool_use_id,
+            status="error",
+            content=[_ErrorContent(text=_SAFE_ERROR.format(tool_use_id=tool_use_id))],
+        ).model_dump(mode="json"),
     )
-    return cast(ToolResult, result.model_dump(mode="json"))
 
 
 def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
@@ -468,38 +494,25 @@ def _error(tool_use_id: str, stage: str, error: Exception) -> ToolResult:
 
 def _begin_and_validate_routes(
     connection: _Connection, request: _BallparkRequest
-) -> tuple[datetime, _Routes, list[date]]:
+) -> tuple[datetime, tuple[_BallparkRouteDb, _BallparkRouteDb], list[date]]:
     with connection.cursor() as cursor:
         cursor.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         cursor.execute("SELECT transaction_timestamp() AS evaluated_at")
-        anchor_rows = cursor.fetchall()
-        if len(anchor_rows) != 1:
+        rows = cursor.fetchall()
+        if len(rows) != 1:
             raise ValueError("database anchor must return exactly one row")
-        evaluated_at = cast(datetime, anchor_rows[0]["evaluated_at"])
+        evaluated_at = cast(datetime, rows[0]["evaluated_at"])
         if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
             raise ValueError("database anchor must be timezone-aware")
-
-        routes: list[_BallparkRoute] = []
+        routes: list[_BallparkRouteDb] = []
         for direction in (request.outbound, request.return_):
             cursor.execute(
-                _ROUTE_SQL,
-                (direction.origin_point_id, direction.destination_point_id),
+                _ROUTE_SQL, (direction.origin_point_id, direction.destination_point_id)
             )
             rows = cursor.fetchall()
             if len(rows) != 1:
                 raise ValueError("ballpark route oracle must return exactly one row")
-            route = _BallparkRouteDb.model_validate(rows[0])
-            routes.append(
-                _BallparkRoute.model_validate(
-                    {
-                        **route.model_dump(),
-                        "origin_point_id": direction.origin_point_id,
-                        "destination_point_id": direction.destination_point_id,
-                        "departure_time": direction.departure_time,
-                    }
-                )
-            )
-
+            routes.append(_BallparkRouteDb.model_validate(rows[0]))
     end_date = evaluated_at.astimezone(_EASTERN).date() - timedelta(days=1)
     start_date = end_date - timedelta(days=83)
     requested_weekdays = {_WEEKDAYS.index(day) for day in request.weekdays}
@@ -508,11 +521,7 @@ def _begin_and_validate_routes(
         for offset in range(84)
         if (start_date + timedelta(days=offset)).weekday() in requested_weekdays
     ]
-    return (
-        evaluated_at.astimezone(_EASTERN),
-        _Routes.model_validate({"outbound": routes[0], "return": routes[1]}),
-        dates,
-    )
+    return evaluated_at.astimezone(_EASTERN), (routes[0], routes[1]), dates
 
 
 def _resolve_wall_time(sample_date: date, departure_time: time) -> datetime | None:
@@ -526,304 +535,158 @@ def _resolve_wall_time(sample_date: date, departure_time: time) -> datetime | No
         .replace(tzinfo=None)
         == naive
     }
-    if len(candidates) != 1:
-        return None
-    return next(iter(candidates)).astimezone(_EASTERN)
+    return next(iter(candidates)).astimezone(_EASTERN) if len(candidates) == 1 else None
 
 
-def _component_from_i66(
-    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-    row: _I66SampleRow,
-) -> _I66Component:
-    return _I66Component(
-        route_step_id=leg.route_step_id,
-        facility="i66",
-        price_usd=row.price_usd,
-        source_kind="observed",
-        pricing_method="source_observation",
-        bin_start_at=row.bin_start_at.astimezone(_EASTERN),
-        bin_end_at=row.bin_end_at.astimezone(_EASTERN),
-        interval_end_at=row.interval_end_at.astimezone(_EASTERN),
-        observed_at=row.observed_at.astimezone(_EASTERN),
-        start_zone_id=row.start_zone_id,
-        end_zone_id=row.end_zone_id,
+def _route_status(request: _DirectionRequest, route: _BallparkRouteDb) -> _RouteStatus:
+    return _RouteStatus(
+        origin_point_id=request.origin_point_id,
+        destination_point_id=request.destination_point_id,
+        status=route.status,
+        reason=route.reason,
     )
 
 
-def _component_from_i95(
-    leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-    row: _I95SampleRow,
-) -> _I95Component:
-    return _I95Component(
-        route_step_id=leg.route_step_id,
-        facility="i95_i495",
-        price_usd=row.price_usd,
-        source_kind="modeled" if row.uses_modeled else "observed",
-        pricing_method=row.pricing_method,
-        bin_start_at=row.bin_start_at.astimezone(_EASTERN),
-        bin_end_at=row.bin_end_at.astimezone(_EASTERN),
-        interval_end_at=row.interval_end_at.astimezone(_EASTERN),
-        observed_at=row.observed_at.astimezone(_EASTERN),
-        od_pair_id=row.od_pair_id,
-        proxy_od_pair_id=row.proxy_od_pair_id,
-    )
-
-
-def _validate_sample_row_set(
-    rows: list[_I66SampleRow] | list[_I95SampleRow],
-    eligible_dates: list[date],
-    departure_time: time,
-    evaluated_at: datetime,
-    label: str,
-) -> None:
-    row_dates = [row.sample_date for row in rows]
-    if (
-        len(rows) > len(eligible_dates)
-        or len(row_dates) != len(set(row_dates))
-        or any(
-            row.sample_date not in eligible_dates
-            or row.interval_end_at > evaluated_at
-            or row.observed_at > evaluated_at
-            or (sample_at := _resolve_wall_time(row.sample_date, departure_time))
-            is None
-            or not row.bin_start_at <= sample_at < row.bin_end_at
-            for row in rows
-        )
+def _summary_inputs(
+    routes: tuple[_BallparkRouteDb, _BallparkRouteDb],
+    request: _BallparkRequest,
+    dates: list[date],
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    legs: list[dict[str, Any]] = []
+    fixed_prices: list[dict[str, str]] = []
+    for direction_name, route, direction in (
+        ("outbound", routes[0], request.outbound),
+        ("return", routes[1], request.return_),
     ):
-        raise ValueError(f"{label} ballpark function returned invalid rows")
-
-
-def _price_direction(
-    cursor: _Cursor,
-    route: _BallparkRoute,
-    departure_time: time,
-    eligible_dates: list[date],
-    evaluated_at: datetime,
-) -> dict[date, dict[str, _PriceComponent]]:
-    components: dict[date, dict[str, _PriceComponent]] = {
-        sample_date: {} for sample_date in eligible_dates
-    }
-    if not route.facility_legs:
-        return components
-    resolved_times = {
-        sample_date: _resolve_wall_time(sample_date, departure_time)
-        for sample_date in eligible_dates
-    }
-
-    for leg in route.facility_legs:
-        if leg.facility == "i66":
-            cursor.execute(
-                _I66_SQL,
-                (
-                    leg.pricing_key.start_zone_id,
-                    leg.pricing_key.end_zone_id,
-                    departure_time,
-                    eligible_dates,
-                    evaluated_at,
-                ),
-            )
-            rows = [_I66SampleRow.model_validate(row) for row in cursor.fetchall()]
-            _validate_sample_row_set(
-                rows, eligible_dates, departure_time, evaluated_at, "I-66"
-            )
-            if any(
-                row.start_zone_id != leg.pricing_key.start_zone_id
-                or row.end_zone_id != leg.pricing_key.end_zone_id
-                for row in rows
-            ):
-                raise ValueError("I-66 ballpark function returned invalid rows")
-            for row in rows:
-                components[row.sample_date][leg.route_step_id] = _component_from_i66(
-                    leg, row
+        resolved = {
+            day: _resolve_wall_time(day, direction.parsed_time()) for day in dates
+        }
+        for leg in route.facility_legs:
+            item: dict[str, Any] = {
+                "direction": direction_name,
+                "route_step_id": leg.route_step_id,
+                "facility": leg.facility,
+            }
+            if leg.facility == "i66":
+                item.update(
+                    start_zone_id=leg.pricing_key.start_zone_id,
+                    end_zone_id=leg.pricing_key.end_zone_id,
                 )
-        elif leg.facility == "i95_i495":
-            cursor.execute(
-                _I95_SQL,
-                (
-                    leg.pricing_key.od_pair_id,
-                    departure_time,
-                    eligible_dates,
-                    evaluated_at,
-                ),
-            )
-            rows = [_I95SampleRow.model_validate(row) for row in cursor.fetchall()]
-            _validate_sample_row_set(
-                rows, eligible_dates, departure_time, evaluated_at, "I-95/I-495"
-            )
-            if any(row.od_pair_id != leg.pricing_key.od_pair_id for row in rows):
-                raise ValueError("I-95/I-495 ballpark function returned invalid rows")
-            for row in rows:
-                components[row.sample_date][leg.route_step_id] = _component_from_i95(
-                    leg, row
-                )
-        elif leg.facility == "greenway":
-            for sample_date, sample_at in resolved_times.items():
-                if sample_at is not None:
-                    priced = current_pricing._price_greenway(  # pyright: ignore[reportPrivateUsage]
-                        leg, sample_at
-                    ).model_copy(update={"component_evaluated_at": evaluated_at})
-                    components[sample_date][leg.route_step_id] = priced
-        elif leg.facility == "dtr":
-            for sample_date, sample_at in resolved_times.items():
-                if sample_at is not None:
-                    priced = current_pricing._price_dtr(  # pyright: ignore[reportPrivateUsage]
-                        leg, sample_at
-                    ).model_copy(update={"component_evaluated_at": evaluated_at})
-                    components[sample_date][leg.route_step_id] = priced
-        else:
-            raise ValueError("ballpark route contains an unsupported facility")
-    return components
+            elif leg.facility == "i95_i495":
+                item["od_pair_id"] = leg.pricing_key.od_pair_id
+            elif leg.facility not in {"greenway", "dtr"}:
+                raise ValueError("ballpark route contains an unsupported facility")
+            legs.append(item)
+            if leg.facility in {"greenway", "dtr"}:
+                for sample_date, sample_at in resolved.items():
+                    if sample_at is not None:
+                        if leg.facility == "greenway":
+                            component = current_pricing._price_greenway(  # pyright: ignore[reportPrivateUsage]
+                                leg, sample_at
+                            )
+                        elif leg.facility == "dtr":
+                            component = current_pricing._price_dtr(  # pyright: ignore[reportPrivateUsage]
+                                leg, sample_at
+                            )
+                        else:  # narrowed by the enclosing fixed-facility check
+                            raise AssertionError("unreachable facility")
+                        fixed_prices.append(
+                            {
+                                "sample_date": sample_date.isoformat(),
+                                "direction": direction_name,
+                                "route_step_id": leg.route_step_id,
+                                "price_usd": f"{component.price_usd:.2f}",
+                            }
+                        )
+    return legs, fixed_prices
 
 
-def _fetch_history(
+def _scenario(daily: Decimal, annualized: Decimal) -> _Scenario:
+    return _Scenario(daily_round_trip_usd=daily, annualized_usd=annualized)
+
+
+def _json_scenarios(value: _ScenariosDb) -> _Scenarios:
+    return _Scenarios(
+        p25=_Scenario(
+            daily_round_trip_usd=Decimal(value.p25.daily_round_trip_usd),
+            annualized_usd=Decimal(value.p25.annualized_usd),
+        ),
+        p50=_Scenario(
+            daily_round_trip_usd=Decimal(value.p50.daily_round_trip_usd),
+            annualized_usd=Decimal(value.p50.annualized_usd),
+        ),
+        p90=_Scenario(
+            daily_round_trip_usd=Decimal(value.p90.daily_round_trip_usd),
+            annualized_usd=Decimal(value.p90.annualized_usd),
+        ),
+    )
+
+
+def _fetch_summary(
     connection: _Connection,
-    routes: _Routes,
+    routes: tuple[_BallparkRouteDb, _BallparkRouteDb],
     request: _BallparkRequest,
-    eligible_dates: list[date],
+    dates: list[date],
     evaluated_at: datetime,
-) -> tuple[
-    dict[date, dict[str, _PriceComponent]],
-    dict[date, dict[str, _PriceComponent]],
-]:
+) -> _SummaryRow:
+    from psycopg.types.json import Jsonb
+
+    legs, fixed_prices = _summary_inputs(routes, request, dates)
     with connection.cursor() as cursor:
-        outbound = _price_direction(
-            cursor,
-            routes.outbound,
-            request.outbound.parsed_time(),
-            eligible_dates,
-            evaluated_at,
+        cursor.execute(
+            _SUMMARY_SQL,
+            (
+                Jsonb(legs),
+                request.outbound.parsed_time(),
+                request.return_.parsed_time(),
+                dates,
+                Jsonb(fixed_prices),
+                request.planned_annual_commute_days,
+                evaluated_at,
+            ),
         )
-        return_ = _price_direction(
-            cursor,
-            routes.return_,
-            request.return_.parsed_time(),
-            eligible_dates,
-            evaluated_at,
-        )
-    connection.commit()
-    return outbound, return_
-
-
-def _money(value: Decimal) -> Decimal:
-    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-def _coverage_percent(complete: int, eligible: int) -> str:
-    value = (Decimal(complete) * 100 / Decimal(eligible)).quantize(
-        Decimal("0.1"), rounding=ROUND_HALF_UP
-    )
-    return f"{value:.1f}"
-
-
-def _scenario(
-    percentile: Literal[25, 50, 90],
-    totals: list[Decimal],
-    annual_days: int,
-) -> _Scenario:
-    rank = ceil(percentile * len(totals) / 100)
-    daily = _money(totals[rank - 1])
-    return _Scenario(
-        percentile=percentile,
-        rank=rank,
-        sample_count=len(totals),
-        daily_round_trip_usd=daily,
-        annualized_usd=_money(daily * annual_days),
+        rows = cursor.fetchall()
+    if len(rows) != 1:
+        raise ValueError("annual ballpark summary must return exactly one row")
+    expected_facilities = list(dict.fromkeys(item["facility"] for item in legs))
+    return _SummaryRow.model_validate(
+        rows[0],
+        context={
+            "dates": dates,
+            "annual_days": request.planned_annual_commute_days,
+            "facilities": expected_facilities,
+        },
     )
 
 
-def _calculate(
-    request: _BallparkRequest,
-    evaluated_at: datetime,
-    routes: _Routes,
-    eligible_dates: list[date],
-    outbound: dict[date, dict[str, _PriceComponent]],
-    return_: dict[date, dict[str, _PriceComponent]],
+def _response(
+    request: _BallparkRequest, evaluated_at: datetime, summary: _SummaryRow
 ) -> _BallparkSuccess | _NoCompleteResponse:
-    outbound_steps = [leg.route_step_id for leg in routes.outbound.facility_legs]
-    return_steps = [leg.route_step_id for leg in routes.return_.facility_legs]
-    complete_days: list[_CompleteDay] = []
-    excluded_dates: list[_ExcludedDate] = []
-
-    for sample_date in eligible_dates:
-        missing_outbound = [
-            step for step in outbound_steps if step not in outbound[sample_date]
-        ]
-        missing_return = [
-            step for step in return_steps if step not in return_[sample_date]
-        ]
-        weekday = _WEEKDAYS[sample_date.weekday()]
-        if missing_outbound or missing_return:
-            excluded_dates.append(
-                _ExcludedDate(
-                    sample_date=sample_date,
-                    weekday=weekday,
-                    missing_outbound_route_step_ids=missing_outbound,
-                    missing_return_route_step_ids=missing_return,
-                )
-            )
-            continue
-        outbound_components = [outbound[sample_date][step] for step in outbound_steps]
-        return_components = [return_[sample_date][step] for step in return_steps]
-        outbound_total = _money(
-            sum((component.price_usd for component in outbound_components), Decimal())
-        )
-        return_total = _money(
-            sum((component.price_usd for component in return_components), Decimal())
-        )
-        uses_modeled = any(
-            component.source_kind == "modeled"
-            for component in outbound_components + return_components
-        )
-        complete_days.append(
-            _CompleteDay.model_validate(
-                {
-                    "sample_date": sample_date,
-                    "weekday": weekday,
-                    "uses_modeled": uses_modeled,
-                    "outbound": _DirectionPrice(
-                        total_usd=outbound_total, components=outbound_components
-                    ),
-                    "return": _DirectionPrice(
-                        total_usd=return_total, components=return_components
-                    ),
-                    "round_trip_total_usd": _money(outbound_total + return_total),
-                }
-            )
-        )
-
-    weekday_counts: dict[_Weekday, tuple[int, int]] = {}
-    for weekday in sorted(request.weekdays, key=_WEEKDAYS.index):
-        eligible = sum(
-            _WEEKDAYS[sample_date.weekday()] == weekday
-            for sample_date in eligible_dates
-        )
-        complete = sum(day.weekday == weekday for day in complete_days)
-        weekday_counts[weekday] = (eligible, complete)
-    complete_counts = [count[1] for count in weekday_counts.values()]
-    maximum_count = max(complete_counts)
-    missing_weekdays = [
-        day for day, (_, complete) in weekday_counts.items() if complete == 0
-    ]
-    underrepresented = [
-        day
-        for day, (_, complete) in weekday_counts.items()
-        if 0 < complete < maximum_count
-    ]
+    target_end = evaluated_at.date() - timedelta(days=1)
     coverage = _Coverage(
-        eligible_date_count=len(eligible_dates),
-        complete_pair_count=len(complete_days),
-        coverage_percent=_coverage_percent(len(complete_days), len(eligible_dates)),
+        eligible_date_count=summary.eligible_date_count,
+        complete_pair_count=summary.complete_pair_count,
+        coverage_percent=summary.coverage_percent,
         by_weekday=[
             _WeekdayCoverage(
-                weekday=weekday,
-                eligible_date_count=eligible,
-                complete_pair_count=complete,
-                coverage_percent=_coverage_percent(complete, eligible),
+                weekday=_WEEKDAYS[item.sample_isodow - 1],
+                eligible_date_count=item.eligible_date_count,
+                complete_pair_count=item.complete_pair_count,
+                coverage_percent=item.coverage_percent,
             )
-            for weekday, (eligible, complete) in weekday_counts.items()
+            for item in summary.coverage_by_weekday
         ],
     )
-    target_end = evaluated_at.astimezone(_EASTERN).date() - timedelta(days=1)
+    facilities = [
+        _FacilityBallpark(
+            facility=item.facility,
+            sample_count=item.sample_count,
+            uses_modeled=item.uses_modeled,
+            uses_current_fixed_rates=item.uses_current_fixed_rates,
+            scenarios=_json_scenarios(item.scenarios),
+        )
+        for item in summary.facility_scenarios
+    ]
     common: dict[str, Any] = {
         "method": _METHOD,
         "evaluated_at": evaluated_at,
@@ -835,42 +698,51 @@ def _calculate(
         ),
         "weekdays": sorted(request.weekdays, key=_WEEKDAYS.index),
         "planned_annual_commute_days": request.planned_annual_commute_days,
-        "pricing_profile": request.pricing_profile,
-        "routes": routes,
         "coverage": coverage,
-        "missing_weekdays": missing_weekdays,
-        "underrepresented_weekdays": underrepresented,
-        "uses_modeled": any(day.uses_modeled for day in complete_days),
-        "uses_current_fixed_rates": any(
-            component.source_kind == "schedule_derived"
-            for day in complete_days
-            for component in day.outbound.components + day.return_.components
-        ),
-        "excluded_dates": excluded_dates,
+        "uses_modeled": summary.uses_modeled,
+        "uses_current_fixed_rates": summary.uses_current_fixed_rates,
+        "facilities": facilities,
     }
-    if not complete_days:
+    if summary.complete_pair_count == 0:
         return _NoCompleteResponse(
             **common,
             error="ballpark_unavailable",
             reason="no_complete_paired_days",
             available_date_range=None,
         )
-    totals = sorted(day.round_trip_total_usd for day in complete_days)
+    values = (
+        summary.available_start_date,
+        summary.available_end_date,
+        summary.p25_daily_usd,
+        summary.p50_daily_usd,
+        summary.p90_daily_usd,
+        summary.p25_annualized_usd,
+        summary.p50_annualized_usd,
+        summary.p90_annualized_usd,
+    )
+    if any(value is None for value in values):
+        raise ValueError("complete annual ballpark summary is incomplete")
     return _BallparkSuccess(
         **common,
+        sample_status=summary.sample_status,
         available_date_range=_DateRange(
-            start_date=complete_days[0].sample_date,
-            end_date=complete_days[-1].sample_date,
-        ),
-        sample_status=(
-            "complete" if len(complete_days) == len(eligible_dates) else "partial"
+            start_date=cast(date, summary.available_start_date),
+            end_date=cast(date, summary.available_end_date),
         ),
         scenarios=_Scenarios(
-            low=_scenario(25, totals, request.planned_annual_commute_days),
-            middle=_scenario(50, totals, request.planned_annual_commute_days),
-            high=_scenario(90, totals, request.planned_annual_commute_days),
+            p25=_scenario(
+                cast(Decimal, summary.p25_daily_usd),
+                cast(Decimal, summary.p25_annualized_usd),
+            ),
+            p50=_scenario(
+                cast(Decimal, summary.p50_daily_usd),
+                cast(Decimal, summary.p50_annualized_usd),
+            ),
+            p90=_scenario(
+                cast(Decimal, summary.p90_daily_usd),
+                cast(Decimal, summary.p90_annualized_usd),
+            ),
         ),
-        complete_days=complete_days,
     )
 
 
@@ -917,7 +789,7 @@ def _close(connection: _Connection, *, rollback: bool) -> None:
 async def get_annual_toll_ballpark(
     tool_context: ToolContext,
 ) -> AsyncGenerator[dict[str, str] | ToolResult]:
-    """Validate a round trip and calculate a recent annualized toll ballpark."""
+    """Validate a round trip and return compact annual toll scenarios."""
     tool_use_id = "unknown"
     try:
         tool_data = cast(Any, tool_context.tool_use)
@@ -926,15 +798,6 @@ async def get_annual_toll_ballpark(
         request = _BallparkRequest.model_validate(tool_data.get("input"))
     except Exception as error:
         yield _error(tool_use_id, "input_validation", error)
-        return
-
-    if request.pricing_profile != _SUPPORTED_PROFILE:
-        yield _tool_result(
-            tool_use_id,
-            _SimpleUnavailableResponse(
-                error="ballpark_unavailable", reason="unsupported_pricing_profile"
-            ),
-        )
         return
     if request.return_.parsed_time() <= request.outbound.parsed_time():
         yield _tool_result(
@@ -949,11 +812,9 @@ async def get_annual_toll_ballpark(
     try:
         yield _progress("route_validation", "running")
         try:
-            connection = cast(
-                _Connection,
-                await asyncio.to_thread(route_validation._connect),  # pyright: ignore[reportPrivateUsage]
-            )
-            evaluated_at, routes, eligible_dates = await asyncio.to_thread(
+            connect = route_validation._connect  # pyright: ignore[reportPrivateUsage]
+            connection = cast(_Connection, await asyncio.to_thread(connect))
+            evaluated_at, routes, dates = await asyncio.to_thread(
                 _begin_and_validate_routes, connection, request
             )
         except Exception as error:
@@ -961,37 +822,29 @@ async def get_annual_toll_ballpark(
             yield _error(tool_use_id, "route_validation", error)
             return
         yield _progress("route_validation", "completed")
-
-        if routes.outbound.status != "valid" or routes.return_.status != "valid":
-            try:
-                result = _tool_result(
-                    tool_use_id,
-                    _RouteUnavailableResponse(
-                        error="ballpark_unavailable",
-                        reason="route_unavailable",
-                        routes=routes,
-                    ),
-                )
-                await asyncio.to_thread(_close, connection, rollback=True)
-                connection = None
-                yield result
-            except Exception as error:
-                yield _error(tool_use_id, "response_serialization", error)
+        if routes[0].status != "valid" or routes[1].status != "valid":
+            yield _tool_result(
+                tool_use_id,
+                _RouteUnavailableResponse.model_validate(
+                    {
+                        "error": "ballpark_unavailable",
+                        "reason": "route_unavailable",
+                        "outbound": _route_status(request.outbound, routes[0]),
+                        "return": _route_status(request.return_, routes[1]),
+                    }
+                ),
+            )
             return
 
         yield _progress("historical_pricing", "running")
         try:
-            outbound, return_ = await asyncio.to_thread(
-                _fetch_history,
-                connection,
-                routes,
-                request,
-                eligible_dates,
-                evaluated_at,
+            summary = await asyncio.to_thread(
+                _fetch_summary, connection, routes, request, dates, evaluated_at
             )
-            completed_connection = connection
-            connection = None
+            completed_connection = cast(_Connection, connection)
+            await asyncio.to_thread(completed_connection.commit)
             await asyncio.to_thread(_close, completed_connection, rollback=False)
+            connection = None
         except Exception as error:
             yield _progress("historical_pricing", "failed")
             yield _error(tool_use_id, "historical_pricing", error)
@@ -1000,15 +853,9 @@ async def get_annual_toll_ballpark(
 
         yield _progress("ballpark_calculation", "running")
         try:
-            response = _calculate(
-                request,
-                evaluated_at,
-                routes,
-                eligible_dates,
-                outbound,
-                return_,
+            result = _tool_result(
+                tool_use_id, _response(request, evaluated_at, summary)
             )
-            result = _tool_result(tool_use_id, response)
         except Exception as error:
             yield _progress("ballpark_calculation", "failed")
             yield _error(tool_use_id, "ballpark_calculation", error)
@@ -1017,14 +864,9 @@ async def get_annual_toll_ballpark(
         yield result
     finally:
         if connection is not None:
-            cleanup_connection = connection
-            connection = None
             try:
-                await asyncio.to_thread(_close, cleanup_connection, rollback=True)
+                await asyncio.to_thread(_close, connection, rollback=True)
             except Exception as error:
-                safe_error = RuntimeError(
-                    f"{type(error).__name__} during connection_cleanup"
-                )
                 logger.error(
                     "get_annual_toll_ballpark cleanup failed",
                     extra={
@@ -1032,7 +874,7 @@ async def get_annual_toll_ballpark(
                         "failureStage": "connection_cleanup",
                         "exceptionType": type(error).__name__,
                     },
-                    exc_info=(type(safe_error), safe_error, error.__traceback__),
+                    exc_info=(type(error), error, error.__traceback__),
                 )
 
 

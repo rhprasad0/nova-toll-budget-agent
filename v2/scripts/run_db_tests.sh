@@ -180,11 +180,17 @@ SQL
       exit 1
     fi
 
-    dump_schema --schema-only --schema "$schema_name" --no-owner "$bootstrap_db" | \
-      sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/bootstrap.sql"
-    dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
-      sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
-    diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
+    bootstrap_version="$(
+      psql --dbname "$bootstrap_db" --tuples-only --no-align \
+        --command "SELECT version FROM $schema_name.schema_version WHERE singleton"
+    )"
+    if [[ "$target_version" == "$bootstrap_version" ]]; then
+      dump_schema --schema-only --schema "$schema_name" --no-owner "$bootstrap_db" | \
+        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/bootstrap.sql"
+      dump_schema --schema-only --schema "$schema_name" --no-owner "$migration_db" | \
+        sed -E '/^\\(un)?restrict /d' >"$migration_source_dir/migrated.sql"
+      diff -u "$migration_source_dir/bootstrap.sql" "$migration_source_dir/migrated.sql"
+    fi
 
     if [[ "$schema_name:$target_version" == "pricing:1.2.0" ]]; then
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \

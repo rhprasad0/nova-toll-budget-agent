@@ -89,7 +89,7 @@ def test_ballpark_runtime_contract_matches_models_and_manifest():
     assert _digest(expected) == manifest["releases"][manifest["current"]]
 
 
-def test_manifest_accepts_new_contract_at_one_dot_zero_dot_zero():
+def test_manifest_accepts_new_contract_with_preserved_one_dot_zero_release():
     current = _manifest()
     previous = copy.deepcopy(current)
     previous.pop("get_annual_toll_ballpark")

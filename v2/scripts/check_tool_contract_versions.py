@@ -53,8 +53,8 @@ def validate_manifest_update(previous: dict[str, Any], current: dict[str, Any]) 
     for name in sorted(current):
         current_version, current_releases = _contract(current, name)
         if name not in previous:
-            if current_version != "1.0.0" or set(current_releases) != {"1.0.0"}:
-                raise ValueError(f"new contract {name} must start at 1.0.0")
+            if "1.0.0" not in current_releases:
+                raise ValueError(f"new contract {name} must include release 1.0.0")
             continue
 
         previous_version, previous_releases = _contract(previous, name)

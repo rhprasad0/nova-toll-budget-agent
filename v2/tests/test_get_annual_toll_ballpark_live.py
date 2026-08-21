@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-from decimal import Decimal
 from typing import Any, cast
 
 import boto3
@@ -75,11 +74,6 @@ def _request(
         },
         "weekdays": ["monday"],
         "planned_annual_commute_days": 53,
-        "pricing_profile": {
-            "vehicle_class": "two_axle_passenger",
-            "payment_method": "e_zpass",
-            "transponder_mode": "toll",
-        },
     }
 
 
@@ -97,8 +91,9 @@ def test_live_fixed_rate_round_trip() -> None:
     assert payload["coverage"]["eligible_date_count"] == 12
     assert payload["coverage"]["coverage_percent"] == "100.0"
     assert payload["uses_current_fixed_rates"] is True
-    assert payload["scenarios"]["middle"]["daily_round_trip_usd"] == "11.60"
-    assert payload["scenarios"]["middle"]["annualized_usd"] == "614.80"
+    assert payload["scenarios"]["p50"]["daily_round_trip_usd"] == "11.60"
+    assert payload["scenarios"]["p50"]["annualized_usd"] == "614.80"
+    assert payload["facilities"][0]["facility"] == "greenway"
 
 
 def test_live_dynamic_round_trip_is_bounded_and_reproducible() -> None:
@@ -110,26 +105,12 @@ def test_live_dynamic_round_trip_is_bounded_and_reproducible() -> None:
         ),
         "annual-ballpark-dynamic",
     )
-    assert payload["routes"]["outbound"]["status"] == "valid"
-    assert payload["routes"]["return"]["status"] == "valid"
     assert payload["coverage"]["eligible_date_count"] == 12
     assert 0 <= payload["coverage"]["complete_pair_count"] <= 12
     if payload.get("error") == "ballpark_unavailable":
         assert payload["reason"] == "no_complete_paired_days"
-        assert len(payload["excluded_dates"]) == 12
+        assert payload["facilities"] == []
         return
-    assert len(payload["complete_days"]) == payload["coverage"]["complete_pair_count"]
-    assert len(payload["complete_days"]) + len(payload["excluded_dates"]) == 12
-    assert all(
-        day["round_trip_total_usd"]
-        == str(
-            sum(
-                (
-                    Decimal(direction["total_usd"])
-                    for direction in (day["outbound"], day["return"])
-                ),
-                Decimal(),
-            ).quantize(Decimal("0.01"))
-        )
-        for day in payload["complete_days"]
-    )
+    assert set(payload["scenarios"]) == {"p25", "p50", "p90"}
+    assert payload["facilities"][0]["facility"] == "i66"
+    assert not ({"complete_days", "excluded_dates", "routes"} & payload.keys())
