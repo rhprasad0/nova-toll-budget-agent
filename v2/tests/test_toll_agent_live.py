@@ -157,3 +157,73 @@ def test_live_i395_to_i95_uses_current_price_tool_once():
     assert calls[0]["name"] == "get_current_toll_price"
     assert calls[0]["input"]["origin_point_id"] == "i95:2233SO"
     assert calls[0]["input"]["destination_point_id"] == "i95:217SD"
+
+
+def test_live_washington_i395_clarification_uses_i95_northbound_exit():
+    answer, calls, agent = _invoke(
+        "What is the current toll from Dumfries to Washington?"
+    )
+    assert calls == [], (answer, calls)
+    assert "I-66" in answer and "I-395" in answer
+
+    second = str(agent("I-395."))
+    assert 1 <= len(calls) <= 2, (second, calls)
+    assert calls[-1]["input"]["origin_point_id"] == "i95:218NO"
+    assert calls[-1]["input"]["destination_point_id"] == "i95:224ND"
+
+
+def test_live_washington_from_i495_south_uses_connector_exit():
+    answer, calls, _agent = _invoke(
+        "What is the current toll from 495 Express Lanes Start/Georg Wash. "
+        "Mem. Pkwy. to Washington D.C. via I-395?"
+    )
+    assert 1 <= len(calls) <= 2, (answer, calls)
+    assert calls[-1]["input"]["origin_point_id"] == "i495:180SO"
+    assert calls[-1]["input"]["destination_point_id"] == "i95:2249ND"
+
+
+def test_live_washington_i395_southbound_uses_dc_entry():
+    answer, calls, _agent = _invoke(
+        "What is the current toll from Washington D.C. I-395 Southbound to Dumfries?"
+    )
+    assert len(calls) == 1, (answer, calls)
+    assert calls[0]["input"]["origin_point_id"] == "i95:2232SO"
+    assert calls[0]["input"]["destination_point_id"] == "i95:217SD"
+
+
+def test_live_wrong_washington_coordinate_retries_returned_alternative_once():
+    answer, calls, _agent = _invoke(
+        "Current toll from I-95 Near Cardinal Drive to 38.8707667,-77.0461277; "
+        "the destination is Washington D.C. via I-395."
+    )
+    assert len(calls) == 2, (answer, calls)
+    assert calls[0]["input"]["destination_point_id"] == "i95:2249ND"
+    assert calls[1]["input"]["destination_point_id"] == "i95:224ND"
+
+
+def test_live_missing_destination_precedes_wrong_role_validation():
+    answer, calls, agent = _invoke("What is the current toll from Compass Creek?")
+    assert calls == [], (answer, calls)
+    assert "destination" in answer.lower()
+
+    second = str(agent("To Leesburg Bypass."))
+    assert len(calls) == 1, (second, calls)
+    assert calls[0]["input"]["origin_point_id"] == "greenway:2B:exit:WB"
+    assert "Battlefield" in second
+
+
+def test_live_missing_annual_schedule_precedes_wrong_role_validation():
+    answer, calls, agent = _invoke(
+        "Estimate my annual commute from Compass Creek to Leesburg Bypass."
+    )
+    assert calls == [], (answer, calls)
+    assert "weekdays" in answer.lower() and "commute days" in answer.lower()
+
+    second = str(
+        agent(
+            "Outbound at 8 AM, return at 5 PM, Monday through Friday, "
+            "for 240 commute days."
+        )
+    )
+    assert len(calls) == 1, (second, calls)
+    assert calls[0]["name"] == "get_annual_toll_ballpark"

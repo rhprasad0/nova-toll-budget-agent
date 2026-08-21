@@ -31,7 +31,7 @@ the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.9.0**. It installs
+The independently versioned `oracle` schema is at **1.9.1**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.

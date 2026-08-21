@@ -41,6 +41,30 @@ BEGIN
     )) THEN
         RAISE EXCEPTION 'known prompt point is missing or changed';
     END IF;
+    IF NOT points @> jsonb_build_array(
+        jsonb_build_object(
+            'point_id', 'i66:16:exit:EB',
+            'label', 'Washington D.C. I-66',
+            'aliases', jsonb_build_array('Washington')
+        ),
+        jsonb_build_object(
+            'point_id', 'i95:2232SO',
+            'label', 'Washington D.C. I-395 Southbound',
+            'aliases', jsonb_build_array('Washington D.C.')
+        ),
+        jsonb_build_object(
+            'point_id', 'i95:224ND',
+            'label', 'Washington D.C. I-95/I-395 Northbound',
+            'aliases', jsonb_build_array('Washington D.C.')
+        ),
+        jsonb_build_object(
+            'point_id', 'i95:2249ND',
+            'label', 'Washington D.C. from I-495 Southbound via I-395',
+            'aliases', jsonb_build_array('Washington D.C.')
+        )
+    ) THEN
+        RAISE EXCEPTION 'qualified Washington prompt labels are missing';
+    END IF;
 END $$;
 
 SET ROLE tollchat_agent;

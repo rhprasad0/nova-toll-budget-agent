@@ -239,12 +239,19 @@ SQL
       exit 1
     fi
 
-    if [[ "$schema_name" == "oracle" ]]; then
+    if [[ "$schema_name" == "oracle" \
+      && "$target_version" == "$bootstrap_version" ]]; then
       for database in "$bootstrap_db" "$migration_db"; do
         psql --dbname "$database" --tuples-only --no-align --command "
           SELECT jsonb_agg(
               jsonb_build_object(
                   'point_id', point_id,
+                  'network_id', network_id,
+                  'source_node_id', source_node_id,
+                  'point_type', point_type,
+                  'direction', direction,
+                  'label', label,
+                  'aliases', aliases,
                   'location', oracle.ST_AsGeoJSON(location)::jsonb,
                   'source_metadata', source_metadata
               ) ORDER BY point_id

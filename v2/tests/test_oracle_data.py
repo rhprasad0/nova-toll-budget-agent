@@ -179,6 +179,29 @@ def test_shared_point_directions_follow_their_roadway_paths() -> None:
     }
 
 
+def test_washington_points_have_route_qualified_labels_and_source_aliases() -> None:
+    points = build_points()
+
+    expected = {
+        "i66:16:entry:WB": ("Washington D.C. I-66", ("Washington",)),
+        "i66:16:exit:EB": ("Washington D.C. I-66", ("Washington",)),
+        "i95:2232SO": ("Washington D.C. I-395 Southbound", ("Washington D.C.",)),
+        "i95:224ND": (
+            "Washington D.C. I-95/I-395 Northbound",
+            ("Washington D.C.",),
+        ),
+        "i95:2249ND": (
+            "Washington D.C. from I-495 Southbound via I-395",
+            ("Washington D.C.",),
+        ),
+    }
+
+    assert {
+        point_id: (points[point_id].label, points[point_id].aliases)
+        for point_id in expected
+    } == expected
+
+
 def test_alternative_rankings_retain_only_reviewed_v1_rules() -> None:
     points = build_points()
 

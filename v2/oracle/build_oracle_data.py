@@ -71,6 +71,20 @@ PREFERRED_ALTERNATIVES = {
     "greenway:2B:exit:WB": ("greenway:2A:entry:EB",),
 }
 
+WASHINGTON_POINT_LABELS = {
+    "i66:16:entry:WB": ("Washington D.C. I-66", ("Washington",)),
+    "i66:16:exit:EB": ("Washington D.C. I-66", ("Washington",)),
+    "i95:2232SO": ("Washington D.C. I-395 Southbound", ("Washington D.C.",)),
+    "i95:224ND": (
+        "Washington D.C. I-95/I-395 Northbound",
+        ("Washington D.C.",),
+    ),
+    "i95:2249ND": (
+        "Washington D.C. from I-495 Southbound via I-395",
+        ("Washington D.C.",),
+    ),
+}
+
 
 @dataclass(frozen=True)
 class Point:
@@ -279,6 +293,8 @@ def build_points() -> dict[str, Point]:
                     "route_17_route_3_local_exit",
                 ],
             }
+        if point_id in WASHINGTON_POINT_LABELS:
+            label, aliases = WASHINGTON_POINT_LABELS[point_id]
         points[point_id] = Point(
             point_id=point_id,
             network_id=_shared_network(raw_node),
@@ -314,6 +330,9 @@ def build_points() -> dict[str, Point]:
                     point_id = _movement_point_id(
                         network_id, source_node_id, point_type, direction
                     )
+                    point_label, aliases = WASHINGTON_POINT_LABELS.get(
+                        point_id, (label, ())
+                    )
                     metadata = _metadata(
                         network_id,
                         source,
@@ -330,10 +349,10 @@ def build_points() -> dict[str, Point]:
                         source_node_id=source_node_id,
                         point_type=point_type,
                         direction=direction,
-                        label=label,
+                        label=point_label,
                         longitude=longitude,
                         latitude=latitude,
-                        aliases=(),
+                        aliases=aliases,
                         source_metadata=metadata,
                     )
 

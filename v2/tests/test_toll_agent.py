@@ -136,6 +136,16 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "reverse the outbound endpoints" in normalized
     assert "outbound departure time, return departure time, weekdays" in normalized
     assert 'ask exactly "Do you mean I-66 or I-395?"' in normalized
+    assert "Washington D.C. I-66" in normalized
+    assert "Washington D.C. I-95/I-395 Northbound" in normalized
+    assert "Washington D.C. from I-495 Southbound via I-395" in normalized
+    assert "Washington D.C. I-395 Southbound" in normalized
+    assert "required-input acquisition takes precedence" in normalized
+    assert "one corrective retry" in normalized
+    assert "Never make a third call" in normalized
+    assert "exact point_id returned in that alternative" in normalized
+    assert "use the required endpoint role as the tie-breaker" in normalized
+    assert "MUST immediately make one corrective retry" in normalized
     assert "prices only the current toll" in normalized
     assert "offer to check the current toll" in normalized
     assert "not affiliated with, endorsed by, or acting for VDOT" in normalized
