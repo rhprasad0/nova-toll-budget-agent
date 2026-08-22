@@ -1,19 +1,21 @@
 {
   "get_annual_toll_ballpark": {
-    "current": "2.0.0",
+    "current": "2.1.0",
     "releases": {
       "1.0.0": "2f970b0593d3a8f1233c3ba8c874c3613ee63478b612703c3ec641db12f368e2",
-      "2.0.0": "5d07664722eded7cb4ea213c49b98f0dc074946615e985c118acb1aeb090f167"
+      "2.0.0": "5d07664722eded7cb4ea213c49b98f0dc074946615e985c118acb1aeb090f167",
+      "2.1.0": "59de79d89344158a070a3c630cf6f6d30ef5568821ae423ec38aee72820c807e"
     }
   },
   "get_current_toll_price": {
-    "current": "1.3.0",
+    "current": "1.4.0",
     "releases": {
       "1.0.0": "b9176bd110453b481ffe5c9d701e2038489835411ce66f6b6825e34ddf70c7c4",
       "1.0.1": "b9176bd110453b481ffe5c9d701e2038489835411ce66f6b6825e34ddf70c7c4",
       "1.1.0": "79f0ed4767f7fd8d59a04863e21bfeab5e01b85526f9d0bc01cea25c6827e959",
       "1.2.0": "a1ab1e06658ff1692827de59bd4136a5643d79c87204ad6dab8178397bb03215",
-      "1.3.0": "32dce510e302d64724a91e5f497eb57d9dc65a244a2e46f533a813aefa334bae"
+      "1.3.0": "32dce510e302d64724a91e5f497eb57d9dc65a244a2e46f533a813aefa334bae",
+      "1.4.0": "4c40b29cdc62529fd230de6b85e9d07e63e7c52fa515890c7471b3feb8ab1c20"
     }
   }
 }

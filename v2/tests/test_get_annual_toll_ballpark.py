@@ -64,6 +64,28 @@ def _route(*, status: str = "valid", facility_legs=None):
     )
 
 
+def _i95_northbound_restart_route():
+    return ballpark._BallparkRouteDb.model_validate(
+        {
+            "status": "invalid_origin",
+            "reason": {
+                "code": "i95_northbound_requires_i495_restart",
+                "details": {
+                    "point_id": "i95:206NO",
+                    "point_type": "entry",
+                    "suggested_restart_point_id": "i495:192NO",
+                    "suggested_destination_point_id": "i495:185ND",
+                },
+            },
+            "point_ids": [],
+            "connection_ids": [],
+            "connection_types": [],
+            "general_purpose_gaps": [],
+            "facility_legs": [],
+        }
+    )
+
+
 def _greenway_route():
     return ballpark._BallparkRouteDb.model_validate(
         {
@@ -332,6 +354,36 @@ def test_route_unavailable_stops_before_summary(monkeypatch):
     _, result = asyncio.run(_invoke(_input()))
     output = cast(Any, result["content"])[0]["json"]
     assert output["reason"] == "route_unavailable"
+
+
+def test_northbound_i95_restart_stops_before_annual_summary(monkeypatch):
+    connection = object()
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_pricing_database", lambda: connection
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        lambda *_: (
+            datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+            (_i95_northbound_restart_route(), _route()),
+            [date(2026, 8, 19)],
+        ),
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_fetch_and_validate_summary",
+        lambda *_: pytest.fail("summary should not run"),
+    )
+    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
+
+    _, result = asyncio.run(_invoke(_input()))
+
+    output = cast(Any, result["content"])[0]["json"]
+    assert output["reason"] == "route_unavailable"
+    assert output["outbound"]["reason"]["code"] == (
+        "i95_northbound_requires_i495_restart"
+    )
 
 
 def test_history_failure_is_safe(monkeypatch, caplog):

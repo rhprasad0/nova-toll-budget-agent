@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.9.1
+-- oracle schema version: 1.10.0
 
 \set ON_ERROR_STOP on
 
@@ -150,7 +150,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.9.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.10.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -960,7 +960,30 @@ BEGIN
     LIMIT 1;
 
     IF status = 'no_supported_route' THEN
-        IF origin_network = destination_network
+        IF origin_network = 'i95'
+           AND origin_role = 'entry'
+           AND origin_direction = 'NB'
+           AND destination_network = 'i495'
+           AND destination_role = 'exit'
+           AND destination_direction = 'NB' THEN
+            status := 'invalid_origin';
+            reason := jsonb_build_object(
+                'code', 'i95_northbound_requires_i495_restart',
+                'details', jsonb_build_object(
+                    'point_id', origin_point_id,
+                    'point_type', origin_role,
+                    'suggested_restart_point_id', 'i495:192NO',
+                    'suggested_destination_point_id', CASE
+                        WHEN destination_point_id = 'i495:1859ND'
+                            THEN 'i495:185ND'
+                        ELSE destination_point_id
+                    END
+                )
+            );
+        END IF;
+
+        IF status = 'no_supported_route'
+           AND origin_network = destination_network
            AND origin_position IS NOT NULL
            AND destination_position IS NOT NULL
            AND origin_position <> destination_position THEN
@@ -979,9 +1002,10 @@ BEGIN
                 destination_direction IS DISTINCT FROM requested_direction;
         END IF;
 
-        IF requested_direction IS NULL
+        IF status = 'no_supported_route'
+           AND (requested_direction IS NULL
            OR origin_incompatible
-           OR (NOT origin_incompatible AND NOT destination_incompatible) THEN
+           OR (NOT origin_incompatible AND NOT destination_incompatible)) THEN
             alternatives := oracle.ramp_alternatives(
                 origin_point_id, destination_point_id, true
             );

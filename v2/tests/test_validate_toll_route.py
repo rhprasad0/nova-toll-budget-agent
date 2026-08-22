@@ -130,6 +130,26 @@ def _southbound_westpark_row(origin_point_id="i95:2233SO"):
     }
 
 
+def _i95_northbound_restart_row():
+    return {
+        "status": "invalid_origin",
+        "reason": {
+            "code": "i95_northbound_requires_i495_restart",
+            "details": {
+                "point_id": "i95:206NO",
+                "point_type": "entry",
+                "suggested_restart_point_id": "i495:192NO",
+                "suggested_destination_point_id": "i495:185ND",
+            },
+        },
+        "point_ids": [],
+        "connection_ids": [],
+        "connection_types": [],
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+    }
+
+
 def _pricing_route_row():
     route = {
         "status": "valid",
@@ -296,6 +316,8 @@ def _invoke(monkeypatch, row):
     elif row["reason"] and "point_id" in row["reason"]["details"]:
         if row["status"] == "invalid_origin":
             origin_point_id = row["reason"]["details"]["point_id"]
+            if row["reason"]["code"] == "i95_northbound_requires_i495_restart":
+                destination_point_id = "i495:1859ND"
         else:
             destination_point_id = row["reason"]["details"]["point_id"]
     result = route_tool.validate_toll_route(
@@ -361,6 +383,7 @@ def test_invalid_input_is_logged_and_never_connects(monkeypatch, caplog, input_d
         },
         _unavailable_row(),
         _northbound_suffix_row(),
+        _i95_northbound_restart_row(),
         {
             "status": "no_supported_route",
             "reason": {
@@ -730,6 +753,44 @@ def test_incompatible_ramp_alternatives_follow_contract(monkeypatch, alternative
         "i95_evidence": None,
     }
     result, connection = _invoke(monkeypatch, row)
+    assert result["status"] == "error"
+    assert connection.closed
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda details: details.update({"alternatives": []}),
+            "Extra inputs are not permitted",
+        ),
+        (
+            lambda details: details.update(
+                {"suggested_restart_point_id": "i495:192SD"}
+            ),
+            "Input should be 'i495:192NO'",
+        ),
+        (
+            lambda details: details.update(
+                {"suggested_destination_point_id": "i95:201ND"}
+            ),
+            "String should match pattern",
+        ),
+        (
+            lambda details: details.update(
+                {"suggested_destination_point_id": "i495:186ND"}
+            ),
+            "restart destination does not match the request",
+        ),
+    ],
+)
+def test_i95_northbound_restart_rejects_malformed_details(
+    monkeypatch, mutation, message
+):
+    row = _i95_northbound_restart_row()
+    mutation(row["reason"]["details"])
+    result, connection = _invoke(monkeypatch, row)
+
     assert result["status"] == "error"
     assert connection.closed
 

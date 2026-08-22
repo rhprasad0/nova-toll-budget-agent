@@ -69,9 +69,13 @@ jobs:
               tests/test_validate_toll_route_live.py \
               tests/test_get_annual_toll_ballpark_live.py \
               -v
-            if [[ "$TIMED_WINDOW_ID" == "i95_southbound" ]]; then
-              uv run python eval/run_evaluation.py | tee /tmp/westpark-eval.txt
-              printf '\n## Southbound Westpark agent evaluation\n\n```text\n' >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$TIMED_WINDOW_ID" == i95_* ]]; then
+              suite=restart
+              if [[ "$TIMED_WINDOW_ID" == "i95_southbound" ]]; then
+                suite=all
+              fi
+              uv run python eval/run_evaluation.py --suite "$suite" | tee /tmp/westpark-eval.txt
+              printf '\n## %s Westpark agent evaluation\n\n```text\n' "$TIMED_WINDOW_ID" >> "$GITHUB_STEP_SUMMARY"
               cat /tmp/westpark-eval.txt >> "$GITHUB_STEP_SUMMARY"
               printf '```\n' >> "$GITHUB_STEP_SUMMARY"
             fi

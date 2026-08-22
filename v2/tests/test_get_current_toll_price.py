@@ -69,6 +69,19 @@ def _nonvalid_route_rows() -> list[dict[str, Any]]:
             **empty_path,
             "status": "invalid_origin",
             "reason": {
+                "code": "i95_northbound_requires_i495_restart",
+                "details": {
+                    "point_id": "i95:206NO",
+                    "point_type": "entry",
+                    "suggested_restart_point_id": "i495:192NO",
+                    "suggested_destination_point_id": "i495:185ND",
+                },
+            },
+        },
+        {
+            **empty_path,
+            "status": "invalid_origin",
+            "reason": {
                 "code": "origin_not_found",
                 "details": {"point_id": origin},
             },

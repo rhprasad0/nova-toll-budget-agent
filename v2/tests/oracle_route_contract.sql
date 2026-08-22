@@ -123,6 +123,77 @@ $$;
 DO $$
 DECLARE
     result record;
+    northbound_result jsonb;
+    southbound_result jsonb;
+    closed_result jsonb;
+BEGIN
+    PERFORM pg_temp.set_i95_state(
+        'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '1 minute'
+    );
+    SELECT to_jsonb(route) INTO northbound_result
+    FROM oracle.validate_toll_route('i95:206NO', 'i495:1859ND') AS route;
+
+    PERFORM pg_temp.set_i95_state(
+        'CLOSED', 'SOUTHBOUND_OPEN', statement_timestamp() - interval '1 minute'
+    );
+    SELECT to_jsonb(route) INTO southbound_result
+    FROM oracle.validate_toll_route('i95:206NO', 'i495:1859ND') AS route;
+
+    PERFORM pg_temp.set_i95_state(
+        'CLOSED', 'CLOSED', statement_timestamp() - interval '1 minute'
+    );
+    SELECT to_jsonb(route) INTO closed_result
+    FROM oracle.validate_toll_route('i95:206NO', 'i495:1859ND') AS route;
+
+    IF northbound_result IS DISTINCT FROM southbound_result
+       OR southbound_result IS DISTINCT FROM closed_result
+       OR northbound_result->>'status' <> 'invalid_origin'
+       OR northbound_result->'reason'->>'code'
+          <> 'i95_northbound_requires_i495_restart'
+       OR northbound_result->'reason'->'details' IS DISTINCT FROM
+          jsonb_build_object(
+              'point_id', 'i95:206NO',
+              'point_type', 'entry',
+              'suggested_restart_point_id', 'i495:192NO',
+              'suggested_destination_point_id', 'i495:185ND'
+          )
+       OR cardinality(ARRAY(
+              SELECT jsonb_array_elements_text(northbound_result->'point_ids')
+          )) <> 0
+       OR northbound_result->'i95_evidence' <> 'null'::jsonb THEN
+        RAISE EXCEPTION 'northbound I-95 restart result changed: %',
+            northbound_result;
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:212NO', 'i495:1859ND');
+    IF result.reason->>'code' <> 'i95_northbound_requires_i495_restart'
+       OR result.reason->'details'->>'point_id' <> 'i95:212NO'
+       OR result.reason->'details'->>'suggested_destination_point_id'
+          <> 'i495:185ND' THEN
+        RAISE EXCEPTION 'second northbound I-95 origin did not use TP1NB restart';
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i495:192NO', 'i495:185ND');
+    IF result.status <> 'valid' OR result.i95_evidence IS NOT NULL THEN
+        RAISE EXCEPTION 'TP1NB-to-Westpark restart route failed: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:2233SO', 'airport_dca');
+    IF result.reason->>'code' <> 'origin_ramp_incompatible' THEN
+        RAISE EXCEPTION 'southbound incompatible-ramp behavior changed';
+    END IF;
+
+    TRUNCATE pricing.trip_pricing_i95;
+END
+$$;
+
+DO $$
+DECLARE
+    result record;
     alternatives jsonb;
     alternative jsonb;
     public_keys text[];

@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted in oracle `1.5.0`; current schema `1.9.1`
+- **Status:** Adopted in oracle `1.5.0`; current schema `1.10.0`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 
@@ -104,6 +104,7 @@ displaying either as a prewritten message.
 | `invalid_origin` | `origin_not_found` | Submitted `point_id` |
 | `invalid_origin` | `origin_not_entry` | `point_id`, actual `point_type`, allowed point types, and `alternatives` |
 | `invalid_origin` | `origin_ramp_incompatible` | `point_id`, actual `point_type`, and `alternatives` |
+| `invalid_origin` | `i95_northbound_requires_i495_restart` | Submitted `point_id`, `entry` point type, `suggested_restart_point_id` (`i495:192NO`), and direction-compatible `suggested_destination_point_id` |
 | `invalid_destination` | `destination_required` | Empty object |
 | `invalid_destination` | `destination_not_found` | Submitted `point_id` |
 | `invalid_destination` | `destination_not_exit` | `point_id`, actual `point_type`, allowed point types, and `alternatives` |
@@ -125,6 +126,13 @@ fields, invalid corridor identities, mismatched intervals, future evidence,
 stale evidence, and finally an indeterminate link state.
 
 ## Invalid-ramp alternatives
+
+The `i95_northbound_requires_i495_restart` result is intentionally separate:
+it contains no `alternatives`. It applies when a northbound I-95 entry cannot
+continue to a northbound I-495 exit through the supported toll graph, and gives
+the caller the exact TP1NB point for a separately accepted current-price call.
+The result is independent of live I-95 direction state and contains no route
+path or I-95 evidence.
 
 `origin_not_entry`, `destination_not_exit`, `origin_ramp_incompatible`, and
 `destination_ramp_incompatible` include an `alternatives` JSON array. Each

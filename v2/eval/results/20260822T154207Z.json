@@ -1,0 +1,203 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "What is the current toll from Springfield-Franconia to Westpark Drive?",
+      "actual_output": "### \ud83d\udcb5 Current toll estimate\n\n- **Total: $0.00**\n- **Coverage:** From the northbound I-495 Express Lanes start after the I-95/I-495 junction to Westpark Drive\n- **Provenance:** Observed\n- **Observed:** 11:30 AM EST\n- **Source status:** No determination\n\n\u27a1\ufe0f **Recent movement:** Unchanged, with a net change of $0.00.\n\n\u2705 **At the recent median:** The current component is $0.00, equal to the typical recent price and within the recent range of **$0.00\u2013$0.00**.\n",
+      "name": "northbound-i95-to-westpark-restart",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "response": "### \ud83d\udea7 Current toll unavailable\n\nThe requested trip cannot be priced from Springfield-Franconia because TollChat cannot price the northbound I-95 general-purpose portion before the I-95/I-495 junction.\n\nWould you like to price the trip from the beginning of the northbound I-495 Express Lanes just after that junction? The omitted I-95 general-purpose segment would not be included in the estimate.\n",
+          "calls": [
+            {
+              "name": "get_current_toll_price",
+              "input": {
+                "origin_point_id": "i95:206NO",
+                "destination_point_id": "i495:1859ND",
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                }
+              },
+              "tool_result": {
+                "status": "invalid_origin",
+                "reason": {
+                  "code": "i95_northbound_requires_i495_restart",
+                  "details": {
+                    "point_id": "i95:206NO",
+                    "point_type": "entry",
+                    "suggested_restart_point_id": "i495:192NO",
+                    "suggested_destination_point_id": "i495:185ND"
+                  }
+                },
+                "point_ids": [],
+                "connection_ids": [],
+                "connection_types": [],
+                "general_purpose_gaps": [],
+                "i95_evidence": null
+              },
+              "is_error": false
+            }
+          ]
+        },
+        {
+          "response": "### \ud83d\udcb5 Current toll estimate\n\n- **Total: $0.00**\n- **Coverage:** From the northbound I-495 Express Lanes start after the I-95/I-495 junction to Westpark Drive\n- **Provenance:** Observed\n- **Observed:** 11:30 AM EST\n- **Source status:** No determination\n\n\u27a1\ufe0f **Recent movement:** Unchanged, with a net change of $0.00.\n\n\u2705 **At the recent median:** The current component is $0.00, equal to the typical recent price and within the recent range of **$0.00\u2013$0.00**.\n",
+          "calls": [
+            {
+              "name": "get_current_toll_price",
+              "input": {
+                "origin_point_id": "i495:192NO",
+                "destination_point_id": "i495:185ND",
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                }
+              },
+              "tool_result": {
+                "origin_point_id": "i495:192NO",
+                "destination_point_id": "i495:185ND",
+                "method": "latest_complete_current_facility_prices",
+                "evaluated_at": "2026-08-22T11:42:04.352769-04:00",
+                "maximum_observation_age_minutes": 30,
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                },
+                "source_kind": "observed",
+                "components": [
+                  {
+                    "route_step_id": "step-1",
+                    "price_usd": "0.00",
+                    "source_kind": "observed",
+                    "pricing_method": "source_observation",
+                    "facility": "i95_i495",
+                    "component_evaluated_at": "2026-08-22T11:42:04.352769-04:00",
+                    "bin_minutes": 10,
+                    "bin_start": "2026-08-22T11:40:00-04:00",
+                    "bin_end": "2026-08-22T11:50:00-04:00",
+                    "interval_end_at": "2026-08-22T11:40:00-04:00",
+                    "observed_at": "2026-08-22T11:30:00-04:00",
+                    "od_pair_id": 1089,
+                    "source_status": "NO_DETERMINATION",
+                    "recent_movement": {
+                      "method": "same_facility_leg_three_cycles",
+                      "direction": "unchanged",
+                      "samples": [
+                        {
+                          "cycle_offset": -2,
+                          "price_usd": "0.00"
+                        },
+                        {
+                          "cycle_offset": -1,
+                          "price_usd": "0.00"
+                        },
+                        {
+                          "cycle_offset": 0,
+                          "price_usd": "0.00"
+                        }
+                      ],
+                      "net_change_usd": "0.00"
+                    },
+                    "prior_week_comparison": {
+                      "method": "same_weekday_same_facility_bins",
+                      "comparable_period_count": 3,
+                      "expected_comparable_period_count": 3,
+                      "comparable_prices": [
+                        {
+                          "week_offset": 3,
+                          "price_usd": "0.00"
+                        },
+                        {
+                          "week_offset": 2,
+                          "price_usd": "0.00"
+                        },
+                        {
+                          "week_offset": 1,
+                          "price_usd": "0.00"
+                        }
+                      ],
+                      "median_usd": "0.00",
+                      "minimum_usd": "0.00",
+                      "maximum_usd": "0.00",
+                      "current_delta_usd": "0.00",
+                      "position": "within_recent_range",
+                      "higher_than_count": 0
+                    }
+                  }
+                ],
+                "total_usd": "0.00"
+              },
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "northbound-i95-to-westpark-restart",
+        "suite": "restart",
+        "prompt": "What is the current toll from Springfield-Franconia to Westpark Drive?",
+        "conversation": [
+          "What is the current toll from Springfield-Franconia to Westpark Drive?",
+          "Yes, price it from there."
+        ],
+        "expected_calls": [
+          {
+            "origin_point_id": "i95:206NO",
+            "destination_point_id": "i495:1859ND",
+            "pricing_profile": {
+              "vehicle_class": "two_axle_passenger",
+              "payment_method": "e_zpass",
+              "transponder_mode": "toll"
+            }
+          },
+          {
+            "origin_point_id": "i495:192NO",
+            "destination_point_id": "i495:185ND",
+            "pricing_profile": {
+              "vehicle_class": "two_axle_passenger",
+              "payment_method": "e_zpass",
+              "transponder_mode": "toll"
+            }
+          }
+        ]
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "WestparkEvaluator",
+      "evaluator_type": "WestparkEvaluator"
+    }
+  ],
+  "test_passes": [
+    true
+  ],
+  "reasons": [
+    "restart offer and accepted TP1NB price passed"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "restart offer and accepted TP1NB price passed",
+        "label": "passed"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null
+  ],
+  "recommendations": [
+    null
+  ]
+}
