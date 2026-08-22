@@ -45,7 +45,7 @@ _MONEY = re.compile(
     r"(?:(?<!\w)\$\s*|\bUSD\s+)([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,3})?)",
     re.IGNORECASE,
 )
-_PERCENT = re.compile(r"\b([0-9]+(?:\.[0-9]+)?)\s*%")
+_PERCENT = re.compile(r"\b([0-9]+(?:\.[0-9]+)?)\s*(?:%|percent\b)", re.I)
 _COVERAGE = re.compile(r"\b([0-9]+)\s+(?:of|out of)\s+([0-9]+)\b", re.I)
 _DATE = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})\b")
 _TIME = re.compile(r"\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AP]M)?\b", re.I)
@@ -671,6 +671,18 @@ def _client() -> OpenAI:
     return OpenAI(api_key=toll_agent.load_openai_api_key(), base_url=_OPENAI_BASE_URL)
 
 
+def _batch_for_input_file(client: Any, input_file_id: str) -> Any | None:  # noqa: ANN401
+    matches = [
+        item
+        for item in client.batches.list(limit=100)
+        if getattr(item, "input_file_id", None) == input_file_id
+        and getattr(item, "endpoint", None) == _ENDPOINT
+    ]
+    if len(matches) > 1:
+        raise ValueError("multiple remote Batches use the manifest input file")
+    return matches[0] if matches else None
+
+
 def submit(
     manifest_path: Path,
     client: Any | None = None,  # noqa: ANN401
@@ -686,10 +698,19 @@ def submit(
     if any(measured[key] != expected.get(key) for key in measured):
         raise ValueError("prepared Batch packet no longer matches its manifest")
     resolved_client = _client() if client is None else client
+    input_file_id = manifest.get("input_file_id")
+    if isinstance(input_file_id, str) and (
+        recovered := _batch_for_input_file(resolved_client, input_file_id)
+    ):
+        manifest.update(
+            batch_id=recovered.id,
+            status=getattr(recovered, "status", None),
+        )
+        _write_json(manifest_path, manifest)
+        return manifest
     gate = enforce_limits(
         measured, active_queued_tokens=active_luna_tokens(resolved_client)
     )
-    input_file_id = manifest.get("input_file_id")
     if not isinstance(input_file_id, str):
         with input_path.open("rb") as file:
             uploaded = resolved_client.files.create(file=file, purpose="batch")

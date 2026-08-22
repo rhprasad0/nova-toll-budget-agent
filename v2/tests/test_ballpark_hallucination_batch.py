@@ -189,14 +189,14 @@ def test_quantitative_grounding_accepts_equivalent_formats_and_flags_inventions(
     assert batch.find_unsupported_claims(grounded, _case()) == {}
 
     unsupported = batch.find_unsupported_claims(
-        grounded
-        + " Coverage was 51 of 60 on 7/4/2027 at 9:45 AM, costing $99,999 or 44%.",
+        grounded + " Coverage was 51 of 60 on 7/4/2027 at 9:45 AM, costing $99,999 or "
+        "44% under one estimate and 45 percent under another.",
         _case(),
     )
 
     assert unsupported == {
         "money": ["99999"],
-        "percent": ["44"],
+        "percent": ["44", "45"],
         "coverage": ["51 of 60"],
         "dates": ["2027-07-04"],
         "times": ["09:45:00"],
@@ -278,6 +278,59 @@ def test_submit_uploads_exact_packet_and_persists_batch_ids(tmp_path: Path) -> N
     assert json.loads(manifest_path.read_text())["batch_id"] == "batch-123"
     with pytest.raises(ValueError, match="already submitted"):
         batch.submit(manifest_path, Client)
+
+
+def test_submit_recovers_batch_created_before_manifest_was_persisted(
+    tmp_path: Path,
+) -> None:
+    requests = batch.build_requests(_case(), "developer", repetitions=1)
+    packet = batch.serialize_requests(requests)
+    packet_path = tmp_path / "input.jsonl"
+    packet_path.write_text(packet)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "input_path": packet_path.name,
+                "input_file_id": "file-123",
+                "preflight": batch.preflight(packet),
+                "batch_id": None,
+            }
+        )
+    )
+
+    class Client:
+        class files:
+            @staticmethod
+            def content(_file_id: str):
+                raise AssertionError("recovery must happen before the queue recount")
+
+        class batches:
+            @staticmethod
+            def list(*, limit: int):
+                assert limit == 100
+                return [
+                    SimpleNamespace(
+                        id="batch-existing",
+                        input_file_id="file-123",
+                        endpoint="/v1/responses",
+                        metadata={
+                            "source": "tollchat-v2-ballpark-hallucination",
+                            "model": "gpt-5.6-luna",
+                        },
+                        status="validating",
+                    )
+                ]
+
+            @staticmethod
+            def create(**_kwargs):
+                raise AssertionError("an existing Batch must not be duplicated")
+
+    manifest = batch.submit(manifest_path, Client)
+
+    assert manifest["batch_id"] == "batch-existing"
+    assert manifest["status"] == "validating"
+    assert json.loads(manifest_path.read_text())["batch_id"] == "batch-existing"
 
 
 def test_prepare_refuses_to_overwrite_a_submitted_manifest(
