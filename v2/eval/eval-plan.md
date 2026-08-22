@@ -148,4 +148,4 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Cross-direction live current | Completed | 1/1 passed; the exact Dulles-to-Reagan call returned grounded stale-evidence unavailability rather than an internal validation error. |
 | 2026-08-22 | Final annual parity run | Completed | 5/5 passed against the final prompt contract. |
 | 2026-08-22 | Annual-day estimate and evaluator hardening | Completed | 6/6 passed live: the agent proposed 260, waited, honored 240, and the evaluator enforced scenario-row and P50-context money binding. |
-| 2026-08-22 | Ballpark hallucination packet | Submitted | Batch `batch_6a8a15e8f5fc81909b45e7e5831d0917` entered validation after the canonical fixture and exact 1,000-row packet passed the request, file, and guarded 40M-token preflight with no other active Luna tokens. |
+| 2026-08-22 | Ballpark hallucination packet | Completed | Batch `batch_6a8a15e8f5fc81909b45e7e5831d0917` returned 1,000/1,000 responses. Adjudication found 99.6% strict quantitative grounding, one genuinely incorrect fact, and 93.1% conservative end-to-end compliance. |

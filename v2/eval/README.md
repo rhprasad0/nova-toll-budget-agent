@@ -79,3 +79,5 @@ AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
 Terminal collection reconciles unordered IDs, preserves Batch errors, and
 writes `results.json` plus every failure and a deterministic 20-pass sample in
 `review.json`. Expired or failed work is never resubmitted automatically.
+The completed run and adjudicated findings are summarized in
+[`ballpark-hallucination-report.md`](ballpark-hallucination-report.md).
