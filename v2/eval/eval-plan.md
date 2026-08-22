@@ -59,7 +59,7 @@ flowchart LR
 ### Annual affordability grounding
 
 - **Evaluation Area:** Job-offer decision support
-- **Description:** The annual case makes the exact income-aware call and reports tool-provided P25/P50/P90 money in a Markdown table with emoji, tax, mileage, scope, and historical-evidence disclosures.
+- **Description:** The annual case makes the exact income-aware call and reports tool-provided annualized daily-P25/P50/P90 money in a Markdown table with emoji, tax, mileage, fixed TollChat vehicle-cost assumption, scope, and historical-evidence disclosures.
 - **Method:** Code-based
 
 ---
@@ -112,6 +112,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Coverage | Add TP1SB acceptance and scheduled northbound/southbound/reversal unavailability; exclude the adversarial three-turn case. |
 | 2026-08-22 | Affordability | Add an income-aware annual job-offer case with deterministic response grounding. |
 | 2026-08-22 | Springfield-Tysons | Replace the false current-price restart with a direct northbound route and add a Tysons-clarification annual case. |
+| 2026-08-22 | Methodology review | Label annualized daily percentiles precisely, remove unsupported AAA attribution, round annual vehicle cost after annualization, and collapse prompt releases for PR CI. |
 
 ### 6.2 Evaluation Progress
 

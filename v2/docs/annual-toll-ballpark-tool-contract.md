@@ -5,7 +5,7 @@
 `get_annual_toll_ballpark` gives a job seeker a rough view of how the tolled
 portion of a Northern Virginia commute affects annual income. It combines
 recent toll scenarios with a fixed one-third tax assumption and a fixed
-vehicle-cost assumption of `$0.685` per mile.
+TollChat vehicle-cost assumption of `$0.685` per mile.
 
 This is a starting point for a more serious inquiry, not a toll quote, tax
 calculation, forecast, budget, or financial plan. Mileage covers only the
@@ -55,9 +55,13 @@ weekday calendar for the 84 completed local dates before the transaction date.
   P25, P50, and P90 daily tolls.
 - Annual toll equals daily toll times `planned_annual_commute_days`.
 - Estimated annual after-tax income equals gross income less one-third.
-- Annual tolled-portion vehicle cost equals straight-line round-trip priced-leg
-  miles times `$0.685` times `planned_annual_commute_days`.
-- Each scenario reports total toll-plus-vehicle cost, remaining estimated
+- Annual tolled-portion vehicle cost equals full-precision straight-line
+  round-trip priced-leg miles times `$0.685` times
+  `planned_annual_commute_days`, rounded only after annualization. Displayed
+  daily and annual miles are rounded independently from that calculation.
+- P25, P50, and P90 are daily historical percentiles annualized by the planned
+  commute days; they are not annual percentiles. Each scenario reports total
+  toll-plus-vehicle cost, remaining estimated
   after-tax income, the cost share of after-tax income, and the extra gross
   income needed to offset the cost under the same one-third tax assumption.
 

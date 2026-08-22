@@ -502,9 +502,13 @@ def evaluate_annual_turn(
         and "straight-line" in folded
         and "tolled" in folded
         and "additional gross" in folded
+        and "annualized daily-p50 toll scenario" in folded
+        and "fixed" in folded
+        and "tollchat" in folded
         and "historical" in folded
         and "coverage" in folded
         and "hov" not in folded
+        and "aaa" not in folded
     ):
         return _result(
             False,
@@ -955,14 +959,15 @@ def _self_check() -> None:
         "### 💼 Annual commute impact\n\n"
         "**P50 leaves $74240.00 after assumed tax and tolled commuting.**\n\n"
         "- 🧾 Gross: $120000.00; after one-third tax: $80000.00\n"
-        "- 🚗 Vehicle: $1885.12; toll: $3874.88\n"
+        "- 🚗 Vehicle: $1885.12; annualized daily-P50 toll scenario: $3874.88\n"
         "- 🎯 Additional gross salary needed: $8640.00\n\n"
         "| Scenario | Daily | Monthly | Annual | Remaining |\n"
         "|---|---:|---:|---:|---:|\n"
         "| P25 | $23.00 | $460.00 | $5520.00 | $74480.00 |\n"
         "| P50 | $24.00 | $480.00 | $5760.00 | $74240.00 |\n"
         "| P90 | $25.00 | $500.00 | $6000.00 | $74000.00 |\n\n"
-        "⚠️ Historical coverage; tolled straight-line portions only at $0.685/mile."
+        "⚠️ Historical coverage; tolled straight-line portions only at $0.685/mile "
+        "as a fixed TollChat vehicle-cost assumption."
     )
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
@@ -970,6 +975,14 @@ def _self_check() -> None:
     missing_table_turns = [{"response": missing_table, "calls": [annual_call]}]
     assert (
         evaluate_annual_turn(missing_table_turns, annual)[0].label
+        == "missing_affordability_context"
+    )
+    missing_method = annual_response.replace(
+        "annualized daily-P50 toll scenario", "toll"
+    )
+    missing_method_turns = [{"response": missing_method, "calls": [annual_call]}]
+    assert (
+        evaluate_annual_turn(missing_method_turns, annual)[0].label
         == "missing_affordability_context"
     )
     tysons = rows[6]

@@ -741,7 +741,7 @@ def _financial_context(
     gross = request.gross_annual_income()
     estimated_tax = _round_usd(gross / Decimal(3))
     daily_miles = _round_miles(daily_distance_miles)
-    daily_vehicle_cost = _round_usd(daily_miles * _VEHICLE_COST_PER_MILE)
+    daily_vehicle_cost = _round_usd(daily_distance_miles * _VEHICLE_COST_PER_MILE)
     return (
         _Assumptions(
             estimated_tax_fraction=_TAX_FRACTION,
@@ -757,13 +757,15 @@ def _financial_context(
         _TolledDistance(
             daily_round_trip_miles=daily_miles,
             annual_miles=_round_miles(
-                daily_miles * request.planned_annual_commute_days
+                daily_distance_miles * request.planned_annual_commute_days
             ),
         ),
         _VehicleCost(
             daily_usd=daily_vehicle_cost,
             annual_usd=_round_usd(
-                daily_vehicle_cost * request.planned_annual_commute_days
+                daily_distance_miles
+                * _VEHICLE_COST_PER_MILE
+                * request.planned_annual_commute_days
             ),
         ),
     )

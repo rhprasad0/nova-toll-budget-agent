@@ -292,6 +292,29 @@ def test_compact_response_uses_database_scenarios():
     )
 
 
+def test_annual_vehicle_cost_rounds_only_after_annualizing():
+    request = ballpark._BallparkRequest.model_validate(
+        {
+            **_input(),
+            "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+            "planned_annual_commute_days": 240,
+        }
+    )
+
+    output = ballpark._build_ballpark_response(
+        request,
+        datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+        _summary(),
+        Decimal("23.114"),
+    ).model_dump(mode="json")
+
+    assert output["tolled_distance"] == {
+        "daily_round_trip_miles": "23.11",
+        "annual_miles": "5547.36",
+    }
+    assert output["vehicle_cost"] == {"daily_usd": "15.83", "annual_usd": "3799.94"}
+
+
 def test_no_complete_response_keeps_compact_coverage():
     response = ballpark._build_ballpark_response(
         ballpark._BallparkRequest.model_validate(_input()),

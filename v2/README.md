@@ -75,7 +75,8 @@ increasing SemVer release and digest; CI rejects rewrites of published releases.
 The primary `get_annual_toll_ballpark` experience helps job seekers estimate
 how the tolled portion of a commute affects income. It combines recent
 same-date P25/P50/P90 toll scenarios with gross annual income, a fixed one-third
-tax assumption, and `$0.685` per straight-line priced-leg mile. It excludes
+tax assumption, and a fixed TollChat assumption of `$0.685` per straight-line
+priced-leg mile. It excludes
 untolled commute segments and remains a rough starting point rather than a
 quote, tax calculation, forecast, or financial plan. Current-price lookup is
 the secondary experience.

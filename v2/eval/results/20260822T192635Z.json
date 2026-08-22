@@ -6,15 +6,15 @@
   ],
   "cases": [
     {
-      "input": "I'm on the phone with a recruiter about a $120,000 job. If I commute from Leesburg Bypass to Route 28 Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year, what does the tolled commute do to my income?",
-      "actual_output": "### \ud83d\udcbc Tolled commute impact\n\n**Under the middle historical scenario (P50), the $120,000 job leaves an estimated **$73,299.20** after the one-third tax assumption and tolled commute costs.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,916.80 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $2,784.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $6,700.80\n- \ud83d\udcbc **Additional gross salary needed to offset:** $10,051.20\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| P25 \u2014 lower historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P50 \u2014 middle historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P90 \u2014 higher historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers only the tolled portions between the validated Leesburg Bypass\u2013Route 28 endpoints; all untolled commute segments are excluded.\n- The estimate assumes one-third of gross income goes to taxes; it is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- It assumes **240 Monday\u2013Friday office days**, with an 8:00 AM outbound trip and a 5:30 PM return.\n- The toll evidence covers **60 complete paired commute days from 6/1/2026 through 8/21/2026**, with 100% weekday coverage. It uses current fixed rates, no modeled prices, and a complete historical sample\u2014not a forecast or probability-based prediction.\n- The estimate covers **23.83 tolled miles per round trip**, or **5,719.20 annual tolled miles**.\n\nFor the recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask whether arrival and departure times are flexible.\n- Ask about direct toll reimbursement.\n",
+      "input": "I'm on the phone with a recruiter about a $120,000 job. If I take the Dulles Greenway from the Leesburg Bypass entrance to its Route 28 exit Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year, what does the tolled commute do to my income?",
+      "actual_output": "### \ud83d\udcbc Tolled commute affordability\n\n**At the P50 middle historical scenario, your estimated annual income after the assumed tax and tolled commute is $73,297.66.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after one-third tax assumption:** $80,000.00\n- \ud83d\ude97 **Tolled-segment vehicle cost:** $16.33 per office day; $3,918.34 annually\n- \ud83d\udee3\ufe0f **Annualized daily-P50 toll scenario:** $11.60 per day; $2,784.00 annually\n- \ud83d\udcc9 **Total annual tolled-commute cost under P50:** $6,702.34\n- \ud83d\udcb5 **Additional gross salary needed to offset:** $10,053.51\n- \ud83d\udcca **Tolled commute share of estimated after-tax income:** 8.4%\n\n| Historical scenario | Per-office-day | Average-monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| P25 \u2014 lower | $27.93 | $558.53 | $6,702.34 | $73,297.66 |\n| P50 \u2014 middle | $27.93 | $558.53 | $6,702.34 | $73,297.66 |\n| P90 \u2014 higher | $27.93 | $558.53 | $6,702.34 | $73,297.66 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers only the tolled portions between validated priced facility endpoints; every untolled part of the commute is excluded.\n- It assumes one-third of gross income goes to taxes; this is **not an actual tax calculation**.\n- Vehicle cost uses a fixed TollChat assumption of **$0.685 per straight-line tolled mile**, not your individualized vehicle expense.\n- The estimate uses recent historical toll evidence for **60 complete paired commute days**, with **100.0% coverage** for the eligible dates, no modeled prices, and current fixed rates.\n- These are annualized historical daily scenarios\u2014not forecasts, probabilities, or annual percentiles.\n\nFor the recruiter, you could ask about:\n\n- Confirming fixed office days.\n- Flexible arrival or departure times.\n- Direct toll reimbursement.\n",
       "name": "leesburg-route-28-job-offer",
       "expected_output": null,
       "expected_assertion": null,
       "expected_trajectory": null,
       "actual_trajectory": [
         {
-          "response": "### \ud83d\udcbc Tolled commute impact\n\n**Under the middle historical scenario (P50), the $120,000 job leaves an estimated **$73,299.20** after the one-third tax assumption and tolled commute costs.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,916.80 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $2,784.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $6,700.80\n- \ud83d\udcbc **Additional gross salary needed to offset:** $10,051.20\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| P25 \u2014 lower historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P50 \u2014 middle historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P90 \u2014 higher historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers only the tolled portions between the validated Leesburg Bypass\u2013Route 28 endpoints; all untolled commute segments are excluded.\n- The estimate assumes one-third of gross income goes to taxes; it is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- It assumes **240 Monday\u2013Friday office days**, with an 8:00 AM outbound trip and a 5:30 PM return.\n- The toll evidence covers **60 complete paired commute days from 6/1/2026 through 8/21/2026**, with 100% weekday coverage. It uses current fixed rates, no modeled prices, and a complete historical sample\u2014not a forecast or probability-based prediction.\n- The estimate covers **23.83 tolled miles per round trip**, or **5,719.20 annual tolled miles**.\n\nFor the recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask whether arrival and departure times are flexible.\n- Ask about direct toll reimbursement.\n",
+          "response": "### \ud83d\udcbc Tolled commute affordability\n\n**At the P50 middle historical scenario, your estimated annual income after the assumed tax and tolled commute is $73,297.66.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after one-third tax assumption:** $80,000.00\n- \ud83d\ude97 **Tolled-segment vehicle cost:** $16.33 per office day; $3,918.34 annually\n- \ud83d\udee3\ufe0f **Annualized daily-P50 toll scenario:** $11.60 per day; $2,784.00 annually\n- \ud83d\udcc9 **Total annual tolled-commute cost under P50:** $6,702.34\n- \ud83d\udcb5 **Additional gross salary needed to offset:** $10,053.51\n- \ud83d\udcca **Tolled commute share of estimated after-tax income:** 8.4%\n\n| Historical scenario | Per-office-day | Average-monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| P25 \u2014 lower | $27.93 | $558.53 | $6,702.34 | $73,297.66 |\n| P50 \u2014 middle | $27.93 | $558.53 | $6,702.34 | $73,297.66 |\n| P90 \u2014 higher | $27.93 | $558.53 | $6,702.34 | $73,297.66 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers only the tolled portions between validated priced facility endpoints; every untolled part of the commute is excluded.\n- It assumes one-third of gross income goes to taxes; this is **not an actual tax calculation**.\n- Vehicle cost uses a fixed TollChat assumption of **$0.685 per straight-line tolled mile**, not your individualized vehicle expense.\n- The estimate uses recent historical toll evidence for **60 complete paired commute days**, with **100.0% coverage** for the eligible dates, no modeled prices, and current fixed rates.\n- These are annualized historical daily scenarios\u2014not forecasts, probabilities, or annual percentiles.\n\nFor the recruiter, you could ask about:\n\n- Confirming fixed office days.\n- Flexible arrival or departure times.\n- Direct toll reimbursement.\n",
           "calls": [
             {
               "name": "get_annual_toll_ballpark",
@@ -41,7 +41,7 @@
               },
               "tool_result": {
                 "method": "recent_complete_same_date_round_trips",
-                "evaluated_at": "2026-08-22T14:45:04.288084-04:00",
+                "evaluated_at": "2026-08-22T15:26:11.391591-04:00",
                 "timezone": "America/New_York",
                 "target_window": {
                   "start_date": "2026-05-30",
@@ -130,11 +130,11 @@
                 },
                 "tolled_distance": {
                   "daily_round_trip_miles": "23.83",
-                  "annual_miles": "5719.20"
+                  "annual_miles": "5720.21"
                 },
                 "vehicle_cost": {
-                  "daily_usd": "16.32",
-                  "annual_usd": "3916.80"
+                  "daily_usd": "16.33",
+                  "annual_usd": "3918.34"
                 },
                 "sample_status": "complete",
                 "available_date_range": {
@@ -145,32 +145,32 @@
                   "p25": {
                     "daily_toll_usd": "11.60",
                     "annual_toll_usd": "2784.00",
-                    "daily_total_tolled_commute_cost_usd": "27.92",
-                    "average_monthly_tolled_commute_cost_usd": "558.40",
-                    "annual_total_tolled_commute_cost_usd": "6700.80",
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73299.20",
+                    "daily_total_tolled_commute_cost_usd": "27.93",
+                    "average_monthly_tolled_commute_cost_usd": "558.53",
+                    "annual_total_tolled_commute_cost_usd": "6702.34",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73297.66",
                     "tolled_commute_share_of_after_tax_income_percent": "8.4",
-                    "additional_gross_income_to_offset_usd": "10051.20"
+                    "additional_gross_income_to_offset_usd": "10053.51"
                   },
                   "p50": {
                     "daily_toll_usd": "11.60",
                     "annual_toll_usd": "2784.00",
-                    "daily_total_tolled_commute_cost_usd": "27.92",
-                    "average_monthly_tolled_commute_cost_usd": "558.40",
-                    "annual_total_tolled_commute_cost_usd": "6700.80",
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73299.20",
+                    "daily_total_tolled_commute_cost_usd": "27.93",
+                    "average_monthly_tolled_commute_cost_usd": "558.53",
+                    "annual_total_tolled_commute_cost_usd": "6702.34",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73297.66",
                     "tolled_commute_share_of_after_tax_income_percent": "8.4",
-                    "additional_gross_income_to_offset_usd": "10051.20"
+                    "additional_gross_income_to_offset_usd": "10053.51"
                   },
                   "p90": {
                     "daily_toll_usd": "11.60",
                     "annual_toll_usd": "2784.00",
-                    "daily_total_tolled_commute_cost_usd": "27.92",
-                    "average_monthly_tolled_commute_cost_usd": "558.40",
-                    "annual_total_tolled_commute_cost_usd": "6700.80",
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73299.20",
+                    "daily_total_tolled_commute_cost_usd": "27.93",
+                    "average_monthly_tolled_commute_cost_usd": "558.53",
+                    "annual_total_tolled_commute_cost_usd": "6702.34",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73297.66",
                     "tolled_commute_share_of_after_tax_income_percent": "8.4",
-                    "additional_gross_income_to_offset_usd": "10051.20"
+                    "additional_gross_income_to_offset_usd": "10053.51"
                   }
                 }
               },
@@ -182,7 +182,7 @@
       "metadata": {
         "id": "leesburg-route-28-job-offer",
         "suite": "annual",
-        "prompt": "I'm on the phone with a recruiter about a $120,000 job. If I commute from Leesburg Bypass to Route 28 Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year, what does the tolled commute do to my income?",
+        "prompt": "I'm on the phone with a recruiter about a $120,000 job. If I take the Dulles Greenway from the Leesburg Bypass entrance to its Route 28 exit Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year, what does the tolled commute do to my income?",
         "expected_call": {
           "outbound": {
             "origin_point_id": "greenway:1:entry:EB",
@@ -215,7 +215,7 @@
     },
     {
       "input": "I'm on the phone with a recruiter about a $120,000 job in Tysons. I live near Springfield-Franconia, commute Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year. What does the tolled commute do to my income?",
-      "actual_output": "### \ud83d\udcbc Estimated income impact\n\n**Under the P50 middle historical scenario, your estimated income after the assumed tax and tolled commute is $62,100.80 per year.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after the one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,799.20 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $14,100.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $17,899.20\n- \ud83d\udcbc **Additional gross salary needed to offset:** $26,848.80\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| **P25 \u2014 lower historical scenario** | $70.68 | $1,413.60 | $16,963.20 | $63,036.80 |\n| **P50 \u2014 middle historical scenario** | $74.58 | $1,491.60 | $17,899.20 | $62,100.80 |\n| **P90 \u2014 higher historical scenario** | $81.83 | $1,636.60 | $19,639.20 | $60,360.80 |\n\n#### \u26a0\ufe0f Assumptions and qualifications\n\n- This estimate covers **only the tolled portion**: straight-line distance between endpoints of validated priced toll-facility legs. It excludes every untolled part of the commute.\n- The tool used **23.11 tolled miles per round-trip day**, or **5,546.40 annual miles**.\n- It assumes **one-third of gross income goes to taxes**; this is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- The toll estimate uses recent historical evidence from **6/1/2026\u20138/21/2026**, with **83.3% coverage** and **50 complete round-trip pairs**. The sample is partial, prices are modeled, and current fixed rates are not used. These are annualized historical daily scenarios\u2014not forecasts or probabilities.\n\nFor your recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask about flexible arrival or departure times.\n- Ask whether tolls are reimbursed directly.\n",
+      "actual_output": "### \ud83d\ude97 Tolled commute affordability estimate\n\n**Under the middle historical scenario (P50), the $120,000 job leaves an estimated $62,101.05 after the assumed taxes and tolled commute costs.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after the one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $15.83 per office day; $3,798.95 annually\n- \ud83d\udee3\ufe0f **Annualized daily-P50 toll scenario:** $58.75 per office day; $14,100.00 annually\n- \ud83d\udcb8 **Total annual tolled-commute cost at P50:** $17,898.95\n- \ud83d\udcc8 **Additional gross salary needed to offset:** $26,848.43\n- **P50 tolled-commute share of estimated after-tax income:** 22.4%\n\n| Historical scenario | Per-office-day | Average-monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| **P25 \u2014 lower** | $70.68 | $1,413.58 | $16,962.95 | $63,037.05 |\n| **P50 \u2014 middle** | $74.58 | $1,491.58 | $17,898.95 | $62,101.05 |\n| **P90 \u2014 higher** | $81.83 | $1,636.58 | $19,638.95 | $60,361.05 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers **only the tolled portions** between validated priced toll-facility endpoints; untolled portions of the commute are excluded.\n- The estimate uses **23.11 straight-line tolled miles per round-trip day**, or **5,545.91 annually**.\n- It assumes one-third of gross income goes to taxes; this is **not an actual tax calculation**.\n- Vehicle cost uses TollChat\u2019s fixed assumption of **$0.685 per straight-line tolled mile**, not your individualized vehicle expense.\n- The P25, P50, and P90 figures are **annualized historical daily scenarios**, not forecasts or probabilities.\n- The toll evidence covers **June 1, 2026\u2013August 21, 2026**, with **83.3% coverage** and partial sample status: 50 complete round trips out of 60 eligible weekdays. Prices use modeled values and do not use current fixed rates.\n\nFor the recruiter, you could ask whether they can:\n\n- Confirm the fixed office days.\n- Discuss flexible arrival or departure times.\n- Provide direct toll reimbursement.\n",
       "name": "springfield-franconia-tysons-job-offer",
       "expected_output": null,
       "expected_assertion": null,
@@ -226,7 +226,7 @@
           "calls": []
         },
         {
-          "response": "### \ud83d\udcbc Estimated income impact\n\n**Under the P50 middle historical scenario, your estimated income after the assumed tax and tolled commute is $62,100.80 per year.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after the one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,799.20 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $14,100.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $17,899.20\n- \ud83d\udcbc **Additional gross salary needed to offset:** $26,848.80\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| **P25 \u2014 lower historical scenario** | $70.68 | $1,413.60 | $16,963.20 | $63,036.80 |\n| **P50 \u2014 middle historical scenario** | $74.58 | $1,491.60 | $17,899.20 | $62,100.80 |\n| **P90 \u2014 higher historical scenario** | $81.83 | $1,636.60 | $19,639.20 | $60,360.80 |\n\n#### \u26a0\ufe0f Assumptions and qualifications\n\n- This estimate covers **only the tolled portion**: straight-line distance between endpoints of validated priced toll-facility legs. It excludes every untolled part of the commute.\n- The tool used **23.11 tolled miles per round-trip day**, or **5,546.40 annual miles**.\n- It assumes **one-third of gross income goes to taxes**; this is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- The toll estimate uses recent historical evidence from **6/1/2026\u20138/21/2026**, with **83.3% coverage** and **50 complete round-trip pairs**. The sample is partial, prices are modeled, and current fixed rates are not used. These are annualized historical daily scenarios\u2014not forecasts or probabilities.\n\nFor your recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask about flexible arrival or departure times.\n- Ask whether tolls are reimbursed directly.\n",
+          "response": "### \ud83d\ude97 Tolled commute affordability estimate\n\n**Under the middle historical scenario (P50), the $120,000 job leaves an estimated $62,101.05 after the assumed taxes and tolled commute costs.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after the one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $15.83 per office day; $3,798.95 annually\n- \ud83d\udee3\ufe0f **Annualized daily-P50 toll scenario:** $58.75 per office day; $14,100.00 annually\n- \ud83d\udcb8 **Total annual tolled-commute cost at P50:** $17,898.95\n- \ud83d\udcc8 **Additional gross salary needed to offset:** $26,848.43\n- **P50 tolled-commute share of estimated after-tax income:** 22.4%\n\n| Historical scenario | Per-office-day | Average-monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| **P25 \u2014 lower** | $70.68 | $1,413.58 | $16,962.95 | $63,037.05 |\n| **P50 \u2014 middle** | $74.58 | $1,491.58 | $17,898.95 | $62,101.05 |\n| **P90 \u2014 higher** | $81.83 | $1,636.58 | $19,638.95 | $60,361.05 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers **only the tolled portions** between validated priced toll-facility endpoints; untolled portions of the commute are excluded.\n- The estimate uses **23.11 straight-line tolled miles per round-trip day**, or **5,545.91 annually**.\n- It assumes one-third of gross income goes to taxes; this is **not an actual tax calculation**.\n- Vehicle cost uses TollChat\u2019s fixed assumption of **$0.685 per straight-line tolled mile**, not your individualized vehicle expense.\n- The P25, P50, and P90 figures are **annualized historical daily scenarios**, not forecasts or probabilities.\n- The toll evidence covers **June 1, 2026\u2013August 21, 2026**, with **83.3% coverage** and partial sample status: 50 complete round trips out of 60 eligible weekdays. Prices use modeled values and do not use current fixed rates.\n\nFor the recruiter, you could ask whether they can:\n\n- Confirm the fixed office days.\n- Discuss flexible arrival or departure times.\n- Provide direct toll reimbursement.\n",
           "calls": [
             {
               "name": "get_annual_toll_ballpark",
@@ -253,7 +253,7 @@
               },
               "tool_result": {
                 "method": "recent_complete_same_date_round_trips",
-                "evaluated_at": "2026-08-22T14:45:14.018858-04:00",
+                "evaluated_at": "2026-08-22T15:26:19.907659-04:00",
                 "timezone": "America/New_York",
                 "target_window": {
                   "start_date": "2026-05-30",
@@ -342,11 +342,11 @@
                 },
                 "tolled_distance": {
                   "daily_round_trip_miles": "23.11",
-                  "annual_miles": "5546.40"
+                  "annual_miles": "5545.91"
                 },
                 "vehicle_cost": {
                   "daily_usd": "15.83",
-                  "annual_usd": "3799.20"
+                  "annual_usd": "3798.95"
                 },
                 "sample_status": "partial",
                 "available_date_range": {
@@ -358,31 +358,31 @@
                     "daily_toll_usd": "54.85",
                     "annual_toll_usd": "13164.00",
                     "daily_total_tolled_commute_cost_usd": "70.68",
-                    "average_monthly_tolled_commute_cost_usd": "1413.60",
-                    "annual_total_tolled_commute_cost_usd": "16963.20",
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "63036.80",
+                    "average_monthly_tolled_commute_cost_usd": "1413.58",
+                    "annual_total_tolled_commute_cost_usd": "16962.95",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "63037.05",
                     "tolled_commute_share_of_after_tax_income_percent": "21.2",
-                    "additional_gross_income_to_offset_usd": "25444.80"
+                    "additional_gross_income_to_offset_usd": "25444.43"
                   },
                   "p50": {
                     "daily_toll_usd": "58.75",
                     "annual_toll_usd": "14100.00",
                     "daily_total_tolled_commute_cost_usd": "74.58",
-                    "average_monthly_tolled_commute_cost_usd": "1491.60",
-                    "annual_total_tolled_commute_cost_usd": "17899.20",
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "62100.80",
+                    "average_monthly_tolled_commute_cost_usd": "1491.58",
+                    "annual_total_tolled_commute_cost_usd": "17898.95",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "62101.05",
                     "tolled_commute_share_of_after_tax_income_percent": "22.4",
-                    "additional_gross_income_to_offset_usd": "26848.80"
+                    "additional_gross_income_to_offset_usd": "26848.43"
                   },
                   "p90": {
                     "daily_toll_usd": "66.00",
                     "annual_toll_usd": "15840.00",
                     "daily_total_tolled_commute_cost_usd": "81.83",
-                    "average_monthly_tolled_commute_cost_usd": "1636.60",
-                    "annual_total_tolled_commute_cost_usd": "19639.20",
-                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "60360.80",
+                    "average_monthly_tolled_commute_cost_usd": "1636.58",
+                    "annual_total_tolled_commute_cost_usd": "19638.95",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "60361.05",
                     "tolled_commute_share_of_after_tax_income_percent": "24.5",
-                    "additional_gross_income_to_offset_usd": "29458.80"
+                    "additional_gross_income_to_offset_usd": "29458.43"
                   }
                 }
               },

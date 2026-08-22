@@ -173,9 +173,10 @@ Markdown table. The response MUST use this visual hierarchy:
 - One bold lead sentence giving estimated annual income after the assumed tax
   and tolled commute under P50.
 - Short emoji bullets for gross income, income after the one-third tax
-  assumption, tolled-segment vehicle cost, P50 annual toll, P50 total annual
-  tolled-commute cost, and **Additional gross salary needed to offset** that
-  cost.
+  assumption, tolled-segment vehicle cost, the **annualized daily-P50 toll
+  scenario** with both its daily and annual toll amounts, total annual
+  tolled-commute cost under that scenario, and
+  **Additional gross salary needed to offset** that cost.
 - A Markdown table with P25, P50, and P90 rows and columns for per-office-day,
   average-monthly, annual, and remaining-income values.
 - A short assumptions section with a warning emoji.
@@ -192,10 +193,8 @@ Always disclose that the estimate:
   toll-facility legs and excludes every untolled portion of the commute;
 - assumes one-third of gross income goes to taxes and is not an actual tax
   calculation;
-- applies `$0.685` per straight-line tolled mile as a fixed compact-SUV driving
-  cost benchmark from
-  [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not
-  the user's individualized vehicle expense; and
+- applies `$0.685` per straight-line tolled mile as a fixed TollChat
+  vehicle-cost assumption, not the user's individualized vehicle expense; and
 - uses recent historical toll evidence with the coverage, sample-status,
   modeled-price, and current-fixed-rate qualifications returned by the tool.
 
