@@ -157,6 +157,22 @@ def test_agent_failure_emits_one_safe_terminal_error(caplog):
     assert "secret failure details" in caplog.text
 
 
+def test_agent_construction_failure_emits_one_safe_terminal_error(caplog):
+    def fail(**_kwargs):
+        raise ValueError("startup secret details")
+
+    events = asyncio.run(_collect(DevChat(fail)))
+
+    assert events == [
+        {
+            "type": "error",
+            "sequence": 0,
+            "message": "Agent request failed. Check the server log.",
+        }
+    ]
+    assert "startup secret details" in caplog.text
+
+
 def test_http_server_serves_assets_streams_ndjson_and_resets():
     factory = _Factory()
     app = DevChat(factory)
@@ -184,6 +200,20 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert events[1]["text_delta"] == "1: hello 👋 👋"
         assert events[-1]["final"]["text"].startswith("## Price")
 
+        with pytest.raises(urllib.error.HTTPError) as foreign_reset:
+            _post(
+                f"{base_url}/api/reset",
+                {"session_id": "browser"},
+                origin="https://evil.example",
+            )
+        assert foreign_reset.value.code == 403
+        response = _post(
+            f"{base_url}/api/chat",
+            {"session_id": "browser", "message": "still here"},
+        )
+        events = [json.loads(line) for line in response]
+        assert events[1]["text_delta"].startswith("1:")
+
         reset = _post(f"{base_url}/api/reset", {"session_id": "browser"})
         assert json.load(reset) == {"ok": True}
         assert len(factory.agents) == 1
@@ -195,18 +225,40 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
             )
         assert invalid.value.code == 400
         assert json.load(invalid.value) == {"error": "invalid session id"}
+
+        for origin, content_type, expected_status in (
+            ("https://evil.example", "application/json", 403),
+            (base_url, "text/plain", 415),
+            (None, "application/json", 403),
+        ):
+            with pytest.raises(urllib.error.HTTPError) as rejected:
+                _post(
+                    f"{base_url}/api/chat",
+                    {"session_id": "blocked", "message": "do not run"},
+                    origin=origin,
+                    content_type=content_type,
+                )
+            assert rejected.value.code == expected_status
+        assert len(factory.agents) == 1
     finally:
         server.shutdown()
         thread.join()
         server.server_close()
 
 
-def _post(url, body):
+def _post(
+    url, body, *, origin: str | None = "same-origin", content_type="application/json"
+):
+    if origin == "same-origin":
+        origin = url.removesuffix("/api/chat").removesuffix("/api/reset")
+    headers = {"Content-Type": content_type}
+    if origin is not None:
+        headers["Origin"] = origin
     return urllib.request.urlopen(
         urllib.request.Request(
             url,
             data=json.dumps(body).encode(),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         ),
         timeout=2,

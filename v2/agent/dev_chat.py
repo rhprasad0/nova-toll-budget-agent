@@ -121,10 +121,10 @@ class DevChat:
         self, session_id: object, message: object
     ) -> AsyncIterator[dict[str, object]]:
         session, prompt = self.validate(session_id, message)
-        agent, lock = self._session(session)
         activities: dict[str, dict[str, object]] = {}
         sequence = 0
         try:
+            agent, lock = self._session(session)
             with lock:
                 async for sdk_event in agent.stream_async(prompt):
                     event = cast(dict[str, object], sdk_event)
@@ -216,29 +216,48 @@ def create_server(
             self._send(HTTPStatus.OK, path.read_bytes(), content_type)
 
         def do_POST(self) -> None:
+            if self.path not in {"/api/chat", "/api/reset"}:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if not self._same_origin():
+                self._json_response(HTTPStatus.FORBIDDEN, {"error": "invalid origin"})
+                return
+            content_type = self.headers.get("Content-Type", "").partition(";")[0]
+            if content_type.strip().lower() != "application/json":
+                self._json_response(
+                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                    {"error": "Content-Type must be application/json"},
+                )
+                return
             try:
                 body = self._json()
                 session_id = body.get("session_id", "")
                 if self.path == "/api/chat":
                     app.validate(session_id, body.get("message", ""))
-                    self.send_response(HTTPStatus.OK)
-                    self._headers("application/x-ndjson; charset=utf-8")
-                    self.end_headers()
-                    try:
-                        asyncio.run(
-                            self._write_stream(
-                                app.stream(session_id, body.get("message", ""))
-                            )
-                        )
-                    except (BrokenPipeError, ConnectionResetError):
-                        return
-                elif self.path == "/api/reset":
-                    app.reset(session_id)
-                    self._json_response(HTTPStatus.OK, {"ok": True})
                 else:
-                    self.send_error(HTTPStatus.NOT_FOUND)
+                    app.reset(session_id)
             except (TypeError, ValueError) as error:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            if self.path == "/api/reset":
+                self._json_response(HTTPStatus.OK, {"ok": True})
+                return
+            self.send_response(HTTPStatus.OK)
+            self._headers("application/x-ndjson; charset=utf-8")
+            self.end_headers()
+            try:
+                asyncio.run(
+                    self._write_stream(app.stream(session_id, body.get("message", "")))
+                )
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
+        def _same_origin(self) -> bool:
+            port = cast(tuple[str, int], self.server.server_address)[1]
+            return self.headers.get("Origin") in {
+                f"http://127.0.0.1:{port}",
+                f"http://localhost:{port}",
+            }
 
         async def _write_stream(self, events: AsyncIterator[dict[str, object]]) -> None:
             async for event in events:
