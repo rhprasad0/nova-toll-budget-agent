@@ -1,6 +1,6 @@
 # TollChat v2 routing oracle
 
-- **Status:** Adopted for oracle schema `1.10.1`
+- **Status:** Adopted for oracle schema `1.11.0`
 - **Scope:** V2 directed toll-road reachability and least-privilege pricing access
 
 ## Purpose
@@ -71,7 +71,7 @@ comparison, and ballpark sample views; it receives no other pricing privileges.
 `tollchat_agent` and `pricing_caller` are distinct IAM-authenticated login
 roles. The agent role can execute only `validate_toll_route` and the bounded
 `get_toll_route_prompt_points` function; the Python-only pricing role can
-execute the seven endpoint-validation, current-price, and annual-ballpark
+execute the eight endpoint-validation, current-price, and annual-ballpark
 operations. Both receive `rds_iam` and `USAGE` on `oracle`, but no direct table
 or view access in `oracle` or `pricing`, write privilege, or schema-creation
 privilege. An additive install rejects either pre-existing runtime role when it
@@ -106,8 +106,8 @@ The blank bootstrap and additive deployment use this order:
 5. Grant `oracle_owner` its pricing-view dependencies, create the shared
    resolver, bounded prompt-point retrieval, three endpoint-based route
    validators, current comparison operations, historical sample operations,
-   and annual aggregation; revoke `PUBLIC` execution, grant prompt retrieval
-   and route validation only to `tollchat_agent`, and grant the seven internal
+   priced-leg distance and annual aggregation; revoke `PUBLIC` execution, grant prompt retrieval
+   and route validation only to `tollchat_agent`, and grant the eight internal
    pricing signatures only to `pricing_caller`.
 
 The migration aborts rather than installing PostGIS in `public`, falling back
@@ -116,7 +116,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.10.1`, stored as the single row in
+oracle is at version `1.11.0`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -495,10 +495,11 @@ usable path wins.
 The normative caller behavior and response examples are defined in the
 [agent-facing route-function contract](oracle-route-function-contract.md).
 
-The application exposes eight narrow, read-only database functions: current,
+The application exposes nine narrow, read-only database functions: current,
 pricing, and schedule-independent route validation; bounded current I-66 and
 I-95/I-495 comparisons; bounded historical sample access for both dynamic
-facilities; and compact annual aggregation. Each is `STABLE SECURITY DEFINER`,
+facilities; priced-leg straight-line distance; and compact annual aggregation.
+Each is `STABLE SECURITY DEFINER`,
 owned by `oracle_owner`, and accepts only bound parameters. The application
 never exposes arbitrary SQL to the model. Only route validation is executable
 by the agent role; the remaining operations are reachable through the Python
@@ -709,7 +710,7 @@ DTR connection charge; only crossing either directed handoff adds it.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
   objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.10.1`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.11.0`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer
@@ -729,7 +730,7 @@ DTR connection charge; only crossing either directed handoff adds it.
   while direct reads or writes against oracle and pricing relations fail.
   `PUBLIC` cannot execute either function, `tollchat_agent` cannot call PostGIS
   functions directly, and a same-named temporary object cannot alter results.
-- Under `SET ROLE pricing_caller`, all seven internal pricing operations
+- Under `SET ROLE pricing_caller`, all eight internal pricing operations
   succeed while agent route validation and direct relation access fail.
 - Oracle installation rejects a pre-existing runtime role that inherits
   `pg_read_all_data`, `pricing_reader`, or any role other than `rds_iam`, or

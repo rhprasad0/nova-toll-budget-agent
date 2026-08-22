@@ -68,6 +68,7 @@ def _request(
     *,
     weekdays: list[str] | None = None,
     annual_days: int = 53,
+    gross_income: str = "120000.00",
 ) -> dict[str, Any]:
     return {
         "outbound": {
@@ -82,13 +83,14 @@ def _request(
         },
         "weekdays": weekdays or ["monday"],
         "planned_annual_commute_days": annual_days,
+        "gross_annual_income_usd": gross_income,
     }
 
 
 def _assert_annualized(payload: dict[str, Any], annual_days: int) -> None:
     for scenario in payload.values():
-        assert Decimal(scenario["annualized_usd"]) == (
-            Decimal(scenario["daily_round_trip_usd"]) * annual_days
+        assert Decimal(scenario["annual_toll_usd"]) == (
+            Decimal(scenario["daily_toll_usd"]) * annual_days
         ).quantize(Decimal("0.01"))
 
 
@@ -162,8 +164,8 @@ def _raw_scenarios(
     for name, percentile in (("p25", 0.25), ("p50", 0.50), ("p90", 0.90)):
         daily = totals[ceil(percentile * len(totals)) - 1]
         result[name] = {
-            "daily_round_trip_usd": f"{daily:.2f}",
-            "annualized_usd": f"{daily * annual_days:.2f}",
+            "daily_toll_usd": f"{daily:.2f}",
+            "annual_toll_usd": f"{daily * annual_days:.2f}",
         }
     return result
 
@@ -182,8 +184,13 @@ def test_live_fixed_rate_round_trip() -> None:
     assert payload["coverage"]["eligible_date_count"] == 12
     assert payload["coverage"]["coverage_percent"] == "100.0"
     assert payload["uses_current_fixed_rates"] is True
-    assert payload["scenarios"]["p50"]["daily_round_trip_usd"] == "11.60"
-    assert payload["scenarios"]["p50"]["annualized_usd"] == "614.80"
+    assert payload["income"]["estimated_after_tax_usd"] == "80000.00"
+    assert payload["assumptions"]["scope"] == "tolled_portions_only"
+    assert payload["scenarios"]["p50"]["daily_toll_usd"] == "11.60"
+    assert payload["scenarios"]["p50"]["annual_toll_usd"] == "614.80"
+    assert Decimal(
+        payload["scenarios"]["p50"]["annual_total_tolled_commute_cost_usd"]
+    ) == Decimal("614.80") + Decimal(payload["vehicle_cost"]["annual_usd"])
     assert payload["facilities"][0]["facility"] == "greenway"
 
 
@@ -263,22 +270,29 @@ def test_live_dynamic_smoke_routes_have_complete_samples(
     assert [item["facility"] for item in payload["facilities"]] == expected_facilities
     assert all(item["sample_count"] == complete_days for item in payload["facilities"])
     annual_days = case_input["planned_annual_commute_days"]
-    assert payload["scenarios"] == _raw_scenarios(
+    toll_scenarios = {
+        name: {
+            "daily_toll_usd": scenario["daily_toll_usd"],
+            "annual_toll_usd": scenario["annual_toll_usd"],
+        }
+        for name, scenario in payload["scenarios"].items()
+    }
+    assert toll_scenarios == _raw_scenarios(
         payload, case_input, sample_legs, fixed_daily
     )
     _assert_annualized(payload["scenarios"], annual_days)
     for facility in payload["facilities"]:
         _assert_annualized(facility["scenarios"], annual_days)
     if len(expected_facilities) == 1:
-        assert payload["scenarios"] == payload["facilities"][0]["scenarios"]
+        assert toll_scenarios == payload["facilities"][0]["scenarios"]
     else:
         fixed = {item["facility"]: item for item in payload["facilities"]}
         assert {
-            scenario["daily_round_trip_usd"]
+            scenario["daily_toll_usd"]
             for scenario in fixed["greenway"]["scenarios"].values()
         } == {"11.60"}
         assert {
-            scenario["daily_round_trip_usd"]
+            scenario["daily_toll_usd"]
             for scenario in fixed["dtr"]["scenarios"].values()
         } == {"12.00"}
     assert not ({"complete_days", "excluded_dates", "routes"} & payload.keys())

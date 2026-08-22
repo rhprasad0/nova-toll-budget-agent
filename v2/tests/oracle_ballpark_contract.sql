@@ -60,6 +60,37 @@ END $$;
 
 DO $$
 DECLARE
+    legs jsonb := jsonb_build_array(jsonb_build_object(
+        'point_ids', jsonb_build_array('i66:1:entry:EB', 'i66:4:exit:EB')
+    ));
+    actual numeric;
+    expected numeric;
+BEGIN
+    SELECT oracle.get_priced_route_distance_miles(legs) INTO actual;
+    SELECT oracle.ST_Distance(origin.location, destination.location, true)
+               / 1609.344
+    INTO expected
+    FROM oracle.toll_route_point AS origin
+    CROSS JOIN oracle.toll_route_point AS destination
+    WHERE origin.point_id = 'i66:1:entry:EB'
+      AND destination.point_id = 'i66:4:exit:EB';
+
+    IF abs(actual - expected) > 0.000001 THEN
+        RAISE EXCEPTION 'priced-leg distance is wrong: % instead of %',
+            actual, expected;
+    END IF;
+    IF oracle.get_priced_route_distance_miles('[]'::jsonb) <> 0 THEN
+        RAISE EXCEPTION 'empty priced-leg distance is not zero';
+    END IF;
+    IF oracle.get_priced_route_distance_miles(
+        '[{"point_ids":["missing","i66:4:exit:EB"]}]'::jsonb
+    ) IS NOT NULL THEN
+        RAISE EXCEPTION 'missing priced-leg coordinate returned a distance';
+    END IF;
+END $$;
+
+DO $$
+DECLARE
     ballpark_route record;
     current_route record;
 BEGIN

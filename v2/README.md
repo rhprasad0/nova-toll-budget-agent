@@ -15,7 +15,7 @@ adopts them.
 ## Adopted contract
 
 - [Current pricing MVP](docs/current-pricing-mvp-contract.md)
-- [Annual toll ballpark](docs/annual-toll-ballpark-tool-contract.md)
+- [Annual toll-commute affordability](docs/annual-toll-ballpark-tool-contract.md)
 - [Routing oracle](docs/oracle-spec.md)
 - [Agent-facing oracle route function](docs/oracle-route-function-contract.md)
 
@@ -31,7 +31,7 @@ the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
 monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
 remains version 5.0.0 and continues to run its existing schema tests.
 
-The independently versioned `oracle` schema is at **1.10.1**. It installs
+The independently versioned `oracle` schema is at **1.11.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
@@ -72,16 +72,17 @@ Its generated input, output, progress-event, and safe-error schemas are locked
 by `agent_tools/contract-manifest.json`. Contract changes require a new,
 increasing SemVer release and digest; CI rejects rewrites of published releases.
 
-The `get_annual_toll_ballpark` tool validates outbound and return routes without
-consulting live I-95 direction, samples complete same-date round trips from the
-latest 12 weeks, and returns nearest-rank P25/P50/P90 daily values annualized by
-the caller's planned commute days. Results remain recent historical context—not
-a quote, forecast, or budget—and disclose modeled prices and current fixed-rate
-assumptions.
+The primary `get_annual_toll_ballpark` experience helps job seekers estimate
+how the tolled portion of a commute affects income. It combines recent
+same-date P25/P50/P90 toll scenarios with gross annual income, a fixed one-third
+tax assumption, and `$0.685` per straight-line priced-leg mile. It excludes
+untolled commute segments and remains a rough starting point rather than a
+quote, tax calculation, forecast, or financial plan. Current-price lookup is
+the secondary experience.
 
 The v2 Strands agent in `agent/` loads the bounded entry/exit labels, aliases,
 and coordinates from RDS once at startup, then exposes exactly the current-price
-and annual-ballpark tools. It fails startup if that prompt data is unavailable
+and annual-affordability tools. It fails startup if that prompt data is unavailable
 or invalid.
 
 Its final system-prompt assembly and prompt-point renderer/input contract are

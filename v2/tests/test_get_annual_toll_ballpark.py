@@ -29,6 +29,7 @@ def _input() -> dict[str, Any]:
         },
         "weekdays": ["monday", "wednesday", "friday"],
         "planned_annual_commute_days": 144,
+        "gross_annual_income_usd": "120000.00",
     }
 
 
@@ -193,6 +194,8 @@ async def _invoke(data: Any) -> tuple[list[dict[str, Any]], ToolResult]:
         lambda value: value.update({"weekdays": ["monday", "monday"]}),
         lambda value: value.update({"weekdays": []}),
         lambda value: value.update({"planned_annual_commute_days": 160}),
+        lambda value: value.pop("gross_annual_income_usd"),
+        lambda value: value.update({"gross_annual_income_usd": "120000"}),
         lambda value: value["outbound"].update({"departure_time": "8am"}),
         lambda value: value.update({"pricing_profile": {"vehicle_class": "truck"}}),
     ],
@@ -257,14 +260,33 @@ def test_fixed_rates_are_computed_for_each_sample_date():
 def test_compact_response_uses_database_scenarios():
     request = ballpark._BallparkRequest.model_validate(_input())
     response = ballpark._build_ballpark_response(
-        request, datetime(2026, 8, 20, 12, tzinfo=_EASTERN), _summary()
+        request,
+        datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+        _summary(),
+        Decimal("20.00"),
     )
     output = response.model_dump(mode="json")
-    assert output["scenarios"]["p50"] == {
-        "daily_round_trip_usd": "8.00",
-        "annualized_usd": "1152.00",
+    assert output["income"] == {
+        "gross_annual_usd": "120000.00",
+        "estimated_tax_usd": "40000.00",
+        "estimated_after_tax_usd": "80000.00",
     }
-    assert output["facilities"][0]["scenarios"]["p25"]["daily_round_trip_usd"] == "4.00"
+    assert output["tolled_distance"] == {
+        "daily_round_trip_miles": "20.00",
+        "annual_miles": "2880.00",
+    }
+    assert output["vehicle_cost"] == {"daily_usd": "13.70", "annual_usd": "1972.80"}
+    assert output["scenarios"]["p50"] == {
+        "daily_toll_usd": "8.00",
+        "annual_toll_usd": "1152.00",
+        "daily_total_tolled_commute_cost_usd": "21.70",
+        "average_monthly_tolled_commute_cost_usd": "260.40",
+        "annual_total_tolled_commute_cost_usd": "3124.80",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "76875.20",
+        "tolled_commute_share_of_after_tax_income_percent": "3.9",
+        "additional_gross_income_to_offset_usd": "4687.20",
+    }
+    assert output["facilities"][0]["scenarios"]["p25"]["daily_toll_usd"] == "4.00"
     assert not (
         {"complete_days", "excluded_dates", "routes", "pricing_profile"} & output.keys()
     )
@@ -275,10 +297,77 @@ def test_no_complete_response_keeps_compact_coverage():
         ballpark._BallparkRequest.model_validate(_input()),
         datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
         _summary(complete=0),
+        Decimal("20.00"),
     )
     assert isinstance(response, ballpark._NoCompleteResponse)
     assert response.coverage.complete_pair_count == 0
     assert response.facilities == []
+    assert response.vehicle_cost.annual_usd == Decimal("1972.80")
+
+
+def test_canonical_offer_decision_math():
+    request = ballpark._BallparkRequest.model_validate(
+        {
+            **_input(),
+            "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+            "planned_annual_commute_days": 240,
+        }
+    )
+    summary = _summary().model_copy(
+        update={
+            "p25_daily_usd": Decimal("12.00"),
+            "p50_daily_usd": Decimal("18.00"),
+            "p90_daily_usd": Decimal("31.00"),
+            "p25_annualized_usd": Decimal("2880.00"),
+            "p50_annualized_usd": Decimal("4320.00"),
+            "p90_annualized_usd": Decimal("7440.00"),
+        }
+    )
+
+    output = ballpark._build_ballpark_response(
+        request,
+        datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+        summary,
+        Decimal("20.00"),
+    ).model_dump(mode="json")
+
+    assert output["income"]["estimated_tax_usd"] == "40000.00"
+    assert output["income"]["estimated_after_tax_usd"] == "80000.00"
+    assert output["vehicle_cost"] == {"daily_usd": "13.70", "annual_usd": "3288.00"}
+    assert output["scenarios"]["p50"] == {
+        "daily_toll_usd": "18.00",
+        "annual_toll_usd": "4320.00",
+        "daily_total_tolled_commute_cost_usd": "31.70",
+        "average_monthly_tolled_commute_cost_usd": "634.00",
+        "annual_total_tolled_commute_cost_usd": "7608.00",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "72392.00",
+        "tolled_commute_share_of_after_tax_income_percent": "9.5",
+        "additional_gross_income_to_offset_usd": "11412.00",
+    }
+
+
+def test_cost_can_exceed_estimated_after_tax_income():
+    request = ballpark._BallparkRequest.model_validate(
+        {**_input(), "gross_annual_income_usd": "1000.00"}
+    )
+
+    output = ballpark._build_ballpark_response(
+        request,
+        datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+        _summary(),
+        Decimal("20.00"),
+    ).model_dump(mode="json")
+
+    assert (
+        output["scenarios"]["p90"][
+            "estimated_annual_income_after_tax_and_tolled_commute_usd"
+        ]
+        == "-2602.13"
+    )
+    assert (
+        output["scenarios"]["p90"]["tolled_commute_share_of_after_tax_income_percent"]
+        == "490.3"
+    )
 
 
 def test_database_summary_rejects_cross_field_inconsistency():
@@ -315,6 +404,7 @@ def test_streams_stages_and_returns_summary(monkeypatch):
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
             [date(2026, 8, 19)],
+            Decimal("20.00"),
         ),
     )
     monkeypatch.setattr(ballpark, "_fetch_and_validate_summary", lambda *_: _summary())
@@ -328,7 +418,7 @@ def test_streams_stages_and_returns_summary(monkeypatch):
         ("ballpark_calculation", "completed"),
     ]
     output = cast(Any, result["content"])[0]["json"]
-    assert output["scenarios"]["p90"]["annualized_usd"] == "1296.00"
+    assert output["scenarios"]["p90"]["annual_toll_usd"] == "1296.00"
 
 
 def test_route_unavailable_stops_before_summary(monkeypatch):
@@ -343,6 +433,7 @@ def test_route_unavailable_stops_before_summary(monkeypatch):
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(status="no_supported_route"), _route()),
             [date(2026, 8, 19)],
+            None,
         ),
     )
     monkeypatch.setattr(
@@ -354,6 +445,37 @@ def test_route_unavailable_stops_before_summary(monkeypatch):
     _, result = asyncio.run(_invoke(_input()))
     output = cast(Any, result["content"])[0]["json"]
     assert output["reason"] == "route_unavailable"
+
+
+def test_missing_priced_leg_distance_stops_before_summary(monkeypatch):
+    connection = object()
+    monkeypatch.setattr(
+        ballpark.route_validation, "connect_to_pricing_database", lambda: connection
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_start_transaction_and_fetch_routes_and_dates",
+        lambda *_: (
+            datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
+            (_route(), _route()),
+            [date(2026, 8, 19)],
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        ballpark,
+        "_fetch_and_validate_summary",
+        lambda *_: pytest.fail("summary should not run"),
+    )
+    monkeypatch.setattr(ballpark, "_close_connection", lambda *_args, **_kwargs: None)
+
+    _, result = asyncio.run(_invoke(_input()))
+
+    output = cast(Any, result["content"])[0]["json"]
+    assert output == {
+        "error": "ballpark_unavailable",
+        "reason": "distance_unavailable",
+    }
 
 
 def test_northbound_i95_restart_stops_before_annual_summary(monkeypatch):
@@ -368,6 +490,7 @@ def test_northbound_i95_restart_stops_before_annual_summary(monkeypatch):
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_i95_northbound_restart_route(), _route()),
             [date(2026, 8, 19)],
+            None,
         ),
     )
     monkeypatch.setattr(
@@ -398,6 +521,7 @@ def test_history_failure_is_safe(monkeypatch, caplog):
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(), _route()),
             [date(2026, 8, 19)],
+            Decimal("20.00"),
         ),
     )
     monkeypatch.setattr(
@@ -425,6 +549,7 @@ def test_cleanup_failure_is_safe(monkeypatch, caplog):
             datetime(2026, 8, 20, 12, tzinfo=_EASTERN),
             (_route(status="no_supported_route"), _route()),
             [date(2026, 8, 19)],
+            None,
         ),
     )
     monkeypatch.setattr(

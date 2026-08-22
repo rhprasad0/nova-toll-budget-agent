@@ -87,7 +87,7 @@ def test_ballpark_runtime_contract_matches_models_and_manifest():
     }
     assert expected == ballpark_tool.TOOL_CONTRACT
     manifest = _manifest()["get_annual_toll_ballpark"]
-    assert manifest["current"] == "2.1.0"
+    assert manifest["current"] == "3.0.0"
     assert _digest(expected) == manifest["releases"][manifest["current"]]
 
 

@@ -94,7 +94,7 @@ def test_live_annual_round_trip_uses_reversed_endpoints():
     answer, calls, _agent = _invoke(
         "For Monday through Friday, estimate my annual round-trip commute from "
         "Leesburg Bypass to Route 28. I leave at 8 AM, return at 5:30 PM, and "
-        "plan 240 commute days."
+        "plan 240 commute days. My gross annual income is $120,000."
     )
     assert len(calls) == 1, (answer, calls)
     assert calls[0]["name"] == "get_annual_toll_ballpark"
@@ -111,8 +111,15 @@ def test_live_annual_round_trip_uses_reversed_endpoints():
         },
         "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
         "planned_annual_commute_days": 240,
+        "gross_annual_income_usd": "120000.00",
     }
-    assert "annual" in answer.lower()
+    folded = answer.lower()
+    assert "annual" in folded and "tolled" in folded
+    assert "###" in answer and "**" in answer and "|" in answer
+    assert any(emoji in answer for emoji in ("💼", "💵", "🚗", "🛣️", "🎯", "⚠️"))
+    assert "0.685" in answer
+    assert "one-third" in folded or "1/3" in answer
+    assert "hov" not in folded
 
 
 @pytest.mark.parametrize(
@@ -148,7 +155,7 @@ def test_live_wrong_role_presents_and_uses_selected_alternative():
         ("What is the current toll?", ("origin", "destination")),
         (
             "Estimate my annual commute from Leesburg Bypass to Route 28.",
-            ("outbound", "return", "weekdays", "commute days"),
+            ("outbound", "return", "weekdays", "commute days", "gross"),
         ),
         (
             "What is the current toll from Washington to Westpark Drive?",
@@ -235,7 +242,7 @@ def test_live_missing_annual_schedule_precedes_wrong_role_validation():
     second = str(
         agent(
             "Outbound at 8 AM, return at 5 PM, Monday through Friday, "
-            "for 240 commute days."
+            "for 240 commute days. Gross annual income is $120,000."
         )
     )
     assert len(calls) == 1, (second, calls)

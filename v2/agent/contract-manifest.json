@@ -1,8 +1,9 @@
 {
   "system_prompt": {
-    "current": "1.0.0",
+    "current": "2.0.0",
     "releases": {
-      "1.0.0": "45c5b073823ebbc4892a0535f301b9528be390ff7d6c8c4b5510f790cffd3438"
+      "1.0.0": "45c5b073823ebbc4892a0535f301b9528be390ff7d6c8c4b5510f790cffd3438",
+      "2.0.0": "8b241b8de295d5e80a48973b7871e97cf0a2b0bd2decf409da6d5c81dd3c0694"
     }
   },
   "system_prompt_renderer": {

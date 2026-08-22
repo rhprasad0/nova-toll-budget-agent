@@ -32,7 +32,22 @@ _PROFILE = {
     "payment_method": "e_zpass",
     "transponder_mode": "toll",
 }
-_EMOJIS = ("🚗", "💵", "🛣️", "📈", "📉", "➡️", "🔄", "⚠️", "🎉", "✅", "🚧")
+_EMOJIS = (
+    "🚗",
+    "💵",
+    "🛣️",
+    "📈",
+    "📉",
+    "➡️",
+    "🔄",
+    "⚠️",
+    "🎉",
+    "✅",
+    "🚧",
+    "💼",
+    "🧾",
+    "🎯",
+)
 _EASTERN_TIME = re.compile(r"\b(?:1[0-2]|[1-9]):[0-5]\d [AP]M E(?:S|D)T\b")
 _MOVEMENT_EMOJIS = {
     "rising": "📈",
@@ -493,6 +508,71 @@ def evaluate_unavailable_turn(
     return _result(True, "unavailability response matched the live state", "passed")
 
 
+def evaluate_annual_turn(
+    calls: list[dict[str, Any]], response: str, metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(calls) != 1 or calls[0].get("name") != "get_annual_toll_ballpark":
+        return _result(False, "expected exactly one annual call", "tool_mismatch")
+    call = calls[0]
+    if call.get("input") != metadata["expected_call"]:
+        return _result(False, "annual arguments did not match", "input_mismatch")
+    payload = call.get("tool_result")
+    if (
+        call.get("is_error")
+        or not isinstance(payload, dict)
+        or "error" in payload
+        or not isinstance(payload.get("scenarios"), dict)
+    ):
+        return _result(False, "annual tool returned no scenarios", "tool_error")
+
+    if style_error := _response_style_error(response, "annual response"):
+        return style_error
+    folded = response.casefold()
+    if not (
+        "###" in response
+        and "**" in response
+        and "|" in response
+        and ("one-third" in folded or "1/3" in response)
+        and "0.685" in response
+        and "straight-line" in folded
+        and "tolled" in folded
+        and "additional gross" in folded
+        and "historical" in folded
+        and "coverage" in folded
+        and "hov" not in folded
+    ):
+        return _result(
+            False,
+            "annual response omitted required hierarchy or assumptions",
+            "missing_affordability_context",
+        )
+
+    scenarios = cast(dict[str, dict[str, Any]], payload["scenarios"])
+    required_values = [
+        payload["income"]["gross_annual_usd"],
+        payload["income"]["estimated_after_tax_usd"],
+        payload["vehicle_cost"]["annual_usd"],
+        scenarios["p50"]["annual_toll_usd"],
+        scenarios["p50"]["additional_gross_income_to_offset_usd"],
+    ]
+    for scenario in scenarios.values():
+        required_values.extend(
+            scenario[field]
+            for field in (
+                "daily_total_tolled_commute_cost_usd",
+                "average_monthly_tolled_commute_cost_usd",
+                "annual_total_tolled_commute_cost_usd",
+                "estimated_annual_income_after_tax_and_tolled_commute_usd",
+            )
+        )
+    normalized = response.replace(",", "")
+    if any(f"${value}" not in normalized for value in required_values):
+        return _result(
+            False, "annual response omitted tool-provided money", "ungrounded_money"
+        )
+    return _result(True, "annual tool call and affordability response passed", "passed")
+
+
 def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
     turns = []
@@ -525,6 +605,13 @@ class TollChatEvaluator(Evaluator[str, str]):
             return evaluate_fallback_turns(turns, metadata)
         if metadata.get("suite") == "unavailable":
             return evaluate_unavailable_turn(turns, metadata)
+        if metadata.get("suite") == "annual":
+            calls = turns[0].get("calls", []) if len(turns) == 1 else []
+            return evaluate_annual_turn(
+                cast(list[dict[str, Any]], calls),
+                str(evaluation_case.actual_output or ""),
+                metadata,
+            )
         calls = turns[0].get("calls", []) if len(turns) == 1 else []
         return evaluate_westpark_turn(
             cast(list[dict[str, Any]], calls),
@@ -569,6 +656,7 @@ def _self_check() -> None:
         "northbound-i95-to-westpark-restart",
         "dulles-airport-to-backlick-tp1sb-fallback",
         "old-keene-mill-to-reagan-i95-unavailable",
+        "leesburg-route-28-job-offer",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "northbound-i95-to-westpark-restart",
@@ -908,6 +996,77 @@ def _self_check() -> None:
         evaluate_unavailable_turn(wrong_unavailable_result, unavailable)[0].label
         == "result_mismatch"
     )
+    annual = rows[5]
+    annual_call = {
+        "name": "get_annual_toll_ballpark",
+        "input": annual["expected_call"],
+        "tool_result": {
+            "income": {
+                "gross_annual_usd": "120000.00",
+                "estimated_after_tax_usd": "80000.00",
+            },
+            "vehicle_cost": {"annual_usd": "1885.12"},
+            "scenarios": {
+                name: {
+                    "daily_total_tolled_commute_cost_usd": daily,
+                    "average_monthly_tolled_commute_cost_usd": monthly,
+                    "annual_total_tolled_commute_cost_usd": annual_total,
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": remaining,
+                    "annual_toll_usd": annual_toll,
+                    "additional_gross_income_to_offset_usd": offset,
+                }
+                for name, daily, monthly, annual_total, remaining, annual_toll, offset in (
+                    (
+                        "p25",
+                        "23.00",
+                        "460.00",
+                        "5520.00",
+                        "74480.00",
+                        "3634.88",
+                        "8280.00",
+                    ),
+                    (
+                        "p50",
+                        "24.00",
+                        "480.00",
+                        "5760.00",
+                        "74240.00",
+                        "3874.88",
+                        "8640.00",
+                    ),
+                    (
+                        "p90",
+                        "25.00",
+                        "500.00",
+                        "6000.00",
+                        "74000.00",
+                        "4114.88",
+                        "9000.00",
+                    ),
+                )
+            },
+        },
+        "is_error": False,
+    }
+    annual_response = (
+        "### 💼 Annual commute impact\n\n"
+        "**P50 leaves $74240.00 after assumed tax and tolled commuting.**\n\n"
+        "- 🧾 Gross: $120000.00; after one-third tax: $80000.00\n"
+        "- 🚗 Vehicle: $1885.12; toll: $3874.88\n"
+        "- 🎯 Additional gross salary needed: $8640.00\n\n"
+        "| Scenario | Daily | Monthly | Annual | Remaining |\n"
+        "|---|---:|---:|---:|---:|\n"
+        "| P25 | $23.00 | $460.00 | $5520.00 | $74480.00 |\n"
+        "| P50 | $24.00 | $480.00 | $5760.00 | $74240.00 |\n"
+        "| P90 | $25.00 | $500.00 | $6000.00 | $74000.00 |\n\n"
+        "⚠️ Historical coverage; tolled straight-line portions only at $0.685/mile."
+    )
+    assert evaluate_annual_turn([annual_call], annual_response, annual)[0].test_pass
+    missing_table = annual_response.replace("|", "")
+    assert (
+        evaluate_annual_turn([annual_call], missing_table, annual)[0].label
+        == "missing_affordability_context"
+    )
     print("self-check ok (fixtures and evaluator pass/fail branches; no network)")
 
 
@@ -918,12 +1077,12 @@ if __name__ == "__main__":
         parser = ArgumentParser()
         parser.add_argument(
             "--window",
-            choices=("i95_northbound", "i95_reversal", "i95_southbound"),
+            choices=("all", "i95_northbound", "i95_reversal", "i95_southbound"),
             required=True,
         )
         parser.add_argument(
             "--suite",
-            choices=("all", "direct", "restart", "fallback", "unavailable"),
+            choices=("all", "direct", "restart", "fallback", "unavailable", "annual"),
             default="all",
         )
         args = parser.parse_args()

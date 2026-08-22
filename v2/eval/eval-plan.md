@@ -1,4 +1,4 @@
-# Evaluation Plan for TollChat v2 I-95/I-495 Junction Routes
+# Evaluation Plan for TollChat v2 Pricing and Affordability
 
 ## 1. Evaluation Requirements
 
@@ -12,7 +12,7 @@
 | **Attribute** | **Details** |
 | :-- | :-- |
 | **Agent Name** | TollChat v2 |
-| **Purpose** | Price covered Northern Virginia toll trips. |
+| **Purpose** | Estimate tolled-commute affordability and current prices. |
 | **Core Capabilities** | Resolve prompt points and call current or annual pricing tools. |
 | **Input** | Natural-language toll question. |
 | **Output** | Markdown response grounded in structured tool results. |
@@ -23,7 +23,9 @@
 flowchart LR
   U[User prompt] --> A[TollChat v2]
   A --> T[get_current_toll_price]
+  A --> B[get_annual_toll_ballpark]
   T --> R[(RDS pricing oracle)]
+  B --> R
   A --> E[Code evaluator]
   T --> E
 ```
@@ -54,6 +56,12 @@ flowchart LR
 - **Description:** Responses use Markdown and emoji, ground prices and observation times, explain closures, make only eligible TP1NB/TP1SB offers, disclose omitted general-purpose travel, and wait for acceptance.
 - **Method:** Code-based
 
+### Annual affordability grounding
+
+- **Evaluation Area:** Job-offer decision support
+- **Description:** The annual case makes the exact income-aware call and reports tool-provided P25/P50/P90 money in a Markdown table with emoji, tax, mileage, scope, and historical-evidence disclosures.
+- **Method:** Code-based
+
 ---
 
 ## 4. Test Data Generation
@@ -63,13 +71,15 @@ flowchart LR
 - **Springfield-Franconia to Westpark:** TP1NB restart offer and accepted price in every I-95 window.
 - **Dulles Airport to Backlick Road:** TP1SB fallback offer and accepted price in northbound and reversal windows.
 - **Old Keene Mill Road to Reagan Airport:** Northbound unavailability without an ineligible fallback offer in southbound and reversal windows.
-- **Total number of test cases:** 5
+- **Leesburg Bypass to Route 28:** Annual job-offer affordability with gross income, a complete work schedule, and fixed-rate Greenway tolls.
+- **Total number of test cases:** 6
 
 | **Scheduled window** | **Cases run** |
 | :-- | :-- |
 | `i95_northbound` | TP1NB restart; TP1SB unavailable/fallback |
 | `i95_reversal` | TP1NB restart; TP1SB unavailable/fallback; northbound unavailable |
 | `i95_southbound` | Two direct Westpark prices; TP1NB restart; northbound unavailable |
+| `all` with `annual` suite | Leesburg-to-Route-28 annual affordability |
 
 ---
 
@@ -99,6 +109,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | :-- | :-- | :-- |
 | 2026-08-22 | Planning | Add tool tests and Strands evals for the two Westpark failures, then wire both into CI. |
 | 2026-08-22 | Coverage | Add TP1SB acceptance and scheduled northbound/southbound/reversal unavailability; exclude the adversarial three-turn case. |
+| 2026-08-22 | Affordability | Add an income-aware annual job-offer case with deterministic response grounding. |
 
 ### 6.2 Evaluation Progress
 
@@ -107,3 +118,4 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Plan and cases | Completed | Five cases with scheduled-window selection. |
 | 2026-08-22 | Offline evaluator | Completed | Pass/fail branches, CI contract, and the full non-live v2 suite pass. |
 | 2026-08-22 | Live execution | Scheduled | TP1NB passed live; state-specific cases await fresh timed windows because current I-95 evidence was stale. |
+| 2026-08-22 | Annual affordability | Implemented | Offline evaluator covers exact inputs, money grounding, Markdown table, emoji, assumptions, and tolled-only scope. |
