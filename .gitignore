@@ -36,3 +36,4 @@ test-results/
 /v2/infra/build/
 /v2/infra/*.tfplan
 *.tfvars
+/v2/eval/private/
