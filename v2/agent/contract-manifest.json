@@ -1,0 +1,14 @@
+{
+  "system_prompt": {
+    "current": "1.0.0",
+    "releases": {
+      "1.0.0": "45c5b073823ebbc4892a0535f301b9528be390ff7d6c8c4b5510f790cffd3438"
+    }
+  },
+  "system_prompt_renderer": {
+    "current": "1.0.0",
+    "releases": {
+      "1.0.0": "0a5ab4e47818ececb81ff5c408146ab5ce59e729d4cd82769e81709f1d8663f3"
+    }
+  }
+}

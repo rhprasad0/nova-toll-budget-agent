@@ -6,6 +6,7 @@ import json
 import sys
 from copy import copy, deepcopy
 from datetime import date, datetime
+from hashlib import sha256
 from itertools import pairwise
 from pathlib import Path
 from threading import Lock
@@ -36,6 +37,8 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _PROMPT_POINTS_SQL = "SELECT oracle.get_toll_route_prompt_points() AS points"
+SYSTEM_PROMPT_VERSION = "1.0.0"
+SYSTEM_PROMPT_RENDERER_VERSION = "1.0.0"
 _EASTERN = ZoneInfo("America/New_York")
 _DUPLICATE_TOOL_STATE_KEY = "tollchat_v2_duplicate_tool_calls"
 _DUPLICATE_HOOK_ORDER = HookOrder.SDK_LAST + 1
@@ -273,11 +276,11 @@ def _agent_tools() -> list[Any]:
     return tools
 
 
-def build_system_prompt(
+def _render_system_prompt_values(
     prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
     *,
-    current_date: date | None = None,
-) -> str:
+    current_date: date,
+) -> dict[str, str]:
     points = (
         load_prompt_points()
         if prompt_points is None
@@ -290,18 +293,29 @@ def build_system_prompt(
             ]
         )
     )
+    return {
+        "PROMPT_POINTS_JSON": json.dumps(
+            [point.model_dump(mode="json") for point in points], indent=2
+        ),
+        "CURRENT_DATE": current_date.strftime("%-m/%-d/%Y"),
+    }
+
+
+def build_system_prompt(
+    prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
+    *,
+    current_date: date | None = None,
+) -> str:
     template = (
         Path(__file__).resolve().parent.parent
         / "agent-sops"
         / "nova-toll-pricing-assistant.sop.md"
     ).read_text(encoding="utf-8")
     return template.format(
-        PROMPT_POINTS_JSON=json.dumps(
-            [point.model_dump(mode="json") for point in points], indent=2
-        ),
-        CURRENT_DATE=(current_date or datetime.now(_EASTERN).date()).strftime(
-            "%-m/%-d/%Y"
-        ),
+        **_render_system_prompt_values(
+            prompt_points,
+            current_date=current_date or datetime.now(_EASTERN).date(),
+        )
     )
 
 
@@ -311,10 +325,17 @@ def build_agent(
     trace_attributes: dict[str, str] | None = None,
     hooks: list[object] | None = None,
 ) -> Agent:
+    system_prompt = build_system_prompt(prompt_points)
+    trace_attributes = {
+        **(trace_attributes or {}),
+        "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
+        "tollchat.system_prompt_renderer_version": SYSTEM_PROMPT_RENDERER_VERSION,
+        "tollchat.system_prompt_sha256": sha256(system_prompt.encode()).hexdigest(),
+    }
     return Agent(
         model=_build_model(),
         tools=_agent_tools(),
-        system_prompt=build_system_prompt(prompt_points),
+        system_prompt=system_prompt,
         callback_handler=None,
         trace_attributes=trace_attributes,
         hooks=cast(Any, [DuplicateToolUseGuard(), *(hooks or [])]),

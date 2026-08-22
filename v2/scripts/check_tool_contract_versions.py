@@ -23,7 +23,9 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
-def _contract(manifest: dict[str, Any], name: str) -> tuple[str, dict[str, str]]:
+def validate_contract(
+    manifest: dict[str, Any], name: str
+) -> tuple[str, dict[str, str]]:
     entry = cast(dict[str, Any], manifest[name])
     if set(entry) != {"current", "releases"}:
         raise ValueError(f"{name} must contain current and releases")
@@ -51,13 +53,13 @@ def validate_manifest_update(previous: dict[str, Any], current: dict[str, Any]) 
         raise ValueError(f"manifest removes contracts: {', '.join(sorted(removed))}")
 
     for name in sorted(current):
-        current_version, current_releases = _contract(current, name)
+        current_version, current_releases = validate_contract(current, name)
         if name not in previous:
             if "1.0.0" not in current_releases:
                 raise ValueError(f"new contract {name} must include release 1.0.0")
             continue
 
-        previous_version, previous_releases = _contract(previous, name)
+        previous_version, previous_releases = validate_contract(previous, name)
 
         for version, digest in previous_releases.items():
             if current_releases.get(version) != digest:
@@ -75,7 +77,7 @@ def validate_manifest_update(previous: dict[str, Any], current: dict[str, Any]) 
             raise ValueError("manifest must add exactly the new current release")
 
 
-def _comparison_ref(base_ref: str) -> str | None:
+def comparison_ref(base_ref: str) -> str | None:
     if base_ref != _ZERO_SHA:
         return base_ref
     result = subprocess.run(
@@ -87,14 +89,16 @@ def _comparison_ref(base_ref: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def _manifest_at(base_ref: str) -> dict[str, Any] | None:
+def manifest_at(
+    base_ref: str, git_path: str = _MANIFEST_GIT_PATH
+) -> dict[str, Any] | None:
     subprocess.run(
         ["git", "cat-file", "-e", f"{base_ref}^{{commit}}"],
         check=True,
         capture_output=True,
     )
     result = subprocess.run(
-        ["git", "show", f"{base_ref}:{_MANIFEST_GIT_PATH}"],
+        ["git", "show", f"{base_ref}:{git_path}"],
         check=False,
         capture_output=True,
         text=True,
@@ -111,13 +115,13 @@ def main() -> int:
 
     current = cast(dict[str, Any], json.loads(_MANIFEST_PATH.read_text()))
     for name in current:
-        _contract(current, name)
-    base_ref = _comparison_ref(sys.argv[1])
+        validate_contract(current, name)
+    base_ref = comparison_ref(sys.argv[1])
     if base_ref is None:
         print("root commit has no prior contract manifest")
         return 0
 
-    previous = _manifest_at(base_ref)
+    previous = manifest_at(base_ref)
     if previous is None:
         print("base commit predates the current-pricing contract manifest")
         return 0

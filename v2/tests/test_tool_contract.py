@@ -115,7 +115,7 @@ def test_zero_base_ref_uses_head_parent(monkeypatch):
 
     monkeypatch.setattr(version_check.subprocess, "run", run)
 
-    assert version_check._comparison_ref("0" * 40) == "parent-sha"
+    assert version_check.comparison_ref("0" * 40) == "parent-sha"
     assert calls[0][0] == ["git", "rev-parse", "--verify", "HEAD^"]
 
 
