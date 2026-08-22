@@ -29,6 +29,11 @@ from scripts import check_agent_contract_versions as version_check
 _CONTRACT_MANIFEST_PATH = (
     Path(__file__).resolve().parents[1] / "agent" / "contract-manifest.json"
 )
+_PROMPT_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "agent-sops"
+    / "nova-toll-pricing-assistant.sop.md"
+)
 _SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
 
 
@@ -49,6 +54,39 @@ def _point(**overrides):
 
 def _contract_manifest():
     return json.loads(_CONTRACT_MANIFEST_PATH.read_text())
+
+
+def _digest(value):
+    canonical = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _renderer_contract():
+    points = [
+        _point(),
+        _point(
+            point_id="greenway:2:exit:EB",
+            source_node_id="2",
+            point_type="exit",
+            label="Exit 2 - Battlefield Parkway",
+            aliases=["Battlefield Parkway"],
+        ),
+    ]
+    values = toll_agent._render_system_prompt_values(
+        points, current_date=date(2026, 8, 21)
+    )
+    assert values["PROMPT_POINTS_JSON"].index(points[0]["point_id"]) < values[
+        "PROMPT_POINTS_JSON"
+    ].index(points[1]["point_id"])
+    return {
+        "inputSchema": toll_agent._PROMPT_POINTS_ADAPTER.json_schema(mode="validation"),
+        "renderedValues": values,
+    }
 
 
 def test_prompt_point_validation_requires_unique_ordered_bounded_coordinates():
@@ -215,17 +253,30 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
 
 
 def test_system_prompt_matches_its_versioned_contract():
-    contract = _contract_manifest()["system_prompt"]
-    version = toll_agent.SYSTEM_PROMPT_VERSION
+    manifest = _contract_manifest()
+    prompt_contract = manifest["system_prompt"]
+    renderer_contract = manifest["system_prompt_renderer"]
 
-    assert version == "1.0.0" == contract["current"]
-    assert all(_SEMVER.fullmatch(release) for release in contract["releases"])
-    assert all(
-        re.fullmatch(r"[0-9a-f]{64}", digest)
-        for digest in contract["releases"].values()
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "1.0.0" == prompt_contract["current"]
+    assert (
+        toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
+        == "1.0.0"
+        == renderer_contract["current"]
     )
-    prompt = build_system_prompt([_point()], current_date=date(2026, 8, 21))
-    assert hashlib.sha256(prompt.encode()).hexdigest() == contract["releases"][version]
+    for contract in manifest.values():
+        assert all(_SEMVER.fullmatch(release) for release in contract["releases"])
+        assert all(
+            re.fullmatch(r"[0-9a-f]{64}", digest)
+            for digest in contract["releases"].values()
+        )
+    assert (
+        hashlib.sha256(_PROMPT_TEMPLATE_PATH.read_bytes()).hexdigest()
+        == (prompt_contract["releases"][prompt_contract["current"]])
+    )
+    assert (
+        _digest(_renderer_contract())
+        == (renderer_contract["releases"][renderer_contract["current"]])
+    )
 
 
 def test_system_prompt_manifest_accepts_one_monotonic_release():
@@ -352,6 +403,8 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
         trace_attributes={
             "tollchat.session_id": "test",
             "tollchat.system_prompt_version": "wrong",
+            "tollchat.system_prompt_renderer_version": "wrong",
+            "tollchat.system_prompt_sha256": "wrong",
         },
     )
 
@@ -361,9 +414,16 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
     ]
     assert original_specs[0] == current_tool.TOOL_SPEC
     assert original_specs[1] == ballpark_tool.TOOL_SPEC
+    assert isinstance(agent.system_prompt, str)
     assert agent.trace_attributes == {
         "tollchat.session_id": "test",
         "tollchat.system_prompt_version": toll_agent.SYSTEM_PROMPT_VERSION,
+        "tollchat.system_prompt_renderer_version": (
+            toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
+        ),
+        "tollchat.system_prompt_sha256": hashlib.sha256(
+            agent.system_prompt.encode()
+        ).hexdigest(),
     }
 
 

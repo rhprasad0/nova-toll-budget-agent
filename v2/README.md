@@ -84,8 +84,11 @@ and coordinates from RDS once at startup, then exposes exactly the current-price
 and annual-ballpark tools. It fails startup if that prompt data is unavailable
 or invalid.
 
-Its system prompt is locked by `agent/contract-manifest.json` and reported in
-traces as `tollchat.system_prompt_version`. Prompt changes require a new,
+Its system-prompt template and prompt-point renderer are independently locked by
+`agent/contract-manifest.json` and reported in traces as
+`tollchat.system_prompt_version` and `tollchat.system_prompt_renderer_version`.
+Each request also reports `tollchat.system_prompt_sha256` for the exact rendered
+prompt, including its date and RDS points. Contract changes require a new,
 increasing SemVer release and digest; CI rejects rewrites of published releases.
 Use patch releases for corrections that preserve behavior, minor releases for
 compatible behavior changes, and major releases for incompatible changes.

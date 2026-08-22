@@ -2,7 +2,13 @@
   "system_prompt": {
     "current": "1.0.0",
     "releases": {
-      "1.0.0": "25efa9d49d193ede89afa04049c38b46ee0623217f47ebef53d5991b8dd8c2de"
+      "1.0.0": "3572ee10f595198206e5e6780dd2f861782242688af0769f26de769627991299"
+    }
+  },
+  "system_prompt_renderer": {
+    "current": "1.0.0",
+    "releases": {
+      "1.0.0": "0a5ab4e47818ececb81ff5c408146ab5ce59e729d4cd82769e81709f1d8663f3"
     }
   }
 }
