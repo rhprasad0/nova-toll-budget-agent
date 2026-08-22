@@ -84,6 +84,25 @@ and coordinates from RDS once at startup, then exposes exactly the current-price
 and annual-ballpark tools. It fails startup if that prompt data is unavailable
 or invalid.
 
+### Local agent console
+
+The loopback-only browser console streams the v2 agent's Markdown replies, tool
+activity, metrics, and raw Strands events without storing conversations on disk.
+From `v2/`, configure the same AWS and database environment used by the live
+agent tests, then run:
+
+```sh
+eval "$(AWS_PROFILE=nova-toll aws configure export-credentials --format env)"
+AWS_DEFAULT_REGION=us-east-1 uv run python -m agent.dev_chat
+```
+
+Open <http://127.0.0.1:8000>. The agent reads its OpenAI credential from SSM;
+the exported AWS session credentials remain in the current shell and must never
+be placed in a local file. Required database variables are `DB_HOST`,
+`DB_PORT`, `DB_NAME`, and `DB_CA_BUNDLE_PATH`. If needed,
+`scripts/build_loader_zip.sh` creates the verified RDS CA bundle at
+`infra/build/loader/rds-ca-bundle.pem`.
+
 Its stable developer prompt uses OpenAI's explicit provider-managed prompt cache
 with a 30-minute TTL. Strands exposes cache reuse through
 `AgentResult.metrics.accumulated_usage` as `cacheReadInputTokens` and
