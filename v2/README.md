@@ -84,8 +84,8 @@ and coordinates from RDS once at startup, then exposes exactly the current-price
 and annual-ballpark tools. It fails startup if that prompt data is unavailable
 or invalid.
 
-Its system-prompt template and prompt-point renderer are independently locked by
-`agent/contract-manifest.json` and reported in traces as
+Its final system-prompt assembly and prompt-point renderer/input contract are
+independently locked by `agent/contract-manifest.json` and reported in traces as
 `tollchat.system_prompt_version` and `tollchat.system_prompt_renderer_version`.
 Each request also reports `tollchat.system_prompt_sha256` for the exact rendered
 prompt, including its date and RDS points. Contract changes require a new,

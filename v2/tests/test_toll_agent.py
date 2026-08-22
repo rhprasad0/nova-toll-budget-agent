@@ -29,11 +29,6 @@ from scripts import check_agent_contract_versions as version_check
 _CONTRACT_MANIFEST_PATH = (
     Path(__file__).resolve().parents[1] / "agent" / "contract-manifest.json"
 )
-_PROMPT_TEMPLATE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "agent-sops"
-    / "nova-toll-pricing-assistant.sop.md"
-)
 _SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
 
 
@@ -66,8 +61,8 @@ def _digest(value):
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def _renderer_contract():
-    points = [
+def _contract_points():
+    return [
         _point(),
         _point(
             point_id="greenway:2:exit:EB",
@@ -77,6 +72,10 @@ def _renderer_contract():
             aliases=["Battlefield Parkway"],
         ),
     ]
+
+
+def _renderer_contract():
+    points = _contract_points()
     values = toll_agent._render_system_prompt_values(
         points, current_date=date(2026, 8, 21)
     )
@@ -269,8 +268,9 @@ def test_system_prompt_matches_its_versioned_contract():
             re.fullmatch(r"[0-9a-f]{64}", digest)
             for digest in contract["releases"].values()
         )
+    prompt = build_system_prompt(_contract_points(), current_date=date(2026, 8, 21))
     assert (
-        hashlib.sha256(_PROMPT_TEMPLATE_PATH.read_bytes()).hexdigest()
+        hashlib.sha256(prompt.encode()).hexdigest()
         == (prompt_contract["releases"][prompt_contract["current"]])
     )
     assert (
