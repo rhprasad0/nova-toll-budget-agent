@@ -135,7 +135,7 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "Never silently substitute an alternative" in normalized
     assert "reverse the outbound endpoints" in normalized
     assert "outbound departure time, return departure time, weekdays" in normalized
-    assert 'ask exactly "Do you mean I-66 or I-395?"' in normalized
+    assert 'ask exactly "**🛣️ Do you mean I-66 or I-395?**"' in normalized
     assert "Washington D.C. I-66" in normalized
     assert "Washington D.C. I-95/I-395 Northbound" in normalized
     assert "Washington D.C. from I-495 Southbound via I-395" in normalized
@@ -149,7 +149,53 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "prices only the current toll" in normalized
     assert "offer to check the current toll" in normalized
     assert "not affiliated with, endorsed by, or acting for VDOT" in normalized
+    assert "Every user-facing response MUST use Markdown" in normalized
+    assert "include at least one relevant emoji" in normalized
+    assert "### 🚧 Express Lanes unavailable" in prompt
+    assert "h:MM AM/PM EST or EDT" in prompt
+    assert "9:30 AM EDT" in prompt
+    assert "9:30 AM EST" in prompt
+    assert "actual zone abbreviation" in normalized
+    assert "use the literal `EST` suffix year-round" not in normalized
+    assert "For every observed or modeled component" in normalized
+    assert "recent_movement" in prompt
+    assert "net_change_usd" in prompt
+    assert "unchanged component must still show its `$0.00` net change" in normalized
+    assert "`rising`: 📈" in prompt
+    assert "`falling`: 📉" in prompt
+    assert "`unchanged`: ➡️" in prompt
+    assert "`mixed`: 🔄" in prompt
+    assert "prior_week_comparison" in prompt
+    assert "lower than, equal to, or higher than" in normalized
+    assert "⚠️ Higher than the recent median" in prompt
+    assert "🎉 You're getting a deal — below the recent median" in prompt
+    assert "✅ At the recent median" in prompt
+    assert "typical recent price only when all 3 of 3" in normalized
+    assert "Never combine component comparisons" in normalized
+    assert "omit that comparison" in normalized
+    assert "data is stale or too old to use" in normalized
+    assert "Do not state an observation's age" in normalized
+    assert "I-95 closure fallback offer" in prompt
+    assert "`fallback_required` is `true`" in normalized
+    assert "`i95_opposite_direction_open` or `i95_fully_closed`" in normalized
+    assert "I-495 Express northbound start at I-95 (TP1NB)" in normalized
+    assert "I-495 Express southbound end at I-95 (TP1SB)" in normalized
+    assert "Wait for the user to accept the offer" in normalized
+    assert "preserve the original other endpoint and pricing profile" in normalized
+    assert "general-purpose lanes and is not included" in normalized
+    assert "Do not offer this fallback for `unknown`" in normalized
+    assert "Reagan Airport or an I-395/I-95 entry" in normalized
+    assert "select `i495:1859ND`" in normalized
+    assert "select `i95:206NO` as the origin" in normalized
+    assert "i95_northbound_requires_i495_restart" in normalized
+    assert "suggested_destination_point_id" in normalized
+    assert "`prefix` with boundary `i495:192NO`" in normalized
+    assert "`suffix` with boundary `i495:192SD`" in normalized
+    assert "qualifying accepted I-95 fallback" in normalized
     assert "Today in America/New_York is 8/21/2026" in normalized
+    assert "final roadside sign" not in normalized
+    assert "30 minutes" not in normalized
+    assert "maximum_observation_age_minutes" not in prompt
     assert "plan_toll_route" not in prompt
     assert "i95_route" not in prompt
 

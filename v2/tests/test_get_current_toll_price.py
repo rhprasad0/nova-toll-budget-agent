@@ -69,6 +69,19 @@ def _nonvalid_route_rows() -> list[dict[str, Any]]:
             **empty_path,
             "status": "invalid_origin",
             "reason": {
+                "code": "i95_northbound_requires_i495_restart",
+                "details": {
+                    "point_id": "i95:206NO",
+                    "point_type": "entry",
+                    "suggested_restart_point_id": "i495:192NO",
+                    "suggested_destination_point_id": "i495:185ND",
+                },
+            },
+        },
+        {
+            **empty_path,
+            "status": "invalid_origin",
+            "reason": {
                 "code": "origin_not_found",
                 "details": {"point_id": origin},
             },
@@ -426,6 +439,56 @@ def _pricing_route(
     return pricing_tool.route_validation._PricingRouteResponse.model_validate(  # pyright: ignore[reportPrivateUsage]
         {**row, "facility_legs": legs}
     )
+
+
+def _southbound_westpark_pricing_route(origin_point_id: str):
+    connection_id = "source:i95_shared:Southbound:2233SO:1859ND"
+    airport = origin_point_id == "airport_dca"
+    row = {
+        **_route_row(),
+        "point_ids": (
+            ["airport_dca", "i95:2233SO", "i495:1859ND"]
+            if airport
+            else ["i95:2233SO", "i495:1859ND"]
+        ),
+        "connection_ids": (
+            ["dca_to_i95_south", connection_id] if airport else [connection_id]
+        ),
+        "connection_types": (
+            ["airport_access", "general_purpose_gap"]
+            if airport
+            else ["general_purpose_gap"]
+        ),
+        "general_purpose_gaps": [
+            {
+                "connection_id": connection_id,
+                "boundary_point_id": "i495:192SD",
+                "role": "prefix",
+                "i95_direction": "SB",
+                "fallback_required": False,
+            }
+        ],
+        "i95_evidence": _i95_evidence("southbound"),
+    }
+    legs = [
+        _i95_leg(
+            route_step_id="step-1",
+            direction="Southbound",
+            entry="2233SO",
+            exit_="1859ND",
+            od_pair_id=1204,
+            point_ids=["i95:2233SO", "i495:192SD"],
+        ).model_dump(mode="json"),
+        _i95_leg(
+            route_step_id="step-2",
+            direction="Southbound",
+            entry="2233SO",
+            exit_="1859ND",
+            od_pair_id=1005,
+            point_ids=["i495:192SD", "i495:1859ND"],
+        ).model_dump(mode="json"),
+    ]
+    return _pricing_route(row, legs)
 
 
 def _run_tool(input_data: Any | None = None) -> list[dict[str, Any]]:
@@ -1290,6 +1353,39 @@ def test_i95_to_reagan_prices_only_the_i95_leg(monkeypatch):
     ]
     assert payload["source_kind"] == "observed"
     assert payload["total_usd"] == "8.20"
+
+
+@pytest.mark.parametrize("origin_point_id", ["airport_dca", "i95:2233SO"])
+def test_southbound_westpark_routes_price_both_components(monkeypatch, origin_point_id):
+    response = _southbound_westpark_pricing_route(origin_point_id)
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "fetch_validated_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    requested_od_pairs = []
+
+    def fetch_prices(od_pair_id):
+        requested_od_pairs.append(od_pair_id)
+        return _i95_rows(od_pair_id=od_pair_id)
+
+    monkeypatch.setattr(pricing_tool, "_fetch_i95_i495_comparisons", fetch_prices)
+
+    events = _run_tool(
+        {
+            **_input(),
+            "origin_point_id": origin_point_id,
+            "destination_point_id": "i495:1859ND",
+        }
+    )
+
+    payload = cast(Any, _result(events))["content"][0]["json"]
+    assert requested_od_pairs == [1204, 1005]
+    assert [component["route_step_id"] for component in payload["components"]] == [
+        "step-1",
+        "step-2",
+    ]
+    assert payload["total_usd"] == "16.40"
 
 
 @pytest.mark.parametrize(

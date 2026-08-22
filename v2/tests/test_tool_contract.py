@@ -57,6 +57,7 @@ def test_runtime_spec_and_generated_contract_match_models():
 
 def test_generated_contract_matches_versioned_digest():
     manifest = _manifest()["get_current_toll_price"]
+    assert manifest["current"] == "1.4.0"
     assert (
         _digest(pricing_tool.TOOL_CONTRACT) == manifest["releases"][manifest["current"]]
     )
@@ -86,6 +87,7 @@ def test_ballpark_runtime_contract_matches_models_and_manifest():
     }
     assert expected == ballpark_tool.TOOL_CONTRACT
     manifest = _manifest()["get_annual_toll_ballpark"]
+    assert manifest["current"] == "2.1.0"
     assert _digest(expected) == manifest["releases"][manifest["current"]]
 
 
@@ -99,8 +101,8 @@ def test_manifest_accepts_new_contract_with_preserved_one_dot_zero_release():
 def test_manifest_accepts_additive_version_advance():
     previous = _manifest()
     current = copy.deepcopy(previous)
-    current["get_current_toll_price"]["current"] = "1.4.0"
-    current["get_current_toll_price"]["releases"]["1.4.0"] = "a" * 64
+    current["get_current_toll_price"]["current"] = "1.5.0"
+    current["get_current_toll_price"]["releases"]["1.5.0"] = "a" * 64
     version_check.validate_manifest_update(previous, current)
 
 

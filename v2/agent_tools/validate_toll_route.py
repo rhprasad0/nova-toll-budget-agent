@@ -98,6 +98,18 @@ class _IncompatibleRampDetails(_PointDetails):
     alternatives: Annotated[list[_Alternative], Field(min_length=1, max_length=2)]
 
 
+class _I95NorthboundRestartDetails(_PointDetails):
+    point_type: Literal["entry"]
+    suggested_restart_point_id: Literal["i495:192NO"]
+    suggested_destination_point_id: Annotated[str, Field(pattern=r"^i495:[0-9]+ND$")]
+
+    @model_validator(mode="after")
+    def _validate_origin(self) -> Self:
+        if not self.point_id.startswith("i95:") or not self.point_id.endswith("NO"):
+            raise ValueError("restart origin must be a northbound I-95 entry")
+        return self
+
+
 class _AvailabilityDetails(_Model):
     required_i95_directions: Annotated[list[I95Direction], Field(min_length=1)]
     availability: Literal["northbound", "southbound", "closed", "unknown"]
@@ -132,6 +144,11 @@ class _IncompatibleRampReason(_Model):
     details: _IncompatibleRampDetails
 
 
+class _I95NorthboundRestartReason(_Model):
+    code: Literal["i95_northbound_requires_i495_restart"]
+    details: _I95NorthboundRestartDetails
+
+
 class _AvailabilityReason(_Model):
     code: Literal[
         "i95_opposite_direction_open",
@@ -161,6 +178,7 @@ Reason = Annotated[
     | _NotFoundReason
     | _WrongRoleReason
     | _IncompatibleRampReason
+    | _I95NorthboundRestartReason
     | _AvailabilityReason
     | _NoRouteReason
     | _TraversalReason,
@@ -178,9 +196,9 @@ class _Gap(_Model):
     @model_validator(mode="after")
     def _validate_alignment(self) -> Self:
         expected_boundary = {
-            "prefix": "i495:192NO",
-            "suffix": "i495:192SD",
-        }[self.role]
+            "NB": "i495:192NO",
+            "SB": "i495:192SD",
+        }[self.i95_direction]
         if self.boundary_point_id != expected_boundary:
             raise ValueError("general-purpose gap fields are not aligned")
         return self
@@ -220,6 +238,7 @@ class _RouteResponse(_Model):
                 "origin_not_found",
                 "origin_not_entry",
                 "origin_ramp_incompatible",
+                "i95_northbound_requires_i495_restart",
             },
             "invalid_destination": {
                 "destination_required",
@@ -311,6 +330,14 @@ class _RouteResponse(_Model):
             )
             if details.point_id != expected:
                 raise ValueError("reason point does not match the request")
+        if isinstance(details, _I95NorthboundRestartDetails):
+            expected_destination = (
+                "i495:185ND"
+                if request.destination_point_id == "i495:1859ND"
+                else request.destination_point_id
+            )
+            if details.suggested_destination_point_id != expected_destination:
+                raise ValueError("restart destination does not match the request")
         if isinstance(details, _RouteDetails) and (
             details.origin_point_id != request.origin_point_id
             or details.destination_point_id != request.destination_point_id

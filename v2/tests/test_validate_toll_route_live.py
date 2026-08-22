@@ -179,6 +179,42 @@ def test_live_i95_state_matches_timed_window() -> None:
     assert any(component["facility"] == "i66" for component in i66["components"])
 
 
+def test_live_i95_northbound_restart_is_state_independent() -> None:
+    window_id = os.environ["TIMED_WINDOW_ID"]
+    if not window_id.startswith("i95_"):
+        pytest.skip("not an I-95 timed window")
+    assert window_id in _WINDOW_EXPECTATIONS, f"unknown timed window {window_id!r}"
+    _configure_rds_endpoint()
+
+    initial = _validate("i95:206NO", "i495:1859ND", f"{window_id}-restart-offer")
+    assert initial == {
+        "status": "invalid_origin",
+        "reason": {
+            "code": "i95_northbound_requires_i495_restart",
+            "details": {
+                "point_id": "i95:206NO",
+                "point_type": "entry",
+                "suggested_restart_point_id": "i495:192NO",
+                "suggested_destination_point_id": "i495:185ND",
+            },
+        },
+        "point_ids": [],
+        "connection_ids": [],
+        "connection_types": [],
+        "general_purpose_gaps": [],
+        "i95_evidence": None,
+    }
+
+    accepted = _validate("i495:192NO", "i495:185ND", f"{window_id}-restart-accepted")
+    assert accepted["origin_point_id"] == "i495:192NO"
+    assert accepted["destination_point_id"] == "i495:185ND"
+    assert accepted["method"] == "latest_complete_current_facility_prices"
+    assert "total_usd" in accepted
+    assert any(
+        component["facility"] == "i95_i495" for component in accepted["components"]
+    )
+
+
 def test_live_greenway_to_dca_matches_timed_i95_state() -> None:
     window_id = os.environ["TIMED_WINDOW_ID"]
     if not window_id.startswith("i95_"):
