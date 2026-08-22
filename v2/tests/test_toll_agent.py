@@ -172,6 +172,16 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "omit that comparison" in normalized
     assert "data is stale or too old to use" in normalized
     assert "Do not state an observation's age" in normalized
+    assert "I-95 closure fallback offer" in prompt
+    assert "`fallback_required` is `true`" in normalized
+    assert "`i95_opposite_direction_open` or `i95_fully_closed`" in normalized
+    assert "I-495 Express northbound start at I-95 (TP1NB)" in normalized
+    assert "I-495 Express southbound end at I-95 (TP1SB)" in normalized
+    assert "Wait for the user to accept the offer" in normalized
+    assert "preserve the original other endpoint and pricing profile" in normalized
+    assert "general-purpose lanes and is not included" in normalized
+    assert "Do not offer this fallback for `unknown`" in normalized
+    assert "qualifying accepted I-95 fallback" in normalized
     assert "Today in America/New_York is 8/21/2026" in normalized
     assert "final roadside sign" not in normalized
     assert "30 minutes" not in normalized
