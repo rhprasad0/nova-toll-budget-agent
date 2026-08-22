@@ -175,6 +175,14 @@ BEGIN
     END IF;
 
     SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:224NO', 'i495:1859ND');
+    IF result.status <> 'invalid_origin'
+       OR result.reason->>'code' <> 'origin_ramp_incompatible' THEN
+        RAISE EXCEPTION 'north-of-junction origin received TP1NB restart: %',
+            row_to_json(result);
+    END IF;
+
+    SELECT * INTO result
     FROM oracle.validate_toll_route('i495:192NO', 'i495:185ND');
     IF result.status <> 'valid' OR result.i95_evidence IS NOT NULL THEN
         RAISE EXCEPTION 'TP1NB-to-Westpark restart route failed: %',

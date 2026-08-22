@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted in oracle `1.5.0`; current schema `1.10.0`
+- **Status:** Adopted in oracle `1.5.0`; current schema `1.10.1`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 
@@ -128,9 +128,10 @@ stale evidence, and finally an indeterminate link state.
 ## Invalid-ramp alternatives
 
 The `i95_northbound_requires_i495_restart` result is intentionally separate:
-it contains no `alternatives`. It applies when a northbound I-95 entry cannot
-continue to a northbound I-495 exit through the supported toll graph, and gives
-the caller the exact TP1NB point for a separately accepted current-price call.
+it contains no `alternatives`. It applies when a northbound I-95 entry at or
+south of the I-495/I-95 junction cannot continue to a northbound I-495 exit
+through the supported toll graph, and gives the caller the exact TP1NB point
+for a separately accepted current-price call.
 The result is independent of live I-95 direction state and contains no route
 path or I-95 evidence.
 

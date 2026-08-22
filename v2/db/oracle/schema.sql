@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.10.0
+-- oracle schema version: 1.10.1
 
 \set ON_ERROR_STOP on
 
@@ -150,7 +150,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.10.0');
+INSERT INTO oracle.schema_version (version) VALUES ('1.10.1');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -963,6 +963,12 @@ BEGIN
         IF origin_network = 'i95'
            AND origin_role = 'entry'
            AND origin_direction = 'NB'
+           AND origin_position <= (
+               SELECT (restart_point.source_metadata
+                   -> 'source_node' ->> 'latitude')::double precision
+               FROM oracle.toll_route_point AS restart_point
+               WHERE restart_point.point_id = 'i495:192NO'
+           )
            AND destination_network = 'i495'
            AND destination_role = 'exit'
            AND destination_direction = 'NB' THEN

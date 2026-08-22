@@ -152,12 +152,15 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "Every user-facing response MUST use Markdown" in normalized
     assert "include at least one relevant emoji" in normalized
     assert "### 🚧 Express Lanes unavailable" in prompt
-    assert "h:MM AM/PM EST" in prompt
+    assert "h:MM AM/PM EST or EDT" in prompt
+    assert "9:30 AM EDT" in prompt
     assert "9:30 AM EST" in prompt
-    assert "use the literal `EST` suffix year-round" in normalized
+    assert "actual zone abbreviation" in normalized
+    assert "use the literal `EST` suffix year-round" not in normalized
     assert "For every observed or modeled component" in normalized
     assert "recent_movement" in prompt
     assert "net_change_usd" in prompt
+    assert "unchanged component must still show its `$0.00` net change" in normalized
     assert "`rising`: 📈" in prompt
     assert "`falling`: 📉" in prompt
     assert "`unchanged`: ➡️" in prompt

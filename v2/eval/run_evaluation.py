@@ -9,6 +9,7 @@ import re
 import sys
 from argparse import ArgumentParser
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -32,6 +33,13 @@ _PROFILE = {
     "transponder_mode": "toll",
 }
 _EMOJIS = ("🚗", "💵", "🛣️", "📈", "📉", "➡️", "🔄", "⚠️", "🎉", "✅", "🚧")
+_EASTERN_TIME = re.compile(r"\b(?:1[0-2]|[1-9]):[0-5]\d [AP]M E(?:S|D)T\b")
+_MOVEMENT_EMOJIS = {
+    "rising": "📈",
+    "falling": "📉",
+    "unchanged": "➡️",
+    "mixed": "🔄",
+}
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
@@ -121,6 +129,89 @@ def _result_endpoints(payload: dict[str, Any]) -> tuple[object, object]:
     )
 
 
+def _movement_value_is_reported(response: str, raw_value: object) -> bool:
+    value = Decimal(str(raw_value))
+    magnitude = format(abs(value), "f")
+    if value >= 0:
+        return f"${magnitude}" in response
+    return bool(
+        re.search(
+            rf"(?:[-\u2212]\${re.escape(magnitude)}|\$[-\u2212]{re.escape(magnitude)}|"
+            rf"(?:down|decreased|fell|lower)\s+\${re.escape(magnitude)})",
+            response,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _component_context_error(
+    payload: dict[str, Any], response: str
+) -> list[EvaluationOutput] | None:
+    folded = response.casefold()
+    components = [
+        component
+        for component in payload.get("components", [])
+        if isinstance(component, dict)
+    ]
+    source_kinds = {
+        str(source_kind)
+        for component in components
+        if (source_kind := component.get("source_kind"))
+    }
+    if payload.get("source_kind"):
+        source_kinds.add(str(payload["source_kind"]))
+    if source_kinds and (
+        not any(term in folded for term in ("pricing", "provenance"))
+        or any(source_kind.casefold() not in folded for source_kind in source_kinds)
+    ):
+        return _result(
+            False, "response omitted component price provenance", "missing_provenance"
+        )
+
+    for component in components:
+        movement = component.get("recent_movement")
+        if isinstance(movement, dict):
+            direction = str(movement.get("direction", ""))
+            required = [
+                direction,
+                _MOVEMENT_EMOJIS.get(direction, ""),
+            ]
+            if movement.get("net_change_percent") is not None:
+                required.append(f"{str(movement['net_change_percent']).lstrip('+-')}%")
+            if not _movement_value_is_reported(
+                response, movement.get("net_change_usd")
+            ) or any(value and value.casefold() not in folded for value in required):
+                return _result(
+                    False,
+                    "response omitted tool-provided recent movement",
+                    "missing_movement",
+                )
+
+        comparison = component.get("prior_week_comparison")
+        if isinstance(comparison, dict):
+            delta = Decimal(str(comparison["current_delta_usd"]))
+            message = (
+                "⚠️ Higher than the recent median"
+                if delta > 0
+                else "🎉 You're getting a deal — below the recent median"
+                if delta < 0
+                else "✅ At the recent median"
+            )
+            required = [
+                message,
+                f"${comparison['median_usd']}",
+                f"${comparison['minimum_usd']}",
+                f"${comparison['maximum_usd']}",
+            ]
+            if any(value.casefold() not in folded for value in required):
+                return _result(
+                    False,
+                    "response omitted tool-provided historical comparison",
+                    "missing_comparison",
+                )
+    return None
+
+
 def _trace_messages(traces: list[dict[str, Any]]) -> Messages:
     def walk(trace: dict[str, Any]) -> Messages:
         messages = [cast(Message, trace["message"])] if trace.get("message") else []
@@ -191,11 +282,13 @@ def evaluate_westpark_turn(
         return _result(
             False, "priced route did not contain two components", "bad_route"
         )
-    if "EST" not in response:
+    if not _EASTERN_TIME.search(response):
         return _result(False, "response omitted observation time", "missing_time")
 
     if style_error := _response_style_error(response, "response"):
         return style_error
+    if context_error := _component_context_error(payload, response):
+        return context_error
     return _result(True, "exact route call and grounded response passed", "passed")
 
 
@@ -257,12 +350,14 @@ def evaluate_restart_turns(
         return _result(
             False, "accepted response omitted the tool price", "ungrounded_price"
         )
-    if "EST" not in accepted_response:
+    if not _EASTERN_TIME.search(accepted_response):
         return _result(
             False, "accepted response omitted observation time", "missing_time"
         )
     if style_error := _response_style_error(accepted_response, "accepted response"):
         return style_error
+    if context_error := _component_context_error(accepted_payload, accepted_response):
+        return context_error
     return _result(True, "restart offer and accepted TP1NB price passed", "passed")
 
 
@@ -331,12 +426,14 @@ def evaluate_fallback_turns(
         return _result(
             False, "accepted response omitted the tool price", "ungrounded_price"
         )
-    if "EST" not in accepted_response:
+    if not _EASTERN_TIME.search(accepted_response):
         return _result(
             False, "accepted response omitted observation time", "missing_time"
         )
     if style_error := _response_style_error(accepted_response, "accepted response"):
         return style_error
+    if context_error := _component_context_error(accepted_payload, accepted_response):
+        return context_error
     return _result(True, "TP1SB offer and accepted fallback price passed", "passed")
 
 
@@ -462,6 +559,9 @@ def main(window: str, suite: str = "all") -> None:
 
 
 def _self_check() -> None:
+    assert _movement_value_is_reported("down $0.50", "-0.50")
+    assert _movement_value_is_reported("\u2212$0.50", "-0.50")
+    assert not _movement_value_is_reported("$0.50", "-0.50")
     rows = load_rows()
     assert [row["id"] for row in rows] == [
         "reagan-airport-to-westpark",
@@ -492,12 +592,56 @@ def _self_check() -> None:
         "tool_result": {
             "origin_point_id": "airport_dca",
             "destination_point_id": "i495:1859ND",
+            "source_kind": "observed",
             "total_usd": "16.40",
-            "components": [{"route_step_id": "step-1"}, {"route_step_id": "step-2"}],
+            "components": [
+                {
+                    "route_step_id": "step-1",
+                    "source_kind": "observed",
+                    "price_usd": "4.80",
+                    "observed_at": "2026-08-22T10:50:00-04:00",
+                    "recent_movement": {
+                        "direction": "unchanged",
+                        "net_change_usd": "0.00",
+                        "net_change_percent": "0.0",
+                    },
+                    "prior_week_comparison": {
+                        "median_usd": "4.80",
+                        "minimum_usd": "4.80",
+                        "maximum_usd": "4.80",
+                        "current_delta_usd": "0.00",
+                    },
+                },
+                {
+                    "route_step_id": "step-2",
+                    "source_kind": "observed",
+                    "price_usd": "11.60",
+                    "observed_at": "2026-08-22T10:50:00-04:00",
+                    "recent_movement": {
+                        "direction": "mixed",
+                        "net_change_usd": "0.35",
+                        "net_change_percent": "3.1",
+                    },
+                    "prior_week_comparison": {
+                        "median_usd": "12.05",
+                        "minimum_usd": "11.25",
+                        "maximum_usd": "12.30",
+                        "current_delta_usd": "-0.45",
+                    },
+                },
+            ],
         },
         "is_error": False,
     }
-    good_response = "### 🚗 Current toll\n\n**Estimate: $16.40** at 9:30 AM EST."
+    good_response = (
+        "### 🚗 Current toll\n\n**Estimate: $16.40** at 9:30 AM EDT.\n\n"
+        "**Provenance:** Observed pricing.\n\n"
+        "- ➡️ unchanged: $0.00 (0.0%)\n"
+        "- 🔄 mixed: $0.35 (3.1%)\n"
+        "- ✅ At the recent median of $4.80; range $4.80-$4.80\n"
+        "- 🎉 You're getting a deal — below the recent median of $12.05; "
+        "range $11.25-$12.30"
+    )
     assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
     assert (
         evaluate_westpark_turn([], good_response, metadata)[0].label == "tool_mismatch"
@@ -518,6 +662,30 @@ def _self_check() -> None:
     assert (
         evaluate_westpark_turn([success], "$16.40 at 9:30 AM EST", metadata)[0].label
         == "missing_markdown"
+    )
+    missing_provenance = good_response.replace(
+        "**Provenance:** Observed pricing.\n\n", ""
+    )
+    assert (
+        evaluate_westpark_turn([success], missing_provenance, metadata)[0].label
+        == "missing_provenance"
+    )
+    missing_movement = good_response.replace(
+        "- ➡️ unchanged: $0.00 (0.0%)\n- 🔄 mixed: $0.35 (3.1%)\n", ""
+    )
+    assert (
+        evaluate_westpark_turn([success], missing_movement, metadata)[0].label
+        == "missing_movement"
+    )
+    missing_comparison = good_response.replace(
+        "- ✅ At the recent median of $4.80; range $4.80-$4.80\n"
+        "- 🎉 You're getting a deal — below the recent median of $12.05; "
+        "range $11.25-$12.30",
+        "",
+    )
+    assert (
+        evaluate_westpark_turn([success], missing_comparison, metadata)[0].label
+        == "missing_comparison"
     )
     closure = {
         **success,
