@@ -5,14 +5,28 @@
 import asyncio
 import json
 import threading
+import tomllib
 import urllib.error
 import urllib.request
 from datetime import date
+from pathlib import Path
 
 import pytest
 
 from agent import dev_chat
 from agent.dev_chat import DevChat, create_server
+
+
+def test_local_console_uses_refreshable_aws_login_credentials():
+    root = Path(__file__).parents[1]
+    dependencies = tomllib.loads((root / "pyproject.toml").read_text())["project"][
+        "dependencies"
+    ]
+    readme = (root / "README.md").read_text()
+
+    assert any(dependency.startswith("boto3[crt]") for dependency in dependencies)
+    assert "AWS_PROFILE=nova-toll" in readme
+    assert "export-credentials" not in readme
 
 
 class _Metrics:

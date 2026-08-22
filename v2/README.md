@@ -92,16 +92,17 @@ From `v2/`, configure the same AWS and database environment used by the live
 agent tests, then run:
 
 ```sh
-eval "$(AWS_PROFILE=nova-toll aws configure export-credentials --format env)"
-AWS_DEFAULT_REGION=us-east-1 uv run python -m agent.dev_chat
+AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+  uv run python -m agent.dev_chat
 ```
 
 Open <http://127.0.0.1:8000>. The agent reads its OpenAI credential from SSM;
-the exported AWS session credentials remain in the current shell and must never
-be placed in a local file. Required database variables are `DB_HOST`,
-`DB_PORT`, `DB_NAME`, and `DB_CA_BUNDLE_PATH`. If needed,
-`scripts/build_loader_zip.sh` creates the verified RDS CA bundle at
-`infra/build/loader/rds-ca-bundle.pem`.
+the Boto3 login provider refreshes the `nova-toll` profile's temporary
+credentials without writing them to a project file. Run `aws login --profile
+nova-toll` again when its login session expires after up to 12 hours. Required
+database variables are `DB_HOST`, `DB_PORT`, `DB_NAME`, and
+`DB_CA_BUNDLE_PATH`. If needed, `scripts/build_loader_zip.sh` creates the
+verified RDS CA bundle at `infra/build/loader/rds-ca-bundle.pem`.
 
 Its stable developer prompt uses OpenAI's explicit provider-managed prompt cache
 with a 30-minute TTL. Strands exposes cache reuse through

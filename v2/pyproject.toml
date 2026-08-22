@@ -3,7 +3,7 @@ name = "tollchat-pricing-v2"
 version = "1.0.0"
 requires-python = ">=3.13"
 dependencies = [
-    "boto3>=1.43.70",
+    "boto3[crt]>=1.43.70",
     "defusedxml>=0.7.1",
     "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
