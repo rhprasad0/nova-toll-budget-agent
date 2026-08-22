@@ -72,14 +72,23 @@ other candidates remain reasonably plausible, ask one concise question naming
 the candidates instead of guessing or calling a tool. Retain every already
 supplied input across clarification turns.
 
-When the destination is Westpark Drive and the origin is Reagan Airport or an
-I-395/I-95 entry, select `i495:1859ND` as the destination and price the trip
-immediately. Do not select another Westpark point or ask the user to choose
-between duplicate Westpark entries for these origins.
+When the user says only `Tysons`, ask one concise question naming Westpark
+Drive, Jones Branch/Route 123, and Route 7. Do not call a tool until the user
+chooses one, and retain every other supplied current or annual input.
 
-For a current trip from `Springfield-Franconia` to Westpark Drive, select
-`i95:206NO` as the origin and apply the Westpark rule above. Do not ask the user
-to choose between the two Franconia-Springfield prompt points.
+When the destination is Westpark Drive and the origin is Reagan Airport or a
+southbound I-395 entry, select `i495:1859ND` as the destination and price the
+trip immediately. Do not select another Westpark point or ask the user to
+choose between duplicate Westpark entries for these origins. Never apply this
+duplicate-point rule to a northbound I-95 entry.
+
+For a trip from `Springfield-Franconia` to Tysons, select `i95:206NO` as the
+origin. Westpark Drive uses `i495:185ND`, Jones Branch/Route 123 uses
+`i495:183ND`, and Route 7 uses `i495:186ND`. For an annual return trip to
+Springfield-Franconia, Westpark uses `i495:185SO`, Jones Branch/Route 123 uses
+`i495:183SO`, and Route 7 uses `i495:186SO` as the origin and `i95:206SD` as the
+destination. Do not ask the user to choose between the two
+Franconia-Springfield prompt points.
 
 The complete endpoint `Washington`, case-insensitively, has a special rule that
 overrides general fuzzy matching. Unless the user directly binds that endpoint

@@ -246,9 +246,16 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "preserve the original other endpoint and pricing profile" in normalized
     assert "general-purpose lanes and is not included" in normalized
     assert "Do not offer this fallback for `unknown`" in normalized
-    assert "Reagan Airport or an I-395/I-95 entry" in normalized
+    assert "Reagan Airport or a southbound I-395 entry" in normalized
     assert "select `i495:1859ND`" in normalized
-    assert "select `i95:206NO` as the origin" in normalized
+    assert "select `i95:206NO` as the origin. Westpark Drive uses `i495:185ND`" in (
+        normalized
+    )
+    assert "Jones Branch/Route 123 uses `i495:183ND`" in normalized
+    assert "Route 7 uses `i495:186ND`" in normalized
+    assert "Westpark uses `i495:185SO`" in normalized
+    assert "Jones Branch/Route 123 uses `i495:183SO`" in normalized
+    assert "Route 7 uses `i495:186SO`" in normalized
     assert "i95_northbound_requires_i495_restart" in normalized
     assert "suggested_destination_point_id" in normalized
     assert "`prefix` with boundary `i495:192NO`" in normalized
@@ -267,7 +274,7 @@ def test_system_prompt_matches_its_versioned_contract():
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.0" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.1.0" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"
@@ -293,8 +300,8 @@ def test_system_prompt_matches_its_versioned_contract():
 def test_system_prompt_manifest_accepts_one_monotonic_release():
     previous = _contract_manifest()
     current = copy.deepcopy(previous)
-    current["system_prompt"]["current"] = "2.1.0"
-    current["system_prompt"]["releases"]["2.1.0"] = "a" * 64
+    current["system_prompt"]["current"] = "2.2.0"
+    current["system_prompt"]["releases"]["2.2.0"] = "a" * 64
 
     version_check.validate_manifest_update(previous, current)
     version_check.validate_manifest_update({}, previous)
@@ -347,8 +354,8 @@ def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases():
         version_check.validate_manifest_update(previous, {})
 
     advanced = copy.deepcopy(previous)
-    advanced["system_prompt"]["current"] = "2.2.0"
-    advanced["system_prompt"]["releases"].update({"2.1.0": "b" * 64, "2.2.0": "c" * 64})
+    advanced["system_prompt"]["current"] = "2.3.0"
+    advanced["system_prompt"]["releases"].update({"2.2.0": "b" * 64, "2.3.0": "c" * 64})
     with pytest.raises(ValueError, match="exactly the new current release"):
         version_check.validate_manifest_update(previous, advanced)
 

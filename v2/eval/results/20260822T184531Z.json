@@ -1,0 +1,472 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "I'm on the phone with a recruiter about a $120,000 job. If I commute from Leesburg Bypass to Route 28 Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year, what does the tolled commute do to my income?",
+      "actual_output": "### \ud83d\udcbc Tolled commute impact\n\n**Under the middle historical scenario (P50), the $120,000 job leaves an estimated **$73,299.20** after the one-third tax assumption and tolled commute costs.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,916.80 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $2,784.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $6,700.80\n- \ud83d\udcbc **Additional gross salary needed to offset:** $10,051.20\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| P25 \u2014 lower historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P50 \u2014 middle historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P90 \u2014 higher historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers only the tolled portions between the validated Leesburg Bypass\u2013Route 28 endpoints; all untolled commute segments are excluded.\n- The estimate assumes one-third of gross income goes to taxes; it is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- It assumes **240 Monday\u2013Friday office days**, with an 8:00 AM outbound trip and a 5:30 PM return.\n- The toll evidence covers **60 complete paired commute days from 6/1/2026 through 8/21/2026**, with 100% weekday coverage. It uses current fixed rates, no modeled prices, and a complete historical sample\u2014not a forecast or probability-based prediction.\n- The estimate covers **23.83 tolled miles per round trip**, or **5,719.20 annual tolled miles**.\n\nFor the recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask whether arrival and departure times are flexible.\n- Ask about direct toll reimbursement.\n",
+      "name": "leesburg-route-28-job-offer",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "response": "### \ud83d\udcbc Tolled commute impact\n\n**Under the middle historical scenario (P50), the $120,000 job leaves an estimated **$73,299.20** after the one-third tax assumption and tolled commute costs.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,916.80 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $2,784.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $6,700.80\n- \ud83d\udcbc **Additional gross salary needed to offset:** $10,051.20\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| P25 \u2014 lower historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P50 \u2014 middle historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n| P90 \u2014 higher historical scenario | $27.92 | $558.40 | $6,700.80 | $73,299.20 |\n\n#### \u26a0\ufe0f Assumptions and limitations\n\n- This covers only the tolled portions between the validated Leesburg Bypass\u2013Route 28 endpoints; all untolled commute segments are excluded.\n- The estimate assumes one-third of gross income goes to taxes; it is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- It assumes **240 Monday\u2013Friday office days**, with an 8:00 AM outbound trip and a 5:30 PM return.\n- The toll evidence covers **60 complete paired commute days from 6/1/2026 through 8/21/2026**, with 100% weekday coverage. It uses current fixed rates, no modeled prices, and a complete historical sample\u2014not a forecast or probability-based prediction.\n- The estimate covers **23.83 tolled miles per round trip**, or **5,719.20 annual tolled miles**.\n\nFor the recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask whether arrival and departure times are flexible.\n- Ask about direct toll reimbursement.\n",
+          "calls": [
+            {
+              "name": "get_annual_toll_ballpark",
+              "input": {
+                "outbound": {
+                  "origin_point_id": "greenway:1:entry:EB",
+                  "destination_point_id": "greenway:28:exit:EB",
+                  "departure_time": "08:00:00"
+                },
+                "return": {
+                  "origin_point_id": "greenway:28:entry:WB",
+                  "destination_point_id": "greenway:1:exit:WB",
+                  "departure_time": "17:30:00"
+                },
+                "weekdays": [
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday"
+                ],
+                "planned_annual_commute_days": 240,
+                "gross_annual_income_usd": "120000.00"
+              },
+              "tool_result": {
+                "method": "recent_complete_same_date_round_trips",
+                "evaluated_at": "2026-08-22T14:45:04.288084-04:00",
+                "timezone": "America/New_York",
+                "target_window": {
+                  "start_date": "2026-05-30",
+                  "end_date": "2026-08-21",
+                  "date_count": 84
+                },
+                "weekdays": [
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday"
+                ],
+                "planned_annual_commute_days": 240,
+                "coverage": {
+                  "eligible_date_count": 60,
+                  "complete_pair_count": 60,
+                  "coverage_percent": "100.0",
+                  "by_weekday": [
+                    {
+                      "weekday": "monday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 12,
+                      "coverage_percent": "100.0"
+                    },
+                    {
+                      "weekday": "tuesday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 12,
+                      "coverage_percent": "100.0"
+                    },
+                    {
+                      "weekday": "wednesday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 12,
+                      "coverage_percent": "100.0"
+                    },
+                    {
+                      "weekday": "thursday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 12,
+                      "coverage_percent": "100.0"
+                    },
+                    {
+                      "weekday": "friday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 12,
+                      "coverage_percent": "100.0"
+                    }
+                  ]
+                },
+                "uses_modeled": false,
+                "uses_current_fixed_rates": true,
+                "facilities": [
+                  {
+                    "facility": "greenway",
+                    "sample_count": 60,
+                    "uses_modeled": false,
+                    "uses_current_fixed_rates": true,
+                    "scenarios": {
+                      "p25": {
+                        "daily_toll_usd": "11.60",
+                        "annual_toll_usd": "2784.00"
+                      },
+                      "p50": {
+                        "daily_toll_usd": "11.60",
+                        "annual_toll_usd": "2784.00"
+                      },
+                      "p90": {
+                        "daily_toll_usd": "11.60",
+                        "annual_toll_usd": "2784.00"
+                      }
+                    }
+                  }
+                ],
+                "assumptions": {
+                  "estimated_tax_fraction": "1/3",
+                  "vehicle_cost_per_mile_usd": "0.685",
+                  "distance_method": "straight_line_priced_facility_legs",
+                  "scope": "tolled_portions_only"
+                },
+                "income": {
+                  "gross_annual_usd": "120000.00",
+                  "estimated_tax_usd": "40000.00",
+                  "estimated_after_tax_usd": "80000.00"
+                },
+                "tolled_distance": {
+                  "daily_round_trip_miles": "23.83",
+                  "annual_miles": "5719.20"
+                },
+                "vehicle_cost": {
+                  "daily_usd": "16.32",
+                  "annual_usd": "3916.80"
+                },
+                "sample_status": "complete",
+                "available_date_range": {
+                  "start_date": "2026-06-01",
+                  "end_date": "2026-08-21"
+                },
+                "scenarios": {
+                  "p25": {
+                    "daily_toll_usd": "11.60",
+                    "annual_toll_usd": "2784.00",
+                    "daily_total_tolled_commute_cost_usd": "27.92",
+                    "average_monthly_tolled_commute_cost_usd": "558.40",
+                    "annual_total_tolled_commute_cost_usd": "6700.80",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73299.20",
+                    "tolled_commute_share_of_after_tax_income_percent": "8.4",
+                    "additional_gross_income_to_offset_usd": "10051.20"
+                  },
+                  "p50": {
+                    "daily_toll_usd": "11.60",
+                    "annual_toll_usd": "2784.00",
+                    "daily_total_tolled_commute_cost_usd": "27.92",
+                    "average_monthly_tolled_commute_cost_usd": "558.40",
+                    "annual_total_tolled_commute_cost_usd": "6700.80",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73299.20",
+                    "tolled_commute_share_of_after_tax_income_percent": "8.4",
+                    "additional_gross_income_to_offset_usd": "10051.20"
+                  },
+                  "p90": {
+                    "daily_toll_usd": "11.60",
+                    "annual_toll_usd": "2784.00",
+                    "daily_total_tolled_commute_cost_usd": "27.92",
+                    "average_monthly_tolled_commute_cost_usd": "558.40",
+                    "annual_total_tolled_commute_cost_usd": "6700.80",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "73299.20",
+                    "tolled_commute_share_of_after_tax_income_percent": "8.4",
+                    "additional_gross_income_to_offset_usd": "10051.20"
+                  }
+                }
+              },
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "leesburg-route-28-job-offer",
+        "suite": "annual",
+        "prompt": "I'm on the phone with a recruiter about a $120,000 job. If I commute from Leesburg Bypass to Route 28 Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year, what does the tolled commute do to my income?",
+        "expected_call": {
+          "outbound": {
+            "origin_point_id": "greenway:1:entry:EB",
+            "destination_point_id": "greenway:28:exit:EB",
+            "departure_time": "08:00:00"
+          },
+          "return": {
+            "origin_point_id": "greenway:28:entry:WB",
+            "destination_point_id": "greenway:1:exit:WB",
+            "departure_time": "17:30:00"
+          },
+          "weekdays": [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday"
+          ],
+          "planned_annual_commute_days": 240,
+          "gross_annual_income_usd": "120000.00"
+        },
+        "active_window": "all"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "TollChatEvaluator",
+      "evaluator_type": "TollChatEvaluator"
+    },
+    {
+      "input": "I'm on the phone with a recruiter about a $120,000 job in Tysons. I live near Springfield-Franconia, commute Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year. What does the tolled commute do to my income?",
+      "actual_output": "### \ud83d\udcbc Estimated income impact\n\n**Under the P50 middle historical scenario, your estimated income after the assumed tax and tolled commute is $62,100.80 per year.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after the one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,799.20 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $14,100.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $17,899.20\n- \ud83d\udcbc **Additional gross salary needed to offset:** $26,848.80\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| **P25 \u2014 lower historical scenario** | $70.68 | $1,413.60 | $16,963.20 | $63,036.80 |\n| **P50 \u2014 middle historical scenario** | $74.58 | $1,491.60 | $17,899.20 | $62,100.80 |\n| **P90 \u2014 higher historical scenario** | $81.83 | $1,636.60 | $19,639.20 | $60,360.80 |\n\n#### \u26a0\ufe0f Assumptions and qualifications\n\n- This estimate covers **only the tolled portion**: straight-line distance between endpoints of validated priced toll-facility legs. It excludes every untolled part of the commute.\n- The tool used **23.11 tolled miles per round-trip day**, or **5,546.40 annual miles**.\n- It assumes **one-third of gross income goes to taxes**; this is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- The toll estimate uses recent historical evidence from **6/1/2026\u20138/21/2026**, with **83.3% coverage** and **50 complete round-trip pairs**. The sample is partial, prices are modeled, and current fixed rates are not used. These are annualized historical daily scenarios\u2014not forecasts or probabilities.\n\nFor your recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask about flexible arrival or departure times.\n- Ask whether tolls are reimbursed directly.\n",
+      "name": "springfield-franconia-tysons-job-offer",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "response": "**\ud83d\udee3\ufe0f Which Tysons destination do you mean: Westpark Drive, Jones Branch/Route 123, or Route 7?**\n",
+          "calls": []
+        },
+        {
+          "response": "### \ud83d\udcbc Estimated income impact\n\n**Under the P50 middle historical scenario, your estimated income after the assumed tax and tolled commute is $62,100.80 per year.**\n\n- \ud83d\udcb0 **Gross annual income:** $120,000.00\n- \ud83e\uddfe **Income after the one-third tax assumption:** $80,000.00\n- \ud83d\ude99 **Tolled-segment vehicle cost:** $3,799.20 annually\n- \ud83d\udee3\ufe0f **P50 annual toll:** $14,100.00\n- \ud83d\udcc9 **P50 total annual tolled-commute cost:** $17,899.20\n- \ud83d\udcbc **Additional gross salary needed to offset:** $26,848.80\n\n| Scenario | Per office day | Average monthly | Annual | Remaining income |\n|---|---:|---:|---:|---:|\n| **P25 \u2014 lower historical scenario** | $70.68 | $1,413.60 | $16,963.20 | $63,036.80 |\n| **P50 \u2014 middle historical scenario** | $74.58 | $1,491.60 | $17,899.20 | $62,100.80 |\n| **P90 \u2014 higher historical scenario** | $81.83 | $1,636.60 | $19,639.20 | $60,360.80 |\n\n#### \u26a0\ufe0f Assumptions and qualifications\n\n- This estimate covers **only the tolled portion**: straight-line distance between endpoints of validated priced toll-facility legs. It excludes every untolled part of the commute.\n- The tool used **23.11 tolled miles per round-trip day**, or **5,546.40 annual miles**.\n- It assumes **one-third of gross income goes to taxes**; this is not an actual tax calculation.\n- Vehicle cost uses **$0.685 per straight-line tolled mile**, a fixed compact-SUV benchmark from [AAA](https://www.ace.aaa.com/automotive/advocacy/cost-of-driving.html), not your individualized vehicle expense.\n- The toll estimate uses recent historical evidence from **6/1/2026\u20138/21/2026**, with **83.3% coverage** and **50 complete round-trip pairs**. The sample is partial, prices are modeled, and current fixed rates are not used. These are annualized historical daily scenarios\u2014not forecasts or probabilities.\n\nFor your recruiter, you may want to:\n\n- Confirm the fixed office days.\n- Ask about flexible arrival or departure times.\n- Ask whether tolls are reimbursed directly.\n",
+          "calls": [
+            {
+              "name": "get_annual_toll_ballpark",
+              "input": {
+                "outbound": {
+                  "origin_point_id": "i95:206NO",
+                  "destination_point_id": "i495:185ND",
+                  "departure_time": "08:00:00"
+                },
+                "return": {
+                  "origin_point_id": "i495:185SO",
+                  "destination_point_id": "i95:206SD",
+                  "departure_time": "17:30:00"
+                },
+                "weekdays": [
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday"
+                ],
+                "planned_annual_commute_days": 240,
+                "gross_annual_income_usd": "120000.00"
+              },
+              "tool_result": {
+                "method": "recent_complete_same_date_round_trips",
+                "evaluated_at": "2026-08-22T14:45:14.018858-04:00",
+                "timezone": "America/New_York",
+                "target_window": {
+                  "start_date": "2026-05-30",
+                  "end_date": "2026-08-21",
+                  "date_count": 84
+                },
+                "weekdays": [
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday"
+                ],
+                "planned_annual_commute_days": 240,
+                "coverage": {
+                  "eligible_date_count": 60,
+                  "complete_pair_count": 50,
+                  "coverage_percent": "83.3",
+                  "by_weekday": [
+                    {
+                      "weekday": "monday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 11,
+                      "coverage_percent": "91.7"
+                    },
+                    {
+                      "weekday": "tuesday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 11,
+                      "coverage_percent": "91.7"
+                    },
+                    {
+                      "weekday": "wednesday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 9,
+                      "coverage_percent": "75.0"
+                    },
+                    {
+                      "weekday": "thursday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 10,
+                      "coverage_percent": "83.3"
+                    },
+                    {
+                      "weekday": "friday",
+                      "eligible_date_count": 12,
+                      "complete_pair_count": 9,
+                      "coverage_percent": "75.0"
+                    }
+                  ]
+                },
+                "uses_modeled": true,
+                "uses_current_fixed_rates": false,
+                "facilities": [
+                  {
+                    "facility": "i95_i495",
+                    "sample_count": 50,
+                    "uses_modeled": true,
+                    "uses_current_fixed_rates": false,
+                    "scenarios": {
+                      "p25": {
+                        "daily_toll_usd": "54.85",
+                        "annual_toll_usd": "13164.00"
+                      },
+                      "p50": {
+                        "daily_toll_usd": "58.75",
+                        "annual_toll_usd": "14100.00"
+                      },
+                      "p90": {
+                        "daily_toll_usd": "66.00",
+                        "annual_toll_usd": "15840.00"
+                      }
+                    }
+                  }
+                ],
+                "assumptions": {
+                  "estimated_tax_fraction": "1/3",
+                  "vehicle_cost_per_mile_usd": "0.685",
+                  "distance_method": "straight_line_priced_facility_legs",
+                  "scope": "tolled_portions_only"
+                },
+                "income": {
+                  "gross_annual_usd": "120000.00",
+                  "estimated_tax_usd": "40000.00",
+                  "estimated_after_tax_usd": "80000.00"
+                },
+                "tolled_distance": {
+                  "daily_round_trip_miles": "23.11",
+                  "annual_miles": "5546.40"
+                },
+                "vehicle_cost": {
+                  "daily_usd": "15.83",
+                  "annual_usd": "3799.20"
+                },
+                "sample_status": "partial",
+                "available_date_range": {
+                  "start_date": "2026-06-01",
+                  "end_date": "2026-08-21"
+                },
+                "scenarios": {
+                  "p25": {
+                    "daily_toll_usd": "54.85",
+                    "annual_toll_usd": "13164.00",
+                    "daily_total_tolled_commute_cost_usd": "70.68",
+                    "average_monthly_tolled_commute_cost_usd": "1413.60",
+                    "annual_total_tolled_commute_cost_usd": "16963.20",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "63036.80",
+                    "tolled_commute_share_of_after_tax_income_percent": "21.2",
+                    "additional_gross_income_to_offset_usd": "25444.80"
+                  },
+                  "p50": {
+                    "daily_toll_usd": "58.75",
+                    "annual_toll_usd": "14100.00",
+                    "daily_total_tolled_commute_cost_usd": "74.58",
+                    "average_monthly_tolled_commute_cost_usd": "1491.60",
+                    "annual_total_tolled_commute_cost_usd": "17899.20",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "62100.80",
+                    "tolled_commute_share_of_after_tax_income_percent": "22.4",
+                    "additional_gross_income_to_offset_usd": "26848.80"
+                  },
+                  "p90": {
+                    "daily_toll_usd": "66.00",
+                    "annual_toll_usd": "15840.00",
+                    "daily_total_tolled_commute_cost_usd": "81.83",
+                    "average_monthly_tolled_commute_cost_usd": "1636.60",
+                    "annual_total_tolled_commute_cost_usd": "19639.20",
+                    "estimated_annual_income_after_tax_and_tolled_commute_usd": "60360.80",
+                    "tolled_commute_share_of_after_tax_income_percent": "24.5",
+                    "additional_gross_income_to_offset_usd": "29458.80"
+                  }
+                }
+              },
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "springfield-franconia-tysons-job-offer",
+        "suite": "annual",
+        "prompt": "I'm on the phone with a recruiter about a $120,000 job in Tysons. I live near Springfield-Franconia, commute Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year. What does the tolled commute do to my income?",
+        "conversation": [
+          "I'm on the phone with a recruiter about a $120,000 job in Tysons. I live near Springfield-Franconia, commute Monday through Friday, leave at 8 AM, return at 5:30 PM, and plan 240 office days a year. What does the tolled commute do to my income?",
+          "Use Westpark Drive."
+        ],
+        "expected_clarification": [
+          "Westpark",
+          "Jones Branch",
+          "Route 7"
+        ],
+        "expected_call": {
+          "outbound": {
+            "origin_point_id": "i95:206NO",
+            "destination_point_id": "i495:185ND",
+            "departure_time": "08:00:00"
+          },
+          "return": {
+            "origin_point_id": "i495:185SO",
+            "destination_point_id": "i95:206SD",
+            "departure_time": "17:30:00"
+          },
+          "weekdays": [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday"
+          ],
+          "planned_annual_commute_days": 240,
+          "gross_annual_income_usd": "120000.00"
+        },
+        "active_window": "all"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "TollChatEvaluator",
+      "evaluator_type": "TollChatEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true
+  ],
+  "reasons": [
+    "annual tool call and affordability response passed",
+    "annual tool call and affordability response passed"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "annual tool call and affordability response passed",
+        "label": "passed"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "annual tool call and affordability response passed",
+        "label": "passed"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null
+  ]
+}

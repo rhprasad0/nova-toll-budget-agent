@@ -1,5 +1,5 @@
 # pyright: basic
-"""Code-grade TollChat v2 current-toll routing regressions."""
+"""Code-grade TollChat v2 pricing and affordability regressions."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 import boto3
 from strands.types.content import Message, Messages
@@ -27,6 +28,7 @@ from agent.toll_agent import build_agent  # noqa: E402
 
 _CASES_PATH = Path(__file__).with_name("test-cases.jsonl")
 _RESULTS_DIR = Path(__file__).with_name("results")
+_EASTERN = ZoneInfo("America/New_York")
 _PROFILE = {
     "vehicle_class": "two_axle_passenger",
     "payment_method": "e_zpass",
@@ -62,7 +64,10 @@ def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
 
 
 def load_cases(
-    path: Path = _CASES_PATH, suite: str = "all", window: str = "all"
+    path: Path = _CASES_PATH,
+    suite: str = "all",
+    window: str = "all",
+    weekday: int | None = None,
 ) -> list[Case[str, str]]:
     return [
         Case[str, str](
@@ -73,6 +78,7 @@ def load_cases(
         for row in load_rows(path)
         if suite == "all" or row.get("suite") == suite
         if window == "all" or window in row.get("windows", [])
+        if weekday is None or weekday in row.get("weekdays", range(1, 8))
     ]
 
 
@@ -307,75 +313,6 @@ def evaluate_westpark_turn(
     return _result(True, "exact route call and grounded response passed", "passed")
 
 
-def evaluate_restart_turns(
-    turns: list[dict[str, Any]], metadata: dict[str, Any]
-) -> list[EvaluationOutput]:
-    expected_calls = metadata["expected_calls"]
-    if calls_error := _expected_calls_error(turns, expected_calls):
-        return calls_error
-
-    initial_call = turns[0]["calls"][0]
-    initial_payload = initial_call.get("tool_result")
-    if not isinstance(initial_payload, dict) or initial_payload.get("status") != (
-        "invalid_origin"
-    ):
-        return _result(False, "initial result was not invalid_origin", "bad_route")
-    reason = initial_payload.get("reason", {})
-    details = reason.get("details", {}) if isinstance(reason, dict) else {}
-    if (
-        reason.get("code") != "i95_northbound_requires_i495_restart"
-        or details.get("suggested_restart_point_id") != "i495:192NO"
-        or details.get("suggested_destination_point_id") != "i495:185ND"
-        or "alternatives" in details
-    ):
-        return _result(False, "initial restart contract was malformed", "bad_route")
-
-    initial_response = str(turns[0].get("response", ""))
-    folded = initial_response.casefold()
-    if not (
-        any(term in folded for term in ("would you like", "want me to", "should i"))
-        and "i-495" in folded
-        and "general-purpose" in folded
-        and re.search(r"not (?:be )?included", folded)
-    ):
-        return _result(False, "restart offer or disclosure was missing", "bad_offer")
-    if re.search(r"\$\s*\d", initial_response) or any(
-        name in folded for name in ("edsall", "seminary")
-    ):
-        return _result(
-            False, "initial offer included a price or bad alternative", "bad_offer"
-        )
-    if style_error := _response_style_error(initial_response, "restart offer"):
-        return style_error
-
-    accepted_call = turns[1]["calls"][0]
-    accepted_payload = accepted_call.get("tool_result")
-    if not isinstance(accepted_payload, dict) or "total_usd" not in accepted_payload:
-        return _result(False, "accepted restart returned no price", "tool_unavailable")
-    expected_accepted = expected_calls[1]
-    if _result_endpoints(accepted_payload) != (
-        expected_accepted["origin_point_id"],
-        expected_accepted["destination_point_id"],
-    ):
-        return _result(
-            False, "restart result endpoints did not match", "result_mismatch"
-        )
-    accepted_response = str(turns[1].get("response", ""))
-    if f"${accepted_payload['total_usd']}" not in accepted_response:
-        return _result(
-            False, "accepted response omitted the tool price", "ungrounded_price"
-        )
-    if not _EASTERN_TIME.search(accepted_response):
-        return _result(
-            False, "accepted response omitted observation time", "missing_time"
-        )
-    if style_error := _response_style_error(accepted_response, "accepted response"):
-        return style_error
-    if context_error := _component_context_error(accepted_payload, accepted_response):
-        return context_error
-    return _result(True, "restart offer and accepted TP1NB price passed", "passed")
-
-
 def evaluate_fallback_turns(
     turns: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
@@ -509,8 +446,36 @@ def evaluate_unavailable_turn(
 
 
 def evaluate_annual_turn(
-    calls: list[dict[str, Any]], response: str, metadata: dict[str, Any]
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
+    clarification = metadata.get("expected_clarification")
+    if clarification:
+        if len(turns) != 2 or turns[0].get("calls"):
+            return _result(
+                False,
+                "Tysons clarification must precede the annual tool call",
+                "bad_clarification",
+            )
+        response = str(turns[0].get("response", ""))
+        folded = response.casefold()
+        if (
+            any(str(choice).casefold() not in folded for choice in clarification)
+            or "?" not in response
+            or "restart" in folded
+        ):
+            return _result(
+                False, "Tysons clarification omitted an exit", "bad_clarification"
+            )
+        if style_error := _response_style_error(response, "Tysons clarification"):
+            return style_error
+        calls = turns[1].get("calls", [])
+        response = str(turns[1].get("response", ""))
+    else:
+        if len(turns) != 1:
+            return _result(False, "expected one annual turn", "turn_count")
+        calls = turns[0].get("calls", [])
+        response = str(turns[0].get("response", ""))
+
     if len(calls) != 1 or calls[0].get("name") != "get_annual_toll_ballpark":
         return _result(False, "expected exactly one annual call", "tool_mismatch")
     call = calls[0]
@@ -599,19 +564,12 @@ class TollChatEvaluator(Evaluator[str, str]):
             else []
         )
         metadata = evaluation_case.metadata or {}
-        if metadata.get("suite") == "restart":
-            return evaluate_restart_turns(turns, metadata)
         if metadata.get("suite") == "fallback":
             return evaluate_fallback_turns(turns, metadata)
         if metadata.get("suite") == "unavailable":
             return evaluate_unavailable_turn(turns, metadata)
         if metadata.get("suite") == "annual":
-            calls = turns[0].get("calls", []) if len(turns) == 1 else []
-            return evaluate_annual_turn(
-                cast(list[dict[str, Any]], calls),
-                str(evaluation_case.actual_output or ""),
-                metadata,
-            )
+            return evaluate_annual_turn(turns, metadata)
         calls = turns[0].get("calls", []) if len(turns) == 1 else []
         return evaluate_westpark_turn(
             cast(list[dict[str, Any]], calls),
@@ -636,7 +594,12 @@ def _configure_database() -> None:
 def main(window: str, suite: str = "all") -> None:
     _configure_database()
     report = Experiment[str, str](
-        cases=load_cases(suite=suite, window=window), evaluators=[TollChatEvaluator()]
+        cases=load_cases(
+            suite=suite,
+            window=window,
+            weekday=datetime.now(_EASTERN).isoweekday(),
+        ),
+        evaluators=[TollChatEvaluator()],
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
     report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
@@ -653,33 +616,35 @@ def _self_check() -> None:
     assert [row["id"] for row in rows] == [
         "reagan-airport-to-westpark",
         "pentagon-eads-to-westpark",
-        "northbound-i95-to-westpark-restart",
+        "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
         "old-keene-mill-to-reagan-i95-unavailable",
         "leesburg-route-28-job-offer",
+        "springfield-franconia-tysons-job-offer",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
-        "northbound-i95-to-westpark-restart",
+        "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
     ]
+    assert [case.name for case in load_cases(window="i95_northbound", weekday=6)] == [
+        "dulles-airport-to-backlick-tp1sb-fallback"
+    ]
     assert [case.name for case in load_cases(window="i95_reversal")] == [
-        "northbound-i95-to-westpark-restart",
         "dulles-airport-to-backlick-tp1sb-fallback",
         "old-keene-mill-to-reagan-i95-unavailable",
     ]
     assert [case.name for case in load_cases(window="i95_southbound")] == [
         "reagan-airport-to-westpark",
         "pentagon-eads-to-westpark",
-        "northbound-i95-to-westpark-restart",
         "old-keene-mill-to-reagan-i95-unavailable",
     ]
-    metadata = rows[0]
+    metadata = rows[2]
     success = {
         "name": "get_current_toll_price",
         "input": metadata["expected_call"],
         "tool_result": {
-            "origin_point_id": "airport_dca",
-            "destination_point_id": "i495:1859ND",
+            "origin_point_id": "i95:206NO",
+            "destination_point_id": "i495:185ND",
             "source_kind": "observed",
             "total_usd": "16.40",
             "components": [
@@ -779,75 +744,13 @@ def _self_check() -> None:
         **success,
         "tool_result": {
             "status": "currently_unavailable",
-            "point_ids": ["airport_dca", "i495:1859ND"],
+            "point_ids": ["i95:206NO", "i495:185ND"],
         },
     }
     assert (
         evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].label
         == "tool_unavailable"
     )
-    restart = rows[2]
-    restart_turns = [
-        {
-            "response": (
-                "### 🛣️ Start after the junction\n\nWould you like me to price "
-                "from I-495? The general-purpose segment is not included."
-            ),
-            "calls": [
-                {
-                    "name": "get_current_toll_price",
-                    "input": restart["expected_calls"][0],
-                    "tool_result": {
-                        "status": "invalid_origin",
-                        "reason": {
-                            "code": "i95_northbound_requires_i495_restart",
-                            "details": {
-                                "point_id": "i95:206NO",
-                                "point_type": "entry",
-                                "suggested_restart_point_id": "i495:192NO",
-                                "suggested_destination_point_id": "i495:185ND",
-                            },
-                        },
-                    },
-                    "is_error": False,
-                }
-            ],
-        },
-        {
-            "response": "### 🚗 Current toll\n\n**Estimate: $4.50** at 9:30 AM EST.",
-            "calls": [
-                {
-                    "name": "get_current_toll_price",
-                    "input": restart["expected_calls"][1],
-                    "tool_result": {
-                        "origin_point_id": "i495:192NO",
-                        "destination_point_id": "i495:185ND",
-                        "total_usd": "4.50",
-                    },
-                    "is_error": False,
-                }
-            ],
-        },
-    ]
-    assert evaluate_restart_turns(restart_turns, restart)[0].test_pass
-    bad_offer = json.loads(json.dumps(restart_turns))
-    bad_offer[0]["response"] += " Try Edsall Road."
-    assert evaluate_restart_turns(bad_offer, restart)[0].label == "bad_offer"
-    unstyled_restart = json.loads(json.dumps(restart_turns))
-    unstyled_restart[0]["response"] = (
-        "Would you like me to price from I-495? The general-purpose segment "
-        "is not included."
-    )
-    assert (
-        evaluate_restart_turns(unstyled_restart, restart)[0].label == "missing_markdown"
-    )
-    wrong_restart_result = json.loads(json.dumps(restart_turns))
-    wrong_restart_result[1]["calls"][0]["tool_result"]["origin_point_id"] = "wrong"
-    assert (
-        evaluate_restart_turns(wrong_restart_result, restart)[0].label
-        == "result_mismatch"
-    )
-
     fallback = {**rows[3], "active_window": "i95_northbound"}
     fallback_turns = [
         {
@@ -1061,12 +964,30 @@ def _self_check() -> None:
         "| P90 | $25.00 | $500.00 | $6000.00 | $74000.00 |\n\n"
         "⚠️ Historical coverage; tolled straight-line portions only at $0.685/mile."
     )
-    assert evaluate_annual_turn([annual_call], annual_response, annual)[0].test_pass
+    annual_turns = [{"response": annual_response, "calls": [annual_call]}]
+    assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
     missing_table = annual_response.replace("|", "")
+    missing_table_turns = [{"response": missing_table, "calls": [annual_call]}]
     assert (
-        evaluate_annual_turn([annual_call], missing_table, annual)[0].label
+        evaluate_annual_turn(missing_table_turns, annual)[0].label
         == "missing_affordability_context"
     )
+    tysons = rows[6]
+    tysons_call = {**annual_call, "input": tysons["expected_call"]}
+    tysons_turns = [
+        {
+            "response": (
+                "**🛣️ Which Tysons exit: Westpark Drive, Jones Branch/Route 123, "
+                "or Route 7?**"
+            ),
+            "calls": [],
+        },
+        {"response": annual_response, "calls": [tysons_call]},
+    ]
+    assert evaluate_annual_turn(tysons_turns, tysons)[0].test_pass
+    premature_call = json.loads(json.dumps(tysons_turns))
+    premature_call[0]["calls"] = [tysons_call]
+    assert evaluate_annual_turn(premature_call, tysons)[0].label == "bad_clarification"
     print("self-check ok (fixtures and evaluator pass/fail branches; no network)")
 
 
@@ -1082,7 +1003,7 @@ if __name__ == "__main__":
         )
         parser.add_argument(
             "--suite",
-            choices=("all", "direct", "restart", "fallback", "unavailable", "annual"),
+            choices=("all", "direct", "fallback", "unavailable", "annual"),
             default="all",
         )
         args = parser.parse_args()

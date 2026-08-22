@@ -2,8 +2,8 @@
 
 ## 1. Evaluation Requirements
 
-- **User Input:** Cover the 495/95 junction behaviors from v1 recommendations 1 and 2, fix the stale plan from recommendation 4, and leave recommendation 3 out of scope.
-- **Interpreted Evaluation Requirements:** Code-grade direct prices, the TP1NB invalid-origin restart, the TP1SB closure fallback and acceptance, and unavailable northbound/southbound responses against the actual scheduled I-95 state.
+- **User Input:** Add current-price and annual-affordability evals for Springfield-Franconia to Tysons, treating I-95 as northbound on weekday mornings.
+- **Interpreted Evaluation Requirements:** Code-grade the direct northbound Westpark price and the multi-turn Tysons annual job-offer flow, while retaining the existing TP1SB fallback and scheduled unavailability coverage.
 
 ---
 
@@ -47,7 +47,7 @@ flowchart LR
 ### Exact route and tool-result correctness
 
 - **Evaluation Area:** Tool-call accuracy and result validity
-- **Description:** Each turn makes exactly one expected current-price call and returns the required price, invalid-origin restart, or lane-state unavailability contract.
+- **Description:** Each pricing turn makes the exact expected current-price call and returns the required direct price, fallback, or lane-state unavailability contract.
 - **Method:** Code-based
 
 ### Grounded response and fallback safety
@@ -68,18 +68,19 @@ flowchart LR
 
 - **Reagan Airport to Westpark:** Direct two-component price in the southbound window.
 - **Pentagon/Eads Street to Westpark:** Direct two-component price in the southbound window.
-- **Springfield-Franconia to Westpark:** TP1NB restart offer and accepted price in every I-95 window.
+- **Springfield-Franconia to Westpark:** Direct two-component price in the northbound window with no restart.
 - **Dulles Airport to Backlick Road:** TP1SB fallback offer and accepted price in northbound and reversal windows.
 - **Old Keene Mill Road to Reagan Airport:** Northbound unavailability without an ineligible fallback offer in southbound and reversal windows.
 - **Leesburg Bypass to Route 28:** Annual job-offer affordability with gross income, a complete work schedule, and fixed-rate Greenway tolls.
-- **Total number of test cases:** 6
+- **Springfield-Franconia to Tysons:** Exit clarification followed by an exact Westpark round-trip annual affordability call.
+- **Total number of test cases:** 7
 
 | **Scheduled window** | **Cases run** |
 | :-- | :-- |
-| `i95_northbound` | TP1NB restart; TP1SB unavailable/fallback |
-| `i95_reversal` | TP1NB restart; TP1SB unavailable/fallback; northbound unavailable |
-| `i95_southbound` | Two direct Westpark prices; TP1NB restart; northbound unavailable |
-| `all` with `annual` suite | Leesburg-to-Route-28 annual affordability |
+| `i95_northbound` | Direct Springfield-to-Westpark price; TP1SB unavailable/fallback |
+| `i95_reversal` | TP1SB unavailable/fallback; northbound unavailable |
+| `i95_southbound` | Two direct Westpark prices; northbound unavailable |
+| `all` with `annual` suite | Leesburg and Springfield-to-Tysons annual affordability |
 
 ---
 
@@ -110,6 +111,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Planning | Add tool tests and Strands evals for the two Westpark failures, then wire both into CI. |
 | 2026-08-22 | Coverage | Add TP1SB acceptance and scheduled northbound/southbound/reversal unavailability; exclude the adversarial three-turn case. |
 | 2026-08-22 | Affordability | Add an income-aware annual job-offer case with deterministic response grounding. |
+| 2026-08-22 | Springfield-Tysons | Replace the false current-price restart with a direct northbound route and add a Tysons-clarification annual case. |
 
 ### 6.2 Evaluation Progress
 
@@ -119,3 +121,6 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Offline evaluator | Completed | Pass/fail branches, CI contract, and the full non-live v2 suite pass. |
 | 2026-08-22 | Live execution | Scheduled | TP1NB passed live; state-specific cases await fresh timed windows because current I-95 evidence was stale. |
 | 2026-08-22 | Annual affordability | Implemented | Offline evaluator covers exact inputs, money grounding, Markdown table, emoji, assumptions, and tolled-only scope. |
+| 2026-08-22 | Springfield-Tysons regressions | Implemented | Current and annual cases code-grade the correct northbound endpoint and reject premature annual calls. |
+| 2026-08-22 | Springfield-Tysons live annual | Completed | Both annual cases passed; the Tysons conversation clarified the exit and made the exact corrected round-trip call. |
+| 2026-08-22 | Springfield-Westpark live current | Scheduled | Saturday route selection used the exact corrected call, but the live feed reported `NORTHBOUND_OPENING`; the strict price eval is weekday-only. |
