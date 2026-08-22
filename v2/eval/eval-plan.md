@@ -2,8 +2,8 @@
 
 ## 1. Evaluation Requirements
 
-- **User Input:** Bring annual-affordability evals to behavioral parity with the five-case current-price suite.
-- **Interpreted Evaluation Requirements:** Code-grade five annual cases spanning grounded fixed and modeled results, route and income clarification, complete required-input acquisition, and safe route unavailability while retaining existing current-price coverage.
+- **User Input:** Add a 52-week annual commute-day proposal and bring annual-affordability coverage to parity with the six-case current-price suite.
+- **Interpreted Evaluation Requirements:** Code-grade six annual cases spanning grounded fixed and modeled results, route and income clarification, adjustable annual-day estimation, complete required-input acquisition, and safe route unavailability while retaining existing current-price coverage.
 
 ---
 
@@ -74,16 +74,17 @@ flowchart LR
 - **Leesburg Bypass to Route 28:** Annual job-offer affordability with gross income, a complete work schedule, and fixed-rate Greenway tolls.
 - **Springfield-Franconia to Tysons:** Exit clarification followed by an exact Westpark round-trip annual affordability call.
 - **Leesburg missing schedule:** Request every missing schedule field in one turn without calling a tool or re-requesting supplied income.
+- **Leesburg annual-day estimate:** Propose 260 for Monday-Friday, wait for confirmation or adjustment, then honor 240 in the exact annual call.
 - **Leesburg salary range:** Request one annual gross estimate, retain the supplied commute details, then make the exact annual call after selection.
 - **Dulles Airport to Reagan Airport:** Accept the cross-direction current-price route, then explain a deterministically unsupported annual return route without scenarios, totals, or a current-price restart.
-- **Total number of test cases:** 11; six current-price and five annual-affordability cases.
+- **Total number of test cases:** 12; six current-price and six annual-affordability cases.
 
 | **Scheduled window** | **Cases run** |
 | :-- | :-- |
 | `i95_northbound` | Direct Springfield-to-Westpark and Dulles-to-Reagan routes; TP1SB unavailable/fallback |
 | `i95_reversal` | TP1SB unavailable/fallback; northbound unavailable |
 | `i95_southbound` | Two direct Westpark prices; northbound unavailable |
-| `all` with `annual` suite | Five annual success, clarification, input-acquisition, and unavailable-route behaviors |
+| `all` with `annual` suite | Six annual success, clarification, annual-day estimation, input-acquisition, and unavailable-route behaviors |
 
 ---
 
@@ -117,6 +118,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Springfield-Tysons | Replace the false current-price restart with a direct northbound route and add a Tysons-clarification annual case. |
 | 2026-08-22 | Methodology review | Label annualized daily percentiles precisely, remove unsupported AAA attribution, round annual vehicle cost after annualization, and collapse prompt releases for PR CI. |
 | 2026-08-22 | Annual parity | Expand annual coverage to five behavioral cases without changing production behavior or weakening graders for failures. |
+| 2026-08-22 | Annual-day estimate | Propose 52 times the weekly schedule, wait for acceptance or adjustment, and bind response money to its labeled context. |
 
 ### 6.2 Evaluation Progress
 
@@ -134,3 +136,4 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Cross-direction gap fix | Implemented | Both tools now accept the legitimate southbound I-495 boundary to northbound I-395 movement while retaining strict boundary and direction enums. |
 | 2026-08-22 | Cross-direction live current | Completed | 1/1 passed; the exact Dulles-to-Reagan call returned grounded stale-evidence unavailability rather than an internal validation error. |
 | 2026-08-22 | Final annual parity run | Completed | 5/5 passed against the final prompt contract. |
+| 2026-08-22 | Annual-day estimate and evaluator hardening | Completed | 6/6 passed live: the agent proposed 260, waited, honored 240, and the evaluator enforced scenario-row and P50-context money binding. |

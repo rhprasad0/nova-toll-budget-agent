@@ -1,10 +1,11 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs six current-toll routing cases and five
+This code-graded Strands suite runs six current-toll routing cases and six
 annual job-offer affordability cases through a fresh production agent. It
 verifies exact tool calls, route/fallback behavior, required-input and income
-clarification, safe annual route unavailability, grounded money, and the
-required Markdown/emoji response hierarchy.
+clarification, adjustable 52-week commute-day estimates, safe annual route
+unavailability, scenario-bound money, and the required Markdown/emoji response
+hierarchy.
 
 ## Offline check
 
@@ -30,7 +31,7 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
-The five annual cases are independent of the live I-95 direction:
+The six annual cases are independent of the live I-95 direction:
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \

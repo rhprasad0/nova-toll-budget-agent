@@ -51,6 +51,7 @@ _EMOJIS = (
     "💰",
     "🧾",
     "🎯",
+    "📅",
 )
 _EASTERN_TIME = re.compile(r"\b(?:1[0-2]|[1-9]):[0-5]\d [AP]M E(?:S|D)T\b")
 _MOVEMENT_EMOJIS = {
@@ -593,27 +594,67 @@ def evaluate_annual_turn(
         )
 
     scenarios = cast(dict[str, dict[str, Any]], payload["scenarios"])
-    required_values = [
-        payload["income"]["gross_annual_usd"],
-        payload["income"]["estimated_after_tax_usd"],
-        payload["vehicle_cost"]["annual_usd"],
-        scenarios["p50"]["annual_toll_usd"],
-        scenarios["p50"]["additional_gross_income_to_offset_usd"],
-    ]
-    for scenario in scenarios.values():
-        required_values.extend(
-            scenario[field]
-            for field in (
-                "daily_total_tolled_commute_cost_usd",
-                "average_monthly_tolled_commute_cost_usd",
-                "annual_total_tolled_commute_cost_usd",
-                "estimated_annual_income_after_tax_and_tolled_commute_usd",
-            )
+    lines = [line.replace(",", "") for line in response.splitlines()]
+
+    for label, scenario in scenarios.items():
+        cells: list[str] = []
+        for line in lines:
+            candidate = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            scenario_label = re.sub(r"[*_`]", "", candidate[0]).strip()
+            if line.lstrip().startswith("|") and re.match(
+                rf"^{re.escape(label)}\b", scenario_label, re.IGNORECASE
+            ):
+                cells = candidate
+                break
+        row_values = (
+            scenario["daily_total_tolled_commute_cost_usd"],
+            scenario["average_monthly_tolled_commute_cost_usd"],
+            scenario["annual_total_tolled_commute_cost_usd"],
+            scenario["estimated_annual_income_after_tax_and_tolled_commute_usd"],
         )
-    normalized = response.replace(",", "")
-    if any(f"${value}" not in normalized for value in required_values):
+        if len(cells) != 5 or any(
+            f"${value}" not in cell
+            for value, cell in zip(row_values, cells[1:], strict=True)
+        ):
+            return _result(
+                False,
+                f"{label.upper()} money was not bound to its scenario row",
+                "misbound_money",
+            )
+
+    p50 = scenarios["p50"]
+    required_contexts = (
+        (
+            "**",
+            "p50",
+            f"${p50['estimated_annual_income_after_tax_and_tolled_commute_usd']}",
+        ),
+        ("-", "gross", f"${payload['income']['gross_annual_usd']}"),
+        ("-", "tax", f"${payload['income']['estimated_after_tax_usd']}"),
+        ("-", "vehicle", f"${payload['vehicle_cost']['annual_usd']}"),
+        (
+            "-",
+            "annualized daily-p50 toll scenario",
+            f"${p50['daily_toll_usd']}",
+            f"${p50['annual_toll_usd']}",
+        ),
+        ("-", "total annual", f"${p50['annual_total_tolled_commute_cost_usd']}"),
+        (
+            "-",
+            "additional gross",
+            f"${p50['additional_gross_income_to_offset_usd']}",
+        ),
+    )
+    if any(
+        not any(
+            all(term.casefold() in line.casefold() for term in terms) for line in lines
+        )
+        for terms in required_contexts
+    ):
         return _result(
-            False, "annual response omitted tool-provided money", "ungrounded_money"
+            False,
+            "annual money was not bound to its required lead or bullet",
+            "misbound_money",
         )
     return _result(True, "annual tool call and affordability response passed", "passed")
 
@@ -658,9 +699,52 @@ def evaluate_annual_missing_inputs(
         )
     if re.search(r"(?:what|which).{0,30}(?:income|salary)", folded):
         return _result(False, "response re-requested supplied income", "repeated_input")
+    if "planned_annual_commute_days" in metadata["expected_missing_fields"] and not (
+        "52" in response
+        and "260" in response
+        and "monday" in folded
+        and "friday" in folded
+        and any(term in folded for term in ("adjust", "up or down", "higher", "lower"))
+    ):
+        return _result(
+            False,
+            "response omitted the adjustable 52-week annual-day estimate",
+            "missing_annual_day_estimate",
+        )
     return _result(
         True, "all missing annual inputs requested before any call", "passed"
     )
+
+
+def evaluate_annual_day_estimate(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 2:
+        return _result(
+            False, "expected annual-day confirmation and answer", "turn_count"
+        )
+    estimate_turn = turns[0]
+    if estimate_turn.get("calls"):
+        return _result(
+            False, "annual tool called before days were confirmed", "premature_call"
+        )
+    response = str(estimate_turn.get("response", ""))
+    if style_error := _response_style_error(response, "annual-day estimate"):
+        return style_error
+    folded = response.casefold()
+    estimate = str(metadata["expected_estimated_annual_commute_days"])
+    if not (
+        "52" in response
+        and estimate in response
+        and any(term in folded for term in ("accept", "confirm", "use"))
+        and any(term in folded for term in ("adjust", "up or down", "higher", "lower"))
+    ):
+        return _result(
+            False,
+            "response did not propose an adjustable 52-week estimate",
+            "bad_annual_day_estimate",
+        )
+    return evaluate_annual_turn([turns[1]], metadata)
 
 
 def evaluate_annual_income_clarification(
@@ -682,7 +766,12 @@ def evaluate_annual_income_clarification(
             "?" in response
             or any(
                 term in folded
-                for term in ("please give", "please provide", "could you provide")
+                for term in (
+                    "please give",
+                    "please provide",
+                    "could you provide",
+                    "please choose",
+                )
             )
         )
         and any(term in folded for term in ("one", "single"))
@@ -826,6 +915,8 @@ class TollChatEvaluator(Evaluator[str, str]):
             behavior = metadata.get("annual_behavior")
             if behavior == "missing_inputs":
                 return evaluate_annual_missing_inputs(turns, metadata)
+            if behavior == "annual_day_estimate":
+                return evaluate_annual_day_estimate(turns, metadata)
             if behavior == "income_clarification":
                 return evaluate_annual_income_clarification(turns, metadata)
             if behavior == "route_unavailable":
@@ -885,6 +976,7 @@ def _self_check() -> None:
         "leesburg-route-28-missing-schedule",
         "leesburg-route-28-salary-range",
         "dulles-to-reagan-annual-route-unavailable",
+        "leesburg-route-28-confirm-annual-days",
         "dulles-to-reagan-current-price",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
@@ -1216,6 +1308,7 @@ def _self_check() -> None:
             "vehicle_cost": {"annual_usd": "1885.12"},
             "scenarios": {
                 name: {
+                    "daily_toll_usd": daily_toll,
                     "daily_total_tolled_commute_cost_usd": daily,
                     "average_monthly_tolled_commute_cost_usd": monthly,
                     "annual_total_tolled_commute_cost_usd": annual_total,
@@ -1223,9 +1316,10 @@ def _self_check() -> None:
                     "annual_toll_usd": annual_toll,
                     "additional_gross_income_to_offset_usd": offset,
                 }
-                for name, daily, monthly, annual_total, remaining, annual_toll, offset in (
+                for name, daily_toll, daily, monthly, annual_total, remaining, annual_toll, offset in (
                     (
                         "p25",
+                        "15.63",
                         "23.00",
                         "460.00",
                         "5520.00",
@@ -1235,6 +1329,7 @@ def _self_check() -> None:
                     ),
                     (
                         "p50",
+                        "16.63",
                         "24.00",
                         "480.00",
                         "5760.00",
@@ -1244,6 +1339,7 @@ def _self_check() -> None:
                     ),
                     (
                         "p90",
+                        "17.63",
                         "25.00",
                         "500.00",
                         "6000.00",
@@ -1259,8 +1355,10 @@ def _self_check() -> None:
     annual_response = (
         "### 💼 Annual commute impact\n\n"
         "**P50 leaves $74240.00 after assumed tax and tolled commuting.**\n\n"
-        "- 🧾 Gross: $120000.00; after one-third tax: $80000.00\n"
-        "- 🚗 Vehicle: $1885.12; annualized daily-P50 toll scenario: $3874.88\n"
+        "- 🧾 Gross income: $120000.00; after one-third tax: $80000.00\n"
+        "- 🚗 Tolled-segment vehicle cost: $1885.12\n"
+        "- 🛣️ Annualized daily-P50 toll scenario: $16.63 daily; $3874.88 annual\n"
+        "- 💵 Total annual tolled-commute cost under P50: $5760.00\n"
         "- 🎯 Additional gross salary needed: $8640.00\n\n"
         "| Scenario | Daily | Monthly | Annual | Remaining |\n"
         "|---|---:|---:|---:|---:|\n"
@@ -1272,6 +1370,48 @@ def _self_check() -> None:
     )
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
+    bold_scenario_labels = annual_response
+    for label, description in (
+        ("P25", "lower historical scenario"),
+        ("P50", "middle historical scenario"),
+        ("P90", "higher historical scenario"),
+    ):
+        bold_scenario_labels = bold_scenario_labels.replace(
+            f"| {label} |", f"| **{label} — {description}** |"
+        )
+    assert evaluate_annual_turn(
+        [{"response": bold_scenario_labels, "calls": [annual_call]}], annual
+    )[0].test_pass
+    swapped_scenarios = (
+        annual_response.replace("| P25 |", "| TEMP |")
+        .replace("| P90 |", "| P25 |")
+        .replace("| TEMP |", "| P90 |")
+    )
+    assert (
+        evaluate_annual_turn(
+            [{"response": swapped_scenarios, "calls": [annual_call]}], annual
+        )[0].label
+        == "misbound_money"
+    )
+    swapped_p50_columns = annual_response.replace(
+        "| P50 | $24.00 | $480.00 |", "| P50 | $480.00 | $24.00 |"
+    )
+    assert (
+        evaluate_annual_turn(
+            [{"response": swapped_p50_columns, "calls": [annual_call]}], annual
+        )[0].label
+        == "misbound_money"
+    )
+    misplaced_p50 = annual_response.replace(
+        "**P50 leaves $74240.00 after assumed tax and tolled commuting.**",
+        "**P50 affordability estimate after assumed tax and tolled commuting.**",
+    )
+    assert (
+        evaluate_annual_turn(
+            [{"response": misplaced_p50, "calls": [annual_call]}], annual
+        )[0].label
+        == "misbound_money"
+    )
     implicit_coverage = annual_response.replace(
         "Historical coverage",
         "Historical evidence: 12 of 12 eligible dates; complete sample",
@@ -1286,7 +1426,7 @@ def _self_check() -> None:
         == "missing_affordability_context"
     )
     missing_method = annual_response.replace(
-        "annualized daily-P50 toll scenario", "toll"
+        "Annualized daily-P50 toll scenario", "Toll"
     )
     missing_method_turns = [{"response": missing_method, "calls": [annual_call]}]
     assert (
@@ -1316,12 +1456,25 @@ def _self_check() -> None:
             "response": (
                 "### 💼 Schedule details\n\n**What outbound departure time, return "
                 "departure time, office days, and planned annual commute days should I "
-                "use**"
+                "use? I estimate annual commute days as 52 times the weekly office days; "
+                "Monday through Friday is 260, which you can adjust.**"
             ),
             "calls": [],
         }
     ]
     assert evaluate_annual_missing_inputs(missing_turns, missing)[0].test_pass
+    missing_estimate_method = json.loads(json.dumps(missing_turns))
+    missing_estimate_method[0]["response"] = missing_estimate_method[0][
+        "response"
+    ].replace(
+        " I estimate annual commute days as 52 times the weekly office days; Monday "
+        "through Friday is 260, which you can adjust.",
+        "",
+    )
+    assert (
+        evaluate_annual_missing_inputs(missing_estimate_method, missing)[0].label
+        == "missing_annual_day_estimate"
+    )
     missing_call = json.loads(json.dumps(missing_turns))
     missing_call[0]["calls"] = [annual_call]
     assert (
@@ -1329,12 +1482,41 @@ def _self_check() -> None:
         == "premature_call"
     )
     omitted_field = json.loads(json.dumps(missing_turns))
-    omitted_field[0]["response"] = omitted_field[0]["response"].replace(
-        "office days, and ", ""
+    omitted_field[0]["response"] = (
+        omitted_field[0]["response"]
+        .replace("office days, and ", "")
+        .replace("weekly office days", "weekly schedule")
     )
     assert (
         evaluate_annual_missing_inputs(omitted_field, missing)[0].label
         == "missing_required_input"
+    )
+
+    estimate_case = rows[10]
+    estimate_call = {**annual_call, "input": estimate_case["expected_call"]}
+    estimate_turns = [
+        {
+            "response": (
+                "### 📅 Annual commute-day estimate\n\n"
+                "**Five weekdays times 52 weeks is 260 annual commute days. "
+                "Should I use 260, or would you like to adjust it up or down?**"
+            ),
+            "calls": [],
+        },
+        {"response": annual_response, "calls": [estimate_call]},
+    ]
+    assert evaluate_annual_day_estimate(estimate_turns, estimate_case)[0].test_pass
+    premature_estimate_call = json.loads(json.dumps(estimate_turns))
+    premature_estimate_call[0]["calls"] = [estimate_call]
+    assert (
+        evaluate_annual_day_estimate(premature_estimate_call, estimate_case)[0].label
+        == "premature_call"
+    )
+    wrong_estimate = json.loads(json.dumps(estimate_turns))
+    wrong_estimate[0]["response"] = wrong_estimate[0]["response"].replace("260", "250")
+    assert (
+        evaluate_annual_day_estimate(wrong_estimate, estimate_case)[0].label
+        == "bad_annual_day_estimate"
     )
 
     income = rows[8]
@@ -1342,7 +1524,7 @@ def _self_check() -> None:
     income_turns = [
         {
             "response": (
-                "### 💰 Gross estimate needed\n\nPlease give me **one annual gross-income "
+                "### 💰 Gross estimate needed\n\nPlease choose **one annual gross-income "
                 "estimate** for that salary range."
             ),
             "calls": [],

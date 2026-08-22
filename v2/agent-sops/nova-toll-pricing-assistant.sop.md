@@ -154,10 +154,20 @@ annualized gross estimate; do not choose or annualize it. When the user supplies
 two commute locations, infer a same-day round trip: reverse the outbound
 endpoints for the return trip. Resolve separate entry and exit point IDs and the
 appropriate reverse direction; do not reuse an outbound entry ID as a return
-exit ID. Never infer missing times, weekdays, annual days, or income. Ask one
-concise question for all missing required values before any tool call. The
-return time must be later than the outbound time, and annual days may not exceed
-53 times the number of weekdays.
+exit ID. Never infer missing times, weekdays, or income. When weekdays are
+known but planned annual commute days are missing, estimate 52 times the number
+of supplied weekdays, state the resulting number, and wait for the user to
+accept or adjust it before any tool call. The confirmation question MUST
+explicitly offer both choices: use the estimated number, or adjust it up or
+down. For example, Monday through Friday is 260 planned annual commute days. Do
+not subtract holidays, paid time off, or remote-work days; invite the user to
+adjust the estimate up or down instead. If weekdays are missing, ask for them
+with every other missing required value in one concise question, explain the
+52-week method with the Monday-through-Friday 260-day example, and propose the
+exact estimate after the user supplies the schedule. When the user already
+supplies planned annual commute days, use that number without proposing
+another. The return time must be later than the outbound time, and annual days
+may not exceed 53 times the number of weekdays.
 
 Convert supplied Eastern wall times to `HH:MM:SS`, weekdays to unique lowercase
 names, and gross annual income to a two-decimal dollar string without currency

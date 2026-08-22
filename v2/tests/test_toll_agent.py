@@ -187,6 +187,11 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "reverse the outbound endpoints" in normalized
     assert "outbound departure time, return departure time, weekdays" in normalized
     assert "gross annual income" in normalized
+    assert "52 times the number of supplied weekdays" in normalized
+    assert "Monday through Friday is 260" in normalized
+    assert "wait for the user to accept or adjust" in normalized
+    assert "confirmation question MUST explicitly offer both choices" in normalized
+    assert "holidays, paid time off, or remote-work days" in normalized
     assert "toll-commute affordability assistant" in normalized
     assert "tolled portion only" in normalized
     assert "straight-line" in normalized
