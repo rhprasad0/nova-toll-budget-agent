@@ -46,6 +46,7 @@ _EMOJIS = (
     "🎉",
     "✅",
     "🚧",
+    "🚫",
     "💼",
     "💰",
     "🧾",
@@ -97,6 +98,15 @@ def _response_style_error(response: str, subject: str) -> list[EvaluationOutput]
     if not any(emoji in response for emoji in _EMOJIS):
         return _result(False, f"{subject} omitted an emoji", "missing_emoji")
     return None
+
+
+def _eastern_time(timestamp: str) -> str:
+    return (
+        datetime.fromisoformat(timestamp)
+        .astimezone(_EASTERN)
+        .strftime("%I:%M %p %Z")
+        .lstrip("0")
+    )
 
 
 def _expected_calls_error(
@@ -283,7 +293,14 @@ def evaluate_westpark_turn(
     if call.get("input") != metadata["expected_call"]:
         return _result(False, "current-price arguments did not match", "input_mismatch")
     payload = call.get("tool_result")
-    if call.get("is_error") or not isinstance(payload, dict) or "error" in payload:
+    if call.get("is_error") or not isinstance(payload, dict):
+        return _result(False, "current-price tool returned an error", "tool_error")
+    allowed_unavailable = (
+        metadata.get("allow_pricing_unavailable")
+        and payload.get("error") == "pricing_unavailable"
+        and payload.get("reason") == "incomplete_route_price"
+    )
+    if "error" in payload and not allowed_unavailable:
         return _result(False, "current-price tool returned an error", "tool_error")
     expected = metadata["expected_call"]
     actual_origin, actual_destination = _result_endpoints(payload)
@@ -294,13 +311,58 @@ def evaluate_westpark_turn(
         return _result(False, "tool result endpoints did not match", "result_mismatch")
 
     if "total_usd" not in payload:
+        if payload.get("status") in metadata.get("allowed_route_statuses", []):
+            folded = response.casefold()
+            if not any(term in folded for term in ("stale", "unknown", "inconclusive")):
+                return _result(
+                    False,
+                    "response did not explain unknown route availability",
+                    "ungrounded_unavailability",
+                )
+            if style_error := _response_style_error(response, "response"):
+                return style_error
+            return _result(
+                True,
+                "exact route call and grounded route unavailability passed",
+                "passed",
+            )
+        if allowed_unavailable:
+            folded = response.casefold()
+            if not any(term in folded for term in ("unavailable", "can't", "cannot")):
+                return _result(
+                    False,
+                    "response did not explain temporary price unavailability",
+                    "ungrounded_unavailability",
+                )
+            observation_times = {
+                _eastern_time(component["observed_at"])
+                for component in payload.get("unavailable_components", [])
+                if component.get("observed_at")
+            }
+            if not observation_times or any(
+                value not in response for value in observation_times
+            ):
+                return _result(
+                    False,
+                    "response omitted the exact unavailable-component observation time",
+                    "missing_time",
+                )
+            if style_error := _response_style_error(response, "response"):
+                return style_error
+            return _result(
+                True,
+                "exact route call and grounded price unavailability passed",
+                "passed",
+            )
         return _result(
             False, "tool returned no usable current toll", "tool_unavailable"
         )
     expected_price = f"${payload['total_usd']}"
     if expected_price not in response:
         return _result(False, f"response omitted {expected_price}", "ungrounded_price")
-    if len(payload.get("components", [])) != 2:
+    if len(payload.get("components", [])) != metadata.get(
+        "expected_component_count", 2
+    ):
         return _result(
             False, "priced route did not contain two components", "bad_route"
         )
@@ -573,7 +635,7 @@ def evaluate_annual_missing_inputs(
     required_terms = {
         "outbound_departure_time": ("outbound", "leave"),
         "return_departure_time": ("return",),
-        "weekdays": ("weekday", "days of the week"),
+        "weekdays": ("weekday", "days of the week", "office days"),
         "planned_annual_commute_days": (
             "annual commute day",
             "annual office day",
@@ -616,7 +678,13 @@ def evaluate_annual_income_clarification(
         return style_error
     folded = response.casefold()
     if not (
-        "?" in response
+        (
+            "?" in response
+            or any(
+                term in folded
+                for term in ("please give", "please provide", "could you provide")
+            )
+        )
         and any(term in folded for term in ("one", "single"))
         and "annual" in folded
         and any(term in folded for term in ("gross", "income", "salary"))
@@ -632,7 +700,12 @@ def evaluate_annual_income_clarification(
         f"${amount:,.0f}",
         f"${amount:,.2f}",
     }
-    if any(value in response for value in forbidden):
+    selection = re.compile(
+        rf"(?:i(?:'|\u2019)ll use|i will use|we(?:'|\u2019)ll use|we will use|using|assume)"
+        rf".{{0,20}}(?:{'|'.join(re.escape(value) for value in forbidden)})",
+        re.IGNORECASE,
+    )
+    if selection.search(response):
         return _result(
             False, "response selected an income from the range", "inferred_income"
         )
@@ -709,7 +782,6 @@ def evaluate_annual_route_unavailable(
             "p90",
             "after-tax",
             "after tax",
-            "vehicle cost",
             "additional gross",
             "|",
         )
@@ -813,13 +885,16 @@ def _self_check() -> None:
         "leesburg-route-28-missing-schedule",
         "leesburg-route-28-salary-range",
         "dulles-to-reagan-annual-route-unavailable",
+        "dulles-to-reagan-current-price",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
+        "dulles-to-reagan-current-price",
     ]
     assert [case.name for case in load_cases(window="i95_northbound", weekday=6)] == [
-        "dulles-airport-to-backlick-tp1sb-fallback"
+        "dulles-airport-to-backlick-tp1sb-fallback",
+        "dulles-to-reagan-current-price",
     ]
     assert [case.name for case in load_cases(window="i95_reversal")] == [
         "dulles-airport-to-backlick-tp1sb-fallback",
@@ -904,6 +979,38 @@ def _self_check() -> None:
         evaluate_westpark_turn([error], good_response, metadata)[0].label
         == "tool_error"
     )
+    unavailable_metadata = rows[-1]
+    unavailable = {
+        **success,
+        "input": unavailable_metadata["expected_call"],
+        "tool_result": {
+            "origin_point_id": "airport_iad",
+            "destination_point_id": "airport_dca",
+            "error": "pricing_unavailable",
+            "reason": "incomplete_route_price",
+            "unavailable_components": [{"observed_at": "2026-08-22T15:40:00-04:00"}],
+        },
+    }
+    assert evaluate_westpark_turn(
+        [unavailable],
+        "### 🚫 Current toll unavailable\n\nThe complete price cannot be provided as "
+        "of 3:40 PM EDT.",
+        unavailable_metadata,
+    )[0].test_pass
+    unknown = {
+        **unavailable,
+        "tool_result": {
+            "status": "unknown_availability",
+            "reason": {"code": "i95_stale_evidence"},
+            "origin_point_id": "airport_iad",
+            "destination_point_id": "airport_dca",
+        },
+    }
+    assert evaluate_westpark_turn(
+        [unknown],
+        "### 🚧 Current toll unavailable\n\nThe I-95 evidence is stale.",
+        unavailable_metadata,
+    )[0].test_pass
     assert (
         evaluate_westpark_turn([success], "$16.40 at 9:30 AM EST", metadata)[0].label
         == "missing_markdown"
@@ -1208,7 +1315,7 @@ def _self_check() -> None:
         {
             "response": (
                 "### 💼 Schedule details\n\n**What outbound departure time, return "
-                "departure time, weekdays, and planned annual commute days should I "
+                "departure time, office days, and planned annual commute days should I "
                 "use**"
             ),
             "calls": [],
@@ -1223,7 +1330,7 @@ def _self_check() -> None:
     )
     omitted_field = json.loads(json.dumps(missing_turns))
     omitted_field[0]["response"] = omitted_field[0]["response"].replace(
-        "weekdays, and ", ""
+        "office days, and ", ""
     )
     assert (
         evaluate_annual_missing_inputs(omitted_field, missing)[0].label
@@ -1235,8 +1342,8 @@ def _self_check() -> None:
     income_turns = [
         {
             "response": (
-                "### 💰 Gross estimate needed\n\n**What single annualized gross estimate "
-                "should I use for that salary range?**"
+                "### 💰 Gross estimate needed\n\nPlease give me **one annual gross-income "
+                "estimate** for that salary range."
             ),
             "calls": [],
         },
@@ -1288,8 +1395,8 @@ def _self_check() -> None:
         {
             "response": (
                 "### 🚧 Annual route unavailable\n\nThe return toll route is "
-                "**unavailable**, so I cannot provide annual toll scenarios or "
-                "financial totals."
+                "**unavailable**, so I cannot estimate its vehicle cost or provide "
+                "annual toll scenarios or financial totals."
             ),
             "calls": [unavailable_call],
         }

@@ -223,6 +223,7 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "9:30 AM EDT" in prompt
     assert "9:30 AM EST" in prompt
     assert "actual zone abbreviation" in normalized
+    assert "preserve that timestamp's clock time" in normalized
     assert "use the literal `EST` suffix year-round" not in normalized
     assert "For every observed or modeled component" in normalized
     assert "recent_movement" in prompt

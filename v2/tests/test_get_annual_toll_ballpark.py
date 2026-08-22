@@ -87,6 +87,34 @@ def _i95_northbound_restart_route():
     )
 
 
+def test_ballpark_route_accepts_cross_direction_gap():
+    route = ballpark._BallparkRouteDb.model_validate(  # pyright: ignore[reportPrivateUsage]
+        {
+            "status": "valid",
+            "reason": None,
+            "point_ids": ["i495:182SO", "i95:2239ND", "airport_dca"],
+            "connection_ids": [
+                "source:i95_shared:Southbound:182SO:2239ND",
+                "i95_north_to_dca_from_i495_south",
+            ],
+            "connection_types": ["general_purpose_gap", "airport_access"],
+            "general_purpose_gaps": [
+                {
+                    "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
+                    "boundary_point_id": "i495:192SD",
+                    "role": "suffix",
+                    "i95_direction": "NB",
+                    "fallback_required": None,
+                }
+            ],
+            "facility_legs": [],
+        }
+    )
+
+    assert route.general_purpose_gaps[0].boundary_point_id == "i495:192SD"
+    assert route.general_purpose_gaps[0].i95_direction == "NB"
+
+
 def _greenway_route():
     return ballpark._BallparkRouteDb.model_validate(
         {

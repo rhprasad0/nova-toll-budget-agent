@@ -75,12 +75,12 @@ flowchart LR
 - **Springfield-Franconia to Tysons:** Exit clarification followed by an exact Westpark round-trip annual affordability call.
 - **Leesburg missing schedule:** Request every missing schedule field in one turn without calling a tool or re-requesting supplied income.
 - **Leesburg salary range:** Request one annual gross estimate, retain the supplied commute details, then make the exact annual call after selection.
-- **Dulles Airport to Reagan Airport:** Explain a deterministically unsupported return route without scenarios, totals, or a current-price restart.
-- **Total number of test cases:** 10; five current-price and five annual-affordability cases.
+- **Dulles Airport to Reagan Airport:** Accept the cross-direction current-price route, then explain a deterministically unsupported annual return route without scenarios, totals, or a current-price restart.
+- **Total number of test cases:** 11; six current-price and five annual-affordability cases.
 
 | **Scheduled window** | **Cases run** |
 | :-- | :-- |
-| `i95_northbound` | Direct Springfield-to-Westpark price; TP1SB unavailable/fallback |
+| `i95_northbound` | Direct Springfield-to-Westpark and Dulles-to-Reagan routes; TP1SB unavailable/fallback |
 | `i95_reversal` | TP1SB unavailable/fallback; northbound unavailable |
 | `i95_southbound` | Two direct Westpark prices; northbound unavailable |
 | `all` with `annual` suite | Five annual success, clarification, input-acquisition, and unavailable-route behaviors |
@@ -130,4 +130,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Springfield-Tysons live annual | Completed | Both annual cases passed; the Tysons conversation clarified the exit and made the exact corrected round-trip call. |
 | 2026-08-22 | Springfield-Westpark live current | Scheduled | Saturday route selection used the exact corrected call, but the live feed reported `NORTHBOUND_OPENING`; the strict price eval is weekday-only. |
 | 2026-08-22 | Annual behavioral parity | Implemented | Five annual cases cover fixed and modeled success, route and income clarification, missing-input acquisition, and deterministic route unavailability. |
-| 2026-08-22 | Annual parity live run | Completed with finding | 4/5 passed. Dulles-to-Reagan exposed a malformed Oracle gap (`NB` with `i495:192SD`) that the annual tool safely rejects before returning route unavailability; the failed report is not curated. |
+| 2026-08-22 | Annual parity live run | Completed with finding | 4/5 passed. Dulles-to-Reagan exposed a false client invariant that coupled an I-495 boundary direction to the subsequent I-95 direction; the failed report is not curated. |
+| 2026-08-22 | Cross-direction gap fix | Implemented | Both tools now accept the legitimate southbound I-495 boundary to northbound I-395 movement while retaining strict boundary and direction enums. |
+| 2026-08-22 | Cross-direction live current | Completed | 1/1 passed; the exact Dulles-to-Reagan call returned grounded stale-evidence unavailability rather than an internal validation error. |
+| 2026-08-22 | Final annual parity run | Completed | 5/5 passed against the final prompt contract. |

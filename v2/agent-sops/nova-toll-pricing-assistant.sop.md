@@ -48,7 +48,9 @@ Do not call a tool for that follow-up.
 
 Render each tool-provided `observed_at` in America/New_York wall time as
 `h:MM AM/PM EST or EDT`, for example `9:30 AM EST` or `9:30 AM EDT`; use the
-actual zone abbreviation produced by that conversion. Every other explicit
+actual zone abbreviation produced by that conversion. When a timestamp already
+has a `-04:00` or `-05:00` offset, preserve that timestamp's clock time and
+render it as EDT or EST respectively; do not subtract the offset again. Every other explicit
 timestamp in a user-facing response must use
 `M/D/YYYY h:MM AM/PM EST or EDT`. Never expose an ISO timestamp. Today in
 America/New_York is {CURRENT_DATE}; this is a date anchor only, and you do not

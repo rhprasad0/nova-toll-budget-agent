@@ -1,0 +1,137 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "What is the current toll from Dulles Airport to Reagan Airport?",
+      "actual_output": "### \u26a0\ufe0f Current toll unavailable\n\nThe validated route from **Dulles Airport to Reagan Airport** does not have a reliable current toll estimate. Availability evidence for the I-95 portion is stale or inconclusive, so TollChat will not invent a price.\n\nTollChat is independent and not affiliated with VDOT, Virginia 511, or any toll operator.\n",
+      "name": "dulles-to-reagan-current-price",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "response": "### \u26a0\ufe0f Current toll unavailable\n\nThe validated route from **Dulles Airport to Reagan Airport** does not have a reliable current toll estimate. Availability evidence for the I-95 portion is stale or inconclusive, so TollChat will not invent a price.\n\nTollChat is independent and not affiliated with VDOT, Virginia 511, or any toll operator.\n",
+          "calls": [
+            {
+              "name": "get_current_toll_price",
+              "input": {
+                "origin_point_id": "airport_iad",
+                "destination_point_id": "airport_dca",
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                }
+              },
+              "tool_result": {
+                "status": "unknown_availability",
+                "reason": {
+                  "code": "i95_stale_evidence",
+                  "details": {
+                    "required_i95_directions": [
+                      "NB",
+                      "NB"
+                    ],
+                    "availability": "unknown"
+                  }
+                },
+                "point_ids": [
+                  "airport_iad",
+                  "i495:182SO",
+                  "i95:2239ND",
+                  "airport_dca"
+                ],
+                "connection_ids": [
+                  "iad_to_i495_south",
+                  "source:i95_shared:Southbound:182SO:2239ND",
+                  "i95_north_to_dca_from_i495_south"
+                ],
+                "connection_types": [
+                  "airport_access",
+                  "general_purpose_gap",
+                  "airport_access"
+                ],
+                "general_purpose_gaps": [
+                  {
+                    "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
+                    "boundary_point_id": "i495:192SD",
+                    "role": "suffix",
+                    "i95_direction": "NB",
+                    "fallback_required": null
+                  }
+                ],
+                "i95_evidence": {
+                  "availability": "unknown",
+                  "northbound_corridor_name": "I-95-NB",
+                  "northbound_link_status": "NORTHBOUND_OPEN",
+                  "northbound_interval_end_at": "2026-08-22T19:50:00+00:00",
+                  "northbound_calculated_at": "2026-08-22T19:40:00+00:00",
+                  "southbound_corridor_name": "I-95-SB",
+                  "southbound_link_status": "CLOSED",
+                  "southbound_interval_end_at": "2026-08-22T19:50:00+00:00",
+                  "southbound_calculated_at": "2026-08-22T19:40:00+00:00"
+                },
+                "facility_legs": []
+              },
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "dulles-to-reagan-current-price",
+        "suite": "direct",
+        "windows": [
+          "i95_northbound"
+        ],
+        "prompt": "What is the current toll from Dulles Airport to Reagan Airport?",
+        "allow_pricing_unavailable": true,
+        "allowed_route_statuses": [
+          "unknown_availability"
+        ],
+        "expected_component_count": 2,
+        "expected_call": {
+          "origin_point_id": "airport_iad",
+          "destination_point_id": "airport_dca",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "active_window": "i95_northbound"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "TollChatEvaluator",
+      "evaluator_type": "TollChatEvaluator"
+    }
+  ],
+  "test_passes": [
+    true
+  ],
+  "reasons": [
+    "exact route call and grounded route unavailability passed"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact route call and grounded route unavailability passed",
+        "label": "passed"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null
+  ],
+  "recommendations": [
+    null
+  ]
+}

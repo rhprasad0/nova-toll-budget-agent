@@ -1,6 +1,6 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs five current-toll routing cases and five
+This code-graded Strands suite runs six current-toll routing cases and five
 annual job-offer affordability cases through a fresh production agent. It
 verifies exact tool calls, route/fallback behavior, required-input and income
 clarification, safe annual route unavailability, grounded money, and the
@@ -22,7 +22,8 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
 ```
 
 The Springfield-Franconia to Westpark direct-price regression runs only during
-a Monday-Friday northbound window:
+a Monday-Friday northbound window. The same command also checks the
+Dulles-to-Reagan cross-direction route every northbound day:
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
