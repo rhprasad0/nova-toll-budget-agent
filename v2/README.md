@@ -84,6 +84,12 @@ and coordinates from RDS once at startup, then exposes exactly the current-price
 and annual-ballpark tools. It fails startup if that prompt data is unavailable
 or invalid.
 
+Its system prompt is locked by `agent/contract-manifest.json` and reported in
+traces as `tollchat.system_prompt_version`. Prompt changes require a new,
+increasing SemVer release and digest; CI rejects rewrites of published releases.
+Use patch releases for corrections that preserve behavior, minor releases for
+compatible behavior changes, and major releases for incompatible changes.
+
 ### Local agent console
 
 The loopback-only browser console streams the v2 agent's Markdown replies, tool

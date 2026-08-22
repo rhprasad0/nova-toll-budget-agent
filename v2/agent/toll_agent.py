@@ -36,6 +36,7 @@ _AWS_REGION = "us-east-1"
 _OPENAI_API_KEY_PARAMETER = "/nova-toll/openai_api_key"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _PROMPT_POINTS_SQL = "SELECT oracle.get_toll_route_prompt_points() AS points"
+SYSTEM_PROMPT_VERSION = "1.0.0"
 _EASTERN = ZoneInfo("America/New_York")
 _DUPLICATE_TOOL_STATE_KEY = "tollchat_v2_duplicate_tool_calls"
 _DUPLICATE_HOOK_ORDER = HookOrder.SDK_LAST + 1
@@ -311,6 +312,10 @@ def build_agent(
     trace_attributes: dict[str, str] | None = None,
     hooks: list[object] | None = None,
 ) -> Agent:
+    trace_attributes = {
+        **(trace_attributes or {}),
+        "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
+    }
     return Agent(
         model=_build_model(),
         tools=_agent_tools(),

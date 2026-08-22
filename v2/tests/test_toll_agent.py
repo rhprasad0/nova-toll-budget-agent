@@ -2,8 +2,12 @@
 
 # pyright: basic
 
+import copy
+import hashlib
 import json
+import re
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -20,6 +24,12 @@ from agent import toll_agent
 from agent.toll_agent import DuplicateToolUseGuard, build_agent, build_system_prompt
 from agent_tools import get_annual_toll_ballpark as ballpark_tool
 from agent_tools import get_current_toll_price as current_tool
+from scripts import check_agent_contract_versions as version_check
+
+_CONTRACT_MANIFEST_PATH = (
+    Path(__file__).resolve().parents[1] / "agent" / "contract-manifest.json"
+)
+_SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
 
 
 def _point(**overrides):
@@ -35,6 +45,10 @@ def _point(**overrides):
     }
     value.update(overrides)
     return value
+
+
+def _contract_manifest():
+    return json.loads(_CONTRACT_MANIFEST_PATH.read_text())
 
 
 def test_prompt_point_validation_requires_unique_ordered_bounded_coordinates():
@@ -200,6 +214,83 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "i95_route" not in prompt
 
 
+def test_system_prompt_matches_its_versioned_contract():
+    contract = _contract_manifest()["system_prompt"]
+    version = toll_agent.SYSTEM_PROMPT_VERSION
+
+    assert version == "1.0.0" == contract["current"]
+    assert all(_SEMVER.fullmatch(release) for release in contract["releases"])
+    assert all(
+        re.fullmatch(r"[0-9a-f]{64}", digest)
+        for digest in contract["releases"].values()
+    )
+    prompt = build_system_prompt([_point()], current_date=date(2026, 8, 21))
+    assert hashlib.sha256(prompt.encode()).hexdigest() == contract["releases"][version]
+
+
+def test_system_prompt_manifest_accepts_one_monotonic_release():
+    previous = _contract_manifest()
+    current = copy.deepcopy(previous)
+    current["system_prompt"]["current"] = "1.1.0"
+    current["system_prompt"]["releases"]["1.1.0"] = "a" * 64
+
+    version_check.validate_manifest_update(previous, current)
+    version_check.validate_manifest_update({}, previous)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda manifest: manifest["system_prompt"].update(
+                {"current": "version-one"}
+            ),
+            "invalid semantic version",
+        ),
+        (
+            lambda manifest: manifest["system_prompt"]["releases"].update(
+                {"1.0.0": "not-a-digest"}
+            ),
+            "invalid SHA-256",
+        ),
+        (
+            lambda manifest: manifest["system_prompt"]["releases"].update(
+                {"0.9.0": "b" * 64}
+            ),
+            "without advancing current",
+        ),
+        (
+            lambda manifest: manifest["system_prompt"].update({"current": "0.9.0"}),
+            "current release 0.9.0 is missing",
+        ),
+    ],
+)
+def test_system_prompt_manifest_rejects_invalid_contract(mutate, message):
+    previous = _contract_manifest()
+    current = copy.deepcopy(previous)
+    mutate(current)
+    with pytest.raises(ValueError, match=message):
+        version_check.validate_manifest_update(previous, current)
+
+
+def test_system_prompt_manifest_rejects_rewrites_removals_and_extra_releases():
+    previous = _contract_manifest()
+
+    rewritten = copy.deepcopy(previous)
+    rewritten["system_prompt"]["releases"]["1.0.0"] = "b" * 64
+    with pytest.raises(ValueError, match=r"rewrites system_prompt release 1\.0\.0"):
+        version_check.validate_manifest_update(previous, rewritten)
+
+    with pytest.raises(ValueError, match="removes contracts: system_prompt"):
+        version_check.validate_manifest_update(previous, {})
+
+    advanced = copy.deepcopy(previous)
+    advanced["system_prompt"]["current"] = "1.2.0"
+    advanced["system_prompt"]["releases"].update({"1.1.0": "b" * 64, "1.2.0": "c" * 64})
+    with pytest.raises(ValueError, match="exactly the new current release"):
+        version_check.validate_manifest_update(previous, advanced)
+
+
 def _before_tool(invocation_state, call_id="one", arguments=None):
     return BeforeToolCallEvent(
         agent=cast(Any, object()),
@@ -256,7 +347,13 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
         json.loads(json.dumps(current_tool.TOOL_SPEC)),
         json.loads(json.dumps(ballpark_tool.TOOL_SPEC)),
     ]
-    agent = build_agent(prompt_points=[_point()])
+    agent = build_agent(
+        prompt_points=[_point()],
+        trace_attributes={
+            "tollchat.session_id": "test",
+            "tollchat.system_prompt_version": "wrong",
+        },
+    )
 
     assert [spec["name"] for spec in agent.tool_registry.get_all_tool_specs()] == [
         "get_current_toll_price",
@@ -264,6 +361,10 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
     ]
     assert original_specs[0] == current_tool.TOOL_SPEC
     assert original_specs[1] == ballpark_tool.TOOL_SPEC
+    assert agent.trace_attributes == {
+        "tollchat.session_id": "test",
+        "tollchat.system_prompt_version": toll_agent.SYSTEM_PROMPT_VERSION,
+    }
 
 
 def test_agent_uses_luna_ssm_and_explicit_prompt_cache(monkeypatch):
