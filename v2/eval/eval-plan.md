@@ -2,8 +2,8 @@
 
 ## 1. Evaluation Requirements
 
-- **User Input:** Add current-price and annual-affordability evals for Springfield-Franconia to Tysons, treating I-95 as northbound on weekday mornings.
-- **Interpreted Evaluation Requirements:** Code-grade the direct northbound Westpark price and the multi-turn Tysons annual job-offer flow, while retaining the existing TP1SB fallback and scheduled unavailability coverage.
+- **User Input:** Bring annual-affordability evals to behavioral parity with the five-case current-price suite.
+- **Interpreted Evaluation Requirements:** Code-grade five annual cases spanning grounded fixed and modeled results, route and income clarification, complete required-input acquisition, and safe route unavailability while retaining existing current-price coverage.
 
 ---
 
@@ -73,14 +73,17 @@ flowchart LR
 - **Old Keene Mill Road to Reagan Airport:** Northbound unavailability without an ineligible fallback offer in southbound and reversal windows.
 - **Leesburg Bypass to Route 28:** Annual job-offer affordability with gross income, a complete work schedule, and fixed-rate Greenway tolls.
 - **Springfield-Franconia to Tysons:** Exit clarification followed by an exact Westpark round-trip annual affordability call.
-- **Total number of test cases:** 7
+- **Leesburg missing schedule:** Request every missing schedule field in one turn without calling a tool or re-requesting supplied income.
+- **Leesburg salary range:** Request one annual gross estimate, retain the supplied commute details, then make the exact annual call after selection.
+- **Dulles Airport to Reagan Airport:** Explain a deterministically unsupported return route without scenarios, totals, or a current-price restart.
+- **Total number of test cases:** 10; five current-price and five annual-affordability cases.
 
 | **Scheduled window** | **Cases run** |
 | :-- | :-- |
 | `i95_northbound` | Direct Springfield-to-Westpark price; TP1SB unavailable/fallback |
 | `i95_reversal` | TP1SB unavailable/fallback; northbound unavailable |
 | `i95_southbound` | Two direct Westpark prices; northbound unavailable |
-| `all` with `annual` suite | Leesburg and Springfield-to-Tysons annual affordability |
+| `all` with `annual` suite | Five annual success, clarification, input-acquisition, and unavailable-route behaviors |
 
 ---
 
@@ -113,6 +116,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Affordability | Add an income-aware annual job-offer case with deterministic response grounding. |
 | 2026-08-22 | Springfield-Tysons | Replace the false current-price restart with a direct northbound route and add a Tysons-clarification annual case. |
 | 2026-08-22 | Methodology review | Label annualized daily percentiles precisely, remove unsupported AAA attribution, round annual vehicle cost after annualization, and collapse prompt releases for PR CI. |
+| 2026-08-22 | Annual parity | Expand annual coverage to five behavioral cases without changing production behavior or weakening graders for failures. |
 
 ### 6.2 Evaluation Progress
 
@@ -125,3 +129,5 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Springfield-Tysons regressions | Implemented | Current and annual cases code-grade the correct northbound endpoint and reject premature annual calls. |
 | 2026-08-22 | Springfield-Tysons live annual | Completed | Both annual cases passed; the Tysons conversation clarified the exit and made the exact corrected round-trip call. |
 | 2026-08-22 | Springfield-Westpark live current | Scheduled | Saturday route selection used the exact corrected call, but the live feed reported `NORTHBOUND_OPENING`; the strict price eval is weekday-only. |
+| 2026-08-22 | Annual behavioral parity | Implemented | Five annual cases cover fixed and modeled success, route and income clarification, missing-input acquisition, and deterministic route unavailability. |
+| 2026-08-22 | Annual parity live run | Completed with finding | 4/5 passed. Dulles-to-Reagan exposed a malformed Oracle gap (`NB` with `i495:192SD`) that the annual tool safely rejects before returning route unavailability; the failed report is not curated. |

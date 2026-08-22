@@ -47,6 +47,7 @@ _EMOJIS = (
     "✅",
     "🚧",
     "💼",
+    "💰",
     "🧾",
     "🎯",
 )
@@ -493,6 +494,19 @@ def evaluate_annual_turn(
     if style_error := _response_style_error(response, "annual response"):
         return style_error
     folded = response.casefold()
+    coverage = payload.get("coverage", {})
+    coverage_reported = "coverage" in folded
+    if isinstance(coverage, dict):
+        complete_pairs = coverage.get("complete_pair_count")
+        eligible_dates = coverage.get("eligible_date_count")
+        sample_status = str(payload.get("sample_status", "")).casefold()
+        coverage_reported = coverage_reported or bool(
+            isinstance(complete_pairs, int)
+            and isinstance(eligible_dates, int)
+            and sample_status
+            and f"{complete_pairs} of {eligible_dates}" in folded
+            and sample_status in folded
+        )
     if not (
         "###" in response
         and "**" in response
@@ -506,7 +520,7 @@ def evaluate_annual_turn(
         and "fixed" in folded
         and "tollchat" in folded
         and "historical" in folded
-        and "coverage" in folded
+        and coverage_reported
         and "hov" not in folded
         and "aaa" not in folded
     ):
@@ -542,6 +556,170 @@ def evaluate_annual_turn(
     return _result(True, "annual tool call and affordability response passed", "passed")
 
 
+def evaluate_annual_missing_inputs(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 1:
+        return _result(False, "expected one missing-input turn", "turn_count")
+    turn = turns[0]
+    if turn.get("calls"):
+        return _result(
+            False, "annual tool called before inputs were complete", "premature_call"
+        )
+    response = str(turn.get("response", ""))
+    if style_error := _response_style_error(response, "missing-input response"):
+        return style_error
+    folded = response.casefold()
+    required_terms = {
+        "outbound_departure_time": ("outbound", "leave"),
+        "return_departure_time": ("return",),
+        "weekdays": ("weekday", "days of the week"),
+        "planned_annual_commute_days": (
+            "annual commute day",
+            "annual office day",
+            "commute days per year",
+            "office days per year",
+            "days per year",
+        ),
+    }
+    asks_for_values = "?" in response or any(
+        term in folded for term in ("what ", "please provide", "could you provide")
+    )
+    if not asks_for_values or any(
+        not any(term in folded for term in required_terms[field])
+        for field in metadata["expected_missing_fields"]
+    ):
+        return _result(
+            False,
+            "response did not ask for every missing annual input",
+            "missing_required_input",
+        )
+    if re.search(r"(?:what|which).{0,30}(?:income|salary)", folded):
+        return _result(False, "response re-requested supplied income", "repeated_input")
+    return _result(
+        True, "all missing annual inputs requested before any call", "passed"
+    )
+
+
+def evaluate_annual_income_clarification(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 2:
+        return _result(False, "expected income clarification and answer", "turn_count")
+    clarification = turns[0]
+    if clarification.get("calls"):
+        return _result(
+            False, "annual tool called before income was selected", "premature_call"
+        )
+    response = str(clarification.get("response", ""))
+    if style_error := _response_style_error(response, "income clarification"):
+        return style_error
+    folded = response.casefold()
+    if not (
+        "?" in response
+        and any(term in folded for term in ("one", "single"))
+        and "annual" in folded
+        and any(term in folded for term in ("gross", "income", "salary"))
+    ):
+        return _result(
+            False,
+            "response did not request one annual gross estimate",
+            "bad_clarification",
+        )
+    amount = Decimal(str(metadata["forbidden_inferred_income_usd"]))
+    forbidden = {
+        f"${amount:f}",
+        f"${amount:,.0f}",
+        f"${amount:,.2f}",
+    }
+    if any(value in response for value in forbidden):
+        return _result(
+            False, "response selected an income from the range", "inferred_income"
+        )
+    return evaluate_annual_turn([turns[1]], metadata)
+
+
+def evaluate_annual_route_unavailable(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 1:
+        return _result(False, "expected one unavailable annual turn", "turn_count")
+    turn = turns[0]
+    calls = turn.get("calls", [])
+    if len(calls) != 1 or calls[0].get("name") != "get_annual_toll_ballpark":
+        return _result(False, "expected exactly one annual call", "tool_mismatch")
+    call = calls[0]
+    if call.get("input") != metadata["expected_call"]:
+        return _result(False, "annual arguments did not match", "input_mismatch")
+    payload = call.get("tool_result")
+    if (
+        call.get("is_error")
+        or not isinstance(payload, dict)
+        or payload.get("error") != "ballpark_unavailable"
+        or payload.get("reason") != "route_unavailable"
+    ):
+        return _result(
+            False, "annual tool did not return route unavailability", "tool_error"
+        )
+    expected_call = metadata["expected_call"]
+    expected_status = metadata["expected_route_status"]
+    for direction in ("outbound", "return"):
+        actual = payload.get(direction)
+        expected = expected_status[direction]
+        expected_input = expected_call[direction]
+        if not isinstance(actual, dict) or (
+            actual.get("origin_point_id") != expected_input["origin_point_id"]
+            or actual.get("destination_point_id")
+            != expected_input["destination_point_id"]
+            or actual.get("status") != expected["status"]
+            or (actual.get("reason") or {}).get("code") != expected["reason_code"]
+        ):
+            return _result(
+                False, "annual route status did not match", "result_mismatch"
+            )
+
+    response = str(turn.get("response", ""))
+    if style_error := _response_style_error(response, "annual unavailable response"):
+        return style_error
+    folded = response.casefold()
+    if (
+        not any(term in folded for term in ("unavailable", "unsupported"))
+        or "return" not in folded
+    ):
+        return _result(
+            False,
+            "response did not explain route unavailability",
+            "missing_unavailability",
+        )
+    if any(term in folded for term in ("restart", "current-price", "current price")):
+        return _result(False, "response offered a current-price restart", "bad_restart")
+    allowed_income = Decimal(str(expected_call["gross_annual_income_usd"]))
+    without_input = response
+    for value in (
+        f"${allowed_income:f}",
+        f"${allowed_income:,.0f}",
+        f"${allowed_income:,.2f}",
+    ):
+        without_input = without_input.replace(value, "")
+    if re.search(r"\$\s*\d", without_input) or any(
+        term in folded
+        for term in (
+            "p25",
+            "p50",
+            "p90",
+            "after-tax",
+            "after tax",
+            "vehicle cost",
+            "additional gross",
+            "|",
+        )
+    ):
+        return _result(
+            False, "response invented unavailable financials", "invented_financials"
+        )
+    return _result(True, "annual route unavailability was safely explained", "passed")
+
+
 def task_function(case: Case[str, str]) -> dict[str, Any]:
     agent = build_agent()
     turns = []
@@ -573,6 +751,13 @@ class TollChatEvaluator(Evaluator[str, str]):
         if metadata.get("suite") == "unavailable":
             return evaluate_unavailable_turn(turns, metadata)
         if metadata.get("suite") == "annual":
+            behavior = metadata.get("annual_behavior")
+            if behavior == "missing_inputs":
+                return evaluate_annual_missing_inputs(turns, metadata)
+            if behavior == "income_clarification":
+                return evaluate_annual_income_clarification(turns, metadata)
+            if behavior == "route_unavailable":
+                return evaluate_annual_route_unavailable(turns, metadata)
             return evaluate_annual_turn(turns, metadata)
         calls = turns[0].get("calls", []) if len(turns) == 1 else []
         return evaluate_westpark_turn(
@@ -625,6 +810,9 @@ def _self_check() -> None:
         "old-keene-mill-to-reagan-i95-unavailable",
         "leesburg-route-28-job-offer",
         "springfield-franconia-tysons-job-offer",
+        "leesburg-route-28-missing-schedule",
+        "leesburg-route-28-salary-range",
+        "dulles-to-reagan-annual-route-unavailable",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "springfield-franconia-to-westpark",
@@ -908,6 +1096,12 @@ def _self_check() -> None:
         "name": "get_annual_toll_ballpark",
         "input": annual["expected_call"],
         "tool_result": {
+            "coverage": {
+                "eligible_date_count": 12,
+                "complete_pair_count": 12,
+                "coverage_percent": "100.0",
+            },
+            "sample_status": "complete",
             "income": {
                 "gross_annual_usd": "120000.00",
                 "estimated_after_tax_usd": "80000.00",
@@ -971,6 +1165,13 @@ def _self_check() -> None:
     )
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
+    implicit_coverage = annual_response.replace(
+        "Historical coverage",
+        "Historical evidence: 12 of 12 eligible dates; complete sample",
+    )
+    assert evaluate_annual_turn(
+        [{"response": implicit_coverage, "calls": [annual_call]}], annual
+    )[0].test_pass
     missing_table = annual_response.replace("|", "")
     missing_table_turns = [{"response": missing_table, "calls": [annual_call]}]
     assert (
@@ -1001,6 +1202,121 @@ def _self_check() -> None:
     premature_call = json.loads(json.dumps(tysons_turns))
     premature_call[0]["calls"] = [tysons_call]
     assert evaluate_annual_turn(premature_call, tysons)[0].label == "bad_clarification"
+
+    missing = rows[7]
+    missing_turns = [
+        {
+            "response": (
+                "### 💼 Schedule details\n\n**What outbound departure time, return "
+                "departure time, weekdays, and planned annual commute days should I "
+                "use**"
+            ),
+            "calls": [],
+        }
+    ]
+    assert evaluate_annual_missing_inputs(missing_turns, missing)[0].test_pass
+    missing_call = json.loads(json.dumps(missing_turns))
+    missing_call[0]["calls"] = [annual_call]
+    assert (
+        evaluate_annual_missing_inputs(missing_call, missing)[0].label
+        == "premature_call"
+    )
+    omitted_field = json.loads(json.dumps(missing_turns))
+    omitted_field[0]["response"] = omitted_field[0]["response"].replace(
+        "weekdays, and ", ""
+    )
+    assert (
+        evaluate_annual_missing_inputs(omitted_field, missing)[0].label
+        == "missing_required_input"
+    )
+
+    income = rows[8]
+    income_call = {**annual_call, "input": income["expected_call"]}
+    income_turns = [
+        {
+            "response": (
+                "### 💰 Gross estimate needed\n\n**What single annualized gross estimate "
+                "should I use for that salary range?**"
+            ),
+            "calls": [],
+        },
+        {"response": annual_response, "calls": [income_call]},
+    ]
+    assert evaluate_annual_income_clarification(income_turns, income)[0].test_pass
+    inferred_income = json.loads(json.dumps(income_turns))
+    inferred_income[0]["response"] += " I'll use $120,000."
+    assert (
+        evaluate_annual_income_clarification(inferred_income, income)[0].label
+        == "inferred_income"
+    )
+    premature_income_call = json.loads(json.dumps(income_turns))
+    premature_income_call[0]["calls"] = [income_call]
+    assert (
+        evaluate_annual_income_clarification(premature_income_call, income)[0].label
+        == "premature_call"
+    )
+
+    unavailable_annual = rows[9]
+    unavailable_call = {
+        "name": "get_annual_toll_ballpark",
+        "input": unavailable_annual["expected_call"],
+        "tool_result": {
+            "error": "ballpark_unavailable",
+            "reason": "route_unavailable",
+            "outbound": {
+                "origin_point_id": "airport_iad",
+                "destination_point_id": "airport_dca",
+                "status": "valid",
+                "reason": None,
+            },
+            "return": {
+                "origin_point_id": "airport_dca",
+                "destination_point_id": "airport_iad",
+                "status": "no_supported_route",
+                "reason": {
+                    "code": "no_supported_route",
+                    "details": {
+                        "origin_point_id": "airport_dca",
+                        "destination_point_id": "airport_iad",
+                    },
+                },
+            },
+        },
+        "is_error": False,
+    }
+    unavailable_annual_turns = [
+        {
+            "response": (
+                "### 🚧 Annual route unavailable\n\nThe return toll route is "
+                "**unavailable**, so I cannot provide annual toll scenarios or "
+                "financial totals."
+            ),
+            "calls": [unavailable_call],
+        }
+    ]
+    assert evaluate_annual_route_unavailable(
+        unavailable_annual_turns, unavailable_annual
+    )[0].test_pass
+    invented_totals = json.loads(json.dumps(unavailable_annual_turns))
+    invented_totals[0]["response"] += " P50 costs $1,000."
+    assert (
+        evaluate_annual_route_unavailable(invented_totals, unavailable_annual)[0].label
+        == "invented_financials"
+    )
+    offered_restart = json.loads(json.dumps(unavailable_annual_turns))
+    offered_restart[0]["response"] += " I can restart with the current-price tool."
+    assert (
+        evaluate_annual_route_unavailable(offered_restart, unavailable_annual)[0].label
+        == "bad_restart"
+    )
+    wrong_route_status = json.loads(json.dumps(unavailable_annual_turns))
+    wrong_route_status[0]["calls"][0]["tool_result"]["return"]["status"] = "valid"
+    assert (
+        evaluate_annual_route_unavailable(wrong_route_status, unavailable_annual)[
+            0
+        ].label
+        == "result_mismatch"
+    )
     print("self-check ok (fixtures and evaluator pass/fail branches; no network)")
 
 
