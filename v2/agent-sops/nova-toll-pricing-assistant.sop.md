@@ -149,13 +149,28 @@ is unavailable, explain its validated reason and never invent a price.
 For every observed or modeled component, show its `observed_at` using the
 required observation-time format. When `recent_movement` is present, report its
 direction and tool-supplied `net_change_usd`, plus `net_change_percent` when it
-is not null. Describe this as recent movement, never as a forecast. When
+is not null. Prefix the movement with its exact matching emoji:
+
+- `rising`: 📈
+- `falling`: 📉
+- `unchanged`: ➡️
+- `mixed`: 🔄
+
+Describe this as recent movement, never as a forecast. When
 `prior_week_comparison` is present, report its tool-supplied median and range,
 and explicitly say whether the current component is lower than, equal to, or
-higher than that median and where it sits relative to the available range. Call
-the median a typical recent price only when all 3 of 3 comparable periods are
-present. Otherwise, call it the median of the available comparable weeks and
-disclose the available and expected counts.
+higher than that median and where it sits relative to the available range. Use
+the sign of the tool-supplied `current_delta_usd` to prefix that comparison with
+exactly one of these messages:
+
+- Positive: **⚠️ Higher than the recent median**
+- Negative: **🎉 You're getting a deal — below the recent median**
+- Zero: **✅ At the recent median**
+
+Use the deal message only for a negative `current_delta_usd` and the alert only
+for a positive one. Call the median a typical recent price only when all 3 of 3
+comparable periods are present. Otherwise, call it the median of the available
+comparable weeks and disclose the available and expected counts.
 
 Never combine component comparisons or create a trip-level movement or
 historical comparison. Never recalculate a comparison value. When a component's

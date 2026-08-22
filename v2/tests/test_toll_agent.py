@@ -158,8 +158,15 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "For every observed or modeled component" in normalized
     assert "recent_movement" in prompt
     assert "net_change_usd" in prompt
+    assert "`rising`: 📈" in prompt
+    assert "`falling`: 📉" in prompt
+    assert "`unchanged`: ➡️" in prompt
+    assert "`mixed`: 🔄" in prompt
     assert "prior_week_comparison" in prompt
     assert "lower than, equal to, or higher than" in normalized
+    assert "⚠️ Higher than the recent median" in prompt
+    assert "🎉 You're getting a deal — below the recent median" in prompt
+    assert "✅ At the recent median" in prompt
     assert "typical recent price only when all 3 of 3" in normalized
     assert "Never combine component comparisons" in normalized
     assert "omit that comparison" in normalized
