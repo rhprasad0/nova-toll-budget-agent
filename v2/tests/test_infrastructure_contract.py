@@ -4,6 +4,7 @@ from pathlib import Path
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 TIMED_CHECKS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
 ).read_text()
@@ -61,7 +62,13 @@ def test_timed_ci_uses_the_internal_pricing_caller():
     assert 'actions   = ["rds-db:connect"]' in policy
     assert "/pricing_caller" in policy
     assert "/tollchat_agent" not in policy
-    assert "ssm:" not in policy
+    assert 'actions   = ["ssm:GetParameter"]' in policy
+    assert (
+        'resources = ["arn:aws:ssm:${data.aws_region.current.region}:'
+        "${data.aws_caller_identity.current.account_id}:parameter/nova-toll/"
+        'openai_api_key"]'
+    ) in policy
+    assert "ssm:GetParameters" not in policy
     assert "/pricing_reader" not in policy
     assert "role/nova-toll-v2-timed-checks" in TIMED_CHECKS_WORKFLOW
     assert "role/nova-toll-github-ci" not in TIMED_CHECKS_WORKFLOW
@@ -88,6 +95,10 @@ def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
     assert "get_current_toll_price" in TIMED_ROUTE_TEST
     assert "get_annual_toll_ballpark" in TIMED_BALLPARK_TEST
     assert "route_validation.validate_toll_route" not in TIMED_ROUTE_TEST
+    assert "eval/run_evaluation.py --check" in CI_WORKFLOW
+    assert 'if [[ "$TIMED_WINDOW_ID" == "i95_southbound" ]]' in (TIMED_CHECKS_WORKFLOW)
+    assert "eval/run_evaluation.py" in TIMED_CHECKS_WORKFLOW
+    assert "OPENAI_API_KEY" not in TIMED_CHECKS_WORKFLOW
 
 
 def test_timed_ci_covers_three_real_i95_states_monday_through_saturday():

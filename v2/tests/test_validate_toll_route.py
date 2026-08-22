@@ -86,12 +86,48 @@ def _northbound_suffix_row():
     row["general_purpose_gaps"][0].update(
         {
             "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
+            "boundary_point_id": "i495:192NO",
             "i95_direction": "NB",
             "fallback_required": False,
         }
     )
     row["i95_evidence"]["availability"] = "northbound"
     return row
+
+
+def _southbound_westpark_row(origin_point_id="i95:2233SO"):
+    connection_id = "source:i95_shared:Southbound:2233SO:1859ND"
+    airport = origin_point_id == "airport_dca"
+    return {
+        "status": "valid",
+        "reason": None,
+        "point_ids": (
+            ["airport_dca", "i95:2233SO", "i495:1859ND"]
+            if airport
+            else ["i95:2233SO", "i495:1859ND"]
+        ),
+        "connection_ids": (
+            ["dca_to_i95_south", connection_id] if airport else [connection_id]
+        ),
+        "connection_types": (
+            ["airport_access", "general_purpose_gap"]
+            if airport
+            else ["general_purpose_gap"]
+        ),
+        "general_purpose_gaps": [
+            {
+                "connection_id": connection_id,
+                "boundary_point_id": "i495:192SD",
+                "role": "prefix",
+                "i95_direction": "SB",
+                "fallback_required": False,
+            }
+        ],
+        "i95_evidence": {
+            **_unavailable_row()["i95_evidence"],
+            "availability": "southbound",
+        },
+    }
 
 
 def _pricing_route_row():
@@ -380,6 +416,30 @@ def test_documented_domain_rows_are_successful(monkeypatch, row):
         "status": "success",
         "content": [{"json": row}],
     }
+    assert connection.closed
+
+
+@pytest.mark.parametrize("origin_point_id", ["airport_dca", "i95:2233SO"])
+def test_southbound_prefix_route_to_westpark_is_valid(monkeypatch, origin_point_id):
+    row = _southbound_westpark_row(origin_point_id)
+
+    result, connection = _invoke(monkeypatch, row)
+
+    assert result == {
+        "toolUseId": "tool-123",
+        "status": "success",
+        "content": [{"json": row}],
+    }
+    assert connection.closed
+
+
+def test_southbound_prefix_rejects_northbound_boundary(monkeypatch):
+    row = _southbound_westpark_row()
+    row["general_purpose_gaps"][0]["boundary_point_id"] = "i495:192NO"
+
+    result, connection = _invoke(monkeypatch, row)
+
+    assert result["status"] == "error"
     assert connection.closed
 
 

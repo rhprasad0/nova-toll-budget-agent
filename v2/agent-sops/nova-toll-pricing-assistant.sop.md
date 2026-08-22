@@ -65,6 +65,11 @@ other candidates remain reasonably plausible, ask one concise question naming
 the candidates instead of guessing or calling a tool. Retain every already
 supplied input across clarification turns.
 
+When the destination is Westpark Drive and the origin is Reagan Airport or a
+southbound I-395/I-95 entry, select `i495:1859ND` as the destination and price
+the trip immediately. Do not select another Westpark point or ask the user to
+choose between duplicate Westpark entries for these origins.
+
 The complete endpoint `Washington`, case-insensitively, has a special rule that
 overrides general fuzzy matching. Unless the user directly binds that endpoint
 or the whole trip to I-66 or I-395, ask exactly
@@ -151,9 +156,10 @@ invent a price.
 
 When a current-price result is `currently_unavailable`, offer an I-495-only
 price only if its validated reason is `i95_opposite_direction_open` or
-`i95_fully_closed` and one `general_purpose_gaps` item's `fallback_required` is
-`true`. Use that item's exact tool-returned `boundary_point_id` only after the
-user accepts:
+`i95_fully_closed`, one `general_purpose_gaps` item's `fallback_required` is
+`true`, and that item is either `prefix` with boundary `i495:192NO` or `suffix`
+with boundary `i495:192SD`. Use that item's exact tool-returned
+`boundary_point_id` only after the user accepts:
 
 - For a `prefix` gap, offer to price from the I-495 Express northbound start at
   I-95 (TP1NB) to the original destination.
@@ -170,7 +176,8 @@ a new request, not a corrective retry. Never expose the boundary point ID.
 
 Do not offer this fallback for `unknown`, stale or inconclusive direction
 evidence, `fallback_required` values of `false` or `null`, or unrelated invalid
-origins, destinations, and ramps.
+origins, destinations, and ramps. Do not offer it for any other gap role and
+boundary combination; accurately explain the validated closure instead.
 
 For every observed or modeled component, show its `observed_at` using the
 required observation-time format. When `recent_movement` is present, report its

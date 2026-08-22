@@ -116,6 +116,12 @@ data "aws_iam_policy_document" "timed_checks" {
     actions   = ["rds-db:connect"]
     resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller"]
   }
+
+  statement {
+    sid       = "ReadOpenAiApiKey"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"]
+  }
 }
 
 resource "aws_iam_role_policy" "timed_checks" {

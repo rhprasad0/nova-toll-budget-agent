@@ -178,9 +178,9 @@ class _Gap(_Model):
     @model_validator(mode="after")
     def _validate_alignment(self) -> Self:
         expected_boundary = {
-            "prefix": "i495:192NO",
-            "suffix": "i495:192SD",
-        }[self.role]
+            "NB": "i495:192NO",
+            "SB": "i495:192SD",
+        }[self.i95_direction]
         if self.boundary_point_id != expected_boundary:
             raise ValueError("general-purpose gap fields are not aligned")
         return self

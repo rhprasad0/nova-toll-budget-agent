@@ -181,6 +181,10 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "preserve the original other endpoint and pricing profile" in normalized
     assert "general-purpose lanes and is not included" in normalized
     assert "Do not offer this fallback for `unknown`" in normalized
+    assert "Reagan Airport or a southbound I-395/I-95 entry" in normalized
+    assert "select `i495:1859ND`" in normalized
+    assert "`prefix` with boundary `i495:192NO`" in normalized
+    assert "`suffix` with boundary `i495:192SD`" in normalized
     assert "qualifying accepted I-95 fallback" in normalized
     assert "Today in America/New_York is 8/21/2026" in normalized
     assert "final roadside sign" not in normalized

@@ -16,6 +16,7 @@ dev = [
     "pyright",
     "pytest",
     "ruff",
+    "strands-agents-evals==1.1.0",
 ]
 
 [tool.pyright]
