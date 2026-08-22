@@ -1,5 +1,5 @@
 # pyright: basic
-"""Code-grade Westpark current-toll routing regressions."""
+"""Code-grade TollChat v2 current-toll routing regressions."""
 
 from __future__ import annotations
 
@@ -38,11 +38,18 @@ def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def load_cases(path: Path = _CASES_PATH, suite: str = "all") -> list[Case[str, str]]:
+def load_cases(
+    path: Path = _CASES_PATH, suite: str = "all", window: str = "all"
+) -> list[Case[str, str]]:
     return [
-        Case[str, str](name=row["id"], input=row["prompt"], metadata=row)
+        Case[str, str](
+            name=row["id"],
+            input=row["prompt"],
+            metadata={**row, "active_window": window},
+        )
         for row in load_rows(path)
         if suite == "all" or row.get("suite") == suite
+        if window == "all" or window in row.get("windows", [])
     ]
 
 
@@ -52,6 +59,42 @@ def _result(passed: bool, reason: str, label: str) -> list[EvaluationOutput]:
             score=float(passed), test_pass=passed, reason=reason, label=label
         )
     ]
+
+
+def _response_style_error(response: str, subject: str) -> list[EvaluationOutput] | None:
+    if not any(mark in response for mark in ("#", "**", "- ")):
+        return _result(False, f"{subject} omitted Markdown", "missing_markdown")
+    if not any(emoji in response for emoji in _EMOJIS):
+        return _result(False, f"{subject} omitted an emoji", "missing_emoji")
+    return None
+
+
+def _expected_calls_error(
+    turns: list[dict[str, Any]], expected_calls: list[dict[str, Any]]
+) -> list[EvaluationOutput] | None:
+    if len(turns) != len(expected_calls):
+        return _result(
+            False,
+            f"expected exactly {len(expected_calls)} conversation turns",
+            "turn_count",
+        )
+    for index, (turn, expected_call) in enumerate(
+        zip(turns, expected_calls, strict=True)
+    ):
+        calls = turn.get("calls", [])
+        if len(calls) != 1 or calls[0].get("name") != "get_current_toll_price":
+            return _result(
+                False,
+                f"turn {index + 1} expected exactly one current-price call",
+                "tool_mismatch",
+            )
+        if calls[0].get("input") != expected_call:
+            return _result(
+                False, f"turn {index + 1} used the wrong endpoints", "input_mismatch"
+            )
+        if calls[0].get("is_error"):
+            return _result(False, f"turn {index + 1} tool failed", "tool_error")
+    return None
 
 
 def _tool_payload(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -66,6 +109,16 @@ def _tool_payload(result: dict[str, Any]) -> dict[str, Any] | None:
             if isinstance(value, dict):
                 return cast(dict[str, Any], value)
     return None
+
+
+def _result_endpoints(payload: dict[str, Any]) -> tuple[object, object]:
+    point_ids = payload.get("point_ids", [])
+    return (
+        payload.get("origin_point_id")
+        or (point_ids[0] if isinstance(point_ids, list) and point_ids else None),
+        payload.get("destination_point_id")
+        or (point_ids[-1] if isinstance(point_ids, list) and point_ids else None),
+    )
 
 
 def _trace_messages(traces: list[dict[str, Any]]) -> Messages:
@@ -120,66 +173,38 @@ def evaluate_westpark_turn(
     if call.get("is_error") or not isinstance(payload, dict) or "error" in payload:
         return _result(False, "current-price tool returned an error", "tool_error")
     expected = metadata["expected_call"]
-    point_ids = payload.get("point_ids", [])
-    actual_origin = payload.get("origin_point_id") or (
-        point_ids[0] if isinstance(point_ids, list) and point_ids else None
-    )
-    actual_destination = payload.get("destination_point_id") or (
-        point_ids[-1] if isinstance(point_ids, list) and point_ids else None
-    )
+    actual_origin, actual_destination = _result_endpoints(payload)
     if (
         actual_origin != expected["origin_point_id"]
         or actual_destination != expected["destination_point_id"]
     ):
         return _result(False, "tool result endpoints did not match", "result_mismatch")
 
-    if "total_usd" in payload:
-        expected_price = f"${payload['total_usd']}"
-        if expected_price not in response:
-            return _result(
-                False, f"response omitted {expected_price}", "ungrounded_price"
-            )
-        if len(payload.get("components", [])) != 2:
-            return _result(
-                False, "priced route did not contain two components", "bad_route"
-            )
-        if "EST" not in response:
-            return _result(False, "response omitted observation time", "missing_time")
-    elif payload.get("status") == "currently_unavailable":
-        if not any(term in response.casefold() for term in ("unavailable", "closed")):
-            return _result(False, "closure result was not explained", "missing_closure")
-    else:
+    if "total_usd" not in payload:
         return _result(
             False, "tool returned no usable current toll", "tool_unavailable"
         )
+    expected_price = f"${payload['total_usd']}"
+    if expected_price not in response:
+        return _result(False, f"response omitted {expected_price}", "ungrounded_price")
+    if len(payload.get("components", [])) != 2:
+        return _result(
+            False, "priced route did not contain two components", "bad_route"
+        )
+    if "EST" not in response:
+        return _result(False, "response omitted observation time", "missing_time")
 
-    if not any(mark in response for mark in ("#", "**", "- ")):
-        return _result(False, "response did not use Markdown", "missing_markdown")
-    if not any(emoji in response for emoji in _EMOJIS):
-        return _result(False, "response did not include an emoji", "missing_emoji")
+    if style_error := _response_style_error(response, "response"):
+        return style_error
     return _result(True, "exact route call and grounded response passed", "passed")
 
 
 def evaluate_restart_turns(
     turns: list[dict[str, Any]], metadata: dict[str, Any]
 ) -> list[EvaluationOutput]:
-    if len(turns) != 2:
-        return _result(False, "expected exactly two conversation turns", "turn_count")
     expected_calls = metadata["expected_calls"]
-    for index, turn in enumerate(turns):
-        calls = turn.get("calls", [])
-        if len(calls) != 1 or calls[0].get("name") != "get_current_toll_price":
-            return _result(
-                False,
-                f"turn {index + 1} expected exactly one current-price call",
-                "tool_mismatch",
-            )
-        if calls[0].get("input") != expected_calls[index]:
-            return _result(
-                False, f"turn {index + 1} used the wrong endpoints", "input_mismatch"
-            )
-        if calls[0].get("is_error"):
-            return _result(False, f"turn {index + 1} tool failed", "tool_error")
+    if calls_error := _expected_calls_error(turns, expected_calls):
+        return calls_error
 
     initial_call = turns[0]["calls"][0]
     initial_payload = initial_call.get("tool_result")
@@ -212,11 +237,21 @@ def evaluate_restart_turns(
         return _result(
             False, "initial offer included a price or bad alternative", "bad_offer"
         )
+    if style_error := _response_style_error(initial_response, "restart offer"):
+        return style_error
 
     accepted_call = turns[1]["calls"][0]
     accepted_payload = accepted_call.get("tool_result")
     if not isinstance(accepted_payload, dict) or "total_usd" not in accepted_payload:
         return _result(False, "accepted restart returned no price", "tool_unavailable")
+    expected_accepted = expected_calls[1]
+    if _result_endpoints(accepted_payload) != (
+        expected_accepted["origin_point_id"],
+        expected_accepted["destination_point_id"],
+    ):
+        return _result(
+            False, "restart result endpoints did not match", "result_mismatch"
+        )
     accepted_response = str(turns[1].get("response", ""))
     if f"${accepted_payload['total_usd']}" not in accepted_response:
         return _result(
@@ -226,11 +261,139 @@ def evaluate_restart_turns(
         return _result(
             False, "accepted response omitted observation time", "missing_time"
         )
-    if not any(mark in accepted_response for mark in ("#", "**", "- ")):
-        return _result(False, "accepted response omitted Markdown", "missing_markdown")
-    if not any(emoji in accepted_response for emoji in _EMOJIS):
-        return _result(False, "accepted response omitted an emoji", "missing_emoji")
+    if style_error := _response_style_error(accepted_response, "accepted response"):
+        return style_error
     return _result(True, "restart offer and accepted TP1NB price passed", "passed")
+
+
+def evaluate_fallback_turns(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if calls_error := _expected_calls_error(turns, metadata["expected_calls"]):
+        return calls_error
+
+    window = metadata.get("active_window")
+    initial_payload = turns[0]["calls"][0].get("tool_result")
+    if not isinstance(initial_payload, dict) or initial_payload.get("status") != (
+        "currently_unavailable"
+    ):
+        return _result(False, "initial result was not unavailable", "bad_route")
+    reason = initial_payload.get("reason", {})
+    details = reason.get("details", {}) if isinstance(reason, dict) else {}
+    if (
+        reason.get("code") != metadata["expected_reasons"].get(window)
+        or details.get("availability") != metadata["expected_availability"].get(window)
+        or details.get("required_i95_directions")
+        != metadata["expected_required_i95_directions"]
+        or initial_payload.get("general_purpose_gaps")
+        != [
+            {
+                "connection_id": "i495_to_i95_south",
+                "boundary_point_id": "i495:192SD",
+                "role": "suffix",
+                "i95_direction": "SB",
+                "fallback_required": True,
+            }
+        ]
+    ):
+        return _result(
+            False, "initial TP1SB fallback contract was malformed", "bad_route"
+        )
+
+    initial_response = str(turns[0].get("response", ""))
+    folded = initial_response.casefold()
+    if not (
+        any(term in folded for term in ("would you like", "want me to", "should i"))
+        and "i-495" in folded
+        and "southbound" in folded
+        and "general-purpose" in folded
+        and re.search(r"not (?:be )?included", folded)
+    ):
+        return _result(False, "TP1SB offer or disclosure was missing", "bad_offer")
+    if re.search(r"\$\s*\d", initial_response) or "i495:192sd" in folded:
+        return _result(False, "TP1SB offer exposed a price or point ID", "bad_offer")
+    if style_error := _response_style_error(initial_response, "fallback offer"):
+        return style_error
+
+    accepted_payload = turns[1]["calls"][0].get("tool_result")
+    if not isinstance(accepted_payload, dict) or "total_usd" not in accepted_payload:
+        return _result(False, "accepted fallback returned no price", "tool_unavailable")
+    expected_accepted = metadata["expected_calls"][1]
+    if _result_endpoints(accepted_payload) != (
+        expected_accepted["origin_point_id"],
+        expected_accepted["destination_point_id"],
+    ):
+        return _result(
+            False, "fallback result endpoints did not match", "result_mismatch"
+        )
+    accepted_response = str(turns[1].get("response", ""))
+    if f"${accepted_payload['total_usd']}" not in accepted_response:
+        return _result(
+            False, "accepted response omitted the tool price", "ungrounded_price"
+        )
+    if "EST" not in accepted_response:
+        return _result(
+            False, "accepted response omitted observation time", "missing_time"
+        )
+    if style_error := _response_style_error(accepted_response, "accepted response"):
+        return style_error
+    return _result(True, "TP1SB offer and accepted fallback price passed", "passed")
+
+
+def evaluate_unavailable_turn(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if calls_error := _expected_calls_error(turns, [metadata["expected_call"]]):
+        return calls_error
+
+    window = metadata.get("active_window")
+    payload = turns[0]["calls"][0].get("tool_result")
+    if (
+        not isinstance(payload, dict)
+        or payload.get("status") != "currently_unavailable"
+    ):
+        return _result(False, "tool result was not unavailable", "bad_route")
+    expected = metadata["expected_call"]
+    if _result_endpoints(payload) != (
+        expected["origin_point_id"],
+        expected["destination_point_id"],
+    ):
+        return _result(
+            False, "unavailable result endpoints did not match", "result_mismatch"
+        )
+    reason = payload.get("reason", {})
+    details = reason.get("details", {}) if isinstance(reason, dict) else {}
+    if (
+        reason.get("code") != metadata["expected_reasons"].get(window)
+        or details.get("availability") != metadata["expected_availability"].get(window)
+        or details.get("required_i95_directions")
+        != metadata["expected_required_i95_directions"]
+    ):
+        return _result(False, "unavailability reason did not match", "bad_route")
+    if any(
+        gap.get("fallback_required") is True
+        for gap in payload.get("general_purpose_gaps", [])
+        if isinstance(gap, dict)
+    ):
+        return _result(False, "unexpected fallback-required gap", "bad_route")
+
+    response = str(turns[0].get("response", ""))
+    folded = response.casefold()
+    expected_state = metadata["expected_availability"].get(window)
+    if not (
+        any(term in folded for term in ("unavailable", "closed"))
+        and expected_state in folded
+    ):
+        return _result(False, "closure state was not explained", "missing_closure")
+    if re.search(r"\$\s*\d", response) or any(
+        term in folded for term in ("would you like", "want me to", "should i", "tp1")
+    ):
+        return _result(
+            False, "response invented a price or fallback offer", "bad_offer"
+        )
+    if style_error := _response_style_error(response, "closure response"):
+        return style_error
+    return _result(True, "unavailability response matched the live state", "passed")
 
 
 def task_function(case: Case[str, str]) -> dict[str, Any]:
@@ -248,7 +411,7 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     return {"output": str(response), "trajectory": turns}
 
 
-class WestparkEvaluator(Evaluator[str, str]):
+class TollChatEvaluator(Evaluator[str, str]):
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
     ) -> list[EvaluationOutput]:
@@ -261,6 +424,10 @@ class WestparkEvaluator(Evaluator[str, str]):
         metadata = evaluation_case.metadata or {}
         if metadata.get("suite") == "restart":
             return evaluate_restart_turns(turns, metadata)
+        if metadata.get("suite") == "fallback":
+            return evaluate_fallback_turns(turns, metadata)
+        if metadata.get("suite") == "unavailable":
+            return evaluate_unavailable_turn(turns, metadata)
         calls = turns[0].get("calls", []) if len(turns) == 1 else []
         return evaluate_westpark_turn(
             cast(list[dict[str, Any]], calls),
@@ -282,16 +449,16 @@ def _configure_database() -> None:
         os.environ["DB_PORT"] = str(instance["Endpoint"]["Port"])
 
 
-def main(suite: str = "all") -> None:
+def main(window: str, suite: str = "all") -> None:
     _configure_database()
     report = Experiment[str, str](
-        cases=load_cases(suite=suite), evaluators=[WestparkEvaluator()]
+        cases=load_cases(suite=suite, window=window), evaluators=[TollChatEvaluator()]
     ).run_evaluations(task_function)
     _RESULTS_DIR.mkdir(exist_ok=True)
     report.to_file(str(_RESULTS_DIR / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"))
     report.display(include_input=False)
     if not all(report.test_passes):
-        raise SystemExit("Westpark evaluation failed")
+        raise SystemExit("TollChat evaluation failed")
 
 
 def _self_check() -> None:
@@ -300,6 +467,23 @@ def _self_check() -> None:
         "reagan-airport-to-westpark",
         "pentagon-eads-to-westpark",
         "northbound-i95-to-westpark-restart",
+        "dulles-airport-to-backlick-tp1sb-fallback",
+        "old-keene-mill-to-reagan-i95-unavailable",
+    ]
+    assert [case.name for case in load_cases(window="i95_northbound")] == [
+        "northbound-i95-to-westpark-restart",
+        "dulles-airport-to-backlick-tp1sb-fallback",
+    ]
+    assert [case.name for case in load_cases(window="i95_reversal")] == [
+        "northbound-i95-to-westpark-restart",
+        "dulles-airport-to-backlick-tp1sb-fallback",
+        "old-keene-mill-to-reagan-i95-unavailable",
+    ]
+    assert [case.name for case in load_cases(window="i95_southbound")] == [
+        "reagan-airport-to-westpark",
+        "pentagon-eads-to-westpark",
+        "northbound-i95-to-westpark-restart",
+        "old-keene-mill-to-reagan-i95-unavailable",
     ]
     metadata = rows[0]
     success = {
@@ -342,7 +526,10 @@ def _self_check() -> None:
             "point_ids": ["airport_dca", "i495:1859ND"],
         },
     }
-    assert evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].test_pass
+    assert (
+        evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].label
+        == "tool_unavailable"
+    )
     restart = rows[2]
     restart_turns = [
         {
@@ -390,6 +577,169 @@ def _self_check() -> None:
     bad_offer = json.loads(json.dumps(restart_turns))
     bad_offer[0]["response"] += " Try Edsall Road."
     assert evaluate_restart_turns(bad_offer, restart)[0].label == "bad_offer"
+    unstyled_restart = json.loads(json.dumps(restart_turns))
+    unstyled_restart[0]["response"] = (
+        "Would you like me to price from I-495? The general-purpose segment "
+        "is not included."
+    )
+    assert (
+        evaluate_restart_turns(unstyled_restart, restart)[0].label == "missing_markdown"
+    )
+    wrong_restart_result = json.loads(json.dumps(restart_turns))
+    wrong_restart_result[1]["calls"][0]["tool_result"]["origin_point_id"] = "wrong"
+    assert (
+        evaluate_restart_turns(wrong_restart_result, restart)[0].label
+        == "result_mismatch"
+    )
+
+    fallback = {**rows[3], "active_window": "i95_northbound"}
+    fallback_turns = [
+        {
+            "response": (
+                "### 🛣️ End at the junction\n\nWould you like me to price the "
+                "trip to the I-495 Express southbound end? The omitted I-95 "
+                "general-purpose segment is not included."
+            ),
+            "calls": [
+                {
+                    "name": "get_current_toll_price",
+                    "input": fallback["expected_calls"][0],
+                    "tool_result": {
+                        "status": "currently_unavailable",
+                        "reason": {
+                            "code": "i95_opposite_direction_open",
+                            "details": {
+                                "required_i95_directions": ["SB"],
+                                "availability": "northbound",
+                            },
+                        },
+                        "general_purpose_gaps": [
+                            {
+                                "connection_id": "i495_to_i95_south",
+                                "boundary_point_id": "i495:192SD",
+                                "role": "suffix",
+                                "i95_direction": "SB",
+                                "fallback_required": True,
+                            }
+                        ],
+                    },
+                    "is_error": False,
+                }
+            ],
+        },
+        {
+            "response": "### 🚗 Current toll\n\n**Estimate: $7.25** at 9:30 AM EST.",
+            "calls": [
+                {
+                    "name": "get_current_toll_price",
+                    "input": fallback["expected_calls"][1],
+                    "tool_result": {
+                        "origin_point_id": "airport_iad",
+                        "destination_point_id": "i495:192SD",
+                        "total_usd": "7.25",
+                    },
+                    "is_error": False,
+                }
+            ],
+        },
+    ]
+    assert evaluate_fallback_turns(fallback_turns, fallback)[0].test_pass
+    wrong_fallback = json.loads(json.dumps(fallback_turns))
+    wrong_fallback[1]["calls"][0]["input"]["destination_point_id"] = "wrong"
+    assert (
+        evaluate_fallback_turns(wrong_fallback, fallback)[0].label == "input_mismatch"
+    )
+    extra_call = json.loads(json.dumps(fallback_turns))
+    extra_call[0]["calls"].append(extra_call[0]["calls"][0])
+    assert evaluate_fallback_turns(extra_call, fallback)[0].label == "tool_mismatch"
+    malformed_reason = json.loads(json.dumps(fallback_turns))
+    malformed_reason[0]["calls"][0]["tool_result"]["reason"]["code"] = "unknown"
+    assert evaluate_fallback_turns(malformed_reason, fallback)[0].label == "bad_route"
+    missing_disclosure = json.loads(json.dumps(fallback_turns))
+    missing_disclosure[0]["response"] = "### 🛣️ Would you like I-495 southbound?"
+    assert evaluate_fallback_turns(missing_disclosure, fallback)[0].label == "bad_offer"
+    unstyled_offer = json.loads(json.dumps(fallback_turns))
+    unstyled_offer[0]["response"] = (
+        "Would you like me to price the trip to the I-495 Express southbound "
+        "end? The omitted I-95 general-purpose segment is not included."
+    )
+    assert (
+        evaluate_fallback_turns(unstyled_offer, fallback)[0].label == "missing_markdown"
+    )
+    wrong_fallback_direction = json.loads(json.dumps(fallback_turns))
+    wrong_fallback_direction[0]["calls"][0]["tool_result"]["reason"]["details"][
+        "required_i95_directions"
+    ] = ["NB"]
+    assert (
+        evaluate_fallback_turns(wrong_fallback_direction, fallback)[0].label
+        == "bad_route"
+    )
+    wrong_result_endpoints = json.loads(json.dumps(fallback_turns))
+    wrong_result_endpoints[1]["calls"][0]["tool_result"]["origin_point_id"] = "wrong"
+    assert (
+        evaluate_fallback_turns(wrong_result_endpoints, fallback)[0].label
+        == "result_mismatch"
+    )
+
+    unavailable = {**rows[4], "active_window": "i95_southbound"}
+    unavailable_turns = [
+        {
+            "response": (
+                "### 🚧 I-95 unavailable\n\nThe northbound trip is unavailable "
+                "because the Express Lanes are currently running southbound."
+            ),
+            "calls": [
+                {
+                    "name": "get_current_toll_price",
+                    "input": unavailable["expected_call"],
+                    "tool_result": {
+                        "status": "currently_unavailable",
+                        "point_ids": ["i95:203NO", "airport_dca"],
+                        "reason": {
+                            "code": "i95_opposite_direction_open",
+                            "details": {
+                                "required_i95_directions": ["NB"],
+                                "availability": "southbound",
+                            },
+                        },
+                        "general_purpose_gaps": [],
+                    },
+                    "is_error": False,
+                }
+            ],
+        }
+    ]
+    assert evaluate_unavailable_turn(unavailable_turns, unavailable)[0].test_pass
+    invented_offer = json.loads(json.dumps(unavailable_turns))
+    invented_offer[0]["response"] += " Would you like another price?"
+    assert (
+        evaluate_unavailable_turn(invented_offer, unavailable)[0].label == "bad_offer"
+    )
+    unavailable_bad_reason = json.loads(json.dumps(unavailable_turns))
+    unavailable_bad_reason[0]["calls"][0]["tool_result"]["reason"]["code"] = (
+        "i95_fully_closed"
+    )
+    assert (
+        evaluate_unavailable_turn(unavailable_bad_reason, unavailable)[0].label
+        == "bad_route"
+    )
+    wrong_unavailable_direction = json.loads(json.dumps(unavailable_turns))
+    wrong_unavailable_direction[0]["calls"][0]["tool_result"]["reason"]["details"][
+        "required_i95_directions"
+    ] = ["SB"]
+    assert (
+        evaluate_unavailable_turn(wrong_unavailable_direction, unavailable)[0].label
+        == "bad_route"
+    )
+    wrong_unavailable_result = json.loads(json.dumps(unavailable_turns))
+    wrong_unavailable_result[0]["calls"][0]["tool_result"]["point_ids"] = [
+        "wrong-origin",
+        "wrong-destination",
+    ]
+    assert (
+        evaluate_unavailable_turn(wrong_unavailable_result, unavailable)[0].label
+        == "result_mismatch"
+    )
     print("self-check ok (fixtures and evaluator pass/fail branches; no network)")
 
 
@@ -399,6 +749,14 @@ if __name__ == "__main__":
     else:
         parser = ArgumentParser()
         parser.add_argument(
-            "--suite", choices=("all", "direct", "restart"), default="all"
+            "--window",
+            choices=("i95_northbound", "i95_reversal", "i95_southbound"),
+            required=True,
         )
-        main(parser.parse_args().suite)
+        parser.add_argument(
+            "--suite",
+            choices=("all", "direct", "restart", "fallback", "unavailable"),
+            default="all",
+        )
+        args = parser.parse_args()
+        main(args.window, args.suite)

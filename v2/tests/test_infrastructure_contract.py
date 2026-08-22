@@ -97,9 +97,8 @@ def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
     assert "route_validation.validate_toll_route" not in TIMED_ROUTE_TEST
     assert "eval/run_evaluation.py --check" in CI_WORKFLOW
     assert 'if [[ "$TIMED_WINDOW_ID" == i95_* ]]' in TIMED_CHECKS_WORKFLOW
-    assert "suite=restart" in TIMED_CHECKS_WORKFLOW
-    assert "suite=all" in TIMED_CHECKS_WORKFLOW
-    assert 'eval/run_evaluation.py --suite "$suite"' in TIMED_CHECKS_WORKFLOW
+    assert 'eval/run_evaluation.py --window "$TIMED_WINDOW_ID"' in TIMED_CHECKS_WORKFLOW
+    assert "TollChat junction evaluation" in TIMED_CHECKS_WORKFLOW
     assert "test_live_i95_northbound_restart_is_state_independent" in TIMED_ROUTE_TEST
     assert "OPENAI_API_KEY" not in TIMED_CHECKS_WORKFLOW
 
