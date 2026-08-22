@@ -135,7 +135,7 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "Never silently substitute an alternative" in normalized
     assert "reverse the outbound endpoints" in normalized
     assert "outbound departure time, return departure time, weekdays" in normalized
-    assert 'ask exactly "Do you mean I-66 or I-395?"' in normalized
+    assert 'ask exactly "**🛣️ Do you mean I-66 or I-395?**"' in normalized
     assert "Washington D.C. I-66" in normalized
     assert "Washington D.C. I-95/I-395 Northbound" in normalized
     assert "Washington D.C. from I-495 Southbound via I-395" in normalized
@@ -149,7 +149,26 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "prices only the current toll" in normalized
     assert "offer to check the current toll" in normalized
     assert "not affiliated with, endorsed by, or acting for VDOT" in normalized
+    assert "Every user-facing response MUST use Markdown" in normalized
+    assert "include at least one relevant emoji" in normalized
+    assert "### 🚧 Express Lanes unavailable" in prompt
+    assert "h:MM AM/PM EST" in prompt
+    assert "9:30 AM EST" in prompt
+    assert "use the literal `EST` suffix year-round" in normalized
+    assert "For every observed or modeled component" in normalized
+    assert "recent_movement" in prompt
+    assert "net_change_usd" in prompt
+    assert "prior_week_comparison" in prompt
+    assert "lower than, equal to, or higher than" in normalized
+    assert "typical recent price only when all 3 of 3" in normalized
+    assert "Never combine component comparisons" in normalized
+    assert "omit that comparison" in normalized
+    assert "data is stale or too old to use" in normalized
+    assert "Do not state an observation's age" in normalized
     assert "Today in America/New_York is 8/21/2026" in normalized
+    assert "final roadside sign" not in normalized
+    assert "30 minutes" not in normalized
+    assert "maximum_observation_age_minutes" not in prompt
     assert "plan_toll_route" not in prompt
     assert "i95_route" not in prompt
 
