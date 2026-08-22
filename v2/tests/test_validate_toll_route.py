@@ -86,7 +86,7 @@ def _northbound_suffix_row():
     row["general_purpose_gaps"][0].update(
         {
             "connection_id": "source:i95_shared:Southbound:182SO:2239ND",
-            "boundary_point_id": "i495:192NO",
+            "boundary_point_id": "i495:192SD",
             "i95_direction": "NB",
             "fallback_required": False,
         }
@@ -456,9 +456,9 @@ def test_southbound_prefix_route_to_westpark_is_valid(monkeypatch, origin_point_
     assert connection.closed
 
 
-def test_southbound_prefix_rejects_northbound_boundary(monkeypatch):
+def test_route_rejects_unknown_gap_boundary(monkeypatch):
     row = _southbound_westpark_row()
-    row["general_purpose_gaps"][0]["boundary_point_id"] = "i495:192NO"
+    row["general_purpose_gaps"][0]["boundary_point_id"] = "i495:999SD"
 
     result, connection = _invoke(monkeypatch, row)
 
@@ -813,6 +813,20 @@ def test_pricing_route_returns_typed_facility_legs(monkeypatch):
             _endpoints(row),
         )
     ]
+    assert connection.closed
+
+
+def test_pricing_route_accepts_cross_direction_gap(monkeypatch):
+    row = {**_northbound_suffix_row(), "facility_legs": []}
+    connection = _Connection([row])
+    monkeypatch.setattr(route_tool, "connect_to_pricing_database", lambda: connection)
+
+    response = route_tool.fetch_validated_pricing_route(  # pyright: ignore[reportPrivateUsage]
+        *_endpoints(row)
+    )
+
+    assert response.general_purpose_gaps[0].boundary_point_id == "i495:192SD"
+    assert response.general_purpose_gaps[0].i95_direction == "NB"
     assert connection.closed
 
 

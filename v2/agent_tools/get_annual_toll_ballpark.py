@@ -29,6 +29,7 @@ _SAFE_ERROR = "Unable to calculate the annual toll ballpark. Reference: {tool_us
 _EASTERN = ZoneInfo("America/New_York")
 _METHOD = "recent_complete_same_date_round_trips"
 _ROUTE_SQL = "SELECT * FROM oracle.validate_ballpark_route(%s, %s)"
+_DISTANCE_SQL = "SELECT oracle.get_priced_route_distance_miles(%s) AS distance_miles"
 _SUMMARY_SQL = """SELECT * FROM oracle.get_annual_ballpark_summary(
     %s, %s, %s, %s, %s, %s, %s
 )"""
@@ -41,6 +42,8 @@ _WEEKDAYS = (
     "saturday",
     "sunday",
 )
+_VEHICLE_COST_PER_MILE = Decimal("0.685")
+_TAX_FRACTION = "1/3"
 
 type _Weekday = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
@@ -57,9 +60,9 @@ type _ProgressMessage = Literal[
     "Retrieving recent toll prices",
     "Recent toll pricing complete",
     "Recent toll pricing failed",
-    "Calculating annual toll ballpark",
-    "Annual toll ballpark complete",
-    "Annual toll ballpark calculation failed",
+    "Calculating annual toll-commute affordability",
+    "Annual toll-commute affordability complete",
+    "Annual toll-commute affordability calculation failed",
 ]
 _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessage] = {
     ("route_validation", "running"): "Validating outbound and return toll routes",
@@ -68,9 +71,15 @@ _PROGRESS_MESSAGES: dict[tuple[_ProgressStage, _ProgressStatus], _ProgressMessag
     ("historical_pricing", "running"): "Retrieving recent toll prices",
     ("historical_pricing", "completed"): "Recent toll pricing complete",
     ("historical_pricing", "failed"): "Recent toll pricing failed",
-    ("ballpark_calculation", "running"): "Calculating annual toll ballpark",
-    ("ballpark_calculation", "completed"): "Annual toll ballpark complete",
-    ("ballpark_calculation", "failed"): "Annual toll ballpark calculation failed",
+    (
+        "ballpark_calculation",
+        "running",
+    ): "Calculating annual toll-commute affordability",
+    ("ballpark_calculation", "completed"): "Annual toll-commute affordability complete",
+    (
+        "ballpark_calculation",
+        "failed",
+    ): "Annual toll-commute affordability calculation failed",
 }
 
 
@@ -79,6 +88,10 @@ class _Model(BaseModel):
 
 
 def _round_usd(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _round_miles(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
@@ -105,6 +118,15 @@ class _BallparkRequest(_Model):
     return_: _DirectionRequest = Field(alias="return")
     weekdays: Annotated[list[_Weekday], Field(min_length=1, max_length=7)]
     planned_annual_commute_days: Annotated[int, Field(ge=1, le=366)]
+    gross_annual_income_usd: Annotated[
+        str,
+        Field(
+            pattern=(
+                r"^(?:0[.](?:0[1-9]|[1-9][0-9])|"
+                r"[1-9][0-9]{0,8}[.][0-9]{2})$"
+            )
+        ),
+    ]
 
     @model_validator(mode="after")
     def _validate_request(self) -> Self:
@@ -113,6 +135,9 @@ class _BallparkRequest(_Model):
         if self.planned_annual_commute_days > 53 * len(self.weekdays):
             raise ValueError("planned annual commute days exceed requested weekdays")
         return self
+
+    def gross_annual_income(self) -> Decimal:
+        return Decimal(self.gross_annual_income_usd)
 
 
 class _ProgressEvent(_Model):
@@ -222,15 +247,15 @@ class _Coverage(_Model):
     by_weekday: Annotated[list[_WeekdayCoverage], Field(min_length=1, max_length=7)]
 
 
-class _Scenario(_Model):
-    daily_round_trip_usd: Annotated[Decimal, Field(ge=0)]
-    annualized_usd: Annotated[Decimal, Field(ge=0)]
+class _TollScenario(_Model):
+    daily_toll_usd: Annotated[Decimal, Field(ge=0)]
+    annual_toll_usd: Annotated[Decimal, Field(ge=0)]
 
 
-class _Scenarios(_Model):
-    p25: _Scenario
-    p50: _Scenario
-    p90: _Scenario
+class _TollScenarios(_Model):
+    p25: _TollScenario
+    p50: _TollScenario
+    p90: _TollScenario
 
 
 class _FacilityBallpark(_Model):
@@ -238,7 +263,7 @@ class _FacilityBallpark(_Model):
     sample_count: Annotated[int, Field(ge=1, le=84)]
     uses_modeled: bool
     uses_current_fixed_rates: bool
-    scenarios: _Scenarios
+    scenarios: _TollScenarios
 
 
 class _WeekdayCoverageDb(_Model):
@@ -402,6 +427,46 @@ class _SummaryRow(_Model):
         return self
 
 
+class _Assumptions(_Model):
+    estimated_tax_fraction: Literal["1/3"]
+    vehicle_cost_per_mile_usd: Literal["0.685"]
+    distance_method: Literal["straight_line_priced_facility_legs"]
+    scope: Literal["tolled_portions_only"]
+
+
+class _Income(_Model):
+    gross_annual_usd: Decimal
+    estimated_tax_usd: Decimal
+    estimated_after_tax_usd: Decimal
+
+
+class _TolledDistance(_Model):
+    daily_round_trip_miles: Annotated[Decimal, Field(ge=0)]
+    annual_miles: Annotated[Decimal, Field(ge=0)]
+
+
+class _VehicleCost(_Model):
+    daily_usd: Annotated[Decimal, Field(ge=0)]
+    annual_usd: Annotated[Decimal, Field(ge=0)]
+
+
+class _FinancialScenario(_Model):
+    daily_toll_usd: Annotated[Decimal, Field(ge=0)]
+    annual_toll_usd: Annotated[Decimal, Field(ge=0)]
+    daily_total_tolled_commute_cost_usd: Annotated[Decimal, Field(ge=0)]
+    average_monthly_tolled_commute_cost_usd: Annotated[Decimal, Field(ge=0)]
+    annual_total_tolled_commute_cost_usd: Annotated[Decimal, Field(ge=0)]
+    estimated_annual_income_after_tax_and_tolled_commute_usd: Decimal
+    tolled_commute_share_of_after_tax_income_percent: Annotated[Decimal, Field(ge=0)]
+    additional_gross_income_to_offset_usd: Annotated[Decimal, Field(ge=0)]
+
+
+class _FinancialScenarios(_Model):
+    p25: _FinancialScenario
+    p50: _FinancialScenario
+    p90: _FinancialScenario
+
+
 class _BallparkResponseBase(_Model):
     method: Literal["recent_complete_same_date_round_trips"]
     evaluated_at: datetime
@@ -413,12 +478,16 @@ class _BallparkResponseBase(_Model):
     uses_modeled: bool
     uses_current_fixed_rates: bool
     facilities: list[_FacilityBallpark]
+    assumptions: _Assumptions
+    income: _Income
+    tolled_distance: _TolledDistance
+    vehicle_cost: _VehicleCost
 
 
 class _BallparkSuccess(_BallparkResponseBase):
     sample_status: Literal["complete", "partial"]
     available_date_range: _DateRange
-    scenarios: _Scenarios
+    scenarios: _FinancialScenarios
 
 
 class _NoCompleteResponse(_BallparkResponseBase):
@@ -439,11 +508,17 @@ class _RouteUnavailableResponse(_Model):
     return_: _RouteStatus = Field(alias="return")
 
 
+class _DistanceUnavailableResponse(_Model):
+    error: Literal["ballpark_unavailable"]
+    reason: Literal["distance_unavailable"]
+
+
 type _BallparkOutput = (
     _BallparkSuccess
     | _NoCompleteResponse
     | _SimpleUnavailableResponse
     | _RouteUnavailableResponse
+    | _DistanceUnavailableResponse
 )
 _OUTPUT_ADAPTER: TypeAdapter[_BallparkOutput] = TypeAdapter(_BallparkOutput)
 _INPUT_SCHEMA: dict[str, Any] = _BallparkRequest.model_json_schema(mode="validation")
@@ -452,7 +527,9 @@ _PROGRESS_SCHEMA = _ProgressEvent.model_json_schema(mode="serialization")
 _OPERATION_ERROR_SCHEMA = _OperationError.model_json_schema(mode="serialization")
 TOOL_SPEC: ToolSpec = {
     "name": "get_annual_toll_ballpark",
-    "description": "Validate a round-trip toll commute and return compact annual toll scenarios.",
+    "description": (
+        "Estimate how a validated round-trip tolled commute affects gross annual income."
+    ),
     "inputSchema": {"json": _INPUT_SCHEMA},
     "outputSchema": {"json": _OUTPUT_SCHEMA},
 }
@@ -496,7 +573,14 @@ def _log_failure_and_build_error_result(
 
 def _start_transaction_and_fetch_routes_and_dates(
     connection: _Connection, request: _BallparkRequest
-) -> tuple[datetime, tuple[_BallparkRouteDb, _BallparkRouteDb], list[date]]:
+) -> tuple[
+    datetime,
+    tuple[_BallparkRouteDb, _BallparkRouteDb],
+    list[date],
+    Decimal | None,
+]:
+    from psycopg.types.json import Jsonb
+
     with connection.cursor() as cursor:
         cursor.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         cursor.execute("SELECT transaction_timestamp() AS evaluated_at")
@@ -515,6 +599,29 @@ def _start_transaction_and_fetch_routes_and_dates(
             if len(rows) != 1:
                 raise ValueError("ballpark route oracle must return exactly one row")
             routes.append(_BallparkRouteDb.model_validate(rows[0]))
+        daily_distance: Decimal | None = None
+        if all(route.status == "valid" for route in routes):
+            daily_distance = Decimal(0)
+            for route in routes:
+                cursor.execute(
+                    _DISTANCE_SQL,
+                    (
+                        Jsonb(
+                            [leg.model_dump(mode="json") for leg in route.facility_legs]
+                        ),
+                    ),
+                )
+                rows = cursor.fetchall()
+                if len(rows) != 1 or set(rows[0]) != {"distance_miles"}:
+                    raise ValueError("priced route distance returned an invalid row")
+                value = rows[0]["distance_miles"]
+                if value is None:
+                    daily_distance = None
+                    break
+                distance = Decimal(value)
+                if distance < 0:
+                    raise ValueError("priced route distance cannot be negative")
+                daily_distance += distance
     end_date = evaluated_at.astimezone(_EASTERN).date() - timedelta(days=1)
     start_date = end_date - timedelta(days=83)
     requested_weekdays = {_WEEKDAYS.index(day) for day in request.weekdays}
@@ -523,7 +630,12 @@ def _start_transaction_and_fetch_routes_and_dates(
         for offset in range(84)
         if (start_date + timedelta(days=offset)).weekday() in requested_weekdays
     ]
-    return evaluated_at.astimezone(_EASTERN), (routes[0], routes[1]), dates
+    return (
+        evaluated_at.astimezone(_EASTERN),
+        (routes[0], routes[1]),
+        dates,
+        daily_distance,
+    )
 
 
 def _resolve_unambiguous_eastern_datetime(
@@ -606,24 +718,80 @@ def _build_summary_query_inputs(
     return legs, fixed_prices
 
 
-def _scenario_from_totals(daily: Decimal, annualized: Decimal) -> _Scenario:
-    return _Scenario(daily_round_trip_usd=daily, annualized_usd=annualized)
+def _parse_database_scenarios(value: _ScenariosDb) -> _TollScenarios:
+    return _TollScenarios(
+        p25=_TollScenario(
+            daily_toll_usd=Decimal(value.p25.daily_round_trip_usd),
+            annual_toll_usd=Decimal(value.p25.annualized_usd),
+        ),
+        p50=_TollScenario(
+            daily_toll_usd=Decimal(value.p50.daily_round_trip_usd),
+            annual_toll_usd=Decimal(value.p50.annualized_usd),
+        ),
+        p90=_TollScenario(
+            daily_toll_usd=Decimal(value.p90.daily_round_trip_usd),
+            annual_toll_usd=Decimal(value.p90.annualized_usd),
+        ),
+    )
 
 
-def _parse_database_scenarios(value: _ScenariosDb) -> _Scenarios:
-    return _Scenarios(
-        p25=_Scenario(
-            daily_round_trip_usd=Decimal(value.p25.daily_round_trip_usd),
-            annualized_usd=Decimal(value.p25.annualized_usd),
+def _financial_context(
+    request: _BallparkRequest, daily_distance_miles: Decimal
+) -> tuple[_Assumptions, _Income, _TolledDistance, _VehicleCost]:
+    gross = request.gross_annual_income()
+    estimated_tax = _round_usd(gross / Decimal(3))
+    daily_miles = _round_miles(daily_distance_miles)
+    daily_vehicle_cost = _round_usd(daily_distance_miles * _VEHICLE_COST_PER_MILE)
+    return (
+        _Assumptions(
+            estimated_tax_fraction=_TAX_FRACTION,
+            vehicle_cost_per_mile_usd="0.685",
+            distance_method="straight_line_priced_facility_legs",
+            scope="tolled_portions_only",
         ),
-        p50=_Scenario(
-            daily_round_trip_usd=Decimal(value.p50.daily_round_trip_usd),
-            annualized_usd=Decimal(value.p50.annualized_usd),
+        _Income(
+            gross_annual_usd=gross,
+            estimated_tax_usd=estimated_tax,
+            estimated_after_tax_usd=gross - estimated_tax,
         ),
-        p90=_Scenario(
-            daily_round_trip_usd=Decimal(value.p90.daily_round_trip_usd),
-            annualized_usd=Decimal(value.p90.annualized_usd),
+        _TolledDistance(
+            daily_round_trip_miles=daily_miles,
+            annual_miles=_round_miles(
+                daily_distance_miles * request.planned_annual_commute_days
+            ),
         ),
+        _VehicleCost(
+            daily_usd=daily_vehicle_cost,
+            annual_usd=_round_usd(
+                daily_distance_miles
+                * _VEHICLE_COST_PER_MILE
+                * request.planned_annual_commute_days
+            ),
+        ),
+    )
+
+
+def _financial_scenario(
+    daily_toll: Decimal,
+    annual_toll: Decimal,
+    income: _Income,
+    vehicle_cost: _VehicleCost,
+) -> _FinancialScenario:
+    daily_total = _round_usd(daily_toll + vehicle_cost.daily_usd)
+    annual_total = _round_usd(annual_toll + vehicle_cost.annual_usd)
+    return _FinancialScenario(
+        daily_toll_usd=daily_toll,
+        annual_toll_usd=annual_toll,
+        daily_total_tolled_commute_cost_usd=daily_total,
+        average_monthly_tolled_commute_cost_usd=_round_usd(annual_total / Decimal(12)),
+        annual_total_tolled_commute_cost_usd=annual_total,
+        estimated_annual_income_after_tax_and_tolled_commute_usd=(
+            income.estimated_after_tax_usd - annual_total
+        ),
+        tolled_commute_share_of_after_tax_income_percent=(
+            annual_total * 100 / income.estimated_after_tax_usd
+        ).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+        additional_gross_income_to_offset_usd=_round_usd(annual_total * Decimal("1.5")),
     )
 
 
@@ -665,7 +833,10 @@ def _fetch_and_validate_summary(
 
 
 def _build_ballpark_response(
-    request: _BallparkRequest, evaluated_at: datetime, summary: _SummaryRow
+    request: _BallparkRequest,
+    evaluated_at: datetime,
+    summary: _SummaryRow,
+    daily_distance_miles: Decimal,
 ) -> _BallparkSuccess | _NoCompleteResponse:
     target_end = evaluated_at.date() - timedelta(days=1)
     coverage = _Coverage(
@@ -692,6 +863,9 @@ def _build_ballpark_response(
         )
         for item in summary.facility_scenarios
     ]
+    assumptions, income, tolled_distance, vehicle_cost = _financial_context(
+        request, daily_distance_miles
+    )
     common: dict[str, Any] = {
         "method": _METHOD,
         "evaluated_at": evaluated_at,
@@ -707,6 +881,10 @@ def _build_ballpark_response(
         "uses_modeled": summary.uses_modeled,
         "uses_current_fixed_rates": summary.uses_current_fixed_rates,
         "facilities": facilities,
+        "assumptions": assumptions,
+        "income": income,
+        "tolled_distance": tolled_distance,
+        "vehicle_cost": vehicle_cost,
     }
     if summary.complete_pair_count == 0:
         return _NoCompleteResponse(
@@ -734,18 +912,24 @@ def _build_ballpark_response(
             start_date=cast(date, summary.available_start_date),
             end_date=cast(date, summary.available_end_date),
         ),
-        scenarios=_Scenarios(
-            p25=_scenario_from_totals(
+        scenarios=_FinancialScenarios(
+            p25=_financial_scenario(
                 cast(Decimal, summary.p25_daily_usd),
                 cast(Decimal, summary.p25_annualized_usd),
+                income,
+                vehicle_cost,
             ),
-            p50=_scenario_from_totals(
+            p50=_financial_scenario(
                 cast(Decimal, summary.p50_daily_usd),
                 cast(Decimal, summary.p50_annualized_usd),
+                income,
+                vehicle_cost,
             ),
-            p90=_scenario_from_totals(
+            p90=_financial_scenario(
                 cast(Decimal, summary.p90_daily_usd),
                 cast(Decimal, summary.p90_annualized_usd),
+                income,
+                vehicle_cost,
             ),
         ),
     )
@@ -794,7 +978,7 @@ def _close_connection(connection: _Connection, *, rollback: bool) -> None:
 async def get_annual_toll_ballpark(
     tool_context: ToolContext,
 ) -> AsyncGenerator[dict[str, str] | ToolResult]:
-    """Validate a round trip and return compact annual toll scenarios."""
+    """Estimate annual income impact for a validated round-trip tolled commute."""
     tool_use_id = "unknown"
     try:
         tool_data = cast(Any, tool_context.tool_use)
@@ -821,7 +1005,7 @@ async def get_annual_toll_ballpark(
         try:
             connect = route_validation.connect_to_pricing_database
             connection = cast(_Connection, await asyncio.to_thread(connect))
-            evaluated_at, routes, dates = await asyncio.to_thread(
+            evaluated_at, routes, dates, daily_distance_miles = await asyncio.to_thread(
                 _start_transaction_and_fetch_routes_and_dates, connection, request
             )
         except Exception as error:
@@ -841,6 +1025,14 @@ async def get_annual_toll_ballpark(
                         "outbound": _build_route_status(request.outbound, routes[0]),
                         "return": _build_route_status(request.return_, routes[1]),
                     }
+                ),
+            )
+            return
+        if daily_distance_miles is None:
+            yield _build_success_result(
+                tool_use_id,
+                _DistanceUnavailableResponse(
+                    error="ballpark_unavailable", reason="distance_unavailable"
                 ),
             )
             return
@@ -872,7 +1064,10 @@ async def get_annual_toll_ballpark(
         yield _progress_event("ballpark_calculation", "running")
         try:
             result = _build_success_result(
-                tool_use_id, _build_ballpark_response(request, evaluated_at, summary)
+                tool_use_id,
+                _build_ballpark_response(
+                    request, evaluated_at, summary, daily_distance_miles
+                ),
             )
         except Exception as error:
             yield _progress_event("ballpark_calculation", "failed")

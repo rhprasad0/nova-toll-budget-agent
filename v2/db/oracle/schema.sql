@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.10.1
+-- oracle schema version: 1.11.0
 
 \set ON_ERROR_STOP on
 
@@ -150,7 +150,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.10.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.11.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -1285,6 +1285,52 @@ BEGIN
 END
 $function$;
 
+CREATE FUNCTION oracle.get_priced_route_distance_miles(
+    facility_legs jsonb
+) RETURNS numeric
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+    leg_count integer;
+    distance_count integer;
+    distance_miles numeric;
+BEGIN
+    IF jsonb_typeof(facility_legs) <> 'array'
+       OR EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(facility_legs) AS leg(value)
+           WHERE jsonb_typeof(leg.value) <> 'object'
+              OR jsonb_typeof(leg.value->'point_ids') <> 'array'
+              OR jsonb_array_length(leg.value->'point_ids') <> 2
+              OR jsonb_typeof(leg.value->'point_ids'->0) <> 'string'
+              OR jsonb_typeof(leg.value->'point_ids'->1) <> 'string'
+       ) THEN
+        RAISE EXCEPTION 'facility legs are malformed';
+    END IF;
+
+    leg_count := jsonb_array_length(facility_legs);
+    IF leg_count = 0 THEN
+        RETURN 0;
+    END IF;
+
+    SELECT
+        count(oracle.ST_Distance(origin.location, destination.location, true)),
+        sum(oracle.ST_Distance(origin.location, destination.location, true))
+            / 1609.344
+    INTO distance_count, distance_miles
+    FROM jsonb_array_elements(facility_legs) AS leg(value)
+    LEFT JOIN oracle.toll_route_point AS origin
+      ON origin.point_id = leg.value->'point_ids'->>0
+    LEFT JOIN oracle.toll_route_point AS destination
+      ON destination.point_id = leg.value->'point_ids'->>1;
+
+    RETURN CASE WHEN distance_count = leg_count THEN distance_miles ELSE NULL END;
+END
+$function$;
+
 CREATE FUNCTION oracle.get_i66_pricing_comparisons(
     requested_start_zone_id integer,
     requested_end_zone_id integer
@@ -2058,6 +2104,8 @@ GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)
 TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.validate_ballpark_route(text, text)
 TO pricing_caller;
+GRANT EXECUTE ON FUNCTION oracle.get_priced_route_distance_miles(jsonb)
+TO pricing_caller;
 GRANT EXECUTE ON FUNCTION oracle.get_i66_ballpark_samples(
     integer, integer, time, date[], timestamptz
 ) TO pricing_caller;
@@ -2081,6 +2129,7 @@ ALTER FUNCTION oracle.route_pricing_legs(text[], text[]) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_toll_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_pricing_route(text, text) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.validate_ballpark_route(text, text) OWNER TO oracle_owner;
+ALTER FUNCTION oracle.get_priced_route_distance_miles(jsonb) OWNER TO oracle_owner;
 ALTER FUNCTION oracle.get_i66_pricing_comparisons(integer, integer)
 OWNER TO oracle_owner;
 ALTER FUNCTION oracle.get_i95_i495_pricing_comparisons(integer)

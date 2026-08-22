@@ -9,6 +9,7 @@ DECLARE
     i66_pricing_function record;
     i95_pricing_function record;
     prompt_points_function record;
+    distance_function record;
     resolver_function record;
 BEGIN
     IF (SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'oracle_owner')
@@ -55,6 +56,10 @@ BEGIN
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid =
+             'oracle.get_priced_route_distance_miles(jsonb)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
              'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
@@ -89,6 +94,9 @@ BEGIN
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.validate_ballpark_route(text,text)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_priced_route_distance_miles(jsonb)'::regprocedure)
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure)
@@ -211,6 +219,17 @@ BEGIN
             row_to_json(prompt_points_function);
     END IF;
     SELECT procedure.provolatile, procedure.proconfig
+    INTO distance_function
+    FROM pg_catalog.pg_proc AS procedure
+    WHERE procedure.oid =
+        'oracle.get_priced_route_distance_miles(jsonb)'::regprocedure;
+    IF distance_function.provolatile <> 's'
+       OR distance_function.proconfig IS DISTINCT FROM
+          ARRAY['search_path=pg_catalog, pg_temp']::text[] THEN
+        RAISE EXCEPTION 'priced-route distance catalog contract is wrong: %',
+            row_to_json(distance_function);
+    END IF;
+    SELECT procedure.provolatile, procedure.proconfig
     INTO resolver_function
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
@@ -258,6 +277,7 @@ BEGIN
                   'oracle.resolve_toll_route_internal(text,text,boolean)'::regprocedure,
                   'oracle.route_pricing_legs(text[],text[])'::regprocedure,
                   'oracle.validate_ballpark_route(text,text)'::regprocedure,
+                  'oracle.get_priced_route_distance_miles(jsonb)'::regprocedure,
                   'oracle.validate_ballpark_sample_request(time,date[],timestamptz)'::regprocedure,
                   'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure,
                   'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)'::regprocedure,
@@ -281,7 +301,7 @@ BEGIN
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('pricing_caller', procedure.oid, 'EXECUTE');
     IF agent_executable_count <> 2
-       OR pricing_executable_count <> 7
+       OR pricing_executable_count <> 8
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
@@ -320,6 +340,11 @@ BEGIN
        )
        OR NOT has_function_privilege(
            'pricing_caller',
+           'oracle.get_priced_route_distance_miles(jsonb)',
+           'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'pricing_caller',
            'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)',
            'EXECUTE'
        )
@@ -352,7 +377,7 @@ BEGIN
            'oracle.validate_ballpark_sample_request(time,date[],timestamptz)',
            'EXECUTE'
        ) THEN
-        RAISE EXCEPTION 'runtime executable surfaces are not exactly 2 and 7 functions';
+        RAISE EXCEPTION 'runtime executable surfaces are not exactly 2 and 8 functions';
     END IF;
 END $$;
 
@@ -374,6 +399,11 @@ BEGIN
             'i66:1:entry:EB', 'i66:4:exit:EB'
         );
         RAISE EXCEPTION 'agent executed internal pricing-route validation';
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    BEGIN
+        PERFORM oracle.get_priced_route_distance_miles('[]'::jsonb);
+        RAISE EXCEPTION 'agent executed priced-route distance';
     EXCEPTION WHEN insufficient_privilege THEN NULL;
     END;
     BEGIN
@@ -490,6 +520,9 @@ BEGIN
     IF result.status <> 'valid'
        OR jsonb_array_length(result.facility_legs) <> 1 THEN
         RAISE EXCEPTION 'pricing caller ballpark route execution failed';
+    END IF;
+    IF oracle.get_priced_route_distance_miles(result.facility_legs) <= 0 THEN
+        RAISE EXCEPTION 'pricing caller priced-route distance failed';
     END IF;
     PERFORM * FROM oracle.get_i66_ballpark_samples(
         3100, 3110, time '08:00',

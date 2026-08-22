@@ -23,7 +23,7 @@ _MAX_MESSAGE_CHARS = 8_000
 _EASTERN = ZoneInfo("America/New_York")
 _TOOL_LABELS = {
     "get_current_toll_price": "Checking current toll price",
-    "get_annual_toll_ballpark": "Calculating annual toll ballpark",
+    "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
 }
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,11 @@
-# TollChat v2 junction evaluation
+# TollChat v2 evaluation
 
-This code-graded Strands suite runs five current-toll routing cases through a
-fresh production agent. Cases are selected for the live I-95 lane state and
-verify exact tool calls, unavailable-direction explanations, TP1NB/TP1SB
-fallback behavior, and grounded Markdown/emoji responses.
+This code-graded Strands suite runs six current-toll routing cases and six
+annual job-offer affordability cases through a fresh production agent. It
+verifies exact tool calls, route/fallback behavior, required-input and income
+clarification, adjustable 52-week commute-day estimates, safe annual route
+unavailability, scenario-bound money, and the required Markdown/emoji response
+hierarchy.
 
 ## Offline check
 
@@ -18,6 +20,22 @@ This command is network-free and runs in normal pull-request CI.
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_southbound
+```
+
+The Springfield-Franconia to Westpark direct-price regression runs only during
+a Monday-Friday northbound window. The same command also checks the
+Dulles-to-Reagan cross-direction route every northbound day:
+
+```bash
+env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+  uv run python eval/run_evaluation.py --window i95_northbound --suite direct
+```
+
+The six annual cases are independent of the live I-95 direction:
+
+```bash
+env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+  uv run python eval/run_evaluation.py --window all --suite annual
 ```
 
 The live run needs the RDS CA bundle at `infra/build/ca/rds-ca-bundle.pem`, AWS

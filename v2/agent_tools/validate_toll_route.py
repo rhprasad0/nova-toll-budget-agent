@@ -193,16 +193,6 @@ class _Gap(_Model):
     i95_direction: I95Direction
     fallback_required: bool | None
 
-    @model_validator(mode="after")
-    def _validate_alignment(self) -> Self:
-        expected_boundary = {
-            "NB": "i495:192NO",
-            "SB": "i495:192SD",
-        }[self.i95_direction]
-        if self.boundary_point_id != expected_boundary:
-            raise ValueError("general-purpose gap fields are not aligned")
-        return self
-
 
 class _MissingEvidence(_Model):
     availability: Literal["unknown"]

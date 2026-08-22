@@ -1,6 +1,6 @@
 # Oracle Route Function Contract
 
-- **Status:** Adopted in oracle `1.5.0`; current schema `1.10.1`
+- **Status:** Adopted in oracle `1.5.0`; current schema `1.11.0`
 - **Audience:** TollChat v2 agent tool and its callers
 - **Operation:** `oracle.validate_toll_route(text, text)`
 
@@ -365,3 +365,14 @@ meanings; only `valid` results contain facility legs.
 execute agent-facing `oracle.validate_toll_route(text, text)`, the private
 resolver, or select the underlying oracle or pricing relations directly.
 `tollchat_agent` cannot execute this internal pricing validator.
+
+## Priced-route distance
+
+The annual-affordability wrapper passes each validated route's `facility_legs`
+to `oracle.get_priced_route_distance_miles(jsonb)`. The function sums geodesic
+straight-line endpoint distances for those priced legs and converts meters to
+miles using `1609.344` meters per mile. It returns `0` for an empty leg array
+and SQL null when any required endpoint coordinate is unavailable.
+
+Only `pricing_caller` may execute this bounded operation. It does not infer
+road geometry, include untolled gaps, or provide navigation distance.
