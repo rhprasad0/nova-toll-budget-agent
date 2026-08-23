@@ -192,6 +192,33 @@ test("checked-in estimate snapshot contains the four approved Washington commute
   }
 });
 
+test("annual estimate pins stay on their outbound oracle coordinates", async () => {
+  const source = await readFile(
+    new URL("../agent/assets/commute-map.mjs", import.meta.url),
+    "utf8",
+  );
+  const estimateMarkerLoop = source.slice(
+    source.indexOf("for (const estimate of snapshot.estimates)"),
+    source.indexOf("const destination = document.createElement"),
+  );
+  assert.match(estimateMarkerLoop, /new maplibregl[.]Marker/);
+  assert.doesNotMatch(estimateMarkerLoop, /\boffset\s*:/);
+
+  const coverage = commuteMap.validateCoverageLocations(JSON.parse(await readFile(
+    new URL("../agent/assets/coverage-locations.json", import.meta.url),
+    "utf8",
+  )));
+  const coordinatesByPoint = new Map(coverage.locations.flatMap((location) => (
+    location.points.map(({ point_id: pointId }) => [pointId, location.coordinates])
+  )));
+  for (const estimate of commuteEstimates.estimates) {
+    assert.deepEqual(
+      estimate.coordinates,
+      coordinatesByPoint.get(estimate.outbound.origin_point_id),
+    );
+  }
+});
+
 test("estimate validation rejects malformed or unsafe map data", () => {
   assert.throws(() => validateEstimateSnapshot({}), /invalid commute estimate snapshot/);
   assert.throws(

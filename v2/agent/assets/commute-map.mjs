@@ -27,11 +27,6 @@ const DIRECTION_NAMES = {
   EB: "Eastbound",
   WB: "Westbound",
 };
-const MARKER_OFFSETS = {
-  "springfield-franconia": [45, 10],
-  "i66-west": [-45, -10],
-};
-
 // Census TIGER/Line 2019 I-495 LINEARID 1106220849438, from the v1 trim to TP1.
 const TP1_CONNECTOR = [
   [-77.205634, 38.799923], [-77.205254, 38.799834], [-77.196633, 38.797845],
@@ -308,11 +303,7 @@ export async function mountCommuteMap() {
       marker.append(place, price);
       marker.addEventListener("click", () => selectEstimate(estimate, marker));
       marker.addEventListener("focus", () => selectEstimate(estimate, marker));
-      new maplibregl.Marker({
-        element: marker,
-        anchor: "bottom",
-        offset: MARKER_OFFSETS[estimate.id] ?? [0, 0],
-      })
+      new maplibregl.Marker({ element: marker, anchor: "bottom" })
         .setLngLat(estimate.coordinates)
         .addTo(map);
     }
