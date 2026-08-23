@@ -91,8 +91,14 @@
         <p>In 1,200 held-out comparisons from five days of matched operator data, this direct proxy method had a mean absolute error of $0.106, compared with $0.154 for ordinary least-squares regression. The test period is too short to show seasonal accuracy, and the largest error was $8.05, so these modeled prices are ballpark estimates rather than operator quotes.</p>
       </section>
 
+      <section aria-labelledby="i66-outside-title">
+        <span class="kicker">07 · I-66 Outside</span>
+        <h2 id="i66-outside-title">Why doesn't TollChat cover I-66 Outside the Beltway?</h2>
+        <p>VDOT's public feeds do not include the I-66 Express Lanes Outside the Beltway. Without a public feed or historical dataset it can validate, TollChat cannot provide reliable current prices or annual ballparks, so it leaves that facility unsupported instead of guessing.</p>
+      </section>
+
       <section aria-labelledby="hallucinations-title">
-        <span class="kicker">07 · Hallucinations</span>
+        <span class="kicker">08 · Hallucinations</span>
         <h2 id="hallucinations-title">Does TollChat hallucinate?</h2>
         <p>Yes. TollChat can make mistakes, but we observed no fabricated costs in this 1,000-answer test. Pricing tools calculate its toll and take-home-pay figures in code. GPT-5.6 Luna handles the conversation and explains those results.</p>
         <p>In <strong>one frozen annual-ballpark evaluation for Springfield-Franconia to Westpark, 996 of 1,000 responses (99.6%)</strong> made no quantitative claim outside the supplied tool evidence under the strict policy.</p>
@@ -101,13 +107,13 @@
       </section>
 
       <section aria-labelledby="free-title">
-        <span class="kicker">08 · Why free?</span>
+        <span class="kicker">09 · Why free?</span>
         <h2 id="free-title">Why is TollChat free?</h2>
         <p>TollChat is free because production AI experience is comically hard to get without already having production AI experience. It's the industry's favorite little paradox. TollChat was born to break that loop: you get a free commute-cost experiment, and we get to find out what happens when an AI project meets real users instead of another demo. It may work. It may not. Either way, that's production experience.</p>
       </section>
 
       <section aria-labelledby="privacy-title">
-        <span class="kicker">09 · Privacy and support</span>
+        <span class="kicker">10 · Privacy and support</span>
         <h2 id="privacy-title">What does TollChat collect?</h2>
         <p>TollChat may collect limited usage statistics so we can measure how many people use the service. Before collection starts, the privacy notice will identify the analytics provider, the event fields, and how long the data will be kept. TollChat will not include chat text, trip details, or salary figures in those statistics.</p>
         <p>TollChat keeps the active conversation in the ephemeral microVM's memory and does not write it to disk. OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">how OpenAI handles API data</a>. A random ID in browser session storage keeps follow-up messages together while the microVM runs. TollChat does not attach that ID to traces or logs.</p>
