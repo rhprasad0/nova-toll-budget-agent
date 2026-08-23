@@ -1,0 +1,2369 @@
+{
+  "schema_version": 1,
+  "locations": [
+    {
+      "coordinates": [
+        -77.5663725,
+        39.0867135
+      ],
+      "points": [
+        {
+          "point_id": "greenway:2A:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 2 - Battlefield Pkwy",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:2A:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 2 - Battlefield Pkwy",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:2A:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 2 - Battlefield Pkwy",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:2A:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 2 - Battlefield Pkwy",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.5653713,
+        39.0734586
+      ],
+      "points": [
+        {
+          "point_id": "greenway:2B:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 2B - Compass Creek Pkwy",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.5652813,
+        39.1000972
+      ],
+      "points": [
+        {
+          "point_id": "greenway:1:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:1:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:1:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:1:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 1 - US 15/SR 7 (Leesburg Bypass)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.5623098,
+        39.0604467
+      ],
+      "points": [
+        {
+          "point_id": "greenway:3:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 3 - SR 653 (Shreve Mill Rd)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:3:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 3 - SR 653 (Shreve Mill Rd)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:3:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 3 - SR 653 (Shreve Mill Rd)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:3:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 3 - SR 653 (Shreve Mill Rd)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.5228923,
+        39.0368575
+      ],
+      "points": [
+        {
+          "point_id": "greenway:4:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 4 - SR 659 (Belmont Ridge Rd)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:4:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 4 - SR 659 (Belmont Ridge Rd)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:4:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 4 - SR 659 (Belmont Ridge Rd)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:4:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 4 - SR 659 (Belmont Ridge Rd)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.5083964,
+        39.0302984
+      ],
+      "points": [
+        {
+          "point_id": "greenway:5:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 5 - SR 901 (Claiborne Pkwy)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:5:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 5 - SR 901 (Claiborne Pkwy)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:5:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 5 - SR 901 (Claiborne Pkwy)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:5:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 5 - SR 901 (Claiborne Pkwy)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.4966979,
+        39.0107879
+      ],
+      "points": [
+        {
+          "point_id": "greenway:6:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 6 - SR 772 (Ryan Rd)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:6:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 6 - SR 772 (Ryan Rd)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:6:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 6 - SR 772 (Ryan Rd)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:6:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 6 - SR 772 (Ryan Rd)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.488063,
+        38.343597
+      ],
+      "points": [
+        {
+          "point_id": "i95:234NO",
+          "facility": "i95",
+          "label": "I-95 Express northbound start near Route 17",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.486364,
+        38.345422
+      ],
+      "points": [
+        {
+          "point_id": "i95:235SD",
+          "facility": "i95",
+          "label": "I-95 Express southbound end near Route 17",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.4784892,
+        38.9975485
+      ],
+      "points": [
+        {
+          "point_id": "greenway:7:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 7 - SR 607 (Loudoun County Pkwy)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:7:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 7 - SR 607 (Loudoun County Pkwy)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:7:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 7 - SR 607 (Loudoun County Pkwy)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:7:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 7 - SR 607 (Loudoun County Pkwy)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.4599286,
+        38.9474564
+      ],
+      "points": [
+        {
+          "point_id": "airport_iad",
+          "facility": "airport_iad",
+          "label": "Washington Dulles International Airport",
+          "direction": null,
+          "role": "airport"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.458962,
+        38.9906018
+      ],
+      "points": [
+        {
+          "point_id": "greenway:8:entry:EB",
+          "facility": "greenway",
+          "label": "Exit 8 - SR 606 (Ox Rd)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:8:entry:WB",
+          "facility": "greenway",
+          "label": "Exit 8 - SR 606 (Ox Rd)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:8:exit:EB",
+          "facility": "greenway",
+          "label": "Exit 8 - SR 606 (Ox Rd)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:8:exit:WB",
+          "facility": "greenway",
+          "label": "Exit 8 - SR 606 (Ox Rd)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.4278587,
+        38.9646107
+      ],
+      "points": [
+        {
+          "point_id": "dtr:28:entry:EB",
+          "facility": "dtr",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:28:entry:WB",
+          "facility": "dtr",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:28:exit:EB",
+          "facility": "dtr",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:28:exit:WB",
+          "facility": "dtr",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "WB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:28:entry:EB",
+          "facility": "greenway",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:28:entry:WB",
+          "facility": "greenway",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "greenway:28:exit:EB",
+          "facility": "greenway",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "greenway:28:exit:WB",
+          "facility": "greenway",
+          "label": "Route 28 (Dulles Toll Road / Dulles Greenway)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.42198543776266,
+        38.422051357101374
+      ],
+      "points": [
+        {
+          "point_id": "i95:232NO",
+          "facility": "i95",
+          "label": "Courthouse Road/Route 630",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:233SD",
+          "facility": "i95",
+          "label": "Courthouse Road/Route 630",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.408712,
+        38.45275
+      ],
+      "points": [
+        {
+          "point_id": "i95:2202SD",
+          "facility": "i95",
+          "label": "I-95 Near Courthouse Road/Route 630",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.407403,
+        38.452553
+      ],
+      "points": [
+        {
+          "point_id": "i95:2192NO",
+          "facility": "i95",
+          "label": "I-95 Near Courthouse Road/Route 630",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.3983638,
+        38.9545776
+      ],
+      "points": [
+        {
+          "point_id": "dtr:10:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 10 - SR 657",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:10:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 10 - SR 657",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:10:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 10 - SR 657",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:10:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 10 - SR 657",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.39427208900452,
+        38.483106880873244
+      ],
+      "points": [
+        {
+          "point_id": "i95:219NO",
+          "facility": "i95",
+          "label": "I-95 Near Garrisonville Road/Route 610",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:220SD",
+          "facility": "i95",
+          "label": "I-95 Near Garrisonville Road/Route 610",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.37763267889507,
+        38.50888867345871
+      ],
+      "points": [
+        {
+          "point_id": "i95:228ND",
+          "facility": "i95",
+          "label": "I-95 Near Quantico",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:229SO",
+          "facility": "i95",
+          "label": "I-95 Near Quantico",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.3739791,
+        38.952852
+      ],
+      "points": [
+        {
+          "point_id": "dtr:11:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 11 - SR 286 (Fairfax County Pkwy)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:11:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 11 - SR 286 (Fairfax County Pkwy)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:11:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 11 - SR 286 (Fairfax County Pkwy)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:11:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 11 - SR 286 (Fairfax County Pkwy)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.3564815,
+        38.9519397
+      ],
+      "points": [
+        {
+          "point_id": "dtr:12:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 12 - SR 602 (Reston Pkwy)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:12:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 12 - SR 602 (Reston Pkwy)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:12:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 12 - SR 602 (Reston Pkwy)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:12:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 12 - SR 602 (Reston Pkwy)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.34081029891966,
+        38.55691655440953
+      ],
+      "points": [
+        {
+          "point_id": "i95:218SD",
+          "facility": "i95",
+          "label": "I-95 Near Joplin Road/Quantico",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.3379578,
+        38.9467082
+      ],
+      "points": [
+        {
+          "point_id": "dtr:13:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 13 - SR 828 (Wiehle Ave)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:13:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 13 - SR 828 (Wiehle Ave)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:13:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 13 - SR 828 (Wiehle Ave)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:13:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 13 - SR 828 (Wiehle Ave)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.32940018177031,
+        38.57367329785056
+      ],
+      "points": [
+        {
+          "point_id": "i95:218NO",
+          "facility": "i95",
+          "label": "I-95 Near Dumfries Road/Route 234",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.3117472,
+        38.9475129
+      ],
+      "points": [
+        {
+          "point_id": "dtr:14:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 14 - SR 674 (Hunter Mill Rd)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:14:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 14 - SR 674 (Hunter Mill Rd)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:14:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 14 - SR 674 (Hunter Mill Rd)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:14:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 14 - SR 674 (Hunter Mill Rd)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.30669260025024,
+        38.6079673419944
+      ],
+      "points": [
+        {
+          "point_id": "i95:217NO",
+          "facility": "i95",
+          "label": "I-95 Near Cardinal Drive",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.30504035949707,
+        38.609996210858746
+      ],
+      "points": [
+        {
+          "point_id": "i95:217SD",
+          "facility": "i95",
+          "label": "I-95 Near Dumfries Road/Route 234",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2943014508278,
+        38.62637740172776
+      ],
+      "points": [
+        {
+          "point_id": "i95:236SO",
+          "facility": "i95",
+          "label": "I-95 Near Dale Boulevard",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.291297,
+        38.63324
+      ],
+      "points": [
+        {
+          "point_id": "i95:214SO",
+          "facility": "i95",
+          "label": "Opitz Boulevard",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.290079,
+        38.63619029
+      ],
+      "points": [
+        {
+          "point_id": "i95:215ND",
+          "facility": "i95",
+          "label": "Opitz Boulevard",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.290078997612,
+        38.63619029317337
+      ],
+      "points": [
+        {
+          "point_id": "i95:214NO",
+          "facility": "i95",
+          "label": "Opitz Boulevard",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2847843170166,
+        38.648408130740094
+      ],
+      "points": [
+        {
+          "point_id": "i95:216SD",
+          "facility": "i95",
+          "label": "I-95 Near Dale Boulevard",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.27968811988832,
+        38.65653544214265
+      ],
+      "points": [
+        {
+          "point_id": "i95:213NO",
+          "facility": "i95",
+          "label": "Prince William Parkway/Route 294",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:213SD",
+          "facility": "i95",
+          "label": "Prince William Parkway/Route 294",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.267998,
+        38.9364969
+      ],
+      "points": [
+        {
+          "point_id": "dtr:15:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 15 - SR 676 (Wolf Trap)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:15:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 15 - SR 676 (Wolf Trap)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:15:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 15 - SR 676 (Wolf Trap)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:15:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 15 - SR 676 (Wolf Trap)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.25293576717378,
+        38.670420956255
+      ],
+      "points": [
+        {
+          "point_id": "i95:211NO",
+          "facility": "i95",
+          "label": "Gordon Boulevard/Route 123",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:211SD",
+          "facility": "i95",
+          "label": "Gordon Boulevard/Route 123",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.25293576717377,
+        38.670420956255
+      ],
+      "points": [
+        {
+          "point_id": "i95:211ND",
+          "facility": "i95",
+          "label": "I-95 Near Gordon Boulevard/Route 123",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2468048,
+        38.9338704
+      ],
+      "points": [
+        {
+          "point_id": "dtr:16:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 16 - SR 7 (Leesburg Pike)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:16:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 16 - SR 7 (Leesburg Pike)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:16:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 16 - SR 7 (Leesburg Pike)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:16:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 16 - SR 7 (Leesburg Pike)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.23375797271729,
+        38.67847457705374
+      ],
+      "points": [
+        {
+          "point_id": "i95:209SO",
+          "facility": "i95",
+          "label": "I-95 Near US-1",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2332489,
+        38.9335214
+      ],
+      "points": [
+        {
+          "point_id": "dtr:17:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 17 - SR 684 (Spring Hill Rd)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:17:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 17 - SR 684 (Spring Hill Rd)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:17:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 17 - SR 684 (Spring Hill Rd)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:17:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 17 - SR 684 (Spring Hill Rd)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2308450937271,
+        38.680744336650406
+      ],
+      "points": [
+        {
+          "point_id": "i95:210SD",
+          "facility": "i95",
+          "label": "US-1",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.23015308380128,
+        38.68124685671744
+      ],
+      "points": [
+        {
+          "point_id": "i95:210NO",
+          "facility": "i95",
+          "label": "US-1",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.22206903572085,
+        38.88630856637025
+      ],
+      "points": [
+        {
+          "point_id": "i495:187SD",
+          "facility": "i495",
+          "label": "Interstate 66",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:187SO",
+          "facility": "i495",
+          "label": "Interstate 66",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.22081457672118,
+        38.87578329502197
+      ],
+      "points": [
+        {
+          "point_id": "i495:188SO",
+          "facility": "i495",
+          "label": "Lee Highway (Route 29)",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2203854232788,
+        38.87585011491063
+      ],
+      "points": [
+        {
+          "point_id": "i495:1889ND",
+          "facility": "i495",
+          "label": "Lee Highway (Route 29)",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:188ND",
+          "facility": "i495",
+          "label": "Lee Highway (Route 29)",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.22027894973763,
+        38.8537916449265
+      ],
+      "points": [
+        {
+          "point_id": "i495:189SD",
+          "facility": "i495",
+          "label": "Gallows Road",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21996618385316,
+        38.885932758997164
+      ],
+      "points": [
+        {
+          "point_id": "i495:1879ND",
+          "facility": "i495",
+          "label": "Interstate 66",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:187ND",
+          "facility": "i495",
+          "label": "Interstate 66",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:187NO",
+          "facility": "i495",
+          "label": "Interstate 66",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21981760978706,
+        38.853800000000014
+      ],
+      "points": [
+        {
+          "point_id": "i495:189NO",
+          "facility": "i495",
+          "label": "Gallows Road",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2189905,
+        38.8862187
+      ],
+      "points": [
+        {
+          "point_id": "i66:1:entry:EB",
+          "facility": "i66",
+          "label": "I-66 West",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:1:exit:WB",
+          "facility": "i66",
+          "label": "I-66 West",
+          "direction": "WB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i66:2:entry:EB",
+          "facility": "i66",
+          "label": "I-495 N",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:3:entry:EB",
+          "facility": "i66",
+          "label": "I-495 Express Lanes N",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:5:entry:EB",
+          "facility": "i66",
+          "label": "I-495 S",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:5:exit:WB",
+          "facility": "i66",
+          "label": "I-495 S",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2180038478851,
+        38.91049999999999
+      ],
+      "points": [
+        {
+          "point_id": "i495:186SO",
+          "facility": "i495",
+          "label": "Route 7 (Leesburg Pike)",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21791457672121,
+        38.8111247592856
+      ],
+      "points": [
+        {
+          "point_id": "i495:190SD",
+          "facility": "i495",
+          "label": "Braddock Road",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21758198280338,
+        38.811241800362566
+      ],
+      "points": [
+        {
+          "point_id": "i495:190NO",
+          "facility": "i495",
+          "label": "Braddock Road",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2175210502624,
+        38.91049999999999
+      ],
+      "points": [
+        {
+          "point_id": "i495:1869ND",
+          "facility": "i495",
+          "label": "Route 7 (Leesburg Pike)",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:186ND",
+          "facility": "i495",
+          "label": "Route 7 (Leesburg Pike)",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21740769577023,
+        38.9193
+      ],
+      "points": [
+        {
+          "point_id": "i495:185SD",
+          "facility": "i495",
+          "label": "Westpark Drive",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:185SO",
+          "facility": "i495",
+          "label": "Westpark Drive",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21660303306578,
+        38.91929165262628
+      ],
+      "points": [
+        {
+          "point_id": "i495:1859ND",
+          "facility": "i495",
+          "label": "Westpark Drive",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:185ND",
+          "facility": "i495",
+          "label": "Westpark Drive",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:185NO",
+          "facility": "i495",
+          "label": "Westpark Drive",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21447632408137,
+        38.928133854143084
+      ],
+      "points": [
+        {
+          "point_id": "i495:184SD",
+          "facility": "i495",
+          "label": "Jones Branch Drive/Route 123",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21313766403193,
+        38.93232578991249
+      ],
+      "points": [
+        {
+          "point_id": "i495:182SD",
+          "facility": "i495",
+          "label": "Route 267",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:182SO",
+          "facility": "i495",
+          "label": "Route 267",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2126604,
+        38.9318591
+      ],
+      "points": [
+        {
+          "point_id": "dtr:1819:entry:EB",
+          "facility": "dtr",
+          "label": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:1819:entry:WB",
+          "facility": "dtr",
+          "label": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:1819:exit:EB",
+          "facility": "dtr",
+          "label": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:1819:exit:WB",
+          "facility": "dtr",
+          "label": "Exit 18/19 - I-495 / SR 123 (Capital Beltway)",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21252367591853,
+        38.92756630116496
+      ],
+      "points": [
+        {
+          "point_id": "i495:1839ND",
+          "facility": "i495",
+          "label": "Jones Branch Drive/Route 123",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:183ND",
+          "facility": "i495",
+          "label": "Jones Branch Drive/Route 123",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:183NO",
+          "facility": "i495",
+          "label": "Jones Branch Drive/Route 123",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i495:183SO",
+          "facility": "i495",
+          "label": "Jones Branch Drive/Route 123",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.21024087829585,
+        38.931274206189734
+      ],
+      "points": [
+        {
+          "point_id": "i495:1829ND",
+          "facility": "i495",
+          "label": "Route 267",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:182ND",
+          "facility": "i495",
+          "label": "Route 267",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:182NO",
+          "facility": "i495",
+          "label": "Route 267",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.20560591900075,
+        38.79989025571085
+      ],
+      "points": [
+        {
+          "point_id": "i495:1919ND",
+          "facility": "i495",
+          "label": "I-495 Near Braddock Road",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:191ND",
+          "facility": "i495",
+          "label": "I-495 Near Braddock Road",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:191NO",
+          "facility": "i495",
+          "label": "I-495 Near Braddock Road",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i495:191SD",
+          "facility": "i495",
+          "label": "I-495 Near Braddock Road",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:191SO",
+          "facility": "i495",
+          "label": "I-495 Near Braddock Road",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.2035113,
+        38.9285321
+      ],
+      "points": [
+        {
+          "point_id": "i66:7:entry:EB",
+          "facility": "i66",
+          "label": "Route 123 - Dolley Madison Blvd",
+          "direction": "EB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.19942033290862,
+        38.72884880962038
+      ],
+      "points": [
+        {
+          "point_id": "i95:209NO",
+          "facility": "i95",
+          "label": "I-95 Near Fairfax County Parkway",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1967508,
+        38.8987045
+      ],
+      "points": [
+        {
+          "point_id": "i66:4:entry:EB",
+          "facility": "i66",
+          "label": "Route 7 - Leesburg Pike",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:4:entry:WB",
+          "facility": "i66",
+          "label": "Route 7 - Leesburg Pike",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:4:exit:EB",
+          "facility": "i66",
+          "label": "Route 7 - Leesburg Pike",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i66:4:exit:WB",
+          "facility": "i66",
+          "label": "Route 7 - Leesburg Pike",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1906817,
+        38.73963239
+      ],
+      "points": [
+        {
+          "point_id": "i95:208ND",
+          "facility": "i95",
+          "label": "Fairfax County Parkway/Route 286",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.19068169593811,
+        38.739632394353926
+      ],
+      "points": [
+        {
+          "point_id": "i95:208SO",
+          "facility": "i95",
+          "label": "Fairfax County Parkway/Route 286",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18551039695738,
+        38.748602828343294
+      ],
+      "points": [
+        {
+          "point_id": "i95:204ND",
+          "facility": "i95",
+          "label": "I-95 Near Old Keene Mill Road/Route 644",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18509197235107,
+        38.750067111217376
+      ],
+      "points": [
+        {
+          "point_id": "i95:207SO",
+          "facility": "i95",
+          "label": "Heller Road",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1850131,
+        38.9001038
+      ],
+      "points": [
+        {
+          "point_id": "i66:6:entry:EB",
+          "facility": "i66",
+          "label": "Route 267 - Dulles Toll Road",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:6:exit:WB",
+          "facility": "i66",
+          "label": "Route 267 - Dulles Toll Road",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1849815,
+        38.8999364
+      ],
+      "points": [
+        {
+          "point_id": "dtr:66:entry:EB",
+          "facility": "dtr",
+          "label": "I-66 / Dulles Toll Road junction",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:66:entry:WB",
+          "facility": "dtr",
+          "label": "I-66 / Dulles Toll Road junction",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "dtr:66:exit:EB",
+          "facility": "dtr",
+          "label": "I-66 / Dulles Toll Road junction",
+          "direction": "EB",
+          "role": "exit"
+        },
+        {
+          "point_id": "dtr:66:exit:WB",
+          "facility": "dtr",
+          "label": "I-66 / Dulles Toll Road junction",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.183795,
+        38.756456
+      ],
+      "points": [
+        {
+          "point_id": "i95:2072SO",
+          "facility": "i95",
+          "label": "I-95 Near Franconia-Springfield Pkwy SB",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1835978404755,
+        38.96359745429534
+      ],
+      "points": [
+        {
+          "point_id": "i495:1819ND",
+          "facility": "i495",
+          "label": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i495:181ND",
+          "facility": "i495",
+          "label": "495 Express Lanes End/George Wash. Mem. Pkwy.",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18357071793291,
+        38.96381405674141
+      ],
+      "points": [
+        {
+          "point_id": "i495:180SO",
+          "facility": "i495",
+          "label": "495 Express Lanes Start/Georg Wash. Mem. Pkwy.",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18277454376219,
+        38.76968978640529
+      ],
+      "points": [
+        {
+          "point_id": "i95:206ND",
+          "facility": "i95",
+          "label": "Franconia-Springfield Parkway/Route 289",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18253314495087,
+        38.769886362330254
+      ],
+      "points": [
+        {
+          "point_id": "i95:206NO",
+          "facility": "i95",
+          "label": "Franconia-Springfield Parkway/Route 289",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:206SD",
+          "facility": "i95",
+          "label": "Franconia-Springfield Parkway/Route 289",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:206SO",
+          "facility": "i95",
+          "label": "Franconia-Springfield Parkway/Route 289",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18112766742706,
+        38.775423725403634
+      ],
+      "points": [
+        {
+          "point_id": "i95:205SD",
+          "facility": "i95",
+          "label": "I-95 Near Backlick Road",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.181055,
+        38.775442
+      ],
+      "points": [
+        {
+          "point_id": "i95:212NO",
+          "facility": "i95",
+          "label": "I-95 Near Franconia-Springfield Pkwy NB",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.18039810657501,
+        38.778643897472506
+      ],
+      "points": [
+        {
+          "point_id": "i95:203NO",
+          "facility": "i95",
+          "label": "Old Keene Mill Road/Route 644",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.180398106575,
+        38.778643897472506
+      ],
+      "points": [
+        {
+          "point_id": "i95:203SD",
+          "facility": "i95",
+          "label": "Old Keene Mill Road/Route 644",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.17638552188875,
+        38.789629026662155
+      ],
+      "points": [
+        {
+          "point_id": "i95:202ND",
+          "facility": "i95",
+          "label": "I-495 EB / I-95 NB",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.17440605163571,
+        38.79212103968848
+      ],
+      "points": [
+        {
+          "point_id": "i95:202NO",
+          "facility": "i95",
+          "label": "I-495 EB / I-95 NB",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:202SD",
+          "facility": "i95",
+          "label": "I-495 EB / I-95 NB",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.17417001724243,
+        38.79235936522906
+      ],
+      "points": [
+        {
+          "point_id": "i95:202SO",
+          "facility": "i95",
+          "label": "I-495 EB / I-95 NB",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1663129,
+        38.8914007
+      ],
+      "points": [
+        {
+          "point_id": "i66:10:exit:EB",
+          "facility": "i66",
+          "label": "Westmoreland St",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1645989,
+        38.8899871
+      ],
+      "points": [
+        {
+          "point_id": "i66:12:entry:WB",
+          "facility": "i66",
+          "label": "Fairfax Drive",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:12:exit:EB",
+          "facility": "i66",
+          "label": "Fairfax Drive",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1603661,
+        38.8870753
+      ],
+      "points": [
+        {
+          "point_id": "i66:11:entry:WB",
+          "facility": "i66",
+          "label": "Washington Blvd",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:11:exit:EB",
+          "facility": "i66",
+          "label": "Washington Blvd",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1563453,
+        38.8856285
+      ],
+      "points": [
+        {
+          "point_id": "i66:8:entry:EB",
+          "facility": "i66",
+          "label": "Sycamore St",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:8:exit:WB",
+          "facility": "i66",
+          "label": "Sycamore St",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.15413222704926,
+        38.79347384215561
+      ],
+      "points": [
+        {
+          "point_id": "i495:192NO",
+          "facility": "i495",
+          "label": "I-495 Express northbound start at I-95 (TP1NB)",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i495:192SD",
+          "facility": "i495",
+          "label": "I-495 Express southbound end at I-95 (TP1SB)",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.149552,
+        38.810914
+      ],
+      "points": [
+        {
+          "point_id": "i95:200SO",
+          "facility": "i95",
+          "label": "I-395 Near Edsall Road",
+          "direction": "SB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:201ND",
+          "facility": "i95",
+          "label": "I-395 Near Edsall Road",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:201SD",
+          "facility": "i95",
+          "label": "I-395 Near Edsall Road",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:221NO",
+          "facility": "i95",
+          "label": "I-395 Near Edsall Road",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:227SD",
+          "facility": "i95",
+          "label": "I-395 Near Edsall Road",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.1176218,
+        38.8865049
+      ],
+      "points": [
+        {
+          "point_id": "i66:9:entry:EB",
+          "facility": "i66",
+          "label": "Glebe Road",
+          "direction": "EB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:9:exit:WB",
+          "facility": "i66",
+          "label": "Glebe Road",
+          "direction": "WB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.113436,
+        38.829886
+      ],
+      "points": [
+        {
+          "point_id": "i95:2229ND",
+          "facility": "i95",
+          "label": "Seminary Road",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:222ND",
+          "facility": "i95",
+          "label": "Seminary Road",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:226SO",
+          "facility": "i95",
+          "label": "Seminary Road",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.112704,
+        38.82992
+      ],
+      "points": [
+        {
+          "point_id": "i95:222NO",
+          "facility": "i95",
+          "label": "Seminary Road",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:226SD",
+          "facility": "i95",
+          "label": "Seminary Road",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0942755,
+        38.8976751
+      ],
+      "points": [
+        {
+          "point_id": "i66:13:entry:WB",
+          "facility": "i66",
+          "label": "Lee Highway - Spout Run Parkway",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:13:exit:EB",
+          "facility": "i66",
+          "label": "Lee Highway - Spout Run Parkway",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.083663,
+        38.841761
+      ],
+      "points": [
+        {
+          "point_id": "i95:225NO",
+          "facility": "i95",
+          "label": "Shirlington Circle",
+          "direction": "NB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:225SD",
+          "facility": "i95",
+          "label": "Shirlington Circle",
+          "direction": "SB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0804369,
+        38.8970859
+      ],
+      "points": [
+        {
+          "point_id": "i66:17:entry:WB",
+          "facility": "i66",
+          "label": "Lee Highway - Scott Street",
+          "direction": "WB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0682271,
+        38.8967771
+      ],
+      "points": [
+        {
+          "point_id": "i66:14:exit:EB",
+          "facility": "i66",
+          "label": "Exit 73 - Rosslyn",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0679009,
+        38.894696
+      ],
+      "points": [
+        {
+          "point_id": "i66:15:entry:WB",
+          "facility": "i66",
+          "label": "Exit 75 - Pentagon/Alexandria",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:15:exit:EB",
+          "facility": "i66",
+          "label": "Exit 75 - Pentagon/Alexandria",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.065971,
+        38.866353
+      ],
+      "points": [
+        {
+          "point_id": "i95:22329ND",
+          "facility": "i95",
+          "label": "Washington Boulevard/Route 27",
+          "direction": "SB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:2232ND",
+          "facility": "i95",
+          "label": "Washington Boulevard/Route 27",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:223SO",
+          "facility": "i95",
+          "label": "Washington Boulevard/Route 27",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0639945,
+        38.8916467
+      ],
+      "points": [
+        {
+          "point_id": "i66:16:entry:WB",
+          "facility": "i66",
+          "label": "Washington D.C. I-66",
+          "direction": "WB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i66:16:exit:EB",
+          "facility": "i66",
+          "label": "Washington D.C. I-66",
+          "direction": "EB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.057466,
+        38.86639
+      ],
+      "points": [
+        {
+          "point_id": "i95:2233SO",
+          "facility": "i95",
+          "label": "Pentagon/Eads Street",
+          "direction": "SB",
+          "role": "entry"
+        },
+        {
+          "point_id": "i95:2239ND",
+          "facility": "i95",
+          "label": "Pentagon/Eads Street",
+          "direction": "NB",
+          "role": "exit"
+        },
+        {
+          "point_id": "i95:223ND",
+          "facility": "i95",
+          "label": "Pentagon/Eads Street",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.052876,
+        38.865725
+      ],
+      "points": [
+        {
+          "point_id": "i95:224NO",
+          "facility": "i95",
+          "label": "Near Pentagon/Eads Street to DC",
+          "direction": "NB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0461277,
+        38.8707667
+      ],
+      "points": [
+        {
+          "point_id": "i95:2249ND",
+          "facility": "i95",
+          "label": "Washington D.C. from I-495 Southbound via I-395",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.039642,
+        38.878016
+      ],
+      "points": [
+        {
+          "point_id": "i95:224ND",
+          "facility": "i95",
+          "label": "Washington D.C. I-95/I-395 Northbound",
+          "direction": "NB",
+          "role": "exit"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.03933,
+        38.878511
+      ],
+      "points": [
+        {
+          "point_id": "i95:2232SO",
+          "facility": "i95",
+          "label": "Washington D.C. I-395 Southbound",
+          "direction": "SB",
+          "role": "entry"
+        }
+      ]
+    },
+    {
+      "coordinates": [
+        -77.0377214,
+        38.8514403
+      ],
+      "points": [
+        {
+          "point_id": "airport_dca",
+          "facility": "airport_dca",
+          "label": "Ronald Reagan Washington National Airport",
+          "direction": null,
+          "role": "airport"
+        }
+      ]
+    }
+  ]
+}

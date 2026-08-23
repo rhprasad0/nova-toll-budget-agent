@@ -212,6 +212,10 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "What is the current price from Dumfries to Washington?" in html
         assert "$130,000 gross annual salary" in html
         assert "Strands event inspector" in html
+        assert 'id="reset-map"' in html
+        assert "Small pins show supported entries and exits" in html
+        assert "price unavailable" not in html.lower()
+        assert "data-facility" not in html
         assert (
             "consumeNdjson"
             in urllib.request.urlopen(f"{base_url}/dev_chat.mjs", timeout=2)
@@ -242,12 +246,23 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         for path in (
             "/assets/commute-map.mjs",
             "/assets/commute-routes.mjs",
+            "/assets/coverage-locations.json",
             "/assets/maplibre-gl-6.0.0/maplibre-gl.css",
             "/assets/maplibre-gl-6.0.0/maplibre-gl.mjs",
             "/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs",
             "/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs",
         ):
             assert urllib.request.urlopen(f"{base_url}{path}", timeout=2).status == 200
+        coverage_locations = json.load(
+            urllib.request.urlopen(
+                f"{base_url}/assets/coverage-locations.json", timeout=2
+            )
+        )
+        assert len(coverage_locations["locations"]) == 103
+        assert (
+            sum(len(location["points"]) for location in coverage_locations["locations"])
+            == 220
+        )
         csp = page.headers["Content-Security-Policy"]
         assert "img-src 'self' data:" in csp
         assert "connect-src 'self' https://tiles.openfreemap.org" in csp

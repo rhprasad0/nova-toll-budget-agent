@@ -10,10 +10,10 @@ import {
   validStreamEvent,
 } from "../agent/dev_chat.mjs";
 import { renderAssistantMarkdown } from "../agent/assets/chat-markdown.mjs";
-import {
-  formatAnnualToll,
-  validateEstimateSnapshot,
-} from "../agent/assets/commute-map.mjs";
+import * as commuteMap from "../agent/assets/commute-map.mjs";
+import { routeData } from "../agent/assets/commute-routes.mjs";
+
+const { formatAnnualToll, validateEstimateSnapshot } = commuteMap;
 
 const commuteEstimates = JSON.parse(await readFile(
   new URL("../agent/assets/commute-estimates.json", import.meta.url),
@@ -207,4 +207,113 @@ test("estimate validation rejects malformed or unsafe map data", () => {
     }),
     /invalid commute estimate snapshot/,
   );
+});
+
+test("checked-in coverage snapshot contains every grouped v2 oracle point", async () => {
+  const snapshot = commuteMap.validateCoverageLocations(JSON.parse(await readFile(
+    new URL("../agent/assets/coverage-locations.json", import.meta.url),
+    "utf8",
+  )));
+
+  assert.equal(snapshot.schema_version, 1);
+  assert.equal(snapshot.locations.length, 103);
+  const records = snapshot.locations.flatMap(({ points }) => points);
+  assert.equal(records.length, 220);
+  assert.equal(new Set(records.map(({ point_id: pointId }) => pointId)).size, 220);
+  const tp1 = snapshot.locations.find(({ coordinates }) => (
+    coordinates[0] === -77.15413222704926 && coordinates[1] === 38.79347384215561
+  ));
+  assert.deepEqual(tp1.points.map(({ label, direction, role }) => ({ label, direction, role })), [
+    {
+      label: "I-495 Express northbound start at I-95 (TP1NB)",
+      direction: "NB",
+      role: "entry",
+    },
+    {
+      label: "I-495 Express southbound end at I-95 (TP1SB)",
+      direction: "SB",
+      role: "exit",
+    },
+  ]);
+});
+
+test("coverage validation rejects malformed coordinates and access records", () => {
+  const location = {
+    coordinates: [-77.15, 38.79],
+    points: [{
+      point_id: "i495:192NO",
+      facility: "i495",
+      label: "I-495 Express northbound start at I-95 (TP1NB)",
+      direction: "NB",
+      role: "entry",
+    }],
+  };
+  assert.equal(commuteMap.validateCoverageLocations({
+    schema_version: 1,
+    locations: [location],
+  }).locations[0], location);
+  assert.throws(
+    () => commuteMap.validateCoverageLocations({
+      schema_version: 1,
+      locations: [{ ...location, coordinates: ["secret", 38.79] }],
+    }),
+    /invalid coverage location snapshot/,
+  );
+  assert.throws(
+    () => commuteMap.validateCoverageLocations({
+      schema_version: 1,
+      locations: [{
+        ...location,
+        points: [{ ...location.points[0], role: "maybe" }],
+      }],
+    }),
+    /invalid coverage location snapshot/,
+  );
+});
+
+test("coverage details expose readable names and directions but not point IDs", () => {
+  const detail = commuteMap.coverageDetail({
+    coordinates: [-77.15, 38.79],
+    points: [
+      {
+        point_id: "i495:192NO",
+        facility: "i495",
+        label: "I-495 Express northbound start at I-95 (TP1NB)",
+        direction: "NB",
+        role: "entry",
+      },
+      {
+        point_id: "i495:192SD",
+        facility: "i495",
+        label: "I-495 Express southbound end at I-95 (TP1SB)",
+        direction: "SB",
+        role: "exit",
+      },
+    ],
+  });
+
+  assert.equal(detail.kicker, "Supported access");
+  assert.equal(detail.title, "Names at this location");
+  assert.deepEqual(detail.paragraphs, [
+    "I-495 Express northbound start at I-95 (TP1NB): Northbound entrance",
+    "I-495 Express southbound end at I-95 (TP1SB): Southbound exit",
+  ]);
+  assert.doesNotMatch(JSON.stringify(detail), /i495:192/);
+});
+
+test("I-495 follows the road from Braddock Road to an existing I-95 point at TP1", () => {
+  const i495 = routeData.features.find(({ properties }) => properties.facility === "i495");
+  const i95 = routeData.features.find(({ properties }) => properties.facility === "i95");
+  const start = [-77.205634, 38.799923];
+  const end = [-77.154508, 38.793504];
+  const connector = i495.geometry.coordinates.find((line) => (
+    JSON.stringify(line[0]) === JSON.stringify(start)
+      && JSON.stringify(line.at(-1)) === JSON.stringify(end)
+  ));
+
+  assert.ok(connector);
+  assert.ok(connector.length > 10);
+  assert.ok(i95.geometry.coordinates.flat().some((point) => (
+    JSON.stringify(point) === JSON.stringify(end)
+  )));
 });

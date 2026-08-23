@@ -88,10 +88,14 @@
     .site-footer p { max-width:42rem; margin:0; }
     .footer-links { display:flex; flex-wrap:wrap; gap:12px; }
     .map-panel { position:sticky; top:0; grid-area:map; display:grid; grid-template-rows:auto 1fr auto; height:100svh; min-height:38rem; overflow:hidden; border-left:1px solid #22315e; background:var(--navy); color:#fff; isolation:isolate; }
-    .map-head { position:relative; z-index:3; padding:22px 24px 18px; border-bottom:1px solid rgba(255,255,255,.16); background:rgba(11,20,56,.96); }
+    .map-head { position:relative; z-index:3; display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:22px 24px 18px; border-bottom:1px solid rgba(255,255,255,.16); background:rgba(11,20,56,.96); }
+    .map-head-copy { min-width:0; }
     .map-head .eyebrow { color:#72c8ff; }
     .map-head h2 { margin:2px 0 0; font-size:1.18rem; letter-spacing:-.025em; }
     .map-head p { margin:7px 0 0; color:#c6d0e8; font-size:.76rem; line-height:1.5; }
+    .map-reset { flex:none; min-height:44px; padding:8px 11px; border:1px solid rgba(255,255,255,.35); border-radius:7px; background:var(--navy-soft); color:#fff; font-size:.72rem; font-weight:800; }
+    .map-reset:hover,.map-reset:focus-visible { border-color:var(--orange); }
+    .map-reset:disabled { cursor:wait; opacity:.55; }
     .map-frame { position:relative; min-height:0; }
     #commute-map { position:absolute; inset:0; }
     .map-state { position:absolute; top:50%; left:50%; z-index:4; width:min(20rem,calc(100% - 32px)); padding:14px 16px; border:1px solid rgba(255,255,255,.2); border-radius:9px; background:rgba(11,20,56,.95); color:#c6d0e8; font-size:.8rem; text-align:center; transform:translate(-50%,-50%); }
@@ -100,13 +104,19 @@
     .map-detail-kicker { display:block; margin-bottom:4px; color:#72c8ff; font-size:.66rem; font-weight:850; letter-spacing:.11em; text-transform:uppercase; }
     .map-detail strong { display:block; font-size:.93rem; }
     .map-detail p { margin:5px 0 0; color:#c6d0e8; font-size:.72rem; line-height:1.45; }
-    .estimate-marker { position:relative; display:grid; min-height:0; padding:6px 9px 7px; border:2px solid #8bd4ff; border-radius:8px; background:rgba(11,20,56,.94); box-shadow:0 7px 18px rgba(0,0,0,.35); color:#fff; line-height:1.05; text-align:left; transform:translateY(-7px); }
+    .coverage-marker { z-index:1; display:grid; width:44px; height:44px; padding:0; place-items:center; border:0; border-radius:50%; background:transparent; }
+    .coverage-marker::before { width:11px; height:11px; border:2px solid #fff; border-radius:50%; background:var(--coverage-color); box-shadow:0 2px 7px rgba(0,0,0,.65); content:""; transition:transform .12s ease; }
+    .coverage-marker:hover::before,.coverage-marker:focus-visible::before,.coverage-marker[data-selected=true]::before { transform:scale(1.55); }
+    .coverage-marker:focus-visible { outline:2px solid rgba(255,255,255,.85); outline-offset:-5px; }
+    .coverage-marker[data-airport=true]::before { border-radius:2px; transform:rotate(45deg); }
+    .coverage-marker[data-airport=true]:hover::before,.coverage-marker[data-airport=true]:focus-visible::before,.coverage-marker[data-airport=true][data-selected=true]::before { transform:rotate(45deg) scale(1.55); }
+    .estimate-marker { position:relative; z-index:4; display:grid; min-height:0; padding:6px 9px 7px; border:2px solid #8bd4ff; border-radius:8px; background:rgba(11,20,56,.94); box-shadow:0 7px 18px rgba(0,0,0,.35); color:#fff; line-height:1.05; text-align:left; transform:translateY(-7px); }
     .estimate-marker::after { position:absolute; right:50%; bottom:-9px; width:10px; height:10px; border-right:2px solid #8bd4ff; border-bottom:2px solid #8bd4ff; background:var(--navy); content:""; transform:translateX(50%) rotate(45deg); }
     .estimate-marker span { max-width:72px; font-size:8px; font-weight:800; letter-spacing:.05em; line-height:1.1; text-transform:uppercase; }
     .estimate-marker strong { margin-top:3px; color:#8bd4ff; font-size:11px; }
     .estimate-marker:hover,.estimate-marker:focus-visible,.estimate-marker[data-selected=true] { border-color:var(--orange); transform:translateY(-7px) scale(1.06); }
     .estimate-marker:hover::after,.estimate-marker:focus-visible::after,.estimate-marker[data-selected=true]::after { border-color:var(--orange); }
-    .destination-marker { display:grid; width:42px; height:42px; place-items:center; border:3px solid #fff; border-radius:50%; background:var(--orange); box-shadow:0 0 0 5px rgba(244,119,53,.22),0 8px 20px rgba(0,0,0,.35); color:#fff; font-size:11px; font-weight:900; }
+    .destination-marker { z-index:3; display:grid; width:42px; height:42px; place-items:center; border:3px solid #fff; border-radius:50%; background:var(--orange); box-shadow:0 0 0 5px rgba(244,119,53,.22),0 8px 20px rgba(0,0,0,.35); color:#fff; font-size:11px; font-weight:900; }
     .maplibregl-ctrl-group { overflow:hidden; border:1px solid rgba(255,255,255,.2); border-radius:7px; background:var(--navy-soft); }
     .maplibregl-ctrl-group button { width:44px; height:44px; padding:0; }
     .maplibregl-ctrl button .maplibregl-ctrl-icon { filter:invert(1); }
@@ -162,19 +172,22 @@
     </header>
     <section class="map-panel" aria-labelledby="map-title">
       <div class="map-head">
-        <p class="eyebrow">Annual toll ballparks</p>
-        <h2 id="map-title">Four commutes to Washington</h2>
-        <p>Pin labels show the historical P50 annual toll. Focus or select a pin for scenarios and evidence coverage.</p>
+        <div class="map-head-copy">
+          <p class="eyebrow">Toll roads and annual ballparks</p>
+          <h2 id="map-title">Where TollChat has coverage</h2>
+          <p>Small pins show supported entries and exits. Large pins show four historical P50 annual toll ballparks to Washington.</p>
+        </div>
+        <button id="reset-map" class="map-reset" type="button" disabled>Reset view</button>
       </div>
       <div class="map-frame">
-        <div id="commute-map" role="region" aria-label="Interactive map of four estimated annual toll commutes to Washington, DC"></div>
-        <div id="map-loading" class="map-state" role="status"><strong>Drawing the commute map…</strong>Loading grounded annual estimates.</div>
+        <div id="commute-map" role="region" aria-label="Interactive map of TollChat entry and exit coverage plus four estimated annual toll commutes to Washington, DC"></div>
+        <div id="map-loading" class="map-state" role="status"><strong>Drawing the coverage map…</strong>Loading supported toll-road access points and annual estimates.</div>
         <div id="map-error" class="map-state" role="alert" hidden><strong>The map could not load.</strong>Chat remains available. Ask TollChat for an estimate instead.</div>
       </div>
       <aside id="map-detail" class="map-detail" aria-live="polite">
-        <span class="map-detail-kicker">Fixed weekday schedule</span>
-        <strong>Choose an origin pin</strong>
-        <p>Monday–Friday at 8:30 AM and 5:30 PM, annualized over 240 commute days.</p>
+        <span class="map-detail-kicker">Map guide</span>
+        <strong>Choose a commute or entry/exit pin</strong>
+        <p>Large pins show annual ballparks. Small pins show names you can use in a TollChat question.</p>
       </aside>
     </section>
     <section id="transcript" aria-live="polite" aria-label="Chat transcript"></section>

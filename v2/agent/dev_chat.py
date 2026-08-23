@@ -209,6 +209,10 @@ def create_server(
             _ASSET_ROOT / "assets/commute-estimates.json",
             "application/json; charset=utf-8",
         ),
+        "/assets/coverage-locations.json": (
+            _ASSET_ROOT / "assets/coverage-locations.json",
+            "application/json; charset=utf-8",
+        ),
         "/assets/chat-markdown.mjs": (
             _ASSET_ROOT / "assets/chat-markdown.mjs",
             "text/javascript; charset=utf-8",
