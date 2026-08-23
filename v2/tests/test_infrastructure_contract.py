@@ -100,7 +100,66 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
 
     deployment = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
     assert "put-function-concurrency" in deployment
-    assert "--reserved-concurrent-executions 1" in deployment
+    assert "--reserved-concurrent-executions 5" in deployment
+
+
+def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+
+    proxy = agentcore.split(
+        'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
+    assert "publish                        = true" in proxy
+    assert "reserved_concurrent_executions = 5" in proxy
+    assert 'resource "aws_lambda_alias" "tollchat_live"' in agentcore
+    assert 'name             = "live"' in agentcore
+    assert (
+        'resource "aws_lambda_provisioned_concurrency_config" "tollchat"' in agentcore
+    )
+    assert "provisioned_concurrent_executions = 1" in agentcore
+    assert (
+        "qualifier                         = aws_lambda_alias.tollchat_live.name"
+        in agentcore
+    )
+
+    assert 'resource "aws_lambda_function_url" "public_chat"' in site
+    assert 'authorization_type = "AWS_IAM"' in site
+    assert 'invoke_mode        = "RESPONSE_STREAM"' in site
+    assert "qualifier          = aws_lambda_alias.tollchat_live.name" in site
+    assert 'origin_access_control_origin_type = "lambda"' in site
+    assert 'origin_access_control_origin_type = "s3"' in site
+    assert 'path_pattern             = "/api/*"' in site
+    assert 'code    = file("${path.module}/../agent/public-api-gate.js")' in site
+    assert 'aliases             = ["tollchat.ai", "www.tollchat.ai"]' in site
+    assert 'resource "aws_wafv2_web_acl" "public_chat"' in site
+    assert "limit                 = 20" in site
+    assert "size                = 32768" in site
+    assert 'resource "cloudflare_dns_record" "apex"' in site
+    assert 'resource "cloudflare_dns_record" "www"' in site
+    assert 'resource "aws_acm_certificate" "site"' in site
+
+
+def test_public_site_publishes_the_v2_ui_and_legal_assets():
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    page = (V2_ROOT / "agent" / "dev_chat.html").read_text()
+    server = (V2_ROOT / "agent" / "dev_chat.py").read_text()
+
+    assert re.search(r'key\s+= "index[.]html"', site)
+    assert re.search(
+        r'source\s+= "\$\{path[.]module\}/[.][.]/agent/dev_chat[.]html"', site
+    )
+    assert re.search(r'key\s+= "chat[.]mjs"', site)
+    assert re.search(
+        r'source\s+= "\$\{path[.]module\}/[.][.]/agent/public_chat[.]mjs"', site
+    )
+    for path in ("faq.html", "privacy.txt", "terms.txt"):
+        assert path in site
+    assert 'fileset("${path.module}/../agent/assets", "**")' in site
+    assert 'key    = "assets/${each.value}"' in site
+    assert (V2_ROOT / "agent" / "assets" / "tollchat-logo.png").exists()
+    assert '<script type="module" src="/chat.mjs"></script>' in page
+    assert '"/chat.mjs"' in server
 
 
 def test_v2_agent_packages_are_required_for_real_deployments():

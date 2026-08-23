@@ -437,7 +437,8 @@ resource "aws_lambda_function" "tollchat_proxy" {
   handler                        = "handler.handler"
   timeout                        = 50
   memory_size                    = 256
-  reserved_concurrent_executions = 1
+  publish                        = true
+  reserved_concurrent_executions = 5
 
   s3_bucket         = data.aws_s3_bucket.agentcore_artifacts.id
   s3_key            = aws_s3_object.tollchat_proxy.key
@@ -471,6 +472,19 @@ resource "aws_lambda_function" "tollchat_proxy" {
     aws_cloudwatch_log_group.tollchat_proxy,
     aws_iam_role_policy_attachment.tollchat_proxy_vpc,
   ]
+}
+
+resource "aws_lambda_alias" "tollchat_live" {
+  name             = "live"
+  description      = "Reviewed public TollChat release"
+  function_name    = aws_lambda_function.tollchat_proxy.function_name
+  function_version = aws_lambda_function.tollchat_proxy.version
+}
+
+resource "aws_lambda_provisioned_concurrency_config" "tollchat" {
+  function_name                     = aws_lambda_alias.tollchat_live.function_name
+  qualifier                         = aws_lambda_alias.tollchat_live.name
+  provisioned_concurrent_executions = 1
 }
 
 resource "aws_api_gateway_rest_api" "tollchat" {
