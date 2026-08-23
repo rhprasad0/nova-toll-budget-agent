@@ -14,12 +14,53 @@ resource "aws_s3_bucket_public_access_block" "site" {
   restrict_public_buckets = true
 }
 
+data "aws_iam_policy_document" "site_kms" {
+  statement {
+    sid       = "EnableAccountIamPolicies"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid       = "AllowCloudFrontDecrypt"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.site.arn]
+    }
+  }
+}
+
+resource "aws_kms_key" "site" {
+  description             = "TollChat v2 public site assets"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.site_kms.json
+}
+
+resource "aws_kms_alias" "site" {
+  name          = "alias/tollchat-v2-site"
+  target_key_id = aws_kms_key.site.key_id
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
   bucket = aws_s3_bucket.site.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      kms_master_key_id = aws_kms_key.site.arn
+      sse_algorithm     = "aws:kms"
     }
+    bucket_key_enabled = true
   }
 }
 
@@ -31,7 +72,7 @@ resource "aws_s3_object" "index" {
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
-  depends_on = [aws_s3_object.site_assets]
+  depends_on = [aws_s3_object.site_assets, aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
 resource "aws_s3_object" "chat" {
@@ -42,7 +83,7 @@ resource "aws_s3_object" "chat" {
   content_type  = "text/javascript; charset=utf-8"
   cache_control = "no-cache"
 
-  depends_on = [aws_s3_object.site_assets]
+  depends_on = [aws_s3_object.site_assets, aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
 resource "aws_s3_object" "faq" {
@@ -52,6 +93,8 @@ resource "aws_s3_object" "faq" {
   etag          = filemd5("${path.module}/../agent/faq.html")
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
 resource "aws_s3_object" "privacy" {
@@ -61,6 +104,8 @@ resource "aws_s3_object" "privacy" {
   etag          = filemd5("${path.module}/../agent/privacy.txt")
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
 resource "aws_s3_object" "terms" {
@@ -70,6 +115,8 @@ resource "aws_s3_object" "terms" {
   etag          = filemd5("${path.module}/../agent/terms.txt")
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
 resource "aws_s3_object" "site_assets" {
@@ -87,6 +134,8 @@ resource "aws_s3_object" "site_assets" {
     )
   )
   cache_control = "no-cache"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
 resource "aws_cloudfront_origin_access_control" "site" {
