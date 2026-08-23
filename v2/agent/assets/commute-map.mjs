@@ -292,18 +292,21 @@ export async function mountCommuteMap() {
     }
 
     for (const estimate of snapshot.estimates) {
-      const marker = document.createElement("button");
+      const pin = document.createElement("button");
+      const marker = document.createElement("span");
       const place = document.createElement("span");
       const price = document.createElement("strong");
+      pin.className = "estimate-pin";
+      pin.type = "button";
+      pin.setAttribute("aria-label", `${estimate.label}: P50 annual toll ${formatAnnualToll(estimate.scenarios.p50.annual_toll_usd)} to Washington, DC`);
       marker.className = "estimate-marker";
-      marker.type = "button";
-      marker.setAttribute("aria-label", `${estimate.label}: P50 annual toll ${formatAnnualToll(estimate.scenarios.p50.annual_toll_usd)} to Washington, DC`);
       place.textContent = estimate.label;
       price.textContent = formatAnnualToll(estimate.scenarios.p50.annual_toll_usd);
       marker.append(place, price);
-      marker.addEventListener("click", () => selectEstimate(estimate, marker));
-      marker.addEventListener("focus", () => selectEstimate(estimate, marker));
-      new maplibregl.Marker({ element: marker, anchor: "bottom" })
+      pin.append(marker);
+      pin.addEventListener("click", () => selectEstimate(estimate, pin));
+      pin.addEventListener("focus", () => selectEstimate(estimate, pin));
+      new maplibregl.Marker({ element: pin, anchor: "bottom" })
         .setLngLat(estimate.coordinates)
         .addTo(map);
     }

@@ -192,7 +192,7 @@ test("checked-in estimate snapshot contains the four approved Washington commute
   }
 });
 
-test("annual estimate pins stay on their outbound oracle coordinates", async () => {
+test("annual estimate pin tips stay on their outbound oracle coordinates", async () => {
   const source = await readFile(
     new URL("../agent/assets/commute-map.mjs", import.meta.url),
     "utf8",
@@ -202,7 +202,14 @@ test("annual estimate pins stay on their outbound oracle coordinates", async () 
     source.indexOf("const destination = document.createElement"),
   );
   assert.match(estimateMarkerLoop, /new maplibregl[.]Marker/);
+  assert.match(estimateMarkerLoop, /pin[.]className = "estimate-pin"/);
+  assert.match(estimateMarkerLoop, /pin[.]append\(marker\)/);
+  assert.match(estimateMarkerLoop, /element: pin/);
   assert.doesNotMatch(estimateMarkerLoop, /\boffset\s*:/);
+
+  const page = await readFile(new URL("../agent/dev_chat.html", import.meta.url), "utf8");
+  assert.match(page, /[.]estimate-pin \{[^}]*padding-bottom:11px;/);
+  assert.doesNotMatch(page, /transform:translateY\(-7px\)/);
 
   const coverage = commuteMap.validateCoverageLocations(JSON.parse(await readFile(
     new URL("../agent/assets/coverage-locations.json", import.meta.url),
