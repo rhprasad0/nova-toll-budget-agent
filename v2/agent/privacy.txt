@@ -21,9 +21,9 @@ Before usage-statistics collection starts, this notice will identify the analyti
 
 Service providers
 
-OpenAI receives prompts, conversation context, and responses to provide the AI portion of TollChat. TollChat uses the stateful OpenAI Responses API. OpenAI retains Responses API application state for at least 30 days. It also keeps abuse-monitoring logs, which may include prompts, responses, and related metadata, for up to 30 days by default. OpenAI may keep those logs longer when required by law or needed to protect its services or others from harm. OpenAI states that API data is not used to train its models unless the API customer opts in.
+OpenAI receives prompts, conversation context, and responses to provide the AI portion of TollChat. TollChat sends the active conversation context on each request with Responses storage disabled (`store=false`); it does not use OpenAI's stored response state to continue a chat. OpenAI still keeps abuse-monitoring logs, which may include prompts, responses, and related metadata, for up to 30 days by default. OpenAI may keep those logs longer when required by law or needed to protect its services or others from harm. OpenAI states that API data is not used to train its models unless the API customer opts in.
 
-We accepted OpenAI's standard retention and abuse monitoring as a tradeoff to keep TollChat free to use. See https://developers.openai.com/api/docs/guides/your-data.
+We accepted OpenAI's standard abuse monitoring as a tradeoff to keep TollChat free to use. See https://developers.openai.com/api/docs/guides/your-data.
 
 The map loads styles and tiles directly from OpenFreeMap. OpenFreeMap states that it keeps anonymized request logs without IP addresses and may temporarily record IP addresses for up to 30 days during a security incident. See https://openfreemap.org/privacy/.
 
