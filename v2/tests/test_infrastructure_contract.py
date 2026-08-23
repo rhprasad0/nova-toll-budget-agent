@@ -17,14 +17,42 @@ TIMED_BALLPARK_TEST = (
 ).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
+V1_LAMBDA = (REPO_ROOT / "v1" / "infra" / "lambda.tf").read_text()
+V1_IAM = (REPO_ROOT / "v1" / "infra" / "iam.tf").read_text()
+V1_AGENTCORE = (REPO_ROOT / "v1" / "infra" / "agentcore.tf").read_text()
 
 
-def test_v1_direct_notification_and_eventbridge_coexist():
+def test_v1_loader_is_retired_but_eventbridge_remains():
     notification = V1_TRIGGERS.split(
         'resource "aws_s3_bucket_notification" "raw"', maxsplit=1
     )[1]
     assert "eventbridge = true" in notification
-    assert "lambda_function_arn = aws_lambda_function.loader.arn" in notification
+    assert "lambda_function" not in notification
+    assert 'resource "aws_lambda_permission" "s3_invoke_loader"' not in V1_TRIGGERS
+    assert 'resource "aws_lambda_function" "loader"' not in V1_LAMBDA
+
+
+def test_v1_site_is_removed_and_terraform_ci_only_validates():
+    assert not (REPO_ROOT / "v1" / "infra" / "site.tf").exists()
+    workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+    assert workflow.count("terraform fmt -check -recursive") == 2
+    assert workflow.count("terraform init -backend=false -input=false") == 2
+    assert workflow.count("terraform validate") == 2
+    assert "terraform plan" not in workflow
+    assert "terraform apply" not in workflow
+    assert "configure-aws-credentials" not in workflow
+    assert "id-token: write" not in workflow
+    assert 'resource "aws_iam_role" "terraform_apply"' not in V1_IAM
+    assert 'resource "aws_iam_role" "github_ci"' not in V1_IAM
+
+
+def test_shared_dynamodb_endpoint_admits_v2_session_table():
+    endpoint = V1_AGENTCORE.split('resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1)[
+        1
+    ].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
+    assert "tollchat-v2-anonymous-sessions" in endpoint
+    assert "table/tollchat-anonymous-sessions" not in endpoint
+    assert "dynamodb:*" not in endpoint
 
 
 def test_v2_has_an_independent_state_and_identity():
@@ -32,6 +60,72 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'function_name = "toll-v2-pricing-loader"' in MAIN_TF
     assert "/pricing_loader_writer" in MAIN_TF
     assert 'DB_USER    = "pricing_loader_writer"' in MAIN_TF
+
+
+def test_v2_declares_a_private_agentcore_application_without_telemetry():
+    agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
+    assert agentcore_path.exists()
+    agentcore = agentcore_path.read_text()
+    assert 'agent_runtime_name = "nova_toll_v2"' in agentcore
+    assert 'network_mode = "VPC"' in agentcore
+    assert "dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent" in agentcore
+    assert "dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller" in agentcore
+    assert 'function_name                  = "tollchat-v2-chat-proxy"' in agentcore
+    assert 'name         = "tollchat-v2-anonymous-sessions"' in agentcore
+    assert 'types            = ["PRIVATE"]' in agentcore
+    assert 'response_transfer_mode  = "STREAM"' in agentcore
+    assert "DenyOutsidePrivateEndpoint" in agentcore
+    assert (
+        'resource "aws_vpc_security_group_ingress_rule" "agentcore_from_proxy"'
+        in agentcore
+    )
+    assert "aws_cloudfront" not in agentcore
+    assert "cloudflare" not in agentcore
+    assert "aws_acm" not in agentcore
+    assert "opentelemetry" not in agentcore.lower()
+    assert "xray" not in agentcore.lower()
+    assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
+    assert "github_pat_[A-Za-z0-9_-]{20,}" in agentcore
+
+    runtime_logs = agentcore.split(
+        'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1
+    )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
+    assert 'toset(["DEFAULT", "preview"])' in runtime_logs
+    assert "retention_in_days = 1" in runtime_logs
+
+    proxy = agentcore.split(
+        'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
+    assert "ignore_changes = [reserved_concurrent_executions]" in proxy
+
+    deployment = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
+    assert "put-function-concurrency" in deployment
+    assert "--reserved-concurrent-executions 1" in deployment
+
+
+def test_v2_agent_packages_are_required_for_real_deployments():
+    variables = (V2_ROOT / "infra" / "variables.tf").read_text()
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    build = V2_ROOT / "scripts" / "build_agentcore_zips.sh"
+    assert 'variable "agentcore_package_path"' in variables
+    assert 'variable "chat_proxy_package_path"' in variables
+    assert "AgentCore deployment requires the reviewed v2 runtime package" in agentcore
+    assert "Chat proxy deployment requires the reviewed v2 proxy package" in agentcore
+    assert build.exists()
+
+
+def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
+    ignores = (REPO_ROOT / ".trivyignore.yaml").read_text()
+    exception = """  - id: AVD-AWS-0104
+    paths: [v2/infra/agentcore.tf]
+    statement: The runtime must reach the public OpenAI API over HTTPS.
+    expired_at: 2027-02-13"""
+    assert exception in ignores
+    assert (
+        """  - id: AVD-AWS-0104
+    paths: [v1/infra/agentcore.tf]"""
+        not in ignores
+    )
 
 
 def test_eventbridge_has_both_failure_paths_and_bounded_retries():

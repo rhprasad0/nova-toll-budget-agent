@@ -1,8 +1,6 @@
 # Tailscale subnet router: one t4g.nano in the default VPC that bridges the
-# tailnet to RDS. Covers three consumers with one box: GitHub Actions CI
-# (joins via the tailscale/github-action + an OAuth client, see iam.tf's
-# github_ci role for the AWS side), the dev laptop (replaces the old
-# home_ip SG rule), and exit-node coverage on public wifi.
+# tailnet to the private preview and RDS for owner access, plus exit-node
+# coverage on public wifi.
 #
 # Auth key, ACL policy, and route approval are set up out-of-band in the
 # Tailscale admin console -- same "seed a placeholder, real value set via

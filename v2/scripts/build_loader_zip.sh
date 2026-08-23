@@ -8,7 +8,7 @@ CA_URL="https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 CA_SHA256="e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
 EPOCH="2020-01-01 00:00:00Z"
 
-rm -rf "$BUILD"
+rm -rf "$STAGE" "$BUILD/loader.zip"
 mkdir -p "$STAGE"
 cp "$V2_ROOT"/lambdas/loader/{handler.py,_bounds.py,parse_csv.py,parse_xml.py} "$STAGE/"
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \

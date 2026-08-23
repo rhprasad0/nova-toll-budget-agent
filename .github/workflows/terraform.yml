@@ -5,51 +5,9 @@ permissions:
 on:
   push:
     branches: ["main"]
-    paths:
-      [
-        "v1/infra/**",
-        ".github/workflows/terraform.yml",
-        "v1/scripts/build_zips.sh",
-        "v1/scripts/loader-requirements.txt",
-        "v1/agent/**",
-        "v1/agent_tools/**",
-        "v1/agent-sops/**",
-        "v1/oracles/**",
-        "v1/pyproject.toml",
-        "v1/uv.lock",
-        "v1/lambdas/**",
-        "v1/site/**",
-        "v1/docs/legal/**",
-        "v2/infra/**",
-        "v2/lambdas/**",
-        "v2/scripts/build_loader_zip.sh",
-        "v2/scripts/loader-requirements.txt",
-        "v2/pyproject.toml",
-        "v2/uv.lock",
-      ]
+    paths: ["v1/infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
   pull_request:
-    paths:
-      [
-        "v1/infra/**",
-        ".github/workflows/terraform.yml",
-        "v1/scripts/build_zips.sh",
-        "v1/scripts/loader-requirements.txt",
-        "v1/agent/**",
-        "v1/agent_tools/**",
-        "v1/agent-sops/**",
-        "v1/oracles/**",
-        "v1/pyproject.toml",
-        "v1/uv.lock",
-        "v1/lambdas/**",
-        "v1/site/**",
-        "v1/docs/legal/**",
-        "v2/infra/**",
-        "v2/lambdas/**",
-        "v2/scripts/build_loader_zip.sh",
-        "v2/scripts/loader-requirements.txt",
-        "v2/pyproject.toml",
-        "v2/uv.lock",
-      ]
+    paths: ["v1/infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -57,7 +15,6 @@ concurrency:
 
 jobs:
   fmt-validate:
-    # Credential-free, so every PR gets basic infrastructure feedback.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,157 +23,13 @@ jobs:
           terraform_wrapper: false
       - run: terraform fmt -check -recursive
         working-directory: v1/infra
-      - run: terraform init -backend=false
+      - run: terraform init -backend=false -input=false
         working-directory: v1/infra
       - run: terraform validate
         working-directory: v1/infra
       - run: terraform fmt -check -recursive
         working-directory: v2/infra
-      - run: terraform init -backend=false
+      - run: terraform init -backend=false -input=false
         working-directory: v2/infra
       - run: terraform validate
         working-directory: v2/infra
-
-  apply:
-    needs: fmt-validate
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    concurrency:
-      group: terraform-apply
-      cancel-in-progress: false
-    permissions:
-      id-token: write
-      contents: read
-    defaults:
-      run:
-        working-directory: v1
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - run: ./scripts/build_zips.sh
-      - name: Record reviewed package digests
-        run: |
-          cd infra/build
-          cp ../../site/preview.html ../../site/preview.mjs ../../site/faq.html .
-          cp ../../docs/legal/privacy.md ../../docs/legal/terms.md .
-          sha256sum agentcore.zip chat-proxy.zip fetcher.zip loader.zip \
-            preview.html preview.mjs faq.html privacy.md terms.md > SHA256SUMS
-          REVIEWED_RELEASE="${GITHUB_SHA}/$(sha256sum SHA256SUMS | cut -d ' ' -f1)"
-          echo "REVIEWED_RELEASE=$REVIEWED_RELEASE" >> "$GITHUB_ENV"
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-terraform-apply
-          aws-region: us-east-1
-      - name: Stage reviewed packages
-        run: |
-          verification_dir="$(mktemp -d)"
-          trap 'rm -r -- "$verification_dir"' EXIT
-          for artifact in agentcore.zip chat-proxy.zip fetcher.zip loader.zip preview.html preview.mjs faq.html privacy.md terms.md SHA256SUMS; do
-            aws s3 cp "infra/build/$artifact" \
-              "s3://nova-toll-agentcore-920534282028/reviewed/$REVIEWED_RELEASE/$artifact" \
-              --checksum-algorithm SHA256 --only-show-errors
-          done
-          for artifact in agentcore.zip chat-proxy.zip fetcher.zip loader.zip preview.html preview.mjs faq.html privacy.md terms.md SHA256SUMS; do
-            aws s3 cp \
-              "s3://nova-toll-agentcore-920534282028/reviewed/$REVIEWED_RELEASE/$artifact" \
-              "$verification_dir/$artifact" \
-              --checksum-mode ENABLED --only-show-errors
-          done
-          (cd "$verification_dir" && sha256sum --check SHA256SUMS)
-      - name: Fetch Cloudflare token
-        run: |
-          TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)
-          echo "::add-mask::$TOKEN"
-          echo "CLOUDFLARE_API_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_wrapper: false
-      - run: terraform init
-        working-directory: v1/infra
-      - run: |
-          terraform apply -auto-approve \
-            -var fetcher_package_path=build/fetcher.zip \
-            -var loader_package_path=build/loader.zip \
-            -var agentcore_package_path=build/agentcore.zip \
-            -var chat_proxy_package_path=build/chat-proxy.zip \
-            -var enable_public_chat=true
-        working-directory: v1/infra
-      - name: Publish reviewed release
-        run: |
-          printf 'Reviewed release: `%s`\n' "$REVIEWED_RELEASE" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$REVIEWED_RELEASE" > infra/build/latest
-          aws s3 cp infra/build/latest \
-            s3://nova-toll-agentcore-920534282028/reviewed/latest \
-            --checksum-algorithm SHA256 --only-show-errors
-
-  deploy-v2:
-    needs: [fmt-validate, apply]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    concurrency:
-      group: terraform-apply
-      cancel-in-progress: false
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          python-version: "3.13"
-      - name: Build reviewed v2 loader
-        run: v2/scripts/build_loader_zip.sh
-      - name: Fetch RDS CA bundle
-        run: |
-          mkdir -p v2/infra/build/ca
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-            -o v2/infra/build/ca/rds-ca-bundle.pem
-          echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  v2/infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
-      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-github-ci
-          aws-region: us-east-1
-      - name: Require manually prepared pricing schema
-        run: |
-          db_host="$(aws rds describe-db-instances --db-instance-identifier nova-toll-db --query 'DBInstances[0].Endpoint.Address' --output text)"
-          db_port="$(aws rds describe-db-instances --db-instance-identifier nova-toll-db --query 'DBInstances[0].Endpoint.Port' --output text)"
-          db_token="$(aws rds generate-db-auth-token --hostname "$db_host" --port "$db_port" --username pricing_reader)"
-          PGPASSWORD="$db_token" PGSSLMODE=verify-full PGSSLROOTCERT="$GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem" \
-            psql --host "$db_host" --port "$db_port" --username pricing_reader --dbname nova_toll \
-            --set ON_ERROR_STOP=1 --no-psqlrc <<'SQL'
-          DO $$
-          BEGIN
-            IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.2.0'
-               OR to_regclass('pricing.trip_pricing_i95') IS NULL
-               OR to_regclass('pricing.trip_pricing_i66') IS NULL
-               OR NOT has_schema_privilege('pricing_loader_writer', 'pricing', 'USAGE')
-               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'SELECT')
-               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'INSERT')
-               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'UPDATE')
-               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'SELECT')
-               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'INSERT')
-               OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i66', 'UPDATE') THEN
-              RAISE EXCEPTION 'pricing 1.2.0 is not prepared for the v2 loader';
-            END IF;
-          END $$;
-          SQL
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-terraform-apply
-          aws-region: us-east-1
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_wrapper: false
-      - run: terraform init
-        working-directory: v2/infra
-      - run: terraform apply -auto-approve -var loader_package_path=build/loader.zip
-        working-directory: v2/infra
-      - name: Record v2 deployment
-        run: |
-          printf 'v2 loader digest: `%s`\n' "$(sha256sum v2/infra/build/loader.zip | cut -d ' ' -f1)" >> "$GITHUB_STEP_SUMMARY"

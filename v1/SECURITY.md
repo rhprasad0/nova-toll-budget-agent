@@ -1,16 +1,14 @@
 # Security notes
 
-This is the living security record for TollChat. It documents implemented
-controls and operating expectations; it must never contain credentials,
-database endpoints, IP addresses, account IDs, or KMS key IDs.
+This is the historical v1 security record. V1 application resources are
+retired; retained shared controls support v2. This file must never contain
+credentials, database endpoints, IP addresses, account IDs, or KMS key IDs.
 
 ## Current posture
 
-The data pipeline uses separate least-privilege Lambda roles, parameterized
-database queries, RDS IAM authentication, and TLS certificate verification.
-The private preview and public beta are deployed. Public chat reaches the same
-validated proxy through CloudFront OAC and WAF; reports sent to
-`contact@tollchat.ai` reach the admin.
+The retained poller uses a least-privilege Lambda role and writes encrypted raw
+objects. The v1 loader, AgentCore runtime, proxies, site, public DNS records,
+telemetry pipeline, and CI Terraform deployment roles are retired.
 
 ## Implemented hardening (2026-07-26)
 
@@ -41,14 +39,6 @@ validated proxy through CloudFront OAC and WAF; reports sent to
   fast-fail courtesy that only applies to clones that have opted in.
 - The Lambda build verifies the downloaded RDS CA bundle SHA-256 before
   packaging it.
-- Successful trusted-main deployments retain all four reviewed package ZIPs
-  and their SHA-256 manifest in the private, versioned AgentCore artifact
-  bucket. Release prefixes include the Git commit and manifest digest; the
-  workflow uploads and downloads-verifies the complete set before apply, then
-  advances `reviewed/latest` only after apply succeeds. Reviewed versions never
-  expire, CloudTrail supplies an independently validated publication record,
-  and rollback requires an explicitly approved prior release ID. It rejects
-  missing or mismatched packages instead of rebuilding them.
 
 ## Implemented hardening (2026-07-27)
 
@@ -56,29 +46,12 @@ validated proxy through CloudFront OAC and WAF; reports sent to
   the loader Lambda's security group and a Tailscale subnet router
   (`infra/tailscale.tf`), replacing the prior static home-IP ingress rule.
   Confirmed live: a direct public connection attempt now times out.
-- GitHub Actions authenticates to AWS via OIDC (`nova-toll-github-ci`,
-  `infra/iam.tf`) rather than long-lived credentials, scoped to
-  `ssm:GetParameter` for the OpenAI key, `rds-db:connect` as the read-only
-  `pricing_reader` role, and `rds:DescribeDBInstances`. Its workflow gate
-  and OIDC `sub` trust condition both allow only the exact `main` push, so
-  unreviewed branch and pull-request code cannot obtain these credentials.
 - The tailnet ACL (`policy.hujson`) is managed via GitOps
   (`.github/workflows/tailscale-acl.yml`, `tailscale/gitops-acl-action`)
   rather than hand-edited in the console: PRs run policy `tests` only, pushes
   to `main` apply. The `tests` assert the owner's access and the RDS route
   survive any future edit, and that `tag:ci` can never reach the general
   internet through the subnet router's exit-node capability.
-- Terraform CI (`.github/workflows/terraform.yml`) keeps pull-request
-  feedback credential-free (`fmt`, `init -backend=false`, and `validate`).
-  Only pushes to `main` run credentialed `apply` through the dedicated
-  `nova-toll-terraform-apply` role, whose trust is scoped to
-  `ref:refs/heads/main`. The apply role is admin-equivalent because this
-  repo's own Terraform manages IAM — a curated set of service-scoped policies
-  would still need `IAMFullAccess` to manage `infra/iam.tf`, at which point it
-  could attach `AdministratorAccess` to anything anyway. The real boundary is
-  the trust policy's branch restriction, not the permission policy. The
-  Cloudflare API token remains on its own dedicated KMS key (`infra/kms.tf`),
-  isolated from the VDOT feed tokens and Tailscale authkey.
 
 ## Deployment verification
 
@@ -108,24 +81,6 @@ S3 objects and RDS rows must not be destroyed.
   ambient AWS identity; never export it, log it, or copy it into a local file.
 - Both OpenAI and Bedrock Mantle use stateful Responses. Local tool auditing uses
   the response `metrics.traces`, not Strands' empty stateful message history.
-- Keep the Cloudflare API token in SSM Parameter Store at
-  `/nova-toll/cloudflare-api-token`, on its dedicated KMS key. Terraform does
-  not manage this parameter or its value; provision and overwrite it
-  out-of-band through the AWS console. Never put it in a file. Fetch it
-  immediately before a Terraform operation and let it die with the shell:
-  `export CLOUDFLARE_API_TOKEN=$(aws ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)`
-  Requires the identity running it to have `ssm:GetParameter` and
-  `kms:Decrypt` on that parameter's key -- an account/SSO-level grant for
-  local use (`AWS_PROFILE=nova-toll`) or
-  `nova-toll-terraform-apply`'s scoped grant in CI.
-- `infra/ssm.tf` retains a non-destructive `removed` block only to hand off
-  the existing parameter from Terraform state. After a trusted-main apply has
-  completed that handoff, create a new least-privilege Cloudflare token,
-  overwrite the existing SSM parameter, validate a trusted Terraform plan,
-  then revoke the old token. Treat every retained Terraform-state version as
-  potentially exposed; do not inspect secret-bearing state just to audit it.
-  Review and restrict S3 state-bucket readers and its KMS decrypt principals
-  to the least privilege needed.
 - Set `AWS_PROFILE=nova-toll` before running Terraform locally.
   `infra/providers.tf` and the `infra/versions.tf` backend block no longer
   hardcode a profile, so both local runs and CI rely on ambient credentials

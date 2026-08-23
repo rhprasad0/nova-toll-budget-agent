@@ -63,53 +63,6 @@ resource "aws_iam_role_policy" "fetcher" {
   policy = data.aws_iam_policy_document.fetcher.json
 }
 
-# --- toll-loader -----------------------------------------------------------
-
-resource "aws_iam_role" "loader" {
-  name               = "toll-loader"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-resource "aws_iam_role_policy_attachment" "loader_vpc" {
-  role       = aws_iam_role.loader.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
-data "aws_iam_policy_document" "loader" {
-  statement {
-    sid       = "DecryptRawObjects"
-    actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.raw.arn]
-  }
-
-  statement {
-    sid     = "GetRawObjects"
-    actions = ["s3:GetObject"]
-    resources = [
-      "${aws_s3_bucket.raw.arn}/raw/feed=i95/*",
-      "${aws_s3_bucket.raw.arn}/raw/feed=i66/*",
-    ]
-  }
-
-  statement {
-    sid       = "ConnectRdsIam"
-    actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/loader_writer"]
-  }
-
-  statement {
-    sid       = "SendToOnFailureQueue"
-    actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.loader_onfailure.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "loader" {
-  name   = "toll-loader"
-  role   = aws_iam_role.loader.id
-  policy = data.aws_iam_policy_document.loader.json
-}
-
 # The replay role is intentionally separate from Terraform and the Lambda
 # execution roles. An account identity must have both sts:AssumeRole and an
 # MFA-authenticated session to use it.
@@ -155,105 +108,10 @@ resource "aws_iam_role_policy" "replay" {
   policy = data.aws_iam_policy_document.replay.json
 }
 
-# --- GitHub Actions CI (RDS integration test) ------------------------------
+# --- GitHub Actions OIDC foundation retained for v2 timed checks -----------
 
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-}
-
-data "aws_iam_policy_document" "github_ci_assume" {
-  statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:sub"
-      # The integration workflow runs only for a main-branch push.
-      # Immutable owner/repo IDs keep this condition valid across a rename or
-      # transfer without granting any branch, PR, tag, environment, or caller.
-      values = [
-        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
-      ]
-    }
-  }
-}
-
-resource "aws_iam_role" "github_ci" {
-  name               = "nova-toll-github-ci"
-  assume_role_policy = data.aws_iam_policy_document.github_ci_assume.json
-}
-
-data "aws_iam_policy_document" "github_ci" {
-  statement {
-    sid       = "ReadOpenAiApiKey"
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"]
-  }
-
-  statement {
-    sid       = "ConnectRdsIam"
-    actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/pricing_reader"]
-  }
-
-  statement {
-    # Lets the integration test resolve the RDS endpoint at runtime instead
-    # of it being hardcoded into the public workflow file.
-    sid       = "DescribeRdsEndpoint"
-    actions   = ["rds:DescribeDBInstances"]
-    resources = [aws_db_instance.main.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "github_ci" {
-  name   = "nova-toll-github-ci"
-  role   = aws_iam_role.github_ci.id
-  policy = data.aws_iam_policy_document.github_ci.json
-}
-
-# --- GitHub Actions CI (Terraform apply) ------------------------------------
-
-data "aws_iam_policy_document" "terraform_apply_assume" {
-  statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:sub"
-      # main-branch push only -- never pull_request, never other branches.
-      # This repo's own Terraform manages IAM (this role included), so any
-      # apply-capable identity is admin-equivalent no matter how the
-      # permission policy below is scoped -- this trust condition is the
-      # real boundary.
-      values = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"]
-    }
-  }
-}
-
-resource "aws_iam_role" "terraform_apply" {
-  name               = "nova-toll-terraform-apply"
-  assume_role_policy = data.aws_iam_policy_document.terraform_apply_assume.json
-}
-
-resource "aws_iam_role_policy_attachment" "terraform_apply_admin" {
-  role       = aws_iam_role.terraform_apply.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }

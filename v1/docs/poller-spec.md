@@ -294,21 +294,17 @@ freshness alarms and drills.
 Lives in `infra/` in this repo. Terraform ≥ 1.10, AWS provider pinned.
 Backend: dedicated state bucket `nova-toll-tfstate-920534282028` with native
 S3 locking (`use_lockfile`, no DynamoDB). Provider: no hardcoded profile —
-local runs set `AWS_PROFILE=nova-toll`, CI uses OIDC-assumed credentials
-(`.github/workflows/terraform.yml`) — `region = "us-east-1"`, default tags
+local runs set `AWS_PROFILE=nova-toll`; CI does not plan or apply Terraform —
+`region = "us-east-1"`, default tags
 `project = nova-toll-budget-agent`
 (lowercase `project` — it must match the cost allocation tag key already
 activated in the org management account; tag keys are case-sensitive in
 billing).
 
-Resources: raw bucket (+versioning, public-access block), state bucket (same
-hardening: versioning, public-access block, SSE; bootstrap manually or
-separate min-config), fetcher and loader Lambdas with least-privilege roles,
-loader `OnFailure` SQS queue, two cadence-specific EventBridge rules, S3 →
-loader notification, log metric filters for `LoadSuccess`, S3 gateway
-endpoint, RDS instance/networking, SSM SecureString parameters for the two
-VDOT tokens (**values entered out-of-band via CLI, never in Terraform
-state**), SNS topic, alarms, and 30-day log groups.
+Retained resources include the raw and state buckets, fetcher Lambda, two
+cadence-specific EventBridge rules, S3/DynamoDB/AgentCore/private-API
+endpoints, RDS, shared private networking, SSM feed tokens, SNS alerting,
+audit foundation, and artifact archive. V2 owns the sole pricing loader.
 
 ## RDS
 
@@ -325,16 +321,9 @@ RDS CA bundle.
 
 **Network posture:** `publicly_accessible = false`, confirmed live
 2026-07-27 (a direct public connection attempt now times out). The security
-group allows 5432 only from (a) the loader Lambda's SG and (b) a Tailscale
-subnet router SG (`infra/tailscale.tf`) — a `t4g.nano` in the same default
-VPC that bridges the tailnet to RDS. That one box gives GitHub Actions CI
-(via the `nova-toll-github-ci` OIDC role and the `tailscale/github-action`,
-see `.github/workflows/ci.yml`), the dev laptop, and Tailscale exit-node use
-on public wifi a path in, without RDS ever being publicly addressable.
-CI's `integration` job exercises this path for real only on pushes to `main`:
-join the tailnet, assume the OIDC role, `SELECT 1` over the bridge. Pull
-requests receive credential-free checks, so this live verification occurs
-after merge. Auth
+group allows 5432 only from the v2 loader/runtime security groups and a
+Tailscale subnet router SG (`infra/tailscale.tf`) — a `t4g.nano` in the same
+default VPC that bridges the tailnet to RDS and the private v2 preview. Auth
 key, ACL policy (`policy.hujson`, applied via
 `.github/workflows/tailscale-acl.yml`), and route/exit-node approval are
 managed out-of-band in the Tailscale admin console and this repo's GitOps
