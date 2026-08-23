@@ -68,7 +68,7 @@ resource "aws_s3_object" "index" {
   bucket        = aws_s3_bucket.site.id
   key           = "index.html"
   source        = "${path.module}/../agent/dev_chat.html"
-  etag          = filemd5("${path.module}/../agent/dev_chat.html")
+  source_hash   = filebase64sha256("${path.module}/../agent/dev_chat.html")
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
@@ -79,7 +79,7 @@ resource "aws_s3_object" "chat" {
   bucket        = aws_s3_bucket.site.id
   key           = "chat.mjs"
   source        = "${path.module}/../agent/public_chat.mjs"
-  etag          = filemd5("${path.module}/../agent/public_chat.mjs")
+  source_hash   = filebase64sha256("${path.module}/../agent/public_chat.mjs")
   content_type  = "text/javascript; charset=utf-8"
   cache_control = "no-cache"
 
@@ -90,7 +90,7 @@ resource "aws_s3_object" "faq" {
   bucket        = aws_s3_bucket.site.id
   key           = "faq.html"
   source        = "${path.module}/../agent/faq.html"
-  etag          = filemd5("${path.module}/../agent/faq.html")
+  source_hash   = filebase64sha256("${path.module}/../agent/faq.html")
   content_type  = "text/html; charset=utf-8"
   cache_control = "no-cache"
 
@@ -101,7 +101,7 @@ resource "aws_s3_object" "privacy" {
   bucket        = aws_s3_bucket.site.id
   key           = "privacy.txt"
   source        = "${path.module}/../agent/privacy.txt"
-  etag          = filemd5("${path.module}/../agent/privacy.txt")
+  source_hash   = filebase64sha256("${path.module}/../agent/privacy.txt")
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 
@@ -112,7 +112,7 @@ resource "aws_s3_object" "terms" {
   bucket        = aws_s3_bucket.site.id
   key           = "terms.txt"
   source        = "${path.module}/../agent/terms.txt"
-  etag          = filemd5("${path.module}/../agent/terms.txt")
+  source_hash   = filebase64sha256("${path.module}/../agent/terms.txt")
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 
@@ -122,10 +122,10 @@ resource "aws_s3_object" "terms" {
 resource "aws_s3_object" "site_assets" {
   for_each = local.site_assets
 
-  bucket = aws_s3_bucket.site.id
-  key    = "assets/${each.value}"
-  source = "${path.module}/../agent/assets/${each.value}"
-  etag   = filemd5("${path.module}/../agent/assets/${each.value}")
+  bucket      = aws_s3_bucket.site.id
+  key         = "assets/${each.value}"
+  source      = "${path.module}/../agent/assets/${each.value}"
+  source_hash = filebase64sha256("${path.module}/../agent/assets/${each.value}")
   content_type = endswith(each.value, ".css") ? "text/css; charset=utf-8" : (
     endswith(each.value, ".mjs") ? "text/javascript; charset=utf-8" : (
       endswith(each.value, ".json") ? "application/json; charset=utf-8" : (

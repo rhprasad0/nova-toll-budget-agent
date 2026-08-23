@@ -156,7 +156,7 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     for path in ("faq.html", "privacy.txt", "terms.txt"):
         assert path in site
     assert 'fileset("${path.module}/../agent/assets", "**")' in site
-    assert 'key    = "assets/${each.value}"' in site
+    assert re.search(r'key\s+= "assets/\$\{each[.]value\}"', site)
     assert (V2_ROOT / "agent" / "assets" / "tollchat-logo.png").exists()
     assert '<script type="module" src="/chat.mjs"></script>' in page
     assert '"/chat.mjs"' in server
