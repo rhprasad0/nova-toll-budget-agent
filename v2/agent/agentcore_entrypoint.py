@@ -182,8 +182,10 @@ class TollChatRuntime:
             if DISCLAIMER not in answer:
                 answer = f"{answer}\n\n{DISCLAIMER}"
             yield {"type": "answer", "text": answer, "blocked": False}
-        except Exception:  # Provider boundary returns one safe error contract.
-            logger.exception("TollChat runtime request failed")
+        except Exception as error:  # Provider boundary returns one safe error contract.
+            logger.error(
+                "TollChat runtime request failed type=%s", type(error).__name__
+            )
             yield _error(
                 "agent_unavailable",
                 "TollChat could not complete that request. Please try again.",

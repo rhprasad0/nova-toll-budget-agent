@@ -32,9 +32,16 @@ def test_v1_loader_is_retired_but_eventbridge_remains():
     assert 'resource "aws_lambda_function" "loader"' not in V1_LAMBDA
 
 
-def test_v1_site_and_terraform_ci_are_removed():
+def test_v1_site_is_removed_and_terraform_ci_only_validates():
     assert not (REPO_ROOT / "v1" / "infra" / "site.tf").exists()
-    assert not (REPO_ROOT / ".github" / "workflows" / "terraform.yml").exists()
+    workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+    assert workflow.count("terraform fmt -check -recursive") == 2
+    assert workflow.count("terraform init -backend=false -input=false") == 2
+    assert workflow.count("terraform validate") == 2
+    assert "terraform plan" not in workflow
+    assert "terraform apply" not in workflow
+    assert "configure-aws-credentials" not in workflow
+    assert "id-token: write" not in workflow
     assert 'resource "aws_iam_role" "terraform_apply"' not in V1_IAM
     assert 'resource "aws_iam_role" "github_ci"' not in V1_IAM
 

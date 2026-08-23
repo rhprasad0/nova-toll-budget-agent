@@ -1,0 +1,35 @@
+name: terraform
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["v1/infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
+  pull_request:
+    paths: ["v1/infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fmt-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+        working-directory: v1/infra
+      - run: terraform init -backend=false -input=false
+        working-directory: v1/infra
+      - run: terraform validate
+        working-directory: v1/infra
+      - run: terraform fmt -check -recursive
+        working-directory: v2/infra
+      - run: terraform init -backend=false -input=false
+        working-directory: v2/infra
+      - run: terraform validate
+        working-directory: v2/infra
