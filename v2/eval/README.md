@@ -42,3 +42,42 @@ The live run needs the RDS CA bundle at `infra/build/ca/rds-ca-bundle.pem`, AWS
 access to RDS and `/nova-toll/openai_api_key`, and network access to the private
 database. The window must match the live state. Protected timed CI runs the
 matching subset in every northbound, reversal, and southbound I-95 window.
+
+## Asynchronous ballpark hallucination run
+
+The frozen-evidence Batch evaluation captures one real annual ballpark for a
+240-day, $120,000 Springfield-Franconia–Westpark commute at 8:30 AM and 5:30
+PM, then expands five reviewed prompts to 1,000 responses. Generated Batch
+files stay in ignored `eval/private/`; the small canonical fixture is
+`eval/ballpark-hallucination-cases.jsonl`.
+
+Prepare and inspect the exact packet without calling OpenAI:
+
+```bash
+AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+  uv run python eval/ballpark_hallucination_batch.py prepare
+jq .preflight eval/private/annual-ballpark-hallucination/manifest.json
+```
+
+Submit only after reviewing that report. The command recounts the packet and
+all visible nonterminal Luna Batch inputs before uploading:
+
+```bash
+AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+  uv run python eval/ballpark_hallucination_batch.py submit
+```
+
+Once the manifest contains a Batch ID, OpenAI owns the 24-hour job and this PC
+may be powered off. Later, run `collect`; it checks once and exits immediately
+when the job is still pending:
+
+```bash
+AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \
+  uv run python eval/ballpark_hallucination_batch.py collect
+```
+
+Terminal collection reconciles unordered IDs, preserves Batch errors, and
+writes `results.json` plus every failure and a deterministic 20-pass sample in
+`review.json`. Expired or failed work is never resubmitted automatically.
+The completed run and adjudicated findings are summarized in
+[`ballpark-hallucination-report.md`](ballpark-hallucination-report.md).

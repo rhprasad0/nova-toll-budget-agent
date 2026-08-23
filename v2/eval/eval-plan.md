@@ -62,6 +62,12 @@ flowchart LR
 - **Description:** The annual case makes the exact income-aware call and reports tool-provided annualized daily-P25/P50/P90 money in a Markdown table with emoji, tax, mileage, fixed TollChat vehicle-cost assumption, scope, and historical-evidence disclosures.
 - **Method:** Code-based
 
+### Frozen-evidence quantitative hallucination rate
+
+- **Evaluation Area:** Final-response grounding under repeated generation
+- **Description:** Across 1,000 production-shaped Batch responses, reject any money, percentage, coverage, date, or time claim absent from one reviewed Springfield-Franconia–Westpark ballpark result while retaining the existing annual-response requirements.
+- **Method:** Code-based
+
 ---
 
 ## 4. Test Data Generation
@@ -78,6 +84,10 @@ flowchart LR
 - **Leesburg salary range:** Request one annual gross estimate, retain the supplied commute details, then make the exact annual call after selection.
 - **Dulles Airport to Reagan Airport:** Accept the cross-direction current-price route, then explain a deterministically unsupported annual return route without scenarios, totals, or a current-price restart.
 - **Total number of test cases:** 12; six current-price and six annual-affordability cases.
+
+The separate hallucination battery uses one canonical annual-ballpark context,
+five reviewed prompt variants, and 200 repeat generations per variant. Repeats
+measure reliability for that context, not route coverage.
 
 | **Scheduled window** | **Cases run** |
 | :-- | :-- |
@@ -119,6 +129,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Methodology review | Label annualized daily percentiles precisely, remove unsupported AAA attribution, round annual vehicle cost after annualization, and collapse prompt releases for PR CI. |
 | 2026-08-22 | Annual parity | Expand annual coverage to five behavioral cases without changing production behavior or weakening graders for failures. |
 | 2026-08-22 | Annual-day estimate | Propose 52 times the weekly schedule, wait for acceptance or adjustment, and bind response money to its labeled context. |
+| 2026-08-22 | Hallucination Batch | Use a direct two-phase OpenAI Batch workflow, a frozen Springfield-Franconia–Westpark ballpark, five prompts, 1,000 responses, and a tiktoken gate against the Tier 3 40M queue. |
 
 ### 6.2 Evaluation Progress
 
@@ -137,3 +148,4 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Cross-direction live current | Completed | 1/1 passed; the exact Dulles-to-Reagan call returned grounded stale-evidence unavailability rather than an internal validation error. |
 | 2026-08-22 | Final annual parity run | Completed | 5/5 passed against the final prompt contract. |
 | 2026-08-22 | Annual-day estimate and evaluator hardening | Completed | 6/6 passed live: the agent proposed 260, waited, honored 240, and the evaluator enforced scenario-row and P50-context money binding. |
+| 2026-08-22 | Ballpark hallucination packet | Completed | Batch `batch_6a8a15e8f5fc81909b45e7e5831d0917` returned 1,000/1,000 responses. Adjudication found 99.6% strict quantitative grounding, one genuinely incorrect fact, and 93.1% conservative end-to-end compliance. |
