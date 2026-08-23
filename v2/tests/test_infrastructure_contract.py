@@ -17,14 +17,35 @@ TIMED_BALLPARK_TEST = (
 ).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
 V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
+V1_LAMBDA = (REPO_ROOT / "v1" / "infra" / "lambda.tf").read_text()
+V1_IAM = (REPO_ROOT / "v1" / "infra" / "iam.tf").read_text()
+V1_AGENTCORE = (REPO_ROOT / "v1" / "infra" / "agentcore.tf").read_text()
 
 
-def test_v1_direct_notification_and_eventbridge_coexist():
+def test_v1_loader_is_retired_but_eventbridge_remains():
     notification = V1_TRIGGERS.split(
         'resource "aws_s3_bucket_notification" "raw"', maxsplit=1
     )[1]
     assert "eventbridge = true" in notification
-    assert "lambda_function_arn = aws_lambda_function.loader.arn" in notification
+    assert "lambda_function" not in notification
+    assert 'resource "aws_lambda_permission" "s3_invoke_loader"' not in V1_TRIGGERS
+    assert 'resource "aws_lambda_function" "loader"' not in V1_LAMBDA
+
+
+def test_v1_site_and_terraform_ci_are_removed():
+    assert not (REPO_ROOT / "v1" / "infra" / "site.tf").exists()
+    assert not (REPO_ROOT / ".github" / "workflows" / "terraform.yml").exists()
+    assert 'resource "aws_iam_role" "terraform_apply"' not in V1_IAM
+    assert 'resource "aws_iam_role" "github_ci"' not in V1_IAM
+
+
+def test_shared_dynamodb_endpoint_admits_v2_session_table():
+    endpoint = V1_AGENTCORE.split('resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1)[
+        1
+    ].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
+    assert "tollchat-v2-anonymous-sessions" in endpoint
+    assert "table/tollchat-anonymous-sessions" not in endpoint
+    assert "dynamodb:*" not in endpoint
 
 
 def test_v2_has_an_independent_state_and_identity():
@@ -32,6 +53,42 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'function_name = "toll-v2-pricing-loader"' in MAIN_TF
     assert "/pricing_loader_writer" in MAIN_TF
     assert 'DB_USER    = "pricing_loader_writer"' in MAIN_TF
+
+
+def test_v2_declares_a_private_agentcore_application_without_telemetry():
+    agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
+    assert agentcore_path.exists()
+    agentcore = agentcore_path.read_text()
+    assert 'agent_runtime_name = "nova_toll_v2"' in agentcore
+    assert 'network_mode = "VPC"' in agentcore
+    assert "dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent" in agentcore
+    assert "dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller" in agentcore
+    assert 'function_name                  = "tollchat-v2-chat-proxy"' in agentcore
+    assert 'name         = "tollchat-v2-anonymous-sessions"' in agentcore
+    assert 'types            = ["PRIVATE"]' in agentcore
+    assert 'response_transfer_mode  = "STREAM"' in agentcore
+    assert "DenyOutsidePrivateEndpoint" in agentcore
+    assert (
+        'resource "aws_vpc_security_group_ingress_rule" "agentcore_from_proxy"'
+        in agentcore
+    )
+    assert "aws_cloudfront" not in agentcore
+    assert "cloudflare" not in agentcore
+    assert "aws_acm" not in agentcore
+    assert "opentelemetry" not in agentcore.lower()
+    assert "xray" not in agentcore.lower()
+    assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
+
+
+def test_v2_agent_packages_are_required_for_real_deployments():
+    variables = (V2_ROOT / "infra" / "variables.tf").read_text()
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    build = V2_ROOT / "scripts" / "build_agentcore_zips.sh"
+    assert 'variable "agentcore_package_path"' in variables
+    assert 'variable "chat_proxy_package_path"' in variables
+    assert "AgentCore deployment requires the reviewed v2 runtime package" in agentcore
+    assert "Chat proxy deployment requires the reviewed v2 proxy package" in agentcore
+    assert build.exists()
 
 
 def test_eventbridge_has_both_failure_paths_and_bounded_retries():

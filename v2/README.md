@@ -1,16 +1,8 @@
 # TollChat v2
 
-This directory is the exclusive home for TollChat's from-scratch v2,
-including its future code, tests, evals, infrastructure, and documentation.
-
-The complete live implementation lives in
-[`v1/`](../v1/) and keeps its existing build and deployment behavior. V2 has no
-compatibility or dependency contract with it.
-Reuse code only through an explicit future change that copies or reintroduces
-the needed behavior here.
-
-Documents in `v1/` remain historical reference material until v2 deliberately
-adopts them.
+This directory is the exclusive home for TollChat's deployed private v2 code,
+tests, evals, infrastructure, and documentation. V1 application resources are
+retired; only the shared operational foundation remains under `v1/infra`.
 
 ## Adopted contract
 
@@ -56,8 +48,8 @@ For an existing database, read both `schema_version` tables and apply only the
 matching guarded [`*_upgrade_*` migrations](db/migrations/) in dependency and
 version order. Never edit or skip a released migration.
 
-See the [shadow rollout runbook](docs/pricing-shadow-rollout.md) for deployment,
-backfill, verification, rollback, and deliberately guarded cleanup.
+See the [AgentCore deployment runbook](docs/agentcore-deployment.md) for the
+manual reviewed-plan deployment, smoke test, and rollback workflow.
 
 The `get_current_toll_price` Strands tool accepts stable origin and destination
 point IDs plus the supported pricing profile. It validates the route through
@@ -123,6 +115,6 @@ with a 30-minute TTL. Strands exposes cache reuse through
 `cacheWriteInputTokens`; toll prices, annual ballparks, final answers, and RDS
 prompt-point queries are not application-cached.
 
-The v2 loader is an independent copy under `v2/lambdas/loader`. Native S3
-events reach it through EventBridge while v1 keeps its direct S3 notification.
-Both paths are idempotent on their table keys and share no deployment state.
+The v2 loader under `v2/lambdas/loader` is the sole pricing loader. Native S3
+events reach it through EventBridge; the retired v1 loader has no trigger or
+deployed function.

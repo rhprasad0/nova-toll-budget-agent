@@ -50,28 +50,7 @@ resource "aws_lambda_permission" "eventbridge_invoke_fetcher_i66" {
   source_arn    = aws_cloudwatch_event_rule.poll_tick_i66.arn
 }
 
-# --- S3 raw/ ObjectCreated → toll-loader ------------------------------------
-
-resource "aws_lambda_permission" "s3_invoke_loader" {
-  statement_id   = "AllowS3Invoke"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.loader.function_name
-  principal      = "s3.amazonaws.com"
-  source_arn     = aws_s3_bucket.raw.arn
-  source_account = data.aws_caller_identity.current.account_id
-}
-
 resource "aws_s3_bucket_notification" "raw" {
-  bucket = aws_s3_bucket.raw.id
-  # Preserve the v1 direct notification while publishing the same object
-  # events for independently managed v2 EventBridge consumers.
+  bucket      = aws_s3_bucket.raw.id
   eventbridge = true
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.loader.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "raw/"
-  }
-
-  depends_on = [aws_lambda_permission.s3_invoke_loader]
 }

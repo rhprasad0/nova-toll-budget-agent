@@ -22,14 +22,6 @@ resource "aws_ssm_parameter" "i66_token" {
   }
 }
 
-removed {
-  from = aws_ssm_parameter.cloudflare_api_token
-
-  lifecycle {
-    destroy = false
-  }
-}
-
 resource "aws_ssm_parameter" "tailscale_authkey" {
   name  = var.tailscale_authkey_param_name
   type  = "SecureString"

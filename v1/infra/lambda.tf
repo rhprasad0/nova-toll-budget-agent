@@ -8,18 +8,10 @@ locals {
   fetcher_zip_path = var.fetcher_package_path != "" ? var.fetcher_package_path : data.archive_file.placeholder.output_path
   fetcher_zip_hash = var.fetcher_package_path != "" ? filebase64sha256(var.fetcher_package_path) : data.archive_file.placeholder.output_base64sha256
 
-  loader_zip_path = var.loader_package_path != "" ? var.loader_package_path : data.archive_file.placeholder.output_path
-  loader_zip_hash = var.loader_package_path != "" ? filebase64sha256(var.loader_package_path) : data.archive_file.placeholder.output_base64sha256
-
 }
 
 resource "aws_cloudwatch_log_group" "fetcher" {
   name              = "/aws/lambda/toll-fetcher"
-  retention_in_days = 30
-}
-
-resource "aws_cloudwatch_log_group" "loader" {
-  name              = "/aws/lambda/toll-loader"
   retention_in_days = 30
 }
 
@@ -53,54 +45,4 @@ resource "aws_lambda_function" "fetcher" {
 resource "aws_lambda_function_event_invoke_config" "fetcher" {
   function_name          = aws_lambda_function.fetcher.function_name
   maximum_retry_attempts = 1
-}
-
-# --- toll-loader -----------------------------------------------------------
-
-resource "aws_sqs_queue" "loader_onfailure" {
-  name                    = "toll-loader-onfailure"
-  sqs_managed_sse_enabled = true
-}
-
-resource "aws_lambda_function" "loader" {
-  function_name = "toll-loader"
-  role          = aws_iam_role.loader.arn
-  runtime       = "python3.13"
-  handler       = "handler.handler"
-  # 90s: in-VPC cold starts (ENI attach + psycopg import + verify-full connect)
-  # can exceed 30s and time out async loads; retries then stampede. See Finding B.
-  timeout     = 90
-  memory_size = 128
-
-  filename         = local.loader_zip_path
-  source_code_hash = local.loader_zip_hash
-
-  reserved_concurrent_executions = 5
-
-  vpc_config {
-    subnet_ids         = data.aws_subnets.default.ids
-    security_group_ids = [aws_security_group.loader.id]
-  }
-
-  environment {
-    variables = {
-      DB_HOST    = aws_db_instance.main.address
-      DB_PORT    = tostring(aws_db_instance.main.port)
-      DB_NAME    = aws_db_instance.main.db_name
-      DB_USER    = "loader_writer"
-      RAW_BUCKET = aws_s3_bucket.raw.bucket
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.loader, aws_iam_role_policy_attachment.loader_vpc]
-}
-
-resource "aws_lambda_function_event_invoke_config" "loader" {
-  function_name = aws_lambda_function.loader.function_name
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.loader_onfailure.arn
-    }
-  }
 }

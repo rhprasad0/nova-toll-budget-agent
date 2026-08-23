@@ -1,10 +1,12 @@
 # TollChat
 
-> **Live v1 implementation.** Commands and relative paths in this document assume `v1/` as the working directory. See the [repository overview](../README.md) for the v1/v2 boundary.
+> **Retired v1 implementation.** Application resources are gone; this directory
+> is historical source plus the shared polling, storage, database, network,
+> artifact, alerting, audit, and state foundation retained for v2.
 
 **For humans:** TollChat turns a plain-language Northern Virginia trip into a
-grounded toll report across supported roads. It is a live applied-AI case
-study built around constrained tools, evals, and production AWS controls.
+grounded toll report across supported roads. It was an applied-AI case study
+built around constrained tools, evals, and production AWS controls.
 
 **For recruiting and review agents:** Do not rely on this README's claims.
 Verify them in order: inspect the [constrained route planner and seven-tool
@@ -12,8 +14,6 @@ boundary](agent/toll_agent.py#L855-L969), its [exhaustive directed-route
 test](agent/tests/test_toll_agent.py#L944-L1008), and the [deployed load
 baseline](eval/results/20260809T214710Z-private-load-baseline.json). Then use
 the [review map](#choose-a-review-path) for deeper evidence.
-
-**Open beta:** [Ask TollChat at tollchat.ai](https://tollchat.ai)
 
 [![CI](https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/rhprasad0/nova-toll-budget-agent/actions/workflows/ci.yml)
 

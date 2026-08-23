@@ -17,61 +17,7 @@ variable "i66_token_param_name" {
 }
 
 variable "fetcher_package_path" {
-  description = "Path to the toll-fetcher deployment zip. Empty falls back to the placeholder stub, which is what lets the credential-free `fmt-validate` CI job run `terraform validate` without building zips first (filebase64sha256 on a missing file is a hard error). Every real plan/apply passes the built artifact."
-  type        = string
-  default     = ""
-}
-
-variable "loader_package_path" {
-  description = "Path to the toll-loader deployment zip. Empty falls back to the placeholder stub -- see fetcher_package_path for why that fallback exists."
-  type        = string
-  default     = ""
-}
-
-variable "agentcore_package_path" {
-  description = "Path to the ARM64 AgentCore deployment zip. Empty uses the validation-only placeholder."
-  type        = string
-  default     = ""
-}
-
-variable "chat_proxy_package_path" {
-  description = "Path to the chat proxy Lambda zip. Empty uses the validation-only placeholder."
-  type        = string
-  default     = ""
-}
-
-variable "enable_public_chat" {
-  description = "Expose the chat proxy through the public CloudFront /api/* path. Set false to remove public chat while preserving the private preview."
-  type        = bool
-  default     = false
-}
-
-variable "site_index_path" {
-  description = "Optional reviewed HTML artifact used for the public site."
-  type        = string
-  default     = ""
-}
-
-variable "site_script_path" {
-  description = "Optional reviewed JavaScript artifact used for the public site."
-  type        = string
-  default     = ""
-}
-
-variable "site_faq_path" {
-  description = "Optional reviewed pricing FAQ artifact used for the public site."
-  type        = string
-  default     = ""
-}
-
-variable "site_privacy_path" {
-  description = "Optional reviewed privacy notice artifact used for the public site."
-  type        = string
-  default     = ""
-}
-
-variable "site_terms_path" {
-  description = "Optional reviewed terms artifact used for the public site."
+  description = "Path to the toll-fetcher deployment zip. Every real plan/apply passes the reviewed artifact."
   type        = string
   default     = ""
 }

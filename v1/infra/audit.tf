@@ -99,21 +99,5 @@ resource "aws_cloudtrail" "audit" {
     }
   }
 
-  advanced_event_selector {
-    name = "AgentCore runtime invocations"
-    field_selector {
-      field  = "eventCategory"
-      equals = ["Data"]
-    }
-    field_selector {
-      field  = "resources.type"
-      equals = ["AWS::BedrockAgentCore::Runtime"]
-    }
-    field_selector {
-      field  = "resources.ARN"
-      equals = [aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn]
-    }
-  }
-
   depends_on = [aws_s3_bucket_policy.audit]
 }

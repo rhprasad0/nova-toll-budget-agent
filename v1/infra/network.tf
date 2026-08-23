@@ -24,12 +24,6 @@ resource "aws_security_group" "rds" {
   vpc_id      = data.aws_vpc.default.id
 }
 
-resource "aws_security_group" "loader" {
-  name        = "nova-toll-loader"
-  description = "toll-loader Lambda ENIs"
-  vpc_id      = data.aws_vpc.default.id
-}
-
 resource "aws_security_group" "tailscale_router" {
   name        = "nova-toll-tailscale-router"
   description = "Tailscale subnet router -- bridges the tailnet (CI, dev laptop, exit-node traffic) to RDS"
@@ -53,37 +47,4 @@ resource "aws_vpc_security_group_egress_rule" "tailscale_router_egress" {
   description       = "Exit-node + DERP/coordination + package installs"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
-}
-
-resource "aws_vpc_security_group_ingress_rule" "rds_from_loader" {
-  security_group_id            = aws_security_group.rds.id
-  description                  = "toll-loader Lambda"
-  referenced_security_group_id = aws_security_group.loader.id
-  from_port                    = 5432
-  to_port                      = 5432
-  ip_protocol                  = "tcp"
-}
-
-resource "aws_vpc_security_group_egress_rule" "loader_to_rds" {
-  security_group_id            = aws_security_group.loader.id
-  description                  = "RDS only"
-  referenced_security_group_id = aws_security_group.rds.id
-  from_port                    = 5432
-  to_port                      = 5432
-  ip_protocol                  = "tcp"
-}
-
-# NOT in the spec's "SG egress to RDS SG only" line — added because it's
-# required for the loader to reach the S3 gateway endpoint at all (AWS:
-# a restricted-egress SG on a gateway endpoint needs an explicit rule for
-# the service's prefix list, gateway endpoints don't bypass SG evaluation).
-# Flagged to the team lead as a spec gap; without this the loader can never
-# read raw/ objects. https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html#gateway-endpoint-security
-resource "aws_vpc_security_group_egress_rule" "loader_to_s3" {
-  security_group_id = aws_security_group.loader.id
-  description       = "S3 gateway endpoint (required, not just RDS)"
-  prefix_list_id    = data.aws_prefix_list.s3.id
-  from_port         = 443
-  to_port           = 443
-  ip_protocol       = "tcp"
 }

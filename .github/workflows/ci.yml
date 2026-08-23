@@ -39,8 +39,11 @@ jobs:
       - run: uv run coverage run -m pytest
       - run: uv run coverage report
       - run: node --test tests/test_dev_chat_ui.mjs
+      - run: npm ci --prefix lambdas/chat_proxy
+      - run: npm test --prefix lambdas/chat_proxy
       - run: uv run python oracle/build_oracle_data.py --check
       - run: ./scripts/build_loader_zip.sh
+      - run: ./scripts/build_agentcore_zips.sh
 
   v2-database:
     runs-on: ubuntu-latest
@@ -71,7 +74,7 @@ jobs:
           POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
 
   v1-check:
-    name: v1 checks (no tests)
+    name: retained v1 source checks
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -83,13 +86,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: "3.13"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: v1/lambdas/chat_proxy/package-lock.json
       - run: uv sync --locked
-      - run: ./scripts/build_zips.sh
       - run: uv run python scripts/check_agent_contract_versions.py "$AGENT_CONTRACT_BASE_REF"
         env:
           AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
