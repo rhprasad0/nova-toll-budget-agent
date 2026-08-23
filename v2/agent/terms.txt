@@ -1,0 +1,32 @@
+TollChat terms
+Effective August 23, 2026
+
+By using TollChat, you agree to these terms.
+
+Informational estimates
+
+TollChat provides informational estimates for supported Northern Virginia toll trips. It does not guarantee a toll, route, road condition, road availability, travel time, tax result, take-home-pay result, or other outcome. TollChat can make mistakes, and its source data may be delayed, incomplete, inaccurate, changed, or unavailable.
+
+Verify current rates and road conditions with the relevant toll operator before travel. Obey posted signs, traffic controls, and applicable law. TollChat is not a navigation or emergency service and must not be used for emergencies or safety-critical decisions.
+
+Do not rely on TollChat for financial planning, employment or salary negotiations, tax filing, legal matters, reimbursements, or other important decisions. TollChat does not provide financial, tax, legal, employment, or professional advice.
+
+Third-party services and data
+
+TollChat is independent and is not affiliated with VDOT or any toll operator. It uses public VDOT SmarterRoads data and rates published by toll operators. Third-party data, websites, and services remain subject to their own terms and policies. See the VDOT SmarterRoads terms at https://smarterroads.vdot.virginia.gov/termsOfService.
+
+Availability and changes
+
+TollChat may change, limit, suspend, or end the service at any time. No availability commitment or service-level guarantee is offered.
+
+Warranty and liability
+
+TollChat is provided as is and as available, without warranties of accuracy, availability, fitness for a particular purpose, or noninfringement. To the fullest extent permitted by law, Benevolent Clankers LLC is not liable for losses or damages arising from use of, or reliance on, TollChat.
+
+License and branding
+
+Copyright 2026 Benevolent Clankers LLC. The source code is licensed under Apache-2.0 at https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/LICENSE. The TollChat name and branding are reserved. The source data and third-party components remain subject to their own licenses and terms.
+
+Questions and changes
+
+Send questions to contact@tollchat.ai. These terms may change as TollChat changes. The effective date above will be updated when they do.

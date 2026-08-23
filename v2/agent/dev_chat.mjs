@@ -2,12 +2,12 @@ import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
 const TOOL_STATUSES = new Set(["running", "completed", "failed"]);
 export const MAX_RAW_EVENT_LOG_CHARS = 64 * 1024;
-const RAW_EVENT_LOG_TRUNCATED = "… older events omitted …\n";
+const RAW_EVENT_LOG_TRUNCATED = "Earlier events omitted.\n";
 export const STARTER_PROMPTS = Object.freeze([
   "What is the current price from Dumfries to Washington?",
-  "What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, "
-    + "leaving at 8:30 AM and returning at 5:30 PM, for 96 commute days per year and a "
-    + "$130,000 gross annual salary?",
+  "How much take-home pay would I have after commuting from Leesburg to Washington on "
+    + "Mondays and Fridays, leaving at 8:30 AM and returning at 5:30 PM for 96 days a "
+    + "year, on a $130,000 gross annual salary?",
 ]);
 
 export const validStreamEvent = (event) => {
@@ -70,7 +70,7 @@ const newTurn = (transcript) => {
   answer.setAttribute("aria-live", "polite");
   const details = document.createElement("details");
   const summary = document.createElement("summary");
-  summary.textContent = "Strands event inspector";
+  summary.textContent = "Technical details (Strands events)";
   const raw = document.createElement("pre");
   details.append(summary, raw);
   article.append(activities, answer, details);
@@ -236,11 +236,15 @@ const start = () => {
       const response = await request("/api/chat", { session_id: sessionId, message });
       if (!response.ok || !response.body) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || "Request failed");
+        throw new Error(body.error || "TollChat couldn't send your question. Please try again.");
       }
       await consumeNdjson(response.body, (item) => applyEvent(view, item));
     } catch (error) {
-      applyEvent(view, { type: "error", sequence: 0, message: error.message || "Request failed" });
+      applyEvent(view, {
+        type: "error",
+        sequence: 0,
+        message: error.message || "TollChat couldn't send your question. Please try again.",
+      });
     } finally {
       setBusy(false);
       input.focus();
@@ -251,7 +255,7 @@ const start = () => {
     setBusy(true);
     try {
       const response = await request("/api/reset", { session_id: sessionId });
-      if (!response.ok) throw new Error("Reset failed");
+      if (!response.ok) throw new Error("TollChat couldn't start a new chat. Please try again.");
       transcript.replaceChildren();
       starterWrap.hidden = false;
     } catch (error) {

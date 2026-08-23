@@ -23,7 +23,7 @@ _MAX_MESSAGE_CHARS = 8_000
 _EASTERN = ZoneInfo("America/New_York")
 _TOOL_LABELS = {
     "get_current_toll_price": "Checking current toll price",
-    "get_annual_toll_ballpark": "Calculating annual toll-commute affordability",
+    "get_annual_toll_ballpark": "Estimating annual commute tolls",
 }
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class DevChat:
             yield {
                 "type": "error",
                 "sequence": sequence,
-                "message": "Agent request failed. Check the server log.",
+                "message": "TollChat couldn't complete the request. Check the server log.",
             }
 
     def reset(self, session_id: object) -> None:
@@ -187,6 +187,8 @@ def create_server(
     static = {
         "/": (_ASSET_ROOT / "dev_chat.html", "text/html; charset=utf-8"),
         "/faq.html": (_ASSET_ROOT / "faq.html", "text/html; charset=utf-8"),
+        "/privacy.txt": (_ASSET_ROOT / "privacy.txt", "text/plain; charset=utf-8"),
+        "/terms.txt": (_ASSET_ROOT / "terms.txt", "text/plain; charset=utf-8"),
         "/dev_chat.mjs": (
             _ASSET_ROOT / "dev_chat.mjs",
             "text/javascript; charset=utf-8",

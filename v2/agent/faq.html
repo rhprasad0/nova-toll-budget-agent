@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="How TollChat v2 sources current prices, estimates annual commutes, protects privacy, and evaluates quantitative grounding.">
+  <meta name="description" content="How TollChat v2 sources current prices, estimates annual commute costs, handles privacy, and tests whether answers stay within tool data.">
   <title>FAQ · TollChat v2</title>
   <style>
     :root { color-scheme:light; --navy:#0b1438; --blue:#007bff; --orange:#f47735; --paper:#fff; --wash:#f3f6fa; --line:#d9e1eb; --text:#15213c; --muted:#5d687d; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
@@ -40,16 +40,16 @@
     <header class="hero">
       <div class="brand">
         <img src="/assets/tollchat-logo.png" alt="TollChat roadway logo" width="58" height="58">
-        <div><p class="eyebrow">Methods · Limits · Privacy</p><h1>How TollChat estimates a commute.</h1></div>
+        <div><p class="eyebrow">Sources · Limits · Privacy</p><h1>How TollChat estimates commute costs</h1></div>
       </div>
-      <p class="lede">The useful short version: TollChat constrains the model to reviewed route and pricing tools, shows where evidence stops, and publishes the code and evaluation method so you can check the homework.</p>
+      <p class="lede">TollChat limits the model to reviewed route and pricing tools, shows where the evidence ends, and publishes its code and test methods so you can review them.</p>
     </header>
 
     <div class="faq-list">
       <section aria-labelledby="sources-title">
         <span class="kicker">01 · Sources</span>
         <h2 id="sources-title">Where do the toll prices come from?</h2>
-        <p>Dynamic I-66 Inside the Beltway and 95/395/495 Express Lanes evidence comes from VDOT’s public pricing feeds. The Dulles Toll Road and Dulles Greenway use reviewed 2-axle E-ZPass schedules reconstructed from operator-published rates. TollChat is independent and is not affiliated with VDOT or a toll operator.</p>
+        <p>Prices for dynamic I-66 Inside the Beltway and 95/395/495 Express Lanes come from VDOT's public feeds. For the Dulles Toll Road and Dulles Greenway, TollChat uses reviewed 2-axle E-ZPass schedules reconstructed from rates published by the operators. TollChat is independent and is not affiliated with VDOT or any toll operator.</p>
         <nav class="sources" aria-label="Official pricing sources">
           <a href="https://www.expresslanes.com/map-your-trip/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">95/395/495 Express Lanes</a>
           <a href="https://vai66tolls.com/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">I-66 Inside the Beltway</a>
@@ -59,48 +59,60 @@
       </section>
 
       <section aria-labelledby="methods-title">
-        <span class="kicker">02 · Two questions</span>
+        <span class="kicker">02 · Estimates</span>
         <h2 id="methods-title">How are current prices different from annual ballparks?</h2>
-        <p>A current-price request uses the latest supported observation or published fixed rate for one route. An annual ballpark uses recent complete same-date round trips to produce daily P25, P50, and P90 scenarios, then multiplies those daily values by the chosen commute days. Those are historical scenarios—not predictions of next year’s tolls.</p>
+        <p>A current-price request uses the latest supported observation or a published fixed rate for one route. An annual ballpark uses recent, complete round trips from the same date to calculate daily P25, P50, and P90 scenarios. It then multiplies each daily value by the number of commute days you choose. These are historical scenarios. They do not predict next year's tolls.</p>
+      </section>
+
+      <section aria-labelledby="take-home-title">
+        <span class="kicker">03 · Take-home pay</span>
+        <h2 id="take-home-title">How should I use the take-home-pay estimate?</h2>
+        <p>TollChat's take-home-pay figures are best-effort estimates, not calculations of your actual pay. They assume one-third of gross income goes to taxes and apply $0.685 per straight-line mile on priced toll segments as a fixed vehicle-cost allowance. They exclude untolled parts of the commute and do not account for your actual taxes, deductions, vehicle, or other expenses.</p>
+        <p>Use the figures as a starting point, not for financial planning, salary or job negotiations, tax filing, or legal decisions. TollChat does not provide financial, tax, or legal advice.</p>
       </section>
 
       <section aria-labelledby="map-title">
-        <span class="kicker">03 · Map</span>
+        <span class="kicker">04 · Map</span>
         <h2 id="map-title">What do the four map pins mean?</h2>
-        <p>Each pin’s primary number is the P50 annual toll for a 2-axle E-ZPass commute to Washington, Monday through Friday, leaving at 8:30 AM and returning at 5:30 PM for 240 commute days. The detail panel shows P25 and P90, the evidence coverage, and the snapshot time. The figures exclude untolled road costs and are neither forecasts nor operator quotes.</p>
+        <p>The main number on each pin is the P50 annual toll for a 2-axle E-ZPass commute to Washington. It assumes travel Monday through Friday, leaving at 8:30 AM and returning at 5:30 PM for 240 commute days. The detail panel shows P25 and P90, how much evidence was available, and when the snapshot was generated. The figures exclude costs from untolled roads. They are not forecasts or quotes from toll operators.</p>
       </section>
 
       <section aria-labelledby="oracle-title">
-        <span class="kicker">04 · Route oracle</span>
+        <span class="kicker">05 · Route oracle</span>
         <h2 id="oracle-title">How does TollChat keep the model on supported roads?</h2>
-        <p>The model resolves ordinary place names to bounded route points. A read-only oracle validates the directed route and returns fixed pricing keys; the pricing tools—not the model—retrieve and add supported toll components. An unsupported route becomes an explicit unavailable result rather than an improvised fare.</p>
+        <p>TollChat matches ordinary place names to a limited set of route points. A read-only route oracle checks the direction of travel and returns fixed pricing keys. The pricing tools retrieve and add the supported toll components; the model does not. If a route is unsupported, TollChat says the price is unavailable instead of making one up.</p>
       </section>
 
       <section aria-labelledby="gap-title">
-        <span class="kicker">05 · Known gaps</span>
+        <span class="kicker">06 · Known gaps</span>
         <h2 id="gap-title">Can a supported trip still be incomplete?</h2>
-        <p>Yes. TollChat discloses missing observations, partial historical coverage, modeled data, and unpriced general-purpose connections. In particular, published data does not expose every I-95 ↔ I-495 origin-destination price. Known components may still be useful, but an omitted gap is never silently called free.</p>
+        <p>Yes. TollChat shows missing observations, partial historical coverage, modeled data, and unpriced general-purpose connections. It does not treat a missing price as a free segment.</p>
+        <p>The route oracle uses 330 origin-destination (OD) pairs for I-95 and I-495, but VDOT history has prices for only 314. The missing 16 appear on 107 of the oracle's 685 routes, mostly where a trip crosses from the I-495 Express Lanes onto I-95/395. For each one, TollChat copies the price from the observed VDOT OD pair that matched it most closely and labels the result as modeled.</p>
+        <p>In 1,200 held-out comparisons from five days of matched operator data, this direct proxy method had a mean absolute error of $0.106, compared with $0.154 for ordinary least-squares regression. The test period is too short to show seasonal accuracy, and the largest error was $8.05, so these modeled prices are ballpark estimates rather than operator quotes.</p>
       </section>
 
       <section aria-labelledby="hallucinations-title">
-        <span class="kicker">06 · Hallucinations</span>
+        <span class="kicker">07 · Hallucinations</span>
         <h2 id="hallucinations-title">Does TollChat hallucinate?</h2>
-        <p>Yes, it can. TollChat uses GPT-5.6 Luna. In <strong>one frozen Springfield-Franconia–Westpark annual-ballpark evaluation, 996 of 1,000 responses (99.6%)</strong> made no quantitative claim outside the supplied tool evidence under the strict policy.</p>
-        <p>One response changed the supplied 5:31 PM time to 1:31 PM. Three responses performed correct scenario-difference arithmetic that was absent from the payload, which violated the strict evidence policy without producing incorrect arithmetic. Core semantic compliance was 97.1%; adding the explicit TollChat-attribution requirement and strict quantitative policy produced the conservative <strong>93.1%</strong> end-to-end result.</p>
-        <p>This repeated-generation test measures reliability for one production-shaped fixture. It is not an agent-wide hallucination rate, route-coverage result, source-accuracy test, or production-traffic evaluation. <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/ballpark-hallucination-report.md" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Read the complete report and methodology</a>.</p>
+        <p>Yes. TollChat can make mistakes, but we observed no fabricated costs in this 1,000-answer test. Pricing tools calculate its toll and take-home-pay figures in code. GPT-5.6 Luna handles the conversation and explains those results.</p>
+        <p>In <strong>one frozen annual-ballpark evaluation for Springfield-Franconia to Westpark, 996 of 1,000 responses (99.6%)</strong> made no quantitative claim outside the supplied tool evidence under the strict policy.</p>
+        <p>One response changed the supplied 5:31 PM time to 1:31 PM. Three responses correctly calculated differences between scenarios, but those calculations were not in the payload. The arithmetic was correct, but it still violated the strict evidence policy. Core semantic compliance was 97.1%. Adding the requirement to attribute the answer explicitly to TollChat and applying the strict quantitative policy produced the conservative <strong>93.1%</strong> end-to-end result.</p>
+        <p>This repeated-generation test measures reliability for one production-shaped fixture. It does not measure TollChat's overall hallucination rate, route coverage, source accuracy, or production traffic. <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/ballpark-hallucination-report.md" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Read the complete report and methodology</a>.</p>
       </section>
 
       <section aria-labelledby="privacy-title">
-        <span class="kicker">07 · Privacy and support</span>
+        <span class="kicker">08 · Privacy and support</span>
         <h2 id="privacy-title">What does this preview collect?</h2>
-        <p>The browser includes no analytics or behavioral-tracking code. The loopback server keeps conversations in memory until reset or restart and does not write them to disk. OpenAI processes requests. A random per-tab session ID keeps follow-ups together only in server memory; it is not attached to traces or logs.</p>
-        <p>The <a href="https://github.com/rhprasad0/nova-toll-budget-agent" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">project is open source under Apache-2.0</a>. Please report bugs or privacy questions to <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a>.</p>
+        <p>TollChat may collect limited usage statistics so we can measure how many people use the service. Before collection starts, the privacy notice will identify the analytics provider, the event fields, and how long the data will be kept. TollChat will not include chat text, trip details, or salary figures in those statistics.</p>
+        <p>TollChat keeps the active conversation in the ephemeral microVM's memory and does not write it to disk. OpenAI receives prompts and responses and retains Responses API data for at least 30 days. A random ID in browser session storage keeps follow-up messages together while the microVM runs. TollChat does not attach that ID to traces or logs.</p>
+        <p>The map loads tiles from OpenFreeMap, which receives the requests needed to provide the map. Read the <a href="/privacy.txt">privacy notice</a> and <a href="/terms.txt">terms</a> for details. The <a href="https://github.com/rhprasad0/nova-toll-budget-agent" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">project is open source under Apache-2.0</a>. Please report bugs or privacy questions to <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a>.</p>
       </section>
     </div>
 
     <footer>
-      <p>Historical evidence and published rates—not future toll quotes.</p>
-      <p><a href="/">TollChat</a> · <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a></p>
+      <p>TollChat is independent and is not affiliated with VDOT or any toll operator. It uses public data from <a href="https://smarterroads.vdot.virginia.gov/faq" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">VDOT SmarterRoads</a> and rates published by toll operators. Source data may be delayed, incomplete, or inaccurate. Verify current rates and road conditions with the relevant operator before travel. TollChat is not a navigation or emergency service. It does not provide future toll quotes. Use its estimates for general information only. Do not rely on them for financial or employment decisions, tax filing, legal matters, or other important decisions.</p>
+      <p>&copy; 2026 Benevolent Clankers LLC. Source code is licensed under <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Apache-2.0</a>; TollChat name and branding reserved.</p>
+      <p><a href="/">TollChat</a> · <a href="/privacy.txt">Privacy</a> · <a href="/terms.txt">Terms</a> · <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a></p>
     </footer>
   </main>
 </body>

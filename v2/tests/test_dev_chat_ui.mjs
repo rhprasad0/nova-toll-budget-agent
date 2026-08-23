@@ -105,7 +105,7 @@ test("bounds raw events and batches streamed Markdown into one animation frame",
     applyEvent(closed, { type: "event", sequence: 100, event: {} });
     assert.equal(closed.raw.writes, 1);
     assert.equal(closed.raw.textContent.length, MAX_RAW_EVENT_LOG_CHARS);
-    assert.match(closed.raw.textContent, /^… older events omitted …\n/);
+    assert.match(closed.raw.textContent, /^Earlier events omitted[.]\n/);
 
     const streaming = fakeView();
     applyEvent(streaming, {
@@ -173,9 +173,9 @@ test("renders supported Markdown and emoji while hostile content stays inert", (
 test("starter prompts are complete enough to submit without clarification", () => {
   assert.deepEqual(STARTER_PROMPTS, [
     "What is the current price from Dumfries to Washington?",
-    "What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, "
-      + "leaving at 8:30 AM and returning at 5:30 PM, for 96 commute days per year and a "
-      + "$130,000 gross annual salary?",
+    "How much take-home pay would I have after commuting from Leesburg to Washington on "
+      + "Mondays and Fridays, leaving at 8:30 AM and returning at 5:30 PM for 96 days a "
+      + "year, on a $130,000 gross annual salary?",
   ]);
 });
 
@@ -348,8 +348,8 @@ test("coverage details expose readable names and directions but not point IDs", 
   };
   const detail = commuteMap.coverageDetail(location);
 
-  assert.equal(detail.kicker, "Supported access");
-  assert.equal(detail.title, "I-495/I-95 Near Van Dorn Street");
+  assert.equal(detail.kicker, "Supported route point");
+  assert.equal(detail.title, "I-495/I-95 near Van Dorn Street");
   assert.deepEqual(detail.paragraphs, ["Northbound entrance · Southbound exit"]);
   assert.deepEqual(commuteMap.coverageCoordinates(location), [-77.154508, 38.793504]);
   assert.doesNotMatch(JSON.stringify(detail), /i495:192/);
