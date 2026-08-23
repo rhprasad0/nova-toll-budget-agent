@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast
 
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp
+from strands.types.agent import Limits
 
 from agent.toll_agent import (
     _DUPLICATE_TOOL_MESSAGE,  # pyright: ignore[reportPrivateUsage]
@@ -18,6 +19,11 @@ from agent.toll_agent import (
 
 MAX_MESSAGE_CHARS = 8_000
 MAX_TURNS = 5
+_INVOCATION_LIMITS: Limits = {
+    "turns": 6,
+    "output_tokens": 8_192,
+    "total_tokens": 50_000,
+}
 DISCLAIMER = (
     "Estimates only. Verify current rates with the toll operator before travel."
 )
@@ -25,7 +31,8 @@ BLOCKED_MESSAGE = "I can only help with Northern Virginia toll road estimates."
 _FAILURE_MODE = "runtime_exception_v2"
 _CREDENTIAL = re.compile(
     r"(?i)(?:authorization\s*[:=]|password\s*[:=]|api[_-]?key\s*[:=]|"
-    r"bearer\s+\S+|(?:AKIA|ASIA)[0-9A-Z]{16}|(?:sk|gh[pousr]_)[A-Za-z0-9_-]{8,})"
+    r"bearer\s+\S+|(?:AKIA|ASIA)[0-9A-Z]{16}|(?:sk|gh[pousr]_)[A-Za-z0-9_-]{8,}|"
+    r"github_pat_[A-Za-z0-9_-]{20,})"
 )
 _TOOL_LABELS = {
     "get_current_toll_price": "Checking current toll price",
@@ -39,7 +46,9 @@ class GuardrailClient(Protocol):
 
 
 class AgentCallable(Protocol):
-    def stream_async(self, prompt: str) -> AsyncIterator[dict[str, object]]: ...
+    def stream_async(
+        self, prompt: str, *, limits: Limits | None = None
+    ) -> AsyncIterator[dict[str, object]]: ...
 
 
 def _error(code: str, message: str) -> dict[str, object]:
@@ -157,7 +166,9 @@ class TollChatRuntime:
             self._turns += 1
             result: object | None = None
             activities: dict[str, dict[str, object]] = {}
-            async for event in self._agent.stream_async(prompt):
+            async for event in self._agent.stream_async(
+                prompt, limits=_INVOCATION_LIMITS
+            ):
                 for activity in _activity_events(event.get("message"), activities):
                     yield activity
                 if "result" in event:

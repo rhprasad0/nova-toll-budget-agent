@@ -282,7 +282,7 @@ resource "aws_bedrock_guardrail" "tollchat" {
     regexes_config {
       name           = "api_key"
       description    = "OpenAI, Anthropic, and GitHub API keys"
-      pattern        = "\\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\\b"
+      pattern        = "\\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_-]{20,})\\b"
       action         = "BLOCK"
       input_action   = "BLOCK"
       output_action  = "BLOCK"

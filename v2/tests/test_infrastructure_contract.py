@@ -78,6 +78,7 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "opentelemetry" not in agentcore.lower()
     assert "xray" not in agentcore.lower()
     assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
+    assert "github_pat_[A-Za-z0-9_-]{20,}" in agentcore
 
 
 def test_v2_agent_packages_are_required_for_real_deployments():

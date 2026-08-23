@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import cast
 
+from strands.types.agent import Limits
+
 from agent.agentcore_entrypoint import BLOCKED_MESSAGE, DISCLAIMER, TollChatRuntime
 
 
@@ -27,9 +29,13 @@ class FakeAgent:
     def __init__(self, answer: str = "The toll is $4.25.") -> None:
         self.answer = answer
         self.prompts: list[str] = []
+        self.limits: list[Limits | None] = []
 
-    async def stream_async(self, prompt: str) -> AsyncIterator[dict[str, object]]:
+    async def stream_async(
+        self, prompt: str, *, limits: Limits | None = None
+    ) -> AsyncIterator[dict[str, object]]:
         self.prompts.append(prompt)
+        self.limits.append(limits)
         yield {
             "message": {
                 "content": [
@@ -84,6 +90,9 @@ def test_runtime_validates_streams_and_applies_both_guardrails():
         },
     ]
     assert agent.prompts == ["Price my trip"]
+    assert agent.limits == [
+        {"turns": 6, "output_tokens": 8_192, "total_tokens": 50_000}
+    ]
     assert guardrail.calls == [
         ("INPUT", "Price my trip"),
         ("OUTPUT", "The toll is $4.25."),
@@ -114,8 +123,23 @@ def test_runtime_blocks_guardrail_content_and_returns_safe_failures():
     }
     assert agent.prompts == []
 
+    pat_agent = FakeAgent()
+    pat_runtime = TollChatRuntime(lambda: pat_agent, FakeGuardrail())
+    assert collect(
+        pat_runtime,
+        {"prompt": "github_pat_11AA22bb33CC44dd55EE"},
+    )[-1] == {
+        "type": "answer",
+        "text": BLOCKED_MESSAGE,
+        "blocked": True,
+    }
+    assert pat_agent.prompts == []
+
     class FailingAgent(FakeAgent):
-        async def stream_async(self, prompt: str) -> AsyncIterator[dict[str, object]]:
+        async def stream_async(
+            self, prompt: str, *, limits: Limits | None = None
+        ) -> AsyncIterator[dict[str, object]]:
+            del limits
             del prompt
             raise RuntimeError("secret provider detail")
             yield  # pragma: no cover
