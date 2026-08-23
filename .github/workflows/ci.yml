@@ -38,7 +38,7 @@ jobs:
           AGENT_CONTRACT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
       - run: uv run coverage run -m pytest
       - run: uv run coverage report
-      - run: node --test tests/test_dev_chat_ui.mjs
+      - run: node --test tests/*.mjs
       - run: npm ci --prefix lambdas/chat_proxy
       - run: npm test --prefix lambdas/chat_proxy
       - run: uv run python oracle/build_oracle_data.py --check

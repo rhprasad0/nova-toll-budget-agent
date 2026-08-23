@@ -12,6 +12,7 @@ const MAX_SESSION_SECONDS = 60 * 60;
 const LEASE_SECONDS = 60;
 const COOKIE = "__Host-tollchat-session";
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const PUBLIC_ORIGINS = new Set(["https://tollchat.ai", "https://www.tollchat.ai"]);
 const DRILL_MODE = "runtime_exception_v2";
 const SAFE_ERROR = {
   type: "error",
@@ -78,7 +79,7 @@ const validPost = (event) => {
     const origin = new URL(header(event, "origin"));
     return contentType === "application/json"
       && origin.protocol === "https:"
-      && origin.host === event.requestContext?.domainName
+      && (origin.host === event.requestContext?.domainName || PUBLIC_ORIGINS.has(origin.origin))
       && origin.pathname === "/"
       && !origin.search && !origin.hash && !origin.username && !origin.password
       && header(event, "sec-fetch-site") === "same-origin";

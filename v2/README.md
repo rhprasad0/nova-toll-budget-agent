@@ -1,6 +1,6 @@
 # TollChat v2
 
-This directory is the exclusive home for TollChat's deployed private v2 code,
+This directory is the exclusive home for TollChat's deployed v2 code,
 tests, evals, infrastructure, and documentation. V1 application resources are
 retired; only the shared operational foundation remains under `v1/infra`.
 
@@ -50,6 +50,10 @@ version order. Never edit or skip a released migration.
 
 See the [AgentCore deployment runbook](docs/agentcore-deployment.md) for the
 manual reviewed-plan deployment, smoke test, and rollback workflow.
+
+The public interface at `tollchat.ai` uses a private S3 origin for the v2 site
+and an IAM-authenticated streaming Lambda URL behind CloudFront and WAF. The
+same proxy and AgentCore runtime remain available through the private preview.
 
 The `get_current_toll_price` Strands tool accepts stable origin and destination
 point IDs plus the supported pricing profile. It validates the route through

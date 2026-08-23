@@ -62,6 +62,22 @@ test("private same-origin chat streams only approved v2 events", async () => {
   assert.equal(new TextDecoder().decode(calls[0].payload), '{"prompt":"Price it"}');
 });
 
+test("public CloudFront origin can invoke the Function URL", async () => {
+  const client = { async send() {
+    return {
+      contentType: "text/event-stream",
+      response: chunks('data: {"type":"answer","text":"$4.25","blocked":false}\n\n'),
+    };
+  } };
+
+  for (const origin of ["https://tollchat.ai", "https://www.tollchat.ai"]) {
+    const publicEvent = event("/api/chat", { message: "Price it" }, origin);
+    publicEvent.requestContext.domainName = "abc.lambda-url.us-east-1.on.aws";
+    const response = await route(publicEvent, dependencies(client));
+    assert.equal(response.statusCode, 200);
+  }
+});
+
 test("proxy rejects cross-origin and malformed upstream data", async () => {
   const client = { async send() {
     return {

@@ -193,6 +193,10 @@ def create_server(
             _ASSET_ROOT / "dev_chat.mjs",
             "text/javascript; charset=utf-8",
         ),
+        "/chat.mjs": (
+            _ASSET_ROOT / "dev_chat.mjs",
+            "text/javascript; charset=utf-8",
+        ),
         "/assets/tollchat-logo.png": (
             _ASSET_ROOT / "assets/tollchat-logo.png",
             "image/png",

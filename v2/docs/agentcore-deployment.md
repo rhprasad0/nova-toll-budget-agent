@@ -18,10 +18,17 @@ npm test --prefix lambdas/chat_proxy
 ```
 
 Create a saved plan with the reviewed packages and the explicit production
-profile. Review every action before applying that exact file:
+profile. Load the Cloudflare token from SSM only into the Terraform process
+environment, then review every action before applying that exact file:
 
 ```sh
 cd infra
+export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
+  ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption \
+  --query Parameter.Value --output text)"
+AWS_PROFILE=nova-toll aws --region us-east-1 lambda put-function-concurrency \
+  --function-name tollchat-v2-chat-proxy \
+  --reserved-concurrent-executions 5
 AWS_PROFILE=nova-toll terraform init
 AWS_PROFILE=nova-toll terraform plan \
   -var loader_package_path=build/loader.zip \
@@ -30,11 +37,14 @@ AWS_PROFILE=nova-toll terraform plan \
   -out=build/release.tfplan
 AWS_PROFILE=nova-toll terraform show build/release.tfplan
 AWS_PROFILE=nova-toll terraform apply build/release.tfplan
+unset CLOUDFLARE_API_TOKEN
 ```
 
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved
-or unreviewed plan.
+or unreviewed plan. The public Function URL targets the published `live` alias,
+which keeps one provisioned execution environment warm. The function-level
+reserved concurrency remains the five-request safety ceiling.
 
 ## Smoke test
 
@@ -54,8 +64,22 @@ curl --fail-with-body --no-buffer "$URL/api/chat" \
 ```
 
 The config request must succeed and chat must stream approved tool-status
-events followed by an answer and disclaimer. Public or cross-origin requests
-to the chat route must fail.
+events followed by an answer and disclaimer. Cross-origin requests to the
+private chat route must fail.
+
+After the private check passes, verify the public edge and warm alias:
+
+```sh
+curl --fail-with-body https://tollchat.ai/
+curl --fail-with-body https://tollchat.ai/api/config
+AWS_PROFILE=nova-toll aws --region us-east-1 lambda get-provisioned-concurrency-config \
+  --function-name tollchat-v2-chat-proxy --qualifier live
+```
+
+The concurrency status and allocation must be `READY` and `1`. Submit a first
+chat from a new browser session and confirm CloudWatch records it under
+`ProvisionedConcurrencyInvocations`, without an on-demand Lambda initialization.
+The public Function URL must reject direct unsigned invocation.
 
 ## Rollback
 
@@ -74,7 +98,7 @@ rollback smoke test succeeds, explicitly restore the reviewed concurrency:
 ```sh
 AWS_PROFILE=nova-toll aws --region us-east-1 lambda put-function-concurrency \
   --function-name tollchat-v2-chat-proxy \
-  --reserved-concurrent-executions 1
+  --reserved-concurrent-executions 5
 ```
 
 Database and shared polling/storage infrastructure are not part of application
