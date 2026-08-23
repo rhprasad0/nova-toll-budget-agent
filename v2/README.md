@@ -35,7 +35,7 @@ The independently versioned `oracle` schema is at **1.11.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
-Regenerate and verify its checked-in seed with:
+Regenerate and verify its checked-in SQL seed and frontend coverage snapshot with:
 
 ```sh
 uv run python oracle/build_oracle_data.py
@@ -97,10 +97,12 @@ compatible behavior changes, and major releases for incompatible changes.
 
 ### Local agent console
 
-The loopback-only browser console streams the v2 agent's Markdown replies, tool
-activity, metrics, and raw Strands events without storing conversations on disk.
-From `v2/`, configure the same AWS and database environment used by the live
-agent tests, then run:
+The loopback-only browser frontend streams the v2 agent's Markdown replies,
+emoji, tool activity, metrics, and raw Strands events without browser analytics
+or on-disk conversation storage. It also serves the FAQ and a checked-in map of
+supported toll-road access points beneath four annual toll ballparks to
+Washington. From `v2/`, configure the
+same AWS and database environment used by the live agent tests, then run:
 
 ```sh
 AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \

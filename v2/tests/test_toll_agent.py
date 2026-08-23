@@ -4,6 +4,7 @@
 
 import copy
 import hashlib
+import inspect
 import json
 import re
 from datetime import date
@@ -427,15 +428,7 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
         json.loads(json.dumps(current_tool.TOOL_SPEC)),
         json.loads(json.dumps(ballpark_tool.TOOL_SPEC)),
     ]
-    agent = build_agent(
-        prompt_points=[_point()],
-        trace_attributes={
-            "tollchat.session_id": "test",
-            "tollchat.system_prompt_version": "wrong",
-            "tollchat.system_prompt_renderer_version": "wrong",
-            "tollchat.system_prompt_sha256": "wrong",
-        },
-    )
+    agent = build_agent(prompt_points=[_point()])
 
     assert [spec["name"] for spec in agent.tool_registry.get_all_tool_specs()] == [
         "get_current_toll_price",
@@ -444,8 +437,8 @@ def test_agent_registers_exactly_the_two_existing_tools(monkeypatch):
     assert original_specs[0] == current_tool.TOOL_SPEC
     assert original_specs[1] == ballpark_tool.TOOL_SPEC
     assert isinstance(agent.system_prompt, str)
+    assert "trace_attributes" not in inspect.signature(build_agent).parameters
     assert agent.trace_attributes == {
-        "tollchat.session_id": "test",
         "tollchat.system_prompt_version": toll_agent.SYSTEM_PROMPT_VERSION,
         "tollchat.system_prompt_renderer_version": (
             toll_agent.SYSTEM_PROMPT_RENDERER_VERSION

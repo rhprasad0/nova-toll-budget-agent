@@ -12,6 +12,7 @@ from typing import Any, cast
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DIR = Path(__file__).resolve().parent / "sources"
 DEFAULT_OUTPUT = ROOT / "v2" / "db" / "oracle" / "data.sql"
+DEFAULT_MAP_OUTPUT = ROOT / "v2" / "agent" / "assets" / "coverage-locations.json"
 LOCATION_FILE = SOURCE_DIR / "route_point_locations.json"
 
 SOURCE_FILES = {
@@ -945,6 +946,31 @@ def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> 
     return "\n".join(lines)
 
 
+def render_coverage_locations(points: dict[str, Point]) -> str:
+    grouped: dict[tuple[float, float], list[dict[str, str | None]]] = defaultdict(list)
+    for point in sorted(points.values(), key=lambda item: item.point_id):
+        if point.longitude is None or point.latitude is None:
+            raise ValueError(f"missing map coordinates for {point.point_id}")
+        coordinates = (float(point.longitude), float(point.latitude))
+        grouped[coordinates].append(
+            {
+                "point_id": point.point_id,
+                "facility": point.network_id,
+                "label": point.label,
+                "direction": point.direction,
+                "role": point.point_type,
+            }
+        )
+    snapshot = {
+        "schema_version": 1,
+        "locations": [
+            {"coordinates": list(coordinates), "points": grouped[coordinates]}
+            for coordinates in sorted(grouped)
+        ],
+    }
+    return json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n"
+
+
 def build_sql() -> str:
     points = build_points()
     connections = build_connections(points)
@@ -956,19 +982,32 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--map-output", type=Path, default=DEFAULT_MAP_OUTPUT)
     args = parser.parse_args()
-    rendered = build_sql()
+    points = build_points()
+    connections = build_connections(points)
+    validate(points, connections)
+    outputs = (
+        (args.output, render_sql(points, connections)),
+        (args.map_output, render_coverage_locations(points)),
+    )
     if args.check:
-        if (
-            not args.output.exists()
-            or args.output.read_text(encoding="utf-8") != rendered
-        ):
-            raise SystemExit(f"generated oracle data is stale: {args.output}")
-        print(f"oracle data is current: {args.output}")
+        stale = [
+            path
+            for path, rendered in outputs
+            if not path.exists() or path.read_text(encoding="utf-8") != rendered
+        ]
+        if stale:
+            raise SystemExit(
+                "generated oracle data is stale: "
+                + ", ".join(str(path) for path in stale)
+            )
+        print("oracle data is current: " + ", ".join(str(path) for path, _ in outputs))
         return 0
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(rendered, encoding="utf-8")
-    print(f"wrote {args.output}")
+    for path, rendered in outputs:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered, encoding="utf-8")
+        print(f"wrote {path}")
     return 0
 
 

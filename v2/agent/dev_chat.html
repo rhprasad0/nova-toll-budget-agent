@@ -1,42 +1,211 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TollChat v2 dev console</title>
-<style>
-  :root { color-scheme: dark; font-family: system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif; background:#0d1117; color:#e6edf3; }
-  body { max-width:960px; margin:auto; padding:2rem 1rem; }
-  header,form { display:flex; align-items:center; gap:.75rem; }
-  h1 { margin-right:auto; font-size:1.5rem; }
-  .note,summary { color:#8b949e; }
-  #transcript { display:grid; gap:1rem; margin:1.5rem 0; }
-  .user-turn,.assistant-turn { margin:0; padding:1rem; border-radius:.75rem; }
-  .user-turn { justify-self:end; max-width:80%; background:#1f6feb33; white-space:pre-wrap; }
-  .assistant-turn { background:#21262d; overflow-wrap:anywhere; }
-  .answer > :first-child { margin-top:0; } .answer > :last-child { margin-bottom:0; }
-  .answer pre,details pre { overflow:auto; padding:.75rem; border-radius:.4rem; background:#010409; }
-  .answer table { border-collapse:collapse; } .answer th,.answer td { padding:.4rem; border:1px solid #30363d; }
-  .activities { display:grid; gap:.35rem; padding-left:1.4rem; color:#8b949e; }
-  .activities li { padding-left:.25rem; } .activities li span:last-child { float:right; margin-left:1rem; }
-  .activities [data-status="failed"],.error { color:#ff7b72; }
-  details { margin-top:.75rem; } details pre { max-height:24rem; font-size:.8rem; white-space:pre-wrap; }
-  textarea { flex:1; min-height:4rem; resize:vertical; }
-  button,textarea { font:inherit; padding:.7rem; border:1px solid #30363d; border-radius:.4rem; }
-  button { cursor:pointer; } button:disabled,textarea:disabled { opacity:.6; cursor:not-allowed; }
-  a { color:#58a6ff; }
-  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width:600px) { body { padding:1rem .75rem; } header { align-items:flex-start; } .user-turn { max-width:90%; } }
-</style>
-<header>
-  <h1>TollChat v2 dev console</h1>
-  <button id="reset" type="button">Reset chat</button>
-</header>
-<p class="note">Loopback-only. Conversations live in memory until reset or server restart; expand the Strands event inspector on any response for raw events.</p>
-<main id="transcript" aria-label="Chat transcript"></main>
-<form id="chat">
-  <label class="sr-only" for="message">Message</label>
-  <textarea id="message" required maxlength="8000" placeholder="See what a Northern Virginia toll commute does to your income 👋"></textarea>
-  <button type="submit">Send</button>
-</form>
-<script type="module" src="/dev_chat.mjs"></script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Ask TollChat about current Northern Virginia toll prices and annual commute affordability.">
+  <title>TollChat v2 · Northern Virginia toll estimates</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/maplibre-gl-6.0.0/maplibre-gl.css">
+  <style>
+    :root {
+      color-scheme:light;
+      --navy:#0b1438;
+      --navy-soft:#182653;
+      --blue:#007bff;
+      --sky:#24a8f2;
+      --orange:#f47735;
+      --paper:#fff;
+      --wash:#f3f6fa;
+      --line:#d9e1eb;
+      --text:#15213c;
+      --muted:#5d687d;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Apple Color Emoji","Segoe UI Emoji",sans-serif;
+    }
+    * { box-sizing:border-box; }
+    html { background:var(--wash); scroll-behavior:smooth; }
+    body { min-width:320px; min-height:100vh; margin:0; background:var(--wash); color:var(--text); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+    button,textarea { font:inherit; }
+    button { min-height:44px; cursor:pointer; }
+    button:disabled { cursor:wait; opacity:.58; }
+    button:focus-visible,textarea:focus-visible,a:focus-visible { outline:3px solid var(--orange); outline-offset:3px; }
+    a { color:#075eb9; text-underline-offset:3px; }
+    a:hover { text-decoration-thickness:2px; }
+    [hidden] { display:none!important; }
+    .skip-link { position:fixed; top:10px; left:10px; z-index:20; padding:10px 14px; border-radius:6px; background:var(--paper); color:var(--navy); font-weight:800; transform:translateY(-150%); }
+    .skip-link:focus { transform:none; }
+    .app-shell { display:grid; grid-template:"header map" auto "transcript map" minmax(12rem,1fr) "composer map" auto "footer map" auto / minmax(0,58fr) minmax(25rem,42fr); min-height:100svh; }
+    .hero { grid-area:header; padding:28px clamp(24px,4vw,56px) 26px; border-bottom:1px solid var(--line); background:var(--paper); }
+    .brand-row { display:flex; align-items:center; gap:16px; }
+    .brand-logo { width:68px; height:68px; flex:0 0 auto; border-radius:16px; object-fit:cover; box-shadow:0 8px 24px rgba(0,123,255,.16); }
+    .brand-copy { min-width:0; margin-right:auto; }
+    .eyebrow { margin:0 0 2px; color:var(--blue); font-size:.72rem; font-weight:850; letter-spacing:.15em; text-transform:uppercase; }
+    h1 { margin:0; color:var(--navy); font-size:clamp(2.25rem,5vw,4.25rem); letter-spacing:-.06em; line-height:.92; }
+    .new-chat { flex:0 0 auto; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--navy); padding:8px 14px; font-weight:800; }
+    .lede { max-width:45rem; margin:18px 0 0; color:var(--muted); font-size:1.02rem; text-wrap:pretty; }
+    .trust-strip { display:grid; gap:5px; max-width:48rem; margin-top:18px; padding:13px 15px; border:1px solid #bed8f3; border-left:4px solid var(--blue); border-radius:8px; background:#f1f8ff; color:#33405b; font-size:.83rem; line-height:1.5; }
+    .trust-strip p { margin:0; }
+    .trust-strip strong { color:var(--navy); }
+    .evaluation-note { max-width:48rem; margin:14px 0 0; color:var(--muted); font-size:.82rem; text-wrap:pretty; }
+    .evaluation-note strong { color:var(--navy); }
+    .starter-wrap { max-width:50rem; margin-top:20px; }
+    .starter-label { margin:0 0 8px; color:var(--navy); font-size:.72rem; font-weight:850; letter-spacing:.1em; text-transform:uppercase; }
+    .starters { display:flex; flex-wrap:wrap; gap:9px; }
+    .starter-chip { min-height:42px; max-width:30rem; border:1px solid #b8c8dc; border-radius:999px; background:var(--paper); color:#164f8a; padding:8px 14px; font-size:.82rem; font-weight:750; line-height:1.35; text-align:left; transition:border-color .16s ease,background-color .16s ease,transform .16s ease; }
+    .starter-chip:hover { border-color:var(--blue); background:#eef7ff; transform:translateY(-1px); }
+    #transcript { grid-area:transcript; display:grid; align-content:start; gap:20px; min-height:12rem; padding:30px clamp(24px,4vw,56px); background:var(--paper); }
+    .user-turn { justify-self:end; max-width:82%; margin:0; border-radius:14px 14px 3px 14px; background:var(--navy); color:#fff; padding:12px 16px; white-space:pre-wrap; }
+    .assistant-turn { max-width:94%; border-left:4px solid var(--blue); padding:3px 0 3px 17px; }
+    .activities { display:grid; gap:5px; margin:0 0 12px; padding:0; list-style:none; color:var(--muted); font-size:.84rem; }
+    .activities li { display:flex; align-items:flex-start; gap:9px; }
+    .activities li::before { width:9px; height:9px; flex:0 0 auto; margin-top:6px; border:2px solid var(--blue); border-radius:50%; content:""; }
+    .activities li span:first-child { flex:1; }
+    .activities [data-status=completed]::before { background:var(--blue); }
+    .activities [data-status=failed]::before { border-color:var(--orange); background:var(--orange); }
+    .answer { overflow-wrap:anywhere; }
+    .answer > :first-child { margin-top:0; }
+    .answer > :last-child { margin-bottom:0; }
+    .answer h1,.answer h2,.answer h3,.answer h4 { margin:18px 0 7px; color:var(--navy); font-size:1.12rem; line-height:1.25; letter-spacing:-.02em; }
+    .answer p,.answer ul,.answer ol,.answer blockquote,.answer pre,.answer table { margin:9px 0; }
+    .answer ul,.answer ol { padding-left:23px; }
+    .answer blockquote { padding-left:12px; border-left:3px solid var(--line); color:var(--muted); }
+    .answer code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.9em; }
+    .answer :not(pre)>code { padding:2px 4px; border-radius:4px; background:#e9eef5; }
+    .answer pre,.answer table { max-width:100%; overflow-x:auto; }
+    .answer pre { padding:11px; border-radius:6px; background:var(--navy); color:#fff; }
+    .answer table { display:block; border-collapse:collapse; }
+    .answer th,.answer td { padding:6px 9px; border:1px solid var(--line); text-align:left; }
+    .error { color:#a33716; }
+    details { margin-top:12px; color:var(--muted); font-size:.72rem; }
+    details summary { cursor:pointer; }
+    details pre { max-height:16rem; overflow:auto; padding:9px; border-radius:6px; background:#eef2f7; color:#3e4960; white-space:pre-wrap; }
+    #chat { position:sticky; bottom:0; z-index:5; grid-area:composer; display:grid; grid-template-columns:1fr auto; gap:9px; margin:0 clamp(24px,4vw,56px); padding:15px; border:1px solid #cbd5e1; border-radius:12px; background:rgba(255,255,255,.96); box-shadow:0 -12px 34px rgba(11,20,56,.1); backdrop-filter:blur(10px); }
+    #chat label { grid-column:1/-1; color:var(--muted); font-size:.82rem; }
+    #message { width:100%; min-height:72px; resize:vertical; border:1px solid #aebbcf; border-radius:8px; background:var(--paper); color:var(--text); padding:12px; }
+    #chat button { align-self:stretch; border:1px solid var(--blue); border-radius:8px; background:var(--blue); color:#fff; padding:10px 18px; font-weight:850; }
+    #chat[aria-busy=true] { opacity:.72; }
+    .site-footer { grid-area:footer; display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px 20px; padding:20px clamp(24px,4vw,56px) 26px; background:var(--paper); color:var(--muted); font-size:.78rem; }
+    .site-footer p { max-width:42rem; margin:0; }
+    .footer-links { display:flex; flex-wrap:wrap; gap:12px; }
+    .map-panel { position:sticky; top:0; grid-area:map; display:grid; grid-template-rows:auto 1fr auto; height:100svh; min-height:38rem; overflow:hidden; border-left:1px solid #22315e; background:var(--navy); color:#fff; isolation:isolate; }
+    .map-head { position:relative; z-index:3; display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:22px 24px 18px; border-bottom:1px solid rgba(255,255,255,.16); background:rgba(11,20,56,.96); }
+    .map-head-copy { min-width:0; }
+    .map-head .eyebrow { color:#72c8ff; }
+    .map-head h2 { margin:2px 0 0; font-size:1.18rem; letter-spacing:-.025em; }
+    .map-head p { margin:7px 0 0; color:#c6d0e8; font-size:.76rem; line-height:1.5; }
+    .map-reset { flex:none; min-height:44px; padding:8px 11px; border:1px solid rgba(255,255,255,.35); border-radius:7px; background:var(--navy-soft); color:#fff; font-size:.72rem; font-weight:800; }
+    .map-reset:hover,.map-reset:focus-visible { border-color:var(--orange); }
+    .map-reset:disabled { cursor:wait; opacity:.55; }
+    .map-frame { position:relative; min-height:0; }
+    #commute-map { position:absolute; inset:0; }
+    .map-state { position:absolute; top:50%; left:50%; z-index:4; width:min(20rem,calc(100% - 32px)); padding:14px 16px; border:1px solid rgba(255,255,255,.2); border-radius:9px; background:rgba(11,20,56,.95); color:#c6d0e8; font-size:.8rem; text-align:center; transform:translate(-50%,-50%); }
+    .map-state strong { display:block; margin-bottom:4px; color:#fff; }
+    .map-detail { position:relative; z-index:3; min-height:136px; padding:16px 20px 18px; border-top:1px solid rgba(255,255,255,.16); background:rgba(11,20,56,.98); }
+    .map-detail-kicker { display:block; margin-bottom:4px; color:#72c8ff; font-size:.66rem; font-weight:850; letter-spacing:.11em; text-transform:uppercase; }
+    .map-detail strong { display:block; font-size:.93rem; }
+    .map-detail p { margin:5px 0 0; color:#c6d0e8; font-size:.72rem; line-height:1.45; }
+    .coverage-marker { z-index:1; display:grid; width:44px; height:44px; padding:0; place-items:center; border:0; border-radius:50%; background:transparent; }
+    .coverage-marker::before { width:11px; height:11px; border:2px solid #fff; border-radius:50%; background:var(--coverage-color); box-shadow:0 2px 7px rgba(0,0,0,.65); content:""; transition:transform .12s ease; }
+    .coverage-marker:hover::before,.coverage-marker:focus-visible::before,.coverage-marker[data-selected=true]::before { transform:scale(1.55); }
+    .coverage-marker:focus-visible { outline:2px solid rgba(255,255,255,.85); outline-offset:-5px; }
+    .coverage-marker[data-airport=true]::before { border-radius:2px; transform:rotate(45deg); }
+    .coverage-marker[data-airport=true]:hover::before,.coverage-marker[data-airport=true]:focus-visible::before,.coverage-marker[data-airport=true][data-selected=true]::before { transform:rotate(45deg) scale(1.55); }
+    .estimate-pin { z-index:4; display:grid; min-height:0; padding:0; padding-bottom:11px; border:0; background:transparent; color:#fff; text-align:left; }
+    .estimate-marker { position:relative; display:grid; padding:6px 9px 7px; border:2px solid #8bd4ff; border-radius:8px; background:rgba(11,20,56,.94); box-shadow:0 7px 18px rgba(0,0,0,.35); line-height:1.05; }
+    .estimate-marker::after { position:absolute; right:50%; bottom:-9px; width:10px; height:10px; border-right:2px solid #8bd4ff; border-bottom:2px solid #8bd4ff; background:var(--navy); content:""; transform:translateX(50%) rotate(45deg); }
+    .estimate-marker span { max-width:72px; font-size:8px; font-weight:800; letter-spacing:.05em; line-height:1.1; text-transform:uppercase; }
+    .estimate-marker strong { margin-top:3px; color:#8bd4ff; font-size:11px; }
+    .estimate-pin:hover .estimate-marker,.estimate-pin:focus-visible .estimate-marker,.estimate-pin[data-selected=true] .estimate-marker { border-color:var(--orange); }
+    .estimate-pin:hover .estimate-marker::after,.estimate-pin:focus-visible .estimate-marker::after,.estimate-pin[data-selected=true] .estimate-marker::after { border-color:var(--orange); }
+    .destination-marker { z-index:3; display:grid; width:42px; height:42px; place-items:center; border:3px solid #fff; border-radius:50%; background:var(--orange); box-shadow:0 0 0 5px rgba(244,119,53,.22),0 8px 20px rgba(0,0,0,.35); color:#fff; font-size:11px; font-weight:900; }
+    .maplibregl-ctrl-group { overflow:hidden; border:1px solid rgba(255,255,255,.2); border-radius:7px; background:var(--navy-soft); }
+    .maplibregl-ctrl-group button { width:44px; height:44px; padding:0; }
+    .maplibregl-ctrl button .maplibregl-ctrl-icon { filter:invert(1); }
+    .maplibregl-ctrl-attrib { background:rgba(11,20,56,.85)!important; color:#b9c4dc; font-size:9px; }
+    .maplibregl-ctrl-attrib a { color:#fff; }
+    @media (max-width:780px) {
+      .app-shell { grid-template:"header" auto "map" auto "transcript" minmax(10rem,auto) "composer" auto "footer" auto / 1fr; }
+      .hero { padding:20px 16px; }
+      .brand-row { align-items:flex-start; }
+      .brand-logo { width:56px; height:56px; border-radius:13px; }
+      h1 { font-size:clamp(2.15rem,12vw,3.5rem); }
+      .new-chat { padding-inline:10px; }
+      .starters { display:grid; }
+      .starter-chip { max-width:none; border-radius:10px; }
+      .map-panel { position:relative; grid-template-rows:auto 27rem auto; height:auto; min-height:0; border:0; }
+      .map-head { padding:15px 16px 13px; }
+      #transcript { padding:24px 16px; }
+      #chat { position:static; grid-template-columns:1fr; margin:0 16px; }
+      #chat label { grid-column:1; }
+      .site-footer { padding:20px 16px 26px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      html { scroll-behavior:auto; }
+      *,*::before,*::after { transition:none!important; animation:none!important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#message">Skip map and ask TollChat</a>
+  <main class="app-shell">
+    <header class="hero">
+      <div class="brand-row">
+        <img class="brand-logo" src="/assets/tollchat-logo.png" alt="TollChat roadway logo" width="68" height="68">
+        <div class="brand-copy">
+          <p class="eyebrow">Northern Virginia toll intelligence</p>
+          <h1>TollChat</h1>
+        </div>
+        <button id="reset" class="new-chat" type="button">New chat</button>
+      </div>
+      <p class="lede">Ask for a current supported toll or see what a tolled commute could do to your annual take-home pay. TollChat checks its route and pricing data before giving you a number. If the data isn't there, it says so. 👋</p>
+      <aside class="trust-strip" aria-label="Privacy, source code, and support">
+        <p><strong>TollChat does not collect user traces or analytics in this v2 preview, and conversations are not written to disk.</strong> Requests are processed by OpenAI and session state remains in server memory until reset or restart.</p>
+        <p>The <a href="https://github.com/rhprasad0/nova-toll-budget-agent" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">code is open source</a>. Because TollChat cannot observe client-side failures, please send bug reports to <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a>.</p>
+      </aside>
+      <p class="evaluation-note"><strong>Test result:</strong> In one annual commute test, 996 of 1,000 answers (99.6%) stuck to the numbers in the data. One answer got a time wrong. The test used just one commute example, so it doesn't cover everything TollChat can do. <a href="/faq.html#hallucinations-title">Read the method and limits →</a></p>
+      <section id="starter-wrap" class="starter-wrap" aria-labelledby="starter-label">
+        <p id="starter-label" class="starter-label">Try a question</p>
+        <div class="starters">
+          <button class="starter-chip" type="button" data-prompt-index="0">What is the current price from Dumfries to Washington?</button>
+          <button class="starter-chip" type="button" data-prompt-index="1">What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, leaving at 8:30 AM and returning at 5:30 PM, for 96 commute days per year and a $130,000 gross annual salary?</button>
+        </div>
+      </section>
+    </header>
+    <section class="map-panel" aria-labelledby="map-title">
+      <div class="map-head">
+        <div class="map-head-copy">
+          <p class="eyebrow">Toll roads and annual ballparks</p>
+          <h2 id="map-title">Where TollChat has coverage</h2>
+          <p>Small pins show supported entries and exits. Large pins show four historical P50 annual toll ballparks to Washington.</p>
+        </div>
+        <button id="reset-map" class="map-reset" type="button" disabled>Reset view</button>
+      </div>
+      <div class="map-frame">
+        <div id="commute-map" role="region" aria-label="Interactive map of TollChat entry and exit coverage plus four estimated annual toll commutes to Washington, DC"></div>
+        <div id="map-loading" class="map-state" role="status"><strong>Drawing the coverage map…</strong>Loading supported toll-road access points and annual estimates.</div>
+        <div id="map-error" class="map-state" role="alert" hidden><strong>The map could not load.</strong>Chat remains available. Ask TollChat for an estimate instead.</div>
+      </div>
+      <aside id="map-detail" class="map-detail" aria-live="polite">
+        <span class="map-detail-kicker">Map guide</span>
+        <strong>Choose a commute or entry/exit pin</strong>
+        <p>Large pins show annual ballparks. Small pins show names you can use in a TollChat question.</p>
+      </aside>
+    </section>
+    <section id="transcript" aria-live="polite" aria-label="Chat transcript"></section>
+    <form id="chat" aria-busy="false">
+      <label for="message">Ask about a trip or commute <span aria-hidden="true">· Shift+Enter adds a line</span></label>
+      <textarea id="message" required maxlength="8000" placeholder="What does this commute do to my take-home pay? 👋"></textarea>
+      <button type="submit">Ask TollChat</button>
+    </form>
+    <footer class="site-footer">
+      <p>Historical toll evidence and published rates—not a forecast, tax calculation, financial plan, or operator-issued quote. Each answer includes a Strands event inspector for debugging.</p>
+      <nav class="footer-links" aria-label="Project links">
+        <a href="/faq.html">FAQ</a>
+        <a href="https://github.com/rhprasad0/nova-toll-budget-agent" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Source code</a>
+        <a href="mailto:contact@tollchat.ai">Report a bug</a>
+      </nav>
+    </footer>
+  </main>
+  <script type="module" src="/dev_chat.mjs"></script>
+</body>
 </html>

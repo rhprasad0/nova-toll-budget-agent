@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+from oracle import build_oracle_data as oracle_builder
 from oracle.build_oracle_data import (
     build_connections,
     build_points,
@@ -232,6 +235,50 @@ def test_generated_sql_is_deterministic() -> None:
     assert build_sql() == build_sql()
     assert "INSERT INTO oracle.toll_route_point" in build_sql()
     assert "INSERT INTO oracle.toll_connection" in build_sql()
+
+
+def test_generated_coverage_locations_group_every_oracle_point() -> None:
+    points = build_points()
+    rendered = oracle_builder.render_coverage_locations(points)
+    snapshot = json.loads(rendered)
+
+    assert rendered == oracle_builder.render_coverage_locations(points)
+    assert snapshot["schema_version"] == 1
+    assert len(snapshot["locations"]) == 103
+    records = [
+        point for location in snapshot["locations"] for point in location["points"]
+    ]
+    assert len(records) == 220
+    assert {point["point_id"] for point in records} == set(points)
+    assert snapshot["locations"] == sorted(
+        snapshot["locations"], key=lambda location: location["coordinates"]
+    )
+
+    tp1 = next(
+        location
+        for location in snapshot["locations"]
+        if location["coordinates"] == [-77.15413222704926, 38.79347384215561]
+    )
+    assert tp1["points"] == [
+        {
+            "point_id": "i495:192NO",
+            "facility": "i495",
+            "label": "I-495 Express northbound start at I-95 (TP1NB)",
+            "direction": "NB",
+            "role": "entry",
+        },
+        {
+            "point_id": "i495:192SD",
+            "facility": "i495",
+            "label": "I-495 Express southbound end at I-95 (TP1SB)",
+            "direction": "SB",
+            "role": "exit",
+        },
+    ]
+    checked_in = (
+        Path(__file__).parents[1] / "agent" / "assets" / "coverage-locations.json"
+    )
+    assert checked_in.read_text(encoding="utf-8") == rendered
 
 
 def test_importer_rejects_cross_row_semantic_errors() -> None:

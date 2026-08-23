@@ -9,6 +9,7 @@ import tomllib
 import urllib.error
 import urllib.request
 from datetime import date
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -45,9 +46,9 @@ class _Result:
 
 
 class _Agent:
-    def __init__(self, number, trace_attributes):
+    def __init__(self, number, factory_kwargs):
         self.number = number
-        self.trace_attributes = trace_attributes
+        self.factory_kwargs = factory_kwargs
 
     async def stream_async(self, prompt):
         yield {"init_event_loop": True}
@@ -87,8 +88,8 @@ class _Factory:
     def __init__(self):
         self.agents = []
 
-    def __call__(self, *, trace_attributes):
-        agent = _Agent(len(self.agents) + 1, trace_attributes)
+    def __call__(self, **kwargs):
+        agent = _Agent(len(self.agents) + 1, kwargs)
         self.agents.append(agent)
         return agent
 
@@ -132,7 +133,7 @@ def test_streams_raw_events_text_tools_result_and_reuses_session():
     second = asyncio.run(_collect(app, message="again"))
     assert second[1]["text_delta"].startswith("1:")
     assert len(factory.agents) == 1
-    assert factory.agents[0].trace_attributes == {"tollchat.session_id": "browser"}
+    assert factory.agents[0].factory_kwargs == {}
 
 
 def test_reset_and_new_york_date_create_fresh_agents(monkeypatch):
@@ -169,6 +170,7 @@ def test_agent_failure_emits_one_safe_terminal_error(caplog):
         "message": "Agent request failed. Check the server log.",
     }
     assert "secret failure details" in caplog.text
+    assert "browser" not in caplog.text
 
 
 def test_agent_construction_failure_emits_one_safe_terminal_error(caplog):
@@ -197,13 +199,76 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
     try:
         page = urllib.request.urlopen(base_url, timeout=2)
         assert page.headers["Cache-Control"] == "no-store"
-        assert "Strands event inspector" in page.read().decode()
+        html = page.read().decode()
+        assert "TollChat does not collect user traces or analytics" in html
+        assert "996 of 1,000" in html
+        assert "TollChat checks its route and pricing data" in html
+        assert "If the data isn't there, it says so" in html
+        assert "stuck to the numbers in the data" in html
+        assert "The test used just one commute example" in html
+        assert "constrained route and pricing tools" not in html
+        assert "supplied tool evidence under the strict policy" not in html
+        assert "contact@tollchat.ai" in html
+        assert 'href="/faq.html#hallucinations-title"' in html
+        assert "What is the current price from Dumfries to Washington?" in html
+        assert "$130,000 gross annual salary" in html
+        assert "Strands event inspector" in html
+        assert 'id="reset-map"' in html
+        assert "Small pins show supported entries and exits" in html
+        assert "price unavailable" not in html.lower()
+        assert "data-facility" not in html
         assert (
             "consumeNdjson"
             in urllib.request.urlopen(f"{base_url}/dev_chat.mjs", timeout=2)
             .read()
             .decode()
         )
+        logo = urllib.request.urlopen(f"{base_url}/assets/tollchat-logo.png", timeout=2)
+        assert logo.headers.get_content_type() == "image/png"
+        assert sha256(logo.read()).hexdigest() == (
+            "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6"
+        )
+        faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
+        assert "How TollChat estimates a commute" in faq
+        assert "99.6%" in faq
+        assert "93.1%" in faq
+        assert "one frozen" in faq
+        assert "not attached to traces or logs" in faq
+        estimates = json.load(
+            urllib.request.urlopen(
+                f"{base_url}/assets/commute-estimates.json", timeout=2
+            )
+        )
+        assert [item["id"] for item in estimates["estimates"]] == [
+            "dumfries",
+            "springfield-franconia",
+            "leesburg",
+            "i66-west",
+        ]
+        for path in (
+            "/assets/commute-map.mjs",
+            "/assets/commute-routes.mjs",
+            "/assets/coverage-locations.json",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl.css",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl.mjs",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs",
+        ):
+            assert urllib.request.urlopen(f"{base_url}{path}", timeout=2).status == 200
+        coverage_locations = json.load(
+            urllib.request.urlopen(
+                f"{base_url}/assets/coverage-locations.json", timeout=2
+            )
+        )
+        assert len(coverage_locations["locations"]) == 103
+        assert (
+            sum(len(location["points"]) for location in coverage_locations["locations"])
+            == 220
+        )
+        csp = page.headers["Content-Security-Policy"]
+        assert "img-src 'self' data:" in csp
+        assert "connect-src 'self' https://tiles.openfreemap.org" in csp
+        assert "worker-src 'self' blob:" in csp
 
         response = _post(
             f"{base_url}/api/chat",

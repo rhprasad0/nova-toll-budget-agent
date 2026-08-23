@@ -1,6 +1,14 @@
 import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
 const TOOL_STATUSES = new Set(["running", "completed", "failed"]);
+export const MAX_RAW_EVENT_LOG_CHARS = 64 * 1024;
+const RAW_EVENT_LOG_TRUNCATED = "… older events omitted …\n";
+export const STARTER_PROMPTS = Object.freeze([
+  "What is the current price from Dumfries to Washington?",
+  "What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, "
+    + "leaving at 8:30 AM and returning at 5:30 PM, for 96 commute days per year and a "
+    + "$130,000 gross annual salary?",
+]);
 
 export const validStreamEvent = (event) => {
   if (!event || typeof event !== "object" || !Number.isInteger(event.sequence) || event.sequence < 0) {
@@ -67,11 +75,74 @@ const newTurn = (transcript) => {
   details.append(summary, raw);
   article.append(activities, answer, details);
   transcript.append(article);
-  return { article, activities, answer, raw, items: new Map(), text: "" };
+  const view = {
+    article,
+    activities,
+    answer,
+    details,
+    raw,
+    rawChars: 0,
+    rawEvents: [],
+    rawTruncated: false,
+    items: new Map(),
+    renderFrame: null,
+    text: "",
+  };
+  details.addEventListener("toggle", () => {
+    raw.textContent = details.open
+      ? `${view.rawTruncated ? RAW_EVENT_LOG_TRUNCATED : ""}${view.rawEvents.join("")}`
+      : "";
+  });
+  return view;
 };
 
-const applyEvent = (view, event) => {
-  view.raw.textContent += `${JSON.stringify(event, null, 2)}\n`;
+const appendRawEvent = (view, event) => {
+  const line = `${JSON.stringify(event, null, 2)}\n`;
+  view.rawEvents.push(line);
+  view.rawChars += line.length;
+  if (view.rawTruncated || view.rawChars > MAX_RAW_EVENT_LOG_CHARS) {
+    view.rawTruncated = true;
+    let overflow = view.rawChars
+      - (MAX_RAW_EVENT_LOG_CHARS - RAW_EVENT_LOG_TRUNCATED.length);
+    // ponytail: Array.shift stays bounded by the 64 KiB log cap.
+    while (overflow > 0) {
+      const first = view.rawEvents[0];
+      if (first.length <= overflow) {
+        view.rawEvents.shift();
+        view.rawChars -= first.length;
+        overflow -= first.length;
+      } else {
+        view.rawEvents[0] = first.slice(overflow);
+        view.rawChars -= overflow;
+        overflow = 0;
+      }
+    }
+  }
+  if (view.details.open) {
+    view.raw.textContent = `${view.rawTruncated ? RAW_EVENT_LOG_TRUNCATED : ""}`
+      + view.rawEvents.join("");
+  }
+};
+
+const flushMarkdown = (view) => {
+  view.renderFrame = null;
+  view.answer.innerHTML = renderAssistantMarkdown(view.text);
+  view.article.scrollIntoView({ block: "end" });
+};
+
+const cancelMarkdown = (view) => {
+  if (view.renderFrame !== null) cancelAnimationFrame(view.renderFrame);
+  view.renderFrame = null;
+};
+
+const queueMarkdown = (view) => {
+  if (view.renderFrame === null) {
+    view.renderFrame = requestAnimationFrame(() => flushMarkdown(view));
+  }
+};
+
+export const applyEvent = (view, event) => {
+  appendRawEvent(view, event);
   for (const tool of event.tool_updates || []) {
     let item = view.items.get(tool.index);
     if (!item) {
@@ -84,15 +155,8 @@ const applyEvent = (view, event) => {
     item.children[0].textContent = tool.label;
     item.children[1].textContent = tool.status[0].toUpperCase() + tool.status.slice(1);
   }
-  if (event.text_delta !== undefined) {
-    view.text += event.text_delta;
-    view.answer.innerHTML = renderAssistantMarkdown(view.text);
-  }
-  if (event.final) {
-    view.text = event.final.text;
-    view.answer.innerHTML = renderAssistantMarkdown(view.text);
-  }
   if (event.type === "error") {
+    cancelMarkdown(view);
     for (const item of view.items.values()) {
       if (item.dataset.status === "running") {
         item.dataset.status = "failed";
@@ -101,6 +165,19 @@ const applyEvent = (view, event) => {
     }
     view.answer.textContent = event.message;
     view.answer.classList.add("error");
+    view.article.scrollIntoView({ block: "end" });
+    return;
+  }
+  if (event.final) {
+    cancelMarkdown(view);
+    view.text = event.final.text;
+    flushMarkdown(view);
+    return;
+  }
+  if (event.text_delta !== undefined) {
+    view.text += event.text_delta;
+    queueMarkdown(view);
+    return;
   }
   view.article.scrollIntoView({ block: "end" });
 };
@@ -111,13 +188,31 @@ const start = () => {
   const input = document.querySelector("#message");
   const submit = form.querySelector("button");
   const reset = document.querySelector("#reset");
+  const starterWrap = document.querySelector("#starter-wrap");
+  const starterButtons = [...document.querySelectorAll("[data-prompt-index]")];
   const sessionId = sessionStorage.tollchatV2SessionId ||= crypto.randomUUID();
   const setBusy = (busy) => {
     input.disabled = busy;
     submit.disabled = busy;
     reset.disabled = busy;
+    for (const button of starterButtons) button.disabled = busy;
     form.setAttribute("aria-busy", String(busy));
   };
+
+  import("./assets/commute-map.mjs")
+    .then(({ mountCommuteMap }) => mountCommuteMap())
+    .catch((error) => {
+      console.error("TollChat map failed", error);
+      document.querySelector("#map-loading").hidden = true;
+      document.querySelector("#map-error").hidden = false;
+    });
+
+  for (const button of starterButtons) {
+    button.addEventListener("click", () => {
+      input.value = STARTER_PROMPTS[Number(button.dataset.promptIndex)];
+      form.requestSubmit();
+    });
+  }
 
   input.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
@@ -135,6 +230,7 @@ const start = () => {
     transcript.append(user);
     const view = newTurn(transcript);
     input.value = "";
+    starterWrap.hidden = true;
     setBusy(true);
     try {
       const response = await request("/api/chat", { session_id: sessionId, message });
@@ -157,6 +253,7 @@ const start = () => {
       const response = await request("/api/reset", { session_id: sessionId });
       if (!response.ok) throw new Error("Reset failed");
       transcript.replaceChildren();
+      starterWrap.hidden = false;
     } catch (error) {
       const view = newTurn(transcript);
       applyEvent(view, { type: "error", sequence: 0, message: error.message });
