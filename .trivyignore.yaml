@@ -1,19 +1,11 @@
 misconfigurations:
   - id: AVD-AWS-0104
-    paths: [v1/infra/agentcore.tf]
-    statement: The runtime must reach the public OpenAI API over HTTPS.
-    expired_at: 2027-02-13
-  - id: AVD-AWS-0104
     paths: [v1/infra/network.tf]
     statement: The Tailscale exit node must forward peer-selected internet traffic.
     expired_at: 2027-02-13
   - id: AVD-AWS-0132
     paths: [v1/infra/agentcore.tf]
     statement: Versioned deployment artifacts contain no user data and use SSE-S3.
-    expired_at: 2027-02-13
-  - id: AVD-AWS-0132
-    paths: [v1/infra/site.tf]
-    statement: The bucket contains public static assets and uses SSE-S3.
     expired_at: 2027-02-13
   - id: AVD-AWS-0131
     paths: [v1/infra/tailscale.tf]

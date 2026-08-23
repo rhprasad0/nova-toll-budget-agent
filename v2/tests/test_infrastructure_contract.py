@@ -80,6 +80,21 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
     assert "github_pat_[A-Za-z0-9_-]{20,}" in agentcore
 
+    runtime_logs = agentcore.split(
+        'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1
+    )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
+    assert 'toset(["DEFAULT", "preview"])' in runtime_logs
+    assert "retention_in_days = 1" in runtime_logs
+
+    proxy = agentcore.split(
+        'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
+    assert "ignore_changes = [reserved_concurrent_executions]" in proxy
+
+    deployment = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
+    assert "put-function-concurrency" in deployment
+    assert "--reserved-concurrent-executions 1" in deployment
+
 
 def test_v2_agent_packages_are_required_for_real_deployments():
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()

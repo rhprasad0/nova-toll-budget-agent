@@ -67,5 +67,15 @@ only the two packages, the AgentCore runtime version/endpoint, and dependent
 deployment metadata.
 
 If the application cannot safely serve traffic while rollback is prepared,
-set reserved concurrency for `tollchat-v2-chat-proxy` to zero. Database and
-shared polling/storage infrastructure are not part of application rollback.
+set reserved concurrency for `tollchat-v2-chat-proxy` to zero. Terraform ignores
+this emergency override so the rollback apply remains fail-closed. After the
+rollback smoke test succeeds, explicitly restore the reviewed concurrency:
+
+```sh
+AWS_PROFILE=nova-toll aws --region us-east-1 lambda put-function-concurrency \
+  --function-name tollchat-v2-chat-proxy \
+  --reserved-concurrent-executions 1
+```
+
+Database and shared polling/storage infrastructure are not part of application
+rollback.

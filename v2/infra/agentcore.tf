@@ -367,6 +367,13 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "agentcore_runtime" {
+  for_each = toset(["DEFAULT", "preview"])
+
+  name              = "/aws/bedrock-agentcore/runtimes/${aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_id}-${each.value}"
+  retention_in_days = 1
+}
+
 resource "aws_bedrockagentcore_agent_runtime_endpoint" "tollchat" {
   agent_runtime_id      = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_id
   agent_runtime_version = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_version
@@ -451,6 +458,8 @@ resource "aws_lambda_function" "tollchat_proxy" {
   }
 
   lifecycle {
+    ignore_changes = [reserved_concurrent_executions]
+
     precondition {
       condition     = var.chat_proxy_package_path != ""
       error_message = "Chat proxy deployment requires the reviewed v2 proxy package."
