@@ -201,6 +201,12 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         html = page.read().decode()
         assert "TollChat does not collect browser traces or analytics" in html
         assert "996 of 1,000" in html
+        assert "TollChat checks its route and pricing data" in html
+        assert "If the data isn't there, it says so" in html
+        assert "stuck to the numbers in the data" in html
+        assert "The test used just one commute example" in html
+        assert "constrained route and pricing tools" not in html
+        assert "supplied tool evidence under the strict policy" not in html
         assert "contact@tollchat.ai" in html
         assert 'href="/faq.html#hallucinations-title"' in html
         assert "What is the current price from Dumfries to Washington?" in html
