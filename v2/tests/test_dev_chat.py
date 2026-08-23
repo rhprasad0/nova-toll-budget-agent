@@ -201,9 +201,10 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert page.headers["Cache-Control"] == "no-store"
         html = page.read().decode()
         assert "may collect limited usage statistics" in html
-        assert "OpenAI receives prompts and responses" in html
-        assert "retains Responses API data for at least 30 days" in html
-        assert "monitors for abuse" in html
+        assert "Responses storage disabled" in html
+        assert "abuse-monitoring logs" in html
+        assert "up to 30 days by default" in html
+        assert "retains Responses API data for at least 30 days" not in html
         assert "tradeoff to keep TollChat free to use" in html
         assert "https://developers.openai.com/api/docs/guides/your-data" in html
         assert "reasonable tax and vehicle-cost assumptions" in html
@@ -263,8 +264,10 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "largest error was $8.05" in faq
         assert "may collect limited usage statistics" in faq
         assert "analytics provider, the event fields" in faq
-        assert "OpenAI receives prompts and responses" in faq
-        assert "monitors for abuse" in faq
+        assert "Responses storage disabled" in faq
+        assert "abuse-monitoring logs" in faq
+        assert "up to 30 days by default" in faq
+        assert "retains Responses API data for at least 30 days" not in faq
         assert "tradeoff to keep TollChat free to use" in faq
         assert "https://developers.openai.com/api/docs/guides/your-data" in faq
         assert "OpenFreeMap" in faq
@@ -276,6 +279,10 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         privacy = privacy_response.read().decode()
         assert "TollChat privacy notice" in privacy
         assert "Starting a new chat does not change OpenAI's retention" in privacy
+        assert "Responses storage disabled (`store=false`)" in privacy
+        assert "does not use OpenAI's stored response state" in privacy
+        assert "stateful OpenAI Responses API" not in privacy
+        assert "Responses API application state for at least 30 days" not in privacy
         assert "abuse monitoring as a tradeoff to keep TollChat free to use" in privacy
         assert "https://developers.openai.com/api/docs/guides/your-data" in privacy
         assert "will not sell this data or use it for targeted advertising" in privacy
