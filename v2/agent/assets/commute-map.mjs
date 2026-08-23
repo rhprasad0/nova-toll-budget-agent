@@ -27,6 +27,9 @@ const DIRECTION_NAMES = {
   EB: "Eastbound",
   WB: "Westbound",
 };
+const TP1_POINT_IDS = new Set(["i495:192NO", "i495:192SD"]);
+const TP1_JUNCTION = [-77.154508, 38.793504];
+const I95_EAST_FRAGMENTS = new Set([5, 7, 11, 19, 29, 30, 32, 33]);
 // Census TIGER/Line 2019 I-495 LINEARID 1106220849438, from the v1 trim to TP1.
 const TP1_CONNECTOR = [
   [-77.205634, 38.799923], [-77.205254, 38.799834], [-77.196633, 38.797845],
@@ -56,8 +59,13 @@ const TP1_CONNECTOR = [
   [-77.162229, 38.791883], [-77.161938, 38.79194], [-77.160691, 38.792184],
   [-77.159398, 38.792463], [-77.157902, 38.792829], [-77.156391, 38.793131],
   [-77.1554, 38.793337], [-77.154988, 38.793412], [-77.154738, 38.793466],
-  [-77.154508, 38.793504],
+  TP1_JUNCTION,
 ];
+const i95 = routeData.features.find(({ properties }) => properties.facility === "i95");
+// ponytail: indices match the pinned TIGER/Line 2019 geometry; revisit if that archive changes.
+i95.geometry.coordinates = i95.geometry.coordinates
+  .map((line, index) => index === 2 ? line.slice(8) : index === 3 ? line.slice(7) : line)
+  .filter((_, index) => !I95_EAST_FRAGMENTS.has(index));
 routeData.features.find(({ properties }) => properties.facility === "i495")
   .geometry.coordinates.push(TP1_CONNECTOR);
 
@@ -133,7 +141,19 @@ export function validateCoverageLocations(snapshot) {
   return snapshot;
 }
 
+const isTp1 = (location) => location.points.length === TP1_POINT_IDS.size
+  && location.points.every(({ point_id: pointId }) => TP1_POINT_IDS.has(pointId));
+
+export const coverageCoordinates = (location) => (
+  isTp1(location) ? TP1_JUNCTION : location.coordinates
+);
+
 export function coverageDetail(location) {
+  if (isTp1(location)) return {
+    kicker: "Supported access",
+    title: "I-495/I-95 Near Van Dorn Street",
+    paragraphs: ["Northbound entrance · Southbound exit"],
+  };
   const names = new Map();
   for (const point of location.points) {
     const access = point.role === "airport"
@@ -287,7 +307,7 @@ export async function mountCommuteMap() {
       marker.addEventListener("click", () => selectCoverage(location, marker));
       marker.addEventListener("focus", () => selectCoverage(location, marker));
       new maplibregl.Marker({ element: marker, anchor: "center" })
-        .setLngLat(location.coordinates)
+        .setLngLat(coverageCoordinates(location))
         .addTo(map);
     }
 

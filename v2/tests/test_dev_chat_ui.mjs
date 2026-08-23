@@ -286,6 +286,7 @@ test("coverage validation rejects malformed coordinates and access records", () 
     schema_version: 1,
     locations: [location],
   }).locations[0], location);
+  assert.equal(commuteMap.coverageCoordinates(location), location.coordinates);
   assert.throws(
     () => commuteMap.validateCoverageLocations({
       schema_version: 1,
@@ -306,7 +307,7 @@ test("coverage validation rejects malformed coordinates and access records", () 
 });
 
 test("coverage details expose readable names and directions but not point IDs", () => {
-  const detail = commuteMap.coverageDetail({
+  const location = {
     coordinates: [-77.15, 38.79],
     points: [
       {
@@ -324,30 +325,33 @@ test("coverage details expose readable names and directions but not point IDs", 
         role: "exit",
       },
     ],
-  });
+  };
+  const detail = commuteMap.coverageDetail(location);
 
   assert.equal(detail.kicker, "Supported access");
-  assert.equal(detail.title, "Names at this location");
-  assert.deepEqual(detail.paragraphs, [
-    "I-495 Express northbound start at I-95 (TP1NB): Northbound entrance",
-    "I-495 Express southbound end at I-95 (TP1SB): Southbound exit",
-  ]);
+  assert.equal(detail.title, "I-495/I-95 Near Van Dorn Street");
+  assert.deepEqual(detail.paragraphs, ["Northbound entrance · Southbound exit"]);
+  assert.deepEqual(commuteMap.coverageCoordinates(location), [-77.154508, 38.793504]);
   assert.doesNotMatch(JSON.stringify(detail), /i495:192/);
 });
 
-test("I-495 follows the road from Braddock Road to an existing I-95 point at TP1", () => {
+test("I-495 and trimmed I-95 stay connected at the Van Dorn TP1 vertex", () => {
   const i495 = routeData.features.find(({ properties }) => properties.facility === "i495");
   const i95 = routeData.features.find(({ properties }) => properties.facility === "i95");
   const start = [-77.205634, 38.799923];
-  const end = [-77.154508, 38.793504];
+  const junction = [-77.154508, 38.793504];
   const connector = i495.geometry.coordinates.find((line) => (
     JSON.stringify(line[0]) === JSON.stringify(start)
-      && JSON.stringify(line.at(-1)) === JSON.stringify(end)
+      && JSON.stringify(line.at(-1)) === JSON.stringify(junction)
   ));
 
   assert.ok(connector);
   assert.ok(connector.length > 10);
-  assert.ok(i95.geometry.coordinates.flat().some((point) => (
-    JSON.stringify(point) === JSON.stringify(end)
+  assert.equal(i95.geometry.coordinates.length, 28);
+  assert.ok(i95.geometry.coordinates.some((line) => (
+    JSON.stringify(line[0]) === JSON.stringify(junction)
+  )));
+  assert.ok(i95.geometry.coordinates.some((line) => (
+    JSON.stringify(line[0]) === JSON.stringify([-77.153219, 38.793384])
   )));
 });
