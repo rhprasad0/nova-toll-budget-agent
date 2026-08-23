@@ -203,6 +203,9 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "may collect limited usage statistics" in html
         assert "OpenAI receives prompts and responses" in html
         assert "retains Responses API data for at least 30 days" in html
+        assert "monitors for abuse" in html
+        assert "tradeoff to keep TollChat free to use" in html
+        assert "https://developers.openai.com/api/docs/guides/your-data" in html
         assert "reasonable tax and vehicle-cost assumptions" in html
         assert "rough take-home-pay estimate" in html
         assert "We observed no fabricated costs in our 1,000-answer test" in html
@@ -261,6 +264,9 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "may collect limited usage statistics" in faq
         assert "analytics provider, the event fields" in faq
         assert "OpenAI receives prompts and responses" in faq
+        assert "monitors for abuse" in faq
+        assert "tradeoff to keep TollChat free to use" in faq
+        assert "https://developers.openai.com/api/docs/guides/your-data" in faq
         assert "OpenFreeMap" in faq
         assert "2026 Benevolent Clankers LLC" in faq
         assert "TollChat name and branding reserved" in faq
@@ -270,6 +276,8 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         privacy = privacy_response.read().decode()
         assert "TollChat privacy notice" in privacy
         assert "Starting a new chat does not change OpenAI's retention" in privacy
+        assert "abuse monitoring as a tradeoff to keep TollChat free to use" in privacy
+        assert "https://developers.openai.com/api/docs/guides/your-data" in privacy
         assert "will not sell this data or use it for targeted advertising" in privacy
         assert "https://openfreemap.org/privacy/" in privacy
         terms_response = urllib.request.urlopen(f"{base_url}/terms.txt", timeout=2)
