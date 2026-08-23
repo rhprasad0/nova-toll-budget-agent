@@ -100,8 +100,14 @@
         <p>This repeated-generation test measures reliability for one production-shaped fixture. It does not measure TollChat's overall hallucination rate, route coverage, source accuracy, or production traffic. <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/v2/eval/ballpark-hallucination-report.md" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Read the complete report and methodology</a>.</p>
       </section>
 
+      <section aria-labelledby="free-title">
+        <span class="kicker">08 · Why free?</span>
+        <h2 id="free-title">Why is TollChat free?</h2>
+        <p>Because production AI experience is comically hard to get without already having production AI experience—the industry's favorite little paradox. TollChat was born to break that loop: you get a free commute-cost experiment, and we get to find out what happens when an AI project meets real users instead of another demo. It may work. It may not. Either way, that's production experience.</p>
+      </section>
+
       <section aria-labelledby="privacy-title">
-        <span class="kicker">08 · Privacy and support</span>
+        <span class="kicker">09 · Privacy and support</span>
         <h2 id="privacy-title">What does TollChat collect?</h2>
         <p>TollChat may collect limited usage statistics so we can measure how many people use the service. Before collection starts, the privacy notice will identify the analytics provider, the event fields, and how long the data will be kept. TollChat will not include chat text, trip details, or salary figures in those statistics.</p>
         <p>TollChat keeps the active conversation in the ephemeral microVM's memory and does not write it to disk. OpenAI receives prompts, prior conversation context, and responses with Responses storage disabled. OpenAI still keeps abuse-monitoring logs, which may include that content, for up to 30 days by default. We accepted that tradeoff to keep TollChat free to use. Read <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">how OpenAI handles API data</a>. A random ID in browser session storage keeps follow-up messages together while the microVM runs. TollChat does not attach that ID to traces or logs.</p>

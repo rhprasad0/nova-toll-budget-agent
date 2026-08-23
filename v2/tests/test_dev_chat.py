@@ -251,6 +251,8 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         )
         faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
         assert "How TollChat estimates commute costs" in faq
+        assert "Why is TollChat free?" in faq
+        assert "production AI experience is comically hard to get" in faq
         assert "99.6%" in faq
         assert "93.1%" in faq
         assert "one frozen" in faq
