@@ -188,9 +188,26 @@ def create_server(
 
     static = {
         "/": (_ASSET_ROOT / "dev_chat.html", "text/html; charset=utf-8"),
+        "/faq.html": (_ASSET_ROOT / "faq.html", "text/html; charset=utf-8"),
         "/dev_chat.mjs": (
             _ASSET_ROOT / "dev_chat.mjs",
             "text/javascript; charset=utf-8",
+        ),
+        "/assets/tollchat-logo.png": (
+            _ASSET_ROOT / "assets/tollchat-logo.png",
+            "image/png",
+        ),
+        "/assets/commute-map.mjs": (
+            _ASSET_ROOT / "assets/commute-map.mjs",
+            "text/javascript; charset=utf-8",
+        ),
+        "/assets/commute-routes.mjs": (
+            _ASSET_ROOT / "assets/commute-routes.mjs",
+            "text/javascript; charset=utf-8",
+        ),
+        "/assets/commute-estimates.json": (
+            _ASSET_ROOT / "assets/commute-estimates.json",
+            "application/json; charset=utf-8",
         ),
         "/assets/chat-markdown.mjs": (
             _ASSET_ROOT / "assets/chat-markdown.mjs",
@@ -204,6 +221,19 @@ def create_server(
             _ASSET_ROOT / "assets/LICENSE.txt",
             "text/plain; charset=utf-8",
         ),
+        **{
+            f"/assets/maplibre-gl-6.0.0/{name}": (
+                _ASSET_ROOT / "assets/maplibre-gl-6.0.0" / name,
+                content_type,
+            )
+            for name, content_type in {
+                "LICENSE.txt": "text/plain; charset=utf-8",
+                "maplibre-gl.css": "text/css; charset=utf-8",
+                "maplibre-gl.mjs": "text/javascript; charset=utf-8",
+                "maplibre-gl-shared.mjs": "text/javascript; charset=utf-8",
+                "maplibre-gl-worker.mjs": "text/javascript; charset=utf-8",
+            }.items()
+        },
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -302,7 +332,10 @@ def create_server(
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header(
                 "Content-Security-Policy",
-                "default-src 'self'; style-src 'unsafe-inline'; img-src 'none'; "
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; "
+                "connect-src 'self' https://tiles.openfreemap.org; "
+                "worker-src 'self' blob:; "
                 "object-src 'none'; base-uri 'none'; form-action 'self'",
             )
 

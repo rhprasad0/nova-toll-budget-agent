@@ -9,6 +9,7 @@ import tomllib
 import urllib.error
 import urllib.request
 from datetime import date
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -197,13 +198,54 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
     try:
         page = urllib.request.urlopen(base_url, timeout=2)
         assert page.headers["Cache-Control"] == "no-store"
-        assert "Strands event inspector" in page.read().decode()
+        html = page.read().decode()
+        assert "TollChat does not collect browser traces or analytics" in html
+        assert "996 of 1,000" in html
+        assert "contact@tollchat.ai" in html
+        assert 'href="/faq.html#hallucinations-title"' in html
+        assert "What is the current price from Dumfries to Washington?" in html
+        assert "$130,000 gross annual salary" in html
+        assert "Strands event inspector" in html
         assert (
             "consumeNdjson"
             in urllib.request.urlopen(f"{base_url}/dev_chat.mjs", timeout=2)
             .read()
             .decode()
         )
+        logo = urllib.request.urlopen(f"{base_url}/assets/tollchat-logo.png", timeout=2)
+        assert logo.headers.get_content_type() == "image/png"
+        assert sha256(logo.read()).hexdigest() == (
+            "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6"
+        )
+        faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
+        assert "How TollChat estimates a commute" in faq
+        assert "99.6%" in faq
+        assert "93.1%" in faq
+        assert "one frozen" in faq
+        estimates = json.load(
+            urllib.request.urlopen(
+                f"{base_url}/assets/commute-estimates.json", timeout=2
+            )
+        )
+        assert [item["id"] for item in estimates["estimates"]] == [
+            "dumfries",
+            "springfield-franconia",
+            "leesburg",
+            "i66-west",
+        ]
+        for path in (
+            "/assets/commute-map.mjs",
+            "/assets/commute-routes.mjs",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl.css",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl.mjs",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs",
+            "/assets/maplibre-gl-6.0.0/maplibre-gl-worker.mjs",
+        ):
+            assert urllib.request.urlopen(f"{base_url}{path}", timeout=2).status == 200
+        csp = page.headers["Content-Security-Policy"]
+        assert "img-src 'self' data:" in csp
+        assert "connect-src 'self' https://tiles.openfreemap.org" in csp
+        assert "worker-src 'self' blob:" in csp
 
         response = _post(
             f"{base_url}/api/chat",

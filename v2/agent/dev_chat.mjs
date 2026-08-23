@@ -1,6 +1,12 @@
 import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
 const TOOL_STATUSES = new Set(["running", "completed", "failed"]);
+export const STARTER_PROMPTS = Object.freeze([
+  "What is the current price from Dumfries to Washington?",
+  "What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, "
+    + "leaving at 8:30 AM and returning at 5:30 PM, for 96 commute days per year and a "
+    + "$130,000 gross annual salary?",
+]);
 
 export const validStreamEvent = (event) => {
   if (!event || typeof event !== "object" || !Number.isInteger(event.sequence) || event.sequence < 0) {
@@ -111,13 +117,31 @@ const start = () => {
   const input = document.querySelector("#message");
   const submit = form.querySelector("button");
   const reset = document.querySelector("#reset");
+  const starterWrap = document.querySelector("#starter-wrap");
+  const starterButtons = [...document.querySelectorAll("[data-prompt-index]")];
   const sessionId = sessionStorage.tollchatV2SessionId ||= crypto.randomUUID();
   const setBusy = (busy) => {
     input.disabled = busy;
     submit.disabled = busy;
     reset.disabled = busy;
+    for (const button of starterButtons) button.disabled = busy;
     form.setAttribute("aria-busy", String(busy));
   };
+
+  import("./assets/commute-map.mjs")
+    .then(({ mountCommuteMap }) => mountCommuteMap())
+    .catch((error) => {
+      console.error("TollChat map failed", error);
+      document.querySelector("#map-loading").hidden = true;
+      document.querySelector("#map-error").hidden = false;
+    });
+
+  for (const button of starterButtons) {
+    button.addEventListener("click", () => {
+      input.value = STARTER_PROMPTS[Number(button.dataset.promptIndex)];
+      form.requestSubmit();
+    });
+  }
 
   input.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
@@ -135,6 +159,7 @@ const start = () => {
     transcript.append(user);
     const view = newTurn(transcript);
     input.value = "";
+    starterWrap.hidden = true;
     setBusy(true);
     try {
       const response = await request("/api/chat", { session_id: sessionId, message });
@@ -157,6 +182,7 @@ const start = () => {
       const response = await request("/api/reset", { session_id: sessionId });
       if (!response.ok) throw new Error("Reset failed");
       transcript.replaceChildren();
+      starterWrap.hidden = false;
     } catch (error) {
       const view = newTurn(transcript);
       applyEvent(view, { type: "error", sequence: 0, message: error.message });

@@ -97,10 +97,11 @@ compatible behavior changes, and major releases for incompatible changes.
 
 ### Local agent console
 
-The loopback-only browser console streams the v2 agent's Markdown replies, tool
-activity, metrics, and raw Strands events without storing conversations on disk.
-From `v2/`, configure the same AWS and database environment used by the live
-agent tests, then run:
+The loopback-only browser frontend streams the v2 agent's Markdown replies,
+emoji, tool activity, metrics, and raw Strands events without browser analytics
+or on-disk conversation storage. It also serves the FAQ and a checked-in map
+snapshot of four annual toll ballparks to Washington. From `v2/`, configure the
+same AWS and database environment used by the live agent tests, then run:
 
 ```sh
 AWS_PROFILE=nova-toll AWS_DEFAULT_REGION=us-east-1 \

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-23T09:08:57.089454-04:00",
+  "source": "get_annual_toll_ballpark",
+  "destination": "Washington, DC",
+  "assumptions": {
+    "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "outbound_departure_time": "08:30:00",
+    "return_departure_time": "17:30:00",
+    "planned_annual_commute_days": 240,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "scope": "tolls_only",
+    "method": "recent_complete_same_date_round_trips"
+  },
+  "estimates": [
+    {
+      "id": "dumfries",
+      "label": "Dumfries",
+      "coordinates": [-77.32940018177031, 38.57367329785056],
+      "outbound": {
+        "origin_point_id": "i95:218NO",
+        "destination_point_id": "i95:224ND"
+      },
+      "return": {
+        "origin_point_id": "i95:2232SO",
+        "destination_point_id": "i95:217SD"
+      },
+      "evaluated_at": "2026-08-23T09:08:39.150638-04:00",
+      "available_date_range": {"start_date": "2026-06-01", "end_date": "2026-08-21"},
+      "coverage": {"eligible_date_count": 60, "complete_pair_count": 52, "coverage_percent": "86.7"},
+      "sample_status": "partial",
+      "uses_current_fixed_rates": false,
+      "uses_modeled": false,
+      "scenarios": {
+        "p25": {"annual_toll_usd": "18384.00"},
+        "p50": {"annual_toll_usd": "20436.00"},
+        "p90": {"annual_toll_usd": "26772.00"}
+      }
+    },
+    {
+      "id": "springfield-franconia",
+      "label": "Springfield-Franconia",
+      "coordinates": [-77.18253314495087, 38.769886362330254],
+      "outbound": {
+        "origin_point_id": "i95:206NO",
+        "destination_point_id": "i95:224ND"
+      },
+      "return": {
+        "origin_point_id": "i95:2232SO",
+        "destination_point_id": "i95:206SD"
+      },
+      "evaluated_at": "2026-08-23T09:08:48.021077-04:00",
+      "available_date_range": {"start_date": "2026-06-01", "end_date": "2026-08-21"},
+      "coverage": {"eligible_date_count": 60, "complete_pair_count": 51, "coverage_percent": "85.0"},
+      "sample_status": "partial",
+      "uses_current_fixed_rates": false,
+      "uses_modeled": false,
+      "scenarios": {
+        "p25": {"annual_toll_usd": "10212.00"},
+        "p50": {"annual_toll_usd": "11604.00"},
+        "p90": {"annual_toll_usd": "14952.00"}
+      }
+    },
+    {
+      "id": "leesburg",
+      "label": "Leesburg",
+      "coordinates": [-77.5652813, 39.1000972],
+      "outbound": {
+        "origin_point_id": "greenway:1:entry:EB",
+        "destination_point_id": "i66:16:exit:EB"
+      },
+      "return": {
+        "origin_point_id": "i66:16:entry:WB",
+        "destination_point_id": "greenway:1:exit:WB"
+      },
+      "evaluated_at": "2026-08-23T09:08:56.735102-04:00",
+      "available_date_range": {"start_date": "2026-07-22", "end_date": "2026-08-21"},
+      "coverage": {"eligible_date_count": 60, "complete_pair_count": 22, "coverage_percent": "36.7"},
+      "sample_status": "partial",
+      "uses_current_fixed_rates": true,
+      "uses_modeled": false,
+      "scenarios": {
+        "p25": {"annual_toll_usd": "9192.00"},
+        "p50": {"annual_toll_usd": "9624.00"},
+        "p90": {"annual_toll_usd": "12228.00"}
+      }
+    },
+    {
+      "id": "i66-west",
+      "label": "I-66 West",
+      "coordinates": [-77.2189905, 38.8862187],
+      "outbound": {
+        "origin_point_id": "i66:1:entry:EB",
+        "destination_point_id": "i66:16:exit:EB"
+      },
+      "return": {
+        "origin_point_id": "i66:16:entry:WB",
+        "destination_point_id": "i66:1:exit:WB"
+      },
+      "evaluated_at": "2026-08-23T09:08:57.089454-04:00",
+      "available_date_range": {"start_date": "2026-07-22", "end_date": "2026-08-21"},
+      "coverage": {"eligible_date_count": 60, "complete_pair_count": 22, "coverage_percent": "36.7"},
+      "sample_status": "partial",
+      "uses_current_fixed_rates": false,
+      "uses_modeled": false,
+      "scenarios": {
+        "p25": {"annual_toll_usd": "3852.00"},
+        "p50": {"annual_toll_usd": "4380.00"},
+        "p90": {"annual_toll_usd": "6936.00"}
+      }
+    }
+  ]
+}

@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { consumeNdjson, validStreamEvent } from "../agent/dev_chat.mjs";
+import { STARTER_PROMPTS, consumeNdjson, validStreamEvent } from "../agent/dev_chat.mjs";
 import { renderAssistantMarkdown } from "../agent/assets/chat-markdown.mjs";
+import {
+  formatAnnualToll,
+  validateEstimateSnapshot,
+} from "../agent/assets/commute-map.mjs";
+
+const commuteEstimates = JSON.parse(await readFile(
+  new URL("../agent/assets/commute-estimates.json", import.meta.url),
+  "utf8",
+));
 
 const stream = (...chunks) => new ReadableStream({
   start(controller) {
@@ -48,4 +58,63 @@ test("renders supported Markdown and emoji while hostile content stays inert", (
   assert.doesNotMatch(html, /href="javascript:|<img/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(html, /alt/);
+});
+
+test("starter prompts are complete enough to submit without clarification", () => {
+  assert.deepEqual(STARTER_PROMPTS, [
+    "What is the current price from Dumfries to Washington?",
+    "What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, "
+      + "leaving at 8:30 AM and returning at 5:30 PM, for 96 commute days per year and a "
+      + "$130,000 gross annual salary?",
+  ]);
+});
+
+test("checked-in estimate snapshot contains the four approved Washington commutes", () => {
+  const snapshot = validateEstimateSnapshot(commuteEstimates);
+
+  assert.equal(snapshot.schema_version, 1);
+  assert.equal(snapshot.destination, "Washington, DC");
+  assert.deepEqual(snapshot.assumptions.weekdays, [
+    "monday", "tuesday", "wednesday", "thursday", "friday",
+  ]);
+  assert.equal(snapshot.assumptions.outbound_departure_time, "08:30:00");
+  assert.equal(snapshot.assumptions.return_departure_time, "17:30:00");
+  assert.equal(snapshot.assumptions.planned_annual_commute_days, 240);
+  assert.deepEqual(
+    snapshot.estimates.map(({ id }) => id),
+    ["dumfries", "springfield-franconia", "leesburg", "i66-west"],
+  );
+  assert.deepEqual(snapshot.estimates.map(({ outbound, return: returnTrip }) => [
+    outbound.origin_point_id,
+    outbound.destination_point_id,
+    returnTrip.origin_point_id,
+    returnTrip.destination_point_id,
+  ]), [
+    ["i95:218NO", "i95:224ND", "i95:2232SO", "i95:217SD"],
+    ["i95:206NO", "i95:224ND", "i95:2232SO", "i95:206SD"],
+    ["greenway:1:entry:EB", "i66:16:exit:EB", "i66:16:entry:WB", "greenway:1:exit:WB"],
+    ["i66:1:entry:EB", "i66:16:exit:EB", "i66:16:entry:WB", "i66:1:exit:WB"],
+  ]);
+  for (const estimate of snapshot.estimates) {
+    assert.match(formatAnnualToll(estimate.scenarios.p50.annual_toll_usd), /^\$[\d,]+\/yr$/);
+    assert.ok(Number(estimate.scenarios.p25.annual_toll_usd) <= Number(estimate.scenarios.p50.annual_toll_usd));
+    assert.ok(Number(estimate.scenarios.p50.annual_toll_usd) <= Number(estimate.scenarios.p90.annual_toll_usd));
+  }
+});
+
+test("estimate validation rejects malformed or unsafe map data", () => {
+  assert.throws(() => validateEstimateSnapshot({}), /invalid commute estimate snapshot/);
+  assert.throws(
+    () => validateEstimateSnapshot({ ...commuteEstimates, estimates: commuteEstimates.estimates.slice(1) }),
+    /invalid commute estimate snapshot/,
+  );
+  assert.throws(
+    () => validateEstimateSnapshot({
+      ...commuteEstimates,
+      estimates: commuteEstimates.estimates.map((estimate, index) => index
+        ? estimate
+        : { ...estimate, coordinates: ["secret", 38.5] }),
+    }),
+    /invalid commute estimate snapshot/,
+  );
 });
