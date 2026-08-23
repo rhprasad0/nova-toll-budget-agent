@@ -1,6 +1,8 @@
 import { renderAssistantMarkdown } from "./assets/chat-markdown.mjs";
 
 const TOOL_STATUSES = new Set(["running", "completed", "failed"]);
+export const MAX_RAW_EVENT_LOG_CHARS = 64 * 1024;
+const RAW_EVENT_LOG_TRUNCATED = "… older events omitted …\n";
 export const STARTER_PROMPTS = Object.freeze([
   "What is the current price from Dumfries to Washington?",
   "What is my take-home pay commuting from Leesburg to Washington on Monday and Friday, "
@@ -73,11 +75,42 @@ const newTurn = (transcript) => {
   details.append(summary, raw);
   article.append(activities, answer, details);
   transcript.append(article);
-  return { article, activities, answer, raw, items: new Map(), text: "" };
+  return {
+    article, activities, answer, raw, items: new Map(), renderFrame: null, text: "",
+  };
 };
 
-const applyEvent = (view, event) => {
-  view.raw.textContent += `${JSON.stringify(event, null, 2)}\n`;
+const appendRawEvent = (raw, event) => {
+  const wasTruncated = raw.textContent.startsWith(RAW_EVENT_LOG_TRUNCATED);
+  const current = wasTruncated
+    ? raw.textContent.slice(RAW_EVENT_LOG_TRUNCATED.length)
+    : raw.textContent;
+  const next = `${current}${JSON.stringify(event, null, 2)}\n`;
+  raw.textContent = !wasTruncated && next.length <= MAX_RAW_EVENT_LOG_CHARS
+    ? next
+    : RAW_EVENT_LOG_TRUNCATED
+      + next.slice(-(MAX_RAW_EVENT_LOG_CHARS - RAW_EVENT_LOG_TRUNCATED.length));
+};
+
+const flushMarkdown = (view) => {
+  view.renderFrame = null;
+  view.answer.innerHTML = renderAssistantMarkdown(view.text);
+  view.article.scrollIntoView({ block: "end" });
+};
+
+const cancelMarkdown = (view) => {
+  if (view.renderFrame !== null) cancelAnimationFrame(view.renderFrame);
+  view.renderFrame = null;
+};
+
+const queueMarkdown = (view) => {
+  if (view.renderFrame === null) {
+    view.renderFrame = requestAnimationFrame(() => flushMarkdown(view));
+  }
+};
+
+export const applyEvent = (view, event) => {
+  appendRawEvent(view.raw, event);
   for (const tool of event.tool_updates || []) {
     let item = view.items.get(tool.index);
     if (!item) {
@@ -90,15 +123,8 @@ const applyEvent = (view, event) => {
     item.children[0].textContent = tool.label;
     item.children[1].textContent = tool.status[0].toUpperCase() + tool.status.slice(1);
   }
-  if (event.text_delta !== undefined) {
-    view.text += event.text_delta;
-    view.answer.innerHTML = renderAssistantMarkdown(view.text);
-  }
-  if (event.final) {
-    view.text = event.final.text;
-    view.answer.innerHTML = renderAssistantMarkdown(view.text);
-  }
   if (event.type === "error") {
+    cancelMarkdown(view);
     for (const item of view.items.values()) {
       if (item.dataset.status === "running") {
         item.dataset.status = "failed";
@@ -107,6 +133,19 @@ const applyEvent = (view, event) => {
     }
     view.answer.textContent = event.message;
     view.answer.classList.add("error");
+    view.article.scrollIntoView({ block: "end" });
+    return;
+  }
+  if (event.final) {
+    cancelMarkdown(view);
+    view.text = event.final.text;
+    flushMarkdown(view);
+    return;
+  }
+  if (event.text_delta !== undefined) {
+    view.text += event.text_delta;
+    queueMarkdown(view);
+    return;
   }
   view.article.scrollIntoView({ block: "end" });
 };
