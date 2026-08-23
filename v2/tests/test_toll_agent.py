@@ -464,15 +464,49 @@ def test_agent_uses_luna_ssm_and_explicit_prompt_cache(monkeypatch):
     )
     model = toll_agent._build_model()
     request = model._format_request(
-        messages=[{"role": "user", "content": [{"text": "price this"}]}],
+        messages=[
+            {"role": "user", "content": [{"text": "price this"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "toolUse": {
+                            "toolUseId": "tool-1",
+                            "name": "get_annual_toll_ballpark",
+                            "input": {"gross_annual_income_usd": "130000.00"},
+                        }
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "toolResult": {
+                            "toolUseId": "tool-1",
+                            "status": "success",
+                            "content": [{"json": {"remaining_income_usd": "78824.40"}}],
+                        }
+                    }
+                ],
+            },
+        ],
         tool_specs=[],
         system_prompt="developer prompt",
+        model_state={"response_id": "response-before-tool-output"},
     )
 
     assert calls == [{"Name": "/nova-toll/openai_api_key", "WithDecryption": True}]
     assert model.get_config().get("model_id") == "gpt-5.6-luna"
     assert request["prompt_cache_key"] == "tollchat-agent-v2"
     assert request["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+    assert request["store"] is False
+    assert "previous_response_id" not in request
+    assert [
+        item["type"]
+        for item in request["input"]
+        if item.get("type") in {"function_call", "function_call_output"}
+    ] == ["function_call", "function_call_output"]
     assert request["input"][0]["content"][0]["text"] == "developer prompt"
     assert "test-key" not in json.dumps(request)
 

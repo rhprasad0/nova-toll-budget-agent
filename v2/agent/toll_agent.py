@@ -195,7 +195,7 @@ def _build_model() -> _CachedResponsesModel:
             "prompt_cache_key": "tollchat-agent-v2",
             "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
         },
-        stateful=True,
+        stateful=False,
     )
 
 
