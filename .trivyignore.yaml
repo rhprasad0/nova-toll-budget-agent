@@ -1,5 +1,9 @@
 misconfigurations:
   - id: AVD-AWS-0104
+    paths: [v2/infra/agentcore.tf]
+    statement: The runtime must reach the public OpenAI API over HTTPS.
+    expired_at: 2027-02-13
+  - id: AVD-AWS-0104
     paths: [v1/infra/network.tf]
     statement: The Tailscale exit node must forward peer-selected internet traffic.
     expired_at: 2027-02-13

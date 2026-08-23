@@ -107,6 +107,20 @@ def test_v2_agent_packages_are_required_for_real_deployments():
     assert build.exists()
 
 
+def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
+    ignores = (REPO_ROOT / ".trivyignore.yaml").read_text()
+    exception = """  - id: AVD-AWS-0104
+    paths: [v2/infra/agentcore.tf]
+    statement: The runtime must reach the public OpenAI API over HTTPS.
+    expired_at: 2027-02-13"""
+    assert exception in ignores
+    assert (
+        """  - id: AVD-AWS-0104
+    paths: [v1/infra/agentcore.tf]"""
+        not in ignores
+    )
+
+
 def test_eventbridge_has_both_failure_paths_and_bounded_retries():
     assert 'detail-type = ["Object Created"]' in MAIN_TF
     assert '{ prefix = "raw/feed=i95/" }' in MAIN_TF
