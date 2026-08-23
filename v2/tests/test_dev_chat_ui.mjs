@@ -27,18 +27,30 @@ const stream = (...chunks) => new ReadableStream({
   },
 });
 
-const fakeView = () => ({
-  activities: { append() {} },
-  answer: { classList: { add() {} }, innerHTML: "", textContent: "" },
-  article: {
-    scrolls: 0,
-    scrollIntoView() { this.scrolls += 1; },
-  },
-  items: new Map(),
-  raw: { textContent: "" },
-  renderFrame: null,
-  text: "",
-});
+const fakeView = () => {
+  const raw = {
+    value: "",
+    writes: 0,
+    get textContent() { return this.value; },
+    set textContent(value) { this.value = value; this.writes += 1; },
+  };
+  return {
+    activities: { append() {} },
+    answer: { classList: { add() {} }, innerHTML: "", textContent: "" },
+    article: {
+      scrolls: 0,
+      scrollIntoView() { this.scrolls += 1; },
+    },
+    details: { open: false },
+    items: new Map(),
+    raw,
+    rawChars: 0,
+    rawEvents: [],
+    rawTruncated: false,
+    renderFrame: null,
+    text: "",
+  };
+};
 
 test("consumes split NDJSON events through one terminal result", async () => {
   const seen = [];
@@ -78,14 +90,22 @@ test("bounds raw events and batches streamed Markdown into one animation frame",
   globalThis.cancelAnimationFrame = (id) => frames.delete(id);
 
   try {
-    const oversized = fakeView();
-    applyEvent(oversized, {
-      type: "event",
-      sequence: 0,
-      event: { payload: "x".repeat(MAX_RAW_EVENT_LOG_CHARS * 2) },
-    });
-    assert.equal(oversized.raw.textContent.length, MAX_RAW_EVENT_LOG_CHARS);
-    assert.match(oversized.raw.textContent, /^… older events omitted …\n/);
+    const closed = fakeView();
+    for (let sequence = 0; sequence < 100; sequence += 1) {
+      applyEvent(closed, {
+        type: "event",
+        sequence,
+        event: { payload: "x".repeat(1024) },
+      });
+    }
+    assert.equal(closed.raw.writes, 0);
+    assert.equal(closed.raw.textContent, "");
+    assert.ok(closed.rawChars < MAX_RAW_EVENT_LOG_CHARS);
+    closed.details.open = true;
+    applyEvent(closed, { type: "event", sequence: 100, event: {} });
+    assert.equal(closed.raw.writes, 1);
+    assert.equal(closed.raw.textContent.length, MAX_RAW_EVENT_LOG_CHARS);
+    assert.match(closed.raw.textContent, /^… older events omitted …\n/);
 
     const streaming = fakeView();
     applyEvent(streaming, {

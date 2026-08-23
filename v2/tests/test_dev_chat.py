@@ -46,9 +46,9 @@ class _Result:
 
 
 class _Agent:
-    def __init__(self, number, trace_attributes):
+    def __init__(self, number, factory_kwargs):
         self.number = number
-        self.trace_attributes = trace_attributes
+        self.factory_kwargs = factory_kwargs
 
     async def stream_async(self, prompt):
         yield {"init_event_loop": True}
@@ -88,8 +88,8 @@ class _Factory:
     def __init__(self):
         self.agents = []
 
-    def __call__(self, *, trace_attributes):
-        agent = _Agent(len(self.agents) + 1, trace_attributes)
+    def __call__(self, **kwargs):
+        agent = _Agent(len(self.agents) + 1, kwargs)
         self.agents.append(agent)
         return agent
 
@@ -133,7 +133,7 @@ def test_streams_raw_events_text_tools_result_and_reuses_session():
     second = asyncio.run(_collect(app, message="again"))
     assert second[1]["text_delta"].startswith("1:")
     assert len(factory.agents) == 1
-    assert factory.agents[0].trace_attributes == {"tollchat.session_id": "browser"}
+    assert factory.agents[0].factory_kwargs == {}
 
 
 def test_reset_and_new_york_date_create_fresh_agents(monkeypatch):
@@ -170,6 +170,7 @@ def test_agent_failure_emits_one_safe_terminal_error(caplog):
         "message": "Agent request failed. Check the server log.",
     }
     assert "secret failure details" in caplog.text
+    assert "browser" not in caplog.text
 
 
 def test_agent_construction_failure_emits_one_safe_terminal_error(caplog):
@@ -199,7 +200,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         page = urllib.request.urlopen(base_url, timeout=2)
         assert page.headers["Cache-Control"] == "no-store"
         html = page.read().decode()
-        assert "TollChat does not collect browser traces or analytics" in html
+        assert "TollChat does not collect user traces or analytics" in html
         assert "996 of 1,000" in html
         assert "TollChat checks its route and pricing data" in html
         assert "If the data isn't there, it says so" in html
@@ -232,6 +233,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "99.6%" in faq
         assert "93.1%" in faq
         assert "one frozen" in faq
+        assert "not attached to traces or logs" in faq
         estimates = json.load(
             urllib.request.urlopen(
                 f"{base_url}/assets/commute-estimates.json", timeout=2

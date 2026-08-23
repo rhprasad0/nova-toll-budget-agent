@@ -154,7 +154,7 @@ class DevChat:
                         return
             raise RuntimeError("agent stream ended without a result")
         except Exception:
-            logger.exception("agent request failed session_id=%s", session)
+            logger.exception("agent request failed")
             yield {
                 "type": "error",
                 "sequence": sequence,
@@ -171,9 +171,7 @@ class DevChat:
             today = _new_york_date()
             if session_id not in self.sessions or self.sessions[session_id][2] != today:
                 self.sessions[session_id] = (
-                    self.agent_factory(
-                        trace_attributes={"tollchat.session_id": session_id}
-                    ),
+                    self.agent_factory(),
                     threading.Lock(),
                     today,
                 )

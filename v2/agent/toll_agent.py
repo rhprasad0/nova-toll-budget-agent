@@ -322,12 +322,10 @@ def build_system_prompt(
 def build_agent(
     *,
     prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
-    trace_attributes: dict[str, str] | None = None,
     hooks: list[object] | None = None,
 ) -> Agent:
     system_prompt = build_system_prompt(prompt_points)
     trace_attributes = {
-        **(trace_attributes or {}),
         "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
         "tollchat.system_prompt_renderer_version": SYSTEM_PROMPT_RENDERER_VERSION,
         "tollchat.system_prompt_sha256": sha256(system_prompt.encode()).hexdigest(),

@@ -75,21 +75,53 @@ const newTurn = (transcript) => {
   details.append(summary, raw);
   article.append(activities, answer, details);
   transcript.append(article);
-  return {
-    article, activities, answer, raw, items: new Map(), renderFrame: null, text: "",
+  const view = {
+    article,
+    activities,
+    answer,
+    details,
+    raw,
+    rawChars: 0,
+    rawEvents: [],
+    rawTruncated: false,
+    items: new Map(),
+    renderFrame: null,
+    text: "",
   };
+  details.addEventListener("toggle", () => {
+    raw.textContent = details.open
+      ? `${view.rawTruncated ? RAW_EVENT_LOG_TRUNCATED : ""}${view.rawEvents.join("")}`
+      : "";
+  });
+  return view;
 };
 
-const appendRawEvent = (raw, event) => {
-  const wasTruncated = raw.textContent.startsWith(RAW_EVENT_LOG_TRUNCATED);
-  const current = wasTruncated
-    ? raw.textContent.slice(RAW_EVENT_LOG_TRUNCATED.length)
-    : raw.textContent;
-  const next = `${current}${JSON.stringify(event, null, 2)}\n`;
-  raw.textContent = !wasTruncated && next.length <= MAX_RAW_EVENT_LOG_CHARS
-    ? next
-    : RAW_EVENT_LOG_TRUNCATED
-      + next.slice(-(MAX_RAW_EVENT_LOG_CHARS - RAW_EVENT_LOG_TRUNCATED.length));
+const appendRawEvent = (view, event) => {
+  const line = `${JSON.stringify(event, null, 2)}\n`;
+  view.rawEvents.push(line);
+  view.rawChars += line.length;
+  if (view.rawTruncated || view.rawChars > MAX_RAW_EVENT_LOG_CHARS) {
+    view.rawTruncated = true;
+    let overflow = view.rawChars
+      - (MAX_RAW_EVENT_LOG_CHARS - RAW_EVENT_LOG_TRUNCATED.length);
+    // ponytail: Array.shift stays bounded by the 64 KiB log cap.
+    while (overflow > 0) {
+      const first = view.rawEvents[0];
+      if (first.length <= overflow) {
+        view.rawEvents.shift();
+        view.rawChars -= first.length;
+        overflow -= first.length;
+      } else {
+        view.rawEvents[0] = first.slice(overflow);
+        view.rawChars -= overflow;
+        overflow = 0;
+      }
+    }
+  }
+  if (view.details.open) {
+    view.raw.textContent = `${view.rawTruncated ? RAW_EVENT_LOG_TRUNCATED : ""}`
+      + view.rawEvents.join("");
+  }
 };
 
 const flushMarkdown = (view) => {
@@ -110,7 +142,7 @@ const queueMarkdown = (view) => {
 };
 
 export const applyEvent = (view, event) => {
-  appendRawEvent(view.raw, event);
+  appendRawEvent(view, event);
   for (const tool of event.tool_updates || []) {
     let item = view.items.get(tool.index);
     if (!item) {
