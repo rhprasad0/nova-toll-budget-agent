@@ -1,0 +1,36 @@
+TollChat privacy notice
+Effective August 23, 2026
+
+Who operates TollChat
+
+Benevolent Clankers LLC operates TollChat. Send privacy questions or requests to contact@tollchat.ai.
+
+What TollChat receives
+
+TollChat receives the text you submit, which may include trip locations, travel times, commute schedules, and salary figures. It also receives the responses and tool results needed to answer you.
+
+TollChat does not create user accounts. A random ID stored in your browser's session storage keeps follow-up messages together and normally remains until that browser session ends. TollChat keeps the active conversation and its corresponding ID in the ephemeral microVM's memory. Starting a new chat removes the active conversation from TollChat's server memory. Server state disappears when the microVM stops or the server starts a new daily session. TollChat does not intentionally write conversations or the tab ID to disk or attach the tab ID to traces or logs. Starting a new chat does not change OpenAI's retention described below.
+
+Do not submit names, exact home or work addresses, account numbers, payment information, credentials, or other personal or confidential information.
+
+Usage statistics
+
+TollChat may collect limited usage statistics, such as counts of page views, chat requests, completed responses, and errors, to measure adoption and reliability. These statistics will not include chat text, trip details, salary figures, the tab session ID, or advertising identifiers. TollChat will not sell this data or use it for targeted advertising.
+
+Before usage-statistics collection starts, this notice will identify the analytics provider, the exact event fields, and how long the data will be kept.
+
+Service providers
+
+OpenAI receives prompts, conversation context, and responses to provide the AI portion of TollChat. TollChat uses the stateful OpenAI Responses API. OpenAI retains Responses API application state for at least 30 days. It also keeps abuse-monitoring logs, which may include prompts, responses, and related metadata, for up to 30 days by default. OpenAI may keep those logs longer when required by law or needed to protect its services or others from harm. OpenAI states that API data is not used to train its models unless the API customer opts in.
+
+We accepted OpenAI's standard retention and abuse monitoring as a tradeoff to keep TollChat free to use. See https://developers.openai.com/api/docs/guides/your-data.
+
+The map loads styles and tiles directly from OpenFreeMap. OpenFreeMap states that it keeps anonymized request logs without IP addresses and may temporarily record IP addresses for up to 30 days during a security incident. See https://openfreemap.org/privacy/.
+
+Links to toll operators, VDOT, GitHub, OpenAI, and other sites are governed by those sites' privacy policies when you visit them.
+
+Requests and changes
+
+TollChat has no accounts or stable user identity, so it may not be able to locate records associated with a particular visitor. Send privacy questions or requests to contact@tollchat.ai.
+
+This notice may change as TollChat changes. The effective date above will be updated when it does.

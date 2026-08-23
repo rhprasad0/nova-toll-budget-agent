@@ -150,8 +150,8 @@ export const coverageCoordinates = (location) => (
 
 export function coverageDetail(location) {
   if (isTp1(location)) return {
-    kicker: "Supported access",
-    title: "I-495/I-95 Near Van Dorn Street",
+    kicker: "Supported route point",
+    title: "I-495/I-95 near Van Dorn Street",
     paragraphs: ["Northbound entrance · Southbound exit"],
   };
   const names = new Map();
@@ -166,7 +166,7 @@ export function coverageDetail(location) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([label, accesses]) => [label, [...accesses].sort().join(" · ")]);
   return {
-    kicker: "Supported access",
+    kicker: "Supported route point",
     title: rows.length === 1 ? rows[0][0] : "Names at this location",
     paragraphs: rows.length === 1
       ? [rows[0][1]]
@@ -244,9 +244,9 @@ export async function mountCommuteMap() {
     selected = marker;
     marker.dataset.selected = "true";
   };
-  const showGuide = () => setDetail(detail, "Map guide", "Choose a commute or entry/exit pin", [
-    "Large pins show historical P50 annual toll ballparks to Washington.",
-    "Small pins show the names and directions TollChat supports for route questions.",
+  const showGuide = () => setDetail(detail, "Map guide", "Select a commute, entrance, or exit", [
+    "Large pins show historical P50 annual toll estimates for commutes to Washington.",
+    "Small pins show the place names and directions TollChat supports in route questions.",
     `Estimate snapshot generated ${new Date(snapshot.generated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}.`,
   ]);
   const selectEstimate = (estimate, marker) => {
@@ -255,7 +255,7 @@ export async function mountCommuteMap() {
     setDetail(detail, "Annual toll ballpark", `${estimate.label} → Washington, DC`, [
       `P25 ${formatAnnualToll(scenarios.p25.annual_toll_usd)} · P50 ${formatAnnualToll(scenarios.p50.annual_toll_usd)} · P90 ${formatAnnualToll(scenarios.p90.annual_toll_usd)}`,
       `${evidence.complete_pair_count} of ${evidence.eligible_date_count} eligible recent weekdays had complete round-trip evidence (${evidence.coverage_percent}% coverage).`,
-      "Tolls only. Two-axle E-ZPass, 240 commute days; historical ballpark, not a forecast or operator quote.",
+      "This historical ballpark covers tolls for a 2-axle E-ZPass vehicle over 240 commute days. It is not a forecast or a quote from a toll operator.",
     ]);
   };
   const selectCoverage = (location, marker) => {

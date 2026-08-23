@@ -167,7 +167,7 @@ def test_agent_failure_emits_one_safe_terminal_error(caplog):
     assert events[-1] == {
         "type": "error",
         "sequence": 1,
-        "message": "Agent request failed. Check the server log.",
+        "message": "TollChat couldn't complete the request. Check the server log.",
     }
     assert "secret failure details" in caplog.text
     assert "browser" not in caplog.text
@@ -183,7 +183,7 @@ def test_agent_construction_failure_emits_one_safe_terminal_error(caplog):
         {
             "type": "error",
             "sequence": 0,
-            "message": "Agent request failed. Check the server log.",
+            "message": "TollChat couldn't complete the request. Check the server log.",
         }
     ]
     assert "startup secret details" in caplog.text
@@ -200,21 +200,41 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         page = urllib.request.urlopen(base_url, timeout=2)
         assert page.headers["Cache-Control"] == "no-store"
         html = page.read().decode()
-        assert "TollChat does not collect user traces or analytics" in html
-        assert "996 of 1,000" in html
-        assert "TollChat checks its route and pricing data" in html
-        assert "If the data isn't there, it says so" in html
-        assert "stuck to the numbers in the data" in html
-        assert "The test used just one commute example" in html
+        assert "may collect limited usage statistics" in html
+        assert "OpenAI receives prompts and responses" in html
+        assert "retains Responses API data for at least 30 days" in html
+        assert "monitors for abuse" in html
+        assert "tradeoff to keep TollChat free to use" in html
+        assert "https://developers.openai.com/api/docs/guides/your-data" in html
+        assert "reasonable tax and vehicle-cost assumptions" in html
+        assert "rough take-home-pay estimate" in html
+        assert "We observed no fabricated costs in our 1,000-answer test" in html
+        assert (
+            "Toll and take-home-pay figures come from code, not AI arithmetic" in html
+        )
+        assert "996 responses (99.6%) used only supplied numbers" in html
         assert "constrained route and pricing tools" not in html
         assert "supplied tool evidence under the strict policy" not in html
         assert "contact@tollchat.ai" in html
+        assert "not affiliated with VDOT or any toll operator" in html
+        assert "VDOT SmarterRoads" in html
+        assert "https://smarterroads.vdot.virginia.gov/faq" in html
+        assert 'href="/privacy.txt"' in html
+        assert 'href="/terms.txt"' in html
+        assert "Do not submit names, exact home or work addresses" in html
+        assert "not a navigation or emergency service" in html
+        assert "2026 Benevolent Clankers LLC" in html
+        assert "TollChat name and branding reserved" in html
+        assert "blob/main/LICENSE" in html
         assert 'href="/faq.html#hallucinations-title"' in html
+        assert 'href="/faq.html#take-home-title"' in html
         assert "What is the current price from Dumfries to Washington?" in html
         assert "$130,000 gross annual salary" in html
-        assert "Strands event inspector" in html
+        assert "general information only" in html
+        assert "financial or employment decisions" in html
+        assert "Strands events" not in html
         assert 'id="reset-map"' in html
-        assert "Small pins show supported entries and exits" in html
+        assert "Small pins mark supported entrances and exits" in html
         assert "price unavailable" not in html.lower()
         assert "data-facility" not in html
         assert (
@@ -229,11 +249,45 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
             "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6"
         )
         faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
-        assert "How TollChat estimates a commute" in faq
+        assert "How TollChat estimates commute costs" in faq
         assert "99.6%" in faq
         assert "93.1%" in faq
         assert "one frozen" in faq
-        assert "not attached to traces or logs" in faq
+        assert (
+            "Pricing tools calculate its toll and take-home-pay figures in code" in faq
+        )
+        assert "best-effort estimates" in faq
+        assert "not for financial planning, salary or job negotiations" in faq
+        assert "330 origin-destination (OD) pairs" in faq
+        assert "mean absolute error of $0.106, compared with $0.154" in faq
+        assert "largest error was $8.05" in faq
+        assert "may collect limited usage statistics" in faq
+        assert "analytics provider, the event fields" in faq
+        assert "OpenAI receives prompts and responses" in faq
+        assert "monitors for abuse" in faq
+        assert "tradeoff to keep TollChat free to use" in faq
+        assert "https://developers.openai.com/api/docs/guides/your-data" in faq
+        assert "OpenFreeMap" in faq
+        assert "2026 Benevolent Clankers LLC" in faq
+        assert "TollChat name and branding reserved" in faq
+        assert "general information only" in faq
+        privacy_response = urllib.request.urlopen(f"{base_url}/privacy.txt", timeout=2)
+        assert privacy_response.headers.get_content_type() == "text/plain"
+        privacy = privacy_response.read().decode()
+        assert "TollChat privacy notice" in privacy
+        assert "Starting a new chat does not change OpenAI's retention" in privacy
+        assert "abuse monitoring as a tradeoff to keep TollChat free to use" in privacy
+        assert "https://developers.openai.com/api/docs/guides/your-data" in privacy
+        assert "will not sell this data or use it for targeted advertising" in privacy
+        assert "https://openfreemap.org/privacy/" in privacy
+        terms_response = urllib.request.urlopen(f"{base_url}/terms.txt", timeout=2)
+        assert terms_response.headers.get_content_type() == "text/plain"
+        terms = terms_response.read().decode()
+        assert "TollChat terms" in terms
+        assert "not a navigation or emergency service" in terms
+        assert "provided as is and as available" in terms
+        assert "https://smarterroads.vdot.virginia.gov/termsOfService" in terms
+        assert "does not attach that ID to traces or logs" in faq
         estimates = json.load(
             urllib.request.urlopen(
                 f"{base_url}/assets/commute-estimates.json", timeout=2
