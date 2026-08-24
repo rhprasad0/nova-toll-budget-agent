@@ -20,6 +20,7 @@ V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
 V1_LAMBDA = (REPO_ROOT / "v1" / "infra" / "lambda.tf").read_text()
 V1_IAM = (REPO_ROOT / "v1" / "infra" / "iam.tf").read_text()
 V1_AGENTCORE = (REPO_ROOT / "v1" / "infra" / "agentcore.tf").read_text()
+DEPLOYMENT = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
 
 
 def test_v1_loader_is_retired_but_eventbridge_remains():
@@ -98,10 +99,10 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
     )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
     assert "ignore_changes = [reserved_concurrent_executions]" in proxy
+    assert "aws_iam_role_policy.tollchat_proxy" in proxy
 
-    deployment = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
-    assert "put-function-concurrency" in deployment
-    assert "--reserved-concurrent-executions 5" in deployment
+    assert "put-function-concurrency" in DEPLOYMENT
+    assert "--reserved-concurrent-executions 5" in DEPLOYMENT
 
 
 def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
@@ -183,6 +184,8 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
         1
     ].split('resource "aws_iam_role_policy" "usage_publisher"', maxsplit=1)[0]
     assert 'actions   = ["dynamodb:GetItem"]' in policy
+    assert 'variable = "dynamodb:LeadingKeys"' in policy
+    assert 'values   = ["usage#all"]' in policy
     assert 'actions   = ["s3:PutObject"]' in policy
     assert "${aws_s3_bucket.site.arn}/usage.json" in policy
     assert 'actions   = ["kms:Encrypt", "kms:GenerateDataKey"]' in policy
@@ -193,6 +196,25 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
         'data "aws_iam_policy_document" "tollchat_proxy"', maxsplit=1
     )[1].split('resource "aws_iam_role_policy" "tollchat_proxy"', maxsplit=1)[0]
     assert '"dynamodb:TransactWriteItems"' in proxy_policy
+
+
+def test_first_usage_rollout_stages_permissions_and_private_smoke_traffic():
+    v1_apply = DEPLOYMENT.index("build/usage-permissions.tfplan")
+    v2_prerequisites = DEPLOYMENT.index("build/usage-prerequisites.tfplan")
+    release = DEPLOYMENT.index("build/release.tfplan")
+    assert v1_apply < v2_prerequisites < release
+    assert DEPLOYMENT.count("dynamodb:TransactWriteItems") >= 2
+    assert "tollchat_usage_optout=1" in DEPLOYMENT
+    assert "--consistent-read" in DEPLOYMENT
+    assert "must be unchanged" in DEPLOYMENT
+
+
+def test_metrics_aware_rollback_preserves_the_aggregate():
+    rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
+    assert "events disable-rule" in rollback
+    assert "usage publisher" in rollback
+    assert "usage#all" in rollback
+    assert re.search(r"proxy and\s+public site together", rollback)
 
 
 def test_v2_agent_packages_are_required_for_real_deployments():

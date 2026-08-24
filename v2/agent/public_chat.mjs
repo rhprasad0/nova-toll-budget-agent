@@ -118,11 +118,11 @@ export const usageProofText = (snapshot, now = Date.now()) => {
   if (!Number.isFinite(started) || !Number.isFinite(asOf) || started > asOf
     || asOf > now + 5 * 60_000 || now - asOf > 48 * 60 * 60_000) return null;
   const format = new Intl.DateTimeFormat("en-US", {
-    month: "long", day: "numeric", timeZone: "UTC",
+    year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
   });
   const sessions = snapshot.engaged_sessions === 1 ? "session" : "sessions";
   const responses = snapshot.completed_responses === 1 ? "response" : "responses";
-  return `Since ${format.format(started)}, ${snapshot.engaged_sessions} counted anonymous chat ${sessions} sent a message and received ${snapshot.completed_responses} completed ${responses}. Updated daily; last updated ${format.format(asOf)}.`;
+  return `Since ${format.format(started)}, ${snapshot.engaged_sessions} counted anonymous chat ${sessions} sent a message. TollChat completed ${snapshot.completed_responses} ${responses}. Updated daily; last updated ${format.format(asOf)}.`;
 };
 
 const newTurn = (transcript) => {

@@ -58,7 +58,7 @@ def publish_usage(
     bucket: str,
     kms_key_arn: str,
     now: datetime,
-) -> dict[str, object]:
+) -> dict[str, object] | None:
     """Read the permanent aggregate and replace the public static snapshot."""
     if now.tzinfo is None:
         raise ValueError("publication time must include a timezone")
@@ -67,7 +67,9 @@ def publish_usage(
         Key={"credential_hash": {"S": _AGGREGATE_KEY}},
         ConsistentRead=True,
     )
-    engaged, completed, started = _usage_aggregate(response.get("Item"))
+    if "Item" not in response:
+        return None
+    engaged, completed, started = _usage_aggregate(response["Item"])
     snapshot: dict[str, object] = {
         "schema_version": 1,
         "collection_started_on": started.date().isoformat(),
@@ -87,7 +89,7 @@ def publish_usage(
     return snapshot
 
 
-def handler(event: object, context: object) -> dict[str, object]:
+def handler(event: object, context: object) -> dict[str, object] | None:
     del event, context
     return publish_usage(
         dynamodb=cast(

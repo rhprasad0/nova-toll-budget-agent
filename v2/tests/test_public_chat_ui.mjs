@@ -154,7 +154,7 @@ test("usage proof accepts only current nonnegative cumulative snapshots", () => 
 
   assert.equal(
     usageProofText(snapshot, now),
-    "Since August 24, 12 counted anonymous chat sessions sent a message and received 34 completed responses. Updated daily; last updated August 25.",
+    "Since August 24, 2026, 12 counted anonymous chat sessions sent a message. TollChat completed 34 responses. Updated daily; last updated August 25, 2026.",
   );
   assert.equal(usageProofText({ ...snapshot, engaged_sessions: -1 }, now), null);
   assert.equal(usageProofText({ ...snapshot, engaged_sessions: 1.5 }, now), null);

@@ -167,6 +167,12 @@ data "aws_iam_policy_document" "usage_publisher" {
   statement {
     actions   = ["dynamodb:GetItem"]
     resources = [aws_dynamodb_table.tollchat_sessions.arn]
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "dynamodb:LeadingKeys"
+      values   = ["usage#all"]
+    }
   }
 
   statement {

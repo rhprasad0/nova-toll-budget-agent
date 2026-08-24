@@ -84,18 +84,32 @@ def test_publish_writes_exact_static_snapshot_and_metadata():
     assert json.loads(body) == snapshot
 
 
+def test_publish_is_a_noop_before_the_first_counted_session() -> None:
+    s3 = S3()
+
+    assert (
+        handler.publish_usage(
+            dynamodb=DynamoDb(None),
+            s3=s3,
+            table_name="sessions",
+            bucket="site",
+            kms_key_arn="kms-arn",
+            now=datetime(2026, 8, 25, 5, 15, tzinfo=UTC),
+        )
+        is None
+    )
+    assert s3.calls == []
+
+
 @pytest.mark.parametrize(
     "item",
     [
-        None,
         aggregate(engaged_sessions={"N": "-1"}),
         aggregate(completed_responses={"N": "1.5"}),
         aggregate(collection_started_at={"S": "not-a-date"}),
     ],
 )
-def test_publish_fails_closed_for_missing_or_malformed_aggregate(
-    item: Item | None,
-) -> None:
+def test_publish_fails_closed_for_malformed_aggregate(item: Item) -> None:
     with pytest.raises(ValueError, match="usage aggregate"):
         handler.publish_usage(
             dynamodb=DynamoDb(item),

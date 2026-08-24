@@ -470,6 +470,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
   depends_on = [
     aws_bedrockagentcore_resource_policy.tollchat,
     aws_cloudwatch_log_group.tollchat_proxy,
+    aws_iam_role_policy.tollchat_proxy,
     aws_iam_role_policy_attachment.tollchat_proxy_vpc,
   ]
 }
