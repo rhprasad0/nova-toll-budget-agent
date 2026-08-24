@@ -249,6 +249,11 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "omit that comparison" in normalized
     assert "data is stale or too old to use" in normalized
     assert "Do not state an observation's age" in normalized
+    assert (
+        "For an available I-495 component, treat `source_status` "
+        "`NO_DETERMINATION` as non-material source-feed metadata and do not "
+        "mention or qualify the price with it." in normalized
+    )
     assert "I-95 closure fallback offer" in prompt
     assert "`fallback_required` is `true`" in normalized
     assert "`i95_opposite_direction_open` or `i95_fully_closed`" in normalized
@@ -286,7 +291,7 @@ def test_system_prompt_matches_its_versioned_contract():
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.0" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.1" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"
