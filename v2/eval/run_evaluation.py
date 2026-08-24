@@ -383,6 +383,32 @@ def evaluate_westpark_turn(
 
     if style_error := _response_style_error(response, "response"):
         return style_error
+    components = [
+        component
+        for component in payload.get("components", [])
+        if isinstance(component, dict)
+    ]
+    folded = " ".join(response.casefold().split())
+    if any(
+        component.get("facility") == "i95_i495"
+        and component.get("source_status") == "NO_DETERMINATION"
+        for component in components
+    ) and (
+        "no_determination" in folded
+        or "no determination" in folded
+        or "source-status qualification" in folded
+        or re.search(
+            r"(?:\b(?:undetermined|inconclusive|indeterminate|unknown)\b"
+            r".{0,40}\b(?:source|status)\b|\b(?:source|status)\b.{0,40}"
+            r"\b(?:undetermined|inconclusive|indeterminate|unknown)\b)",
+            folded,
+        )
+    ):
+        return _result(
+            False,
+            "response surfaced non-material I-95/I-495 source status",
+            "spurious_source_status",
+        )
     if context_error := _component_context_error(payload, response):
         return context_error
     return _result(True, "exact route call and grounded response passed", "passed")
@@ -1237,8 +1263,10 @@ def _self_check() -> None:
             "components": [
                 {
                     "route_step_id": "step-1",
+                    "facility": "i95_i495",
                     "source_kind": "observed",
                     "price_usd": "4.80",
+                    "source_status": "SOUTHBOUND_OPEN",
                     "observed_at": "2026-08-22T10:50:00-04:00",
                     "recent_movement": {
                         "direction": "unchanged",
@@ -1254,8 +1282,10 @@ def _self_check() -> None:
                 },
                 {
                     "route_step_id": "step-2",
+                    "facility": "i95_i495",
                     "source_kind": "observed",
                     "price_usd": "11.60",
+                    "source_status": "NO_DETERMINATION",
                     "observed_at": "2026-08-22T10:50:00-04:00",
                     "recent_movement": {
                         "direction": "mixed",
@@ -1283,6 +1313,32 @@ def _self_check() -> None:
         "range $11.25-$12.30"
     )
     assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
+    assert (
+        evaluate_westpark_turn(
+            [success],
+            good_response
+            + "\n\nOne component has a NO_DETERMINATION source-status qualification.",
+            metadata,
+        )[0].label
+        == "spurious_source_status"
+    )
+    for qualification in ("inconclusive", "indeterminate", "unknown"):
+        assert (
+            evaluate_westpark_turn(
+                [success],
+                good_response + f"\n\nThe source status metadata is {qualification}.",
+                metadata,
+            )[0].label
+            == "spurious_source_status"
+        )
+    assert (
+        evaluate_westpark_turn(
+            [success],
+            good_response + "\n\n**Source status:**\n- unknown",
+            metadata,
+        )[0].label
+        == "spurious_source_status"
+    )
     assert (
         evaluate_westpark_turn([], good_response, metadata)[0].label == "tool_mismatch"
     )
