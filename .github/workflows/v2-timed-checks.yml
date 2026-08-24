@@ -69,12 +69,10 @@ jobs:
               tests/test_validate_toll_route_live.py \
               tests/test_get_annual_toll_ballpark_live.py \
               -v
-            if [[ "$TIMED_WINDOW_ID" == i95_* ]]; then
-              uv run python eval/run_evaluation.py --window "$TIMED_WINDOW_ID" | tee /tmp/tollchat-eval.txt
-              printf '\n## %s TollChat junction evaluation\n\n```text\n' "$TIMED_WINDOW_ID" >> "$GITHUB_STEP_SUMMARY"
-              cat /tmp/tollchat-eval.txt >> "$GITHUB_STEP_SUMMARY"
-              printf '```\n' >> "$GITHUB_STEP_SUMMARY"
-            fi
+            uv run python eval/run_evaluation.py --window "$TIMED_WINDOW_ID" | tee /tmp/tollchat-eval.txt
+            printf '\n## %s TollChat timed evaluation\n\n```text\n' "$TIMED_WINDOW_ID" >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/tollchat-eval.txt >> "$GITHUB_STEP_SUMMARY"
+            printf '```\n' >> "$GITHUB_STEP_SUMMARY"
           else
             status=$?
             if (( status != 3 )); then exit "$status"; fi

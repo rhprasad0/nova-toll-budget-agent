@@ -44,6 +44,10 @@ BEGIN
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
            WHERE oid =
+             'oracle.get_i66_pricing_comparisons(integer,integer,text)'::regprocedure)
+          <> 'oracle_owner'
+       OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
+           WHERE oid =
              'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure)
           <> 'oracle_owner'
        OR (SELECT pg_get_userbyid(proowner) FROM pg_catalog.pg_proc
@@ -85,6 +89,9 @@ BEGIN
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.validate_pricing_route(text,text)'::regprocedure)
+       OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
+               WHERE oid =
+                 'oracle.get_i66_pricing_comparisons(integer,integer,text)'::regprocedure)
        OR NOT (SELECT prosecdef FROM pg_catalog.pg_proc
                WHERE oid =
                  'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure)
@@ -189,7 +196,7 @@ BEGIN
     INTO i66_pricing_function
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
-        'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure;
+        'oracle.get_i66_pricing_comparisons(integer,integer,text)'::regprocedure;
     IF i66_pricing_function.provolatile <> 's'
        OR i66_pricing_function.proconfig IS DISTINCT FROM
           ARRAY['search_path=pg_catalog, pg_temp']::text[] THEN
@@ -270,6 +277,8 @@ BEGIN
               WHERE procedure.oid IN (
                   'oracle.validate_toll_route(text,text)'::regprocedure,
                   'oracle.validate_pricing_route(text,text)'::regprocedure,
+                  'oracle.i66_tolling_active(text,timestamp)'::regprocedure,
+                  'oracle.get_i66_pricing_comparisons(integer,integer,text)'::regprocedure,
                   'oracle.get_i66_pricing_comparisons(integer,integer)'::regprocedure,
                   'oracle.get_i95_i495_pricing_comparisons(integer)'::regprocedure,
                   'oracle.get_toll_route_prompt_points()'::regprocedure,
@@ -280,6 +289,7 @@ BEGIN
                   'oracle.get_priced_route_distance_miles(jsonb)'::regprocedure,
                   'oracle.validate_ballpark_sample_request(time,date[],timestamptz)'::regprocedure,
                   'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)'::regprocedure,
+                  'oracle.get_i66_ballpark_samples(integer,integer,text,time,date[],timestamptz)'::regprocedure,
                   'oracle.get_i95_i495_ballpark_samples(integer,time,date[],timestamptz)'::regprocedure,
                   'oracle.get_annual_ballpark_summary(jsonb,time,time,date[],jsonb,integer,timestamptz)'::regprocedure
               )
@@ -301,7 +311,7 @@ BEGIN
     WHERE namespace.nspname = 'oracle'
       AND has_function_privilege('pricing_caller', procedure.oid, 'EXECUTE');
     IF agent_executable_count <> 2
-       OR pricing_executable_count <> 8
+       OR pricing_executable_count <> 9
        OR NOT has_function_privilege(
            'tollchat_agent', 'oracle.validate_toll_route(text,text)', 'EXECUTE'
        )
@@ -321,6 +331,11 @@ BEGIN
        OR NOT has_function_privilege(
            'pricing_caller',
            'oracle.validate_pricing_route(text,text)',
+           'EXECUTE'
+       )
+       OR NOT has_function_privilege(
+           'pricing_caller',
+           'oracle.get_i66_pricing_comparisons(integer,integer,text)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
@@ -345,7 +360,7 @@ BEGIN
        )
        OR NOT has_function_privilege(
            'pricing_caller',
-           'oracle.get_i66_ballpark_samples(integer,integer,time,date[],timestamptz)',
+           'oracle.get_i66_ballpark_samples(integer,integer,text,time,date[],timestamptz)',
            'EXECUTE'
        )
        OR NOT has_function_privilege(
@@ -500,11 +515,24 @@ BEGIN
         RAISE EXCEPTION 'pricing caller route execution failed';
     END IF;
     SELECT * INTO result
+    FROM oracle.get_i66_pricing_comparisons(3100, 3110, 'EB');
+    IF result.comparison_kind <> 'current'
+       OR NOT (
+            (result.available
+             AND result.price_usd = 0
+             AND result.source_kind = 'schedule_derived'
+             AND result.availability_reason IS NULL)
+            OR (NOT result.available
+                AND result.availability_reason = 'missing_observation')
+       ) THEN
+        RAISE EXCEPTION 'pricing caller I-66 diagnostic failed';
+    END IF;
+    SELECT * INTO result
     FROM oracle.get_i66_pricing_comparisons(3100, 3110);
     IF result.comparison_kind <> 'current'
        OR result.available
        OR result.availability_reason <> 'missing_observation' THEN
-        RAISE EXCEPTION 'pricing caller I-66 diagnostic failed';
+        RAISE EXCEPTION 'deployed I-66 compatibility function failed';
     END IF;
     SELECT * INTO result
     FROM oracle.get_i95_i495_pricing_comparisons(9999);
@@ -525,7 +553,7 @@ BEGIN
         RAISE EXCEPTION 'pricing caller priced-route distance failed';
     END IF;
     PERFORM * FROM oracle.get_i66_ballpark_samples(
-        3100, 3110, time '08:00',
+        3100, 3110, 'EB', time '08:00',
         ARRAY[(transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 1],
         transaction_timestamp()
     );

@@ -120,6 +120,9 @@ agent-facing route validator.
   database snapshot. Preserve the timestamps that make this variance visible.
 - I-66 uses 6-minute bins. I-95/I-495 uses 10-minute bins. Both are half-open
   and aligned to the top of the hour.
+- I-66 is schedule-derived at `$0` outside its weekday 5:30-9:30 AM eastbound
+  and 3:00-7:00 PM westbound windows, including the published federal-holiday
+  closures. Missing or stale observations remain unavailable inside a window.
 - Require `interval_end_at <= component_evaluated_at`,
   `observed_at <= component_evaluated_at`, and an observation age from zero
   through 30 minutes for every current observed or modeled price.

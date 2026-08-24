@@ -86,7 +86,7 @@
       <section aria-labelledby="gap-title">
         <span class="kicker">06 · Known gaps</span>
         <h2 id="gap-title">Can a supported trip still be incomplete?</h2>
-        <p>Yes. TollChat shows missing observations, partial historical coverage, modeled data, and unpriced general-purpose connections. It does not treat a missing price as a free segment.</p>
+        <p>Yes. TollChat shows missing observations during active tolling, partial historical coverage, modeled data, and unpriced general-purpose connections. I-66 Inside the Beltway is the exception outside its published tolling windows, when the authoritative price is $0 rather than a missing price.</p>
         <p>The route oracle uses 330 origin-destination (OD) pairs for I-95 and I-495, but VDOT history has prices for only 314. The missing 16 appear on 107 of the oracle's 685 routes, mostly where a trip crosses from the I-495 Express Lanes onto I-95/395. For each one, TollChat copies the price from the observed VDOT OD pair that matched it most closely and labels the result as modeled.</p>
         <p>In 1,200 held-out comparisons from five days of matched operator data, this direct proxy method had a mean absolute error of $0.106, compared with $0.154 for ordinary least-squares regression. The test period is too short to show seasonal accuracy, and the largest error was $8.05, so these modeled prices are ballpark estimates rather than operator quotes.</p>
       </section>

@@ -83,7 +83,9 @@ flowchart LR
 - **Leesburg annual-day estimate:** Propose 260 for Monday-Friday, wait for confirmation or adjustment, then honor 240 in the exact annual call.
 - **Leesburg salary range:** Request one annual gross estimate, retain the supplied commute details, then make the exact annual call after selection.
 - **Dulles Airport to Reagan Airport:** Accept the cross-direction current-price route, then explain a deterministically unsupported annual return route without scenarios, totals, or a current-price restart.
-- **Total number of test cases:** 12; six current-price and six annual-affordability cases.
+- **I-66 West to Route 7 / Route 7 to I-495 South:** Require observed tolls in
+  the matching direction and schedule-derived `$0` in every free state.
+- **Total number of test cases:** 14; eight current-price and six annual-affordability cases.
 
 The separate hallucination battery uses one canonical annual-ballpark context,
 five reviewed prompt variants, and 200 repeat generations per variant. Repeats
@@ -93,7 +95,9 @@ measure reliability for that context, not route coverage.
 | :-- | :-- |
 | `i95_northbound` | Direct Springfield-to-Westpark and Dulles-to-Reagan routes; TP1SB unavailable/fallback |
 | `i95_reversal` | TP1SB unavailable/fallback; northbound unavailable |
-| `i95_southbound` | Two direct Westpark prices; northbound unavailable |
+| `i95_southbound` | Two direct Westpark prices; northbound unavailable; both I-66 directions free |
+| `greenway_eb_peak` | I-66 eastbound tolled and westbound free (both free on holidays) |
+| `greenway_wb_peak` | I-66 westbound tolled and eastbound free (both free on holidays) |
 | `all` with `annual` suite | Six annual success, clarification, annual-day estimation, input-acquisition, and unavailable-route behaviors |
 
 ---

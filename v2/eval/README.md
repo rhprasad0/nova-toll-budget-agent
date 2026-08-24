@@ -1,6 +1,6 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs six current-toll routing cases and six
+This code-graded Strands suite runs eight current-toll routing cases and six
 annual job-offer affordability cases through a fresh production agent. It
 verifies exact tool calls, route/fallback behavior, required-input and income
 clarification, adjustable 52-week commute-day estimates, safe annual route
@@ -40,8 +40,9 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
 
 The live run needs the RDS CA bundle at `infra/build/ca/rds-ca-bundle.pem`, AWS
 access to RDS and `/nova-toll/openai_api_key`, and network access to the private
-database. The window must match the live state. Protected timed CI runs the
-matching subset in every northbound, reversal, and southbound I-95 window.
+database. The window must match the live state. Protected timed CI also runs
+the I-66 eastbound/westbound cases at 7:23 AM, 2:17 PM, and 5:23 PM Eastern so
+the active/free and both-free states are covered by the existing daily jobs.
 
 ## Asynchronous ballpark hallucination run
 

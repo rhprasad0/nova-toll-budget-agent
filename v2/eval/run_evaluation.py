@@ -8,7 +8,8 @@ import os
 import re
 import sys
 from argparse import ArgumentParser
-from datetime import UTC, datetime
+from calendar import monthcalendar
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -195,7 +196,17 @@ def _component_context_error(
         source_kinds.add(str(payload["source_kind"]))
     if source_kinds and (
         not any(term in folded for term in ("pricing", "provenance"))
-        or any(source_kind.casefold() not in folded for source_kind in source_kinds)
+        or any(
+            not any(
+                variant in folded
+                for variant in {
+                    source_kind.casefold(),
+                    source_kind.casefold().replace("_", "-"),
+                    source_kind.casefold().replace("_", " "),
+                }
+            )
+            for source_kind in source_kinds
+        )
     ):
         return _result(
             False, "response omitted component price provenance", "missing_provenance"
@@ -375,6 +386,118 @@ def evaluate_westpark_turn(
     if context_error := _component_context_error(payload, response):
         return context_error
     return _result(True, "exact route call and grounded response passed", "passed")
+
+
+def _i66_holidays(year: int) -> set[date]:
+    def nth(month: int, weekday: int, occurrence: int) -> date:
+        days = [week[weekday] for week in monthcalendar(year, month) if week[weekday]]
+        return date(year, month, days[occurrence])
+
+    fixed = {
+        date(year, 1, 1),
+        date(year, 6, 19),
+        date(year, 7, 4),
+        date(year, 11, 11),
+        date(year, 12, 25),
+    }
+    holidays = fixed | {
+        nth(1, 0, 2),
+        nth(2, 0, 2),
+        nth(5, 0, -1),
+        nth(9, 0, 0),
+        nth(10, 0, 1),
+        nth(11, 3, 3),
+    }
+    return holidays | {
+        day + timedelta(days=1 if day.weekday() == 6 else -1)
+        for day in fixed
+        if day.weekday() >= 5
+    }
+
+
+def evaluate_i66_schedule_turn(
+    calls: list[dict[str, Any]], response: str, metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(calls) != 1 or calls[0].get("name") != "get_current_toll_price":
+        return _result(
+            False, "expected exactly one current-price call", "tool_mismatch"
+        )
+    call = calls[0]
+    if call.get("input") != metadata["expected_call"]:
+        return _result(False, "current-price arguments did not match", "input_mismatch")
+    payload = call.get("tool_result")
+    if call.get("is_error") or not isinstance(payload, dict) or "error" in payload:
+        return _result(False, "I-66 current-price tool returned an error", "tool_error")
+    components = payload.get("components")
+    if not isinstance(components, list) or len(components) != 1:
+        return _result(False, "I-66 trip did not have one component", "bad_route")
+    component = components[0]
+    if not isinstance(component, dict) or component.get("facility") != "i66":
+        return _result(False, "tool result was not an I-66 component", "bad_route")
+    try:
+        evaluated = datetime.fromisoformat(str(component["component_evaluated_at"]))
+        total = Decimal(str(payload["total_usd"]))
+        price = Decimal(str(component["price_usd"]))
+    except (KeyError, ValueError):
+        return _result(False, "I-66 tool result was incomplete", "result_mismatch")
+
+    local = evaluated.astimezone(_EASTERN)
+    wall_time = local.time().replace(tzinfo=None)
+    direction = metadata.get("i66_direction")
+    is_active = (
+        local.weekday() < 5
+        and local.date() not in _i66_holidays(local.year)
+        and (
+            (direction == "EB" and time(5, 30) <= wall_time < time(9, 30))
+            or (direction == "WB" and time(15) <= wall_time < time(19))
+        )
+    )
+    is_free = not is_active
+    expected_source = "schedule_derived" if is_free else "observed"
+    expected_method = "published_schedule" if is_free else "source_observation"
+    if (
+        component.get("source_kind") != expected_source
+        or component.get("pricing_method") != expected_method
+        or (is_free and (price != 0 or total != 0))
+        or (not is_free and (price <= 0 or total <= 0))
+    ):
+        return _result(
+            False, "I-66 state did not match the timed window", "state_mismatch"
+        )
+
+    folded = response.casefold()
+    if is_free and (
+        not re.search(r"\$0(?:\.00)?\b", response)
+        or any(
+            term in folded
+            for term in (
+                "invalid",
+                "unavailable",
+                "no data",
+                "can't price",
+                "cannot price",
+            )
+        )
+    ):
+        return _result(
+            False, "free I-66 trip was not reported as $0", "bad_free_response"
+        )
+    if not is_free and f"${payload['total_usd']}" not in response:
+        return _result(
+            False, "response omitted the active I-66 toll", "ungrounded_price"
+        )
+    if not is_free and (
+        not component.get("observed_at")
+        or _eastern_time(str(component["observed_at"])) not in response
+    ):
+        return _result(
+            False, "response omitted the I-66 observation time", "missing_time"
+        )
+    if style_error := _response_style_error(response, "I-66 response"):
+        return style_error
+    if context_error := _component_context_error(payload, response):
+        return context_error
+    return _result(True, "I-66 timed state and grounded response passed", "passed")
 
 
 def evaluate_fallback_turns(
@@ -911,6 +1034,13 @@ class TollChatEvaluator(Evaluator[str, str]):
             return evaluate_fallback_turns(turns, metadata)
         if metadata.get("suite") == "unavailable":
             return evaluate_unavailable_turn(turns, metadata)
+        if metadata.get("suite") == "i66_schedule":
+            calls = turns[0].get("calls", []) if len(turns) == 1 else []
+            return evaluate_i66_schedule_turn(
+                cast(list[dict[str, Any]], calls),
+                str(evaluation_case.actual_output or ""),
+                metadata,
+            )
         if metadata.get("suite") == "annual":
             behavior = metadata.get("annual_behavior")
             if behavior == "missing_inputs":
@@ -978,6 +1108,8 @@ def _self_check() -> None:
         "dulles-to-reagan-annual-route-unavailable",
         "leesburg-route-28-confirm-annual-days",
         "dulles-to-reagan-current-price",
+        "i66-west-to-route-7-current-price",
+        "route-7-to-i495-south-current-price",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "springfield-franconia-to-westpark",
@@ -996,7 +1128,103 @@ def _self_check() -> None:
         "reagan-airport-to-westpark",
         "pentagon-eads-to-westpark",
         "old-keene-mill-to-reagan-i95-unavailable",
+        "i66-west-to-route-7-current-price",
+        "route-7-to-i495-south-current-price",
     ]
+    assert [case.name for case in load_cases(window="greenway_eb_peak")] == [
+        "i66-west-to-route-7-current-price",
+        "route-7-to-i495-south-current-price",
+    ]
+    assert date(2026, 7, 3) in _i66_holidays(2026)
+    assert date(2026, 7, 5) not in _i66_holidays(2026)
+    assert date(2027, 7, 5) in _i66_holidays(2027)
+    i66_free = rows[-2]
+    i66_free_call = {
+        "name": "get_current_toll_price",
+        "input": i66_free["expected_call"],
+        "tool_result": {
+            "origin_point_id": "i66:1:entry:EB",
+            "destination_point_id": "i66:4:exit:EB",
+            "source_kind": "schedule_derived",
+            "total_usd": "0.00",
+            "components": [
+                {
+                    "facility": "i66",
+                    "component_evaluated_at": "2026-08-18T14:17:00-04:00",
+                    "price_usd": "0.00",
+                    "source_kind": "schedule_derived",
+                    "pricing_method": "published_schedule",
+                }
+            ],
+        },
+    }
+    i66_free_metadata = {**i66_free, "active_window": "i95_southbound"}
+    assert evaluate_i66_schedule_turn(
+        [i66_free_call],
+        "**$0.00 estimate** ✅ Schedule-derived pricing applies.",
+        i66_free_metadata,
+    )[0].test_pass
+    assert (
+        evaluate_i66_schedule_turn(
+            [i66_free_call],
+            "**Price unavailable** ⚠️ There is no data.",
+            i66_free_metadata,
+        )[0].label
+        == "bad_free_response"
+    )
+    i66_active_call = json.loads(json.dumps(i66_free_call))
+    i66_active_call["tool_result"].update(source_kind="observed", total_usd="3.25")
+    i66_active_call["tool_result"]["components"][0].update(
+        component_evaluated_at="2026-08-18T07:23:00-04:00",
+        observed_at="2026-08-18T07:22:00-04:00",
+        price_usd="3.25",
+        source_kind="observed",
+        pricing_method="source_observation",
+    )
+    assert evaluate_i66_schedule_turn(
+        [i66_active_call],
+        "**$3.25 estimate** ✅ Observed pricing at 7:22 AM EDT.",
+        {**i66_free, "active_window": "greenway_eb_peak"},
+    )[0].test_pass
+    i66_active_zero = json.loads(json.dumps(i66_active_call))
+    i66_active_zero["tool_result"]["total_usd"] = "0.00"
+    i66_active_zero["tool_result"]["components"][0]["price_usd"] = "0.00"
+    assert (
+        evaluate_i66_schedule_turn(
+            [i66_active_zero],
+            "**$0.00 estimate** ✅ Observed pricing at 7:22 AM EDT.",
+            i66_free,
+        )[0].label
+        == "state_mismatch"
+    )
+    i66_free_observed = json.loads(json.dumps(i66_active_call))
+    i66_free_observed["tool_result"]["components"][0]["component_evaluated_at"] = (
+        "2026-08-18T14:17:00-04:00"
+    )
+    assert (
+        evaluate_i66_schedule_turn(
+            [i66_free_observed],
+            "**$3.25 estimate** ✅ Observed pricing at 7:22 AM EDT.",
+            i66_free,
+        )[0].label
+        == "state_mismatch"
+    )
+    wb_active = rows[-1]
+    i66_wb_active = json.loads(json.dumps(i66_active_call))
+    i66_wb_active["input"] = wb_active["expected_call"]
+    i66_wb_active["tool_result"].update(
+        origin_point_id="i66:4:entry:WB",
+        destination_point_id="i66:5:exit:WB",
+    )
+    i66_wb_active["tool_result"]["components"][0].update(
+        component_evaluated_at="2026-08-18T17:23:00-04:00",
+        observed_at="2026-08-18T17:22:00-04:00",
+    )
+    assert evaluate_i66_schedule_turn(
+        [i66_wb_active],
+        "**$3.25 estimate** ✅ Observed pricing at 5:22 PM EDT.",
+        wb_active,
+    )[0].test_pass
     metadata = rows[2]
     success = {
         "name": "get_current_toll_price",
@@ -1071,7 +1299,7 @@ def _self_check() -> None:
         evaluate_westpark_turn([error], good_response, metadata)[0].label
         == "tool_error"
     )
-    unavailable_metadata = rows[-1]
+    unavailable_metadata = rows[11]
     unavailable = {
         **success,
         "input": unavailable_metadata["expected_call"],
@@ -1616,12 +1844,26 @@ if __name__ == "__main__":
         parser = ArgumentParser()
         parser.add_argument(
             "--window",
-            choices=("all", "i95_northbound", "i95_reversal", "i95_southbound"),
+            choices=(
+                "all",
+                "i95_northbound",
+                "i95_reversal",
+                "i95_southbound",
+                "greenway_eb_peak",
+                "greenway_wb_peak",
+            ),
             required=True,
         )
         parser.add_argument(
             "--suite",
-            choices=("all", "direct", "fallback", "unavailable", "annual"),
+            choices=(
+                "all",
+                "direct",
+                "fallback",
+                "unavailable",
+                "annual",
+                "i66_schedule",
+            ),
             default="all",
         )
         args = parser.parse_args()

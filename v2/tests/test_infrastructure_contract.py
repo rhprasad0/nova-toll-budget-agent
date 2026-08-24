@@ -295,11 +295,14 @@ def test_timed_ci_skips_stale_scheduled_runs():
     )
 
 
-def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
+def test_timed_ci_checks_agent_pricing_tool_in_every_scheduled_state():
     for window_id in ("i95_northbound", "i95_reversal", "i95_southbound"):
         assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
         assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
         assert f'"{window_id}":' in TIMED_ROUTE_TEST
+    for window_id in ("greenway_eb_peak", "greenway_wb_peak"):
+        assert f"- {window_id}" in TIMED_SCHEDULE_WORKFLOW
+        assert f'window_id="{window_id}"' in TIMED_SCHEDULE_WORKFLOW
 
     assert "tests/test_validate_toll_route_live.py" in TIMED_CHECKS_WORKFLOW
     assert "tests/test_get_annual_toll_ballpark_live.py" in TIMED_CHECKS_WORKFLOW
@@ -307,9 +310,8 @@ def test_timed_ci_checks_agent_pricing_tool_in_every_i95_state():
     assert "get_annual_toll_ballpark" in TIMED_BALLPARK_TEST
     assert "route_validation.validate_toll_route" not in TIMED_ROUTE_TEST
     assert "eval/run_evaluation.py --check" in CI_WORKFLOW
-    assert 'if [[ "$TIMED_WINDOW_ID" == i95_* ]]' in TIMED_CHECKS_WORKFLOW
     assert 'eval/run_evaluation.py --window "$TIMED_WINDOW_ID"' in TIMED_CHECKS_WORKFLOW
-    assert "TollChat junction evaluation" in TIMED_CHECKS_WORKFLOW
+    assert "TollChat timed evaluation" in TIMED_CHECKS_WORKFLOW
     assert "test_live_i95_northbound_restart_is_state_independent" in TIMED_ROUTE_TEST
     assert "OPENAI_API_KEY" not in TIMED_CHECKS_WORKFLOW
 

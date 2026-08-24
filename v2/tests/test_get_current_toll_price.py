@@ -295,6 +295,14 @@ def _i66_rows(
             else None,
             "available": unavailable_reason is None,
             "availability_reason": unavailable_reason,
+            "source_kind": (
+                None if unavailable_reason == "missing_observation" else "observed"
+            ),
+            "pricing_method": (
+                None
+                if unavailable_reason == "missing_observation"
+                else "source_observation"
+            ),
         }
     ]
     if unavailable_reason is None:
@@ -310,6 +318,8 @@ def _i66_rows(
                 "price_usd": Decimal(price),
                 "available": True,
                 "availability_reason": None,
+                "source_kind": "observed",
+                "pricing_method": "source_observation",
             }
             for kind, offset, price in [
                 ("prior_cycle", 1, "6.20"),
@@ -322,6 +332,36 @@ def _i66_rows(
     return [
         pricing_tool._I66ComparisonRow.model_validate(row)  # pyright: ignore[reportPrivateUsage]
         for row in rows
+    ]
+
+
+def _i66_schedule_rows() -> list[pricing_tool._I66ComparisonRow]:  # pyright: ignore[reportPrivateUsage]
+    evaluated_at = datetime(2026, 8, 13, 12, 0, tzinfo=_EASTERN)
+    return [
+        pricing_tool._I66ComparisonRow.model_validate(  # pyright: ignore[reportPrivateUsage]
+            {
+                "evaluated_at": evaluated_at,
+                "comparison_kind": comparison_kind,
+                "comparison_offset": comparison_offset,
+                "bin_start_at": bin_start,
+                "bin_end_at": bin_start + timedelta(minutes=6),
+                "interval_end_at": None,
+                "observed_at": None,
+                "price_usd": Decimal("0.00"),
+                "available": True,
+                "availability_reason": None,
+                "source_kind": "schedule_derived",
+                "pricing_method": "published_schedule",
+            }
+        )
+        for comparison_kind, comparison_offset, bin_start in (
+            ("current", 0, evaluated_at),
+            ("prior_cycle", 1, evaluated_at - timedelta(minutes=6)),
+            ("prior_cycle", 2, evaluated_at - timedelta(minutes=12)),
+            ("prior_week", 1, evaluated_at - timedelta(days=7)),
+            ("prior_week", 2, evaluated_at - timedelta(days=14)),
+            ("prior_week", 3, evaluated_at - timedelta(days=21)),
+        )
     ]
 
 
@@ -1155,7 +1195,7 @@ def test_i66_pricer_returns_current_price_and_comparisons(monkeypatch):
 
     component = pricing_tool._price_i66_leg(_i66_leg())
 
-    assert isinstance(component, pricing_tool._I66Component)  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(component, pricing_tool._I66ObservedComponent)  # pyright: ignore[reportPrivateUsage]
     assert component.price_usd == Decimal("7.20")
     assert component.recent_movement is not None
     assert component.recent_movement.direction == "rising"
@@ -1166,6 +1206,29 @@ def test_i66_pricer_returns_current_price_and_comparisons(monkeypatch):
     assert component.prior_week_comparison.current_delta_percent == Decimal("44.0")
     assert component.prior_week_comparison.position == "above_recent_range"
     assert component.prior_week_comparison.higher_than_count == 3
+
+
+def test_i66_pricer_returns_schedule_derived_zero(monkeypatch):
+    requested: list[tuple[int, int, str]] = []
+
+    def fetch(start_zone_id: int, end_zone_id: int, direction: str):
+        requested.append((start_zone_id, end_zone_id, direction))
+        return _i66_schedule_rows()
+
+    monkeypatch.setattr(pricing_tool, "_fetch_i66_comparisons", fetch)
+
+    component = pricing_tool._price_i66_leg(_i66_leg())
+
+    assert isinstance(component, pricing_tool._I66ScheduleComponent)  # pyright: ignore[reportPrivateUsage]
+    assert requested == [(3110, 3110, "EB")]
+    assert component.price_usd == Decimal("0.00")
+    assert component.source_kind == "schedule_derived"
+    assert component.pricing_method == "published_schedule"
+    assert component.rate_period == "off_peak"
+    assert component.published_schedule.schedule_id == (
+        "vdot_i66_inside_beltway_2026-08-10"
+    )
+    assert "observed_at" not in component.model_dump(mode="json")
 
 
 @pytest.mark.parametrize(
@@ -1687,7 +1750,7 @@ def test_i66_pricer_omits_incomplete_history(monkeypatch):
 
     component = pricing_tool._price_i66_leg(_i66_leg())
 
-    assert isinstance(component, pricing_tool._I66Component)  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(component, pricing_tool._I66ObservedComponent)  # pyright: ignore[reportPrivateUsage]
     assert component.recent_movement is None
     assert component.prior_week_comparison is None
 
@@ -1763,7 +1826,7 @@ def test_i66_pricer_rejects_misaligned_leg(monkeypatch, mutation):
 
 
 @pytest.mark.parametrize(
-    ("input_data", "row", "legs", "facilities", "expected_i66_zone_pair"),
+    ("input_data", "row", "legs", "facilities", "expected_i66_component"),
     [
         (
             {
@@ -1800,7 +1863,7 @@ def test_i66_pricer_rejects_misaligned_leg(monkeypatch, mutation):
                 _i66_leg(route_step_id="step-3").model_dump(mode="json"),
             ],
             ["dtr", "dtr", "i66"],
-            (3110, 3110),
+            (3110, 3110, "EB"),
         ),
         (
             {
@@ -1848,12 +1911,12 @@ def test_i66_pricer_rejects_misaligned_leg(monkeypatch, mutation):
                 ).model_dump(mode="json"),
             ],
             ["i66", "dtr", "dtr"],
-            (3220, 3220),
+            (3220, 3220, "WB"),
         ),
     ],
 )
 def test_i66_dtr_junction_prices_both_directions(
-    monkeypatch, input_data, row, legs, facilities, expected_i66_zone_pair
+    monkeypatch, input_data, row, legs, facilities, expected_i66_component
 ):
     row = {
         **row,
@@ -1864,10 +1927,10 @@ def test_i66_dtr_junction_prices_both_directions(
         "fetch_validated_pricing_route",
         lambda *_args, **_kwargs: response,
     )
-    requested_i66_zone_pairs: list[tuple[int, int]] = []
+    requested_i66_components: list[tuple[int, int, str]] = []
 
-    def fetch_i66_prices(start_zone_id: int, end_zone_id: int):
-        requested_i66_zone_pairs.append((start_zone_id, end_zone_id))
+    def fetch_i66_prices(start_zone_id: int, end_zone_id: int, direction: str):
+        requested_i66_components.append((start_zone_id, end_zone_id, direction))
         return _i66_rows()
 
     monkeypatch.setattr(pricing_tool, "_fetch_i66_comparisons", fetch_i66_prices)
@@ -1886,7 +1949,7 @@ def test_i66_dtr_junction_prices_both_directions(
         *pricing_stages,
     ]
     assert [component["facility"] for component in payload["components"]] == facilities
-    assert requested_i66_zone_pairs == [expected_i66_zone_pair]
+    assert requested_i66_components == [expected_i66_component]
     assert payload["source_kind"] == "mixed"
     assert payload["total_usd"] == "13.20"
 

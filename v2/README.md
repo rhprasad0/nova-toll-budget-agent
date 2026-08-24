@@ -57,8 +57,9 @@ same proxy and AgentCore runtime remain available through the private preview.
 
 The `get_current_toll_price` Strands tool accepts stable origin and destination
 point IDs plus the supported pricing profile. It validates the route through
-the oracle and prices I-66 and I-95/I-495 from current observations plus Dulles
-Greenway and Dulles Toll Road from their published schedules. I-95/I-495
+the oracle and prices I-66 from current observations during its published
+tolling windows and at $0 outside them, I-95/I-495 from current observations,
+and Dulles Greenway and Dulles Toll Road from their published schedules. I-95/I-495
 components use 10-minute bins and retain recent movement, prior-week context,
 and the provisional `identity_proxy_v1` label for modeled OD prices. Mixed
 facility trips preserve route order and return one summed total. Callers do not
