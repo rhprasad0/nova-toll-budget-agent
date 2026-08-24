@@ -601,8 +601,9 @@ Direct pricing-table access remains unavailable to either runtime role.
 
 I-95/I-495 IDs `1374` through `1389` resolve through provisional modeled views.
 Every returned modeled price remains labeled `identity_proxy_v1` rather than
-observed. Annual aggregation requires complete same-date route components and
-never treats a missing price as zero.
+observed. Annual aggregation requires complete same-date route components.
+Missing active-window prices are never zero; I-66's published free periods are
+represented by explicit schedule-derived zero samples.
 
 A Greenway/Dulles Toll Road route retains separate Greenway and DTR roadway
 legs around the Route 28 handoff. The Greenway mainline fee excludes the $2

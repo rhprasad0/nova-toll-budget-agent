@@ -134,9 +134,15 @@ def _raw_scenarios(
                     cursor.execute(
                         """SELECT sample_date, price_usd
                            FROM oracle.get_i66_ballpark_samples(
-                               %s, %s, %s, %s, transaction_timestamp()
+                               %s, %s, %s, %s, %s, transaction_timestamp()
                            )""",
-                        (first_id, second_id, time.fromisoformat(local_time), dates),
+                        (
+                            first_id,
+                            second_id,
+                            "EB" if first_id < 3200 else "WB",
+                            time.fromisoformat(local_time),
+                            dates,
+                        ),
                     )
                 else:
                     cursor.execute(

@@ -131,10 +131,23 @@ DECLARE
 BEGIN
     SELECT * INTO STRICT i66
     FROM oracle.get_i66_ballpark_samples(
-        3100, 3110, time '08:00', ARRAY[sample_day], transaction_timestamp()
+        3100, 3110, 'EB', time '08:00', ARRAY[sample_day],
+        transaction_timestamp()
     );
     IF i66.price_usd <> 5.00 OR i66.sample_date <> sample_day THEN
         RAISE EXCEPTION 'I-66 ballpark did not select the latest bin row: %',
+            row_to_json(i66);
+    END IF;
+
+    SELECT * INTO STRICT i66
+    FROM oracle.get_i66_ballpark_samples(
+        3100, 3110, 'EB', time '12:00', ARRAY[sample_day],
+        transaction_timestamp()
+    );
+    IF i66.price_usd <> 0
+       OR i66.pricing_method <> 'published_schedule'
+       OR i66.observed_at IS NOT NULL THEN
+        RAISE EXCEPTION 'I-66 off-window sample is invalid: %',
             row_to_json(i66);
     END IF;
 
@@ -164,7 +177,7 @@ DECLARE
 BEGIN
     BEGIN
         PERFORM * FROM oracle.get_i66_ballpark_samples(
-            3100, 3110, time '08:00', ARRAY[today - 1, today - 1],
+            3100, 3110, 'EB', time '08:00', ARRAY[today - 1, today - 1],
             transaction_timestamp()
         );
         RAISE EXCEPTION 'duplicate dates were accepted';
@@ -173,11 +186,21 @@ BEGIN
     END;
     BEGIN
         PERFORM * FROM oracle.get_i66_ballpark_samples(
-            3100, 3110, time '08:00', ARRAY[today], transaction_timestamp()
+            3100, 3110, 'EB', time '08:00', ARRAY[today],
+            transaction_timestamp()
         );
         RAISE EXCEPTION 'incomplete current date was accepted';
     EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'invalid ballpark sample request' THEN RAISE; END IF;
+    END;
+    BEGIN
+        PERFORM * FROM oracle.get_i66_ballpark_samples(
+            3100, 3110, 'WB', time '08:00', ARRAY[today - 1],
+            transaction_timestamp()
+        );
+        RAISE EXCEPTION 'mismatched I-66 direction was accepted';
+    EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'invalid I-66 ballpark component' THEN RAISE; END IF;
     END;
     BEGIN
         PERFORM * FROM oracle.get_i95_i495_ballpark_samples(
@@ -257,7 +280,7 @@ BEGIN
             end_zone_name, zone_toll_rate_usd, s3_key
         ) VALUES (
             sample_at - interval '1 minute', sample_at, sample_at, 66,
-            'I-66-EB', 7000, 'A', 7010, 'B', i66_prices[sample_index],
+            'I-66-EB', 3100, 'A', 3120, 'B', i66_prices[sample_index],
             'test/annual-summary-i66-' || sample_index || '.csv'
         );
         IF sample_index > 1 THEN
@@ -288,10 +311,10 @@ BEGIN
 
     SELECT * INTO STRICT summary
     FROM oracle.get_annual_ballpark_summary(
-        '[{"direction":"outbound","facility":"i66","route_step_id":"step-1","start_zone_id":7000,"end_zone_id":7010},
+        '[{"direction":"outbound","facility":"i66","route_step_id":"step-1","start_zone_id":3100,"end_zone_id":3120},
           {"direction":"return","facility":"i95_i495","route_step_id":"step-1","od_pair_id":7001},
           {"direction":"outbound","facility":"greenway","route_step_id":"step-2"},
-          {"direction":"return","facility":"i66","route_step_id":"step-2","start_zone_id":7000,"end_zone_id":7010}]'::jsonb,
+          {"direction":"return","facility":"i66","route_step_id":"step-2","start_zone_id":3100,"end_zone_id":3120}]'::jsonb,
         time '08:00', time '08:00', sample_dates, fixed_prices, 5,
         transaction_timestamp()
     );

@@ -47,9 +47,14 @@ _DTR_RATES = {
     "ramp": Decimal("2.00"),
     "mainline_plaza": Decimal("4.00"),
 }
+_I66_SCHEDULE_ID = "vdot_i66_inside_beltway_2026-08-10"
+_I66_SOURCE_URL = (
+    "https://www.vdot.virginia.gov/projects/major-projects/66expresslanes/faqs/"
+)
+_I66_RETRIEVED_AT = date(2026, 8, 24)
 _DTR_POINTS = ("28", "10", "11", "12", "13", "14", "15", "16", "17", "1819", "66")
 _DTR_RAMP_POINTS = {"10", "11", "12", "13", "14", "17"}
-_I66_SQL = "SELECT * FROM oracle.get_i66_pricing_comparisons(%s, %s)"
+_I66_SQL = "SELECT * FROM oracle.get_i66_pricing_comparisons(%s, %s, %s)"
 _I95_SQL = "SELECT * FROM oracle.get_i95_i495_pricing_comparisons(%s)"
 
 type _ProgressStage = Literal[
@@ -266,7 +271,7 @@ class _PriorWeekComparison(_Model):
     higher_than_count: Annotated[int, Field(ge=0, le=3)]
 
 
-class _I66Component(_Model):
+class _I66ObservedComponent(_Model):
     route_step_id: str
     price_usd: _Usd
     source_kind: Literal["observed"]
@@ -280,6 +285,31 @@ class _I66Component(_Model):
     observed_at: datetime
     recent_movement: _RecentMovement | None = None
     prior_week_comparison: _PriorWeekComparison | None = None
+
+
+class _I66PublishedSchedule(_Model):
+    schedule_id: Literal["vdot_i66_inside_beltway_2026-08-10"]
+    source_url: Literal[
+        "https://www.vdot.virginia.gov/projects/major-projects/66expresslanes/faqs/"
+    ]
+    retrieved_at: date
+
+
+class _I66ScheduleComponent(_Model):
+    route_step_id: str
+    price_usd: _Usd
+    source_kind: Literal["schedule_derived"]
+    pricing_method: Literal["published_schedule"]
+    facility: Literal["i66"]
+    component_evaluated_at: datetime
+    rate_period: Literal["off_peak"]
+    published_schedule: _I66PublishedSchedule
+
+
+type _I66Component = Annotated[
+    _I66ObservedComponent | _I66ScheduleComponent,
+    Field(discriminator="source_kind"),
+]
 
 
 class _I95Component(_Model):
@@ -400,10 +430,48 @@ class _I66ComparisonRow(_Model):
     price_usd: _Usd | None
     available: bool
     availability_reason: Literal["missing_observation", "stale_observation"] | None
+    source_kind: Literal["observed", "schedule_derived"] | None
+    pricing_method: Literal["source_observation", "published_schedule"] | None
 
     @model_validator(mode="after")
     def _validate_contract(self) -> Self:
+        if self.source_kind == "schedule_derived":
+            if (
+                not self.available
+                or self.availability_reason is not None
+                or self.price_usd != 0
+                or self.pricing_method != "published_schedule"
+                or self.bin_start_at is None
+                or self.bin_end_at is None
+                or self.bin_end_at - self.bin_start_at != timedelta(minutes=6)
+                or self.interval_end_at is not None
+                or self.observed_at is not None
+            ):
+                raise ValueError("schedule-derived I-66 comparison is invalid")
+            if any(
+                value.tzinfo is None or value.utcoffset() is None
+                for value in (
+                    self.evaluated_at,
+                    self.bin_start_at,
+                    self.bin_end_at,
+                )
+            ):
+                raise ValueError("I-66 comparison timestamps must be aware")
+            expected_offsets = {
+                "current": {0},
+                "prior_cycle": {1, 2},
+                "prior_week": {1, 2, 3},
+            }
+            if self.comparison_offset not in expected_offsets[self.comparison_kind]:
+                raise ValueError("I-66 comparison kind and offset do not match")
+            return self
         _validate_comparison_contract(self, label="I-66", bin_minutes=6)
+        provenance = (self.source_kind, self.pricing_method)
+        if self.availability_reason == "missing_observation":
+            if any(value is not None for value in provenance):
+                raise ValueError("missing I-66 observation contains provenance")
+        elif provenance != ("observed", "source_observation"):
+            raise ValueError("I-66 observation provenance is inconsistent")
         return self
 
 
@@ -553,7 +621,9 @@ def _current_eastern_time() -> datetime:
     return datetime.now(_EASTERN)
 
 
-def _fetch_pricing_rows(sql: str, params: tuple[int, ...]) -> list[dict[str, Any]]:
+def _fetch_pricing_rows(
+    sql: str, params: tuple[int | str, ...]
+) -> list[dict[str, Any]]:
     connection = cast(Any, route_validation.connect_to_pricing_database())
     database_error: Exception | None = None
     rows: list[dict[str, Any]] = []
@@ -593,10 +663,10 @@ def _validate_comparison_rows(
 
 
 def _fetch_i66_comparisons(
-    start_zone_id: int, end_zone_id: int
+    start_zone_id: int, end_zone_id: int, direction: str
 ) -> list[_I66ComparisonRow]:
     """Fetch one bounded, diagnostic I-66 comparison set."""
-    rows = _fetch_pricing_rows(_I66_SQL, (start_zone_id, end_zone_id))
+    rows = _fetch_pricing_rows(_I66_SQL, (start_zone_id, end_zone_id, direction))
 
     comparisons = [_I66ComparisonRow.model_validate(row) for row in rows]
     _validate_comparison_rows(comparisons, "I-66")
@@ -735,7 +805,7 @@ def _build_price_comparisons(
 def _price_i66_leg(
     leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
 ) -> _I66Component | _UnavailableComponent:
-    """Price one validated I-66 facility leg from current observations."""
+    """Price one validated I-66 leg from observations or its published schedule."""
     route_key = leg.pricing_key.source_route_key
     parts = route_key.split(":")
     if len(parts) != 3 or parts[0] not in {"EB", "WB"} or not all(parts[1:]):
@@ -748,10 +818,25 @@ def _price_i66_leg(
         raise ValueError("I-66 facility leg does not match its pricing key")
 
     rows = _fetch_i66_comparisons(
-        leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id
+        leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id, direction
     )
     current = next(row for row in rows if row.comparison_kind == "current")
     evaluated_at = current.evaluated_at.astimezone(_EASTERN)
+    if current.source_kind == "schedule_derived":
+        return _I66ScheduleComponent(
+            route_step_id=leg.route_step_id,
+            price_usd=Decimal(0),
+            source_kind="schedule_derived",
+            pricing_method="published_schedule",
+            facility="i66",
+            component_evaluated_at=evaluated_at,
+            rate_period="off_peak",
+            published_schedule=_I66PublishedSchedule(
+                schedule_id=_I66_SCHEDULE_ID,
+                source_url=_I66_SOURCE_URL,
+                retrieved_at=_I66_RETRIEVED_AT,
+            ),
+        )
     if not current.available:
         return _UnavailableComponent(
             route_step_id=leg.route_step_id,
@@ -781,7 +866,7 @@ def _price_i66_leg(
         rows, current_price, current_bin_start
     )
 
-    return _I66Component(
+    return _I66ObservedComponent(
         route_step_id=leg.route_step_id,
         price_usd=current_price,
         source_kind="observed",
