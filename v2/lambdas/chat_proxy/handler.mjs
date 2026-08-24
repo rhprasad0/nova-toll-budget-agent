@@ -4,13 +4,20 @@ import {
   InvokeAgentRuntimeCommand,
   StopRuntimeSessionCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
-import { DynamoDBClient, PutItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  PutItemCommand,
+  TransactWriteItemsCommand,
+  UpdateItemCommand,
+} from "@aws-sdk/client-dynamodb";
 
 const MAX_MESSAGE_CHARS = 8_000;
 const IDLE_SECONDS = 15 * 60;
 const MAX_SESSION_SECONDS = 60 * 60;
 const LEASE_SECONDS = 60;
 const COOKIE = "__Host-tollchat-session";
+const USAGE_OPTOUT_COOKIE = "tollchat_usage_optout";
+const USAGE_AGGREGATE_KEY = "usage#all";
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const PUBLIC_ORIGINS = new Set(["https://tollchat.ai", "https://www.tollchat.ai"]);
 const DRILL_MODE = "runtime_exception_v2";
@@ -88,31 +95,51 @@ const validPost = (event) => {
   }
 };
 
-const credential = (event) => {
+const cookieValues = (event, wanted) => {
   const values = [];
   const sources = event.cookies?.length ? event.cookies : [header(event, "cookie") ?? ""];
   for (const source of sources.filter(Boolean)) {
     for (const part of source.split(";")) {
       const [name, ...raw] = part.trim().split("=");
-      if (name === COOKIE) values.push(raw.join("="));
+      if (name === wanted) values.push(raw.join("="));
     }
   }
+  return values;
+};
+
+const credential = (event) => {
+  const values = cookieValues(event, COOKIE);
   if (!values.length) return { kind: "missing" };
   if (values.length !== 1 || !TOKEN.test(values[0])) return { kind: "invalid" };
   return { kind: "valid", token: values[0] };
 };
+
+const isPublicRequest = (event) => event.version === "2.0"
+  && typeof event.requestContext?.http?.method === "string";
+const usageOptedOut = (event) => cookieValues(event, USAGE_OPTOUT_COOKIE).includes("1");
 
 const tokenHash = (token) => createHash("sha256").update(token).digest("hex");
 const sessionCookie = (token) =>
   `${COOKIE}=${token}; Path=/; Max-Age=${MAX_SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict`;
 
 const conditionalFailure = (error) => error?.name === "ConditionalCheckFailedException";
+const transactionConditionFailure = (error) => error?.name === "TransactionCanceledException"
+  && error.CancellationReasons?.some(({ Code }) => Code === "ConditionalCheckFailed");
+const requestToken = (leaseId, metric) => createHash("sha256")
+  .update(`${leaseId}:${metric}`).digest("hex").slice(0, 36);
+const aggregateUpdate = (dependencies, metric, now) => ({
+  TableName: dependencies.sessionTable,
+  Key: { credential_hash: { S: USAGE_AGGREGATE_KEY } },
+  UpdateExpression: "SET collection_started_at = if_not_exists(collection_started_at, :now), updated_at = :now ADD #metric :one",
+  ExpressionAttributeNames: { "#metric": metric },
+  ExpressionAttributeValues: { ":now": { S: now }, ":one": { N: "1" } },
+});
 
-const createSession = async (dependencies, leaseId) => {
+const createSession = async (dependencies, leaseId, usageExcluded, countUsage) => {
   const now = Math.floor(dependencies.now() / 1000);
   const token = dependencies.randomBytes(32).toString("base64url");
   const runtimeSessionId = dependencies.randomUUID();
-  await dependencies.sessionClient.send(new PutItemCommand({
+  const put = {
     TableName: dependencies.sessionTable,
     Item: {
       credential_hash: { S: tokenHash(token) },
@@ -122,10 +149,22 @@ const createSession = async (dependencies, leaseId) => {
       expires_at: { N: String(now + MAX_SESSION_SECONDS) },
       lease_id: { S: leaseId },
       lease_until: { N: String(now + LEASE_SECONDS) },
+      usage_excluded: { BOOL: usageExcluded },
     },
     ConditionExpression: "attribute_not_exists(credential_hash)",
-  }));
-  return { runtimeSessionId, token, cookie: sessionCookie(token) };
+  };
+  if (countUsage) {
+    await dependencies.sessionClient.send(new TransactWriteItemsCommand({
+      ClientRequestToken: requestToken(leaseId, "engaged_sessions"),
+      TransactItems: [
+        { Put: put },
+        { Update: aggregateUpdate(dependencies, "engaged_sessions", new Date(now * 1000).toISOString()) },
+      ],
+    }));
+  } else {
+    await dependencies.sessionClient.send(new PutItemCommand(put));
+  }
+  return { runtimeSessionId, token, cookie: sessionCookie(token), usageExcluded };
 };
 
 const updateSession = async (dependencies, token, update, leaseId) => {
@@ -158,7 +197,11 @@ const updateSession = async (dependencies, token, update, leaseId) => {
     }));
     const runtimeSessionId = result.Attributes?.runtime_session_id?.S;
     if (!runtimeSessionId) throw new Error("session record missing runtime id");
-    return { kind: "ok", runtimeSessionId };
+    return {
+      kind: "ok",
+      runtimeSessionId,
+      usageExcluded: result.Attributes?.usage_excluded?.BOOL !== false,
+    };
   } catch (error) {
     if (conditionalFailure(error)) {
       const item = error.Item;
@@ -169,6 +212,38 @@ const updateSession = async (dependencies, token, update, leaseId) => {
       return { kind: current && activeLease ? "busy" : "expired" };
     }
     throw error;
+  }
+};
+
+const countCompletedResponse = async (dependencies, token, leaseId) => {
+  const now = new Date(dependencies.now()).toISOString();
+  try {
+    await dependencies.sessionClient.send(new TransactWriteItemsCommand({
+      ClientRequestToken: requestToken(leaseId, "completed_responses"),
+      TransactItems: [
+        { Update: {
+          TableName: dependencies.sessionTable,
+          Key: { credential_hash: { S: tokenHash(token) } },
+          UpdateExpression: "ADD counted_response_ids :request_ids",
+          ConditionExpression: [
+            "usage_excluded = :included",
+            "lease_id = :lease_id",
+            "(attribute_not_exists(counted_response_ids) OR NOT contains(counted_response_ids, :request_id))",
+          ].join(" AND "),
+          ExpressionAttributeValues: {
+            ":included": { BOOL: false },
+            ":lease_id": { S: leaseId },
+            ":request_id": { S: leaseId },
+            ":request_ids": { SS: [leaseId] },
+          },
+        } },
+        { Update: aggregateUpdate(dependencies, "completed_responses", now) },
+      ],
+    }));
+  } catch (error) {
+    if (!transactionConditionFailure(error)) {
+      console.error("PROXY_FAILURE", "usage_count", error?.name ?? "Error");
+    }
   }
 };
 
@@ -202,7 +277,11 @@ const validEvent = (value) => {
     && ERROR_CODES.has(value.code) && ERROR_MESSAGES.has(value.message);
 };
 
-async function* ndjsonFromSse(stream, release = async () => {}) {
+async function* ndjsonFromSse(
+  stream,
+  release = async () => {},
+  countAnswer = async () => {},
+) {
   const decoder = new TextDecoder();
   let buffer = "";
   let terminal;
@@ -228,6 +307,7 @@ async function* ndjsonFromSse(stream, release = async () => {}) {
     if (terminal.type === "error" && terminal.code === "agent_unavailable") {
       console.error("PROXY_FAILURE", "runtime", terminal.code);
     }
+    if (terminal.type === "answer") await countAnswer();
     yield `${JSON.stringify(terminal)}\n`;
   } catch (error) {
     console.error("PROXY_FAILURE", "stream", error?.name ?? "Error");
@@ -272,8 +352,16 @@ export async function route(event, dependencies) {
     let runtimeSessionId;
     const leaseId = dependencies.randomUUID();
     let sessionToken;
+    let usageExcluded;
+    const publicRequest = isPublicRequest(event);
     if (supplied.kind === "missing") {
-      const created = await createSession(dependencies, leaseId);
+      usageExcluded = !publicRequest || usageOptedOut(event);
+      const created = await createSession(
+        dependencies,
+        leaseId,
+        usageExcluded,
+        publicRequest && !usageExcluded,
+      );
       runtimeSessionId = created.runtimeSessionId;
       sessionToken = created.token;
       cookie = created.cookie;
@@ -283,6 +371,7 @@ export async function route(event, dependencies) {
       if (session.kind === "expired") return expired();
       runtimeSessionId = session.runtimeSessionId;
       sessionToken = supplied.token;
+      usageExcluded = session.usageExcluded;
     }
     let leaseHeld = true;
     release = async () => {
@@ -311,7 +400,13 @@ export async function route(event, dependencies) {
         "X-Content-Type-Options": "nosniff",
         ...(cookie ? { "Set-Cookie": cookie } : {}),
       },
-      body: ndjsonFromSse(result.response, release),
+      body: ndjsonFromSse(
+        result.response,
+        release,
+        publicRequest && usageExcluded === false
+          ? () => countCompletedResponse(dependencies, sessionToken, leaseId)
+          : undefined,
+      ),
     };
   } catch (error) {
     if (path === "/api/reset" && error?.name === "ResourceNotFoundException") {

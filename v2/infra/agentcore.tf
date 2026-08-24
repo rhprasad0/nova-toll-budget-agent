@@ -414,7 +414,7 @@ data "aws_iam_policy_document" "tollchat_proxy" {
     ]
   }
   statement {
-    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
     resources = [aws_dynamodb_table.tollchat_sessions.arn]
   }
 }

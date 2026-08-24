@@ -53,6 +53,7 @@ def test_shared_dynamodb_endpoint_admits_v2_session_table():
     assert "tollchat-v2-anonymous-sessions" in endpoint
     assert "table/tollchat-anonymous-sessions" not in endpoint
     assert "dynamodb:*" not in endpoint
+    assert '"dynamodb:TransactWriteItems"' in endpoint
 
 
 def test_v2_has_an_independent_state_and_identity():
@@ -160,6 +161,38 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     assert (V2_ROOT / "agent" / "assets" / "tollchat-logo.png").exists()
     assert '<script type="module" src="/chat.mjs"></script>' in page
     assert '"/chat.mjs"' in server
+    assert 'key           = "usage.json"' in site
+    assert 'content       = "{}"' in site
+    assert 'id="usage-proof"' in page
+    assert re.search(r'<p[^>]*id="usage-proof"[^>]*hidden', page)
+
+
+def test_usage_publisher_is_daily_static_and_least_privilege():
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+
+    assert 'resource "aws_lambda_function" "usage_publisher"' in site
+    assert 'function_name = "tollchat-v2-usage-publisher"' in site
+    assert 'schedule_expression = "cron(15 5 * * ? *)"' in site
+    assert "maximum_event_age_in_seconds = 86400" in site
+    assert "maximum_retry_attempts       = 185" in site
+    assert 'metric_name         = "Errors"' in site
+    assert 'metric_name         = "FailedInvocations"' in site
+
+    policy = site.split('data "aws_iam_policy_document" "usage_publisher"', maxsplit=1)[
+        1
+    ].split('resource "aws_iam_role_policy" "usage_publisher"', maxsplit=1)[0]
+    assert 'actions   = ["dynamodb:GetItem"]' in policy
+    assert 'actions   = ["s3:PutObject"]' in policy
+    assert "${aws_s3_bucket.site.arn}/usage.json" in policy
+    assert 'actions   = ["kms:Encrypt", "kms:GenerateDataKey"]' in policy
+    assert "dynamodb:Scan" not in policy
+    assert "s3:*" not in policy
+
+    proxy_policy = agentcore.split(
+        'data "aws_iam_policy_document" "tollchat_proxy"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "tollchat_proxy"', maxsplit=1)[0]
+    assert '"dynamodb:TransactWriteItems"' in proxy_policy
 
 
 def test_v2_agent_packages_are_required_for_real_deployments():

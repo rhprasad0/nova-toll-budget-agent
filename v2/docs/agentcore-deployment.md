@@ -34,11 +34,29 @@ AWS_PROFILE=nova-toll terraform plan \
   -var loader_package_path=build/loader.zip \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip \
+  -target=aws_s3_object.index \
+  -target=aws_s3_object.faq \
+  -target=aws_s3_object.privacy \
+  -target=aws_s3_object.usage \
+  -out=build/usage-disclosure.tfplan
+AWS_PROFILE=nova-toll terraform show build/usage-disclosure.tfplan
+AWS_PROFILE=nova-toll terraform apply build/usage-disclosure.tfplan
+curl --fail-with-body https://tollchat.ai/privacy.txt
+curl --fail-with-body https://tollchat.ai/faq.html
+AWS_PROFILE=nova-toll terraform plan \
+  -var loader_package_path=build/loader.zip \
+  -var agentcore_package_path=build/agentcore.zip \
+  -var chat_proxy_package_path=build/chat-proxy.zip \
   -out=build/release.tfplan
 AWS_PROFILE=nova-toll terraform show build/release.tfplan
 AWS_PROFILE=nova-toll terraform apply build/release.tfplan
 unset CLOUDFLARE_API_TOKEN
 ```
+
+The one-time targeted plan is required for the first usage-counter release so
+the disclosure and hidden placeholder reach the public site before collection
+can start. Confirm the updated privacy and FAQ text is live before creating the
+full release plan. Later releases skip that targeted plan.
 
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved
