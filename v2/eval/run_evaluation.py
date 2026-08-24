@@ -388,7 +388,7 @@ def evaluate_westpark_turn(
         for component in payload.get("components", [])
         if isinstance(component, dict)
     ]
-    folded = response.casefold()
+    folded = " ".join(response.casefold().split())
     if any(
         component.get("facility") == "i95_i495"
         and component.get("source_status") == "NO_DETERMINATION"
@@ -401,8 +401,7 @@ def evaluate_westpark_turn(
             r"(?:\b(?:undetermined|inconclusive|indeterminate|unknown)\b"
             r".{0,40}\b(?:source|status)\b|\b(?:source|status)\b.{0,40}"
             r"\b(?:undetermined|inconclusive|indeterminate|unknown)\b)",
-            response,
-            re.IGNORECASE,
+            folded,
         )
     ):
         return _result(
@@ -1332,6 +1331,14 @@ def _self_check() -> None:
             )[0].label
             == "spurious_source_status"
         )
+    assert (
+        evaluate_westpark_turn(
+            [success],
+            good_response + "\n\n**Source status:**\n- unknown",
+            metadata,
+        )[0].label
+        == "spurious_source_status"
+    )
     assert (
         evaluate_westpark_turn([], good_response, metadata)[0].label == "tool_mismatch"
     )
