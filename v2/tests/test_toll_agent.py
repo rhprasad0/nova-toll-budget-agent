@@ -250,7 +250,7 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "data is stale or too old to use" in normalized
     assert "Do not state an observation's age" in normalized
     assert (
-        "For an available I-495 component, treat `source_status` "
+        "For a successful `facility: i95_i495` component, treat `source_status` "
         "`NO_DETERMINATION` as non-material source-feed metadata and do not "
         "mention or qualify the price with it." in normalized
     )

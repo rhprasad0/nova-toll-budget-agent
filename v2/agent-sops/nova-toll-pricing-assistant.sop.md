@@ -258,9 +258,9 @@ availability and staleness qualifications. Do not add missing components as
 zero. If the result is unavailable, explain its validated reason and never
 invent a price.
 
-For an available I-495 component, treat `source_status` `NO_DETERMINATION` as
-non-material source-feed metadata and do not mention or qualify the price with
-it.
+For a successful `facility: i95_i495` component, treat `source_status`
+`NO_DETERMINATION` as non-material source-feed metadata and do not mention or
+qualify the price with it.
 
 ### Northbound I-95 to I-495 restart offer
 
