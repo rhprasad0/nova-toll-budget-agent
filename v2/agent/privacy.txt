@@ -1,5 +1,5 @@
 TollChat privacy notice
-Effective August 23, 2026
+Effective August 24, 2026
 
 Who operates TollChat
 
@@ -9,15 +9,31 @@ What TollChat receives
 
 TollChat receives the text you submit, which may include trip locations, travel times, commute schedules, and salary figures. It also receives the responses and tool results needed to answer you.
 
-TollChat does not create user accounts. A random ID stored in your browser's session storage keeps follow-up messages together and normally remains until that browser session ends. TollChat keeps the active conversation and its corresponding ID in the ephemeral microVM's memory. Starting a new chat removes the active conversation from TollChat's server memory. Server state disappears when the microVM stops or the server starts a new daily session. TollChat does not intentionally write conversations or the tab ID to disk or attach the tab ID to traces or logs. Starting a new chat does not change OpenAI's retention described below.
+TollChat does not create user accounts. A random credential in a secure, HTTP-only browser cookie keeps public follow-up messages together for up to one hour. TollChat stores only a one-way hash of that credential with the temporary server session. It keeps the active conversation in the ephemeral microVM's memory. Starting a new chat removes the active conversation from TollChat's server memory. Server state disappears when the microVM stops or the server starts a new daily session. TollChat does not intentionally write conversations or the session credential to disk or attach the credential to traces or logs. Starting a new chat does not change OpenAI's retention described below.
 
 Do not submit names, exact home or work addresses, account numbers, payment information, credentials, or other personal or confidential information.
 
 Usage statistics
 
-TollChat may collect limited usage statistics, such as counts of page views, chat requests, completed responses, and errors, to measure adoption and reliability. These statistics will not include chat text, trip details, salary figures, the tab session ID, or advertising identifiers. TollChat will not sell this data or use it for targeted advertising.
+TollChat keeps two cumulative usage counters on AWS: counted anonymous chat sessions that sent a valid first message, and fully completed responses. A blocked response counts as completed. Errors, incomplete responses, and private preview traffic do not count. Collection starts with this release; earlier traffic is not backfilled.
 
-Before usage-statistics collection starts, this notice will identify the analytics provider, the exact event fields, and how long the data will be kept.
+When a public session starts, the temporary session record contains a one-way hash of a random browser credential, a random runtime ID, creation and activity timestamps, a one-hour expiration timestamp, a request lease, a usage-excluded boolean, and the random request IDs of responses already counted. These fields prevent duplicate counting. TollChat stops accepting the record after one hour, and DynamoDB then deletes it asynchronously. The record does not contain chat text, trip details, salary figures, IP addresses, or advertising identifiers.
+
+One permanent aggregate record contains only the two cumulative counts, the collection start time, and the latest update time. TollChat retains that aggregate while the service operates. Once daily, TollChat publishes the counts, collection start date, and publication time as a static JSON file and displays them on the site. Exact daily totals let readers calculate the change since the previous day.
+
+These counters measure sessions, not unique or verified people. Starting a new chat, using another browser, or returning after a session expires can count again. Failed requests, browser opt-outs, and automated traffic can also make the totals differ from the number of people who tried TollChat. TollChat does not sell this data or use it for targeted advertising. No third-party analytics provider receives these counters.
+
+Browser opt-out
+
+To exclude a browser across tollchat.ai and www.tollchat.ai, open its developer console on either site and run:
+
+document.cookie = "tollchat_usage_optout=1; Domain=tollchat.ai; Path=/; Max-Age=31536000; Secure; SameSite=Strict";
+
+Then start a new chat. The one-bit preference cookie is not an identifier and expires after at most one year. It affects new sessions in that browser; it cannot remove an earlier count. To count future new sessions again, run:
+
+document.cookie = "tollchat_usage_optout=; Domain=tollchat.ai; Path=/; Max-Age=0; Secure; SameSite=Strict";
+
+Then start a new chat. Clearing browser cookies can also remove the preference.
 
 Service providers
 

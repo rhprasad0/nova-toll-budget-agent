@@ -414,7 +414,7 @@ data "aws_iam_policy_document" "tollchat_proxy" {
     ]
   }
   statement {
-    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
     resources = [aws_dynamodb_table.tollchat_sessions.arn]
   }
 }
@@ -470,6 +470,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
   depends_on = [
     aws_bedrockagentcore_resource_policy.tollchat,
     aws_cloudwatch_log_group.tollchat_proxy,
+    aws_iam_role_policy.tollchat_proxy,
     aws_iam_role_policy_attachment.tollchat_proxy_vpc,
   ]
 }

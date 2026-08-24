@@ -107,6 +107,24 @@ export async function runRequest(request, onEvent, setBusy, onSessionExpired = (
 export const shouldSubmitOnEnter = (event, busy) => event.key === "Enter"
   && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && !busy;
 
+export const usageProofText = (snapshot, now = Date.now()) => {
+  if (!snapshot || typeof snapshot !== "object"
+    || snapshot.schema_version !== 1
+    || !/^\d{4}-\d{2}-\d{2}$/.test(snapshot.collection_started_on)
+    || !Number.isInteger(snapshot.engaged_sessions) || snapshot.engaged_sessions < 0
+    || !Number.isInteger(snapshot.completed_responses) || snapshot.completed_responses < 0) return null;
+  const started = Date.parse(`${snapshot.collection_started_on}T00:00:00Z`);
+  const asOf = Date.parse(snapshot.as_of);
+  if (!Number.isFinite(started) || !Number.isFinite(asOf) || started > asOf
+    || asOf > now + 5 * 60_000 || now - asOf > 48 * 60 * 60_000) return null;
+  const format = new Intl.DateTimeFormat("en-US", {
+    year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
+  });
+  const sessions = snapshot.engaged_sessions === 1 ? "session" : "sessions";
+  const responses = snapshot.completed_responses === 1 ? "response" : "responses";
+  return `Since ${format.format(started)}, ${snapshot.engaged_sessions} counted anonymous chat ${sessions} sent a message. TollChat completed ${snapshot.completed_responses} ${responses}. Updated daily; last updated ${format.format(asOf)}.`;
+};
+
 const newTurn = (transcript) => {
   const article = document.createElement("article");
   article.className = "assistant-turn";
@@ -141,6 +159,7 @@ const start = () => {
   const submit = form.querySelector("button");
   const reset = document.querySelector("#reset");
   const starterWrap = document.querySelector("#starter-wrap");
+  const usageProof = document.querySelector("#usage-proof");
   const starterButtons = [...document.querySelectorAll("[data-prompt-index]")];
   const setBusy = (busy) => {
     input.disabled = busy;
@@ -157,6 +176,19 @@ const start = () => {
       document.querySelector("#map-loading").hidden = true;
       document.querySelector("#map-error").hidden = false;
     });
+
+  void fetch("/usage.json", { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error("usage snapshot unavailable");
+      return response.json();
+    })
+    .then((snapshot) => {
+      const text = usageProofText(snapshot);
+      if (!text) return;
+      usageProof.textContent = text;
+      usageProof.hidden = false;
+    })
+    .catch(() => {});
 
   for (const button of starterButtons) {
     button.addEventListener("click", () => {

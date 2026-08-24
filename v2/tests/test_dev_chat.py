@@ -200,7 +200,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         page = urllib.request.urlopen(base_url, timeout=2)
         assert page.headers["Cache-Control"] == "no-store"
         html = page.read().decode()
-        assert "may collect limited usage statistics" in html
+        assert "counts anonymous chat sessions that send a message" in html
         assert "Responses storage disabled" in html
         assert "abuse-monitoring logs" in html
         assert "up to 30 days by default" in html
@@ -266,8 +266,8 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "330 origin-destination (OD) pairs" in faq
         assert "mean absolute error of $0.106, compared with $0.154" in faq
         assert "largest error was $8.05" in faq
-        assert "may collect limited usage statistics" in faq
-        assert "analytics provider, the event fields" in faq
+        assert "two cumulative, non-identifying counters" in faq
+        assert "These are sessions, not verified people" in faq
         assert "Responses storage disabled" in faq
         assert "abuse-monitoring logs" in faq
         assert "up to 30 days by default" in faq
@@ -289,7 +289,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "Responses API application state for at least 30 days" not in privacy
         assert "abuse monitoring as a tradeoff to keep TollChat free to use" in privacy
         assert "https://developers.openai.com/api/docs/guides/your-data" in privacy
-        assert "will not sell this data or use it for targeted advertising" in privacy
+        assert "does not sell this data or use it for targeted advertising" in privacy
         assert "https://openfreemap.org/privacy/" in privacy
         terms_response = urllib.request.urlopen(f"{base_url}/terms.txt", timeout=2)
         assert terms_response.headers.get_content_type() == "text/plain"
@@ -298,7 +298,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "not a navigation or emergency service" in terms
         assert "provided as is and as available" in terms
         assert "https://smarterroads.vdot.virginia.gov/termsOfService" in terms
-        assert "does not attach that ID to traces or logs" in faq
+        assert "does not attach the credential to traces or logs" in faq
         estimates = json.load(
             urllib.request.urlopen(
                 f"{base_url}/assets/commute-estimates.json", timeout=2
