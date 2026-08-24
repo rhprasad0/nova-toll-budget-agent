@@ -200,9 +200,12 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
 
 def test_first_usage_rollout_stages_permissions_and_private_smoke_traffic():
     v1_apply = DEPLOYMENT.index("build/usage-permissions.tfplan")
-    v2_prerequisites = DEPLOYMENT.index("build/usage-prerequisites.tfplan")
+    disclosures = DEPLOYMENT.index("s3api put-object")
     release = DEPLOYMENT.index("build/release.tfplan")
-    assert v1_apply < v2_prerequisites < release
+    assert v1_apply < disclosures < release
+    assert "usage-prerequisites.tfplan" not in DEPLOYMENT
+    assert "Do not use Terraform resource targets" in DEPLOYMENT
+    assert "iam get-role-policy" in DEPLOYMENT
     assert DEPLOYMENT.count("dynamodb:TransactWriteItems") >= 2
     assert "tollchat_usage_optout=1" in DEPLOYMENT
     assert "--consistent-read" in DEPLOYMENT

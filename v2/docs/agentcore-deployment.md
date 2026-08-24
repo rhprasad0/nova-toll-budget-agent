@@ -53,24 +53,37 @@ AWS_PROFILE=nova-toll aws --region us-east-1 lambda put-function-concurrency \
 AWS_PROFILE=nova-toll terraform init
 ```
 
-For the first usage-counter release only, stage the v2 transaction permission,
-public disclosure, and hidden placeholder before deploying the proxy package:
+For the first usage-counter release only, stage the public disclosure and
+hidden placeholder directly in the encrypted site bucket before deploying the
+proxy package. Do not use Terraform resource targets for this step: the site
+objects' KMS and CloudFront dependencies also pull the proxy and runtime into a
+targeted plan.
 
 ```sh
-AWS_PROFILE=nova-toll terraform plan \
-  -var loader_package_path=build/loader.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip \
-  -target=aws_iam_role_policy.tollchat_proxy \
-  -target=aws_s3_object.index \
-  -target=aws_s3_object.faq \
-  -target=aws_s3_object.privacy \
-  -target=aws_s3_object.usage \
-  -out=build/usage-prerequisites.tfplan
-AWS_PROFILE=nova-toll terraform show build/usage-prerequisites.tfplan
-AWS_PROFILE=nova-toll terraform apply build/usage-prerequisites.tfplan
-AWS_PROFILE=nova-toll terraform state show aws_iam_role_policy.tollchat_proxy \
-  | grep -F 'dynamodb:TransactWriteItems'
+SITE_BUCKET="$(AWS_PROFILE=nova-toll terraform state show -no-color \
+  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
+SITE_KMS_ARN="$(AWS_PROFILE=nova-toll aws --region us-east-1 kms describe-key \
+  --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
+EMPTY_USAGE="$(mktemp)"
+printf '{}\n' >"$EMPTY_USAGE"
+AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+  --bucket "$SITE_BUCKET" --key index.html --body ../agent/dev_chat.html \
+  --content-type 'text/html; charset=utf-8' --cache-control no-cache \
+  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
+AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+  --bucket "$SITE_BUCKET" --key faq.html --body ../agent/faq.html \
+  --content-type 'text/html; charset=utf-8' --cache-control no-cache \
+  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
+AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+  --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
+  --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
+  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
+AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+  --bucket "$SITE_BUCKET" --key usage.json --body "$EMPTY_USAGE" \
+  --content-type 'application/json; charset=utf-8' --cache-control no-cache \
+  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
+rm -f -- "$EMPTY_USAGE"
+unset EMPTY_USAGE SITE_BUCKET SITE_KMS_ARN
 curl --fail-with-body https://tollchat.ai/privacy.txt
 curl --fail-with-body https://tollchat.ai/faq.html
 ```
@@ -86,13 +99,20 @@ AWS_PROFILE=nova-toll terraform plan \
   -out=build/release.tfplan
 AWS_PROFILE=nova-toll terraform show build/release.tfplan
 AWS_PROFILE=nova-toll terraform apply build/release.tfplan
+AWS_PROFILE=nova-toll aws --region us-east-1 iam get-role-policy \
+  --role-name nova-toll-v2-chat-proxy \
+  --policy-name nova-toll-v2-chat-proxy \
+  --query PolicyDocument --output json | grep -F 'dynamodb:TransactWriteItems'
 unset CLOUDFLARE_API_TOKEN
 ```
 
-The one-time v1 and v2 prerequisite plans are required for the first
-usage-counter release. Confirm both transaction permissions and the public
-privacy and FAQ text before creating the full release plan. Later releases skip
-both targeted plans.
+The one-time v1 permission plan and direct disclosure upload are required for
+the first usage-counter release. Confirm the v1 transaction permission and the
+public privacy and FAQ text before creating the full release plan. The proxy
+Lambda explicitly depends on its inline policy, so the complete plan applies
+the v2 transaction permission before publishing the new Lambda version. Verify
+that live policy after apply. Later releases skip the v1 targeted plan and
+direct disclosure upload.
 
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved
