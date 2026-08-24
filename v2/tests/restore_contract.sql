@@ -126,9 +126,9 @@ END $$;
 
 DO $$
 BEGIN
-    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.2.0'
+    IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.3.0'
        OR (SELECT count(*) FROM pricing.schema_version) <> 1 THEN
-        RAISE EXCEPTION 'pricing schema must expose exactly version 1.2.0';
+        RAISE EXCEPTION 'pricing schema must expose exactly version 1.3.0';
     END IF;
 
     IF NOT pg_has_role('pricing_loader_writer', 'rds_iam', 'MEMBER')
@@ -139,7 +139,6 @@ BEGIN
     IF NOT has_schema_privilege('pricing_loader_writer', 'pricing', 'USAGE')
        OR has_schema_privilege('pricing_loader_writer', 'pricing', 'CREATE')
        OR has_table_privilege('pricing_loader_writer', 'pricing.schema_version', 'SELECT,INSERT,UPDATE,DELETE')
-       OR has_table_privilege('pricing_loader_writer', 'pricing.backfill_state', 'SELECT,INSERT,UPDATE,DELETE')
        OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'INSERT')
        OR NOT has_table_privilege('pricing_loader_writer', 'pricing.trip_pricing_i95', 'UPDATE')
@@ -152,7 +151,6 @@ BEGIN
     IF NOT has_schema_privilege('pricing_reader', 'pricing', 'USAGE')
        OR has_schema_privilege('pricing_reader', 'pricing', 'CREATE')
        OR NOT has_table_privilege('pricing_reader', 'pricing.schema_version', 'SELECT')
-       OR NOT has_table_privilege('pricing_reader', 'pricing.backfill_state', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.trip_pricing_i95', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.trip_pricing_i66', 'SELECT')
        OR NOT has_table_privilege('pricing_reader', 'pricing.current_trip_pricing_i95', 'SELECT')

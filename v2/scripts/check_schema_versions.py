@@ -155,6 +155,23 @@ def _owns(schema: RegisteredSchema, path: str) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in schema.owned_paths)
 
 
+def owning_schemas(path: str, *registries: tuple[RegisteredSchema, ...]) -> set[str]:
+    return {
+        schema.name
+        for registry in registries
+        for schema in registry
+        if _owns(schema, path)
+    }
+
+
+def validate_registry_continuity(
+    current: tuple[RegisteredSchema, ...], previous: tuple[RegisteredSchema, ...]
+) -> None:
+    removed = sorted({schema.name for schema in previous} - {s.name for s in current})
+    if removed:
+        raise ValueError(f"registered application schemas cannot be removed: {removed}")
+
+
 def upgrade_versions(schema_name: str, path: str) -> tuple[str, str] | None:
     match = UPGRADE_MIGRATION.fullmatch(path)
     if match is None or match.group("schema") != schema_name:
@@ -265,24 +282,25 @@ def main() -> int:
     )
     changed = changed_repository_files(base_ref)
     added = changed_repository_files(base_ref, added_only=True)
+    previous_registry_text = git_text(base_ref, "v2/db/application-schemas.json")
+    previous_schemas = (
+        load_previous_registry(previous_registry_text)
+        if previous_registry_text is not None
+        else ()
+    )
+    validate_registry_continuity(schemas, previous_schemas)
     production_sql = [
         path for path in changed if path.startswith("v2/db/") and path.endswith(".sql")
     ]
     for path in production_sql:
-        owners = [schema.name for schema in schemas if _owns(schema, path)]
+        owners = owning_schemas(path, schemas, previous_schemas)
         if len(owners) != 1:
             raise ValueError(
                 "changed production SQL must have exactly one registered owner: "
-                f"{path} has {owners}"
+                f"{path} has {sorted(owners)}"
             )
 
-    previous_registry_text = git_text(base_ref, "v2/db/application-schemas.json")
-    previous_by_name: dict[str, RegisteredSchema] = {}
-    if previous_registry_text is not None:
-        previous_by_name = {
-            schema.name: schema
-            for schema in load_previous_registry(previous_registry_text)
-        }
+    previous_by_name = {schema.name: schema for schema in previous_schemas}
 
     for schema in schemas:
         current = current_versions[schema.name]

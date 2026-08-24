@@ -1,6 +1,6 @@
 # TollChat v2 routing oracle
 
-- **Status:** Adopted for oracle schema `1.11.0`
+- **Status:** Adopted for oracle schema `1.12.1`
 - **Scope:** V2 directed toll-road reachability and least-privilege pricing access
 
 ## Purpose
@@ -43,12 +43,11 @@ extensions are not installed. PostGIS-owned types, functions, and
 `spatial_ref_sys` therefore coexist with the two TollChat application tables in
 `oracle`.
 
-The retained v1 database contract remains entirely in `public`. V2 migrations
-do not move, replace, or modify those objects, and they create no v2-owned
-object in `public`. Importers, migrations, tests, functions, and application
-queries always use schema-qualified names and do not rely on the caller's
-`search_path`. Spatial DDL and later spatial operations likewise qualify
-PostGIS objects through `oracle`, for example
+Legacy pricing objects in `public` were retired with pricing schema 1.3.0.
+Oracle migrations neither depend on nor recreate them. Importers, migrations,
+tests, functions, and application queries always use schema-qualified names
+and do not rely on the caller's `search_path`. Spatial DDL and later spatial
+operations likewise qualify PostGIS objects through `oracle`, for example
 `oracle.geography(Point,4326)` and `oracle.ST_DWithin`.
 
 Pricing objects live separately in the `pricing` schema. The oracle tables do
@@ -116,7 +115,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.11.0`, stored as the single row in
+oracle is at version `1.12.1`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -141,7 +140,7 @@ and executes, at minimum:
 - the existing pricing bootstrap and contracts;
 - a blank bootstrap in dependency order: pricing, then oracle;
 - the oracle restore and data-import contracts;
-- an additive installation beside retained v1 `public` and v2 `pricing`;
+- an installation beside the independently versioned `pricing` schema;
 - the supported upgrade path from the previous oracle version once one exists;
 - guarded oracle rollback, proving that `public` and `pricing` are unchanged;
 - PostGIS version, namespace, and extension-function privilege checks;
@@ -709,9 +708,8 @@ DTR connection charge; only crossing either directed handoff adds it.
   self-connections, or duplicate directed pairs fail. Importer contract tests
   reject cross-row semantic violations.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
-  PostGIS 3.5.x and every v2 routing object in `oracle`, while retained v1
-  objects in `public` remain unchanged.
-- `oracle.schema_version` contains exactly one row at `1.11.0`, its canonical
+  PostGIS 3.5.x and every v2 routing object in `oracle` beside `pricing`.
+- `oracle.schema_version` contains exactly one row at `1.12.1`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

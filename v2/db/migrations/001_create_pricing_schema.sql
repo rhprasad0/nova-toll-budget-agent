@@ -1,5 +1,4 @@
--- Additive live preparation for the independent TollChat v2 pricing schema.
--- This creates empty v2 objects. Run the shadow loader before backfill.sql.
+-- Bootstrap the independent TollChat pricing schema.
 
 \set ON_ERROR_STOP on
 

@@ -312,7 +312,7 @@ resource "aws_cloudwatch_metric_alarm" "freshness" {
   for_each = toset(["i95", "i66"])
 
   alarm_name          = "toll-v2-pricing-freshness-${each.key}"
-  alarm_description   = "No successful v2 ${each.key} load for 30 minutes. Follow v2/docs/pricing-shadow-rollout.md."
+  alarm_description   = "No successful v2 ${each.key} load for 30 minutes. Follow v2/README.md."
   namespace           = "NovaToll"
   metric_name         = "V2LoadSuccess"
   dimensions          = { feed = each.key }

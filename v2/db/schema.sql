@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL pricing bootstrap.
--- pricing schema version: 1.2.0
+-- pricing schema version: 1.3.0
 
 \set ON_ERROR_STOP on
 
@@ -17,7 +17,7 @@ CREATE TABLE pricing.schema_version (
     installed_at timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO pricing.schema_version (version) VALUES ('1.2.0');
+INSERT INTO pricing.schema_version (version) VALUES ('1.3.0');
 
 CREATE TABLE pricing.trip_pricing_i95 (
     interval_end_at    timestamptz NOT NULL,
@@ -52,14 +52,6 @@ CREATE TABLE pricing.trip_pricing_i66 (
     s3_key             text NOT NULL,
     ingested_at        timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (interval_end_at, start_zone_id, end_zone_id)
-);
-
-CREATE TABLE pricing.backfill_state (
-    feed text PRIMARY KEY CHECK (feed IN ('i95', 'i66')),
-    completed_at timestamptz NOT NULL,
-    public_row_count bigint NOT NULL CHECK (public_row_count >= 0),
-    pricing_row_count bigint NOT NULL CHECK (pricing_row_count >= 0),
-    CHECK (public_row_count = pricing_row_count)
 );
 
 CREATE INDEX trip_pricing_i95_od_lookup_idx

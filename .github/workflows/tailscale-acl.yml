@@ -5,10 +5,10 @@ permissions:
 on:
   push:
     branches: ["main"]
-    paths: ["v1/policy.hujson"]
+    paths: ["infra/policy.hujson"]
   pull_request:
     branches: ["main"]
-    paths: ["v1/policy.hujson"]
+    paths: ["infra/policy.hujson"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -26,7 +26,7 @@ jobs:
           oauth-client-id: ${{ secrets.TS_ACL_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_ACL_OAUTH_SECRET }}
           tailnet: rhprasad0.github
-          policy-file: v1/policy.hujson
+          policy-file: infra/policy.hujson
           action: test
       - name: Deploy ACL
         if: github.event_name == 'push'
@@ -35,5 +35,5 @@ jobs:
           oauth-client-id: ${{ secrets.TS_ACL_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_ACL_OAUTH_SECRET }}
           tailnet: rhprasad0.github
-          policy-file: v1/policy.hujson
+          policy-file: infra/policy.hujson
           action: apply
