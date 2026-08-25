@@ -17,7 +17,13 @@ if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
     v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql)"
 fi
+retirement_source_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
+  v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql)"
 migration_source_dir="$(mktemp -d)"
+retirement_source_dir="$migration_source_dir/retirement"
+mkdir "$retirement_source_dir"
+git archive "$retirement_source_ref" v2/db | \
+  tar -x --directory "$retirement_source_dir"
 oracle_rollback_db="nova_toll_v2_oracle_rollback_test"
 missing_pricing_db="nova_toll_v2_oracle_missing_pricing_test"
 incompatible_pricing_db="nova_toll_v2_oracle_incompatible_pricing_test"
@@ -412,8 +418,8 @@ fi
 prepare_retirement_database() {
   local database="$1"
   createdb --template template0 "$database"
-  psql --dbname "$database" --file "$migration_source_dir/v2/db/schema.sql"
-  psql --dbname "$database" --file "$migration_source_dir/v2/db/roles.sql"
+  psql --dbname "$database" --file "$retirement_source_dir/v2/db/schema.sql"
+  psql --dbname "$database" --file "$retirement_source_dir/v2/db/roles.sql"
   psql --dbname "$database" --file v2/tests/legacy_public_fixture.sql
 }
 
