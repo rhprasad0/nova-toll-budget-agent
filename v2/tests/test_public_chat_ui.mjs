@@ -142,7 +142,7 @@ test("public API gate allows only the deployed operations", async () => {
   assert.equal(blocked.statusCode, 404);
 });
 
-test("public report routes rewrite only trailing-slash toll paths", async () => {
+test("public report routes rewrite toll directories with or without trailing slashes", async () => {
   const source = await readFile(new URL("../agent/public-report-routes.js", import.meta.url), "utf8");
   const context = {};
   vm.runInNewContext(`${source}\nthis.rewrite = handler;`, context);
@@ -150,6 +150,7 @@ test("public report routes rewrite only trailing-slash toll paths", async () => 
   for (const [uri, expected] of [
     ["/tolls/i95-i495/", "/tolls/i95-i495/index.html"],
     ["/tolls/i95-i495/origin/destination/", "/tolls/i95-i495/origin/destination/index.html"],
+    ["/tolls/i95-i495/origin/destination", "/tolls/i95-i495/origin/destination/index.html"],
     ["/tolls/i95-i495/origin/destination/report.json", "/tolls/i95-i495/origin/destination/report.json"],
     ["/robots.txt", "/robots.txt"],
     ["/sitemap.xml", "/sitemap.xml"],
