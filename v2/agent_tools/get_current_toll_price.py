@@ -917,6 +917,8 @@ def _build_i95_i495_component(
         )
     ):
         raise ValueError("I-95/I-495 facility leg does not match its pricing key")
+    if any(row.od_pair_id not in {None, leg.pricing_key.od_pair_id} for row in rows):
+        raise ValueError("I-95/I-495 pricing rows contain the wrong OD pair")
 
     current = next(row for row in rows if row.comparison_kind == "current")
     evaluated_at = current.evaluated_at.astimezone(_EASTERN)
@@ -1344,21 +1346,25 @@ async def get_current_toll_price(
                         route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
                         leg,
                     )
-                    pricing_inputs[leg.route_step_id] = await asyncio.to_thread(
+                    rows = await asyncio.to_thread(
                         _fetch_i95_i495_comparisons, i95_leg.pricing_key.od_pair_id
                     )
+                    _build_i95_i495_component(i95_leg, rows)
+                    pricing_inputs[leg.route_step_id] = rows
             elif facility == "i66":
                 for leg in facility_legs:
                     i66_leg = cast(
                         route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
                         leg,
                     )
-                    pricing_inputs[leg.route_step_id] = await asyncio.to_thread(
+                    rows = await asyncio.to_thread(
                         _fetch_i66_comparisons,
                         i66_leg.pricing_key.start_zone_id,
                         i66_leg.pricing_key.end_zone_id,
                         i66_leg.pricing_key.source_route_key.split(":", 1)[0],
                     )
+                    _build_i66_component(i66_leg, rows)
+                    pricing_inputs[leg.route_step_id] = rows
             elif facility == "greenway":
                 for leg in facility_legs:
                     price_greenway_leg(

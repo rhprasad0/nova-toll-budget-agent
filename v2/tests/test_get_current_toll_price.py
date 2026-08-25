@@ -1932,6 +1932,65 @@ def test_multicomponent_route_returns_no_partial_price(monkeypatch):
     assert "total_usd" not in payload
 
 
+def test_domain_builder_rejects_i95_rows_for_another_leg():
+    response = _southbound_westpark_pricing_route("i95:2233SO")
+
+    with pytest.raises(ValueError, match="wrong OD pair"):
+        _domain_result(
+            {
+                **_input(),
+                "origin_point_id": "i95:2233SO",
+                "destination_point_id": "i495:1859ND",
+            },
+            response,
+            datetime(2026, 8, 13, 8, 32, 6, tzinfo=_EASTERN),
+            {
+                "step-1": _i95_rows(od_pair_id=1005),
+                "step-2": _i95_rows(od_pair_id=1204),
+            },
+        )
+
+
+def test_i95_component_failure_marks_pricing_stage_failed(monkeypatch, caplog):
+    leg = _i95_leg().model_dump(mode="json")
+    leg["pricing_key"]["source_route_key"] = "Northbound:204NO:223ND"
+    row = {
+        **_route_row(),
+        "point_ids": ["i95:203NO", "i95:223ND"],
+        "connection_ids": ["source:i95_shared:Northbound:203NO:223ND"],
+        "i95_evidence": _i95_evidence("northbound"),
+    }
+    response = _pricing_route(row, [leg])
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "fetch_validated_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool, "_fetch_i95_i495_comparisons", lambda *_args: _i95_rows()
+    )
+
+    with caplog.at_level(logging.ERROR):
+        events = _run_tool(
+            {
+                **_input(),
+                "origin_point_id": "i95:203NO",
+                "destination_point_id": "i95:223ND",
+            }
+        )
+
+    assert [
+        (event["stage"], event["status"]) for event in _progress_events(events)
+    ] == [
+        ("route_validation", "running"),
+        ("route_validation", "completed"),
+        ("i95_i495_pricing", "running"),
+        ("i95_i495_pricing", "failed"),
+    ]
+    assert _result(events)["status"] == "error"
+    assert caplog.records[0].failureStage == "i95_i495_pricing"
+
+
 def test_i95_failure_streams_failed_and_sanitizes_error(monkeypatch, caplog):
     secret = "private I-95 crash"
     row = {
