@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from conftest import loader_handler
+import pricing_loader_handler as loader_handler
 
 V2_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_SQL = (V2_ROOT / "db" / "schema.sql").read_text()

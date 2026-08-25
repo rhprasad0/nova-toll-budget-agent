@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections.abc import Mapping
 from itertools import pairwise
 from typing import Annotated, Any, Literal, Self, cast
 
@@ -14,7 +15,6 @@ from pydantic import (
     ValidationInfo,
     model_validator,
 )
-from strands.types.tools import ToolResult, ToolUse
 
 logger = logging.getLogger(__name__)
 
@@ -641,7 +641,7 @@ def connect_to_pricing_database() -> object:
 
 def _log_failure_and_build_error_result(
     tool_use_id: str, stage: str, error: Exception
-) -> ToolResult:
+) -> dict[str, Any]:
     logger.error(
         "validate_toll_route failed",
         extra={
@@ -737,7 +737,7 @@ def fetch_validated_pricing_route(
     return response
 
 
-def validate_toll_route(tool_use: ToolUse, **_: Any) -> ToolResult:  # noqa: ANN401
+def validate_toll_route(tool_use: Mapping[str, Any], **_: Any) -> dict[str, Any]:  # noqa: ANN401
     """Validate a toll route and return the oracle's seven-field response."""
     tool_use_id = "unknown"
     try:

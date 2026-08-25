@@ -4,6 +4,12 @@ variable "loader_package_path" {
   default     = ""
 }
 
+variable "publisher_package_path" {
+  description = "Reviewed v2 report publisher zip. Empty uses a validation-only placeholder."
+  type        = string
+  default     = ""
+}
+
 variable "agentcore_package_path" {
   description = "Reviewed v2 AgentCore runtime zip. Empty uses a validation-only placeholder."
   type        = string

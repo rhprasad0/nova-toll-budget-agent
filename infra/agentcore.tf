@@ -84,6 +84,35 @@ resource "aws_vpc_endpoint" "tollchat_api" {
   private_dns_enabled = false
 }
 
+resource "aws_security_group" "eventbridge_endpoint" {
+  name        = "nova-toll-eventbridge-endpoint"
+  description = "Private EventBridge API endpoint"
+  vpc_id      = data.aws_vpc.default.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "eventbridge_from_private" {
+  for_each = toset([
+    aws_subnet.tollchat_private_a.cidr_block,
+    aws_subnet.tollchat_private_c.cidr_block,
+  ])
+
+  security_group_id = aws_security_group.eventbridge_endpoint.id
+  cidr_ipv4         = each.value
+  description       = "TollChat private Lambda subnets"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
+resource "aws_vpc_endpoint" "eventbridge" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.events"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.private_subnets
+  security_group_ids  = [aws_security_group.eventbridge_endpoint.id]
+  private_dns_enabled = true
+}
+
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id            = data.aws_vpc.default.id
   service_name      = "com.amazonaws.${data.aws_region.current.region}.dynamodb"

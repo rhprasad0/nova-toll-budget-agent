@@ -1,8 +1,10 @@
 import io
 import sys
+from dataclasses import replace
+from datetime import UTC, datetime
 
+import pricing_loader_handler as handler
 import pytest
-from conftest import loader_handler as handler
 from parse_csv import parse_trip_pricing_csv
 from parse_xml import parse_trip_pricing_xml
 
@@ -177,3 +179,181 @@ def test_load_batches_rows_and_keeps_success_markers_on_noop(monkeypatch, caplog
     assert "V2_LOAD_ROWS i66 0" in caplog.text
     assert "V2_LOAD_OK i66" in caplog.text
     assert "V2_LOAD_OBJECT_OK i66" in caplog.text
+
+
+def _i95_rows():
+    return parse_trip_pricing_csv(
+        """ZONETOLLRATE,ODPAIRNAME,ODPAIRID,STARTZONENAME,STARTZONEID,INTERVALENDDATETI,CURRENTDATETIME,ENDZONENAME,ENDZONEID,CORRIDORN,CORRIDORID,CALULCATEDDATETIM,LINKSTATUS
+2.50,A TO B,1,A,10,16/08/26 12:00:00,16/08/26 11:59:00,B,20,I-95,95,16/08/26 11:58:00,OPEN
+"""
+    )
+
+
+def test_i95_success_event_is_emitted_after_commit(monkeypatch):
+    calls = []
+
+    class Cursor:
+        rowcount = 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def executemany(self, *_args):
+            calls.append("write")
+
+    class Transaction:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            calls.append("commit")
+
+    class Connection:
+        def transaction(self):
+            return Transaction()
+
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            calls.append("close")
+
+    class Events:
+        def put_events(self, **kwargs):
+            calls.append(("event", kwargs))
+            return {"FailedEntryCount": 0, "Entries": [{"EventId": "event-1"}]}
+
+    monkeypatch.setattr(handler, "_connect", lambda **_kwargs: Connection())
+    monkeypatch.setattr(handler.boto3, "client", lambda service: Events())
+    for name in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER"):
+        monkeypatch.setenv(name, "5432" if name == "DB_PORT" else "test")
+
+    handler._load(
+        "i95",
+        _i95_rows(),
+        s3_key="raw/feed=i95/date=2026-08-16/1200Z.csv",
+    )
+
+    assert calls[:3] == ["write", "commit", "close"]
+    event = calls[3][1]["Entries"][0]
+    assert event["Source"] == "tollchat.pricing-loader"
+    assert event["DetailType"] == "I95 Pricing Load Committed"
+    assert '"source_watermark":"2026-08-16T16:00:00Z"' in event["Detail"]
+    assert '"row_count":1' in event["Detail"]
+
+
+def test_i95_mixed_intervals_fail_before_writing(monkeypatch):
+    rows = _i95_rows()
+    rows.append(
+        replace(rows[0], interval_end_at=datetime(2026, 8, 16, 16, 10, tzinfo=UTC))
+    )
+    monkeypatch.setattr(
+        handler,
+        "_connect",
+        lambda **_kwargs: pytest.fail("database should not be opened"),
+    )
+
+    with pytest.raises(ValueError, match="one source interval"):
+        handler._load(
+            "i95",
+            rows,
+            s3_key="raw/feed=i95/date=2026-08-16/1200Z.csv",
+        )
+
+
+def test_i95_eventbridge_partial_failure_retries_the_loader(monkeypatch):
+    class Cursor:
+        rowcount = 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def executemany(self, *_args):
+            return None
+
+    class Connection:
+        def transaction(self):
+            return self
+
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def close(self):
+            return None
+
+    class Events:
+        def put_events(self, **_kwargs):
+            return {
+                "FailedEntryCount": 1,
+                "Entries": [{"ErrorCode": "InternalFailure"}],
+            }
+
+    monkeypatch.setattr(handler, "_connect", lambda **_kwargs: Connection())
+    monkeypatch.setattr(handler.boto3, "client", lambda service: Events())
+    for name in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER"):
+        monkeypatch.setenv(name, "5432" if name == "DB_PORT" else "test")
+
+    with pytest.raises(RuntimeError, match="load-success event"):
+        handler._load(
+            "i95",
+            _i95_rows(),
+            s3_key="raw/feed=i95/date=2026-08-16/1200Z.csv",
+        )
+
+
+def test_failed_i95_transaction_emits_no_event(monkeypatch):
+    class Cursor:
+        rowcount = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def executemany(self, *_args):
+            raise RuntimeError("database write failed")
+
+    class Connection:
+        def transaction(self):
+            return self
+
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(handler, "_connect", lambda **_kwargs: Connection())
+    monkeypatch.setattr(
+        handler.boto3,
+        "client",
+        lambda service: pytest.fail("failed transaction emitted an event"),
+    )
+    for name in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER"):
+        monkeypatch.setenv(name, "5432" if name == "DB_PORT" else "test")
+
+    with pytest.raises(RuntimeError, match="database write failed"):
+        handler._load(
+            "i95",
+            _i95_rows(),
+            s3_key="raw/feed=i95/date=2026-08-16/1200Z.csv",
+        )

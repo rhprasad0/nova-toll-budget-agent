@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import os
 import re
 import urllib.parse
 from collections.abc import Iterator
+from datetime import UTC
 from typing import Any, LiteralString, cast
 
 import boto3
@@ -138,6 +140,39 @@ def _row_params(row: I95Row | I66Row, *, s3_key: str) -> dict[str, Any]:
     return params
 
 
+def _i95_watermark(rows: list[I95Row] | list[I66Row]) -> str:
+    if not rows or any(not isinstance(row, I95Row) for row in rows):
+        raise ValueError("I-95 load must contain exactly one source interval")
+    watermarks = {row.interval_end_at.astimezone(UTC) for row in rows}
+    if len(watermarks) != 1:
+        raise ValueError("I-95 load must contain exactly one source interval")
+    return next(iter(watermarks)).isoformat().replace("+00:00", "Z")
+
+
+def _publish_i95_success(*, watermark: str, s3_key: str, row_count: int) -> None:
+    events = cast(Any, boto3.client("events"))  # pyright: ignore[reportUnknownMemberType]
+    response = events.put_events(
+        Entries=[
+            {
+                "Source": "tollchat.pricing-loader",
+                "DetailType": "I95 Pricing Load Committed",
+                "Detail": json.dumps(
+                    {
+                        "schema_version": 1,
+                        "facility": "i95_i495",
+                        "source_watermark": watermark,
+                        "source_key": s3_key,
+                        "row_count": row_count,
+                    },
+                    separators=(",", ":"),
+                ),
+            }
+        ]
+    )
+    if response.get("FailedEntryCount"):
+        raise RuntimeError("failed to emit I-95 load-success event")
+
+
 def _connect(*, host: str, port: int, dbname: str, user: str) -> object:
     import psycopg  # type: ignore[import-not-found]
 
@@ -161,6 +196,7 @@ def _connect(*, host: str, port: int, dbname: str, user: str) -> object:
 
 
 def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
+    watermark = _i95_watermark(rows) if feed == "i95" else None
     _, upsert_sql = _FEED_CONFIG[feed]
     conn = cast(
         Any,
@@ -180,6 +216,12 @@ def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
             affected_rows = cur.rowcount
     finally:
         conn.close()
+    if watermark is not None:
+        _publish_i95_success(
+            watermark=watermark,
+            s3_key=s3_key,
+            row_count=len(rows),
+        )
     logger.info("V2_LOAD_ROWS %s %s", feed, affected_rows)
     logger.info("V2_LOAD_OK %s", feed)
     logger.info("V2_LOAD_OBJECT_OK %s %s", feed, s3_key)

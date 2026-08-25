@@ -51,6 +51,7 @@ jobs:
       - run: uv run python oracle/build_oracle_data.py --check
       - run: ./scripts/build_fetcher_zip.sh
       - run: ./scripts/build_loader_zip.sh
+      - run: ./scripts/build_publisher_zip.sh
       - run: ./scripts/build_agentcore_zips.sh
 
   v2-database:

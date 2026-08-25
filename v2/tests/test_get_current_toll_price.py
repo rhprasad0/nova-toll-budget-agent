@@ -14,7 +14,8 @@ from strands.tools.loader import load_tools_from_module_path
 from strands.tools.registry import ToolRegistry
 from strands.types.tools import ToolResult, ToolUse
 
-from agent_tools import get_current_toll_price as pricing_tool
+from agent_tools import current_price_domain as pricing_tool
+from agent_tools import get_current_toll_price as pricing_transport
 
 _EASTERN = ZoneInfo("America/New_York")
 
@@ -549,7 +550,7 @@ def _southbound_westpark_pricing_route(origin_point_id: str):
 def _run_tool(input_data: Any | None = None) -> list[dict[str, Any]]:
     async def collect() -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
-        async for event in pricing_tool.get_current_toll_price.stream(
+        async for event in pricing_transport.get_current_toll_price.stream(
             _tool_use(_input() if input_data is None else input_data),
             {"agent": object()},
         ):
@@ -610,7 +611,7 @@ def _domain_result(
 def test_strands_loads_exact_strict_input_schema():
     assert not hasattr(pricing_tool.route_validation, "TOOL_SPEC")
     loaded = load_tools_from_module_path("agent_tools.get_current_toll_price")
-    assert loaded == [pricing_tool.get_current_toll_price]
+    assert loaded == [pricing_transport.get_current_toll_price]
     registry = ToolRegistry()
     registry.register_tool(loaded[0])
     registered_spec = registry.get_all_tools_config()["get_current_toll_price"]

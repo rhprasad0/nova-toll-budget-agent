@@ -253,6 +253,11 @@ def test_eventbridge_has_both_failure_paths_and_bounded_retries():
     assert "maximum_retry_attempts       = 185" in MAIN_TF
     assert 'resource "aws_sqs_queue" "invoke_failure"' in MAIN_TF
     assert 'resource "aws_sqs_queue" "delivery_failure"' in MAIN_TF
+    assert 'resource "aws_vpc_endpoint" "eventbridge"' in FOUNDATION_AGENTCORE
+    assert (
+        'resource "aws_vpc_security_group_egress_rule" "loader_to_eventbridge"'
+        in MAIN_TF
+    )
 
 
 def test_loader_network_and_data_access_are_scoped():
@@ -261,6 +266,33 @@ def test_loader_network_and_data_access_are_scoped():
     assert '"${data.aws_s3_bucket.raw.arn}/raw/feed=i66/*"' in MAIN_TF
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_rds"' in MAIN_TF
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
+
+
+def test_report_publisher_is_event_driven_bounded_and_least_privilege():
+    variables = (V2_ROOT / "infra" / "variables.tf").read_text()
+    assert 'variable "publisher_package_path"' in variables
+    assert 'function_name = "toll-v2-report-publisher"' in MAIN_TF
+    assert 'schedule_expression = "cron(5/10 * * * ? *)"' in MAIN_TF
+    assert '"tollchat.pricing-loader"' in MAIN_TF
+    assert '"I95 Pricing Load Committed"' in MAIN_TF
+    assert "/report_publisher" in MAIN_TF
+    assert 'DB_USER = "report_publisher"' in MAIN_TF
+    assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_rds"' in MAIN_TF
+    assert (
+        "s3:PutObject"
+        not in MAIN_TF.split('data "aws_iam_policy_document" "publisher"', maxsplit=1)[
+            1
+        ].split('resource "aws_iam_role_policy" "publisher"', maxsplit=1)[0]
+    )
+    assert (
+        'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
+        in MAIN_TF
+    )
+    assert "evaluation_periods  = 3" in MAIN_TF
+    assert "period              = 600" in MAIN_TF
+    assert 'treat_missing_data  = "breaching"' in MAIN_TF
+    assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
+    assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
 
 
 def test_timed_ci_uses_the_internal_pricing_caller():
