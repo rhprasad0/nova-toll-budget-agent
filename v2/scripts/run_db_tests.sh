@@ -12,6 +12,11 @@ if [[ -z "$base_ref" ]]; then
   echo "usage: $0 BASE_GIT_REF" >&2
   exit 2
 fi
+if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
+  # New tags have no base; migration 026's parent is its declared 1.2.0 source.
+  base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
+    v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql)"
+fi
 migration_source_dir="$(mktemp -d)"
 oracle_rollback_db="nova_toll_v2_oracle_rollback_test"
 missing_pricing_db="nova_toll_v2_oracle_missing_pricing_test"
