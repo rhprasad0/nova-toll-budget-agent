@@ -168,6 +168,7 @@ def run_rollup(
         Dimensions=[
             {"Name": "WebACL", "Value": web_acl_metric},
             {"Name": "Rule", "Value": route_rule_metric},
+            {"Name": "Region", "Value": "CloudFront"},
         ],
         StartTime=start,
         EndTime=start + timedelta(days=1),

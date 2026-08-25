@@ -231,7 +231,14 @@ def test_agent_measurement_is_count_only_private_and_bounded():
         'resource "aws_s3_bucket_public_access_block" "agent_measurement"'
         in measurement
     )
-    assert 'sse_algorithm = "AES256"' in measurement
+    assert 'resource "aws_kms_key" "agent_measurement"' in measurement
+    assert "enable_key_rotation     = true" in measurement
+    assert 'sse_algorithm     = "aws:kms"' in measurement
+    assert "kms_master_key_id = aws_kms_key.agent_measurement.arn" in measurement
+    assert "bucket_key_enabled = true" in measurement
+    assert 'identifiers = ["delivery.logs.amazonaws.com"]' in measurement
+    assert 'actions   = ["kms:GenerateDataKey*"]' in measurement
+    assert 'encryption_option = "SSE_KMS"' in measurement
     assert (
         'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
         in measurement
@@ -243,6 +250,7 @@ def test_agent_measurement_is_count_only_private_and_bounded():
     assert "enforce_workgroup_configuration    = true" in measurement
     assert "bytes_scanned_cutoff_per_query     = 1073741824" in measurement
     assert "/WAFLogs/cloudfront/tollchat-v2-public-chat/" in measurement
+    assert "/WAFLogs/us-east-1/tollchat-v2-public-chat/" not in measurement
     assert '"glue:GetPartition"' in measurement
     assert 'schedule_expression = "cron(15 3 * * ? *)"' in measurement
     assert "evaluation_periods  = 2" in measurement

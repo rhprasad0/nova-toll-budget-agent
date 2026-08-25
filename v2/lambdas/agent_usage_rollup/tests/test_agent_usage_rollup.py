@@ -32,9 +32,11 @@ class _Athena:
 class _CloudWatch:
     def __init__(self, waf_count=100):
         self.waf_count = waf_count
+        self.statistics = []
         self.metrics = []
 
-    def get_metric_statistics(self, **_kwargs):
+    def get_metric_statistics(self, **kwargs):
+        self.statistics.append(kwargs)
         return {"Datapoints": [{"Sum": self.waf_count}]}
 
     def put_metric_data(self, **kwargs):
@@ -82,6 +84,11 @@ def test_rollup_publishes_only_completed_runs_and_metrics(monkeypatch):
     assert len(rollup_queries) == len(completion_queries) == 3
     assert result["coverage_percent"] == 95.0
     assert result["completed_dates"] == ["2026-08-23", "2026-08-24", "2026-08-25"]
+    assert cloudwatch.statistics[0]["Dimensions"] == [
+        {"Name": "WebACL", "Value": "tollchat-v2-public-chat"},
+        {"Name": "Rule", "Value": "tollchat-v2-agent-route-report"},
+        {"Name": "Region", "Value": "CloudFront"},
+    ]
     assert {datum["MetricName"] for datum in cloudwatch.metrics[0]["MetricData"]} == {
         "LogCoveragePercent",
         "RollupCompleted",

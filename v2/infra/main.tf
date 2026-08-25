@@ -434,6 +434,12 @@ data "aws_iam_policy_document" "publisher" {
     actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
     resources = [aws_kms_key.site.arn]
   }
+
+  statement {
+    sid       = "UseAgentMeasurementKey"
+    actions   = ["kms:Encrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.agent_measurement.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "publisher" {

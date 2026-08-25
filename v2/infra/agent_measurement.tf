@@ -23,12 +23,58 @@ resource "aws_s3_bucket_public_access_block" "agent_measurement" {
   restrict_public_buckets = true
 }
 
+data "aws_iam_policy_document" "agent_measurement_kms" {
+  statement {
+    sid       = "EnableAccountIamPolicies"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid       = "AllowWafLogDelivery"
+    actions   = ["kms:GenerateDataKey*"]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:us-east-1:${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
+}
+
+resource "aws_kms_key" "agent_measurement" {
+  description             = "TollChat agent-route measurement data"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.agent_measurement_kms.json
+}
+
+resource "aws_kms_alias" "agent_measurement" {
+  name          = "alias/tollchat-v2-agent-measurement"
+  target_key_id = aws_kms_key.agent_measurement.key_id
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "agent_measurement" {
   bucket = aws_s3_bucket.agent_measurement.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      kms_master_key_id = aws_kms_key.agent_measurement.arn
+      sse_algorithm     = "aws:kms"
     }
+    bucket_key_enabled = true
   }
 }
 
@@ -162,6 +208,7 @@ resource "aws_wafv2_web_acl_logging_configuration" "agent_reports" {
 
   depends_on = [
     aws_s3_bucket_policy.agent_measurement,
+    aws_s3_bucket_server_side_encryption_configuration.agent_measurement,
     aws_s3_object.privacy,
   ]
 }
@@ -183,7 +230,8 @@ resource "aws_glue_catalog_table" "waf_logs" {
     "projection.log_hour.type"   = "integer"
     "projection.log_hour.range"  = "0,23"
     "projection.log_hour.digits" = "2"
-    "storage.location.template"  = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/tollchat-v2-public-chat/$${log_date}/$${log_hour}/"
+    # CloudFront-scoped WAF logs use this literal scope token, not the region name.
+    "storage.location.template" = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/tollchat-v2-public-chat/$${log_date}/$${log_hour}/"
   }
 
   dynamic "partition_keys" {
@@ -357,7 +405,10 @@ resource "aws_athena_workgroup" "agent_reports" {
     result_configuration {
       output_location       = "s3://${aws_s3_bucket.agent_measurement.id}/athena-results/"
       expected_bucket_owner = data.aws_caller_identity.current.account_id
-      encryption_configuration { encryption_option = "SSE_S3" }
+      encryption_configuration {
+        encryption_option = "SSE_KMS"
+        kms_key_arn       = aws_kms_key.agent_measurement.arn
+      }
     }
   }
 }
@@ -445,6 +496,12 @@ data "aws_iam_policy_document" "agent_usage_rollup" {
       "${aws_s3_bucket.agent_measurement.arn}/rollups/*",
       "${aws_s3_bucket.agent_measurement.arn}/athena-results/*",
     ]
+  }
+
+  statement {
+    sid       = "UseMeasurementKey"
+    actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.agent_measurement.arn]
   }
 
   statement {
