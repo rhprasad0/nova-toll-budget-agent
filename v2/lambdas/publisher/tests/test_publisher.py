@@ -698,6 +698,7 @@ def test_completed_publication_writes_and_repairs_private_generation_marker():
     marker_put = next(put for put in s3.puts if put["Bucket"] == "analytics-bucket")
     assert marker_put["Key"].startswith("generations/date=2026-08-25/")
     marker = json.loads(marker_put["Body"])
+    route_keys = marker.pop("route_keys")
     assert marker == {
         "schema_version": 1,
         "facility": "i95_i495",
@@ -705,6 +706,13 @@ def test_completed_publication_writes_and_repairs_private_generation_marker():
         "published_at": "2026-08-25T16:07:00Z",
         "result_sha256": result["result_sha256"],
     }
+    published_route_keys = {
+        key.removesuffix("/report.json")
+        for key in s3.objects
+        if key.startswith("tolls/i95-i495/") and key.endswith("/report.json")
+    }
+    assert len(route_keys) == 685
+    assert set(route_keys) == published_route_keys
 
     marker_key = marker_put["Key"]
     del s3.objects[marker_key]

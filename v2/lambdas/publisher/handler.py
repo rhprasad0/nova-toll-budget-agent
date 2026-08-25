@@ -793,7 +793,10 @@ def _put_phase(
 
 
 def _put_generation_marker(
-    s3_client: _S3Client, analytics_bucket: str, manifest: dict[str, Any]
+    s3_client: _S3Client,
+    analytics_bucket: str,
+    manifest: dict[str, Any],
+    route_keys: list[str],
 ) -> None:
     published_at = cast(str, manifest["published_at"])
     marker = {
@@ -802,6 +805,7 @@ def _put_generation_marker(
         "generation_id": manifest["generation_id"],
         "published_at": published_at,
         "result_sha256": manifest["result_sha256"],
+        "route_keys": route_keys,
     }
     marker_name = f"{published_at.replace(':', '')}-{manifest['result_sha256']}.json"
     s3_client.put_object(
@@ -835,6 +839,7 @@ def _publish_generation(
         for route in generation.routes
     ]
     result_sha256 = _result_fingerprint(documents, point_slugs)
+    route_keys = [_route_key(document, point_slugs) for document in documents]
     if previous is not None:
         previous_watermark = previous.get("source_watermark")
         if (
@@ -846,7 +851,9 @@ def _publish_generation(
             return {"status": "superseded", "result_sha256": result_sha256}
         if previous["result_sha256"] == result_sha256:
             if analytics_bucket is not None:
-                _put_generation_marker(s3_client, analytics_bucket, previous)
+                _put_generation_marker(
+                    s3_client, analytics_bucket, previous, route_keys
+                )
             return {"status": "unchanged", "result_sha256": result_sha256}
 
     json_objects = [
@@ -924,7 +931,7 @@ def _publish_generation(
         ],
     )
     if analytics_bucket is not None:
-        _put_generation_marker(s3_client, analytics_bucket, manifest)
+        _put_generation_marker(s3_client, analytics_bucket, manifest, route_keys)
     return {"status": "published", "result_sha256": result_sha256}
 
 

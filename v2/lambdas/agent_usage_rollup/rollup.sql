@@ -28,7 +28,7 @@ WITH raw AS (
 ), registry_matches AS (
     SELECT
         raw.*,
-        registry.vendor_family,
+        registry.vendor_family AS declared_vendor_family,
         registry.agent_mode,
         row_number() OVER (
             PARTITION BY raw.request_id
@@ -38,24 +38,12 @@ WITH raw AS (
     LEFT JOIN agent_registry registry
       ON raw.user_agent LIKE concat('%', lower(registry.user_agent_token), '%')
     WHERE raw.request_rank = 1
-), requests AS (
+), identified AS (
     SELECT
         registry_matches.*,
         regexp_extract(uri, '^/tolls/i95-i495/([^/]+)/', 1) AS origin_slug,
         regexp_extract(uri, '^/tolls/i95-i495/[^/]+/([^/]+)/', 1) AS destination_slug,
         CASE WHEN uri LIKE '%/report.json' THEN 'json' ELSE 'html' END AS representation,
-        CASE
-            WHEN agent_mode IS NOT NULL THEN agent_mode
-            WHEN any_match(labels, label -> label.name LIKE '%:assistant-referrer-%') THEN 'ai_referral'
-            WHEN any_match(labels, label -> label.name LIKE '%:bot:category:ai') THEN 'unknown_agent'
-            ELSE 'unclassified'
-        END AS traffic_class,
-        CASE
-            WHEN any_match(labels, label -> label.name LIKE '%:bot:web_bot_auth:verified') THEN 'wba_verified'
-            WHEN any_match(labels, label -> label.name LIKE '%:bot:verified') THEN 'aws_verified'
-            WHEN agent_mode IS NOT NULL THEN 'declared'
-            ELSE NULL
-        END AS identity_confidence,
         regexp_extract(
             array_join(transform(labels, label -> label.name), ','),
             'bot:name:([^,]+)',
@@ -73,6 +61,62 @@ WITH raw AS (
         ) AS aws_category
     FROM registry_matches
     WHERE registry_rank = 1
+), mapped AS (
+    SELECT
+        identified.*,
+        nullif(regexp_extract(
+            array_join(transform(labels, label -> label.name), ','),
+            'assistant-referrer-([^,]+)',
+            1
+        ), '') AS referrer_vendor_family,
+        CASE
+            WHEN aws_organization IN (
+                'amazon', 'anthropic', 'apple', 'duckduckgo', 'google',
+                'microsoft', 'openai', 'perplexity'
+            ) THEN aws_organization
+            WHEN aws_bot_name IN ('chatgpt', 'chatgpt_user', 'gptbot', 'oai_searchbot') THEN 'openai'
+            WHEN aws_bot_name IN ('anthropic', 'claude_searchbot', 'claude_user', 'claude_web', 'claudebot') THEN 'anthropic'
+            WHEN aws_bot_name IN ('perplexitybot', 'perplexity_user') THEN 'perplexity'
+            WHEN aws_bot_name IN ('bingbot', 'copilot') THEN 'microsoft'
+            WHEN aws_bot_name IN ('gemini_deep_research', 'google_common_crawler', 'googlebot') THEN 'google'
+            WHEN aws_bot_name IN ('amazonbot', 'amzn_searchbot', 'amzn_user', 'bedrockbot') THEN 'amazon'
+            WHEN aws_bot_name IN ('applebot', 'applebot_extended') THEN 'apple'
+            WHEN aws_bot_name = 'duckassistbot' THEN 'duckduckgo'
+            ELSE NULL
+        END AS aws_vendor_family
+    FROM identified
+), requests AS (
+    SELECT
+        mapped.*,
+        CASE
+            WHEN agent_mode IS NOT NULL THEN agent_mode
+            WHEN referrer_vendor_family IS NOT NULL THEN 'ai_referral'
+            WHEN any_match(labels, label -> label.name LIKE '%:bot:category:ai') THEN 'unknown_agent'
+            ELSE 'unclassified'
+        END AS traffic_class,
+        CASE
+            WHEN any_match(labels, label -> label.name LIKE '%:bot:web_bot_auth:verified')
+                 AND aws_vendor_family IS NOT NULL
+                 AND (declared_vendor_family IS NULL OR aws_vendor_family = declared_vendor_family)
+                THEN 'wba_verified'
+            WHEN any_match(labels, label -> label.name LIKE '%:bot:verified')
+                 AND aws_vendor_family IS NOT NULL
+                 AND (declared_vendor_family IS NULL OR aws_vendor_family = declared_vendor_family)
+                THEN 'aws_verified'
+            WHEN agent_mode IS NOT NULL THEN 'declared'
+            ELSE NULL
+        END AS identity_confidence,
+        CASE
+            WHEN declared_vendor_family IS NOT NULL THEN declared_vendor_family
+            WHEN aws_vendor_family IS NOT NULL
+                 AND (
+                     any_match(labels, label -> label.name LIKE '%:bot:web_bot_auth:verified')
+                     OR any_match(labels, label -> label.name LIKE '%:bot:verified')
+                 ) THEN aws_vendor_family
+            WHEN referrer_vendor_family IS NOT NULL THEN referrer_vendor_family
+            ELSE 'unknown'
+        END AS vendor_family
+    FROM mapped
 ), with_generation AS (
     SELECT
         requests.*,
@@ -83,8 +127,12 @@ WITH raw AS (
             ORDER BY from_iso8601_timestamp(marker.published_at) DESC NULLS LAST
         ) AS generation_rank
     FROM requests
-    LEFT JOIN agent_report_generations marker
+    JOIN agent_report_generations marker
       ON from_iso8601_timestamp(marker.published_at) <= requests.requested_at
+     AND contains(
+         marker.route_keys,
+         concat('tolls/i95-i495/', requests.origin_slug, '/', requests.destination_slug)
+     )
 )
 SELECT
     min(requested_at) AS first_requested_at,
@@ -95,7 +143,7 @@ SELECT
     destination_slug,
     representation,
     traffic_class,
-    coalesce(vendor_family, 'unknown') AS vendor_family,
+    vendor_family,
     identity_confidence,
     aws_bot_name,
     aws_organization,
@@ -112,7 +160,7 @@ GROUP BY
     destination_slug,
     representation,
     traffic_class,
-    coalesce(vendor_family, 'unknown'),
+    vendor_family,
     identity_confidence,
     aws_bot_name,
     aws_organization,

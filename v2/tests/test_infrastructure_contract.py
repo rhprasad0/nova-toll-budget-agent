@@ -312,8 +312,15 @@ def test_agent_registry_and_rollup_outputs_are_privacy_safe():
     assert "report[.]json" in rollup
     assert "identity_confidence" in rollup
     assert "web_bot_auth:verified" in rollup
+    assert "assistant-referrer-([^,]+)" in rollup
+    assert "aws_vendor_family = declared_vendor_family" in rollup
+    assert re.search(r"contains\(\s*marker[.]route_keys", rollup)
+    assert "JOIN agent_report_generations marker" in rollup
+    assert "LEFT JOIN agent_report_generations marker" not in rollup
     for forbidden in ("clientip", "args", "referer"):
         assert forbidden not in rollup.lower()
+    measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
+    assert 'route_keys     = "array<string>"' in measurement
     assert "INSERT INTO agent_report_rollup_completions" in completion
     assert "JOIN latest" in latest
     assert "agent_report_rollups usage" in latest
@@ -346,6 +353,18 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     assert 'content       = "{}"' in site
     assert 'id="usage-proof"' in page
     assert re.search(r'<p[^>]*id="usage-proof"[^>]*hidden', page)
+
+
+def test_agent_referrer_rules_match_only_exact_url_authorities():
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    referrer_rules = site.split('dynamic "rule" {', maxsplit=1)[1].split(
+        'rule {\n    name     = "agent-route-report"', maxsplit=1
+    )[0]
+
+    assert "regex_match_statement" in referrer_rules
+    assert 'positional_constraint = "CONTAINS"' not in referrer_rules
+    assert "^https?://([a-z0-9-]+[.])*" in site
+    assert "(:[0-9]+)?([/?#]|$)" in site
 
 
 def test_usage_publisher_is_daily_static_and_least_privilege():

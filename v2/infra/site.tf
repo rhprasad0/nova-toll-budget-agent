@@ -1,11 +1,11 @@
 locals {
   site_assets = fileset("${path.module}/../agent/assets", "**")
   assistant_referrers = {
-    openai     = { priority = 1, host = "chatgpt.com" }
-    anthropic  = { priority = 2, host = "claude.ai" }
-    perplexity = { priority = 3, host = "perplexity.ai" }
-    google     = { priority = 4, host = "gemini.google.com" }
-    microsoft  = { priority = 5, host = "copilot.microsoft.com" }
+    openai     = { priority = 1, host = "chatgpt[.]com" }
+    anthropic  = { priority = 2, host = "claude[.]ai" }
+    perplexity = { priority = 3, host = "perplexity[.]ai" }
+    google     = { priority = 4, host = "gemini[.]google[.]com" }
+    microsoft  = { priority = 5, host = "copilot[.]microsoft[.]com" }
   }
 }
 
@@ -469,14 +469,13 @@ resource "aws_wafv2_web_acl" "public_chat" {
             }
           }
           statement {
-            byte_match_statement {
+            regex_match_statement {
               field_to_match {
                 single_header {
                   name = "referer"
                 }
               }
-              positional_constraint = "CONTAINS"
-              search_string         = rule.value.host
+              regex_string = "^https?://([a-z0-9-]+[.])*${rule.value.host}(:[0-9]+)?([/?#]|$)"
               text_transformation {
                 priority = 0
                 type     = "LOWERCASE"

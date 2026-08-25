@@ -263,6 +263,7 @@ resource "aws_glue_catalog_table" "agent_report_generations" {
         generation_id  = "string"
         published_at   = "string"
         result_sha256  = "string"
+        route_keys     = "array<string>"
       }
       content {
         name = columns.key
