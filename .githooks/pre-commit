@@ -18,7 +18,7 @@ else
     echo "gitleaks not installed locally; skipping (CI will still catch it)" >&2
 fi
 
-for project in v1 v2; do
+for project in v2; do
     files=$(git diff --cached --name-only --diff-filter=ACM -- "$project/*.py" "$project/**/*.py" | sed "s#^$project/##")
     [ -z "$files" ] && continue
 

@@ -1,2 +1,0 @@
-psycopg[binary]==3.3.4
-defusedxml==0.7.1

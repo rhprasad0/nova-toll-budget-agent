@@ -24,7 +24,7 @@ dev = [
 [tool.pyright]
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
-exclude = ["**/__pycache__", ".venv", "infra/build", "lambdas/loader/tests"]
+exclude = ["**/__pycache__", ".venv", "infra/build", "lambdas/fetcher/tests", "lambdas/loader/tests"]
 
 [tool.ruff]
 extend-exclude = ["infra/build"]

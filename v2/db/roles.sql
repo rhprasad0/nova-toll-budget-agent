@@ -1,6 +1,5 @@
 -- TollChat v2 IAM-authenticated pricing roles. Run as the database owner
--- after db/schema.sql. The guarded role creation makes this usable both on a
--- blank database and beside the deployed v1 roles.
+-- after db/schema.sql.
 
 \set ON_ERROR_STOP on
 
@@ -31,7 +30,6 @@ TO pricing_loader_writer;
 
 GRANT SELECT ON
     pricing.schema_version,
-    pricing.backfill_state,
     pricing.trip_pricing_i95,
     pricing.trip_pricing_i66,
     pricing.current_trip_pricing_i95,

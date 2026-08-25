@@ -16,25 +16,28 @@ TIMED_BALLPARK_TEST = (
     V2_ROOT / "tests" / "test_get_annual_toll_ballpark_live.py"
 ).read_text()
 VERSIONS_TF = (V2_ROOT / "infra" / "versions.tf").read_text()
-V1_TRIGGERS = (REPO_ROOT / "v1" / "infra" / "triggers.tf").read_text()
-V1_LAMBDA = (REPO_ROOT / "v1" / "infra" / "lambda.tf").read_text()
-V1_IAM = (REPO_ROOT / "v1" / "infra" / "iam.tf").read_text()
-V1_AGENTCORE = (REPO_ROOT / "v1" / "infra" / "agentcore.tf").read_text()
+FOUNDATION_ROOT = REPO_ROOT / "infra"
+FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
+FOUNDATION_LAMBDA = (FOUNDATION_ROOT / "lambda.tf").read_text()
+FOUNDATION_IAM = (FOUNDATION_ROOT / "iam.tf").read_text()
+FOUNDATION_AGENTCORE = (FOUNDATION_ROOT / "agentcore.tf").read_text()
 DEPLOYMENT = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
 
 
-def test_v1_loader_is_retired_but_eventbridge_remains():
-    notification = V1_TRIGGERS.split(
+def test_foundation_publishes_raw_events_without_a_legacy_loader():
+    notification = FOUNDATION_TRIGGERS.split(
         'resource "aws_s3_bucket_notification" "raw"', maxsplit=1
     )[1]
     assert "eventbridge = true" in notification
     assert "lambda_function" not in notification
-    assert 'resource "aws_lambda_permission" "s3_invoke_loader"' not in V1_TRIGGERS
-    assert 'resource "aws_lambda_function" "loader"' not in V1_LAMBDA
+    assert (
+        'resource "aws_lambda_permission" "s3_invoke_loader"' not in FOUNDATION_TRIGGERS
+    )
+    assert 'resource "aws_lambda_function" "loader"' not in FOUNDATION_LAMBDA
 
 
-def test_v1_site_is_removed_and_terraform_ci_only_validates():
-    assert not (REPO_ROOT / "v1" / "infra" / "site.tf").exists()
+def test_foundation_has_no_site_and_terraform_ci_only_validates():
+    assert not (FOUNDATION_ROOT / "site.tf").exists()
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
     assert workflow.count("terraform fmt -check -recursive") == 2
     assert workflow.count("terraform init -backend=false -input=false") == 2
@@ -43,14 +46,14 @@ def test_v1_site_is_removed_and_terraform_ci_only_validates():
     assert "terraform apply" not in workflow
     assert "configure-aws-credentials" not in workflow
     assert "id-token: write" not in workflow
-    assert 'resource "aws_iam_role" "terraform_apply"' not in V1_IAM
-    assert 'resource "aws_iam_role" "github_ci"' not in V1_IAM
+    assert 'resource "aws_iam_role" "terraform_apply"' not in FOUNDATION_IAM
+    assert 'resource "aws_iam_role" "github_ci"' not in FOUNDATION_IAM
 
 
 def test_shared_dynamodb_endpoint_admits_v2_session_table():
-    endpoint = V1_AGENTCORE.split('resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1)[
-        1
-    ].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
+    endpoint = FOUNDATION_AGENTCORE.split(
+        'resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1
+    )[1].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
     assert "tollchat-v2-anonymous-sessions" in endpoint
     assert "table/tollchat-anonymous-sessions" not in endpoint
     assert "dynamodb:*" not in endpoint
@@ -198,15 +201,12 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
     assert '"dynamodb:TransactWriteItems"' in proxy_policy
 
 
-def test_first_usage_rollout_stages_permissions_and_private_smoke_traffic():
-    v1_apply = DEPLOYMENT.index("build/usage-permissions.tfplan")
-    disclosures = DEPLOYMENT.index("s3api put-object")
-    release = DEPLOYMENT.index("build/release.tfplan")
-    assert v1_apply < disclosures < release
+def test_usage_rollout_has_no_retired_foundation_step():
+    assert "usage-permissions.tfplan" not in DEPLOYMENT
     assert "usage-prerequisites.tfplan" not in DEPLOYMENT
     assert "Do not use Terraform resource targets" in DEPLOYMENT
     assert "iam get-role-policy" in DEPLOYMENT
-    assert DEPLOYMENT.count("dynamodb:TransactWriteItems") >= 2
+    assert "dynamodb:TransactWriteItems" in DEPLOYMENT
     assert "tollchat_usage_optout=1" in DEPLOYMENT
     assert "--consistent-read" in DEPLOYMENT
     assert "must be unchanged" in DEPLOYMENT
@@ -240,7 +240,7 @@ def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
     assert exception in ignores
     assert (
         """  - id: AVD-AWS-0104
-    paths: [v1/infra/agentcore.tf]"""
+    paths: [infra/agentcore.tf]"""
         not in ignores
     )
 

@@ -21,26 +21,7 @@ Create a saved plan with the reviewed packages and the explicit production
 profile. Load the Cloudflare token from SSM only into the Terraform process
 environment, then review every action before applying that exact file:
 
-Before the first usage-counter release, update and verify the retained v1
-DynamoDB endpoint policy. This must finish before any v2 proxy code containing
-transactional counters is deployed:
-
-```sh
-mkdir -p ../v1/infra/build
-(
-  cd ../v1/infra
-  AWS_PROFILE=nova-toll terraform init
-  AWS_PROFILE=nova-toll terraform plan \
-    -target=aws_vpc_endpoint.dynamodb \
-    -out=build/usage-permissions.tfplan
-  AWS_PROFILE=nova-toll terraform show build/usage-permissions.tfplan
-  AWS_PROFILE=nova-toll terraform apply build/usage-permissions.tfplan
-  AWS_PROFILE=nova-toll terraform state show aws_vpc_endpoint.dynamodb \
-    | grep -F 'dynamodb:TransactWriteItems'
-)
-```
-
-Then enter `v2/infra` and initialize the v2 state for every release:
+Enter `v2/infra` and initialize the application state for every release:
 
 ```sh
 cd infra
@@ -106,13 +87,8 @@ AWS_PROFILE=nova-toll aws --region us-east-1 iam get-role-policy \
 unset CLOUDFLARE_API_TOKEN
 ```
 
-The one-time v1 permission plan and direct disclosure upload are required for
-the first usage-counter release. Confirm the v1 transaction permission and the
-public privacy and FAQ text before creating the full release plan. The proxy
-Lambda explicitly depends on its inline policy, so the complete plan applies
-the v2 transaction permission before publishing the new Lambda version. Verify
-that live policy after apply. Later releases skip the v1 targeted plan and
-direct disclosure upload.
+The proxy Lambda explicitly depends on its inline policy, so the complete plan
+applies transaction permission before publishing the new Lambda version.
 
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved

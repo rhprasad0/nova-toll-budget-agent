@@ -2,21 +2,37 @@
 set -euo pipefail
 
 bootstrap_db="nova_toll_v2_bootstrap_test"
-backfill_db="nova_toll_v2_backfill_test"
+retirement_db="nova_toll_v2_retirement_test"
+retirement_divergent_db="nova_toll_v2_retirement_divergent_test"
+retirement_dependent_db="nova_toll_v2_retirement_dependent_test"
+retirement_role_db="nova_toll_v2_retirement_role_test"
 migration_db="nova_toll_v2_migration_test"
-migration_source_dir="$(mktemp -d)"
 base_ref="${1:-}"
+if [[ -z "$base_ref" ]]; then
+  echo "usage: $0 BASE_GIT_REF" >&2
+  exit 2
+fi
+if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
+  # New tags have no base; migration 026's parent is its declared 1.2.0 source.
+  base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
+    v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql)"
+fi
+migration_source_dir="$(mktemp -d)"
 oracle_rollback_db="nova_toll_v2_oracle_rollback_test"
 missing_pricing_db="nova_toll_v2_oracle_missing_pricing_test"
 incompatible_pricing_db="nova_toll_v2_oracle_incompatible_pricing_test"
 unsafe_agent_db="nova_toll_v2_oracle_unsafe_agent_test"
 
 cleanup_databases() {
-  for database in "$bootstrap_db" "$backfill_db" "$migration_db" \
+  for database in "$bootstrap_db" "$retirement_db" "$migration_db" \
+    "$retirement_divergent_db" "$retirement_dependent_db" \
+    "$retirement_role_db" \
     "$oracle_rollback_db" "$missing_pricing_db" "$incompatible_pricing_db" \
     "$unsafe_agent_db"; do
     dropdb --if-exists "$database"
   done
+  psql --dbname postgres --set ON_ERROR_STOP=1 \
+    --command "DROP ROLE IF EXISTS loader_writer"
 }
 
 cleanup() {
@@ -314,7 +330,7 @@ BEGIN
     RAISE EXCEPTION 'failed schema upgrade changed the installed version';
   END IF;
 END $$;
-UPDATE pricing.schema_version SET version = '1.2.0' WHERE singleton;
+UPDATE pricing.schema_version SET version = '1.3.0' WHERE singleton;
 SQL
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_analysis_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/pricing_ballpark_contract.sql
@@ -393,66 +409,58 @@ if psql --dbname "$bootstrap_db" \
   exit 1
 fi
 
-createdb --template template0 "$backfill_db"
-psql --dbname "$backfill_db" \
-  --file v2/db/migrations/001_create_pricing_schema.sql
-psql --dbname "$backfill_db" --file v2/tests/public_source_fixture.sql
-psql --dbname "$backfill_db" --file v2/tests/backfill_contract.sql
+prepare_retirement_database() {
+  local database="$1"
+  createdb --template template0 "$database"
+  psql --dbname "$database" --file "$migration_source_dir/v2/db/schema.sql"
+  psql --dbname "$database" --file "$migration_source_dir/v2/db/roles.sql"
+  psql --dbname "$database" --file v2/tests/legacy_public_fixture.sql
+}
 
-psql --dbname "$backfill_db" --set ON_ERROR_STOP=1 <<'SQL'
-UPDATE pricing.trip_pricing_i95
-SET calculated_at = calculated_at + interval '1 minute',
-    zone_toll_rate_usd = zone_toll_rate_usd + 1,
-    s3_key = 'raw/feed=i95/date=2026-08-16/1210Z.csv';
-SQL
-if psql --dbname "$backfill_db" --file v2/db/migrations/backfill.sql; then
-  echo "backfill unexpectedly regressed a newer pricing row" >&2
+prepare_retirement_database "$retirement_db"
+psql --dbname "$retirement_db" \
+  --file v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql
+psql --dbname "$retirement_db" --file v2/tests/legacy_retirement_contract.sql
+psql --dbname "$retirement_db" \
+  --file v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql
+
+prepare_retirement_database "$retirement_divergent_db"
+psql --dbname "$retirement_divergent_db" --set ON_ERROR_STOP=1 \
+  --command "UPDATE public.trip_pricing_i95 SET zone_toll_rate_usd = 99"
+if psql --dbname "$retirement_divergent_db" \
+  --file v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql; then
+  echo "retirement accepted divergent public pricing" >&2
   exit 1
 fi
-psql --dbname "$backfill_db" --set ON_ERROR_STOP=1 <<'SQL'
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pricing.trip_pricing_i95
-    WHERE calculated_at = '2026-08-16 11:59:00+00'
-      AND zone_toll_rate_usd = 8.10
-      AND s3_key = 'raw/feed=i95/date=2026-08-16/1210Z.csv'
-  ) THEN
-    RAISE EXCEPTION 'failed backfill changed the newer pricing row';
-  END IF;
-END $$;
+dropdb "$retirement_divergent_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command "DROP ROLE loader_writer"
 
-UPDATE pricing.trip_pricing_i95 AS pricing_row
-SET calculated_at = public_row.calculated_at,
-    zone_toll_rate_usd = public_row.zone_toll_rate_usd,
-    s3_key = public_row.s3_key
-FROM public.trip_pricing_i95 AS public_row
-WHERE pricing_row.interval_end_at = public_row.interval_end_at
-  AND pricing_row.start_zone_id = public_row.start_zone_id
-  AND pricing_row.end_zone_id = public_row.end_zone_id
-  AND pricing_row.od_pair_id = public_row.od_pair_id;
+prepare_retirement_database "$retirement_dependent_db"
+psql --dbname "$retirement_dependent_db" --set ON_ERROR_STOP=1 <<'SQL'
+CREATE SCHEMA hostile;
+CREATE VIEW hostile.legacy_prices AS SELECT * FROM public.trip_pricing_i95;
 SQL
-
-if psql --dbname "$backfill_db" \
-  --file v2/db/migrations/001_create_pricing_schema.rollback.sql; then
-  echo "rollback unexpectedly accepted a missing confirmation" >&2
+if psql --dbname "$retirement_dependent_db" \
+  --file v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql; then
+  echo "retirement accepted surviving legacy dependencies" >&2
   exit 1
 fi
+dropdb "$retirement_dependent_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command "DROP ROLE loader_writer"
 
-psql --dbname "$backfill_db" --set drop_pricing_confirmed=yes \
-  --file v2/db/migrations/001_create_pricing_schema.rollback.sql
-psql --dbname "$backfill_db" --set ON_ERROR_STOP=1 <<'SQL'
-DO $$
-BEGIN
-  IF to_regnamespace('pricing') IS NOT NULL
-     OR to_regclass('public.trip_pricing_i95') IS NULL
-     OR to_regclass('public.trip_pricing_i66') IS NULL
-     OR to_regclass('public.trip_pricing') IS NULL
-     OR to_regclass('public.trip_pricing_i95_live') IS NULL THEN
-    RAISE EXCEPTION 'cleanup did not preserve the public generation';
-  END IF;
-END $$;
+prepare_retirement_database "$retirement_role_db"
+psql --dbname "$retirement_role_db" --set ON_ERROR_STOP=1 <<'SQL'
+CREATE SCHEMA hostile;
+CREATE TABLE hostile.keep (id integer PRIMARY KEY);
+GRANT SELECT ON hostile.keep TO loader_writer;
 SQL
+if psql --dbname "$retirement_role_db" \
+  --file v2/db/migrations/026_upgrade_pricing_1_2_0_to_1_3_0.sql; then
+  echo "retirement accepted a surviving loader_writer grant" >&2
+  exit 1
+fi
 
 createdb --template template0 "$missing_pricing_db"
 if psql --dbname "$missing_pricing_db" \
@@ -475,7 +483,6 @@ fi
 createdb --template template0 "$oracle_rollback_db"
 psql --dbname "$oracle_rollback_db" \
   --file v2/db/migrations/001_create_pricing_schema.sql
-psql --dbname "$oracle_rollback_db" --file v2/tests/public_source_fixture.sql
 psql --dbname "$oracle_rollback_db" \
   --file v2/db/migrations/003_create_oracle_schema.sql
 

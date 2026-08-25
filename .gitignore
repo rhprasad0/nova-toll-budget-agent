@@ -16,20 +16,12 @@ __pycache__/
 node_modules/
 test-results/
 /.worktrees/
-/v1/eval/private/
-/v1/eval/deterministic/price_hallucination/single-leg-batch.jsonl
-/v1/eval/deterministic/price_hallucination/multi-leg-batch-*.jsonl
-/v1/eval/deterministic/price_hallucination/gate*-automated.json
-/v1/eval/deterministic/price_hallucination/gate*-manual-sample.json
-/v1/eval/deterministic/price_hallucination/gate*-results-packet.sha256
-/v1/eval/deterministic/price_hallucination/gate*-results-review.md
-
 # Terraform
-/v1/infra/.terraform/
-/v1/infra/*.tfstate
-/v1/infra/*.tfstate.*
-/v1/infra/build/
-/v1/infra/*.tfplan
+/infra/.terraform/
+/infra/*.tfstate
+/infra/*.tfstate.*
+/infra/build/
+/infra/*.tfplan
 /v2/infra/.terraform/
 /v2/infra/*.tfstate
 /v2/infra/*.tfstate.*

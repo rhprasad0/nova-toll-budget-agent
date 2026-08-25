@@ -5,9 +5,9 @@ permissions:
 on:
   push:
     branches: ["main"]
-    paths: ["v1/infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
+    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
   pull_request:
-    paths: ["v1/infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
+    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -22,11 +22,11 @@ jobs:
         with:
           terraform_wrapper: false
       - run: terraform fmt -check -recursive
-        working-directory: v1/infra
+        working-directory: infra
       - run: terraform init -backend=false -input=false
-        working-directory: v1/infra
+        working-directory: infra
       - run: terraform validate
-        working-directory: v1/infra
+        working-directory: infra
       - run: terraform fmt -check -recursive
         working-directory: v2/infra
       - run: terraform init -backend=false -input=false

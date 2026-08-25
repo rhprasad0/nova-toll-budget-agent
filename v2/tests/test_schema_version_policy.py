@@ -1,10 +1,32 @@
 import pytest
 
-from scripts.check_schema_versions import validate_schema_update
+from scripts.check_schema_versions import (
+    RegisteredSchema,
+    owning_schemas,
+    validate_registry_continuity,
+    validate_schema_update,
+)
 
 PRICING_MIGRATION = "v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql"
 ORACLE_MIGRATION = "v2/db/migrations/004_upgrade_oracle_1_0_0_to_1_0_1.sql"
 ORACLE_MIGRATION_2 = "v2/db/migrations/005_upgrade_oracle_1_0_1_to_1_0_2.sql"
+
+
+def test_deleted_contract_path_keeps_its_previous_owner():
+    previous = (
+        RegisteredSchema(
+            name="pricing",
+            canonical_sql="v2/db/schema.sql",
+            owned_paths=("v2/db/migrations/retired.sql",),
+        ),
+    )
+    assert owning_schemas("v2/db/migrations/retired.sql", (), previous) == {"pricing"}
+
+
+def test_registered_schema_cannot_be_removed():
+    previous = (RegisteredSchema("pricing", "v2/db/schema.sql", ("v2/db/*.sql",)),)
+    with pytest.raises(ValueError, match="cannot be removed: \\['pricing'\\]"):
+        validate_registry_continuity((), previous)
 
 
 @pytest.mark.parametrize(

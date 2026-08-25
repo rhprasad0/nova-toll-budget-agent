@@ -4,10 +4,3 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: uv
-    directory: /v1
-    schedule:
-      interval: weekly
-    # v1 remains deployed while v2 replaces it. Stop routine version-update
-    # PRs without disabling Dependabot security updates.
-    open-pull-requests-limit: 0

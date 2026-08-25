@@ -1,8 +1,7 @@
 # TollChat v2
 
-This directory is the exclusive home for TollChat's deployed v2 code,
-tests, evals, infrastructure, and documentation. V1 application resources are
-retired; only the shared operational foundation remains under `v1/infra`.
+This directory contains TollChat's deployed application, tests, evals, and
+application infrastructure. Shared production foundations live in `../infra`.
 
 ## Adopted contract
 
@@ -17,13 +16,12 @@ retired; only the shared operational foundation remains under `v1/infra`.
 - [IAM-authenticated database roles](db/roles.sql)
 - [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
 
-The independently deployable `pricing` application schema is at **1.2.0**. Its
+The independently deployable `pricing` application schema is at **1.3.0**. Its
 version is stored in `pricing.schema_version`; CI tests
-the bootstrap, coexistence backfill, privileges, analytics, cleanup guard, and
-monotonic SemVer policy on PostgreSQL 17.9. The retained v1 `public` contract
-remains version 5.0.0 and continues to run its existing schema tests.
+the bootstrap, privileges, analytics, cleanup guard, and monotonic SemVer policy
+on PostgreSQL 17.9.
 
-The independently versioned `oracle` schema is at **1.11.0**. It installs
+The independently versioned `oracle` schema is at **1.12.1**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
@@ -34,8 +32,7 @@ uv run python oracle/build_oracle_data.py
 uv run python oracle/build_oracle_data.py --check
 ```
 
-For a new database, install pricing before oracle; neither migration moves or
-modifies v1 data:
+For a new database, install pricing before oracle:
 
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
@@ -121,5 +118,5 @@ with a 30-minute TTL. Strands exposes cache reuse through
 prompt-point queries are not application-cached.
 
 The v2 loader under `v2/lambdas/loader` is the sole pricing loader. Native S3
-events reach it through EventBridge; the retired v1 loader has no trigger or
+events reach it through EventBridge; the retired loader has no trigger or
 deployed function.

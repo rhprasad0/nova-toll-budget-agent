@@ -23,9 +23,11 @@ treat the disposable check as a substitute for applying migrations to RDS.
    migration in dependency order, and verify the deployed versions match the
    branch. Do not open the PR until the live migrations succeed.
 
-# Version boundaries
+# Repository boundaries
 
-The complete deployed product lives under `v1/`; preserve its behavior unless the user explicitly requests a change there. Keep all v2 code, tests, evals, infrastructure, and documentation under `v2/`. V2 has no compatibility contract with v1: reuse is opt-in, so copy or reintroduce only the pieces it actually needs.
+Keep application code, tests, evals, and application infrastructure under
+`v2/`. Shared polling, storage, database, network, and security foundations live
+under `infra/` and retain their existing Terraform backend.
 
 # Tools
 
@@ -33,8 +35,11 @@ Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa searc
 
 # Secrets
 
-SSM Parameter Store is the source of truth for every credential in the deployed v1 system (see `v1/SECURITY.md`) — never a local file.
+SSM Parameter Store is the source of truth for deployed credentials (see
+`SECURITY.md`) — never a local file.
 
 # Evaluation evidence
 
-Curate technically valid, representative v1 reports in `v1/eval/results/` for reviewers. Do not commit failed or superseded runs. Update `v1/eval/results/README.md` and run gitleaks before committing a report.
+Curate technically valid, representative reports in `v2/eval/results/` for
+reviewers. Do not commit failed or superseded runs. Update the results index and
+run gitleaks before committing a report.
