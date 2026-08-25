@@ -404,6 +404,9 @@ def test_report_document_and_html_lead_with_the_direct_answer():
     assert "$1.23" in page
     assert "As of" in page
     assert "Ronald Reagan Washington National Airport" in page
+    assert (
+        '<link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">'
+    ) in page
     assert '<link rel="alternate" type="application/json" href="report.json">' in page
     assert "<script" not in page
 

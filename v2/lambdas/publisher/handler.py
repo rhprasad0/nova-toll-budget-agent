@@ -604,6 +604,7 @@ def _render_report_html(document: dict[str, Any]) -> str:
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{title}</title>"
+        '<link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">'
         '<link rel="alternate" type="application/json" href="report.json">'
         "</head><body><main>"
         f"<h1>{title}</h1>{answer}"
