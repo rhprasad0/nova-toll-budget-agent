@@ -163,6 +163,9 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     assert 'fileset("${path.module}/../agent/assets", "**")' in site
     assert re.search(r'key\s+= "assets/\$\{each[.]value\}"', site)
     assert (V2_ROOT / "agent" / "assets" / "tollchat-logo.png").exists()
+    assert (V2_ROOT / "agent" / "assets" / "favicon.png").exists()
+    assert 'href="/assets/favicon.png"' in page
+    assert '"/assets/favicon.png"' in server
     assert '<script type="module" src="/chat.mjs"></script>' in page
     assert '"/chat.mjs"' in server
     assert 'key           = "usage.json"' in site

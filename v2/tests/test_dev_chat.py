@@ -222,6 +222,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "https://smarterroads.vdot.virginia.gov/faq" in html
         assert 'href="/privacy.txt"' in html
         assert 'href="/terms.txt"' in html
+        assert 'href="/assets/favicon.png"' in html
         assert "Do not submit names, exact home or work addresses" in html
         assert "not a navigation or emergency service" in html
         assert "2026 Benevolent Clankers LLC" in html
@@ -250,6 +251,7 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
             "da0167c64714b0e37c234d18695aecf6f81226627ca21e105e1fcc43c397e1a6"
         )
         faq = urllib.request.urlopen(f"{base_url}/faq.html", timeout=2).read().decode()
+        assert 'href="/assets/favicon.png"' in faq
         assert "How TollChat estimates commute costs" in faq
         assert "Why doesn't TollChat cover I-66 Outside the Beltway?" in faq
         assert "VDOT's public feeds do not include" in faq
@@ -278,6 +280,14 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "2026 Benevolent Clankers LLC" in faq
         assert "TollChat name and branding reserved" in faq
         assert "general information only" in faq
+        favicon = urllib.request.urlopen(f"{base_url}/assets/favicon.png", timeout=2)
+        favicon_bytes = favicon.read()
+        assert favicon.headers.get_content_type() == "image/png"
+        assert favicon_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        assert tuple(
+            int.from_bytes(favicon_bytes[offset : offset + 4], "big")
+            for offset in (16, 20)
+        ) == (64, 64)
         privacy_response = urllib.request.urlopen(f"{base_url}/privacy.txt", timeout=2)
         assert privacy_response.headers.get_content_type() == "text/plain"
         privacy = privacy_response.read().decode()
