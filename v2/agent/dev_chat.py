@@ -201,6 +201,10 @@ def create_server(
             _ASSET_ROOT / "assets/tollchat-logo.png",
             "image/png",
         ),
+        "/assets/favicon.png": (
+            _ASSET_ROOT / "assets/favicon.png",
+            "image/png",
+        ),
         "/assets/commute-map.mjs": (
             _ASSET_ROOT / "assets/commute-map.mjs",
             "text/javascript; charset=utf-8",
