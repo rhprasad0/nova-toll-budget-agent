@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -194,6 +195,128 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )
+
+
+def test_agent_measurement_is_count_only_private_and_bounded():
+    measurement_path = V2_ROOT / "infra" / "agent_measurement.tf"
+    assert measurement_path.exists()
+    measurement = measurement_path.read_text()
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+
+    bot = site.split('name     = "agent-report-bot-control"', maxsplit=1)[1].split(
+        'name     = "allow-static-site"', maxsplit=1
+    )[0]
+    assert 'version     = "Version_6.1"' in bot
+    assert 'inspection_level        = "COMMON"' in bot
+    assert "override_action" in bot and "count {}" in bot
+    assert 'search_string         = "/tolls/"' in bot
+    assert "sampled_requests_enabled   = true" in bot
+    assert "priority = 0" in bot
+    assert (
+        "priority = 7"
+        in site.split('name     = "allow-static-site"', maxsplit=1)[1].split(
+            'name     = "block-oversized-api-body"', maxsplit=1
+        )[0]
+    )
+
+    assert 'toset(["cookie", "authorization", "referer"])' in site
+    assert 'field_type = "QUERY_STRING"' in site
+    assert site.count('action                     = "SUBSTITUTION"') >= 2
+
+    assert (
+        'agent_measurement_bucket   = "aws-waf-logs-tollchat-agent-reports-'
+        in measurement
+    )
+    assert (
+        'resource "aws_s3_bucket_public_access_block" "agent_measurement"'
+        in measurement
+    )
+    assert 'sse_algorithm = "AES256"' in measurement
+    assert (
+        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
+        in measurement
+    )
+    assert 'default_behavior = "DROP"' in measurement
+    assert 'behavior    = "KEEP"' in measurement
+    assert "agent-route-report" in measurement
+    assert measurement.count("days = 7") >= 2
+    assert "enforce_workgroup_configuration    = true" in measurement
+    assert "bytes_scanned_cutoff_per_query     = 1073741824" in measurement
+    assert "/WAFLogs/cloudfront/tollchat-v2-public-chat/" in measurement
+    assert '"glue:GetPartition"' in measurement
+    assert 'schedule_expression = "cron(15 3 * * ? *)"' in measurement
+    assert "evaluation_periods  = 2" in measurement
+    assert "threshold           = 95" in measurement
+    coverage_alarm = measurement.split(
+        'resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage"',
+        maxsplit=1,
+    )[1]
+    assert 'treat_missing_data  = "notBreaching"' in coverage_alarm
+    assert "usage.json" not in measurement
+
+
+def test_agent_measurement_keeps_cloudflare_dns_only():
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    for resource in ('cloudflare_dns_record" "apex', 'cloudflare_dns_record" "www'):
+        block = site.split(f'resource "{resource}"', maxsplit=1)[1].split(
+            "\n}", maxsplit=1
+        )[0]
+        assert "proxied = false" in block
+    assert 'resource "cloudflare_bot_management"' not in site
+
+
+def test_agent_measurement_privacy_notice_precedes_logging():
+    privacy = (V2_ROOT / "agent" / "privacy.txt").read_text()
+    for text in (
+        "seven days",
+        "IP address",
+        "AWS WAF",
+        "published generation",
+        "five minutes",
+        "does not disable access or security logging",
+    ):
+        assert text in privacy
+    measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
+    logging = measurement.split(
+        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"',
+        maxsplit=1,
+    )[1]
+    assert "aws_s3_object.privacy" in logging
+
+
+def test_agent_registry_and_rollup_outputs_are_privacy_safe():
+    registry = [
+        json.loads(line)
+        for line in (V2_ROOT / "analytics" / "agent_registry.ndjson")
+        .read_text()
+        .splitlines()
+    ]
+    tokens = [entry["user_agent_token"].casefold() for entry in registry]
+    assert len(tokens) == len(set(tokens))
+    assert {entry["agent_mode"] for entry in registry} == {
+        "search_crawler",
+        "user_triggered_agent",
+        "training_crawler",
+    }
+    assert all(entry["documentation_url"].startswith("https://") for entry in registry)
+
+    rollup = (V2_ROOT / "lambdas" / "agent_usage_rollup" / "rollup.sql").read_text()
+    completion = (
+        V2_ROOT / "lambdas" / "agent_usage_rollup" / "complete.sql"
+    ).read_text()
+    latest = (
+        V2_ROOT / "lambdas" / "agent_usage_rollup" / "latest_view.sql"
+    ).read_text()
+    assert "PARTITION BY httprequest.requestid" in rollup
+    assert "httprequest.httpmethod = 'GET'" in rollup
+    assert "report[.]json" in rollup
+    assert "identity_confidence" in rollup
+    assert "web_bot_auth:verified" in rollup
+    for forbidden in ("clientip", "args", "referer"):
+        assert forbidden not in rollup.lower()
+    assert "INSERT INTO agent_report_rollup_completions" in completion
+    assert "JOIN latest" in latest
+    assert "agent_report_rollups usage" in latest
 
 
 def test_public_site_publishes_the_v2_ui_and_legal_assets():

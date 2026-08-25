@@ -681,6 +681,44 @@ def test_publication_uses_phase_barriers_manifest_last_and_then_noops():
     assert len(s3.puts) == put_count
 
 
+def test_completed_publication_writes_and_repairs_private_generation_marker():
+    generation = publisher.build_generation(_report_rows())
+    published_at = EVALUATED_AT.replace(minute=7)
+    s3 = _FakeS3()
+
+    result = publisher._publish_generation(
+        generation,
+        s3,
+        "site-bucket",
+        published_at,
+        analytics_bucket="analytics-bucket",
+    )
+
+    assert result["status"] == "published"
+    marker_put = next(put for put in s3.puts if put["Bucket"] == "analytics-bucket")
+    assert marker_put["Key"].startswith("generations/date=2026-08-25/")
+    marker = json.loads(marker_put["Body"])
+    assert marker == {
+        "schema_version": 1,
+        "facility": "i95_i495",
+        "generation_id": "2026-08-25T16:05:00Z",
+        "published_at": "2026-08-25T16:07:00Z",
+        "result_sha256": result["result_sha256"],
+    }
+
+    marker_key = marker_put["Key"]
+    del s3.objects[marker_key]
+    repair = publisher._publish_generation(
+        generation,
+        s3,
+        "site-bucket",
+        published_at.replace(minute=8),
+        analytics_bucket="analytics-bucket",
+    )
+    assert repair["status"] == "unchanged"
+    assert marker_key in s3.objects
+
+
 @pytest.mark.parametrize(
     "failed_suffix",
     [
@@ -756,6 +794,7 @@ def test_publication_failure_never_logs_success(monkeypatch, caplog):
     )
     monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "true")
     monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
+    monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
     monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
 
     with caplog.at_level("INFO"), pytest.raises(RuntimeError, match="publish failed"):
@@ -773,6 +812,7 @@ def test_success_is_logged_after_publication(monkeypatch, caplog):
     )
     monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "true")
     monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
+    monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
     monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
 
     with caplog.at_level("INFO"):

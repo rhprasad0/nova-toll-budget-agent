@@ -666,12 +666,19 @@ search-crawler, user-triggered, or training intent.
 [AWS WAF Bot Control and Web Bot Authentication](https://docs.aws.amazon.com/waf/latest/developerguide/waf-bot-control.html)
 [AWS WAF Bot Control labels](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-bot.html)
 
+The Bot Control rule alone enables request sampling so the native dashboard can
+populate. Web ACL data protection substitutes cookie values, authorization
+headers, query strings, and referrers in both samples and full logs before AWS
+stores them. Small non-terminating rules label recognized assistant referrer
+families before substitution; the aggregate never needs the original URL.
+
 TollChat enables AWS WAF logging to a dedicated encrypted S3 prefix. A
 non-terminating rule labels `/tolls/` requests, and the logging filter retains
 only records with that label. Logging redacts cookies, authorization headers,
-and query strings; it retains the request ID, time, method, host, URI path,
-user-agent, referrer, WAF action, and Bot Control labels needed for the metrics
-below. No raw `/api/*` or other site traffic is stored for this feature.
+query strings, and referrers; it retains the request ID, time, method, host, URI
+path, user-agent, assistant-referrer family, WAF action, and Bot Control labels
+needed for the metrics below. No raw `/api/*` or other site traffic is stored
+for this feature.
 
 CloudFront standard logging remains disabled because it is distribution-wide
 and would also collect metadata for human chat requests. The initial metric is
@@ -725,7 +732,8 @@ Raw filtered WAF logs are encrypted, access-restricted, and retained for seven
 days for classification retries. They contain viewer IPs and therefore are not
 public usage data. A daily rollup stores only:
 
-- UTC date and report generation age;
+- UTC date and published-generation age, qualified by the five-minute
+  CloudFront cache uncertainty;
 - route identity and HTML or JSON representation;
 - AWS bot name, organization, category, vendor family, and agent mode;
 - declared, AWS-verified, or WBA-verified confidence;
@@ -737,10 +745,13 @@ string, or user identifier. The privacy notice must disclose the temporary
 access-log retention before logging is enabled.
 
 An idempotent Athena rollup recomputes the current and previous two UTC days,
-deduplicates by WAF request ID, and produces internal daily and cumulative
-totals. Metrics are labeled best-effort lower bounds because log delivery can be
-late or incomplete. Delivered WAF log volume is compared with the AI Activity
-Dashboard to expose material coverage gaps. The existing public `usage.json`
+deduplicates by WAF request ID, and publishes a date only after its unique run
+has completed. Raw logs and Athena result objects expire after seven days;
+privacy-safe aggregates remain internal. Metrics are labeled best-effort lower
+bounds because log delivery can be late or incomplete. Delivered WAF log volume
+is compared with the WAF request metric to expose material coverage gaps. The
+native AI Activity Dashboard supplies the 14-day visual view and saved Athena
+queries provide durable route/day history. The existing public `usage.json`
 is not extended until the classifier has been validated against real traffic.
 If agent metrics are later published, they retain the taxonomy above instead
 of collapsing crawls, user-triggered retrievals, and referral visits into one
@@ -862,13 +873,16 @@ Exit: the public surface is crawlable, canonical, and still isolated from
 
 ### 6. Add privacy-scoped agent measurement
 
+- Keep the Terraform-managed Cloudflare apex and `www` records DNS-only and
+  verify the deployed drift posture so AWS WAF sees direct viewer traffic.
 - Add the pinned Bot Control common rule in Count mode before
   `allow-static-site`, scoped to `/tolls/`.
-- Add the `/tolls/` WAF label, filtered and redacted WAF logging, encrypted S3
-  destination, seven-day lifecycle, and least-privilege access.
+- Add scoped request sampling with Web ACL data protection, the `/tolls/` WAF
+  label, filtered and redacted WAF logging, encrypted S3 destination, seven-day
+  raw and query-result lifecycles, and least-privilege access.
 - Add the idempotent Athena rollup with two-day replay, request-ID
-  deduplication, confidence taxonomy, coverage comparison, and no public
-  `usage.json` change.
+  deduplication, completion checkpoints, confidence taxonomy, native dashboard,
+  saved internal queries, coverage alarm, and no public `usage.json` change.
 - Update the privacy notice before enabling logging.
 
 Exit: agent requests are visible as best-effort lower bounds without collecting

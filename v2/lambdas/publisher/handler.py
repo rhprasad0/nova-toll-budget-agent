@@ -792,11 +792,33 @@ def _put_phase(
         list(executor.map(put, objects))
 
 
+def _put_generation_marker(
+    s3_client: _S3Client, analytics_bucket: str, manifest: dict[str, Any]
+) -> None:
+    published_at = cast(str, manifest["published_at"])
+    marker = {
+        "schema_version": 1,
+        "facility": manifest["facility"],
+        "generation_id": manifest["generation_id"],
+        "published_at": published_at,
+        "result_sha256": manifest["result_sha256"],
+    }
+    marker_name = f"{published_at.replace(':', '')}-{manifest['result_sha256']}.json"
+    s3_client.put_object(
+        Bucket=analytics_bucket,
+        Key=f"generations/date={published_at[:10]}/{marker_name}",
+        Body=(json.dumps(marker, separators=(",", ":")) + "\n").encode(),
+        ContentType="application/json",
+        CacheControl="no-store",
+    )
+
+
 def _publish_generation(
     generation: Generation,
     s3_client: _S3Client,
     bucket: str,
     published_at: datetime,
+    analytics_bucket: str | None = None,
 ) -> dict[str, Any]:
     previous = _read_manifest(s3_client, bucket)
     endpoints = [
@@ -823,6 +845,8 @@ def _publish_generation(
         ):
             return {"status": "superseded", "result_sha256": result_sha256}
         if previous["result_sha256"] == result_sha256:
+            if analytics_bucket is not None:
+                _put_generation_marker(s3_client, analytics_bucket, previous)
             return {"status": "unchanged", "result_sha256": result_sha256}
 
     json_objects = [
@@ -899,6 +923,8 @@ def _publish_generation(
             )
         ],
     )
+    if analytics_bucket is not None:
+        _put_generation_marker(s3_client, analytics_bucket, manifest)
     return {"status": "published", "result_sha256": result_sha256}
 
 
@@ -992,6 +1018,7 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
             ),
             os.environ["SITE_BUCKET_NAME"],
             datetime.now(UTC),
+            os.environ["AGENT_MEASUREMENT_BUCKET"],
         )
         result.update(publication)
         if publication["status"] == "superseded":
