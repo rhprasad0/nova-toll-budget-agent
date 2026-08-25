@@ -809,22 +809,39 @@ publisher-side place map.
 
 - Emit an I-95/I-495 load-success event only after the loader transaction
   commits, including the committed source watermark.
-- Add the publisher Lambda, expected-watermark check, idempotent generation
+- Add the publisher Lambda, expected-watermark check, side-effect-safe duplicate
   handling, and bounded bulk read through the shared result builder.
 - Add the 10-minute watchdog trigger and the 30-minute no-success alarm.
 - Test delayed loads, duplicate events, missing events, failed loads, and stale
   transitions.
 
-Exit: every committed feed cycle publishes its matching generation, while the
-watchdog publishes or preserves honest unavailable states.
+At this stage, duplicate deliveries may receive distinct snapshot-specific run
+identifiers because the publisher has no public side effects or durable
+checkpoint yet.
+
+Exit: every committed feed cycle builds its matching validated generation,
+while the watchdog builds or preserves honest unavailable states.
 
 ### 4. Render and publish public resources
 
 - Render accessible route HTML, `report.json`, the route index, manifest, and
   sitemap from one in-memory generation.
+- Make the manifest the durable idempotency checkpoint. For load events, no-op
+  when its canonical source-revision fingerprint is already complete; for the
+  watchdog, no-op when its canonical result fingerprint is unchanged. Neither
+  fingerprint includes generation or evaluation metadata.
+- Define the source revision as a SHA-256 digest of the canonical, stably
+  ordered normalized I-95 rows that committed successfully, and include it in
+  a versioned loader event. Exclude S3 and EventBridge delivery metadata from
+  the digest.
+- Treat a corrected same-watermark source revision as a new generation, reject
+  publication older than the completed manifest, and never use only the source
+  watermark, source key, or EventBridge ID as the deduplication key.
 - Upload JSON before HTML and publish the manifest and sitemap last.
 - Add object-level failure tests, including failure between JSON and HTML, and
-  require visible generation and freshness metadata.
+  require visible generation and freshness metadata. Cover retried deliveries
+  with later snapshot timestamps, same-watermark corrections, delayed events
+  after a watchdog generation, and unchanged watchdog results.
 - Verify complete geographic labels and tool-parity disclosures in both
   available and unavailable pages.
 

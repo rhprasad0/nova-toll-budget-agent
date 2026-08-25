@@ -86,8 +86,8 @@ def _report_row(index=0, *, available=True, evaluated_at=EVALUATED_AT):
     }
 
 
-def _report_rows():
-    return [_report_row(index) for index in range(685)]
+def _report_rows(*, evaluated_at=EVALUATED_AT):
+    return [_report_row(index, evaluated_at=evaluated_at) for index in range(685)]
 
 
 def _load_event(watermark=WATERMARK):
@@ -136,15 +136,22 @@ def test_expected_watermark_matrix():
         publisher._expected_watermark_action(WATERMARK, None)
 
 
-def test_duplicate_load_events_are_safe(monkeypatch):
-    rows = _report_rows()
-    monkeypatch.setattr(publisher, "_read_report_rows", lambda: rows)
+def test_duplicate_load_events_are_side_effect_safe(monkeypatch):
+    reads = iter(
+        [
+            _report_rows(),
+            _report_rows(evaluated_at=EVALUATED_AT.replace(minute=6)),
+        ]
+    )
+    monkeypatch.setattr(publisher, "_read_report_rows", lambda: next(reads))
 
     first = publisher.handler(_load_event(), None)
     second = publisher.handler(_load_event(), None)
 
-    assert first == second
-    assert first["status"] == "generated"
+    for result in (first, second):
+        assert result["status"] == "generated"
+        assert result["source_watermark"] == "2026-08-25T16:00:00Z"
+        assert result["route_count"] == 685
 
 
 def test_delayed_load_event_is_a_noop(monkeypatch):
