@@ -92,6 +92,82 @@ unset CLOUDFLARE_API_TOKEN
 The proxy Lambda explicitly depends on its inline policy, so the complete plan
 applies transaction permission before publishing the new Lambda version.
 
+## Public report launch
+
+The report publisher depends on the CloudFront distribution and `robots.txt`,
+so enabling publication in the complete saved plan happens only after the edge
+rewrite has deployed. Wait for the distribution, enqueue one watchdog run, and
+verify the complete manifest before testing public URLs:
+
+```sh
+SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll terraform output -json public_site | jq -r .distribution_id)"
+SITE_BUCKET="$(AWS_PROFILE=nova-toll terraform state show -no-color \
+  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
+AWS_PROFILE=nova-toll aws --region us-east-1 cloudfront wait distribution-deployed \
+  --id "$SITE_DISTRIBUTION"
+REPORT_INVOKE="$(mktemp)"
+AWS_PROFILE=nova-toll aws --region us-east-1 lambda invoke \
+  --function-name toll-v2-report-publisher --invocation-type Event \
+  --cli-binary-format raw-in-base64-out --payload '{"trigger":"watchdog"}' \
+  "$REPORT_INVOKE"
+REPORT_MANIFEST="$(mktemp)"
+for attempt in $(seq 1 90); do
+  if AWS_PROFILE=nova-toll aws --region us-east-1 s3api get-object \
+    --bucket "$SITE_BUCKET" --key tolls/i95-i495/manifest.json \
+    "$REPORT_MANIFEST" >/dev/null 2>&1 && \
+    jq -e '.publication_format_version == "1.0.0" and .route_count == 685' \
+      "$REPORT_MANIFEST" >/dev/null; then
+    break
+  fi
+  sleep 10
+done
+jq -e '.publication_format_version == "1.0.0" and .route_count == 685' \
+  "$REPORT_MANIFEST"
+rm -f -- "$REPORT_INVOKE" "$REPORT_MANIFEST"
+unset REPORT_INVOKE REPORT_MANIFEST SITE_BUCKET SITE_DISTRIBUTION
+```
+
+Check every canonical report and JSON sibling with bounded concurrency, then
+deep-check both hostnames, the crawler policy, representative agent families,
+and API isolation:
+
+```sh
+REPORT_URLS="$(mktemp)"
+curl --fail-with-body --silent --show-error https://tollchat.ai/sitemap.xml \
+  | grep -o '<loc>[^<]*</loc>' | sed 's#</\?loc>##g' >"$REPORT_URLS"
+test "$(wc -l <"$REPORT_URLS")" -eq 685
+xargs -P 8 -n 1 sh -c '
+  html="$1"
+  curl --fail --silent --show-error --head "$html" \
+    | grep -qi "^content-type: text/html"
+  curl --fail --silent --show-error --head "${html}report.json" \
+    | grep -qi "^content-type: application/json"
+' _ <"$REPORT_URLS"
+
+REPORT_URL="https://tollchat.ai/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
+REPORT_PAGE="$(mktemp)"
+curl --fail-with-body --silent --show-error "$REPORT_URL" >"$REPORT_PAGE"
+grep -F "<link rel=\"canonical\" href=\"$REPORT_URL\">" "$REPORT_PAGE"
+grep -F '<link rel="alternate" type="application/json" href="report.json">' "$REPORT_PAGE"
+! grep -qi 'noindex\|<script' "$REPORT_PAGE"
+curl --fail-with-body --silent --show-error \
+  "${REPORT_URL/tollchat.ai/www.tollchat.ai}" >/dev/null
+for host in tollchat.ai www.tollchat.ai; do
+  curl --fail-with-body --silent --show-error "https://$host/robots.txt" \
+    | grep -F 'Sitemap: https://tollchat.ai/sitemap.xml'
+done
+for agent in OAI-SearchBot Googlebot Claude-SearchBot PerplexityBot bingbot \
+  Amzn-SearchBot Applebot DuckAssistBot; do
+  curl --fail-with-body --silent --show-error --user-agent "$agent" \
+    "$REPORT_URL" >/dev/null
+done
+curl --fail-with-body --silent --show-error https://tollchat.ai/api/config >/dev/null
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  https://tollchat.ai/api/chat)" -eq 404
+rm -f -- "$REPORT_PAGE" "$REPORT_URLS"
+unset REPORT_PAGE REPORT_URL REPORT_URLS
+```
+
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved
 or unreviewed plan. The public Function URL targets the published `live` alias,
@@ -155,6 +231,24 @@ Lambda initialization. The public Function URL must reject direct unsigned
 invocation.
 
 ## Rollback
+
+For a report-rendering regression, keep the CloudFront rewrite active, deploy
+corrected publisher code with a bumped publication format version, and invoke a
+watchdog run to replace the complete generation. If report source content is
+unsafe, stop new report writes first:
+
+```sh
+AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
+  --name toll-v2-committed-i95-loads
+AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
+  --name toll-v2-report-watchdog
+```
+
+Disabling publication does not withdraw existing report objects. The site
+bucket is not versioned. A public takedown therefore requires separate approval
+to delete the exact `tolls/i95-i495/` prefix and `sitemap.xml`, followed by a
+targeted CloudFront invalidation. Do not perform that destructive rollback as
+part of an ordinary application rollback.
 
 Disable daily publication before preparing a rollback:
 
