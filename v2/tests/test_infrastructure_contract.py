@@ -276,14 +276,29 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert '"tollchat.pricing-loader"' in MAIN_TF
     assert '"I95 Pricing Load Committed"' in MAIN_TF
     assert "/report_publisher" in MAIN_TF
-    assert 'DB_USER = "report_publisher"' in MAIN_TF
+    assert re.search(r'DB_USER\s+= "report_publisher"', MAIN_TF)
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_rds"' in MAIN_TF
-    assert (
-        "s3:PutObject"
-        not in MAIN_TF.split('data "aws_iam_policy_document" "publisher"', maxsplit=1)[
-            1
-        ].split('resource "aws_iam_role_policy" "publisher"', maxsplit=1)[0]
-    )
+    policy = MAIN_TF.split('data "aws_iam_policy_document" "publisher"', maxsplit=1)[
+        1
+    ].split('resource "aws_iam_role_policy" "publisher"', maxsplit=1)[0]
+    assert 'actions   = ["s3:GetObject"]' in policy
+    assert "tolls/i95-i495/manifest.json" in policy
+    assert re.search(r'actions\s+= \["s3:PutObject"\]', policy)
+    assert "tolls/i95-i495/*" in policy
+    assert "sitemap.xml" in policy
+    assert 'actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]' in policy
+    assert "s3:ListBucket" not in policy
+    assert "s3:DeleteObject" not in policy
+    assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_s3"' in MAIN_TF
+    publisher_lambda = MAIN_TF.split(
+        'resource "aws_lambda_function" "publisher"', maxsplit=1
+    )[1].split(
+        'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
+    )[0]
+    assert "timeout       = 600" in publisher_lambda
+    assert 'REPORT_PUBLICATION_ENABLED = "false"' in publisher_lambda
+    assert "SITE_BUCKET_NAME           = aws_s3_bucket.site.id" in publisher_lambda
+    assert "reserved_concurrent_executions = 1" in publisher_lambda
     assert (
         'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
         in MAIN_TF
