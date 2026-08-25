@@ -133,6 +133,21 @@ def _nonvalid_route_rows() -> list[dict[str, Any]]:
             "i95_evidence": _i95_evidence("closed"),
         },
         {
+            "status": "currently_unavailable",
+            "reason": {
+                "code": "i95_opposite_direction_open",
+                "details": {
+                    "required_i95_directions": ["NB"],
+                    "availability": "southbound",
+                },
+            },
+            "point_ids": ["i95:202NO", "i95:201ND"],
+            "connection_ids": ["source:i95_shared:Northbound:202NO:201ND"],
+            "connection_types": ["within_facility"],
+            "general_purpose_gaps": [],
+            "i95_evidence": _i95_evidence("southbound"),
+        },
+        {
             "status": "unknown_availability",
             "reason": {
                 "code": "i95_missing_source",
@@ -578,6 +593,20 @@ def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
     )
 
 
+def _domain_result(
+    request: dict[str, Any],
+    route: pricing_tool.route_validation._PricingRouteResponse,  # pyright: ignore[reportPrivateUsage]
+    evaluated_at: datetime,
+    pricing_inputs: dict[str, object],
+) -> dict[str, Any]:
+    return pricing_tool.build_current_price_result(
+        pricing_tool._PricingRequest.model_validate(request),  # pyright: ignore[reportPrivateUsage]
+        route,
+        evaluated_at,
+        pricing_inputs,
+    )
+
+
 def test_strands_loads_exact_strict_input_schema():
     assert not hasattr(pricing_tool.route_validation, "TOOL_SPEC")
     loaded = load_tools_from_module_path("agent_tools.get_current_toll_price")
@@ -608,6 +637,154 @@ def test_strands_loads_exact_strict_input_schema():
     assert registered_spec["outputSchema"]["json"] == (
         pricing_tool._OUTPUT_ADAPTER.json_schema(mode="serialization")  # pyright: ignore[reportPrivateUsage]
     )
+
+
+def test_tool_matches_domain_builder_for_every_canonical_i95_i495_source_route(
+    monkeypatch,
+):
+    source = json.loads(
+        (Path(__file__).parents[1] / "oracle" / "sources" / "i95.json").read_text()
+    )
+    evaluated_at = datetime(2026, 8, 13, 8, 32, 6, tzinfo=_EASTERN)
+    monkeypatch.setattr(pricing_tool, "_current_eastern_time", lambda: evaluated_at)
+
+    checked = 0
+    for pair in source["pairs"]:
+        entry = pair["entry"]
+        exit_ = pair["exit"]
+        direction = pair["direction"]
+        origin = (
+            "i495" if source["nodes"][entry]["path"].startswith("495") else "i95"
+        ) + f":{entry}"
+        destination = (
+            "i495" if source["nodes"][exit_]["path"].startswith("495") else "i95"
+        ) + f":{exit_}"
+        od_pair_id = pair["ods"][0]
+        leg = _i95_leg(
+            direction=direction,
+            entry=entry,
+            exit_=exit_,
+            od_pair_id=od_pair_id,
+            point_ids=[origin, destination],
+        )
+        route = _pricing_route(
+            {
+                **_route_row(),
+                "point_ids": [origin, destination],
+                "connection_ids": [f"source:i95_shared:{direction}:{entry}:{exit_}"],
+                "i95_evidence": (
+                    None
+                    if origin.startswith("i495:") and destination.startswith("i495:")
+                    else _i95_evidence(direction.lower())
+                ),
+            },
+            [leg.model_dump(mode="json")],
+        )
+        request = {
+            **_input(),
+            "origin_point_id": origin,
+            "destination_point_id": destination,
+        }
+
+        rows = _i95_rows(od_pair_id=od_pair_id)
+        payload = _domain_result(
+            request,
+            route,
+            evaluated_at,
+            {"step-1": rows},
+        )
+        monkeypatch.setattr(
+            pricing_tool.route_validation,
+            "fetch_validated_pricing_route",
+            lambda *_args, response=route, **_kwargs: response,
+        )
+        monkeypatch.setattr(
+            pricing_tool,
+            "_fetch_i95_i495_comparisons",
+            lambda requested_od_pair_id, expected=od_pair_id, result=rows: (
+                result
+                if requested_od_pair_id == expected
+                else pytest.fail("tool requested the wrong OD pair")
+            ),
+        )
+        tool_payload = cast(Any, _result(_run_tool(request)))["content"][0]["json"]
+
+        assert tool_payload == payload
+        assert payload["origin_point_id"] == origin
+        assert payload["destination_point_id"] == destination
+        assert payload["evaluated_at"] == "2026-08-13T08:32:06-04:00"
+        assert payload["source_kind"] == "observed"
+        assert payload["total_usd"] == "8.20"
+        assert payload["components"][0]["route_step_id"] == "step-1"
+        assert payload["components"][0]["od_pair_id"] == od_pair_id
+        checked += 1
+
+    assert checked == 685
+
+
+@pytest.mark.parametrize(
+    ("unavailable_reason", "source_kind", "expected_reason", "expected_source"),
+    [
+        ("missing_observation", "observed", "missing_observation", None),
+        ("stale_observation", "observed", "stale_observation", None),
+        ("facility_unavailable", "observed", "facility_unavailable", None),
+        (
+            "exceptional_i95_schedule",
+            "observed",
+            "exceptional_i95_schedule",
+            None,
+        ),
+        (None, "observed", None, "observed"),
+        (None, "modeled", None, "modeled"),
+    ],
+)
+def test_domain_builder_characterizes_i95_i495_price_states(
+    unavailable_reason, source_kind, expected_reason, expected_source
+):
+    leg = _i95_leg(
+        entry="191NO" if source_kind == "modeled" else "203NO",
+        exit_="201ND" if source_kind == "modeled" else "223ND",
+        od_pair_id=1374 if source_kind == "modeled" else 1261,
+        point_ids=(
+            ["i495:192NO", "i95:201ND"]
+            if source_kind == "modeled"
+            else ["i95:203NO", "i95:223ND"]
+        ),
+    )
+    route = _pricing_route(
+        {
+            **_route_row(),
+            "point_ids": leg.point_ids,
+            "connection_ids": leg.connection_ids,
+            "i95_evidence": _i95_evidence("northbound"),
+        },
+        [leg.model_dump(mode="json")],
+    )
+    rows = _i95_rows(
+        unavailable_reason=unavailable_reason,
+        source_kind=source_kind,
+        od_pair_id=leg.pricing_key.od_pair_id,
+    )
+
+    payload = _domain_result(
+        {
+            **_input(),
+            "origin_point_id": leg.point_ids[0],
+            "destination_point_id": leg.point_ids[-1],
+        },
+        route,
+        rows[0].evaluated_at,
+        {leg.route_step_id: rows},
+    )
+
+    if expected_reason is not None:
+        assert payload["reason"] == "incomplete_route_price"
+        assert payload["unavailable_components"][0]["reason"] == expected_reason
+        assert "total_usd" not in payload
+    else:
+        assert payload["source_kind"] == expected_source
+        assert payload["components"][0]["source_kind"] == expected_source
+        assert payload["total_usd"] == "8.20"
 
 
 @pytest.mark.parametrize(
@@ -680,7 +857,7 @@ def test_nonvalid_routes_complete_validation_without_pricing(monkeypatch, row):
 
     monkeypatch.setattr(
         pricing_tool,
-        "_build_success_result",
+        "build_current_price_result",
         lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
     )
     input_data = _input()
@@ -1272,13 +1449,6 @@ def test_i95_pricer_returns_current_price_comparisons_and_provenance(
     assert component.prior_week_comparison is not None
     assert component.prior_week_comparison.median_usd == Decimal("6.00")
     assert component.prior_week_comparison.position == "above_recent_range"
-    response = pricing_tool._build_success_result(  # pyright: ignore[reportPrivateUsage]
-        "tool-123",
-        pricing_tool._PricingRequest.model_validate(_input()),  # pyright: ignore[reportPrivateUsage]
-        component.component_evaluated_at,
-        [component],
-    )
-    assert cast(Any, response)["content"][0]["json"]["source_kind"] == source_kind
 
 
 @pytest.mark.parametrize(
