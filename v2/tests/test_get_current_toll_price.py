@@ -596,7 +596,7 @@ def _install_route(monkeypatch, legs: list[dict[str, Any]]) -> None:
 def _domain_result(
     request: dict[str, Any],
     route: pricing_tool.route_validation._PricingRouteResponse,  # pyright: ignore[reportPrivateUsage]
-    evaluated_at: datetime,
+    evaluated_at: datetime | None,
     pricing_inputs: dict[str, object],
 ) -> dict[str, Any]:
     return pricing_tool.build_current_price_result(
@@ -659,14 +659,26 @@ def test_tool_matches_domain_builder_for_every_canonical_i95_i495_source_route(
         destination = (
             "i495" if source["nodes"][exit_]["path"].startswith("495") else "i95"
         ) + f":{exit_}"
-        od_pair_id = pair["ods"][0]
-        leg = _i95_leg(
-            direction=direction,
-            entry=entry,
-            exit_=exit_,
-            od_pair_id=od_pair_id,
-            point_ids=[origin, destination],
+        od_pair_ids = pair["ods"]
+        boundary = "i495:192NO" if direction == "Northbound" else "i495:192SD"
+        component_points = (
+            [[origin, boundary], [boundary, destination]]
+            if len(od_pair_ids) == 2
+            else [[origin, destination]]
         )
+        legs = [
+            _i95_leg(
+                route_step_id=f"step-{index}",
+                direction=direction,
+                entry=entry,
+                exit_=exit_,
+                od_pair_id=od_pair_id,
+                point_ids=point_ids,
+            )
+            for index, (od_pair_id, point_ids) in enumerate(
+                zip(od_pair_ids, component_points, strict=True), start=1
+            )
+        ]
         route = _pricing_route(
             {
                 **_route_row(),
@@ -678,7 +690,7 @@ def test_tool_matches_domain_builder_for_every_canonical_i95_i495_source_route(
                     else _i95_evidence(direction.lower())
                 ),
             },
-            [leg.model_dump(mode="json")],
+            [leg.model_dump(mode="json") for leg in legs],
         )
         request = {
             **_input(),
@@ -686,40 +698,51 @@ def test_tool_matches_domain_builder_for_every_canonical_i95_i495_source_route(
             "destination_point_id": destination,
         }
 
-        rows = _i95_rows(od_pair_id=od_pair_id)
+        rows_by_od_pair = {
+            od_pair_id: _i95_rows(od_pair_id=od_pair_id) for od_pair_id in od_pair_ids
+        }
         payload = _domain_result(
             request,
             route,
             evaluated_at,
-            {"step-1": rows},
+            {
+                f"step-{index}": rows_by_od_pair[od_pair_id]
+                for index, od_pair_id in enumerate(od_pair_ids, start=1)
+            },
         )
         monkeypatch.setattr(
             pricing_tool.route_validation,
             "fetch_validated_pricing_route",
             lambda *_args, response=route, **_kwargs: response,
         )
-        monkeypatch.setattr(
-            pricing_tool,
-            "_fetch_i95_i495_comparisons",
-            lambda requested_od_pair_id, expected=od_pair_id, result=rows: (
-                result
-                if requested_od_pair_id == expected
-                else pytest.fail("tool requested the wrong OD pair")
-            ),
-        )
+        requested_od_pairs: list[int] = []
+
+        def fetch_rows(
+            requested_od_pair_id, rows=rows_by_od_pair, requested=requested_od_pairs
+        ):
+            requested.append(requested_od_pair_id)
+            return rows[requested_od_pair_id]
+
+        monkeypatch.setattr(pricing_tool, "_fetch_i95_i495_comparisons", fetch_rows)
         tool_payload = cast(Any, _result(_run_tool(request)))["content"][0]["json"]
 
         assert tool_payload == payload
+        assert requested_od_pairs == od_pair_ids
         assert payload["origin_point_id"] == origin
         assert payload["destination_point_id"] == destination
         assert payload["evaluated_at"] == "2026-08-13T08:32:06-04:00"
         assert payload["source_kind"] == "observed"
-        assert payload["total_usd"] == "8.20"
-        assert payload["components"][0]["route_step_id"] == "step-1"
-        assert payload["components"][0]["od_pair_id"] == od_pair_id
+        assert payload["total_usd"] == f"{Decimal('8.20') * len(od_pair_ids):.2f}"
+        assert [component["route_step_id"] for component in payload["components"]] == [
+            f"step-{index}" for index in range(1, len(od_pair_ids) + 1)
+        ]
+        assert [component["od_pair_id"] for component in payload["components"]] == (
+            od_pair_ids
+        )
         checked += 1
 
     assert checked == 685
+    assert sum(len(pair["ods"]) for pair in source["pairs"]) == 980
 
 
 @pytest.mark.parametrize(
@@ -855,11 +878,6 @@ def test_nonvalid_routes_complete_validation_without_pricing(monkeypatch, row):
         lambda *_args, **_kwargs: response,
     )
 
-    monkeypatch.setattr(
-        pricing_tool,
-        "build_current_price_result",
-        lambda *_args, **_kwargs: pytest.fail("nonvalid route reached pricing"),
-    )
     input_data = _input()
     if row["point_ids"]:
         input_data.update(
@@ -869,6 +887,7 @@ def test_nonvalid_routes_complete_validation_without_pricing(monkeypatch, row):
             }
         )
 
+    expected = _domain_result(input_data, response, None, {})
     events = _run_tool(input_data)
 
     assert [
@@ -878,6 +897,7 @@ def test_nonvalid_routes_complete_validation_without_pricing(monkeypatch, row):
         ("route_validation", "completed"),
     ]
     payload = cast(Any, _result(events))["content"][0]["json"]
+    assert payload == expected
     assert payload["status"] == row["status"]
     assert ("facility_legs" in payload) is bool(row["point_ids"])
     assert "total_usd" not in payload
@@ -1865,6 +1885,49 @@ def test_i95_unavailable_returns_no_partial_price(monkeypatch):
     payload = cast(Any, _result(events))["content"][0]["json"]
     assert payload["reason"] == "incomplete_route_price"
     assert payload["unavailable_components"][0]["reason"] == "stale_observation"
+    assert "components" not in payload
+    assert "total_usd" not in payload
+
+
+def test_multicomponent_route_returns_no_partial_price(monkeypatch):
+    response = _southbound_westpark_pricing_route("i95:2233SO")
+    input_data = {
+        **_input(),
+        "origin_point_id": "i95:2233SO",
+        "destination_point_id": "i495:1859ND",
+    }
+    rows_by_od_pair = {
+        1204: _i95_rows(od_pair_id=1204),
+        1005: _i95_rows(od_pair_id=1005, unavailable_reason="stale_observation"),
+    }
+    evaluated_at = rows_by_od_pair[1204][0].evaluated_at
+    expected = _domain_result(
+        input_data,
+        response,
+        evaluated_at,
+        {
+            "step-1": rows_by_od_pair[1204],
+            "step-2": rows_by_od_pair[1005],
+        },
+    )
+    monkeypatch.setattr(
+        pricing_tool.route_validation,
+        "fetch_validated_pricing_route",
+        lambda *_args, **_kwargs: response,
+    )
+    monkeypatch.setattr(
+        pricing_tool,
+        "_fetch_i95_i495_comparisons",
+        lambda od_pair_id: rows_by_od_pair[od_pair_id],
+    )
+    monkeypatch.setattr(pricing_tool, "_current_eastern_time", lambda: evaluated_at)
+
+    payload = cast(Any, _result(_run_tool(input_data)))["content"][0]["json"]
+
+    assert payload == expected
+    assert [item["route_step_id"] for item in payload["unavailable_components"]] == [
+        "step-2"
+    ]
     assert "components" not in payload
     assert "total_usd" not in payload
 

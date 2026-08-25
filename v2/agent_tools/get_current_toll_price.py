@@ -1122,13 +1122,26 @@ def price_dtr_leg(
 def build_current_price_result(
     request: _PricingRequest,
     pricing_route: route_validation._PricingRouteResponse,  # pyright: ignore[reportPrivateUsage]
-    evaluated_at: datetime,
+    evaluated_at: datetime | None,
     pricing_inputs: dict[str, object],
 ) -> dict[str, Any]:
     """Build the deterministic domain result from a validated route and pricing rows."""
     if pricing_route.status != "valid":
-        raise ValueError("current price result requires a valid pricing route")
-    if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
+        if pricing_inputs:
+            raise ValueError("nonvalid routes cannot contain pricing inputs")
+        response = (
+            _PricingRouteUnavailableResponse.model_validate(pricing_route.model_dump())
+            if pricing_route.status in {"currently_unavailable", "unknown_availability"}
+            else _NonValidRouteResponse.model_validate(
+                pricing_route.model_dump(exclude={"facility_legs"})
+            )
+        )
+        return response.model_dump(mode="json")
+    if (
+        evaluated_at is None
+        or evaluated_at.tzinfo is None
+        or evaluated_at.utcoffset() is None
+    ):
         raise ValueError("current price result requires an aware evaluation time")
 
     expected_inputs = {
@@ -1275,20 +1288,11 @@ async def get_current_toll_price(
 
     if pricing_route.status != "valid":
         try:
-            response = (
-                _PricingRouteUnavailableResponse.model_validate(
-                    pricing_route.model_dump()
-                )
-                if pricing_route.status
-                in {"currently_unavailable", "unknown_availability"}
-                else _NonValidRouteResponse.model_validate(
-                    pricing_route.model_dump(exclude={"facility_legs"})
-                )
-            )
+            response = build_current_price_result(request, pricing_route, None, {})
             yield {
                 "toolUseId": tool_use_id,
                 "status": "success",
-                "content": [{"json": response.model_dump(mode="json")}],
+                "content": [{"json": response}],
             }
         except Exception as error:
             yield _log_failure_and_build_error_result(
