@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.12.1
+-- oracle schema version: 1.13.0
 
 \set ON_ERROR_STOP on
 
@@ -59,6 +59,13 @@ END $$;
 
 DO $$
 BEGIN
+    CREATE ROLE report_publisher LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles
         WHERE rolname = 'oracle_owner'
@@ -69,7 +76,7 @@ BEGIN
     END IF;
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles
-        WHERE rolname IN ('tollchat_agent', 'pricing_caller')
+        WHERE rolname IN ('tollchat_agent', 'pricing_caller', 'report_publisher')
           AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
                OR rolreplication OR rolbypassrls)
     ) THEN
@@ -82,7 +89,9 @@ BEGIN
           ON member_role.oid = membership.member
         JOIN pg_catalog.pg_roles AS granted_role
           ON granted_role.oid = membership.roleid
-        WHERE member_role.rolname IN ('tollchat_agent', 'pricing_caller')
+        WHERE member_role.rolname IN (
+            'tollchat_agent', 'pricing_caller', 'report_publisher'
+        )
           AND granted_role.rolname <> 'rds_iam'
     ) THEN
         RAISE EXCEPTION 'existing runtime role has an unexpected role membership';
@@ -93,7 +102,8 @@ BEGIN
              LATERAL aclexplode(database.datacl) AS privilege
         WHERE database.datname = current_database()
           AND privilege.grantee IN (
-              to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+              to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
+              to_regrole('report_publisher')
           )
           AND privilege.privilege_type IN ('CREATE', 'TEMPORARY')
     ) OR EXISTS (
@@ -101,28 +111,31 @@ BEGIN
         FROM pg_catalog.pg_namespace AS namespace,
              LATERAL aclexplode(namespace.nspacl) AS privilege
         WHERE privilege.grantee IN (
-            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
+            to_regrole('report_publisher')
         )
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_class AS relation,
              LATERAL aclexplode(relation.relacl) AS privilege
         WHERE privilege.grantee IN (
-            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
+            to_regrole('report_publisher')
         )
     ) OR EXISTS (
         SELECT 1
         FROM pg_catalog.pg_attribute AS attribute,
              LATERAL aclexplode(attribute.attacl) AS privilege
         WHERE privilege.grantee IN (
-            to_regrole('tollchat_agent'), to_regrole('pricing_caller')
+            to_regrole('tollchat_agent'), to_regrole('pricing_caller'),
+            to_regrole('report_publisher')
         )
     ) THEN
         RAISE EXCEPTION 'existing runtime role has unexpected direct privileges';
     END IF;
 END $$;
 
-GRANT rds_iam TO tollchat_agent, pricing_caller;
+GRANT rds_iam TO tollchat_agent, pricing_caller, report_publisher;
 
 CREATE SCHEMA oracle;
 REVOKE ALL ON SCHEMA oracle FROM PUBLIC;
@@ -150,7 +163,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.12.1');
+INSERT INTO oracle.schema_version (version) VALUES ('1.13.0');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,
@@ -167,8 +180,25 @@ CREATE TABLE oracle.toll_route_point (
     location oracle.geography(Point, 4326),
     aliases text[] NOT NULL DEFAULT ARRAY[]::text[],
     source_metadata jsonb NOT NULL CHECK (jsonb_typeof(source_metadata) = 'object'),
+    place_name text,
+    region text,
+    country_code text,
     CHECK ((point_type = 'airport') = (direction IS NULL)),
     CHECK ((point_type = 'airport') = (network_id LIKE 'airport_%')),
+    CONSTRAINT toll_route_point_geographic_context_check CHECK (
+        num_nonnulls(place_name, region, country_code) IN (0, 3)
+        AND (
+            place_name IS NULL
+            OR (
+                btrim(place_name) <> ''
+                AND btrim(region) <> ''
+                AND country_code ~ '^[A-Z]{2}$'
+            )
+        )
+    ),
+    CONSTRAINT toll_route_point_i95_i495_context_check CHECK (
+        network_id NOT IN ('i95', 'i495') OR place_name IS NOT NULL
+    ),
     UNIQUE NULLS NOT DISTINCT (network_id, source_node_id, point_type, direction)
 );
 
@@ -2434,6 +2464,171 @@ BEGIN
 END
 $function$;
 
+CREATE FUNCTION oracle.get_i95_i495_report_inputs() RETURNS TABLE (
+    snapshot_evaluated_at timestamptz,
+    origin jsonb,
+    destination jsonb,
+    structural_facility_legs jsonb,
+    status text,
+    reason jsonb,
+    point_ids text[],
+    connection_ids text[],
+    connection_types text[],
+    general_purpose_gaps jsonb,
+    i95_evidence jsonb,
+    facility_legs jsonb,
+    route_step_id text,
+    comparison_kind text,
+    comparison_offset integer,
+    bin_start_at timestamptz,
+    bin_end_at timestamptz,
+    interval_end_at timestamptz,
+    observed_at timestamptz,
+    price_usd numeric,
+    available boolean,
+    availability_reason text,
+    source_kind text,
+    pricing_method text,
+    od_pair_id integer,
+    proxy_od_pair_id integer,
+    source_status text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+WITH report_points AS MATERIALIZED (
+    SELECT
+        route_point.point_id,
+        route_point.point_type,
+        jsonb_build_object(
+            'point_id', route_point.point_id,
+            'label', route_point.label,
+            'place_name', route_point.place_name,
+            'region', route_point.region,
+            'country_code', route_point.country_code,
+            'aliases', to_jsonb(route_point.aliases),
+            'nearby_landmarks', coalesce(
+                route_point.source_metadata
+                    #> '{report_context,nearby_landmarks}',
+                '[]'::jsonb
+            ),
+            'direction', CASE route_point.direction
+                WHEN 'NB' THEN 'northbound'
+                WHEN 'SB' THEN 'southbound'
+            END,
+            'role', route_point.point_type,
+            'display_name', format(
+                '%s, %s — %s (%s %s)',
+                route_point.place_name,
+                route_point.region,
+                route_point.label,
+                CASE route_point.direction
+                    WHEN 'NB' THEN 'northbound'
+                    WHEN 'SB' THEN 'southbound'
+                END,
+                route_point.point_type
+            ),
+            'location', oracle.ST_AsGeoJSON(
+                route_point.location, 15, 0
+            )::jsonb
+        ) AS endpoint
+    FROM oracle.toll_route_point AS route_point
+    WHERE route_point.network_id IN ('i95', 'i495')
+), structural_routes AS MATERIALIZED (
+    SELECT
+        origin.point_id AS origin_point_id,
+        destination.point_id AS destination_point_id,
+        origin.endpoint AS origin,
+        destination.endpoint AS destination,
+        structural.status,
+        structural.point_ids,
+        structural.connection_ids,
+        oracle.route_pricing_legs(
+            structural.point_ids, structural.connection_ids
+        ) AS facility_legs
+    FROM report_points AS origin
+    CROSS JOIN report_points AS destination
+    CROSS JOIN LATERAL oracle.resolve_toll_route_internal(
+        origin.point_id, destination.point_id, false
+    ) AS structural
+    WHERE origin.point_type = 'entry'
+      AND destination.point_type = 'exit'
+), eligible_routes AS MATERIALIZED (
+    SELECT *
+    FROM structural_routes
+    WHERE status = 'valid'
+      AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(facility_legs) AS leg(value)
+          WHERE leg.value->>'facility' = 'i95_i495'
+      )
+      AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(facility_legs) AS leg(value)
+          WHERE leg.value->>'facility' <> 'i95_i495'
+      )
+), current_routes AS MATERIALIZED (
+    SELECT
+        eligible.origin_point_id,
+        eligible.destination_point_id,
+        eligible.origin,
+        eligible.destination,
+        eligible.facility_legs AS structural_facility_legs,
+        current_route.*
+    FROM eligible_routes AS eligible
+    CROSS JOIN LATERAL oracle.validate_pricing_route(
+        eligible.origin_point_id, eligible.destination_point_id
+    ) AS current_route
+)
+SELECT
+    statement_timestamp(),
+    current_route.origin,
+    current_route.destination,
+    current_route.structural_facility_legs,
+    current_route.status,
+    current_route.reason,
+    current_route.point_ids,
+    current_route.connection_ids,
+    current_route.connection_types,
+    current_route.general_purpose_gaps,
+    current_route.i95_evidence,
+    current_route.facility_legs,
+    leg.value->>'route_step_id',
+    comparison.comparison_kind,
+    comparison.comparison_offset,
+    comparison.bin_start_at,
+    comparison.bin_end_at,
+    comparison.interval_end_at,
+    comparison.observed_at,
+    comparison.price_usd,
+    comparison.available,
+    comparison.availability_reason,
+    comparison.source_kind,
+    comparison.pricing_method,
+    comparison.od_pair_id,
+    comparison.proxy_od_pair_id,
+    comparison.source_status
+FROM current_routes AS current_route
+LEFT JOIN LATERAL jsonb_array_elements(
+    current_route.facility_legs
+) AS leg(value) ON current_route.status = 'valid'
+LEFT JOIN LATERAL oracle.get_i95_i495_pricing_comparisons(
+    (leg.value->'pricing_key'->>'od_pair_id')::integer
+) AS comparison ON leg.value IS NOT NULL
+ORDER BY
+    current_route.origin->>'point_id',
+    current_route.destination->>'point_id',
+    (substring(leg.value->>'route_step_id' FROM '[0-9]+'))::integer,
+    CASE comparison.comparison_kind
+        WHEN 'current' THEN 0
+        WHEN 'prior_cycle' THEN 1
+        ELSE 2
+    END,
+    comparison.comparison_offset
+$function$;
+
 REVOKE ALL ON ALL TABLES IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA oracle FROM PUBLIC;
 REVOKE ALL ON TYPE oracle.geometry, oracle.geography FROM PUBLIC;
@@ -2452,7 +2647,7 @@ GRANT SELECT ON pricing.current_i95_direction,
     pricing.i95_i495_pricing_comparisons,
     pricing.i66_ballpark_samples,
     pricing.i95_i495_ballpark_samples TO oracle_owner;
-GRANT USAGE ON SCHEMA oracle TO tollchat_agent, pricing_caller;
+GRANT USAGE ON SCHEMA oracle TO tollchat_agent, pricing_caller, report_publisher;
 GRANT EXECUTE ON FUNCTION oracle.get_toll_route_prompt_points()
 TO tollchat_agent;
 GRANT EXECUTE ON FUNCTION oracle.validate_toll_route(text, text)
@@ -2478,6 +2673,8 @@ GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_ballpark_samples(
 GRANT EXECUTE ON FUNCTION oracle.get_annual_ballpark_summary(
     jsonb, time, time, date[], jsonb, integer, timestamptz
 ) TO pricing_caller;
+GRANT EXECUTE ON FUNCTION oracle.get_i95_i495_report_inputs()
+TO report_publisher;
 
 ALTER TABLE oracle.schema_version OWNER TO oracle_owner;
 ALTER TABLE oracle.toll_route_point OWNER TO oracle_owner;
@@ -2514,6 +2711,7 @@ ALTER FUNCTION oracle.get_i95_i495_ballpark_samples(
 ALTER FUNCTION oracle.get_annual_ballpark_summary(
     jsonb, time, time, date[], jsonb, integer, timestamptz
 ) OWNER TO oracle_owner;
+ALTER FUNCTION oracle.get_i95_i495_report_inputs() OWNER TO oracle_owner;
 ALTER SCHEMA oracle OWNER TO oracle_owner;
 
 COMMIT;

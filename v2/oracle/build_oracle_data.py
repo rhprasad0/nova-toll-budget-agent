@@ -86,6 +86,294 @@ WASHINGTON_POINT_LABELS = {
     ),
 }
 
+I95_REPORT_CONTEXT = {
+    "495 Express Lanes End/George Wash. Mem. Pkwy.": (
+        "McLean",
+        "Virginia",
+        ("George Washington Memorial Parkway", "GW Parkway", "McLean"),
+        ("American Legion Memorial Bridge",),
+    ),
+    "495 Express Lanes Start/Georg Wash. Mem. Pkwy.": (
+        "McLean",
+        "Virginia",
+        ("George Washington Memorial Parkway", "GW Parkway", "McLean"),
+        ("American Legion Memorial Bridge",),
+    ),
+    "Braddock Road": (
+        "Ravensworth",
+        "Virginia",
+        ("Braddock Road", "Ravensworth", "Annandale"),
+        (),
+    ),
+    "Courthouse Road/Route 630": (
+        "Stafford",
+        "Virginia",
+        ("Courthouse Road", "Route 630", "Stafford Courthouse"),
+        (),
+    ),
+    "Fairfax County Parkway/Route 286": (
+        "Newington",
+        "Virginia",
+        ("Fairfax County Parkway", "Route 286", "Newington"),
+        ("Fort Belvoir",),
+    ),
+    "Franconia-Springfield Parkway/Route 289": (
+        "Springfield",
+        "Virginia",
+        ("Franconia-Springfield Parkway", "Route 289", "Springfield"),
+        ("Franconia-Springfield Metro Station",),
+    ),
+    "Gallows Road": (
+        "Woodburn",
+        "Virginia",
+        ("Gallows Road", "Woodburn", "Merrifield"),
+        ("Inova Fairfax Medical Campus", "Mosaic District"),
+    ),
+    "Gordon Boulevard/Route 123": (
+        "Lorton",
+        "Virginia",
+        ("Gordon Boulevard", "Route 123", "Occoquan", "Lorton"),
+        (),
+    ),
+    "Heller Road": (
+        "Springfield",
+        "Virginia",
+        ("Heller Road", "Newington", "Springfield"),
+        ("Fort Belvoir",),
+    ),
+    "I-395 Near Edsall Road": (
+        "Lincolnia",
+        "Virginia",
+        ("Edsall Road", "Lincolnia", "Alexandria"),
+        (),
+    ),
+    "I-495 EB / I-95 NB": (
+        "Springfield",
+        "Virginia",
+        ("Springfield Interchange", "Mixing Bowl", "Springfield"),
+        ("Springfield Town Center",),
+    ),
+    "I-495 Near Braddock Road": (
+        "North Springfield",
+        "Virginia",
+        ("Braddock Road", "North Springfield", "Annandale"),
+        (),
+    ),
+    "I-495/I-95 Near Van Dorn Street": (
+        "Lincolnia",
+        "Virginia",
+        ("Van Dorn Street", "Lincolnia", "Springfield"),
+        (),
+    ),
+    "I-95 Near Backlick Road": (
+        "Springfield",
+        "Virginia",
+        ("Backlick Road", "Springfield"),
+        ("Springfield Town Center",),
+    ),
+    "I-95 Near Cardinal Drive": (
+        "Montclair",
+        "Virginia",
+        ("Cardinal Drive", "Montclair", "Dale City"),
+        (),
+    ),
+    "I-95 Near Courthouse Road/Route 630": (
+        "Stafford",
+        "Virginia",
+        ("Courthouse Road", "Route 630", "Stafford Courthouse"),
+        (),
+    ),
+    "I-95 Near Dale Boulevard": (
+        "Potomac Mills",
+        "Virginia",
+        ("Dale Boulevard", "Potomac Mills", "Dale City"),
+        ("Potomac Mills",),
+    ),
+    "I-95 Near Dumfries Road/Route 234": (
+        "Dumfries",
+        "Virginia",
+        ("Dumfries Road", "Route 234", "Montclair", "Dumfries"),
+        (),
+    ),
+    "I-95 Near Fairfax County Parkway": (
+        "Newington",
+        "Virginia",
+        ("Fairfax County Parkway", "Route 286", "Newington"),
+        ("Fort Belvoir",),
+    ),
+    "I-95 Near Franconia-Springfield Pkwy NB": (
+        "Springfield",
+        "Virginia",
+        ("Franconia-Springfield Parkway", "Route 289", "Springfield"),
+        ("Franconia-Springfield Metro Station",),
+    ),
+    "I-95 Near Franconia-Springfield Pkwy SB": (
+        "Springfield",
+        "Virginia",
+        ("Franconia-Springfield Parkway", "Route 289", "Springfield"),
+        ("Franconia-Springfield Metro Station",),
+    ),
+    "I-95 Near Garrisonville Road/Route 610": (
+        "Stafford",
+        "Virginia",
+        ("Garrisonville Road", "Route 610", "Stafford"),
+        (),
+    ),
+    "I-95 Near Gordon Boulevard/Route 123": (
+        "Lorton",
+        "Virginia",
+        ("Gordon Boulevard", "Route 123", "Occoquan", "Lorton"),
+        (),
+    ),
+    "I-95 Near Joplin Road/Quantico": (
+        "Quantico",
+        "Virginia",
+        ("Joplin Road", "Quantico"),
+        ("Marine Corps Base Quantico", "National Museum of the Marine Corps"),
+    ),
+    "I-95 Near Old Keene Mill Road/Route 644": (
+        "Springfield",
+        "Virginia",
+        ("Old Keene Mill Road", "Route 644", "Springfield"),
+        ("Springfield Town Center",),
+    ),
+    "I-95 Near Quantico": (
+        "Quantico",
+        "Virginia",
+        ("Quantico", "Triangle"),
+        ("Marine Corps Base Quantico", "National Museum of the Marine Corps"),
+    ),
+    "I-95 Near Route 17": (
+        "Fredericksburg",
+        "Virginia",
+        ("Route 17", "Warrenton Road", "Falmouth", "Fredericksburg"),
+        (),
+    ),
+    "I-95 Near US-1": (
+        "Lorton",
+        "Virginia",
+        ("Route 1", "Richmond Highway", "Lorton"),
+        ("Workhouse Arts Center",),
+    ),
+    "Interstate 66": (
+        "Idylwood",
+        "Virginia",
+        ("I-66", "Idylwood", "Dunn Loring"),
+        (),
+    ),
+    "Jones Branch Drive/Route 123": (
+        "Tysons",
+        "Virginia",
+        ("Jones Branch Drive", "Route 123", "Tysons Corner"),
+        ("The Boro Tysons",),
+    ),
+    "Lee Highway (Route 29)": (
+        "Idylwood",
+        "Virginia",
+        ("Lee Highway", "Route 29", "Idylwood", "Merrifield"),
+        (),
+    ),
+    "Near Pentagon/Eads Street to DC": (
+        "Arlington",
+        "Virginia",
+        ("Pentagon", "Pentagon City", "Crystal City", "National Landing"),
+        ("Pentagon", "Ronald Reagan Washington National Airport"),
+    ),
+    "Old Keene Mill Road/Route 644": (
+        "Springfield",
+        "Virginia",
+        ("Old Keene Mill Road", "Route 644", "Springfield"),
+        ("Springfield Town Center",),
+    ),
+    "Opitz Boulevard": (
+        "Potomac Mills",
+        "Virginia",
+        ("Opitz Boulevard", "Potomac Mills", "Woodbridge"),
+        ("Potomac Mills",),
+    ),
+    "Pentagon/Eads Street": (
+        "Arlington",
+        "Virginia",
+        ("Pentagon", "Pentagon City", "Crystal City", "National Landing"),
+        ("Pentagon", "Ronald Reagan Washington National Airport"),
+    ),
+    "Prince William Parkway/Route 294": (
+        "Potomac Mills",
+        "Virginia",
+        ("Prince William Parkway", "Route 294", "Potomac Mills", "Woodbridge"),
+        ("Potomac Mills",),
+    ),
+    "Route 267": (
+        "Tysons",
+        "Virginia",
+        ("Dulles Toll Road", "Dulles Access Road", "Tysons Corner"),
+        (),
+    ),
+    "Route 7 (Leesburg Pike)": (
+        "Tysons",
+        "Virginia",
+        ("Route 7", "Leesburg Pike", "Tysons Corner"),
+        ("Tysons Corner Center",),
+    ),
+    "Seminary Road": (
+        "Alexandria",
+        "Virginia",
+        ("Seminary Road", "Alexandria"),
+        (),
+    ),
+    "Shirlington Circle": (
+        "Alexandria",
+        "Virginia",
+        ("Shirlington", "Arlington", "Alexandria"),
+        ("Village at Shirlington",),
+    ),
+    "US-1": (
+        "Lorton",
+        "Virginia",
+        ("Route 1", "Richmond Highway", "Lorton"),
+        ("Workhouse Arts Center",),
+    ),
+    "Washington Boulevard/Route 27": (
+        "Arlington",
+        "Virginia",
+        ("Washington Boulevard", "Route 27", "Pentagon"),
+        ("Pentagon", "Arlington National Cemetery"),
+    ),
+    "Washington D.C.": (
+        "Washington",
+        "District of Columbia",
+        ("Washington D.C.", "Washington", "District of Columbia"),
+        ("National Mall", "Ronald Reagan Washington National Airport"),
+    ),
+    "Westpark Drive": (
+        "Tysons",
+        "Virginia",
+        ("Westpark Drive", "Tysons Corner"),
+        ("Tysons Galleria",),
+    ),
+}
+
+I95_REPORT_POINT_PLACES = {
+    "i495:187SD": "Dunn Loring",
+    "i495:187SO": "Dunn Loring",
+    "i495:188SO": "Merrifield",
+    "i95:216SD": "Potomac Mills",
+    "i95:2249ND": "Arlington",
+    "i95:225NO": "Alexandria",
+    "i95:225SD": "Alexandria",
+    "i95:236SO": "Dale City",
+}
+
+AIRPORT_ALIASES = {
+    "airport_dca": (
+        "DCA",
+        "Reagan Airport",
+        "Reagan National Airport",
+        "Washington National Airport",
+    ),
+    "airport_iad": ("IAD", "Dulles Airport", "Washington Dulles"),
+}
+
 
 @dataclass(frozen=True)
 class Point:
@@ -95,6 +383,9 @@ class Point:
     point_type: str
     direction: str | None
     label: str
+    place_name: str | None
+    region: str | None
+    country_code: str | None
     longitude: str | None
     latitude: str | None
     aliases: tuple[str, ...]
@@ -243,10 +534,15 @@ def build_points() -> dict[str, Point]:
     if not isinstance(shared_nodes, dict):
         raise ValueError("i95 nodes must be an object")
     typed_shared_nodes = cast(dict[str, dict[str, Any]], shared_nodes)
+    if {str(node["label"]) for node in typed_shared_nodes.values()} != set(
+        I95_REPORT_CONTEXT
+    ):
+        raise ValueError("I-95 report context does not match source labels")
     for source_node_id, raw_node in typed_shared_nodes.items():
         point_id = _shared_point_id(source_node_id, raw_node)
         label = str(raw_node["label"])
         aliases: tuple[str, ...] = ()
+        place_name, region, place_aliases, nearby_landmarks = I95_REPORT_CONTEXT[label]
         metadata = _metadata(
             "i95_shared",
             shared,
@@ -296,6 +592,11 @@ def build_points() -> dict[str, Point]:
             }
         if point_id in WASHINGTON_POINT_LABELS:
             label, aliases = WASHINGTON_POINT_LABELS[point_id]
+        place_name = I95_REPORT_POINT_PLACES.get(point_id, place_name)
+        aliases = tuple(dict.fromkeys((*aliases, *place_aliases)))
+        metadata["report_context"] = {
+            "nearby_landmarks": list(nearby_landmarks),
+        }
         points[point_id] = Point(
             point_id=point_id,
             network_id=_shared_network(raw_node),
@@ -303,6 +604,9 @@ def build_points() -> dict[str, Point]:
             point_type=_shared_role(raw_node),
             direction=_shared_direction(raw_node),
             label=label,
+            place_name=place_name,
+            region=region,
+            country_code="US",
             longitude=str(raw_node["longitude"]),
             latitude=str(raw_node["latitude"]),
             aliases=aliases,
@@ -351,6 +655,9 @@ def build_points() -> dict[str, Point]:
                         point_type=point_type,
                         direction=direction,
                         label=point_label,
+                        place_name=None,
+                        region=None,
+                        country_code=None,
                         longitude=longitude,
                         latitude=latitude,
                         aliases=aliases,
@@ -372,9 +679,12 @@ def build_points() -> dict[str, Point]:
             point_type="airport",
             direction=None,
             label=label,
+            place_name=None,
+            region=None,
+            country_code=None,
             longitude=longitude,
             latitude=latitude,
-            aliases=(),
+            aliases=AIRPORT_ALIASES[airport_id],
             source_metadata={
                 "curated": True,
                 "basis": "v2/docs/oracle-spec.md",
@@ -886,7 +1196,7 @@ def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> 
         "",
         "INSERT INTO oracle.toll_route_point (",
         "    point_id, network_id, source_node_id, point_type, direction,",
-        "    label, location, aliases, source_metadata",
+        "    label, place_name, region, country_code, location, aliases, source_metadata",
         ") VALUES",
     ]
     point_values: list[str] = []
@@ -907,6 +1217,9 @@ def render_sql(points: dict[str, Point], connections: dict[str, Connection]) -> 
                     _sql_text(point.point_type),
                     _sql_text(point.direction),
                     _sql_text(point.label),
+                    _sql_text(point.place_name),
+                    _sql_text(point.region),
+                    _sql_text(point.country_code),
                     location,
                     _sql_text_array(point.aliases),
                     _sql_json(point.source_metadata),

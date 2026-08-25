@@ -95,7 +95,10 @@ Every origin and destination includes:
 - `place_name`, a curated commonly recognized locality such as `Dumfries` or
   `Tysons`;
 - `region` and `country_code`;
-- `aliases`, including common geographic names such as `Tysons Corner`;
+- `aliases`, including alternate road and locality names such as `Route 286`,
+  `Newington`, and `Tysons Corner`;
+- `nearby_landmarks`, a separate list of recognizable places such as `Fort
+  Belvoir` or `Ronald Reagan Washington National Airport`;
 - `direction` and `role`, expanded for people as `northbound entry` or
   `northbound exit`; and
 - a GeoJSON point with longitude and latitude.
@@ -105,13 +108,15 @@ starts at a town center. For example:
 
 ```text
 Dumfries, Virginia — I-95 near Dumfries Road/Route 234 (northbound entry)
-Tysons, Virginia — Westpark Drive (northbound exit; alias: Tysons Corner)
+Tysons, Virginia — Westpark Drive (northbound exit)
 ```
 
-Place names and aliases are curated, versioned Oracle metadata. The publisher
-does not call a runtime geocoder or infer locality names independently from
-coordinates. A report is not published until both endpoints have complete
-human-readable context.
+Place names, aliases, and nearby landmarks are curated, versioned Oracle
+metadata. Aliases are alternate names for the access point; nearby landmarks
+provide orientation but do not resolve as that point. The publisher does not
+call a runtime geocoder or infer locality names independently from coordinates.
+A report is not published until both endpoints have complete human-readable
+context.
 
 ### Required Oracle migration
 
@@ -141,8 +146,8 @@ The migration must:
 
 1. add the columns and constraints without replacing stable point IDs;
 2. backfill every public I-95 and I-495 endpoint used by report enumeration;
-3. add useful common-place aliases to the existing `aliases` array, including
-   `Tysons Corner` for applicable Tysons endpoints;
+3. add useful alternate road and locality names to the existing `aliases`
+   array, plus separate nearby-landmark context;
 4. update the bounded reporting operation to return the complete endpoint
    contract with each route;
 5. preserve the existing prompt-point surface, which automatically benefits

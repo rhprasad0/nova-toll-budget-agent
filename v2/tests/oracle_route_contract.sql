@@ -566,7 +566,8 @@ BEGIN
            OR alternative->>'network_id' <> 'i95'
            OR alternative->>'point_type' <> 'entry'
            OR alternative->>'direction' <> 'NB'
-           OR alternative->'aliases' <> '[]'::jsonb
+           OR jsonb_typeof(alternative->'aliases') <> 'array'
+           OR jsonb_array_length(alternative->'aliases') = 0
            OR alternative->'location'->>'type' <> 'Point'
            OR NOT pg_temp.structurally_reaches(
                alternative->>'point_id', 'airport_iad'
@@ -1420,16 +1421,17 @@ INSERT INTO oracle.toll_connection VALUES (
 
 INSERT INTO oracle.toll_route_point (
     point_id, network_id, source_node_id, point_type, direction,
-    label, aliases, source_metadata
+    label, aliases, source_metadata, place_name, region, country_code
 ) VALUES
     (
         'test-limit-i95-origin', 'i95', 'test-limit-origin', 'entry', 'NB',
-        'Traversal-priority origin', ARRAY[]::text[], '{"test_fixture":true}'::jsonb
+        'Traversal-priority origin', ARRAY[]::text[], '{"test_fixture":true}'::jsonb,
+        'Testville', 'Virginia', 'US'
     ),
     (
         'test-limit-i95-destination', 'i95', 'test-limit-destination', 'exit', 'NB',
         'Traversal-priority destination', ARRAY[]::text[],
-        '{"test_fixture":true}'::jsonb
+        '{"test_fixture":true}'::jsonb, 'Testville', 'Virginia', 'US'
     );
 
 INSERT INTO oracle.toll_connection VALUES
