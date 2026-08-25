@@ -414,6 +414,48 @@ def test_report_document_and_html_lead_with_the_direct_answer():
     assert "<script" not in escaped_page
 
 
+def test_report_html_includes_complete_component_evidence():
+    generation = publisher.build_generation(_report_rows())
+    document = publisher._build_report_document(
+        generation, generation.routes[0], EVALUATED_AT.replace(minute=7)
+    )
+    component = document["current_price"]["components"][0]
+    component["recent_movement"] = {
+        "method": "same_facility_leg_three_cycles",
+        "direction": "rising",
+        "samples": [
+            {"cycle_offset": -2, "price_usd": "0.80"},
+            {"cycle_offset": -1, "price_usd": "1.00"},
+            {"cycle_offset": 0, "price_usd": "1.23"},
+        ],
+        "net_change_usd": "0.43",
+        "net_change_percent": "53.8",
+    }
+    component["prior_week_comparison"] = {
+        "method": "same_weekday_same_facility_bins",
+        "comparable_period_count": 2,
+        "expected_comparable_period_count": 3,
+        "comparable_prices": [],
+        "median_usd": "1.10",
+        "minimum_usd": "0.90",
+        "maximum_usd": "1.20",
+        "current_delta_usd": "0.13",
+        "current_delta_percent": "11.8",
+        "position": "above_recent_range",
+        "higher_than_count": 2,
+    }
+
+    page = publisher._render_report_html(document)
+
+    assert f"{component['bin_start']} to {component['bin_end']}" in page
+    assert component["interval_end_at"] in page
+    assert "Cycle -2: $0.80; Cycle -1: $1.00; Cycle 0: $1.23" in page
+    assert "net change $0.43 (53.8%)" in page
+    assert "range $0.90 to $1.20" in page
+    assert "current delta $0.13 (11.8%)" in page
+    assert "2 of 3 comparable periods" in page
+
+
 def test_unavailable_report_has_no_current_total():
     rows = _report_rows()
     rows[0] = _report_row(0, available=False)
@@ -504,6 +546,55 @@ def test_malformed_frozen_slug_map_fails_closed():
         publisher._read_manifest(s3, "site-bucket")
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("generation_id", None),
+        ("generation_id", "2026-08-25T16:05:00"),
+        ("published_at", None),
+        ("published_at", "not-a-timestamp"),
+        ("source_watermark", 1),
+        ("source_watermark", "2026-08-25T16:00:00"),
+        ("route_count", 684),
+    ],
+)
+def test_manifest_rejects_malformed_publication_metadata(field, value):
+    manifest = {
+        "schema_version": "1.0.0",
+        "facility": "i95_i495",
+        "generation_id": "2026-08-25T16:05:00Z",
+        "published_at": "2026-08-25T16:07:00Z",
+        "source_watermark": "2026-08-25T16:00:00Z",
+        "result_sha256": "a" * 64,
+        "route_count": 685,
+        "point_slugs": {"i95:1SO": "one"},
+    }
+    manifest[field] = value
+    s3 = _FakeS3()
+    s3.objects[publisher.MANIFEST_KEY] = json.dumps(manifest).encode()
+
+    with pytest.raises(ValueError, match="manifest is malformed"):
+        publisher._read_manifest(s3, "site-bucket")
+
+
+def test_manifest_requires_an_explicit_source_watermark():
+    s3 = _FakeS3()
+    s3.objects[publisher.MANIFEST_KEY] = json.dumps(
+        {
+            "schema_version": "1.0.0",
+            "facility": "i95_i495",
+            "generation_id": "2026-08-25T16:05:00Z",
+            "published_at": "2026-08-25T16:07:00Z",
+            "result_sha256": "a" * 64,
+            "route_count": 685,
+            "point_slugs": {"i95:1SO": "one"},
+        }
+    ).encode()
+
+    with pytest.raises(ValueError, match="manifest is malformed"):
+        publisher._read_manifest(s3, "site-bucket")
+
+
 def test_publication_uses_phase_barriers_manifest_last_and_then_noops():
     generation = publisher.build_generation(_report_rows())
     s3 = _FakeS3()
@@ -566,6 +657,36 @@ def test_failed_publication_does_not_advance_manifest(failed_suffix):
         )
 
     assert "tolls/i95-i495/manifest.json" not in s3.objects
+
+
+def test_retry_repairs_an_interrupted_publication():
+    original = publisher.build_generation(_report_rows())
+    changed = original.model_copy(deep=True)
+    changed.routes[0].current_price["components"][0]["price_usd"] = "2.34"
+    changed.routes[0].current_price["total_usd"] = "2.34"
+    first_published_at = EVALUATED_AT.replace(minute=7)
+    changed_published_at = EVALUATED_AT.replace(minute=8)
+    s3 = _FakeS3()
+    publisher._publish_generation(original, s3, "site-bucket", first_published_at)
+
+    expected = _FakeS3()
+    expected.objects = copy.deepcopy(s3.objects)
+    publisher._publish_generation(
+        changed, expected, "site-bucket", changed_published_at
+    )
+
+    s3.fail_suffix = "index.html"
+    with pytest.raises(RuntimeError, match="injected"):
+        publisher._publish_generation(changed, s3, "site-bucket", changed_published_at)
+    s3.fail_suffix = None
+
+    result = publisher._publish_generation(
+        changed, s3, "site-bucket", changed_published_at
+    )
+
+    assert result["status"] == "published"
+    assert len(s3.objects) == 1373
+    assert s3.objects == expected.objects
 
 
 def test_disabled_handler_never_opens_s3(monkeypatch):

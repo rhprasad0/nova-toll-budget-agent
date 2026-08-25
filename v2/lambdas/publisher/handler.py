@@ -467,13 +467,21 @@ def _endpoint_html(title: str, endpoint: dict[str, Any]) -> str:
 
 def _component_html(component: dict[str, Any]) -> str:
     price = component.get("price_usd")
+    bin_start = component.get("bin_start")
+    bin_end = component.get("bin_end")
     items = [
         ("Facility", component.get("facility")),
         ("Price", f"${price}" if price is not None else None),
         ("Source", component.get("source_kind")),
         ("Pricing method", component.get("pricing_method")),
         ("Source observation", component.get("observed_at")),
-        ("10-minute bin", component.get("bin_start")),
+        (
+            "10-minute bin",
+            f"{bin_start} to {bin_end}"
+            if bin_start is not None and bin_end is not None
+            else None,
+        ),
+        ("Source interval end", component.get("interval_end_at")),
     ]
     details = "".join(
         f"<dt>{escape(label)}</dt><dd>{escape(_label(value))}</dd>"
@@ -483,10 +491,22 @@ def _component_html(component: dict[str, Any]) -> str:
     movement = component.get("recent_movement")
     if isinstance(movement, dict):
         movement_values = cast(dict[str, object], movement)
+        samples = movement_values.get("samples")
+        sample_text = (
+            "; ".join(
+                f"Cycle {escape(str(sample.get('cycle_offset')))}: "
+                f"${escape(str(sample.get('price_usd')))}"
+                for sample in cast(list[dict[str, object]], samples)
+            )
+            if isinstance(samples, list)
+            else "Unavailable"
+        )
         details += (
             "<dt>Recent movement</dt><dd>"
+            f"{sample_text}; "
             f"{escape(_label(movement_values.get('direction', 'unavailable')))}, net change "
-            f"${escape(str(movement_values.get('net_change_usd', 'unavailable')))}</dd>"
+            f"${escape(str(movement_values.get('net_change_usd', 'unavailable')))} "
+            f"({escape(str(movement_values.get('net_change_percent', 'unavailable')))}%)</dd>"
         )
     comparison = component.get("prior_week_comparison")
     if isinstance(comparison, dict):
@@ -494,8 +514,14 @@ def _component_html(component: dict[str, Any]) -> str:
         details += (
             "<dt>Prior-week comparison</dt><dd>"
             f"Median ${escape(str(comparison_values.get('median_usd', 'unavailable')))}; "
+            f"range ${escape(str(comparison_values.get('minimum_usd', 'unavailable')))} to "
+            f"${escape(str(comparison_values.get('maximum_usd', 'unavailable')))}; "
+            f"current delta ${escape(str(comparison_values.get('current_delta_usd', 'unavailable')))} "
+            f"({escape(str(comparison_values.get('current_delta_percent', 'unavailable')))}%); "
             f"{escape(_label(comparison_values.get('position', 'unavailable')))}; "
-            f"{escape(str(comparison_values.get('comparable_period_count', 0)))} comparable periods"
+            f"{escape(str(comparison_values.get('comparable_period_count', 0)))} of "
+            f"{escape(str(comparison_values.get('expected_comparable_period_count', 0)))} "
+            "comparable periods"
             "</dd>"
         )
     return f"<section><h3>Priced component</h3><dl>{details}</dl></section>"
@@ -685,8 +711,26 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
     manifest = cast(dict[str, object], decoded) if isinstance(decoded, dict) else {}
     point_slugs = manifest.get("point_slugs")
     if (
-        manifest.get("schema_version") != "1.0.0"
+        not {
+            "schema_version",
+            "facility",
+            "generation_id",
+            "published_at",
+            "source_watermark",
+            "result_sha256",
+            "route_count",
+            "point_slugs",
+        }
+        <= manifest.keys()
+        or manifest.get("schema_version") != "1.0.0"
         or manifest.get("facility") != FACILITY
+        or not isinstance(manifest.get("generation_id"), str)
+        or not isinstance(manifest.get("published_at"), str)
+        or not (
+            manifest.get("source_watermark") is None
+            or isinstance(manifest.get("source_watermark"), str)
+        )
+        or manifest.get("route_count") != EXPECTED_ROUTE_COUNT
         or not isinstance(point_slugs, dict)
         or not all(
             isinstance(point_id, str) and isinstance(slug, str)
@@ -696,6 +740,15 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
         or not re.fullmatch(r"[a-f0-9]{64}", cast(str, manifest.get("result_sha256")))
     ):
         raise ValueError("publication manifest is malformed")
+    try:
+        _aware_timestamp(cast(str, manifest["generation_id"]), label="generation ID")
+        _aware_timestamp(cast(str, manifest["published_at"]), label="published at")
+        if manifest["source_watermark"] is not None:
+            _aware_timestamp(
+                cast(str, manifest["source_watermark"]), label="source watermark"
+            )
+    except ValueError as error:
+        raise ValueError("publication manifest is malformed") from error
     return cast(dict[str, Any], manifest)
 
 
