@@ -399,7 +399,8 @@ def test_report_document_and_html_lead_with_the_direct_answer():
         "Ronald Reagan Washington National Airport"
     ]
 
-    page = publisher._render_report_html(document)
+    canonical_url = "https://tollchat.ai/tolls/i95-i495/origin/destination/"
+    page = publisher._render_report_html(document, canonical_url)
     assert page.index("Current I-95/I-495 toll") < page.index("Route details")
     assert "$1.23" in page
     assert "As of" in page
@@ -407,12 +408,14 @@ def test_report_document_and_html_lead_with_the_direct_answer():
     assert (
         '<link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">'
     ) in page
+    assert page.count(f'<link rel="canonical" href="{canonical_url}">') == 1
     assert '<link rel="alternate" type="application/json" href="report.json">' in page
+    assert "noindex" not in page.lower()
     assert "<script" not in page
 
     hostile = copy.deepcopy(document)
     hostile["route"]["origin"]["place_name"] = "<script>alert(1)</script>"
-    escaped_page = publisher._render_report_html(hostile)
+    escaped_page = publisher._render_report_html(hostile, canonical_url)
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in escaped_page
     assert "<script" not in escaped_page
 
@@ -448,7 +451,9 @@ def test_report_html_includes_complete_component_evidence():
         "higher_than_count": 2,
     }
 
-    page = publisher._render_report_html(document)
+    page = publisher._render_report_html(
+        document, "https://tollchat.ai/tolls/i95-i495/origin/destination/"
+    )
 
     assert f"{component['bin_start']} to {component['bin_end']}" in page
     assert component["interval_end_at"] in page
@@ -469,13 +474,15 @@ def test_unavailable_report_has_no_current_total():
 
     assert document["availability"] == "unavailable"
     assert "total_usd" not in document["current_price"]
-    page = publisher._render_report_html(document)
+    page = publisher._render_report_html(
+        document, "https://tollchat.ai/tolls/i95-i495/origin/destination/"
+    )
     assert "Current pricing is unavailable" in page
     assert "Current total" not in page
     assert "stale observation" in page.lower()
 
 
-def test_result_fingerprint_ignores_run_times_but_not_public_content():
+def test_result_fingerprint_ignores_run_times_but_not_public_content(monkeypatch):
     generation = publisher.build_generation(_report_rows())
     route = generation.routes[0]
     first = publisher._build_report_document(generation, route, EVALUATED_AT)
@@ -502,6 +509,10 @@ def test_result_fingerprint_ignores_run_times_but_not_public_content():
         publisher._result_fingerprint([changed], slugs)
     )
 
+    fingerprint = publisher._result_fingerprint([first], slugs)
+    monkeypatch.setattr(publisher, "PUBLICATION_FORMAT_VERSION", "2")
+    assert publisher._result_fingerprint([first], slugs) != fingerprint
+
 
 class _MissingObject(Exception):
     def __init__(self):
@@ -513,7 +524,17 @@ class _FakeS3:
     def __init__(self, *, fail_suffix=None):
         self.objects = {}
         self.puts = []
+        self.lists = []
         self.fail_suffix = fail_suffix
+
+    def list_objects_v2(self, **kwargs):
+        self.lists.append(kwargs)
+        prefix = kwargs["Prefix"]
+        return {
+            "Contents": [
+                {"Key": key} for key in self.objects if key.startswith(prefix)
+            ][: kwargs["MaxKeys"]]
+        }
 
     def get_object(self, *, Bucket, Key):
         del Bucket
@@ -559,6 +580,7 @@ def test_malformed_frozen_slug_map_fails_closed():
         ("source_watermark", 1),
         ("source_watermark", "2026-08-25T16:00:00"),
         ("route_count", 684),
+        ("publication_format_version", 1),
     ],
 )
 def test_manifest_rejects_malformed_publication_metadata(field, value):
@@ -607,6 +629,13 @@ def test_publication_uses_phase_barriers_manifest_last_and_then_noops():
     )
 
     assert result["status"] == "published"
+    assert s3.lists == [
+        {
+            "Bucket": "site-bucket",
+            "Prefix": publisher.MANIFEST_KEY,
+            "MaxKeys": 1,
+        }
+    ]
     keys = [put["Key"] for put in s3.puts]
     assert len(keys) == 1373
     assert all(key.endswith("report.json") for key in keys[:685])
@@ -617,10 +646,22 @@ def test_publication_uses_phase_barriers_manifest_last_and_then_noops():
         "tolls/i95-i495/manifest.json",
     ]
     manifest = json.loads(s3.objects[keys[-1]])
+    assert (
+        manifest["publication_format_version"] == publisher.PUBLICATION_FORMAT_VERSION
+    )
     assert manifest["route_count"] == 685
     assert len(manifest["point_slugs"]) == 1370
     assert s3.objects["sitemap.xml"].count(b"<url>") == 685
     assert s3.objects["tolls/i95-i495/index.html"].count(b"<li>") == 685
+    assert (
+        b'<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/">'
+        in s3.objects["tolls/i95-i495/index.html"]
+    )
+    report_key = next(key for key in keys if key.endswith("/index.html"))
+    assert (
+        f'<link rel="canonical" href="https://tollchat.ai/{report_key.removesuffix("index.html")}">'.encode()
+        in s3.objects[report_key]
+    )
     assert s3.puts[0]["CacheControl"] == "public, max-age=300"
     assert s3.puts[-1]["CacheControl"] == "no-cache"
 

@@ -403,6 +403,18 @@ data "aws_iam_policy_document" "publisher" {
   }
 
   statement {
+    sid       = "FindPublicationManifest"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.site.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "s3:prefix"
+      values   = ["tolls/i95-i495/manifest.json"]
+    }
+  }
+
+  statement {
     sid     = "WritePublicReports"
     actions = ["s3:PutObject"]
     resources = [
@@ -486,7 +498,7 @@ resource "aws_lambda_function" "publisher" {
       DB_PORT                    = tostring(data.aws_db_instance.main.port)
       DB_NAME                    = data.aws_db_instance.main.db_name
       DB_USER                    = "report_publisher"
-      REPORT_PUBLICATION_ENABLED = "false"
+      REPORT_PUBLICATION_ENABLED = "true"
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
     }
   }
@@ -499,8 +511,11 @@ resource "aws_lambda_function" "publisher" {
   }
 
   depends_on = [
+    aws_cloudfront_distribution.site,
     aws_cloudwatch_log_group.publisher,
+    aws_iam_role_policy.publisher,
     aws_iam_role_policy_attachment.publisher_vpc,
+    aws_s3_object.robots,
   ]
 }
 

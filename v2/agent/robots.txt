@@ -1,0 +1,43 @@
+User-agent: OAI-SearchBot
+Allow: /tolls/
+
+User-agent: ChatGPT-User
+Allow: /tolls/
+
+User-agent: Claude-SearchBot
+Allow: /tolls/
+
+User-agent: Claude-User
+Allow: /tolls/
+
+User-agent: Googlebot
+Allow: /tolls/
+
+User-agent: Google-Extended
+Allow: /tolls/
+
+User-agent: Google-Agent
+Allow: /tolls/
+
+User-agent: PerplexityBot
+Allow: /tolls/
+
+User-agent: Perplexity-User
+Allow: /tolls/
+
+User-agent: bingbot
+Allow: /tolls/
+
+User-agent: Amzn-SearchBot
+Allow: /tolls/
+
+User-agent: Amzn-User
+Allow: /tolls/
+
+User-agent: Applebot
+Allow: /tolls/
+
+User-agent: DuckAssistBot
+Allow: /tolls/
+
+Sitemap: https://tollchat.ai/sitemap.xml

@@ -139,6 +139,17 @@ resource "aws_s3_object" "terms" {
   depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
+resource "aws_s3_object" "robots" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "robots.txt"
+  source        = "${path.module}/../agent/robots.txt"
+  source_hash   = filebase64sha256("${path.module}/../agent/robots.txt")
+  content_type  = "text/plain; charset=utf-8"
+  cache_control = "no-cache"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
+}
+
 resource "aws_s3_object" "site_assets" {
   for_each = local.site_assets
 
@@ -311,6 +322,14 @@ resource "aws_cloudfront_function" "public_chat_routes" {
   comment = "Allow only TollChat public API operations"
   publish = true
   code    = file("${path.module}/../agent/public-api-gate.js")
+}
+
+resource "aws_cloudfront_function" "public_report_routes" {
+  name    = "tollchat-v2-public-report-routes"
+  runtime = "cloudfront-js-2.0"
+  comment = "Resolve canonical TollChat report directories"
+  publish = true
+  code    = file("${path.module}/../agent/public-report-routes.js")
 }
 
 resource "aws_wafv2_web_acl" "public_chat" {
@@ -526,6 +545,11 @@ resource "aws_cloudfront_distribution" "site" {
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
     cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.public_report_routes.arn
+    }
   }
 
   ordered_cache_behavior {

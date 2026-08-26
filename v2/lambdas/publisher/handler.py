@@ -32,6 +32,7 @@ CA_BUNDLE_PATH = str(Path(__file__).with_name("rds-ca-bundle.pem"))
 PUBLIC_PREFIX = "tolls/i95-i495"
 MANIFEST_KEY = f"{PUBLIC_PREFIX}/manifest.json"
 PUBLIC_BASE_URL = "https://tollchat.ai"
+PUBLICATION_FORMAT_VERSION = "1.0.0"
 PUBLIC_CACHE_CONTROL = "public, max-age=300"
 MANIFEST_CACHE_CONTROL = "no-cache"
 _EASTERN = ZoneInfo("America/New_York")
@@ -48,6 +49,10 @@ class _S3Body(Protocol):
 
 
 class _S3Client(Protocol):
+    def list_objects_v2(
+        self, *, Bucket: str, Prefix: str, MaxKeys: int
+    ) -> dict[str, object]: ...
+
     def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]: ...
 
     def put_object(
@@ -400,6 +405,7 @@ def _result_fingerprint(
 ) -> str:
     canonical = json.dumps(
         {
+            "publication_format_version": PUBLICATION_FORMAT_VERSION,
             "point_slugs": point_slugs,
             "reports": _without_runtime_fields(documents),
         },
@@ -554,7 +560,7 @@ def _unavailable_html(current_price: dict[str, Any]) -> str:
     return "".join(parts)
 
 
-def _render_report_html(document: dict[str, Any]) -> str:
+def _render_report_html(document: dict[str, Any], canonical_url: str) -> str:
     route = cast(dict[str, Any], document["route"])
     origin = cast(dict[str, Any], route["origin"])
     destination = cast(dict[str, Any], route["destination"])
@@ -605,6 +611,7 @@ def _render_report_html(document: dict[str, Any]) -> str:
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{title}</title>"
         '<link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">'
+        f'<link rel="canonical" href="{escape(canonical_url)}">'
         '<link rel="alternate" type="application/json" href="report.json">'
         "</head><body><main>"
         f"<h1>{title}</h1>{answer}"
@@ -655,7 +662,9 @@ def _render_index_html(
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        "<title>Current I-95/I-495 toll reports</title></head><body><main>"
+        "<title>Current I-95/I-495 toll reports</title>"
+        '<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/">'
+        "</head><body><main>"
         "<h1>Current I-95/I-495 toll reports</h1><p>Choose a directed entry-to-exit "
         "route. Each report includes current availability, freshness, price, and "
         "provenance.</p><ol>" + "".join(links) + "</ol></main></body></html>\n"
@@ -687,6 +696,14 @@ def _render_sitemap(
 
 
 def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
+    listing = s3_client.list_objects_v2(Bucket=bucket, Prefix=MANIFEST_KEY, MaxKeys=1)
+    contents = listing.get("Contents", [])
+    if not isinstance(contents, list) or not any(
+        isinstance(item, dict)
+        and cast(dict[object, object], item).get("Key") == MANIFEST_KEY
+        for item in cast(list[object], contents)
+    ):
+        return None
     try:
         response = s3_client.get_object(Bucket=bucket, Key=MANIFEST_KEY)
     except Exception as error:
@@ -711,6 +728,7 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
     decoded: object = json.loads(body)
     manifest = cast(dict[str, object], decoded) if isinstance(decoded, dict) else {}
     point_slugs = manifest.get("point_slugs")
+    publication_format_version = manifest.get("publication_format_version", "0")
     if (
         not {
             "schema_version",
@@ -725,6 +743,7 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
         <= manifest.keys()
         or manifest.get("schema_version") != "1.0.0"
         or manifest.get("facility") != FACILITY
+        or not isinstance(publication_format_version, str)
         or not isinstance(manifest.get("generation_id"), str)
         or not isinstance(manifest.get("published_at"), str)
         or not (
@@ -741,6 +760,7 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
         or not re.fullmatch(r"[a-f0-9]{64}", cast(str, manifest.get("result_sha256")))
     ):
         raise ValueError("publication manifest is malformed")
+    manifest["publication_format_version"] = publication_format_version
     try:
         _aware_timestamp(cast(str, manifest["generation_id"]), label="generation ID")
         _aware_timestamp(cast(str, manifest["published_at"]), label="published at")
@@ -817,7 +837,10 @@ def _publish_generation(
     html_objects = [
         (
             f"{_route_key(document, point_slugs)}/index.html",
-            _render_report_html(document),
+            _render_report_html(
+                document,
+                f"{PUBLIC_BASE_URL}/{_route_key(document, point_slugs)}/",
+            ),
             "text/html; charset=utf-8",
             PUBLIC_CACHE_CONTROL,
         )
@@ -827,6 +850,7 @@ def _publish_generation(
     sitemap = _render_sitemap(documents, point_slugs, published_at)
     manifest = {
         "schema_version": "1.0.0",
+        "publication_format_version": PUBLICATION_FORMAT_VERSION,
         "facility": generation.facility,
         "generation_id": _utc_text(generation.generation_id),
         "published_at": _utc_text(published_at),

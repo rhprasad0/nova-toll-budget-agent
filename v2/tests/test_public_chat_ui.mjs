@@ -142,6 +142,24 @@ test("public API gate allows only the deployed operations", async () => {
   assert.equal(blocked.statusCode, 404);
 });
 
+test("public report routes rewrite only trailing-slash toll paths", async () => {
+  const source = await readFile(new URL("../agent/public-report-routes.js", import.meta.url), "utf8");
+  const context = {};
+  vm.runInNewContext(`${source}\nthis.rewrite = handler;`, context);
+
+  for (const [uri, expected] of [
+    ["/tolls/i95-i495/", "/tolls/i95-i495/index.html"],
+    ["/tolls/i95-i495/origin/destination/", "/tolls/i95-i495/origin/destination/index.html"],
+    ["/tolls/i95-i495/origin/destination/report.json", "/tolls/i95-i495/origin/destination/report.json"],
+    ["/robots.txt", "/robots.txt"],
+    ["/sitemap.xml", "/sitemap.xml"],
+    ["/assets/favicon.png", "/assets/favicon.png"],
+    ["/api/config", "/api/config"],
+  ]) {
+    assert.equal(context.rewrite({ request: { method: "GET", uri } }).uri, expected);
+  }
+});
+
 test("usage proof accepts only current nonnegative cumulative snapshots", () => {
   const snapshot = {
     schema_version: 1,

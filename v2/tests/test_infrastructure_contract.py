@@ -145,6 +145,57 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'resource "aws_acm_certificate" "site"' in site
 
 
+def test_public_report_surface_is_canonical_crawlable_and_isolated():
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    robots = (V2_ROOT / "agent" / "robots.txt").read_text()
+
+    assert 'resource "aws_cloudfront_function" "public_report_routes"' in site
+    assert 'code    = file("${path.module}/../agent/public-report-routes.js")' in site
+    default_behavior = site.split("  default_cache_behavior {", maxsplit=1)[1].split(
+        "  ordered_cache_behavior {", maxsplit=1
+    )[0]
+    assert "aws_cloudfront_function.public_report_routes.arn" in default_behavior
+    api_behavior = site.split("  ordered_cache_behavior {", maxsplit=1)[1].split(
+        "  web_acl_id", maxsplit=1
+    )[0]
+    assert "aws_cloudfront_function.public_chat_routes.arn" in api_behavior
+    assert "aws_cloudfront_function.public_report_routes.arn" not in api_behavior
+
+    robots_object = site.split('resource "aws_s3_object" "robots"', maxsplit=1)[
+        1
+    ].split('resource "aws_s3_object"', maxsplit=1)[0]
+    assert 'key           = "robots.txt"' in robots_object
+    assert 'source        = "${path.module}/../agent/robots.txt"' in robots_object
+    assert 'content_type  = "text/plain; charset=utf-8"' in robots_object
+    assert 'cache_control = "no-cache"' in robots_object
+    for user_agent in (
+        "OAI-SearchBot",
+        "ChatGPT-User",
+        "Claude-SearchBot",
+        "Claude-User",
+        "Googlebot",
+        "Google-Extended",
+        "Google-Agent",
+        "PerplexityBot",
+        "Perplexity-User",
+        "bingbot",
+        "Amzn-SearchBot",
+        "Amzn-User",
+        "Applebot",
+        "DuckAssistBot",
+    ):
+        assert f"User-agent: {user_agent}\nAllow: /tolls/" in robots
+    assert "Sitemap: https://tollchat.ai/sitemap.xml" in robots
+    for training_agent in ("GPTBot", "ClaudeBot", "Amazonbot", "Applebot-Extended"):
+        assert training_agent not in robots
+    assert "cloudfront wait distribution-deployed" in DEPLOYMENT
+    assert "toll-v2-report-publisher" in DEPLOYMENT
+    assert 'test "$(wc -l <"$REPORT_URLS")" -eq 685' in DEPLOYMENT
+    assert (
+        "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
+    )
+
+
 def test_public_site_publishes_the_v2_ui_and_legal_assets():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     page = (V2_ROOT / "agent" / "dev_chat.html").read_text()
@@ -286,11 +337,13 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     ].split('resource "aws_iam_role_policy" "publisher"', maxsplit=1)[0]
     assert 'actions   = ["s3:GetObject"]' in policy
     assert "tolls/i95-i495/manifest.json" in policy
+    assert 'actions   = ["s3:ListBucket"]' in policy
+    assert 'variable = "s3:prefix"' in policy
+    assert 'values   = ["tolls/i95-i495/manifest.json"]' in policy
     assert re.search(r'actions\s+= \["s3:PutObject"\]', policy)
     assert "tolls/i95-i495/*" in policy
     assert "sitemap.xml" in policy
     assert 'actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]' in policy
-    assert "s3:ListBucket" not in policy
     assert "s3:DeleteObject" not in policy
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_s3"' in MAIN_TF
     publisher_lambda = MAIN_TF.split(
@@ -299,9 +352,12 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
         'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
     )[0]
     assert "timeout       = 600" in publisher_lambda
-    assert 'REPORT_PUBLICATION_ENABLED = "false"' in publisher_lambda
+    assert 'REPORT_PUBLICATION_ENABLED = "true"' in publisher_lambda
     assert "SITE_BUCKET_NAME           = aws_s3_bucket.site.id" in publisher_lambda
     assert "reserved_concurrent_executions = 1" in publisher_lambda
+    assert "aws_cloudfront_distribution.site" in publisher_lambda
+    assert "aws_iam_role_policy.publisher" in publisher_lambda
+    assert "aws_s3_object.robots" in publisher_lambda
     assert (
         'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
         in MAIN_TF
