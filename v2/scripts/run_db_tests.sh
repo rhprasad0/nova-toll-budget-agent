@@ -273,6 +273,9 @@ SQL
                   'point_type', point_type,
                   'direction', direction,
                   'label', label,
+                  'place_name', place_name,
+                  'region', region,
+                  'country_code', country_code,
                   'aliases', aliases,
                   'location', oracle.ST_AsGeoJSON(location)::jsonb,
                   'source_metadata', source_metadata
@@ -348,6 +351,7 @@ psql --dbname "$bootstrap_db" --file v2/tests/oracle_pricing_route_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i66_pricing_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_i95_pricing_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_ballpark_contract.sql
+psql --dbname "$bootstrap_db" --file v2/tests/oracle_report_contract.sql
 psql --dbname "$bootstrap_db" --file v2/tests/oracle_security_contract.sql
 
 psql --dbname "$bootstrap_db" --set ON_ERROR_STOP=1 <<'SQL'

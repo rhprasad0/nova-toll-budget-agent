@@ -44,6 +44,59 @@ def test_all_route_points_have_coordinate_provenance() -> None:
     assert all(len(coordinates) == 1 for coordinates in locations.values())
 
 
+def test_i95_i495_report_points_have_curated_geographic_context() -> None:
+    points = build_points()
+    report_points = [
+        point for point in points.values() if point.network_id in {"i95", "i495"}
+    ]
+
+    assert len(report_points) == 107
+    assert all(point.place_name for point in report_points)
+    assert all(point.region for point in report_points)
+    assert {point.country_code for point in report_points} == {"US"}
+    assert all(point.aliases for point in report_points)
+    assert all(len(point.aliases) == len(set(point.aliases)) for point in report_points)
+    assert points["i95:218NO"].place_name == "Dumfries"
+    assert {"Dumfries Road", "Route 234"} <= set(points["i95:218NO"].aliases)
+    assert points["i495:185ND"].place_name == "Tysons"
+    assert "Tysons Corner" in points["i495:185ND"].aliases
+    assert all(
+        "Tysons Corner" in point.aliases
+        for point in report_points
+        if point.place_name == "Tysons"
+    )
+    assert points["i95:208ND"].place_name == "Newington"
+    assert {"Fairfax County Parkway", "Route 286"} <= set(points["i95:208ND"].aliases)
+    assert points["i495:187NO"].place_name == "Idylwood"
+    assert points["i495:187SD"].place_name == "Dunn Loring"
+    assert points["i495:188SO"].place_name == "Merrifield"
+    assert points["i95:2249ND"].place_name == "Arlington"
+    assert points["i95:236SO"].place_name == "Dale City"
+    assert points["i95:216SD"].place_name == "Potomac Mills"
+    assert points["i95:223ND"].source_metadata["report_context"][
+        "nearby_landmarks"
+    ] == [
+        "Pentagon",
+        "Ronald Reagan Washington National Airport",
+    ]
+    assert points["i95:208ND"].source_metadata["report_context"][
+        "nearby_landmarks"
+    ] == ["Fort Belvoir"]
+
+    assert "Reagan Airport" in points["airport_dca"].aliases
+    assert "DCA" in points["airport_dca"].aliases
+    assert "Dulles Airport" in points["airport_iad"].aliases
+    assert "IAD" in points["airport_iad"].aliases
+    assert all("Reagan Airport" not in point.aliases for point in report_points)
+
+    non_report_points = [
+        point for point in points.values() if point.network_id not in {"i95", "i495"}
+    ]
+    assert all(point.place_name is None for point in non_report_points)
+    assert all(point.region is None for point in non_report_points)
+    assert all(point.country_code is None for point in non_report_points)
+
+
 def test_source_metadata_retains_future_pricing_keys() -> None:
     points = build_points()
     connections = build_connections(points)
@@ -186,23 +239,20 @@ def test_washington_points_have_route_qualified_labels_and_source_aliases() -> N
     points = build_points()
 
     expected = {
-        "i66:16:entry:WB": ("Washington D.C. I-66", ("Washington",)),
-        "i66:16:exit:EB": ("Washington D.C. I-66", ("Washington",)),
-        "i95:2232SO": ("Washington D.C. I-395 Southbound", ("Washington D.C.",)),
-        "i95:224ND": (
-            "Washington D.C. I-95/I-395 Northbound",
-            ("Washington D.C.",),
-        ),
+        "i66:16:entry:WB": ("Washington D.C. I-66", "Washington"),
+        "i66:16:exit:EB": ("Washington D.C. I-66", "Washington"),
+        "i95:2232SO": ("Washington D.C. I-395 Southbound", "Washington D.C."),
+        "i95:224ND": ("Washington D.C. I-95/I-395 Northbound", "Washington D.C."),
         "i95:2249ND": (
             "Washington D.C. from I-495 Southbound via I-395",
-            ("Washington D.C.",),
+            "Washington D.C.",
         ),
     }
 
-    assert {
-        point_id: (points[point_id].label, points[point_id].aliases)
-        for point_id in expected
-    } == expected
+    for point_id, (label, source_alias) in expected.items():
+        assert points[point_id].label == label
+        assert source_alias in points[point_id].aliases
+    assert {"Washington", "District of Columbia"} <= set(points["i95:224ND"].aliases)
 
 
 def test_alternative_rankings_retain_only_reviewed_v1_rules() -> None:
