@@ -7,6 +7,19 @@
   <title>TollChat v2 · Northern Virginia toll prices and commute estimates</title>
   <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">
   <link rel="stylesheet" href="/assets/maplibre-gl-6.0.0/maplibre-gl.css">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "@id": "https://tollchat.ai/#webpage",
+      "url": "https://tollchat.ai/",
+      "name": "TollChat · Northern Virginia toll prices and commute estimates",
+      "description": "Ask TollChat for current Northern Virginia toll prices and annual commute estimates.",
+      "datePublished": "2026-08-23",
+      "dateModified": "2026-08-26",
+      "inLanguage": "en-US"
+    }
+  </script>
   <style>
     :root {
       color-scheme:light;
@@ -48,7 +61,6 @@
     .trust-strip strong { color:var(--navy); }
     .evaluation-note { max-width:48rem; margin:14px 0 0; color:var(--muted); font-size:.82rem; text-wrap:pretty; }
     .evaluation-note strong { color:var(--navy); }
-    .usage-proof { max-width:48rem; margin:8px 0 0; color:var(--muted); font-size:.82rem; text-wrap:pretty; }
     .starter-wrap { max-width:50rem; margin-top:20px; }
     .starter-label { margin:0 0 8px; color:var(--navy); font-size:.72rem; font-weight:850; letter-spacing:.1em; text-transform:uppercase; }
     .starters { display:flex; flex-wrap:wrap; gap:9px; }
@@ -165,7 +177,6 @@
         <p>The <a href="https://github.com/rhprasad0/nova-toll-budget-agent" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">code is open source</a>. TollChat cannot see client-side failures, so send bug reports to <a href="mailto:contact@tollchat.ai">contact@tollchat.ai</a>.</p>
       </aside>
       <p class="evaluation-note"><strong>We observed no fabricated costs in our 1,000-answer test.</strong> Toll and take-home-pay figures come from code, not AI arithmetic. 996 responses (99.6%) used only supplied numbers. One misstated a time. <a href="/faq.html#hallucinations-title">See the test limits</a>.</p>
-      <p id="usage-proof" class="usage-proof" aria-live="polite" hidden></p>
       <section id="starter-wrap" class="starter-wrap" aria-labelledby="starter-label">
         <p id="starter-label" class="starter-label">Try a question</p>
         <div class="starters">
@@ -202,6 +213,7 @@
       <button type="submit">Ask TollChat</button>
     </form>
     <footer class="site-footer">
+      <p id="usage-proof" aria-live="polite" hidden></p>
       <p>TollChat is independent and is not affiliated with VDOT or any toll operator. It uses public data from <a href="https://smarterroads.vdot.virginia.gov/faq" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">VDOT SmarterRoads</a> and rates published by toll operators. Source data may be delayed, incomplete, or inaccurate. Verify current rates and road conditions with the relevant operator before travel. TollChat is not a navigation or emergency service. Its answers are estimates, not forecasts, tax calculations, financial plans, or quotes from toll operators. Use them for general information only. Do not rely on them for financial or employment decisions, tax filing, legal matters, or other important decisions.</p>
       <p>&copy; 2026 Benevolent Clankers LLC. Source code is licensed under <a href="https://github.com/rhprasad0/nova-toll-budget-agent/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Apache-2.0</a>; TollChat name and branding reserved.</p>
       <nav class="footer-links" aria-label="Project links">
