@@ -13,6 +13,7 @@ uv run pytest
 npm ci --prefix lambdas/chat_proxy
 npm test --prefix lambdas/chat_proxy
 ./scripts/build_loader_zip.sh
+./scripts/build_publisher_zip.sh
 ./scripts/build_agentcore_zips.sh
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
@@ -75,6 +76,7 @@ plan. Later releases start here after initialization:
 ```sh
 AWS_PROFILE=nova-toll terraform plan \
   -var loader_package_path=build/loader.zip \
+  -var publisher_package_path=build/publisher.zip \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip \
   -out=build/release.tfplan

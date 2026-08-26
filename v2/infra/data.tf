@@ -49,6 +49,11 @@ data "aws_security_group" "agentcore_endpoint" {
   vpc_id = data.aws_vpc.default.id
 }
 
+data "aws_security_group" "eventbridge_endpoint" {
+  name   = "nova-toll-eventbridge-endpoint"
+  vpc_id = data.aws_vpc.default.id
+}
+
 data "aws_s3_bucket" "raw" {
   bucket = "nova-toll-raw-920534282028"
 }
