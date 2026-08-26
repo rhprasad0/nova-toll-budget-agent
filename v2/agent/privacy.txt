@@ -1,5 +1,5 @@
 TollChat privacy notice
-Effective August 24, 2026
+Effective August 25, 2026
 
 Who operates TollChat
 
@@ -22,6 +22,16 @@ When a public session starts, the temporary session record contains a one-way ha
 One permanent aggregate record contains only the two cumulative counts, the collection start time, and the latest update time. TollChat retains that aggregate while the service operates. Once daily, TollChat publishes the counts, collection start date, and publication time as a static JSON file and displays them on the site. Exact daily totals let readers calculate the change since the previous day.
 
 These counters measure sessions, not unique or verified people. Starting a new chat, using another browser, or returning after a session expires can count again. Failed requests, browser opt-outs, and automated traffic can also make the totals differ from the number of people who tried TollChat. TollChat does not sell this data or use it for targeted advertising. No third-party analytics provider receives these counters.
+
+Route report access and agent measurement
+
+When a browser, crawler, or agent requests a public toll route report under /tolls/, AWS WAF temporarily processes the IP address, request time, method, host and route path, user-agent, referring site, WAF action, and bot-classification labels. Before sampled requests or full logs are stored, AWS WAF substitutes cookie values, authorization headers, query strings, and full referrer values. Referring assistant families are represented only by non-identifying labels.
+
+TollChat keeps filtered raw route-report access logs and Athena query results for seven days. Raw logs can contain an IP address and full user-agent. They do not contain chat prompts, responses, account identifiers, cookie values, authorization values, query strings, or full referrer URLs. Requests to /api/ and unrelated site pages are excluded from this route-report logging pipeline. Access is restricted to operators and AWS services used to produce the measurement.
+
+TollChat keeps anonymous daily route aggregates while the service operates. They contain the UTC date, route, HTML or JSON representation, published generation age, agent category and confidence, WAF action, and request count. They do not contain IP addresses, full user-agents, referrer URLs, cookies, query strings, or user identifiers. Because CloudFront can cache reports for five minutes, published generation age has up to five minutes of uncertainty and does not prove the exact object version served.
+
+These figures describe requests, not unique people, successful answers, citations, or confirmed origin responses. AWS WAF logging and metrics are best-effort and can be incomplete. The browser opt-out below controls anonymous chat usage counters; it does not disable access or security logging for public route reports.
 
 Browser opt-out
 

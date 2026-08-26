@@ -1,5 +1,12 @@
 locals {
   site_assets = fileset("${path.module}/../agent/assets", "**")
+  assistant_referrers = {
+    openai     = { priority = 1, host = "chatgpt[.]com" }
+    anthropic  = { priority = 2, host = "claude[.]ai" }
+    perplexity = { priority = 3, host = "perplexity[.]ai" }
+    google     = { priority = 4, host = "gemini[.]google[.]com" }
+    microsoft  = { priority = 5, host = "copilot[.]microsoft[.]com" }
+  }
 }
 
 data "archive_file" "usage_publisher" {
@@ -348,6 +355,30 @@ resource "aws_wafv2_web_acl" "public_chat" {
     }
   }
 
+  data_protection_config {
+    dynamic "data_protection" {
+      for_each = toset(["cookie", "authorization", "referer"])
+      content {
+        field {
+          field_type = "SINGLE_HEADER"
+          field_keys = [data_protection.value]
+        }
+        action                     = "SUBSTITUTION"
+        exclude_rate_based_details = false
+        exclude_rule_match_details = false
+      }
+    }
+
+    data_protection {
+      field {
+        field_type = "QUERY_STRING"
+      }
+      action                     = "SUBSTITUTION"
+      exclude_rate_based_details = false
+      exclude_rule_match_details = false
+    }
+  }
+
   custom_response_body {
     key = "invalid-request"
     content = jsonencode({
@@ -365,8 +396,139 @@ resource "aws_wafv2_web_acl" "public_chat" {
   }
 
   rule {
-    name     = "allow-static-site"
+    name     = "agent-report-bot-control"
     priority = 0
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesBotControlRuleSet"
+        vendor_name = "AWS"
+        version     = "Version_6.1"
+
+        managed_rule_group_configs {
+          aws_managed_rules_bot_control_rule_set {
+            inspection_level        = "COMMON"
+            enable_machine_learning = false
+          }
+        }
+
+        scope_down_statement {
+          byte_match_statement {
+            field_to_match {
+              uri_path {}
+            }
+            positional_constraint = "STARTS_WITH"
+            search_string         = "/tolls/"
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "tollchat-v2-agent-report-bot-control"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  dynamic "rule" {
+    for_each = local.assistant_referrers
+    content {
+      name     = "agent-report-referrer-${rule.key}"
+      priority = rule.value.priority
+
+      action {
+        count {}
+      }
+
+      rule_label {
+        name = "assistant-referrer-${rule.key}"
+      }
+
+      statement {
+        and_statement {
+          statement {
+            byte_match_statement {
+              field_to_match {
+                uri_path {}
+              }
+              positional_constraint = "STARTS_WITH"
+              search_string         = "/tolls/"
+              text_transformation {
+                priority = 0
+                type     = "NONE"
+              }
+            }
+          }
+          statement {
+            regex_match_statement {
+              field_to_match {
+                single_header {
+                  name = "referer"
+                }
+              }
+              regex_string = "^https?://([a-z0-9-]+[.])*${rule.value.host}(:[0-9]+)?([/?#]|$)"
+              text_transformation {
+                priority = 0
+                type     = "LOWERCASE"
+              }
+            }
+          }
+        }
+      }
+
+      visibility_config {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "tollchat-v2-agent-referrer-${rule.key}"
+        sampled_requests_enabled   = false
+      }
+    }
+  }
+
+  rule {
+    name     = "agent-route-report"
+    priority = 6
+
+    action {
+      count {}
+    }
+
+    rule_label {
+      name = "agent-route-report"
+    }
+
+    statement {
+      byte_match_statement {
+        field_to_match {
+          uri_path {}
+        }
+        positional_constraint = "STARTS_WITH"
+        search_string         = "/tolls/"
+        text_transformation {
+          priority = 0
+          type     = "NONE"
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "tollchat-v2-agent-route-report"
+      sampled_requests_enabled   = false
+    }
+  }
+
+  rule {
+    name     = "allow-static-site"
+    priority = 7
 
     action {
       allow {}
@@ -399,7 +561,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
   rule {
     name     = "block-oversized-api-body"
-    priority = 1
+    priority = 8
 
     action {
       block {
@@ -433,7 +595,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
   rule {
     name     = "rate-limit-chat-and-reset"
-    priority = 2
+    priority = 9
 
     action {
       block {

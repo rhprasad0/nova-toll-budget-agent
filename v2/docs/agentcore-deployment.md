@@ -70,6 +70,26 @@ curl --fail-with-body https://tollchat.ai/privacy.txt
 curl --fail-with-body https://tollchat.ai/faq.html
 ```
 
+For the first agent-route measurement release, publish and verify the updated
+privacy notice before creating the release plan that enables WAF logging. This
+is intentionally a separate operation: a Terraform dependency can order S3 and
+WAF API calls, but it cannot prove the notice was already visible through the
+deployed CloudFront surface.
+
+```sh
+SITE_BUCKET="$(AWS_PROFILE=nova-toll terraform state show -no-color \
+  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
+SITE_KMS_ARN="$(AWS_PROFILE=nova-toll aws --region us-east-1 kms describe-key \
+  --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
+AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+  --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
+  --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
+  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
+curl --fail-with-body --silent --show-error https://tollchat.ai/privacy.txt \
+  | grep -F 'TollChat keeps filtered raw route-report access logs and Athena query results for seven days.'
+unset SITE_BUCKET SITE_KMS_ARN
+```
+
 After those one-time prerequisites, create and apply the complete saved release
 plan. Later releases start here after initialization:
 
@@ -167,6 +187,34 @@ test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
 rm -f -- "$REPORT_PAGE" "$REPORT_URLS"
 unset REPORT_PAGE REPORT_URL REPORT_URLS
 ```
+
+## Agent-route measurement launch
+
+Confirm Cloudflare remains DNS-only, generate uniquely recognizable HTML and
+JSON requests, invoke the rollup, and inspect only the sanitized saved view.
+The WAF logging destination can take several minutes to deliver its first file.
+
+```sh
+REPORT_URL="https://tollchat.ai/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
+AWS_PROFILE=nova-toll aws --region us-east-1 wafv2 get-logging-configuration \
+  --resource-arn "$(AWS_PROFILE=nova-toll terraform output -raw agent_report_web_acl_arn)"
+curl --fail-with-body --silent --show-error --user-agent 'ChatGPT-User Task6Smoke' \
+  "$REPORT_URL" >/dev/null
+curl --fail-with-body --silent --show-error --user-agent 'ChatGPT-User Task6Smoke' \
+  "${REPORT_URL}report.json" >/dev/null
+curl --fail-with-body --silent --show-error --head "$REPORT_URL" >/dev/null
+AWS_PROFILE=nova-toll aws --region us-east-1 lambda invoke \
+  --function-name tollchat-v2-agent-usage-rollup --payload '{}' \
+  --cli-binary-format raw-in-base64-out /tmp/agent-usage-rollup.json
+jq -e '.completed_dates | length == 3' /tmp/agent-usage-rollup.json
+rm -f /tmp/agent-usage-rollup.json
+unset REPORT_URL
+```
+
+Open the `tollchat-v2-public-chat` protection pack's **AI Traffic Analysis**
+tab for the native 14-day view. In Athena, select the
+`tollchat-agent-reports` workgroup and run the Terraform-managed top-routes or
+recent-request-times named query. Never export the raw WAF table.
 
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved

@@ -1,0 +1,16 @@
+{"vendor_family":"openai","user_agent_token":"OAI-SearchBot","agent_mode":"search_crawler","documentation_url":"https://developers.openai.com/api/docs/bots"}
+{"vendor_family":"openai","user_agent_token":"ChatGPT-User","agent_mode":"user_triggered_agent","documentation_url":"https://developers.openai.com/api/docs/bots"}
+{"vendor_family":"openai","user_agent_token":"GPTBot","agent_mode":"training_crawler","documentation_url":"https://developers.openai.com/api/docs/bots"}
+{"vendor_family":"google","user_agent_token":"Googlebot","agent_mode":"search_crawler","documentation_url":"https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers"}
+{"vendor_family":"google","user_agent_token":"Google-Agent","agent_mode":"user_triggered_agent","documentation_url":"https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"}
+{"vendor_family":"anthropic","user_agent_token":"Claude-SearchBot","agent_mode":"search_crawler","documentation_url":"https://support.anthropic.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"}
+{"vendor_family":"anthropic","user_agent_token":"Claude-User","agent_mode":"user_triggered_agent","documentation_url":"https://support.anthropic.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"}
+{"vendor_family":"anthropic","user_agent_token":"ClaudeBot","agent_mode":"training_crawler","documentation_url":"https://support.anthropic.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"}
+{"vendor_family":"perplexity","user_agent_token":"PerplexityBot","agent_mode":"search_crawler","documentation_url":"https://docs.perplexity.ai/docs/resources/perplexity-crawlers"}
+{"vendor_family":"perplexity","user_agent_token":"Perplexity-User","agent_mode":"user_triggered_agent","documentation_url":"https://docs.perplexity.ai/docs/resources/perplexity-crawlers"}
+{"vendor_family":"microsoft","user_agent_token":"bingbot","agent_mode":"search_crawler","documentation_url":"https://learn.microsoft.com/en-us/microsoft-copilot-studio/guidance/generative-ai-public-websites"}
+{"vendor_family":"amazon","user_agent_token":"Amzn-SearchBot","agent_mode":"search_crawler","documentation_url":"https://developer.amazon.com/en/amazonbot"}
+{"vendor_family":"amazon","user_agent_token":"Amzn-User","agent_mode":"user_triggered_agent","documentation_url":"https://developer.amazon.com/en/amazonbot"}
+{"vendor_family":"amazon","user_agent_token":"Amazonbot","agent_mode":"training_crawler","documentation_url":"https://developer.amazon.com/en/amazonbot"}
+{"vendor_family":"apple","user_agent_token":"Applebot","agent_mode":"search_crawler","documentation_url":"https://support.apple.com/en-us/119829"}
+{"vendor_family":"duckduckgo","user_agent_token":"DuckAssistBot","agent_mode":"search_crawler","documentation_url":"https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot"}
