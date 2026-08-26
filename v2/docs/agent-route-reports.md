@@ -224,11 +224,15 @@ Each covered route has one HTML report and one JSON representation:
 /tolls/i95-i495/{origin-point-slug}/{destination-point-slug}/report.json
 ```
 
-Point slugs are deterministic URL-safe encodings of stable Oracle point IDs;
-they are not generated from mutable labels. IDs need not appear in the page
-title or lead copy. A browsable I-95/I-495 route index links every report by
-human-readable place and roadway names, and all indexable HTML reports appear
-in sitemap indexes.
+Point slugs are descriptive, deterministic combinations of place, up to two
+distinct aliases, and direction. Text is normalized with Unicode NFKD, ASCII
+transliteration, lowercase, and hyphens. If distinct point IDs produce the same
+slug, the shortest deterministic point ID retains the descriptive slug and the
+others receive their normalized point ID as a suffix. The complete point-ID-to-
+slug map is frozen in the first successful manifest and reused, so later label
+or context corrections do not move established URLs. A browsable I-95/I-495
+route index links every report by human-readable place and roadway names, and
+all indexable HTML reports appear in the sitemap.
 
 ### HTML contract
 
@@ -239,7 +243,6 @@ For an available route, the server-rendered page includes:
 - canonical roadway labels, direction, and entry or exit role for both
   endpoints;
 - geographic aliases and enough locality context to disambiguate each place;
-- an optional map or map links derived from the published coordinates;
 - the current estimated route total;
 - the fixed vehicle, payment, and transponder profile;
 - the Eastern evaluation time and visible "as of" language;
@@ -270,6 +273,8 @@ successful report is:
   "schema_version": "1.0.0",
   "generation_id": "2026-08-25T14:12:00Z",
   "published_at": "2026-08-25T14:12:00Z",
+  "evaluated_at": "2026-08-25T14:12:00Z",
+  "availability": "available",
   "facility": "i95_i495",
   "route": {
     "origin": {
@@ -826,22 +831,18 @@ while the watchdog builds or preserves honest unavailable states.
 
 - Render accessible route HTML, `report.json`, the route index, manifest, and
   sitemap from one in-memory generation.
-- Make the manifest the durable idempotency checkpoint. For load events, no-op
-  when its canonical source-revision fingerprint is already complete; for the
-  watchdog, no-op when its canonical result fingerprint is unchanged. Neither
-  fingerprint includes generation or evaluation metadata.
-- Define the source revision as a SHA-256 digest of the canonical, stably
-  ordered normalized I-95 rows that committed successfully, and include it in
-  a versioned loader event. Exclude S3 and EventBridge delivery metadata from
-  the digest.
-- Treat a corrected same-watermark source revision as a new generation, reject
-  publication older than the completed manifest, and never use only the source
-  watermark, source key, or EventBridge ID as the deduplication key.
-- Upload JSON before HTML and publish the manifest and sitemap last.
+- Make the manifest's canonical public-result fingerprint the durable,
+  best-effort idempotency checkpoint for both load events and the watchdog.
+  Exclude generation, publication, and evaluation metadata from the fingerprint.
+  A same-watermark correction that changes no public result is a no-op.
+- Reject publication older than the completed manifest. The source watermark
+  validates event ordering but is not the deduplication key.
+- Upload all JSON before HTML, then publish the route index and sitemap, and
+  publish the manifest last.
 - Add object-level failure tests, including failure between JSON and HTML, and
   require visible generation and freshness metadata. Cover retried deliveries
-  with later snapshot timestamps, same-watermark corrections, delayed events
-  after a watchdog generation, and unchanged watchdog results.
+  with later snapshot timestamps, same-watermark corrections, delayed events,
+  and unchanged watchdog results.
 - Verify complete geographic labels and tool-parity disclosures in both
   available and unavailable pages.
 

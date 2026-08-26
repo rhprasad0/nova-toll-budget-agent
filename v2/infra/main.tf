@@ -395,6 +395,27 @@ data "aws_iam_policy_document" "publisher" {
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.publisher_invoke_failure.arn]
   }
+
+  statement {
+    sid       = "ReadPublicationManifest"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/tolls/i95-i495/manifest.json"]
+  }
+
+  statement {
+    sid     = "WritePublicReports"
+    actions = ["s3:PutObject"]
+    resources = [
+      "${aws_s3_bucket.site.arn}/tolls/i95-i495/*",
+      "${aws_s3_bucket.site.arn}/sitemap.xml",
+    ]
+  }
+
+  statement {
+    sid       = "UseSiteKey"
+    actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.site.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "publisher" {
@@ -427,6 +448,15 @@ resource "aws_vpc_security_group_egress_rule" "publisher_to_rds" {
   ip_protocol                  = "tcp"
 }
 
+resource "aws_vpc_security_group_egress_rule" "publisher_to_s3" {
+  security_group_id = aws_security_group.publisher.id
+  description       = "S3 gateway endpoint"
+  prefix_list_id    = data.aws_prefix_list.s3.id
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
 resource "aws_cloudwatch_log_group" "publisher" {
   name              = "/aws/lambda/toll-v2-report-publisher"
   retention_in_days = 30
@@ -437,7 +467,7 @@ resource "aws_lambda_function" "publisher" {
   role          = aws_iam_role.publisher.arn
   runtime       = "python3.13"
   handler       = "handler.handler"
-  timeout       = 240
+  timeout       = 600
   memory_size   = 512
 
   filename         = local.publisher_zip_path
@@ -452,10 +482,12 @@ resource "aws_lambda_function" "publisher" {
 
   environment {
     variables = {
-      DB_HOST = data.aws_db_instance.main.address
-      DB_PORT = tostring(data.aws_db_instance.main.port)
-      DB_NAME = data.aws_db_instance.main.db_name
-      DB_USER = "report_publisher"
+      DB_HOST                    = data.aws_db_instance.main.address
+      DB_PORT                    = tostring(data.aws_db_instance.main.port)
+      DB_NAME                    = data.aws_db_instance.main.db_name
+      DB_USER                    = "report_publisher"
+      REPORT_PUBLICATION_ENABLED = "false"
+      SITE_BUCKET_NAME           = aws_s3_bucket.site.id
     }
   }
 

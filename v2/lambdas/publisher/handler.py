@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
+import re
+import unicodedata
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from html import escape
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, Protocol, cast
+from zoneinfo import ZoneInfo
 
 import boto3
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +29,37 @@ FACILITY = "i95_i495"
 EXPECTED_ROUTE_COUNT = 685
 REPORT_SQL = "SELECT * FROM oracle.get_i95_i495_report_inputs()"
 CA_BUNDLE_PATH = str(Path(__file__).with_name("rds-ca-bundle.pem"))
+PUBLIC_PREFIX = "tolls/i95-i495"
+MANIFEST_KEY = f"{PUBLIC_PREFIX}/manifest.json"
+PUBLIC_BASE_URL = "https://tollchat.ai"
+PUBLIC_CACHE_CONTROL = "public, max-age=300"
+MANIFEST_CACHE_CONTROL = "no-cache"
+_EASTERN = ZoneInfo("America/New_York")
+_RUNTIME_FIELDS = {
+    "component_evaluated_at",
+    "evaluated_at",
+    "generation_id",
+    "published_at",
+}
+
+
+class _S3Body(Protocol):
+    def read(self, amount: int = -1) -> bytes: ...
+
+
+class _S3Client(Protocol):
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]: ...
+
+    def put_object(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        Body: bytes,
+        ContentType: str,
+        CacheControl: str,
+    ) -> object: ...
+
 
 _ROUTE_FIELDS = (
     "snapshot_evaluated_at",
@@ -90,6 +128,69 @@ class Generation(_Model):
         list[GenerationRoute],
         Field(min_length=EXPECTED_ROUTE_COUNT, max_length=EXPECTED_ROUTE_COUNT),
     ]
+
+
+def _slugify(*parts: str) -> str:
+    text = "-".join(parts)
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
+    if not slug:
+        raise ValueError("report slug is empty")
+    return slug
+
+
+def _slug_candidate(endpoint: Endpoint) -> str:
+    parts = [endpoint.place_name]
+    seen = {endpoint.place_name.casefold()}
+    for alias in endpoint.aliases:
+        key = alias.casefold()
+        if key not in seen:
+            parts.append(alias)
+            seen.add(key)
+        if len(parts) == 3:
+            break
+    parts.append(endpoint.direction)
+    return _slugify(*parts)
+
+
+def _build_slug_map(
+    endpoints: list[Endpoint], existing: dict[str, str] | None = None
+) -> dict[str, str]:
+    by_id: dict[str, Endpoint] = {}
+    for endpoint in endpoints:
+        prior = by_id.setdefault(endpoint.point_id, endpoint)
+        if prior != endpoint:
+            raise ValueError(f"endpoint metadata disagrees for {endpoint.point_id}")
+
+    if existing is not None:
+        if any(slug != _slugify(slug) for slug in existing.values()):
+            raise ValueError("manifest point-slug mapping is malformed")
+        if not by_id.keys() <= existing.keys():
+            raise ValueError("manifest point-slug mapping is incomplete")
+        if len(set(existing.values())) != len(existing):
+            raise ValueError("manifest point-slug mapping is not unique")
+        return dict(sorted(existing.items()))
+
+    candidates = {
+        point_id: _slug_candidate(endpoint) for point_id, endpoint in by_id.items()
+    }
+    groups: dict[str, list[str]] = defaultdict(list)
+    for point_id, candidate in candidates.items():
+        groups[candidate].append(point_id)
+    slugs: dict[str, str] = {}
+    for candidate, point_ids in groups.items():
+        primary = min(
+            point_ids, key=lambda value: (len(_slugify(value)), _slugify(value))
+        )
+        for point_id in point_ids:
+            slugs[point_id] = (
+                candidate
+                if point_id == primary
+                else f"{candidate}-{_slugify(point_id)}"
+            )
+    if len(set(slugs.values())) != len(slugs):
+        raise ValueError("descriptive point slugs are not unique")
+    return dict(sorted(slugs.items()))
 
 
 class _LoadDetail(_Model):
@@ -261,6 +362,521 @@ def build_generation(rows: list[dict[str, Any]]) -> Generation:
     )
 
 
+def _build_report_document(
+    generation: Generation, route: GenerationRoute, published_at: datetime
+) -> dict[str, Any]:
+    current_price = route.current_price
+    return {
+        "schema_version": "1.0.0",
+        "generation_id": _utc_text(generation.generation_id),
+        "published_at": _utc_text(published_at),
+        "evaluated_at": _utc_text(generation.evaluated_at),
+        "availability": "available" if "total_usd" in current_price else "unavailable",
+        "facility": generation.facility,
+        "route": {
+            "origin": route.origin.model_dump(mode="json"),
+            "destination": route.destination.model_dump(mode="json"),
+            "structural_facility_legs": route.structural_facility_legs,
+        },
+        "current_price": current_price,
+    }
+
+
+def _without_runtime_fields(value: Any) -> Any:  # noqa: ANN401
+    if isinstance(value, dict):
+        values = cast(dict[str, Any], value)
+        return {
+            key: _without_runtime_fields(item)
+            for key, item in values.items()
+            if key not in _RUNTIME_FIELDS
+        }
+    if isinstance(value, list):
+        return [_without_runtime_fields(item) for item in cast(list[Any], value)]
+    return value
+
+
+def _result_fingerprint(
+    documents: list[dict[str, Any]], point_slugs: dict[str, str]
+) -> str:
+    canonical = json.dumps(
+        {
+            "point_slugs": point_slugs,
+            "reports": _without_runtime_fields(documents),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _display_time(value: str | None) -> str:
+    if value is None:
+        return "Unavailable"
+    return (
+        _aware_timestamp(value, label="report timestamp")
+        .astimezone(_EASTERN)
+        .strftime("%B %-d, %Y at %-I:%M %p %Z")
+    )
+
+
+def _label(value: object) -> str:
+    return str(value).replace("_", " ")
+
+
+def _source_observed_at(current_price: dict[str, Any]) -> str | None:
+    values: list[str] = []
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in cast(dict[str, object], value).items():
+                if key == "observed_at" and isinstance(item, str):
+                    values.append(item)
+                else:
+                    collect(item)
+        elif isinstance(value, list):
+            for item in cast(list[object], value):
+                collect(item)
+
+    collect(current_price)
+    return (
+        max(values, key=lambda item: _aware_timestamp(item, label="observed_at"))
+        if values
+        else None
+    )
+
+
+def _endpoint_html(title: str, endpoint: dict[str, Any]) -> str:
+    aliases = ", ".join(escape(str(value)) for value in endpoint["aliases"]) or "None"
+    landmarks = (
+        ", ".join(escape(str(value)) for value in endpoint["nearby_landmarks"])
+        or "None"
+    )
+    return (
+        f"<section><h2>{escape(title)}</h2><dl>"
+        f"<dt>Place</dt><dd>{escape(str(endpoint['place_name']))}, "
+        f"{escape(str(endpoint['region']))}</dd>"
+        f"<dt>Roadway access</dt><dd>{escape(str(endpoint['label']))}</dd>"
+        f"<dt>Direction and role</dt><dd>{escape(str(endpoint['direction']))} "
+        f"{escape(str(endpoint['role']))}</dd>"
+        f"<dt>Also known as</dt><dd>{aliases}</dd>"
+        f"<dt>Nearby landmarks</dt><dd>{landmarks}</dd>"
+        f"</dl></section>"
+    )
+
+
+def _component_html(component: dict[str, Any]) -> str:
+    price = component.get("price_usd")
+    bin_start = component.get("bin_start")
+    bin_end = component.get("bin_end")
+    items = [
+        ("Facility", component.get("facility")),
+        ("Price", f"${price}" if price is not None else None),
+        ("Source", component.get("source_kind")),
+        ("Pricing method", component.get("pricing_method")),
+        ("Source observation", component.get("observed_at")),
+        (
+            "10-minute bin",
+            f"{bin_start} to {bin_end}"
+            if bin_start is not None and bin_end is not None
+            else None,
+        ),
+        ("Source interval end", component.get("interval_end_at")),
+    ]
+    details = "".join(
+        f"<dt>{escape(label)}</dt><dd>{escape(_label(value))}</dd>"
+        for label, value in items
+        if value is not None
+    )
+    movement = component.get("recent_movement")
+    if isinstance(movement, dict):
+        movement_values = cast(dict[str, object], movement)
+        samples = movement_values.get("samples")
+        sample_text = (
+            "; ".join(
+                f"Cycle {escape(str(sample.get('cycle_offset')))}: "
+                f"${escape(str(sample.get('price_usd')))}"
+                for sample in cast(list[dict[str, object]], samples)
+            )
+            if isinstance(samples, list)
+            else "Unavailable"
+        )
+        details += (
+            "<dt>Recent movement</dt><dd>"
+            f"{sample_text}; "
+            f"{escape(_label(movement_values.get('direction', 'unavailable')))}, net change "
+            f"${escape(str(movement_values.get('net_change_usd', 'unavailable')))} "
+            f"({escape(str(movement_values.get('net_change_percent', 'unavailable')))}%)</dd>"
+        )
+    comparison = component.get("prior_week_comparison")
+    if isinstance(comparison, dict):
+        comparison_values = cast(dict[str, object], comparison)
+        details += (
+            "<dt>Prior-week comparison</dt><dd>"
+            f"Median ${escape(str(comparison_values.get('median_usd', 'unavailable')))}; "
+            f"range ${escape(str(comparison_values.get('minimum_usd', 'unavailable')))} to "
+            f"${escape(str(comparison_values.get('maximum_usd', 'unavailable')))}; "
+            f"current delta ${escape(str(comparison_values.get('current_delta_usd', 'unavailable')))} "
+            f"({escape(str(comparison_values.get('current_delta_percent', 'unavailable')))}%); "
+            f"{escape(_label(comparison_values.get('position', 'unavailable')))}; "
+            f"{escape(str(comparison_values.get('comparable_period_count', 0)))} of "
+            f"{escape(str(comparison_values.get('expected_comparable_period_count', 0)))} "
+            "comparable periods"
+            "</dd>"
+        )
+    return f"<section><h3>Priced component</h3><dl>{details}</dl></section>"
+
+
+def _unavailable_html(current_price: dict[str, Any]) -> str:
+    reason = (
+        current_price.get("reason")
+        or current_price.get("status")
+        or current_price.get("error")
+    )
+    parts = [
+        "<p><strong>Current pricing is unavailable.</strong> "
+        f"Reason: {escape(_label(reason or 'unknown'))}.</p>"
+    ]
+    unavailable = current_price.get("unavailable_components")
+    if isinstance(unavailable, list):
+        parts.append("<ul>")
+        for component in cast(list[object], unavailable):
+            if isinstance(component, dict):
+                values = cast(dict[str, object], component)
+                observed_at = values.get("observed_at")
+                parts.append(
+                    "<li>"
+                    f"{escape(_label(values.get('reason', 'unknown')))}; "
+                    f"source observation {_display_time(observed_at if isinstance(observed_at, str) else None)}"
+                    "</li>"
+                )
+        parts.append("</ul>")
+    return "".join(parts)
+
+
+def _render_report_html(document: dict[str, Any]) -> str:
+    route = cast(dict[str, Any], document["route"])
+    origin = cast(dict[str, Any], route["origin"])
+    destination = cast(dict[str, Any], route["destination"])
+    current_price = cast(dict[str, Any], document["current_price"])
+    origin_name = escape(str(origin["place_name"]))
+    destination_name = escape(str(destination["place_name"]))
+    title = f"Current I-95/I-495 toll from {origin_name} to {destination_name}"
+    observed_at = _source_observed_at(current_price)
+    if document["availability"] == "available":
+        answer = (
+            f"<p><strong>Current total:</strong> "
+            f"${escape(str(current_price['total_usd']))}</p>"
+        )
+    else:
+        answer = _unavailable_html(current_price)
+
+    profile = current_price.get("pricing_profile")
+    profile_html = ""
+    if isinstance(profile, dict):
+        profile_values = cast(dict[str, object], profile)
+        profile_html = (
+            "<p><strong>Pricing profile:</strong> "
+            + ", ".join(escape(_label(value)) for value in profile_values.values())
+            + ".</p>"
+        )
+    components = current_price.get("components")
+    component_html = (
+        "".join(
+            _component_html(cast(dict[str, Any], component))
+            for component in cast(list[object], components)
+            if isinstance(component, dict)
+        )
+        if isinstance(components, list)
+        else ""
+    )
+    tp1 = any(
+        "TP1" in str(endpoint["point_id"]).upper() for endpoint in (origin, destination)
+    )
+    tp1_html = (
+        "<p><strong>Springfield interchange boundary:</strong> This report keeps "
+        "the same TP1 route URL when the reversible facility is closed or unavailable; "
+        "it does not substitute another route or price.</p>"
+        if tp1
+        else ""
+    )
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>{title}</title>"
+        '<link rel="alternate" type="application/json" href="report.json">'
+        "</head><body><main>"
+        f"<h1>{title}</h1>{answer}"
+        f"<p><strong>As of:</strong> {_display_time(cast(str, document['evaluated_at']))}. "
+        f"<strong>Published:</strong> {_display_time(cast(str, document['published_at']))}. "
+        f"<strong>Latest source observation:</strong> {_display_time(observed_at)}.</p>"
+        f"{profile_html}{tp1_html}<h2>Route details</h2>"
+        f"{_endpoint_html('Origin', origin)}{_endpoint_html('Destination', destination)}"
+        f"<section><h2>Price components and provenance</h2>{component_html}</section>"
+        "<section><h2>Important disclosures</h2><p>This is a current estimate for "
+        "a two-axle passenger vehicle using E-ZPass in toll mode, not a quote. "
+        "Modeled components are identified by their source and pricing method. "
+        "Missing, stale, closed, and exceptional-schedule states remain unavailable "
+        "rather than being replaced with another route.</p></section>"
+        '<p><a href="report.json">View the machine-readable JSON report</a></p>'
+        f"<p>Generation {escape(str(document['generation_id']))}</p>"
+        "</main></body></html>\n"
+    )
+
+
+def _render_index_html(
+    documents: list[dict[str, Any]], point_slugs: dict[str, str]
+) -> str:
+    links: list[str] = []
+    for document in sorted(
+        documents,
+        key=lambda item: (
+            item["route"]["origin"]["place_name"],
+            item["route"]["destination"]["place_name"],
+            item["route"]["origin"]["direction"],
+        ),
+    ):
+        origin = document["route"]["origin"]
+        destination = document["route"]["destination"]
+        href = (
+            f"./{point_slugs[origin['point_id']]}/"
+            f"{point_slugs[destination['point_id']]}/"
+        )
+        origin_aliases = ", ".join(origin["aliases"])
+        destination_aliases = ", ".join(destination["aliases"])
+        label = (
+            f"{origin['place_name']} — {origin['label']} ({origin_aliases}; "
+            f"{origin['direction']}) to {destination['place_name']} — "
+            f"{destination['label']} ({destination_aliases}; "
+            f"{destination['direction']})"
+        )
+        links.append(f'<li><a href="{escape(href)}">{escape(label)}</a></li>')
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        "<title>Current I-95/I-495 toll reports</title></head><body><main>"
+        "<h1>Current I-95/I-495 toll reports</h1><p>Choose a directed entry-to-exit "
+        "route. Each report includes current availability, freshness, price, and "
+        "provenance.</p><ol>" + "".join(links) + "</ol></main></body></html>\n"
+    )
+
+
+def _route_key(document: dict[str, Any], point_slugs: dict[str, str]) -> str:
+    route = document["route"]
+    return (
+        f"{PUBLIC_PREFIX}/{point_slugs[route['origin']['point_id']]}/"
+        f"{point_slugs[route['destination']['point_id']]}"
+    )
+
+
+def _render_sitemap(
+    documents: list[dict[str, Any]], point_slugs: dict[str, str], published_at: datetime
+) -> str:
+    lastmod = cast(str, _utc_text(published_at))
+    urls = "".join(
+        f"<url><loc>{PUBLIC_BASE_URL}/{_route_key(document, point_slugs)}/</loc>"
+        f"<lastmod>{lastmod}</lastmod></url>"
+        for document in documents
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{urls}</urlset>\n"
+    )
+
+
+def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=MANIFEST_KEY)
+    except Exception as error:
+        error_response = getattr(error, "response", {})
+        response_values = (
+            cast(dict[str, object], error_response)
+            if isinstance(error_response, dict)
+            else {}
+        )
+        error_values = response_values.get("Error")
+        code = (
+            cast(dict[str, object], error_values).get("Code")
+            if isinstance(error_values, dict)
+            else None
+        )
+        if code in {"NoSuchKey", "404", "NotFound"}:
+            return None
+        raise
+    body = cast(_S3Body, response["Body"]).read(1_000_001)
+    if len(body) > 1_000_000:
+        raise ValueError("publication manifest is too large")
+    decoded: object = json.loads(body)
+    manifest = cast(dict[str, object], decoded) if isinstance(decoded, dict) else {}
+    point_slugs = manifest.get("point_slugs")
+    if (
+        not {
+            "schema_version",
+            "facility",
+            "generation_id",
+            "published_at",
+            "source_watermark",
+            "result_sha256",
+            "route_count",
+            "point_slugs",
+        }
+        <= manifest.keys()
+        or manifest.get("schema_version") != "1.0.0"
+        or manifest.get("facility") != FACILITY
+        or not isinstance(manifest.get("generation_id"), str)
+        or not isinstance(manifest.get("published_at"), str)
+        or not (
+            manifest.get("source_watermark") is None
+            or isinstance(manifest.get("source_watermark"), str)
+        )
+        or manifest.get("route_count") != EXPECTED_ROUTE_COUNT
+        or not isinstance(point_slugs, dict)
+        or not all(
+            isinstance(point_id, str) and isinstance(slug, str)
+            for point_id, slug in cast(dict[object, object], point_slugs).items()
+        )
+        or not isinstance(manifest.get("result_sha256"), str)
+        or not re.fullmatch(r"[a-f0-9]{64}", cast(str, manifest.get("result_sha256")))
+    ):
+        raise ValueError("publication manifest is malformed")
+    try:
+        _aware_timestamp(cast(str, manifest["generation_id"]), label="generation ID")
+        _aware_timestamp(cast(str, manifest["published_at"]), label="published at")
+        if manifest["source_watermark"] is not None:
+            _aware_timestamp(
+                cast(str, manifest["source_watermark"]), label="source watermark"
+            )
+    except ValueError as error:
+        raise ValueError("publication manifest is malformed") from error
+    return cast(dict[str, Any], manifest)
+
+
+def _put_phase(
+    s3_client: _S3Client,
+    bucket: str,
+    objects: list[tuple[str, str, str, str]],
+) -> None:
+    def put(value: tuple[str, str, str, str]) -> None:
+        key, body, content_type, cache_control = value
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body.encode(),
+            ContentType=content_type,
+            CacheControl=cache_control,
+        )
+
+    with ThreadPoolExecutor(max_workers=min(8, len(objects))) as executor:
+        list(executor.map(put, objects))
+
+
+def _publish_generation(
+    generation: Generation,
+    s3_client: _S3Client,
+    bucket: str,
+    published_at: datetime,
+) -> dict[str, Any]:
+    previous = _read_manifest(s3_client, bucket)
+    endpoints = [
+        endpoint
+        for route in generation.routes
+        for endpoint in (route.origin, route.destination)
+    ]
+    existing_slugs = (
+        cast(dict[str, str], previous["point_slugs"]) if previous is not None else None
+    )
+    point_slugs = _build_slug_map(endpoints, existing_slugs)
+    documents = [
+        _build_report_document(generation, route, published_at)
+        for route in generation.routes
+    ]
+    result_sha256 = _result_fingerprint(documents, point_slugs)
+    if previous is not None:
+        previous_watermark = previous.get("source_watermark")
+        if (
+            isinstance(previous_watermark, str)
+            and generation.source_watermark is not None
+            and generation.source_watermark
+            < _aware_timestamp(previous_watermark, label="manifest source watermark")
+        ):
+            return {"status": "superseded", "result_sha256": result_sha256}
+        if previous["result_sha256"] == result_sha256:
+            return {"status": "unchanged", "result_sha256": result_sha256}
+
+    json_objects = [
+        (
+            f"{_route_key(document, point_slugs)}/report.json",
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            "application/json; charset=utf-8",
+            PUBLIC_CACHE_CONTROL,
+        )
+        for document in documents
+    ]
+    html_objects = [
+        (
+            f"{_route_key(document, point_slugs)}/index.html",
+            _render_report_html(document),
+            "text/html; charset=utf-8",
+            PUBLIC_CACHE_CONTROL,
+        )
+        for document in documents
+    ]
+    route_index = _render_index_html(documents, point_slugs)
+    sitemap = _render_sitemap(documents, point_slugs, published_at)
+    manifest = {
+        "schema_version": "1.0.0",
+        "facility": generation.facility,
+        "generation_id": _utc_text(generation.generation_id),
+        "published_at": _utc_text(published_at),
+        "source_watermark": _utc_text(generation.source_watermark),
+        "result_sha256": result_sha256,
+        "route_count": len(documents),
+        "point_slugs": point_slugs,
+    }
+
+    _put_phase(s3_client, bucket, json_objects)
+    _put_phase(s3_client, bucket, html_objects)
+    _put_phase(
+        s3_client,
+        bucket,
+        [
+            (
+                f"{PUBLIC_PREFIX}/index.html",
+                route_index,
+                "text/html; charset=utf-8",
+                PUBLIC_CACHE_CONTROL,
+            )
+        ],
+    )
+    _put_phase(
+        s3_client,
+        bucket,
+        [
+            (
+                "sitemap.xml",
+                sitemap,
+                "application/xml; charset=utf-8",
+                PUBLIC_CACHE_CONTROL,
+            )
+        ],
+    )
+    _put_phase(
+        s3_client,
+        bucket,
+        [
+            (
+                MANIFEST_KEY,
+                json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+                "application/json; charset=utf-8",
+                MANIFEST_CACHE_CONTROL,
+            )
+        ],
+    )
+    return {"status": "published", "result_sha256": result_sha256}
+
+
 def _connect() -> object:
     import psycopg  # type: ignore[import-not-found]
     from psycopg.rows import dict_row  # type: ignore[import-not-found]
@@ -332,16 +948,33 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
             }
 
     generation_id = cast(str, _utc_text(generation.generation_id))
-    logger.info(
-        "V2_REPORT_GENERATION_OK %s %s %s",
-        FACILITY,
-        generation_id,
-        len(generation.routes),
-    )
-    return {
+    result: dict[str, Any] = {
         "status": "generated",
         "facility": FACILITY,
         "generation_id": generation_id,
         "source_watermark": _utc_text(generation.source_watermark),
         "route_count": len(generation.routes),
     }
+    enabled = os.getenv("REPORT_PUBLICATION_ENABLED", "false").lower()
+    if enabled not in {"true", "false"}:
+        raise ValueError("REPORT_PUBLICATION_ENABLED must be true or false")
+    if enabled == "true":
+        publication = _publish_generation(
+            generation,
+            cast(
+                _S3Client,
+                boto3.client("s3"),  # pyright: ignore[reportUnknownMemberType]
+            ),
+            os.environ["SITE_BUCKET_NAME"],
+            datetime.now(UTC),
+        )
+        result.update(publication)
+        if publication["status"] == "superseded":
+            return result
+    logger.info(
+        "V2_REPORT_GENERATION_OK %s %s %s",
+        FACILITY,
+        generation_id,
+        len(generation.routes),
+    )
+    return result
