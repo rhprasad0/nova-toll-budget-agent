@@ -200,6 +200,30 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         page = urllib.request.urlopen(base_url, timeout=2)
         assert page.headers["Cache-Control"] == "no-store"
         html = page.read().decode()
+        json_ld_marker = '<script type="application/ld+json">'
+        assert json_ld_marker in html
+        json_ld = json.loads(html.split(json_ld_marker, 1)[1].split("</script>", 1)[0])
+        assert json_ld == {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "@id": "https://tollchat.ai/#webpage",
+            "url": "https://tollchat.ai/",
+            "name": "TollChat · Northern Virginia toll prices and commute estimates",
+            "description": (
+                "Ask TollChat for current Northern Virginia toll prices and annual "
+                "commute estimates."
+            ),
+            "datePublished": "2026-08-23",
+            "dateModified": "2026-08-26",
+            "inLanguage": "en-US",
+        }
+        footer = html.split('<footer class="site-footer">', 1)[1].split("</footer>", 1)[
+            0
+        ]
+        assert 'id="usage-proof"' in footer
+        assert (
+            'id="usage-proof"' not in html.split('<footer class="site-footer">', 1)[0]
+        )
         assert "counts anonymous chat sessions that send a message" in html
         assert "Responses storage disabled" in html
         assert "abuse-monitoring logs" in html
