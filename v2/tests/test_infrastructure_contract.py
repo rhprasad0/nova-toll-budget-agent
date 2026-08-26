@@ -349,6 +349,12 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     )
     for path in ("faq.html", "privacy.txt", "terms.txt"):
         assert path in site
+    assert (V2_ROOT / "agent" / "BingSiteAuth.xml").exists()
+    bing = site.split('resource "aws_s3_object" "bing_site_auth"', maxsplit=1)[1]
+    assert 'key           = "BingSiteAuth.xml"' in bing
+    assert 'source        = "${path.module}/../agent/BingSiteAuth.xml"' in bing
+    assert 'content_type  = "application/xml; charset=utf-8"' in bing
+    assert 'cache_control = "no-cache"' in bing
     assert 'fileset("${path.module}/../agent/assets", "**")' in site
     assert re.search(r'key\s+= "assets/\$\{each[.]value\}"', site)
     assert (V2_ROOT / "agent" / "assets" / "tollchat-logo.png").exists()
