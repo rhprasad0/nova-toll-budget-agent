@@ -157,6 +157,17 @@ resource "aws_s3_object" "robots" {
   depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
+resource "aws_s3_object" "bing_site_auth" {
+  bucket        = aws_s3_bucket.site.id
+  key           = "BingSiteAuth.xml"
+  source        = "${path.module}/../agent/BingSiteAuth.xml"
+  source_hash   = filebase64sha256("${path.module}/../agent/BingSiteAuth.xml")
+  content_type  = "application/xml; charset=utf-8"
+  cache_control = "no-cache"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
+}
+
 resource "aws_s3_object" "site_assets" {
   for_each = local.site_assets
 
