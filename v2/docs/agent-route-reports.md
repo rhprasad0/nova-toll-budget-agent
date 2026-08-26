@@ -1,6 +1,6 @@
 # Agent-readable I-95/I-495 current toll reports
 
-- **Status:** Proposed
+- **Status:** Implemented
 - **Scope:** Public current-price reports for routes priced only by the
   I-95/I-495 Express Lanes feed
 

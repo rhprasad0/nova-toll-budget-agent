@@ -1,0 +1,423 @@
+{
+  "overall_score": 1.0,
+  "scores": [
+    1.0,
+    1.0
+  ],
+  "cases": [
+    {
+      "input": "What is the current toll from Reagan Airport to Westpark Drive?",
+      "actual_output": "### \ud83d\udcb5 Current toll estimate\n\n**Estimated total toll: $14.15** from Reagan Airport to Westpark Drive.\n\n- **Observed:** 8/26/2026 12:20 PM EDT\n- **Leg 1:** $5.10 \u2014 \u27a1\ufe0f unchanged, net change $0.00 (0.0%)\n  - **\u2705 At the recent median:** $5.10; within the recent range of $5.10\u2013$6.90.\n- **Leg 2:** $9.05 \u2014 \ud83d\udcc9 falling, net change -$0.80 (-8.1%)\n  - **\u26a0\ufe0f Higher than the recent median:** $9.00; within the recent range of $8.90\u2013$12.00.\n- **Provenance:** observed (observed components)\n\n*TollChat is independent and not affiliated with VDOT, Virginia 511, or any toll operator. This is an estimate, not an operator quote.*\n",
+      "name": "reagan-airport-to-westpark",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "response": "### \ud83d\udcb5 Current toll estimate\n\n**Estimated total toll: $14.15** from Reagan Airport to Westpark Drive.\n\n- **Observed:** 8/26/2026 12:20 PM EDT\n- **Leg 1:** $5.10 \u2014 \u27a1\ufe0f unchanged, net change $0.00 (0.0%)\n  - **\u2705 At the recent median:** $5.10; within the recent range of $5.10\u2013$6.90.\n- **Leg 2:** $9.05 \u2014 \ud83d\udcc9 falling, net change -$0.80 (-8.1%)\n  - **\u26a0\ufe0f Higher than the recent median:** $9.00; within the recent range of $8.90\u2013$12.00.\n- **Provenance:** observed (observed components)\n\n*TollChat is independent and not affiliated with VDOT, Virginia 511, or any toll operator. This is an estimate, not an operator quote.*\n",
+          "calls": [
+            {
+              "name": "get_current_toll_price",
+              "input": {
+                "origin_point_id": "airport_dca",
+                "destination_point_id": "i495:1859ND",
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                }
+              },
+              "tool_result": {
+                "origin_point_id": "airport_dca",
+                "destination_point_id": "i495:1859ND",
+                "method": "latest_complete_current_facility_prices",
+                "evaluated_at": "2026-08-26T12:34:43.332498-04:00",
+                "maximum_observation_age_minutes": 30,
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                },
+                "source_kind": "observed",
+                "components": [
+                  {
+                    "route_step_id": "step-1",
+                    "price_usd": "5.10",
+                    "source_kind": "observed",
+                    "pricing_method": "source_observation",
+                    "facility": "i95_i495",
+                    "component_evaluated_at": "2026-08-26T12:34:43.332498-04:00",
+                    "bin_minutes": 10,
+                    "bin_start": "2026-08-26T12:30:00-04:00",
+                    "bin_end": "2026-08-26T12:40:00-04:00",
+                    "interval_end_at": "2026-08-26T12:30:00-04:00",
+                    "observed_at": "2026-08-26T12:20:00-04:00",
+                    "od_pair_id": 1204,
+                    "source_status": "SOUTHBOUND_OPEN",
+                    "recent_movement": {
+                      "method": "same_facility_leg_three_cycles",
+                      "direction": "unchanged",
+                      "samples": [
+                        {
+                          "cycle_offset": -2,
+                          "price_usd": "5.10"
+                        },
+                        {
+                          "cycle_offset": -1,
+                          "price_usd": "5.10"
+                        },
+                        {
+                          "cycle_offset": 0,
+                          "price_usd": "5.10"
+                        }
+                      ],
+                      "net_change_usd": "0.00",
+                      "net_change_percent": "0.0"
+                    },
+                    "prior_week_comparison": {
+                      "method": "same_weekday_same_facility_bins",
+                      "comparable_period_count": 3,
+                      "expected_comparable_period_count": 3,
+                      "comparable_prices": [
+                        {
+                          "week_offset": 3,
+                          "price_usd": "6.90"
+                        },
+                        {
+                          "week_offset": 2,
+                          "price_usd": "5.10"
+                        },
+                        {
+                          "week_offset": 1,
+                          "price_usd": "5.10"
+                        }
+                      ],
+                      "median_usd": "5.10",
+                      "minimum_usd": "5.10",
+                      "maximum_usd": "6.90",
+                      "current_delta_usd": "0.00",
+                      "current_delta_percent": "0.0",
+                      "position": "within_recent_range",
+                      "higher_than_count": 0
+                    }
+                  },
+                  {
+                    "route_step_id": "step-2",
+                    "price_usd": "9.05",
+                    "source_kind": "observed",
+                    "pricing_method": "source_observation",
+                    "facility": "i95_i495",
+                    "component_evaluated_at": "2026-08-26T12:34:43.470395-04:00",
+                    "bin_minutes": 10,
+                    "bin_start": "2026-08-26T12:30:00-04:00",
+                    "bin_end": "2026-08-26T12:40:00-04:00",
+                    "interval_end_at": "2026-08-26T12:30:00-04:00",
+                    "observed_at": "2026-08-26T12:20:00-04:00",
+                    "od_pair_id": 1005,
+                    "source_status": "NO_DETERMINATION",
+                    "recent_movement": {
+                      "method": "same_facility_leg_three_cycles",
+                      "direction": "falling",
+                      "samples": [
+                        {
+                          "cycle_offset": -2,
+                          "price_usd": "9.85"
+                        },
+                        {
+                          "cycle_offset": -1,
+                          "price_usd": "9.50"
+                        },
+                        {
+                          "cycle_offset": 0,
+                          "price_usd": "9.05"
+                        }
+                      ],
+                      "net_change_usd": "-0.80",
+                      "net_change_percent": "-8.1"
+                    },
+                    "prior_week_comparison": {
+                      "method": "same_weekday_same_facility_bins",
+                      "comparable_period_count": 3,
+                      "expected_comparable_period_count": 3,
+                      "comparable_prices": [
+                        {
+                          "week_offset": 3,
+                          "price_usd": "8.90"
+                        },
+                        {
+                          "week_offset": 2,
+                          "price_usd": "9.00"
+                        },
+                        {
+                          "week_offset": 1,
+                          "price_usd": "12.00"
+                        }
+                      ],
+                      "median_usd": "9.00",
+                      "minimum_usd": "8.90",
+                      "maximum_usd": "12.00",
+                      "current_delta_usd": "0.05",
+                      "current_delta_percent": "0.6",
+                      "position": "within_recent_range",
+                      "higher_than_count": 2
+                    }
+                  }
+                ],
+                "total_usd": "14.15"
+              },
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "reagan-airport-to-westpark",
+        "suite": "direct",
+        "windows": [
+          "i95_southbound"
+        ],
+        "prompt": "What is the current toll from Reagan Airport to Westpark Drive?",
+        "expected_call": {
+          "origin_point_id": "airport_dca",
+          "destination_point_id": "i495:1859ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "active_window": "i95_southbound"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "TollChatEvaluator",
+      "evaluator_type": "TollChatEvaluator"
+    },
+    {
+      "input": "What is the current toll from I-395 Pentagon/Eads Street to Westpark Drive?",
+      "actual_output": "### \ud83d\udcb0 Current toll estimate\n\n**Estimated total: $14.15** from I-395 Pentagon/Eads Street to Westpark Drive.\n\n- **Profile:** Two-axle passenger vehicle, E\u2011ZPass, toll mode\n- **Provenance:** Observed components\n- **Observed:** 12:20 PM EDT\n- **Component 1:** $5.10 \u2014 \u27a1\ufe0f unchanged; $0.00 (0.0%) recent movement\n  - **\u2705 At the recent median** of $5.10; within the available range of $5.10\u2013$6.90\n- **Component 2:** $9.05 \u2014 \ud83d\udcc9 falling; down $0.80 (8.1%) recently\n  - **\u26a0\ufe0f Higher than the recent median** of $9.00; within the available range of $8.90\u2013$12.00\n\nTollChat is independent and prices are estimates, not operator quotes.\n",
+      "name": "pentagon-eads-to-westpark",
+      "expected_output": null,
+      "expected_assertion": null,
+      "expected_trajectory": null,
+      "actual_trajectory": [
+        {
+          "response": "### \ud83d\udcb0 Current toll estimate\n\n**Estimated total: $14.15** from I-395 Pentagon/Eads Street to Westpark Drive.\n\n- **Profile:** Two-axle passenger vehicle, E\u2011ZPass, toll mode\n- **Provenance:** Observed components\n- **Observed:** 12:20 PM EDT\n- **Component 1:** $5.10 \u2014 \u27a1\ufe0f unchanged; $0.00 (0.0%) recent movement\n  - **\u2705 At the recent median** of $5.10; within the available range of $5.10\u2013$6.90\n- **Component 2:** $9.05 \u2014 \ud83d\udcc9 falling; down $0.80 (8.1%) recently\n  - **\u26a0\ufe0f Higher than the recent median** of $9.00; within the available range of $8.90\u2013$12.00\n\nTollChat is independent and prices are estimates, not operator quotes.\n",
+          "calls": [
+            {
+              "name": "get_current_toll_price",
+              "input": {
+                "origin_point_id": "i95:2233SO",
+                "destination_point_id": "i495:1859ND",
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                }
+              },
+              "tool_result": {
+                "origin_point_id": "i95:2233SO",
+                "destination_point_id": "i495:1859ND",
+                "method": "latest_complete_current_facility_prices",
+                "evaluated_at": "2026-08-26T12:34:51.473697-04:00",
+                "maximum_observation_age_minutes": 30,
+                "pricing_profile": {
+                  "vehicle_class": "two_axle_passenger",
+                  "payment_method": "e_zpass",
+                  "transponder_mode": "toll"
+                },
+                "source_kind": "observed",
+                "components": [
+                  {
+                    "route_step_id": "step-1",
+                    "price_usd": "5.10",
+                    "source_kind": "observed",
+                    "pricing_method": "source_observation",
+                    "facility": "i95_i495",
+                    "component_evaluated_at": "2026-08-26T12:34:51.473697-04:00",
+                    "bin_minutes": 10,
+                    "bin_start": "2026-08-26T12:30:00-04:00",
+                    "bin_end": "2026-08-26T12:40:00-04:00",
+                    "interval_end_at": "2026-08-26T12:30:00-04:00",
+                    "observed_at": "2026-08-26T12:20:00-04:00",
+                    "od_pair_id": 1204,
+                    "source_status": "SOUTHBOUND_OPEN",
+                    "recent_movement": {
+                      "method": "same_facility_leg_three_cycles",
+                      "direction": "unchanged",
+                      "samples": [
+                        {
+                          "cycle_offset": -2,
+                          "price_usd": "5.10"
+                        },
+                        {
+                          "cycle_offset": -1,
+                          "price_usd": "5.10"
+                        },
+                        {
+                          "cycle_offset": 0,
+                          "price_usd": "5.10"
+                        }
+                      ],
+                      "net_change_usd": "0.00",
+                      "net_change_percent": "0.0"
+                    },
+                    "prior_week_comparison": {
+                      "method": "same_weekday_same_facility_bins",
+                      "comparable_period_count": 3,
+                      "expected_comparable_period_count": 3,
+                      "comparable_prices": [
+                        {
+                          "week_offset": 3,
+                          "price_usd": "6.90"
+                        },
+                        {
+                          "week_offset": 2,
+                          "price_usd": "5.10"
+                        },
+                        {
+                          "week_offset": 1,
+                          "price_usd": "5.10"
+                        }
+                      ],
+                      "median_usd": "5.10",
+                      "minimum_usd": "5.10",
+                      "maximum_usd": "6.90",
+                      "current_delta_usd": "0.00",
+                      "current_delta_percent": "0.0",
+                      "position": "within_recent_range",
+                      "higher_than_count": 0
+                    }
+                  },
+                  {
+                    "route_step_id": "step-2",
+                    "price_usd": "9.05",
+                    "source_kind": "observed",
+                    "pricing_method": "source_observation",
+                    "facility": "i95_i495",
+                    "component_evaluated_at": "2026-08-26T12:34:51.611600-04:00",
+                    "bin_minutes": 10,
+                    "bin_start": "2026-08-26T12:30:00-04:00",
+                    "bin_end": "2026-08-26T12:40:00-04:00",
+                    "interval_end_at": "2026-08-26T12:30:00-04:00",
+                    "observed_at": "2026-08-26T12:20:00-04:00",
+                    "od_pair_id": 1005,
+                    "source_status": "NO_DETERMINATION",
+                    "recent_movement": {
+                      "method": "same_facility_leg_three_cycles",
+                      "direction": "falling",
+                      "samples": [
+                        {
+                          "cycle_offset": -2,
+                          "price_usd": "9.85"
+                        },
+                        {
+                          "cycle_offset": -1,
+                          "price_usd": "9.50"
+                        },
+                        {
+                          "cycle_offset": 0,
+                          "price_usd": "9.05"
+                        }
+                      ],
+                      "net_change_usd": "-0.80",
+                      "net_change_percent": "-8.1"
+                    },
+                    "prior_week_comparison": {
+                      "method": "same_weekday_same_facility_bins",
+                      "comparable_period_count": 3,
+                      "expected_comparable_period_count": 3,
+                      "comparable_prices": [
+                        {
+                          "week_offset": 3,
+                          "price_usd": "8.90"
+                        },
+                        {
+                          "week_offset": 2,
+                          "price_usd": "9.00"
+                        },
+                        {
+                          "week_offset": 1,
+                          "price_usd": "12.00"
+                        }
+                      ],
+                      "median_usd": "9.00",
+                      "minimum_usd": "8.90",
+                      "maximum_usd": "12.00",
+                      "current_delta_usd": "0.05",
+                      "current_delta_percent": "0.6",
+                      "position": "within_recent_range",
+                      "higher_than_count": 2
+                    }
+                  }
+                ],
+                "total_usd": "14.15"
+              },
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "id": "pentagon-eads-to-westpark",
+        "suite": "direct",
+        "windows": [
+          "i95_southbound"
+        ],
+        "prompt": "What is the current toll from I-395 Pentagon/Eads Street to Westpark Drive?",
+        "expected_call": {
+          "origin_point_id": "i95:2233SO",
+          "destination_point_id": "i495:1859ND",
+          "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll"
+          }
+        },
+        "active_window": "i95_southbound"
+      },
+      "actual_interactions": null,
+      "expected_interactions": null,
+      "actual_environment_state": null,
+      "expected_environment_state": null,
+      "evaluator": "TollChatEvaluator",
+      "evaluator_type": "TollChatEvaluator"
+    }
+  ],
+  "test_passes": [
+    true,
+    true
+  ],
+  "reasons": [
+    "exact route call and grounded response passed",
+    "exact route call and grounded response passed"
+  ],
+  "detailed_results": [
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact route call and grounded response passed",
+        "label": "passed"
+      }
+    ],
+    [
+      {
+        "score": 1.0,
+        "test_pass": true,
+        "reason": "exact route call and grounded response passed",
+        "label": "passed"
+      }
+    ]
+  ],
+  "diagnoses": [
+    null,
+    null
+  ],
+  "recommendations": [
+    null,
+    null
+  ]
+}
