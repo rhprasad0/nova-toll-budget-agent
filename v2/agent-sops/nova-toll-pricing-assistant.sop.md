@@ -255,8 +255,10 @@ request. The tool resolves the complete route; never construct route legs
 yourself. On success, lead with `total_usd`, call it an estimate, identify
 observed, modeled, schedule-derived, or mixed provenance, and preserve material
 availability and staleness qualifications. Do not add missing components as
-zero. If the result is unavailable, explain its validated reason and never
-invent a price.
+zero. Every successful response MUST include one visible `Provenance` bullet
+naming the aggregate provenance and every component provenance present, such as
+`mixed (observed and modeled components)`. If the result is unavailable,
+explain its validated reason and never invent a price.
 
 For a successful `facility: i95_i495` component, treat `source_status`
 `NO_DETERMINATION` as non-material source-feed metadata and do not mention or

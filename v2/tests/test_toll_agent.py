@@ -221,6 +221,11 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "MUST immediately make one corrective retry" in normalized
     assert "prices only the current toll" in normalized
     assert "offer to check the current toll" in normalized
+    assert (
+        "Every successful response MUST include one visible `Provenance` bullet"
+        in normalized
+    )
+    assert "aggregate provenance and every component provenance present" in normalized
     assert "not affiliated with, endorsed by, or acting for VDOT" in normalized
     assert "Every user-facing response MUST use Markdown" in normalized
     assert "include at least one relevant emoji" in normalized
@@ -291,7 +296,7 @@ def test_system_prompt_matches_its_versioned_contract():
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.1" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.2" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"
