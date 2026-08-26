@@ -107,7 +107,7 @@ export async function runRequest(request, onEvent, setBusy, onSessionExpired = (
 export const shouldSubmitOnEnter = (event, busy) => event.key === "Enter"
   && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && !busy;
 
-export const usageProofText = (snapshot, now = Date.now()) => {
+export const usageProofText = (snapshot, now = Date.now(), homepageUpdatedAt) => {
   if (!snapshot || typeof snapshot !== "object"
     || snapshot.schema_version !== 1
     || !/^\d{4}-\d{2}-\d{2}$/.test(snapshot.collection_started_on)
@@ -115,14 +115,16 @@ export const usageProofText = (snapshot, now = Date.now()) => {
     || !Number.isInteger(snapshot.completed_responses) || snapshot.completed_responses < 0) return null;
   const started = Date.parse(`${snapshot.collection_started_on}T00:00:00Z`);
   const asOf = Date.parse(snapshot.as_of);
+  const homepageUpdated = Date.parse(homepageUpdatedAt);
   if (!Number.isFinite(started) || !Number.isFinite(asOf) || started > asOf
-    || asOf > now + 5 * 60_000 || now - asOf > 48 * 60 * 60_000) return null;
+    || !Number.isFinite(homepageUpdated) || asOf > now + 5 * 60_000
+    || now - asOf > 48 * 60 * 60_000) return null;
   const format = new Intl.DateTimeFormat("en-US", {
     year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
   });
   const sessions = snapshot.engaged_sessions === 1 ? "session" : "sessions";
   const responses = snapshot.completed_responses === 1 ? "response" : "responses";
-  return `Since ${format.format(started)}, ${snapshot.engaged_sessions} counted anonymous chat ${sessions} sent a message. TollChat completed ${snapshot.completed_responses} ${responses}. Updated daily; last updated ${format.format(asOf)}.`;
+  return `Since ${format.format(started)}, ${snapshot.engaged_sessions} counted anonymous chat ${sessions} sent a message. TollChat completed ${snapshot.completed_responses} ${responses}. Fresh toll data is provided continuously; homepage last updated ${format.format(homepageUpdated)}.`;
 };
 
 const newTurn = (transcript) => {
@@ -183,7 +185,7 @@ const start = () => {
       return response.json();
     })
     .then((snapshot) => {
-      const text = usageProofText(snapshot);
+      const text = usageProofText(snapshot, Date.now(), document.lastModified);
       if (!text) return;
       usageProof.textContent = text;
       usageProof.hidden = false;
