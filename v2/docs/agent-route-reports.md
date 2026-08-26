@@ -1,6 +1,7 @@
 # Agent-readable I-95/I-495 current toll reports
 
 - **Status:** Implemented and deployed August 26, 2026
+- **Deployment evidence:** [`20260826T163454Z.json`](../eval/results/20260826T163454Z.json)
 - **Scope:** Public current-price reports for routes priced only by the
   I-95/I-495 Express Lanes feed
 
