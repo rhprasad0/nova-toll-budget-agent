@@ -802,10 +802,11 @@ def _build_price_comparisons(
     return recent_movement, prior_week_comparison
 
 
-def _price_i66_leg(
+def _build_i66_component(
     leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    rows: list[_I66ComparisonRow],
 ) -> _I66Component | _UnavailableComponent:
-    """Price one validated I-66 leg from observations or its published schedule."""
+    """Build one I-66 component from normalized comparison rows."""
     route_key = leg.pricing_key.source_route_key
     parts = route_key.split(":")
     if len(parts) != 3 or parts[0] not in {"EB", "WB"} or not all(parts[1:]):
@@ -817,9 +818,6 @@ def _price_i66_leg(
     ]:
         raise ValueError("I-66 facility leg does not match its pricing key")
 
-    rows = _fetch_i66_comparisons(
-        leg.pricing_key.start_zone_id, leg.pricing_key.end_zone_id, direction
-    )
     current = next(row for row in rows if row.comparison_kind == "current")
     evaluated_at = current.evaluated_at.astimezone(_EASTERN)
     if current.source_kind == "schedule_derived":
@@ -883,10 +881,23 @@ def _price_i66_leg(
     )
 
 
-def _price_i95_i495_leg(
+def _price_i66_leg(  # pyright: ignore[reportUnusedFunction]
+    leg: route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+) -> _I66Component | _UnavailableComponent:
+    """Price one validated I-66 leg from observations or its published schedule."""
+    rows = _fetch_i66_comparisons(
+        leg.pricing_key.start_zone_id,
+        leg.pricing_key.end_zone_id,
+        leg.pricing_key.source_route_key.split(":", 1)[0],
+    )
+    return _build_i66_component(leg, rows)
+
+
+def _build_i95_i495_component(
     leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+    rows: list[_I95ComparisonRow],
 ) -> _I95Component | _UnavailableComponent:
-    """Price one validated I-95/I-495 facility leg from current observations."""
+    """Build one I-95/I-495 component from normalized comparison rows."""
     route_key = leg.pricing_key.source_route_key
     parts = route_key.split(":")
     boundary = "i495:192NO" if parts[0] == "Northbound" else "i495:192SD"
@@ -906,8 +917,9 @@ def _price_i95_i495_leg(
         )
     ):
         raise ValueError("I-95/I-495 facility leg does not match its pricing key")
+    if any(row.od_pair_id not in {None, leg.pricing_key.od_pair_id} for row in rows):
+        raise ValueError("I-95/I-495 pricing rows contain the wrong OD pair")
 
-    rows = _fetch_i95_i495_comparisons(leg.pricing_key.od_pair_id)
     current = next(row for row in rows if row.comparison_kind == "current")
     evaluated_at = current.evaluated_at.astimezone(_EASTERN)
     if not current.available:
@@ -961,6 +973,15 @@ def _price_i95_i495_leg(
         source_status=cast(str, current.source_status),
         recent_movement=recent_movement,
         prior_week_comparison=prior_week_comparison,
+    )
+
+
+def _price_i95_i495_leg(  # pyright: ignore[reportUnusedFunction]
+    leg: route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+) -> _I95Component | _UnavailableComponent:
+    """Price one validated I-95/I-495 facility leg from current observations."""
+    return _build_i95_i495_component(
+        leg, _fetch_i95_i495_comparisons(leg.pricing_key.od_pair_id)
     )
 
 
@@ -1100,12 +1121,93 @@ def price_dtr_leg(
     )
 
 
-def _build_success_result(
-    tool_use_id: str,
+def build_current_price_result(
     request: _PricingRequest,
-    evaluated_at: datetime,
-    components: list[_PriceComponent],
-) -> ToolResult:
+    pricing_route: route_validation._PricingRouteResponse,  # pyright: ignore[reportPrivateUsage]
+    evaluated_at: datetime | None,
+    pricing_inputs: dict[str, object],
+) -> dict[str, Any]:
+    """Build the deterministic domain result from a validated route and pricing rows."""
+    if pricing_route.status != "valid":
+        if pricing_inputs:
+            raise ValueError("nonvalid routes cannot contain pricing inputs")
+        response = (
+            _PricingRouteUnavailableResponse.model_validate(pricing_route.model_dump())
+            if pricing_route.status in {"currently_unavailable", "unknown_availability"}
+            else _NonValidRouteResponse.model_validate(
+                pricing_route.model_dump(exclude={"facility_legs"})
+            )
+        )
+        return response.model_dump(mode="json")
+    if (
+        evaluated_at is None
+        or evaluated_at.tzinfo is None
+        or evaluated_at.utcoffset() is None
+    ):
+        raise ValueError("current price result requires an aware evaluation time")
+
+    expected_inputs = {
+        leg.route_step_id
+        for leg in pricing_route.facility_legs
+        if leg.facility in {"i95_i495", "i66"}
+    }
+    if pricing_inputs.keys() != expected_inputs:
+        raise ValueError("pricing inputs do not match dynamic facility legs")
+
+    components: list[_PriceComponent] = []
+    unavailable_components: list[_UnavailableComponent] = []
+    database_evaluated_at: datetime | None = None
+    for leg in pricing_route.facility_legs:
+        if leg.facility == "i95_i495":
+            rows = pricing_inputs[leg.route_step_id]
+            if not isinstance(rows, list):
+                raise ValueError("I-95/I-495 pricing input is malformed")
+            row_values = cast(list[object], rows)
+            if not all(isinstance(row, _I95ComparisonRow) for row in row_values):
+                raise ValueError("I-95/I-495 pricing input is malformed")
+            priced = _build_i95_i495_component(
+                leg,
+                cast(list[_I95ComparisonRow], row_values),
+            )
+            if database_evaluated_at is None:
+                database_evaluated_at = priced.component_evaluated_at
+        elif leg.facility == "i66":
+            rows = pricing_inputs[leg.route_step_id]
+            if not isinstance(rows, list):
+                raise ValueError("I-66 pricing input is malformed")
+            row_values = cast(list[object], rows)
+            if not all(isinstance(row, _I66ComparisonRow) for row in row_values):
+                raise ValueError("I-66 pricing input is malformed")
+            priced = _build_i66_component(
+                leg,
+                cast(list[_I66ComparisonRow], row_values),
+            )
+            if database_evaluated_at is None:
+                database_evaluated_at = priced.component_evaluated_at
+        elif leg.facility == "greenway":
+            priced = price_greenway_leg(
+                leg,
+                evaluated_at,
+            )
+        else:
+            priced = price_dtr_leg(
+                leg,
+                evaluated_at,
+            )
+        if isinstance(priced, _UnavailableComponent):
+            unavailable_components.append(priced)
+        else:
+            components.append(priced)
+
+    if unavailable_components:
+        return _IncompleteRoutePriceResponse(
+            origin_point_id=request.origin_point_id,
+            destination_point_id=request.destination_point_id,
+            error="pricing_unavailable",
+            reason="incomplete_route_price",
+            unavailable_components=unavailable_components,
+        ).model_dump(mode="json")
+
     source_kinds: set[Literal["observed", "modeled", "schedule_derived"]] = {
         component.source_kind for component in components
     }
@@ -1120,7 +1222,7 @@ def _build_success_result(
         origin_point_id=request.origin_point_id,
         destination_point_id=request.destination_point_id,
         method=_METHOD,
-        evaluated_at=evaluated_at,
+        evaluated_at=database_evaluated_at or evaluated_at,
         maximum_observation_age_minutes=30,
         pricing_profile=request.pricing_profile,
         source_kind=source_kind,
@@ -1129,11 +1231,7 @@ def _build_success_result(
             (component.price_usd for component in components), Decimal()
         ).quantize(Decimal("0.01")),
     )
-    return {
-        "toolUseId": tool_use_id,
-        "status": "success",
-        "content": [{"json": response.model_dump(mode="json", exclude_none=True)}],
-    }
+    return response.model_dump(mode="json", exclude_none=True)
 
 
 @tool(
@@ -1192,20 +1290,11 @@ async def get_current_toll_price(
 
     if pricing_route.status != "valid":
         try:
-            response = (
-                _PricingRouteUnavailableResponse.model_validate(
-                    pricing_route.model_dump()
-                )
-                if pricing_route.status
-                in {"currently_unavailable", "unknown_availability"}
-                else _NonValidRouteResponse.model_validate(
-                    pricing_route.model_dump(exclude={"facility_legs"})
-                )
-            )
+            response = build_current_price_result(request, pricing_route, None, {})
             yield {
                 "toolUseId": tool_use_id,
                 "status": "success",
-                "content": [{"json": response.model_dump(mode="json")}],
+                "content": [{"json": response}],
             }
         except Exception as error:
             yield _log_failure_and_build_error_result(
@@ -1217,8 +1306,14 @@ async def get_current_toll_price(
 
     if not pricing_route.facility_legs:
         try:
-            result = _build_success_result(tool_use_id, request, evaluated_at, [])
-            yield result
+            response = build_current_price_result(
+                request, pricing_route, evaluated_at, {}
+            )
+            yield {
+                "toolUseId": tool_use_id,
+                "status": "success",
+                "content": [{"json": response}],
+            }
         except Exception as error:
             yield _log_failure_and_build_error_result(
                 tool_use_id, "response_serialization", error
@@ -1232,9 +1327,7 @@ async def get_current_toll_price(
         yield _operation_error_result(tool_use_id)
         return
 
-    components: list[_PriceComponent] = []
-    unavailable_components: list[_UnavailableComponent] = []
-    database_evaluated_at: datetime | None = None
+    pricing_inputs: dict[str, object] = {}
     for facility, legs in groupby(
         pricing_route.facility_legs, key=lambda leg: leg.facility
     ):
@@ -1249,36 +1342,31 @@ async def get_current_toll_price(
             facility_legs = list(legs)
             if facility == "i95_i495":
                 for leg in facility_legs:
-                    priced = await asyncio.to_thread(
-                        _price_i95_i495_leg,
-                        cast(
-                            route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-                            leg,
-                        ),
+                    i95_leg = cast(
+                        route_validation._I95FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                        leg,
                     )
-                    if database_evaluated_at is None:
-                        database_evaluated_at = priced.component_evaluated_at
-                    if isinstance(priced, _UnavailableComponent):
-                        unavailable_components.append(priced)
-                    else:
-                        components.append(priced)
+                    rows = await asyncio.to_thread(
+                        _fetch_i95_i495_comparisons, i95_leg.pricing_key.od_pair_id
+                    )
+                    _build_i95_i495_component(i95_leg, rows)
+                    pricing_inputs[leg.route_step_id] = rows
             elif facility == "i66":
                 for leg in facility_legs:
-                    priced = await asyncio.to_thread(
-                        _price_i66_leg,
-                        cast(
-                            route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
-                            leg,
-                        ),
+                    i66_leg = cast(
+                        route_validation._I66FacilityLeg,  # pyright: ignore[reportPrivateUsage]
+                        leg,
                     )
-                    if database_evaluated_at is None:
-                        database_evaluated_at = priced.component_evaluated_at
-                    if isinstance(priced, _UnavailableComponent):
-                        unavailable_components.append(priced)
-                    else:
-                        components.append(priced)
+                    rows = await asyncio.to_thread(
+                        _fetch_i66_comparisons,
+                        i66_leg.pricing_key.start_zone_id,
+                        i66_leg.pricing_key.end_zone_id,
+                        i66_leg.pricing_key.source_route_key.split(":", 1)[0],
+                    )
+                    _build_i66_component(i66_leg, rows)
+                    pricing_inputs[leg.route_step_id] = rows
             elif facility == "greenway":
-                components.extend(
+                for leg in facility_legs:
                     price_greenway_leg(
                         cast(
                             route_validation._GreenwayFacilityLeg,  # pyright: ignore[reportPrivateUsage]
@@ -1286,10 +1374,8 @@ async def get_current_toll_price(
                         ),
                         evaluated_at,
                     )
-                    for leg in facility_legs
-                )
             else:
-                components.extend(
+                for leg in facility_legs:
                     price_dtr_leg(
                         cast(
                             route_validation._DtrFacilityLeg,  # pyright: ignore[reportPrivateUsage]
@@ -1297,42 +1383,26 @@ async def get_current_toll_price(
                         ),
                         evaluated_at,
                     )
-                    for leg in facility_legs
-                )
         except Exception as error:
             yield _progress_event(stage, "failed")
             yield _log_failure_and_build_error_result(tool_use_id, stage, error)
             return
         yield _progress_event(stage, "completed")
 
-    if unavailable_components:
-        response = _IncompleteRoutePriceResponse(
-            origin_point_id=request.origin_point_id,
-            destination_point_id=request.destination_point_id,
-            error="pricing_unavailable",
-            reason="incomplete_route_price",
-            unavailable_components=unavailable_components,
-        )
-        yield {
-            "toolUseId": tool_use_id,
-            "status": "success",
-            "content": [{"json": response.model_dump(mode="json")}],
-        }
-        return
-
     try:
-        result = _build_success_result(
-            tool_use_id,
-            request,
-            database_evaluated_at or evaluated_at,
-            components,
+        response = build_current_price_result(
+            request, pricing_route, evaluated_at, pricing_inputs
         )
     except Exception as error:
         yield _log_failure_and_build_error_result(
             tool_use_id, "response_serialization", error
         )
         return
-    yield result
+    yield {
+        "toolUseId": tool_use_id,
+        "status": "success",
+        "content": [{"json": response}],
+    }
 
 
 get_current_toll_price.tool_spec = TOOL_SPEC
