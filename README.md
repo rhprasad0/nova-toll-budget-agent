@@ -44,8 +44,10 @@ work recovered directed ramp roles, aliases, pricing keys, one-way access,
 cross-road handoffs, and the measured publication cadence of each feed. The
 Dulles roads were modeled separately from their published rate schedules
 because their pricing rules are different. The
-[routing contract](v2/docs/oracle-spec.md) records the source mappings,
-curated handoffs, and validation checks.
+[oracle contract](v2/db/oracle/CONTRACT.md) and checked-in
+[source mappings](v2/oracle/sources/) document the curated handoffs and
+validation checks; the [data builder](v2/oracle/build_oracle_data.py)
+regenerates their SQL representation.
 
 The result is a directed PostgreSQL/PostGIS graph and pricing engine, called
 the routing oracle inside the project. It encodes source-backed toll-road
@@ -58,7 +60,8 @@ route map referenced **330 distinct pricing IDs, while VDOT history contained
 only 314**. The missing 16 affected 107 of 685 published routes. V2 maps each
 missing product to the closest VDOT-priced proxy found in the retained source
 overlap and explicitly labels the value as modeled rather than observed. See
-the [data-gap methodology and limitations](v2/docs/i95-missing-od-pricing.md).
+the [validation report](v2/eval/results/i95-missing-od-pricing.md) and
+production [proxy mapping and pricing views](v2/db/analysis.sql).
 
 ## The agent has two tools and does not do the math
 
@@ -71,8 +74,8 @@ on/off ramps when they do not know the official names.
 Once the endpoints are clear, the agent can call exactly two deterministic
 tools:
 
-1. [`get_current_toll_price`](v2/docs/current-pricing-mvp-contract.md) validates the route, applies live facility direction and tolling schedules, selects fresh VDOT observations or published fixed rates, and returns ordered components plus a total.
-2. [`get_annual_toll_ballpark`](v2/docs/annual-toll-ballpark-tool-contract.md) validates both commute directions and turns recent same-date toll scenarios, office days, income, and tolled-leg distance into an affordability range for comparing a job offer.
+1. [`get_current_toll_price`](v2/agent_tools/get_current_toll_price.py) validates the route, applies live facility direction and tolling schedules, selects fresh VDOT observations or published fixed rates, and returns ordered components plus a total.
+2. [`get_annual_toll_ballpark`](v2/agent_tools/get_annual_toll_ballpark.py) validates both commute directions and turns recent same-date toll scenarios, office days, income, and tolled-leg distance into an affordability range for comparing a job offer.
 
 The model cannot submit its own route plan or pricing components. Route
 selection, freshness rules, schedule logic, money arithmetic, and provenance
@@ -108,12 +111,12 @@ money, and response grounding.
 
 | Claim | Evidence | Important limit |
 | --- | --- | --- |
-| [Missing-price proxy](v2/docs/i95-missing-od-pricing.md) | 1,200 chronological holdout comparisons; **$0.106 mean absolute error**; **96.1% within $0.50** | 578 captures over five days; $8.05 maximum error; a provisional ballpark, not an operator quote |
+| [Missing-price proxy](v2/eval/results/i95-missing-od-pricing.md) | 1,200 chronological holdout comparisons; **$0.106 mean absolute error**; **96.1% within $0.50** | Five days of matched data; $8.05 maximum error; a provisional ballpark, not an operator quote |
 | [Quantitative grounding](v2/eval/ballpark-hallucination-report.md) | **996/1,000** strict grounding passes; **999/1,000** without a genuinely incorrect quantitative fact; **93.1%** conservative end-to-end result | One frozen route fixture across five prompt variants; repetitions are correlated |
 | [Live agent behavior](v2/eval/results/README.md) | **9/9** curated current-price and annual-affordability cases passed their code-graded contracts | Small, deliberately curated scenario set, not a general route-coverage claim |
 
 **Verify it:** [run the local agent](v2/README.md#local-agent-console) ·
-[build and test](v2/docs/agentcore-deployment.md#build-and-review) ·
+[build and test](v2/README.md#verify-the-build) ·
 [run offline eval checks](v2/eval/README.md#offline-check) ·
 [run live evals](v2/eval/README.md#live-run)
 

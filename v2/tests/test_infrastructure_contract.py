@@ -22,7 +22,7 @@ FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
 FOUNDATION_LAMBDA = (FOUNDATION_ROOT / "lambda.tf").read_text()
 FOUNDATION_IAM = (FOUNDATION_ROOT / "iam.tf").read_text()
 FOUNDATION_AGENTCORE = (FOUNDATION_ROOT / "agentcore.tf").read_text()
-DEPLOYMENT = (V2_ROOT / "docs" / "agentcore-deployment.md").read_text()
+DEPLOYMENT = (V2_ROOT / "RUNBOOK.md").read_text()
 
 
 def test_foundation_publishes_raw_events_without_a_legacy_loader():

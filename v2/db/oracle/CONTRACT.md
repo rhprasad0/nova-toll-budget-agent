@@ -1,6 +1,6 @@
 # TollChat v2 routing oracle
 
-- **Status:** Adopted for oracle schema `1.12.1`
+- **Status:** Adopted for oracle schema `1.13.1`
 - **Scope:** V2 directed toll-road reachability and least-privilege pricing access
 
 ## Purpose
@@ -115,7 +115,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.12.1`, stored as the single row in
+oracle is at version `1.13.1`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -491,8 +491,9 @@ usable path wins.
 
 ## Agent operations
 
-The normative caller behavior and response examples are defined in the
-[agent-facing route-function contract](oracle-route-function-contract.md).
+The normative caller behavior and response shape are defined below and
+exercised by the Oracle SQL contracts in `v2/tests/` plus the agent-tool tests
+in `v2/tests/test_validate_toll_route.py`.
 
 The application exposes nine narrow, read-only database functions: current,
 pricing, and schedule-independent route validation; bounded current I-66 and
@@ -709,7 +710,7 @@ DTR connection charge; only crossing either directed handoff adds it.
   reject cross-row semantic violations.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle` beside `pricing`.
-- `oracle.schema_version` contains exactly one row at `1.12.1`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.13.1`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer
