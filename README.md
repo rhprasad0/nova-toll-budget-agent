@@ -134,6 +134,24 @@ money, and response grounding.
 Start with the [v2 technical guide](v2/README.md) for implementation and
 operations details.
 
+## Shared foundation changes
+
+Build and pass the real fetcher package for every root `infra/` plan. The
+bucket-policy guard rejects placeholder plans:
+
+```sh
+v2/scripts/build_fetcher_zip.sh
+AWS_PROFILE=nova-toll terraform -chdir=infra init
+AWS_PROFILE=nova-toll terraform -chdir=infra plan \
+  -var='fetcher_package_path=build/fetcher.zip' \
+  -out=build/foundation.tfplan
+AWS_PROFILE=nova-toll terraform -chdir=infra show build/foundation.tfplan
+AWS_PROFILE=nova-toll terraform -chdir=infra apply build/foundation.tfplan
+```
+
+Review the saved plan before applying it. Load credentials from SSM into the
+process environment only; never place them in Terraform variables or plans.
+
 ## License
 
 Unless otherwise noted, project-authored source code and documentation are available under the [Apache License 2.0](LICENSE).
