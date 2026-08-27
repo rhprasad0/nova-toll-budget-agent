@@ -23,6 +23,13 @@ def test_oracle_source_contract() -> None:
     validate(points, connections)
 
 
+def test_curated_provenance_uses_the_oracle_contract() -> None:
+    sql = build_sql()
+
+    assert "v2/docs/" not in sql
+    assert sql.count('"basis":"v2/db/oracle/CONTRACT.md"') == 31
+
+
 def test_all_route_points_have_coordinate_provenance() -> None:
     points = build_points()
 
@@ -145,7 +152,7 @@ def test_greenway_and_dtr_pricing_metadata_stays_discrete() -> None:
         assert handoff.source_route_key == connection_id
         assert handoff.source_metadata == {
             "curated": True,
-            "basis": "v2/docs/oracle-spec.md",
+            "basis": "v2/db/oracle/CONTRACT.md",
             "pricing_facility": "dtr",
             "pricing_charge": {
                 "label": "Dulles Toll Road connection",

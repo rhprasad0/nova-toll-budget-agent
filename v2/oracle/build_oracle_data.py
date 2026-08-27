@@ -554,7 +554,7 @@ def build_points() -> dict[str, Point]:
             label = "I-495 Express northbound start at I-95 (TP1NB)"
             aliases = ("TP1NB", "Springfield Interchange", str(raw_node["label"]))
             metadata["curated_boundary"] = {
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 "evidence_url": "https://www.expresslanes.com/sites/default/files/inline-files/495%20Express%20Lanes%20-%20The%20First%20Year.pdf",
                 "pricing_zone_id": 495001,
                 "pricing_zone_name": "NB 495 TP Past 95/395 (TP1NB)",
@@ -563,7 +563,7 @@ def build_points() -> dict[str, Point]:
             label = "I-495 Express southbound end at I-95 (TP1SB)"
             aliases = ("TP1SB", "Springfield Interchange", str(raw_node["label"]))
             metadata["curated_boundary"] = {
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 "evidence_url": "https://www.expresslanes.com/sites/default/files/inline-files/495%20Express%20Lanes%20-%20The%20First%20Year.pdf",
                 "pricing_zone_id": 495101,
                 "pricing_zone_name": "SB 495 TP Before 95/395 (TP1SB)",
@@ -572,7 +572,7 @@ def build_points() -> dict[str, Point]:
             label = "I-95 Express northbound start near Route 17"
             aliases = ("I-95 Near Route 17", "Route 17 northbound entrance")
             metadata["curated_boundary"] = {
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 "evidence_url": "https://improve95.vdot.virginia.gov/fredex/",
                 "access_variants": [
                     "northbound_general_purpose_through_slip_ramp",
@@ -583,7 +583,7 @@ def build_points() -> dict[str, Point]:
             label = "I-95 Express southbound end near Route 17"
             aliases = ("I-95 Near Route 17", "Route 17 southbound exit")
             metadata["curated_boundary"] = {
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 "evidence_url": "https://improve95.vdot.virginia.gov/fredex/",
                 "access_variants": [
                     "general_purpose_continuation",
@@ -687,7 +687,7 @@ def build_points() -> dict[str, Point]:
             aliases=AIRPORT_ALIASES[airport_id],
             source_metadata={
                 "curated": True,
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 **location_metadata,
             },
         )
@@ -721,7 +721,7 @@ def _curated_connection(
 ) -> Connection:
     source_metadata: dict[str, Any] = {
         "curated": True,
-        "basis": "v2/docs/oracle-spec.md",
+        "basis": "v2/db/oracle/CONTRACT.md",
     }
     if evidence_url is not None:
         source_metadata["evidence_url"] = evidence_url
@@ -898,7 +898,7 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             source_route_key=None,
             source_metadata={
                 "curated": True,
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 "composed_from": ["iad_to_i66", "i66_to_dulles_toll_road"],
             },
         ),
@@ -911,7 +911,7 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             source_route_key=None,
             source_metadata={
                 "curated": True,
-                "basis": "v2/docs/oracle-spec.md",
+                "basis": "v2/db/oracle/CONTRACT.md",
                 "composed_from": ["dulles_toll_road_to_i66", "i66_to_iad"],
             },
         ),

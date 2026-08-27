@@ -1,5 +1,5 @@
 -- TollChat v2 PostgreSQL routing oracle bootstrap.
--- oracle schema version: 1.13.0
+-- oracle schema version: 1.13.1
 
 \set ON_ERROR_STOP on
 
@@ -163,7 +163,7 @@ CREATE TABLE oracle.schema_version (
     installed_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
 
-INSERT INTO oracle.schema_version (version) VALUES ('1.13.0');
+INSERT INTO oracle.schema_version (version) VALUES ('1.13.1');
 
 CREATE TABLE oracle.toll_route_point (
     point_id text PRIMARY KEY,

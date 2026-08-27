@@ -3,25 +3,29 @@
 This directory contains TollChat's deployed application, tests, evals, and
 application infrastructure. Shared production foundations live in `../infra`.
 
-## Adopted contract
+## Runtime boundaries
 
-- [Current pricing MVP](docs/current-pricing-mvp-contract.md)
-- [Annual toll-commute affordability](docs/annual-toll-ballpark-tool-contract.md)
-- [Routing oracle](docs/oracle-spec.md)
-- [Agent-facing oracle route function](docs/oracle-route-function-contract.md)
+- [Current-price tool](agent_tools/get_current_toll_price.py) and its
+  [deterministic pricing domain](agent_tools/current_price_domain.py)
+- [Annual toll-commute affordability tool](agent_tools/get_annual_toll_ballpark.py)
+- [Directed routing contract](db/oracle/CONTRACT.md),
+  [schema](db/oracle/schema.sql), and
+  [reviewed source-data builder](oracle/build_oracle_data.py)
+- [Agent-facing route validation](agent_tools/validate_toll_route.py)
 
 ## Database bootstrap
 
 - [PostgreSQL schema](db/schema.sql)
 - [IAM-authenticated database roles](db/roles.sql)
-- [Missing I-95/495 OD pricing model](docs/i95-missing-od-pricing.md)
+- [Missing I-95/495 OD validation](eval/results/i95-missing-od-pricing.md) and
+  [production proxy mapping and pricing views](db/analysis.sql)
 
 The independently deployable `pricing` application schema is at **1.3.0**. Its
 version is stored in `pricing.schema_version`; CI tests
 the bootstrap, privileges, analytics, cleanup guard, and monotonic SemVer policy
 on PostgreSQL 17.9.
 
-The independently versioned `oracle` schema is at **1.13.0**. It installs
+The independently versioned `oracle` schema is at **1.13.1**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.
@@ -45,8 +49,38 @@ For an existing database, read both `schema_version` tables and apply only the
 matching guarded [`*_upgrade_*` migrations](db/migrations/) in dependency and
 version order. Never edit or skip a released migration.
 
-See the [AgentCore deployment runbook](docs/agentcore-deployment.md) for the
-manual reviewed-plan deployment, smoke test, and rollback workflow.
+## Verify the build
+
+From `v2/`, run the core application checks and deterministic release builds:
+
+```sh
+uv sync --locked
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
+uv run python eval/run_evaluation.py --check
+uv run coverage run -m pytest
+uv run coverage report
+node --test tests/*.mjs
+npm ci --prefix lambdas/chat_proxy
+npm test --prefix lambdas/chat_proxy
+uv run python oracle/build_oracle_data.py --check
+./scripts/build_loader_zip.sh
+./scripts/build_publisher_zip.sh
+./scripts/build_agentcore_zips.sh
+(cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
+```
+
+Database contract and migration checks require PostgreSQL 17 with PostGIS 3.5.
+From the repository root, pass the pull request's base revision to:
+
+```sh
+v2/scripts/run_db_tests.sh BASE_GIT_REF
+```
+
+Production deployment is manual; CI never runs `terraform plan` or `apply`.
+Follow the [deployment runbook](RUNBOOK.md) for the reviewed saved-plan,
+smoke-test, rollout, and rollback procedures.
 
 The public interface at `tollchat.ai` uses a private S3 origin for the v2 site
 and an IAM-authenticated streaming Lambda URL behind CloudFront and WAF. The
