@@ -519,13 +519,16 @@ Only technically valid, representative reports should be curated in
 - Create a trusted planner, development deploy, and production deploy role. The
   trusted planner may also be the plan-object writer; do not create another
   dedicated writer role or grant this capability to untrusted pull-request CI.
-- Every trust policy requires `aud = sts.amazonaws.com` and an exact immutable
-  repository `sub`. Development requires `ref:refs/heads/main`; production
-  deploy requires the protected `production` GitHub environment. Production
-  also requires the exact reusable
-  `job_workflow_ref`, pinned to the repository workflow path and reviewed ref.
-- IAM currently exposes `job_workflow_ref` as a GitHub OIDC condition key. Keep
-  `sub` and `aud` as mandatory controls; the workflow claim supplements them.
+- Every trust policy requires the supported GitHub OIDC condition keys
+  `aud = sts.amazonaws.com` and an exact immutable repository `sub`.
+  Development requires `ref:refs/heads/main`; production deploy requires the
+  protected `production` GitHub environment in its subject. AWS IAM does not
+  expose GitHub's `job_workflow_ref` as an independent condition key, so do not
+  test it in a trust policy. Protect the production workflow path and reviewed
+  ref through repository rules and review. If workflow identity must later be
+  enforced by AWS, first configure GitHub's customized `sub` template to
+  include `repo`, `context`, and `job_workflow_ref`, then atomically update
+  every affected role to require the exact resulting subject.
 - Give the planner explicit discovery reads plus only the narrow state-lock and
   unique plan-object writes it needs. A permissions boundary prevents other
   infrastructure mutation. Do not attempt a brittle hand-written deny list of
@@ -728,15 +731,15 @@ jobs mutation authority.
 **Guidance:** In `infra/`, create the dedicated release-plan bucket, KMS key,
 two-day default Compliance retention, lifecycle, policies, and existing-
 CloudTrail data selector. Add the trusted planner and two deploy roles; bind
-production to `sub`, `aud`, and `job_workflow_ref`; add exact state-object and
-lockfile access; and emit sanitized plan summaries. Pre-create the GitHub
-environments, enable immutable releases and the `v*` tag ruleset, retain full-
-SHA action pins and minimum token permissions, and add report-only
-scheduled/manual drift plans for both states.
+each to supported `aud` and exact branch/environment `sub` conditions; add
+exact state-object and lockfile access; and emit sanitized plan summaries.
+Pre-create the GitHub environments, enable immutable releases and the `v*` tag
+ruleset, retain full-SHA action pins and minimum token permissions, and add
+report-only scheduled/manual drift plans for both states.
 
 **Tests:** Verify bucket-default retention without per-object retention
 permission, checksums, KMS isolation, CloudTrail data events, allowed branch/
-environment/workflow claims, denied cross-environment state and database
+environment subjects, denied cross-environment state and database
 access, successful exact state writes and lock cleanup by deploy roles,
 read-only state access by the planner, prohibited session tags, immutable
 release/tag behavior, fork-safe pull-request behavior, environment deployment
@@ -972,6 +975,7 @@ Resolved:
 - [GitHub immutable releases and tags](https://docs.github.com/en/actions/how-tos/create-and-publish-actions/using-immutable-releases-and-tags-to-manage-your-actions-releases)
 - [GitHub Actions secure use reference](https://docs.github.com/en/actions/reference/security/secure-use)
 - [GitHub Actions OIDC with AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)
+- [GitHub OIDC subject customization](https://docs.github.com/en/actions/reference/security/oidc#customizing-the-subject-claims-for-an-organization-or-repository)
 - [AWS service quota guidance](https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_manage_service_limits_aware_quotas_and_constraints.html)
 - [AWS tagging schema guidance](https://docs.aws.amazon.com/whitepapers/latest/tagging-best-practices/defining-and-publishing-a-tagging-schema.html)
 - [AWS cost allocation strategy](https://docs.aws.amazon.com/whitepapers/latest/tagging-best-practices/building-a-cost-allocation-strategy.html)
