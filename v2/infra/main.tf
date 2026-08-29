@@ -300,16 +300,13 @@ resource "aws_sqs_queue_policy" "delivery_failure" {
 resource "aws_cloudwatch_log_metric_filter" "load_success" {
   name           = "V2LoadSuccess"
   log_group_name = aws_cloudwatch_log_group.loader.name
-  pattern        = "[..., event=\"V2_LOAD_OK\", feed, environment]"
+  pattern        = local.is_production ? "[..., event=\"V2_LOAD_OK\", feed]" : "[..., event=\"V2_LOAD_OK\", feed, environment]"
 
   metric_transformation {
-    namespace = "NovaToll"
-    name      = "V2LoadSuccess"
-    value     = "1"
-    dimensions = {
-      feed        = "$feed"
-      Environment = "$environment"
-    }
+    namespace  = "NovaToll"
+    name       = "V2LoadSuccess"
+    value      = "1"
+    dimensions = local.is_production ? { feed = "$feed" } : { feed = "$feed", Environment = "$environment" }
   }
 }
 
@@ -334,7 +331,7 @@ resource "aws_cloudwatch_metric_alarm" "freshness" {
   alarm_description   = "No successful v2 ${each.key} load for 30 minutes. Follow v2/README.md."
   namespace           = "NovaToll"
   metric_name         = "V2LoadSuccess"
-  dimensions          = { feed = each.key, Environment = var.environment }
+  dimensions          = local.is_production ? { feed = each.key } : { feed = each.key, Environment = var.environment }
   statistic           = "Sum"
   period              = 600
   evaluation_periods  = 3
@@ -648,16 +645,13 @@ resource "aws_sqs_queue_policy" "publisher_delivery_failure" {
 resource "aws_cloudwatch_log_metric_filter" "report_generation_success" {
   name           = "V2ReportGenerationSuccess"
   log_group_name = aws_cloudwatch_log_group.publisher.name
-  pattern        = "[..., event=\"V2_REPORT_GENERATION_OK\", facility, generation_id, route_count, environment]"
+  pattern        = local.is_production ? "[..., event=\"V2_REPORT_GENERATION_OK\", facility, generation_id, route_count]" : "[..., event=\"V2_REPORT_GENERATION_OK\", facility, generation_id, route_count, environment]"
 
   metric_transformation {
-    namespace = "NovaToll"
-    name      = "V2ReportGenerationSuccess"
-    value     = "1"
-    dimensions = {
-      facility    = "$facility"
-      Environment = "$environment"
-    }
+    namespace  = "NovaToll"
+    name       = "V2ReportGenerationSuccess"
+    value      = "1"
+    dimensions = local.is_production ? { facility = "$facility" } : { facility = "$facility", Environment = "$environment" }
   }
 }
 
@@ -666,7 +660,7 @@ resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
   alarm_description   = "No complete I-95/I-495 report generation for 30 minutes."
   namespace           = "NovaToll"
   metric_name         = "V2ReportGenerationSuccess"
-  dimensions          = { facility = "i95_i495", Environment = var.environment }
+  dimensions          = local.is_production ? { facility = "i95_i495" } : { facility = "i95_i495", Environment = var.environment }
   statistic           = "Sum"
   period              = 600
   evaluation_periods  = 3

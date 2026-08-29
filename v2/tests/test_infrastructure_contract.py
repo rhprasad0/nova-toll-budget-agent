@@ -654,8 +654,17 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert "aws_iam_role_policy.publisher" in publisher_lambda
     assert "aws_s3_object.robots" in publisher_lambda
     assert (
-        'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count, environment]"'
+        'local.is_production ? "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
         in MAIN_TF
+    )
+    assert (
+        '"[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count, environment]"'
+        in MAIN_TF
+    )
+    assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
+    assert (
+        "local.is_production ? null : { Environment = var.environment }"
+        in (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
     )
     assert "evaluation_periods  = 3" in MAIN_TF
     assert "period              = 600" in MAIN_TF
