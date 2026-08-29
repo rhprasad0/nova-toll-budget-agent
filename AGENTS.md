@@ -26,6 +26,10 @@ under `infra/` and retain their existing Terraform backend.
 
 Use the the AWS and Context7 MCP servers for documentation lookup. Use Exa search for other search tasks.
 
+# Optional subagent workflow
+
+Use `code_explorer` → `implementer` → `verifier` only when the user explicitly requests this workflow; ordinary tasks must not infer it. The parent assigns an isolated `.worktrees/` path, forwards the explorer brief and path to the implementer, then forwards any verifier findings to the implementer and re-verifies the resulting diff.
+
 # Secrets
 
 SSM Parameter Store is the source of truth for deployed credentials (see
