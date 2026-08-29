@@ -188,7 +188,7 @@ def test_v2_has_an_independent_state_and_identity():
     )
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     assert (
-        'content       = local.is_production ? file("${path.module}/../agent/robots.txt") : "User-agent: *\\nDisallow: /\\n"'
+        'source        = local.is_production ? "${path.module}/../agent/robots.txt" : null'
         in site
     )
     assert 'name    = "tollchat-v2-public-chat-routes${local.suffix}"' in site
@@ -347,7 +347,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     ].split('resource "aws_s3_object"', maxsplit=1)[0]
     assert 'key           = "robots.txt"' in robots_object
     assert (
-        'content       = local.is_production ? file("${path.module}/../agent/robots.txt") : "User-agent: *\\nDisallow: /\\n"'
+        'source        = local.is_production ? "${path.module}/../agent/robots.txt" : null'
         in robots_object
     )
     assert 'content_type  = "text/plain; charset=utf-8"' in robots_object

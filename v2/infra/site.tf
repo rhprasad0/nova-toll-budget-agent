@@ -149,7 +149,9 @@ resource "aws_s3_object" "terms" {
 resource "aws_s3_object" "robots" {
   bucket        = aws_s3_bucket.site.id
   key           = "robots.txt"
-  content       = local.is_production ? file("${path.module}/../agent/robots.txt") : "User-agent: *\nDisallow: /\n"
+  source        = local.is_production ? "${path.module}/../agent/robots.txt" : null
+  source_hash   = local.is_production ? filebase64sha256("${path.module}/../agent/robots.txt") : null
+  content       = local.is_production ? null : "User-agent: *\nDisallow: /\n"
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 
