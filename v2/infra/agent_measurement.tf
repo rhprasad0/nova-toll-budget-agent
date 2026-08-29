@@ -549,6 +549,7 @@ resource "aws_lambda_function" "agent_usage_rollup" {
     variables = {
       ATHENA_DATABASE       = aws_glue_catalog_database.agent_reports.name
       ATHENA_WORKGROUP      = aws_athena_workgroup.agent_reports.name
+      TOLLCHAT_ENVIRONMENT  = var.environment
       WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"
       WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"
     }
@@ -603,6 +604,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
   alarm_name          = "tollchat-v2-agent-usage-rollup-missing${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "RollupCompleted"
+  dimensions          = local.is_production ? null : { Environment = var.environment }
   period              = 86400
   evaluation_periods  = 1
   statistic           = "Sum"
@@ -616,6 +618,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
   alarm_name          = "tollchat-v2-agent-usage-log-coverage${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "LogCoveragePercent"
+  dimensions          = local.is_production ? null : { Environment = var.environment }
   period              = 86400
   evaluation_periods  = 2
   datapoints_to_alarm = 2

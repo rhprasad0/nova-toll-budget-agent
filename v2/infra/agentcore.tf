@@ -596,13 +596,13 @@ resource "aws_lambda_permission" "tollchat_api" {
 }
 
 resource "aws_cloudwatch_log_metric_filter" "proxy_failure" {
-  name           = "V2ProxyFailure"
+  name           = "V2ProxyFailure${local.suffix}"
   log_group_name = aws_cloudwatch_log_group.tollchat_proxy.name
   pattern        = "PROXY_FAILURE"
 
   metric_transformation {
     namespace = "NovaToll"
-    name      = "V2ProxyFailure"
+    name      = "V2ProxyFailure${local.suffix}"
     value     = "1"
   }
 }
@@ -624,7 +624,7 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_failures" {
   alarm_name          = "tollchat-v2-chat-proxy-failures${local.suffix}"
   namespace           = "NovaToll"
-  metric_name         = "V2ProxyFailure"
+  metric_name         = "V2ProxyFailure${local.suffix}"
   period              = 300
   evaluation_periods  = 1
   statistic           = "Sum"
