@@ -210,8 +210,6 @@ resource "aws_lambda_function" "loader" {
       DB_NAME    = local.database_name
       DB_USER    = local.database_roles.loader
       RAW_BUCKET = data.aws_s3_bucket.raw.bucket
-      # Development-only runtime marker; production keeps its deployed env map.
-      TOLLCHAT_ENVIRONMENT = local.is_production ? null : var.environment
     }
   }
 
@@ -505,17 +503,18 @@ resource "aws_lambda_function" "publisher" {
   }
 
   environment {
-    variables = {
+    variables = merge({
       DB_HOST                    = data.aws_db_instance.main.address
       DB_PORT                    = tostring(data.aws_db_instance.main.port)
       DB_NAME                    = local.database_name
       DB_USER                    = local.database_roles.publisher
-      PUBLIC_BASE_URL            = "https://${local.domains[0]}"
-      TOLLCHAT_ENVIRONMENT       = local.is_production ? null : var.environment
       REPORT_PUBLICATION_ENABLED = "true"
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
       AGENT_MEASUREMENT_BUCKET   = aws_s3_bucket.agent_measurement.id
-    }
+      }, local.is_production ? {} : {
+      PUBLIC_BASE_URL      = "https://${local.domains[0]}"
+      TOLLCHAT_ENVIRONMENT = var.environment
+    })
   }
 
   lifecycle {

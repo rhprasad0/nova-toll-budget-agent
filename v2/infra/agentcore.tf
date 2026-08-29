@@ -456,12 +456,13 @@ resource "aws_lambda_function" "tollchat_proxy" {
   }
 
   environment {
-    variables = {
+    variables = merge({
       AGENTCORE_RUNTIME_ARN = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
       AGENTCORE_VPCE_URL    = "https://${data.aws_vpc_endpoint.agentcore.dns_entry[0].dns_name}"
       SESSION_TABLE_NAME    = aws_dynamodb_table.tollchat_sessions.name
-      PUBLIC_ORIGINS        = "https://${local.domains[0]}${local.is_production ? ",https://www.tollchat.ai" : ""}"
-    }
+      }, local.is_production ? {} : {
+      PUBLIC_ORIGINS = "https://${local.domains[0]}"
+    })
   }
 
   lifecycle {

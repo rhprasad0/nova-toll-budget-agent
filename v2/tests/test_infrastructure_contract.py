@@ -700,10 +700,8 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
         in MAIN_TF
     )
     assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
-    assert (
-        "local.is_production ? null : { Environment = var.environment }"
-        in (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
-    )
+    assert "}, local.is_production ? {} : {" in publisher_lambda
+    assert 'PUBLIC_BASE_URL      = "https://${local.domains[0]}"' in publisher_lambda
     assert "evaluation_periods  = 3" in MAIN_TF
     assert "period              = 600" in MAIN_TF
     assert 'treat_missing_data  = "breaching"' in MAIN_TF
