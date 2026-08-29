@@ -2,6 +2,10 @@
 command = "npx"
 args = ["-y", "@upstash/context7-mcp@4.0.4"]
 
+[agents]
+max_threads = 6
+max_depth = 1
+
 [agents.code_explorer]
 config_file = "agents/code_explorer.toml"
 
