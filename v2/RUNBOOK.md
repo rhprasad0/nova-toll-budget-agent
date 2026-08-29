@@ -357,20 +357,10 @@ AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
   --name tollchat-v2-usage-publisher
 ```
 
-Check out the last accepted release revision, rebuild it, verify its recorded
-SHA-256 manifest, and repeat the saved-plan deployment workflow without
-recapturing evidence. Restore the old proxy and public site together so the code
-and disclosure remain consistent.
-Deterministic builds restore the exact package bytes; bucket versioning retains
-the earlier runtime and proxy objects for 30 days. When rolling back to a
-pre-metrics revision, expect the plan to remove the usage publisher, schedule,
-alarms, placeholder, and metrics-era public/legal assets. Retain the DynamoDB
-`usage#all` aggregate; it is operational history and is not managed as a
-Terraform item.
-
-After the rollback package is deployed, set `RELEASE_EVIDENCE` to the original
-failed release's pre-apply evidence file. Do not rerun capture. Restore its
-targets in a separate shell:
+For immediate recovery, set `RELEASE_EVIDENCE` to the original failed release's
+pre-apply evidence file. Do not rerun capture. Restore its targets before
+running the Terraform rollback; this deliberately creates temporary drift that
+the saved-plan deployment below must reconcile:
 
 ```sh
 (
@@ -391,6 +381,20 @@ targets in a separate shell:
     --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION"
 )
 ```
+
+After the immediate rollback smoke test passes, check out the last accepted
+release revision, rebuild it, verify its recorded SHA-256 manifest, and repeat
+the saved-plan deployment workflow without recapturing evidence. Restore the old
+proxy and public site together so the code and disclosure remain consistent.
+The apply must reconcile the Lambda alias and AgentCore endpoint with Terraform
+state; rerun the reviewed plan afterward and require it to report no changes.
+
+Deterministic builds restore the exact package bytes; bucket versioning retains
+the earlier runtime and proxy objects for 30 days. When rolling back to a
+pre-metrics revision, expect the plan to remove the usage publisher, schedule,
+alarms, placeholder, and metrics-era public/legal assets. Retain the DynamoDB
+`usage#all` aggregate; it is operational history and is not managed as a
+Terraform item.
 
 If the application cannot safely serve traffic while rollback is prepared,
 set reserved concurrency for `tollchat-v2-chat-proxy` to zero. Terraform ignores

@@ -110,6 +110,12 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         "unexplained action or any replacement",
     ):
         assert text in DEPLOYMENT
+    rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
+    assert rollback.index("update-alias") < rollback.index(
+        "After the immediate rollback smoke test passes"
+    )
+    assert "temporary drift" in rollback
+    assert "require it to report no changes" in rollback
 
 
 def test_pull_request_workflows_have_no_production_access():
