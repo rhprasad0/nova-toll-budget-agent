@@ -11,11 +11,15 @@ __pycache__/
 .aws/
 .tollchat/
 .mcp.json
-/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/project-graph/
 /.codex/
 node_modules/
 test-results/
 /.worktrees/
+/.graph/
 # Terraform
 /infra/.terraform/
 /infra/*.tfstate
