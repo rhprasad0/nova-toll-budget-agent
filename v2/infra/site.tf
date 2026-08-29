@@ -520,7 +520,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "tollchat-v2-agent-route-report"
+      metric_name                = "tollchat-v2-agent-route-report${local.suffix}"
       sampled_requests_enabled   = false
     }
   }
@@ -653,7 +653,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "tollchat-v2-public-chat"
+    metric_name                = "tollchat-v2-public-chat${local.suffix}"
     sampled_requests_enabled   = false
   }
 
@@ -668,6 +668,19 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
 
 data "aws_cloudfront_origin_request_policy" "all_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
+}
+
+resource "aws_cloudfront_response_headers_policy" "development_noindex" {
+  count = local.is_production ? 0 : 1
+  name  = "tollchat-v2-development-noindex"
+
+  custom_headers_config {
+    items {
+      header   = "X-Robots-Tag"
+      override = true
+      value    = "noindex"
+    }
+  }
 }
 
 resource "aws_cloudfront_distribution" "site" {
@@ -700,12 +713,13 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "site"
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
-    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "site"
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    response_headers_policy_id = local.is_production ? null : aws_cloudfront_response_headers_policy.development_noindex[0].id
 
     function_association {
       event_type   = "viewer-request"
