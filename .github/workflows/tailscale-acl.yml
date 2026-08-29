@@ -6,12 +6,9 @@ on:
   push:
     branches: ["main"]
     paths: ["infra/policy.hujson"]
-  pull_request:
-    branches: ["main"]
-    paths: ["infra/policy.hujson"]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -19,15 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Test ACL
-        if: github.event_name == 'pull_request'
-        uses: tailscale/gitops-acl-action@5a4a17f5708e9bf96f4ee915a95e9f83c2eebe1a # v1.5.2
-        with:
-          oauth-client-id: ${{ secrets.TS_ACL_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_ACL_OAUTH_SECRET }}
-          tailnet: rhprasad0.github
-          policy-file: infra/policy.hujson
-          action: test
       - name: Deploy ACL
         if: github.event_name == 'push'
         uses: tailscale/gitops-acl-action@5a4a17f5708e9bf96f4ee915a95e9f83c2eebe1a # v1.5.2

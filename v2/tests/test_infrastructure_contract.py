@@ -1,6 +1,9 @@
 import json
 import re
 from pathlib import Path
+from typing import cast
+
+import yaml
 
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
@@ -23,6 +26,7 @@ FOUNDATION_LAMBDA = (FOUNDATION_ROOT / "lambda.tf").read_text()
 FOUNDATION_IAM = (FOUNDATION_ROOT / "iam.tf").read_text()
 FOUNDATION_AGENTCORE = (FOUNDATION_ROOT / "agentcore.tf").read_text()
 DEPLOYMENT = (V2_ROOT / "RUNBOOK.md").read_text()
+AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 
 
 def test_foundation_publishes_raw_events_without_a_legacy_loader():
@@ -49,6 +53,104 @@ def test_foundation_has_no_site_and_terraform_ci_only_validates():
     assert "id-token: write" not in workflow
     assert 'resource "aws_iam_role" "terraform_apply"' not in FOUNDATION_IAM
     assert 'resource "aws_iam_role" "github_ci"' not in FOUNDATION_IAM
+
+
+def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+
+    assert (
+        'key          = "nova-toll/terraform.tfstate"'
+        in (FOUNDATION_ROOT / "versions.tf").read_text()
+    )
+    assert 'key          = "nova-toll/v2/terraform.tfstate"' in VERSIONS_TF
+    assert "postgis/postgis" in CI_WORKFLOW
+    assert "python3 v2/scripts/check_schema_versions.py" in CI_WORKFLOW
+    assert "v2/scripts/run_db_tests.sh" in CI_WORKFLOW
+    for forbidden in (
+        "terraform plan",
+        "terraform apply",
+        "configure-aws-credentials",
+        "id-token: write",
+    ):
+        assert forbidden not in workflow
+    for text in (
+        "PRs use disposable migration validation only",
+        "never mutate deployed databases or schemas",
+        "Schema-changing work is not deployable",
+    ):
+        assert text in AGENTS
+    for text in (
+        "PRs use disposable PostGIS migration validation only",
+        "Current releases are schema-neutral",
+        "nova-toll-tfstate-920534282028",
+        "nova-toll/terraform.tfstate",
+        "nova-toll/v2/terraform.tfstate",
+        "920534282028",
+        "us-east-1",
+        "nova-toll-db",
+        "tollchat.ai",
+        "nova-toll-agentcore-920534282028",
+        "runtime/v2/agentcore.zip",
+        "lambda/v2/chat-proxy.zip",
+        "tollchat-v2-chat-proxy",
+        "AgentCore runtime `nova_toll_v2`",
+        "get-alias",
+        "list-agent-runtimes",
+        "liveVersion",
+        'test ! -e "$RELEASE_EVIDENCE"',
+        "set -eu",
+        "grep -qx 'lambda_live_function_version=[0-9][0-9]*'",
+        "sed -n 's/^agentcore_runtime_id=//p'",
+        "update-alias",
+        "update-agent-runtime-endpoint",
+        "project = nova-toll-budget-agent",
+        "version = v2",
+        "Environment tags are deferred to #300",
+        "foundation plan to be zero-change",
+        "unexplained action or any replacement",
+    ):
+        assert text in DEPLOYMENT
+
+
+def test_pull_request_workflows_have_no_production_access():
+    def assert_safe_permissions(permissions: object) -> None:
+        if isinstance(permissions, str):
+            assert permissions != "write-all"
+        elif isinstance(permissions, dict):
+            permissions = cast(dict[str, object], permissions)
+            assert permissions.get("id-token") != "write"
+
+    github_token = re.compile(
+        r"secrets\s*(?:[.]\s*GITHUB_TOKEN\b|\[\s*['\"]GITHUB_TOKEN['\"]\s*\])"
+    )
+    assert "secrets" not in github_token.sub("", "${{ secrets [ 'GITHUB_TOKEN' ] }}")
+    assert "secrets" in github_token.sub("", "${{ secrets [ 'AWS_KEY' ] }}")
+    for workflow_path in (REPO_ROOT / ".github" / "workflows").glob("*.y*ml"):
+        workflow = workflow_path.read_text()
+        document = yaml.load(workflow, Loader=yaml.BaseLoader)
+        assert isinstance(document, dict)
+        document = cast(dict[str, object], document)
+        triggers = document.get("on")
+        if not isinstance(triggers, (str, list, dict)):
+            continue
+        assert "pull_request_target" not in triggers
+        if "pull_request" not in triggers:
+            continue
+        assert_safe_permissions(document.get("permissions"))
+        jobs = document.get("jobs")
+        if isinstance(jobs, dict):
+            for job in cast(dict[str, object], jobs).values():
+                if isinstance(job, dict):
+                    assert_safe_permissions(
+                        cast(dict[str, object], job).get("permissions")
+                    )
+        assert not re.search(r"\bsecrets\b", github_token.sub("", workflow))
+        for forbidden in (
+            "configure-aws-credentials",
+            "AWS_PROFILE",
+            "environment:",
+        ):
+            assert forbidden not in workflow
 
 
 def test_shared_dynamodb_endpoint_admits_v2_session_table():

@@ -34,3 +34,7 @@ Use `code_explorer` → `implementer` → `verifier` only when the user explicit
 
 SSM Parameter Store is the source of truth for deployed credentials (see
 `SECURITY.md`) — never a local file.
+
+# Delivery boundary
+
+PRs use disposable migration validation only: never mutate deployed databases or schemas, and never expose production deployment credentials. Schema-changing work is not deployable until approved deployed-migration automation exists.

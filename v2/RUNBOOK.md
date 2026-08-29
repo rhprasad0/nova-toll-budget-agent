@@ -3,6 +3,35 @@
 Deployments are manual. CI builds and tests the application but never runs a
 Terraform plan or apply.
 
+## Delivery contract and production baseline
+
+PRs use disposable PostGIS migration validation only; they never access or
+mutate deployed databases or schemas. `main` continues to run validation only.
+Published releases are manual, reviewed deployments from `main`; schema-changing
+work is not deployable until approved deployed-migration automation exists.
+Current releases are schema-neutral.
+
+The current production baseline is AWS account `920534282028` in `us-east-1`:
+
+- Foundation state: `s3://nova-toll-tfstate-920534282028/nova-toll/terraform.tfstate`.
+- Application state: `s3://nova-toll-tfstate-920534282028/nova-toll/v2/terraform.tfstate`.
+- PostgreSQL: `nova-toll-db` / `nova_toll`; reporting Glue database:
+  `tollchat_agent_reports`; session table: `tollchat-v2-anonymous-sessions`.
+- Public domains: `tollchat.ai` and `www.tollchat.ai`; fixed dependencies include
+  `nova-toll-rds`, `nova-toll-private-a`, `nova-toll-private-c`,
+  `nova-toll-agentcore-endpoint`, and `nova-toll-eventbridge-endpoint`.
+- Default tags remain `project = nova-toll-budget-agent` and `version = v2` for
+  the application. Environment tags are deferred to #300.
+- Release artifacts overwrite `s3://nova-toll-agentcore-920534282028/runtime/v2/agentcore.zip`
+  and `s3://nova-toll-agentcore-920534282028/lambda/v2/chat-proxy.zip`; retained
+  S3 object versions are the rollback source.
+- Stable release targets are the `live` alias of `tollchat-v2-chat-proxy` and
+  the `preview` endpoint of AgentCore runtime `nova_toll_v2`.
+
+Before release apply, require the foundation plan to be zero-change. Review every
+action in the saved candidate application plan against intended reviewed release
+changes. Stop on any unexplained action or any replacement.
+
 ## Build and review
 
 From `v2/`:
@@ -33,6 +62,29 @@ AWS_PROFILE=nova-toll aws --region us-east-1 lambda put-function-concurrency \
   --function-name tollchat-v2-chat-proxy \
   --reserved-concurrent-executions 5
 AWS_PROFILE=nova-toll terraform init
+```
+
+Before applying, set `RELEASE_EVIDENCE` to a unique per-release path (for
+example, `build/release-evidence-20260829T120000Z.txt`). The file must be
+retained with that release; capture never overwrites an existing record.
+
+```sh
+(
+  set -eu
+  : "${RELEASE_EVIDENCE:?set a unique release-evidence path}"
+  test ! -e "$RELEASE_EVIDENCE"
+  LAMBDA_LIVE_FUNCTION_VERSION="$(AWS_PROFILE=nova-toll aws --region us-east-1 lambda get-alias \
+    --function-name tollchat-v2-chat-proxy --name live --query FunctionVersion --output text)"
+  AGENTCORE_RUNTIME_ID="$(AWS_PROFILE=nova-toll aws --region us-east-1 bedrock-agentcore-control list-agent-runtimes \
+    --query "agentRuntimes[?agentRuntimeName=='nova_toll_v2'].agentRuntimeId | [0]" --output text)"
+  AGENTCORE_ENDPOINT_LIVE_VERSION="$(AWS_PROFILE=nova-toll aws --region us-east-1 bedrock-agentcore-control get-agent-runtime-endpoint \
+    --agent-runtime-id "$AGENTCORE_RUNTIME_ID" --endpoint-name preview --query liveVersion --output text)"
+  case "$LAMBDA_LIVE_FUNCTION_VERSION" in ""|None|*[!0-9]*) exit 1 ;; esac
+  case "$AGENTCORE_RUNTIME_ID" in ""|None|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) exit 1 ;; esac
+  case "$AGENTCORE_ENDPOINT_LIVE_VERSION" in ""|None|*[!0-9]*) exit 1 ;; esac
+  printf 'lambda_live_function_version=%s\nagentcore_runtime_id=%s\nagentcore_endpoint_live_version=%s\n' \
+    "$LAMBDA_LIVE_FUNCTION_VERSION" "$AGENTCORE_RUNTIME_ID" "$AGENTCORE_ENDPOINT_LIVE_VERSION" >"$RELEASE_EVIDENCE"
+)
 ```
 
 For the first usage-counter release only, stage the public disclosure and
@@ -167,7 +219,7 @@ xargs -P 8 -n 1 sh -c '
 REPORT_URL="https://tollchat.ai/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
 REPORT_PAGE="$(mktemp)"
 curl --fail-with-body --silent --show-error "$REPORT_URL" >"$REPORT_PAGE"
-grep -F "<link rel=\"canonical\" href=\"$REPORT_URL\">" "$REPORT_PAGE"
+grep -F '<link rel="canonical" href="'"$REPORT_URL"'">' "$REPORT_PAGE"
 grep -F '<link rel="alternate" type="application/json" href="report.json">' "$REPORT_PAGE"
 ! grep -qi 'noindex\|<script' "$REPORT_PAGE"
 curl --fail-with-body --silent --show-error \
@@ -306,14 +358,39 @@ AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
 ```
 
 Check out the last accepted release revision, rebuild it, verify its recorded
-SHA-256 manifest, and repeat the saved-plan workflow. Restore the old proxy and
-public site together so the code and disclosure remain consistent.
+SHA-256 manifest, and repeat the saved-plan deployment workflow without
+recapturing evidence. Restore the old proxy and public site together so the code
+and disclosure remain consistent.
 Deterministic builds restore the exact package bytes; bucket versioning retains
 the earlier runtime and proxy objects for 30 days. When rolling back to a
 pre-metrics revision, expect the plan to remove the usage publisher, schedule,
 alarms, placeholder, and metrics-era public/legal assets. Retain the DynamoDB
 `usage#all` aggregate; it is operational history and is not managed as a
 Terraform item.
+
+After the rollback package is deployed, set `RELEASE_EVIDENCE` to the original
+failed release's pre-apply evidence file. Do not rerun capture. Restore its
+targets in a separate shell:
+
+```sh
+(
+  set -eu
+  : "${RELEASE_EVIDENCE:?set the original failed release evidence path}"
+  test "$(wc -l <"$RELEASE_EVIDENCE")" -eq 3
+  grep -qx 'lambda_live_function_version=[0-9][0-9]*' "$RELEASE_EVIDENCE"
+  grep -qx 'agentcore_runtime_id=[A-Za-z0-9][A-Za-z0-9_-]*' "$RELEASE_EVIDENCE"
+  grep -qx 'agentcore_endpoint_live_version=[0-9][0-9]*' "$RELEASE_EVIDENCE"
+  LAMBDA_LIVE_FUNCTION_VERSION="$(sed -n 's/^lambda_live_function_version=//p' "$RELEASE_EVIDENCE")"
+  AGENTCORE_RUNTIME_ID="$(sed -n 's/^agentcore_runtime_id=//p' "$RELEASE_EVIDENCE")"
+  AGENTCORE_ENDPOINT_LIVE_VERSION="$(sed -n 's/^agentcore_endpoint_live_version=//p' "$RELEASE_EVIDENCE")"
+  AWS_PROFILE=nova-toll aws --region us-east-1 lambda update-alias \
+    --function-name tollchat-v2-chat-proxy --name live \
+    --function-version "$LAMBDA_LIVE_FUNCTION_VERSION"
+  AWS_PROFILE=nova-toll aws --region us-east-1 bedrock-agentcore-control update-agent-runtime-endpoint \
+    --agent-runtime-id "$AGENTCORE_RUNTIME_ID" --endpoint-name preview \
+    --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION"
+)
+```
 
 If the application cannot safely serve traffic while rollback is prepared,
 set reserved concurrency for `tollchat-v2-chat-proxy` to zero. Terraform ignores
