@@ -447,7 +447,7 @@ resource "aws_athena_named_query" "recent_routes" {
 }
 
 resource "aws_iam_role" "agent_usage_rollup" {
-  name               = "tollchat-v2-agent-usage-rollup"
+  name               = "tollchat-v2-agent-usage-rollup${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -523,7 +523,7 @@ data "aws_iam_policy_document" "agent_usage_rollup" {
 }
 
 resource "aws_iam_role_policy" "agent_usage_rollup" {
-  name   = "tollchat-v2-agent-usage-rollup"
+  name   = "tollchat-v2-agent-usage-rollup${local.suffix}"
   role   = aws_iam_role.agent_usage_rollup.id
   policy = data.aws_iam_policy_document.agent_usage_rollup.json
 }
@@ -562,7 +562,7 @@ resource "aws_lambda_function" "agent_usage_rollup" {
 }
 
 resource "aws_cloudwatch_event_rule" "agent_usage_rollup" {
-  name                = "tollchat-v2-agent-usage-rollup"
+  name                = "tollchat-v2-agent-usage-rollup${local.suffix}"
   schedule_expression = "cron(15 3 * * ? *)"
 }
 
@@ -585,7 +585,7 @@ resource "aws_cloudwatch_event_target" "agent_usage_rollup" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_errors" {
-  alarm_name          = "tollchat-v2-agent-usage-rollup-errors"
+  alarm_name          = "tollchat-v2-agent-usage-rollup-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.agent_usage_rollup.function_name }
@@ -599,7 +599,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
-  alarm_name          = "tollchat-v2-agent-usage-rollup-missing"
+  alarm_name          = "tollchat-v2-agent-usage-rollup-missing${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "RollupCompleted"
   period              = 86400
@@ -612,7 +612,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
-  alarm_name          = "tollchat-v2-agent-usage-log-coverage"
+  alarm_name          = "tollchat-v2-agent-usage-log-coverage${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "LogCoveragePercent"
   period              = 86400

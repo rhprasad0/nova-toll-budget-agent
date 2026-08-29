@@ -31,7 +31,7 @@ REPORT_SQL = "SELECT * FROM oracle.get_i95_i495_report_inputs()"
 CA_BUNDLE_PATH = str(Path(__file__).with_name("rds-ca-bundle.pem"))
 PUBLIC_PREFIX = "tolls/i95-i495"
 MANIFEST_KEY = f"{PUBLIC_PREFIX}/manifest.json"
-PUBLIC_BASE_URL = "https://tollchat.ai"
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://tollchat.ai").rstrip("/")
 PUBLICATION_FORMAT_VERSION = "1.0.0"
 PUBLIC_CACHE_CONTROL = "public, max-age=300"
 MANIFEST_CACHE_CONTROL = "no-cache"

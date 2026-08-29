@@ -510,6 +510,7 @@ resource "aws_lambda_function" "publisher" {
       DB_PORT                    = tostring(data.aws_db_instance.main.port)
       DB_NAME                    = local.database_name
       DB_USER                    = local.database_roles.publisher
+      PUBLIC_BASE_URL            = "https://${local.domains[0]}"
       REPORT_PUBLICATION_ENABLED = "true"
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
       AGENT_MEASUREMENT_BUCKET   = aws_s3_bucket.agent_measurement.id

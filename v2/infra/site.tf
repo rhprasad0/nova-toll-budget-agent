@@ -177,7 +177,7 @@ resource "aws_s3_object" "site_assets" {
 }
 
 resource "aws_iam_role" "usage_publisher" {
-  name               = "tollchat-v2-usage-publisher"
+  name               = "tollchat-v2-usage-publisher${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -210,18 +210,18 @@ data "aws_iam_policy_document" "usage_publisher" {
 }
 
 resource "aws_iam_role_policy" "usage_publisher" {
-  name   = "tollchat-v2-usage-publisher"
+  name   = "tollchat-v2-usage-publisher${local.suffix}"
   role   = aws_iam_role.usage_publisher.id
   policy = data.aws_iam_policy_document.usage_publisher.json
 }
 
 resource "aws_cloudwatch_log_group" "usage_publisher" {
-  name              = "/aws/lambda/tollchat-v2-usage-publisher"
+  name              = "/aws/lambda/tollchat-v2-usage-publisher${local.suffix}"
   retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "usage_publisher" {
-  function_name = "tollchat-v2-usage-publisher"
+  function_name = "tollchat-v2-usage-publisher${local.suffix}"
   role          = aws_iam_role.usage_publisher.arn
   runtime       = "python3.13"
   handler       = "handler.handler"
@@ -250,7 +250,7 @@ resource "aws_lambda_function" "usage_publisher" {
 }
 
 resource "aws_cloudwatch_event_rule" "usage_publisher" {
-  name                = "tollchat-v2-usage-publisher"
+  name                = "tollchat-v2-usage-publisher${local.suffix}"
   schedule_expression = "cron(15 5 * * ? *)"
 }
 
@@ -275,7 +275,7 @@ resource "aws_cloudwatch_event_target" "usage_publisher" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors" {
-  alarm_name          = "tollchat-v2-usage-publisher-errors"
+  alarm_name          = "tollchat-v2-usage-publisher-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.usage_publisher.function_name }
@@ -289,7 +289,7 @@ resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
-  alarm_name          = "tollchat-v2-usage-publisher-failed-invocations"
+  alarm_name          = "tollchat-v2-usage-publisher-failed-invocations${local.suffix}"
   namespace           = "AWS/Events"
   metric_name         = "FailedInvocations"
   dimensions          = { RuleName = aws_cloudwatch_event_rule.usage_publisher.name }
@@ -303,7 +303,7 @@ resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
 }
 
 resource "aws_cloudfront_origin_access_control" "site" {
-  name                              = "tollchat-v2-site"
+  name                              = "tollchat-v2-site${local.suffix}"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -317,7 +317,7 @@ resource "aws_lambda_function_url" "public_chat" {
 }
 
 resource "aws_cloudfront_origin_access_control" "public_chat" {
-  name                              = "tollchat-v2-public-chat"
+  name                              = "tollchat-v2-public-chat${local.suffix}"
   origin_access_control_origin_type = "lambda"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -340,7 +340,7 @@ resource "aws_cloudfront_function" "public_report_routes" {
 }
 
 resource "aws_wafv2_web_acl" "public_chat" {
-  name  = "tollchat-v2-public-chat"
+  name  = "tollchat-v2-public-chat${local.suffix}"
   scope = "CLOUDFRONT"
 
   default_action {

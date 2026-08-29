@@ -509,7 +509,7 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
     assert 'resource "aws_lambda_function" "usage_publisher"' in site
-    assert 'function_name = "tollchat-v2-usage-publisher"' in site
+    assert 'function_name = "tollchat-v2-usage-publisher${local.suffix}"' in site
     assert 'schedule_expression = "cron(15 5 * * ? *)"' in site
     assert "maximum_event_age_in_seconds = 86400" in site
     assert "maximum_retry_attempts       = 185" in site
