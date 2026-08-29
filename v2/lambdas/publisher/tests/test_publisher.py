@@ -142,6 +142,16 @@ def test_expected_watermark_matrix():
         )
         == "superseded"
     )
+
+
+def test_load_event_environment_must_match_runtime(monkeypatch):
+    assert publisher._expected_watermark(_load_event()) == WATERMARK
+    monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", "development")
+    with pytest.raises(ValueError, match="environment"):
+        publisher._expected_watermark(_load_event())
+    development = _load_event()
+    development["detail"]["environment"] = "development"
+    assert publisher._expected_watermark(development) == WATERMARK
     with pytest.raises(RuntimeError, match="not visible"):
         publisher._expected_watermark_action(WATERMARK.replace(minute=10), WATERMARK)
     with pytest.raises(RuntimeError, match="not visible"):
