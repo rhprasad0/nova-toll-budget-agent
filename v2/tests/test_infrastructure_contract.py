@@ -179,8 +179,8 @@ def test_v2_has_an_independent_state_and_identity():
         in (V2_ROOT / "infra" / "backend.development.hcl").read_text()
     )
     assert 'function_name = "toll-v2-pricing-loader${local.suffix}"' in MAIN_TF
-    assert "/pricing_loader_writer" in MAIN_TF
-    assert 'DB_USER    = "pricing_loader_writer"' in MAIN_TF
+    assert "${local.database_roles.loader}" in MAIN_TF
+    assert "DB_USER    = local.database_roles.loader" in MAIN_TF
 
 
 def test_v2_declares_a_private_agentcore_application_without_telemetry():
@@ -251,7 +251,7 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
         'resource "aws_lambda_provisioned_concurrency_config" "tollchat"' in agentcore
     )
     assert (
-        "provisioned_concurrent_executions = local.is_production ? 1 : 0" in agentcore
+        "count                             = local.is_production ? 1 : 0" in agentcore
     )
     assert (
         "qualifier                         = aws_lambda_alias.tollchat_live.name"
@@ -608,8 +608,8 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert 'schedule_expression = "cron(5/10 * * * ? *)"' in MAIN_TF
     assert '"tollchat.pricing-loader"' in MAIN_TF
     assert '"I95 Pricing Load Committed"' in MAIN_TF
-    assert "/report_publisher" in MAIN_TF
-    assert re.search(r'DB_USER\s+= "report_publisher"', MAIN_TF)
+    assert "${local.database_roles.publisher}" in MAIN_TF
+    assert re.search(r"DB_USER\s+= local.database_roles.publisher", MAIN_TF)
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_rds"' in MAIN_TF
     policy = MAIN_TF.split('data "aws_iam_policy_document" "publisher"', maxsplit=1)[
         1
@@ -653,10 +653,10 @@ def test_timed_ci_uses_the_internal_pricing_caller():
         1
     ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
 
-    assert 'name               = "nova-toll-v2-timed-checks"' in MAIN_TF
+    assert 'name               = "nova-toll-v2-timed-checks${local.suffix}"' in MAIN_TF
     assert 'actions   = ["rds:DescribeDBInstances"]' in policy
     assert 'actions   = ["rds-db:connect"]' in policy
-    assert "/pricing_caller" in policy
+    assert "/${local.database_roles.pricing_caller}" in policy
     assert "/tollchat_agent" not in policy
     assert 'actions   = ["ssm:GetParameter"]' in policy
     assert (

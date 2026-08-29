@@ -285,7 +285,7 @@ resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
@@ -299,7 +299,7 @@ resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudfront_origin_access_control" "site" {
@@ -828,8 +828,9 @@ resource "cloudflare_dns_record" "apex" {
 }
 
 resource "cloudflare_dns_record" "www" {
+  count   = local.is_production ? 1 : 0
   zone_id = data.cloudflare_zone.tollchat.zone_id
-  name    = local.is_production ? "www.tollchat.ai" : "dev"
+  name    = "www.tollchat.ai"
   type    = "CNAME"
   content = aws_cloudfront_distribution.site.domain_name
   ttl     = 1

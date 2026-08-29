@@ -595,7 +595,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
@@ -608,7 +608,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
@@ -622,7 +622,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
   threshold           = 95
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 output "agent_report_web_acl_arn" {

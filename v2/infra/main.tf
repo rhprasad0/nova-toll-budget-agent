@@ -22,7 +22,7 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 resource "aws_iam_role" "loader" {
-  name               = "toll-v2-pricing-loader"
+  name               = "toll-v2-pricing-loader${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -32,13 +32,13 @@ resource "aws_iam_role_policy_attachment" "loader_vpc" {
 }
 
 resource "aws_sqs_queue" "invoke_failure" {
-  name                      = "toll-v2-pricing-loader-invoke-failure"
+  name                      = "toll-v2-pricing-loader-invoke-failure${local.suffix}"
   sqs_managed_sse_enabled   = true
   message_retention_seconds = 1209600
 }
 
 resource "aws_sqs_queue" "delivery_failure" {
-  name                      = "toll-v2-pricing-loader-delivery-failure"
+  name                      = "toll-v2-pricing-loader-delivery-failure${local.suffix}"
   sqs_managed_sse_enabled   = true
   message_retention_seconds = 1209600
 }
@@ -68,7 +68,7 @@ data "aws_iam_policy_document" "loader" {
   statement {
     sid       = "ConnectRdsIam"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/pricing_loader_writer"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.loader}"]
   }
 
   statement {
@@ -79,7 +79,7 @@ data "aws_iam_policy_document" "loader" {
 }
 
 resource "aws_iam_role_policy" "loader" {
-  name   = "toll-v2-pricing-loader"
+  name   = "toll-v2-pricing-loader${local.suffix}"
   role   = aws_iam_role.loader.id
   policy = data.aws_iam_policy_document.loader.json
 }
@@ -108,7 +108,7 @@ data "aws_iam_policy_document" "timed_checks_assume" {
 }
 
 resource "aws_iam_role" "timed_checks" {
-  name               = "nova-toll-v2-timed-checks"
+  name               = "nova-toll-v2-timed-checks${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.timed_checks_assume.json
 }
 
@@ -122,7 +122,7 @@ data "aws_iam_policy_document" "timed_checks" {
   statement {
     sid       = "ConnectAsPricingCaller"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}"]
   }
 
   statement {
@@ -133,13 +133,13 @@ data "aws_iam_policy_document" "timed_checks" {
 }
 
 resource "aws_iam_role_policy" "timed_checks" {
-  name   = "nova-toll-v2-route-live-checks"
+  name   = "nova-toll-v2-route-live-checks${local.suffix}"
   role   = aws_iam_role.timed_checks.id
   policy = data.aws_iam_policy_document.timed_checks.json
 }
 
 resource "aws_security_group" "loader" {
-  name        = "nova-toll-v2-pricing-loader"
+  name        = "nova-toll-v2-pricing-loader${local.suffix}"
   description = "v2 pricing loader Lambda ENIs"
   vpc_id      = data.aws_vpc.default.id
 }
@@ -207,8 +207,8 @@ resource "aws_lambda_function" "loader" {
     variables = {
       DB_HOST    = data.aws_db_instance.main.address
       DB_PORT    = tostring(data.aws_db_instance.main.port)
-      DB_NAME    = data.aws_db_instance.main.db_name
-      DB_USER    = "pricing_loader_writer"
+      DB_NAME    = local.database_name
+      DB_USER    = local.database_roles.loader
       RAW_BUCKET = data.aws_s3_bucket.raw.bucket
     }
   }
@@ -322,7 +322,7 @@ resource "aws_cloudwatch_metric_alarm" "loader_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "freshness" {
@@ -339,7 +339,7 @@ resource "aws_cloudwatch_metric_alarm" "freshness" {
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "failure_queues" {
@@ -358,11 +358,11 @@ resource "aws_cloudwatch_metric_alarm" "failure_queues" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_iam_role" "publisher" {
-  name               = "toll-v2-report-publisher"
+  name               = "toll-v2-report-publisher${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -372,13 +372,13 @@ resource "aws_iam_role_policy_attachment" "publisher_vpc" {
 }
 
 resource "aws_sqs_queue" "publisher_invoke_failure" {
-  name                      = "toll-v2-report-publisher-invoke-failure"
+  name                      = "toll-v2-report-publisher-invoke-failure${local.suffix}"
   sqs_managed_sse_enabled   = true
   message_retention_seconds = 1209600
 }
 
 resource "aws_sqs_queue" "publisher_delivery_failure" {
-  name                      = "toll-v2-report-publisher-delivery-failure"
+  name                      = "toll-v2-report-publisher-delivery-failure${local.suffix}"
   sqs_managed_sse_enabled   = true
   message_retention_seconds = 1209600
 }
@@ -387,7 +387,7 @@ data "aws_iam_policy_document" "publisher" {
   statement {
     sid       = "ConnectRdsIam"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/report_publisher"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.publisher}"]
   }
 
   statement {
@@ -443,13 +443,13 @@ data "aws_iam_policy_document" "publisher" {
 }
 
 resource "aws_iam_role_policy" "publisher" {
-  name   = "toll-v2-report-publisher"
+  name   = "toll-v2-report-publisher${local.suffix}"
   role   = aws_iam_role.publisher.id
   policy = data.aws_iam_policy_document.publisher.json
 }
 
 resource "aws_security_group" "publisher" {
-  name        = "nova-toll-v2-report-publisher"
+  name        = "nova-toll-v2-report-publisher${local.suffix}"
   description = "v2 report publisher Lambda ENIs"
   vpc_id      = data.aws_vpc.default.id
 }
@@ -508,8 +508,8 @@ resource "aws_lambda_function" "publisher" {
     variables = {
       DB_HOST                    = data.aws_db_instance.main.address
       DB_PORT                    = tostring(data.aws_db_instance.main.port)
-      DB_NAME                    = data.aws_db_instance.main.db_name
-      DB_USER                    = "report_publisher"
+      DB_NAME                    = local.database_name
+      DB_USER                    = local.database_roles.publisher
       REPORT_PUBLICATION_ENABLED = "true"
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
       AGENT_MEASUREMENT_BUCKET   = aws_s3_bucket.agent_measurement.id
@@ -667,7 +667,7 @@ resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "publisher_errors" {
@@ -681,7 +681,7 @@ resource "aws_cloudwatch_metric_alarm" "publisher_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "publisher_failed_invocations" {
@@ -700,7 +700,7 @@ resource "aws_cloudwatch_metric_alarm" "publisher_failed_invocations" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "publisher_failure_queues" {
@@ -719,5 +719,5 @@ resource "aws_cloudwatch_metric_alarm" "publisher_failure_queues" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }

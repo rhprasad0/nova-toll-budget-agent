@@ -142,14 +142,14 @@ resource "aws_dynamodb_table" "tollchat_sessions" {
 
 resource "aws_s3_object" "agentcore" {
   bucket      = data.aws_s3_bucket.agentcore_artifacts.id
-  key         = "runtime/v2/agentcore.zip"
+  key         = "runtime/v2/agentcore${local.is_production ? "" : "-dev"}.zip"
   source      = local.agentcore_zip_path
   source_hash = filebase64sha256(local.agentcore_zip_path)
 }
 
 resource "aws_s3_object" "tollchat_proxy" {
   bucket      = data.aws_s3_bucket.agentcore_artifacts.id
-  key         = "lambda/v2/chat-proxy.zip"
+  key         = "lambda/v2/chat-proxy${local.is_production ? "" : "-dev"}.zip"
   source      = local.proxy_zip_path
   source_hash = local.proxy_zip_hash
 }
@@ -214,7 +214,7 @@ data "aws_iam_policy_document" "tollchat_runtime" {
 }
 
 resource "aws_iam_role_policy" "tollchat_runtime" {
-  name   = "nova-toll-v2-agentcore-runtime"
+  name   = "nova-toll-v2-agentcore-runtime${local.suffix}"
   role   = aws_iam_role.tollchat_runtime.id
   policy = data.aws_iam_policy_document.tollchat_runtime.json
 }
@@ -483,9 +483,10 @@ resource "aws_lambda_alias" "tollchat_live" {
 }
 
 resource "aws_lambda_provisioned_concurrency_config" "tollchat" {
+  count                             = local.is_production ? 1 : 0
   function_name                     = aws_lambda_alias.tollchat_live.function_name
   qualifier                         = aws_lambda_alias.tollchat_live.name
-  provisioned_concurrent_executions = local.is_production ? 1 : 0
+  provisioned_concurrent_executions = 1
 }
 
 resource "aws_api_gateway_rest_api" "tollchat" {
