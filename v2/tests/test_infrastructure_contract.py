@@ -211,6 +211,10 @@ def test_v2_has_an_independent_state_and_identity():
         'agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"'
         in measurement
     )
+    assert "TOLLCHAT_ENVIRONMENT = var.environment" in measurement
+    assert (
+        "local.is_production ? null : { Environment = var.environment }" in measurement
+    )
     assert "WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert (
         'resource "aws_cloudfront_response_headers_policy" "development_noindex"'

@@ -98,6 +98,27 @@ def test_rollup_publishes_only_completed_runs_and_metrics(monkeypatch):
     )
 
 
+def test_rollup_development_metrics_have_environment_dimension(monkeypatch):
+    athena = _Athena()
+    cloudwatch = _CloudWatch()
+    monkeypatch.setattr(rollup, "_query_template", lambda name: name)
+    monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", "development")
+    rollup.run_rollup(
+        athena=athena,
+        cloudwatch=cloudwatch,
+        database="agent_reports",
+        workgroup="agent-reports",
+        web_acl_metric="acl-dev",
+        route_rule_metric="route-dev",
+        now=datetime(2026, 8, 25, 3, 15, tzinfo=UTC),
+        sleep=lambda _seconds: None,
+    )
+    assert all(
+        datum["Dimensions"] == [{"Name": "Environment", "Value": "development"}]
+        for datum in cloudwatch.metrics[0]["MetricData"]
+    )
+
+
 def test_failed_athena_write_never_publishes_completion(monkeypatch):
     athena = _Athena(states=["FAILED"])
     monkeypatch.setattr(rollup, "_query_template", lambda name: name)
