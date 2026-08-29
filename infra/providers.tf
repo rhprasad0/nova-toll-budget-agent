@@ -4,7 +4,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      project = "nova-toll-budget-agent"
+      project     = "nova-toll-budget-agent"
+      environment = "production"
+      shared_with = "development"
     }
   }
 }
