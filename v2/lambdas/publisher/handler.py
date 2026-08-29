@@ -199,6 +199,7 @@ def _build_slug_map(
 
 
 class _LoadDetail(_Model):
+    environment: Literal["development", "production"]
     schema_version: Literal[1]
     facility: Literal["i95_i495"]
     source_watermark: str
@@ -984,6 +985,8 @@ def _expected_watermark(event: dict[str, Any]) -> datetime | None:
     ):
         raise ValueError("unsupported publisher event")
     detail = _LoadDetail.model_validate(event["detail"])
+    if detail.environment != os.environ.get("TOLLCHAT_ENVIRONMENT", "production"):
+        raise ValueError("publisher event environment does not match runtime")
     return _aware_timestamp(detail.source_watermark, label="source watermark")
 
 
@@ -1031,9 +1034,10 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
         if publication["status"] == "superseded":
             return result
     logger.info(
-        "V2_REPORT_GENERATION_OK %s %s %s",
+        "V2_REPORT_GENERATION_OK %s %s %s %s",
         FACILITY,
         generation_id,
         len(generation.routes),
+        os.environ.get("TOLLCHAT_ENVIRONMENT", "production"),
     )
     return result

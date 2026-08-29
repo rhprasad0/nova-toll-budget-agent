@@ -603,6 +603,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
   alarm_name          = "tollchat-v2-agent-usage-rollup-missing${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "RollupCompleted"
+  dimensions          = { Environment = var.environment }
   period              = 86400
   evaluation_periods  = 1
   statistic           = "Sum"
@@ -616,6 +617,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
   alarm_name          = "tollchat-v2-agent-usage-log-coverage${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "LogCoveragePercent"
+  dimensions          = { Environment = var.environment }
   period              = 86400
   evaluation_periods  = 2
   datapoints_to_alarm = 2

@@ -654,7 +654,7 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert "aws_iam_role_policy.publisher" in publisher_lambda
     assert "aws_s3_object.robots" in publisher_lambda
     assert (
-        'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
+        'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count, environment]"'
         in MAIN_TF
     )
     assert "evaluation_periods  = 3" in MAIN_TF
