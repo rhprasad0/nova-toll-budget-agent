@@ -1,6 +1,6 @@
 locals {
-  agent_measurement_database = "tollchat_agent_reports"
-  agent_measurement_bucket   = "aws-waf-logs-tollchat-agent-reports-${data.aws_caller_identity.current.account_id}"
+  agent_measurement_database = "tollchat_agent_reports${local.is_production ? "" : "_development"}"
+  agent_measurement_bucket   = "aws-waf-logs-tollchat-agent-reports-${data.aws_caller_identity.current.account_id}${local.suffix}"
   agent_measurement_label    = "awswaf:${data.aws_caller_identity.current.account_id}:webacl:tollchat-v2-public-chat:agent-route-report"
 }
 
@@ -63,7 +63,7 @@ resource "aws_kms_key" "agent_measurement" {
 }
 
 resource "aws_kms_alias" "agent_measurement" {
-  name          = "alias/tollchat-v2-agent-measurement"
+  name          = "alias/tollchat-v2-agent-measurement${local.suffix}"
   target_key_id = aws_kms_key.agent_measurement.key_id
 }
 
@@ -529,12 +529,12 @@ resource "aws_iam_role_policy" "agent_usage_rollup" {
 }
 
 resource "aws_cloudwatch_log_group" "agent_usage_rollup" {
-  name              = "/aws/lambda/tollchat-v2-agent-usage-rollup"
-  retention_in_days = 30
+  name              = "/aws/lambda/tollchat-v2-agent-usage-rollup${local.suffix}"
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "agent_usage_rollup" {
-  function_name = "tollchat-v2-agent-usage-rollup"
+  function_name = "tollchat-v2-agent-usage-rollup${local.suffix}"
   role          = aws_iam_role.agent_usage_rollup.arn
   runtime       = "python3.13"
   handler       = "handler.handler"

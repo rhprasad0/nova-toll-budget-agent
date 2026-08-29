@@ -20,8 +20,9 @@ The current production baseline is AWS account `920534282028` in `us-east-1`:
 - Public domains: `tollchat.ai` and `www.tollchat.ai`; fixed dependencies include
   `nova-toll-rds`, `nova-toll-private-a`, `nova-toll-private-c`,
   `nova-toll-agentcore-endpoint`, and `nova-toll-eventbridge-endpoint`.
-- Default tags remain `project = nova-toll-budget-agent` and `version = v2` for
-  the application. Environment tags are deferred to #300.
+- Default application tags are `project = nova-toll-budget-agent`, `version = v2`,
+  and `environment = production`. Shared foundation resources add
+  `environment = production` and `shared_with = development`.
 - Release artifacts overwrite `s3://nova-toll-agentcore-920534282028/runtime/v2/agentcore.zip`
   and `s3://nova-toll-agentcore-920534282028/lambda/v2/chat-proxy.zip`; retained
   S3 object versions are the rollback source.
@@ -51,7 +52,7 @@ Create a saved plan with the reviewed packages and the explicit production
 profile. Load the Cloudflare token from SSM only into the Terraform process
 environment, then review every action before applying that exact file:
 
-Enter `v2/infra` and initialize the application state for every release:
+Enter `v2/infra` and initialize the explicit production application state for every release:
 
 ```sh
 cd infra
@@ -61,7 +62,7 @@ export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
 AWS_PROFILE=nova-toll aws --region us-east-1 lambda put-function-concurrency \
   --function-name tollchat-v2-chat-proxy \
   --reserved-concurrent-executions 5
-AWS_PROFILE=nova-toll terraform init
+AWS_PROFILE=nova-toll terraform init -backend-config=backend.production.hcl
 ```
 
 Before applying, set `RELEASE_EVIDENCE` to a unique per-release path (for
@@ -159,6 +160,21 @@ AWS_PROFILE=nova-toll aws --region us-east-1 iam get-role-policy \
   --policy-name nova-toll-v2-chat-proxy \
   --query PolicyDocument --output json | grep -F 'dynamodb:TransactWriteItems'
 unset CLOUDFLARE_API_TOKEN
+```
+
+## Development environment
+
+Development has its own application state and names but consumes the shared
+network, RDS, artifact, raw-data, and alert foundations read-only. It uses
+`dev.tollchat.ai`, `nova_toll_development`, development database roles, shorter
+logs, non-paging alarms, and no provisioned proxy concurrency. Bootstrap its
+AWS-side dependencies separately before planning; this configuration never
+creates PostgreSQL roles or schemas.
+
+```sh
+cd v2/infra
+AWS_PROFILE=nova-toll terraform init -backend-config=backend.development.hcl
+AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars
 ```
 
 The proxy Lambda explicitly depends on its inline policy, so the complete plan

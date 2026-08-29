@@ -16,7 +16,7 @@ data "archive_file" "usage_publisher" {
 }
 
 resource "aws_s3_bucket" "site" {
-  bucket = "tollchat-site-920534282028"
+  bucket = "tollchat-site-${data.aws_caller_identity.current.account_id}${local.suffix}"
 }
 
 resource "aws_s3_bucket_public_access_block" "site" {
@@ -62,7 +62,7 @@ resource "aws_kms_key" "site" {
 }
 
 resource "aws_kms_alias" "site" {
-  name          = "alias/tollchat-v2-site"
+  name          = "alias/tollchat-v2-site${local.suffix}"
   target_key_id = aws_kms_key.site.key_id
 }
 
@@ -217,7 +217,7 @@ resource "aws_iam_role_policy" "usage_publisher" {
 
 resource "aws_cloudwatch_log_group" "usage_publisher" {
   name              = "/aws/lambda/tollchat-v2-usage-publisher"
-  retention_in_days = 30
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "usage_publisher" {
@@ -610,7 +610,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
       rate_based_statement {
         aggregate_key_type    = "IP"
         evaluation_window_sec = 300
-        limit                 = 20
+        limit                 = local.rate_limit
 
         scope_down_statement {
           and_statement {
@@ -675,7 +675,7 @@ resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
-  aliases             = ["tollchat.ai", "www.tollchat.ai"]
+  aliases             = local.domains
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
@@ -783,8 +783,8 @@ data "cloudflare_zone" "tollchat" {
 }
 
 resource "aws_acm_certificate" "site" {
-  domain_name               = "tollchat.ai"
-  subject_alternative_names = ["www.tollchat.ai"]
+  domain_name               = local.domains[0]
+  subject_alternative_names = slice(local.domains, 1, length(local.domains))
   validation_method         = "DNS"
 
   lifecycle { create_before_destroy = true }
@@ -820,7 +820,7 @@ resource "aws_acm_certificate_validation" "site" {
 
 resource "cloudflare_dns_record" "apex" {
   zone_id = data.cloudflare_zone.tollchat.zone_id
-  name    = "tollchat.ai"
+  name    = local.domains[0]
   type    = "CNAME"
   content = aws_cloudfront_distribution.site.domain_name
   ttl     = 1
@@ -829,7 +829,7 @@ resource "cloudflare_dns_record" "apex" {
 
 resource "cloudflare_dns_record" "www" {
   zone_id = data.cloudflare_zone.tollchat.zone_id
-  name    = "www.tollchat.ai"
+  name    = local.is_production ? "www.tollchat.ai" : "dev"
   type    = "CNAME"
   content = aws_cloudfront_distribution.site.domain_name
   ttl     = 1
@@ -840,6 +840,6 @@ output "public_site" {
   description = "Public TollChat v2 deployment."
   value = {
     distribution_id = aws_cloudfront_distribution.site.id
-    url             = "https://tollchat.ai"
+    url             = "https://${local.domains[0]}"
   }
 }

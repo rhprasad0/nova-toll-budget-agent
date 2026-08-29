@@ -58,11 +58,14 @@ def test_foundation_has_no_site_and_terraform_ci_only_validates():
 def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
 
-    assert (
+    assert 'backend "s3" {}' in (FOUNDATION_ROOT / "versions.tf").read_text()
+    assert 'backend "s3" {}' in VERSIONS_TF
+    assert (FOUNDATION_ROOT / "backend.production.hcl").read_text().find(
         'key          = "nova-toll/terraform.tfstate"'
-        in (FOUNDATION_ROOT / "versions.tf").read_text()
-    )
-    assert 'key          = "nova-toll/v2/terraform.tfstate"' in VERSIONS_TF
+    ) >= 0
+    assert (V2_ROOT / "infra" / "backend.production.hcl").read_text().find(
+        'key          = "nova-toll/v2/terraform.tfstate"'
+    ) >= 0
     assert "postgis/postgis" in CI_WORKFLOW
     assert "python3 v2/scripts/check_schema_versions.py" in CI_WORKFLOW
     assert "v2/scripts/run_db_tests.sh" in CI_WORKFLOW
@@ -105,7 +108,7 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         "update-agent-runtime-endpoint",
         "project = nova-toll-budget-agent",
         "version = v2",
-        "Environment tags are deferred to #300",
+        "environment = production",
         "foundation plan to be zero-change",
         "unexplained action or any replacement",
     ):
@@ -170,8 +173,12 @@ def test_shared_dynamodb_endpoint_admits_v2_session_table():
 
 
 def test_v2_has_an_independent_state_and_identity():
-    assert 'key          = "nova-toll/v2/terraform.tfstate"' in VERSIONS_TF
-    assert 'function_name = "toll-v2-pricing-loader"' in MAIN_TF
+    assert 'environment"' in (V2_ROOT / "infra" / "variables.tf").read_text()
+    assert (
+        "nova-toll/v2/development/terraform.tfstate"
+        in (V2_ROOT / "infra" / "backend.development.hcl").read_text()
+    )
+    assert 'function_name = "toll-v2-pricing-loader${local.suffix}"' in MAIN_TF
     assert "/pricing_loader_writer" in MAIN_TF
     assert 'DB_USER    = "pricing_loader_writer"' in MAIN_TF
 
@@ -180,12 +187,24 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
     assert agentcore_path.exists()
     agentcore = agentcore_path.read_text()
-    assert 'agent_runtime_name = "nova_toll_v2"' in agentcore
+    assert (
+        'agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}"'
+        in agentcore
+    )
     assert 'network_mode = "VPC"' in agentcore
-    assert "dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent" in agentcore
-    assert "dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller" in agentcore
-    assert 'function_name                  = "tollchat-v2-chat-proxy"' in agentcore
-    assert 'name         = "tollchat-v2-anonymous-sessions"' in agentcore
+    assert (
+        "dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.agent}"
+        in agentcore
+    )
+    assert (
+        "dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}"
+        in agentcore
+    )
+    assert (
+        'function_name                  = "tollchat-v2-chat-proxy${local.suffix}"'
+        in agentcore
+    )
+    assert 'name         = "tollchat-v2-anonymous-sessions${local.suffix}"' in agentcore
     assert 'types            = ["PRIVATE"]' in agentcore
     assert 'response_transfer_mode  = "STREAM"' in agentcore
     assert "DenyOutsidePrivateEndpoint" in agentcore
@@ -205,7 +224,7 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
         'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1
     )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
     assert 'toset(["DEFAULT", "preview"])' in runtime_logs
-    assert "retention_in_days = 1" in runtime_logs
+    assert "retention_in_days = local.is_production ? 1 : 1" in runtime_logs
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
@@ -231,7 +250,9 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert (
         'resource "aws_lambda_provisioned_concurrency_config" "tollchat"' in agentcore
     )
-    assert "provisioned_concurrent_executions = 1" in agentcore
+    assert (
+        "provisioned_concurrent_executions = local.is_production ? 1 : 0" in agentcore
+    )
     assert (
         "qualifier                         = aws_lambda_alias.tollchat_live.name"
         in agentcore
@@ -245,9 +266,9 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'origin_access_control_origin_type = "s3"' in site
     assert 'path_pattern             = "/api/*"' in site
     assert 'code    = file("${path.module}/../agent/public-api-gate.js")' in site
-    assert 'aliases             = ["tollchat.ai", "www.tollchat.ai"]' in site
+    assert "aliases             = local.domains" in site
     assert 'resource "aws_wafv2_web_acl" "public_chat"' in site
-    assert "limit                 = 20" in site
+    assert "limit                 = local.rate_limit" in site
     assert "size                = 32768" in site
     assert 'resource "cloudflare_dns_record" "apex"' in site
     assert 'resource "cloudflare_dns_record" "www"' in site
@@ -583,7 +604,7 @@ def test_loader_network_and_data_access_are_scoped():
 def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()
     assert 'variable "publisher_package_path"' in variables
-    assert 'function_name = "toll-v2-report-publisher"' in MAIN_TF
+    assert 'function_name = "toll-v2-report-publisher${local.suffix}"' in MAIN_TF
     assert 'schedule_expression = "cron(5/10 * * * ? *)"' in MAIN_TF
     assert '"tollchat.pricing-loader"' in MAIN_TF
     assert '"I95 Pricing Load Committed"' in MAIN_TF

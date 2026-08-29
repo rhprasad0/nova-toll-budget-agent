@@ -181,12 +181,12 @@ resource "aws_vpc_security_group_egress_rule" "loader_to_eventbridge" {
 }
 
 resource "aws_cloudwatch_log_group" "loader" {
-  name              = "/aws/lambda/toll-v2-pricing-loader"
-  retention_in_days = 30
+  name              = "/aws/lambda/toll-v2-pricing-loader${local.suffix}"
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "loader" {
-  function_name = "toll-v2-pricing-loader"
+  function_name = "toll-v2-pricing-loader${local.suffix}"
   role          = aws_iam_role.loader.arn
   runtime       = "python3.13"
   handler       = "handler.handler"
@@ -482,12 +482,12 @@ resource "aws_vpc_security_group_egress_rule" "publisher_to_s3" {
 }
 
 resource "aws_cloudwatch_log_group" "publisher" {
-  name              = "/aws/lambda/toll-v2-report-publisher"
-  retention_in_days = 30
+  name              = "/aws/lambda/toll-v2-report-publisher${local.suffix}"
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "publisher" {
-  function_name = "toll-v2-report-publisher"
+  function_name = "toll-v2-report-publisher${local.suffix}"
   role          = aws_iam_role.publisher.arn
   runtime       = "python3.13"
   handler       = "handler.handler"

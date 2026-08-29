@@ -28,4 +28,7 @@ test-results/
 /v2/infra/build/
 /v2/infra/*.tfplan
 *.tfvars
+!infra/production.tfvars
+!v2/infra/production.tfvars
+!v2/infra/development.tfvars
 /v2/eval/private/
