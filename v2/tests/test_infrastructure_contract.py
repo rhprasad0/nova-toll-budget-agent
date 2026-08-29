@@ -301,6 +301,8 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
     assert "publish                        = true" in proxy
     assert "reserved_concurrent_executions = 5" in proxy
+    assert agentcore.count('metric_name         = "V2ProxyFailure${local.suffix}"') == 1
+    assert agentcore.count('name      = "V2ProxyFailure${local.suffix}"') == 1
     assert 'resource "aws_lambda_alias" "tollchat_live"' in agentcore
     assert 'name             = "live"' in agentcore
     assert (
