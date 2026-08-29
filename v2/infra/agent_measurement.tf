@@ -1,6 +1,7 @@
 locals {
   agent_measurement_database = "tollchat_agent_reports${local.is_production ? "" : "_development"}"
   agent_measurement_bucket   = "aws-waf-logs-tollchat-agent-reports-${data.aws_caller_identity.current.account_id}${local.suffix}"
+  agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"
   agent_measurement_label    = "awswaf:${data.aws_caller_identity.current.account_id}:webacl:tollchat-v2-public-chat${local.suffix}:agent-route-report"
 }
 
@@ -231,7 +232,7 @@ resource "aws_glue_catalog_table" "waf_logs" {
     "projection.log_hour.range"  = "0,23"
     "projection.log_hour.digits" = "2"
     # CloudFront-scoped WAF logs use this literal scope token, not the region name.
-    "storage.location.template" = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/tollchat-v2-public-chat/$${log_date}/$${log_hour}/"
+    "storage.location.template" = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/${local.agent_measurement_acl}/$${log_date}/$${log_hour}/"
   }
 
   dynamic "partition_keys" {
@@ -243,7 +244,7 @@ resource "aws_glue_catalog_table" "waf_logs" {
   }
 
   storage_descriptor {
-    location      = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/tollchat-v2-public-chat/"
+    location      = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/${local.agent_measurement_acl}/"
     input_format  = "org.apache.hadoop.mapred.TextInputFormat"
     output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
 
