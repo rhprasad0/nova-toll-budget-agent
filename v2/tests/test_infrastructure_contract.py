@@ -207,6 +207,11 @@ def test_v2_has_an_independent_state_and_identity():
         in measurement
     )
     assert (
+        'agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"'
+        in measurement
+    )
+    assert "WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
+    assert (
         'resource "aws_cloudfront_response_headers_policy" "development_noindex"'
         in site
     )
@@ -427,7 +432,7 @@ def test_agent_measurement_is_count_only_private_and_bounded():
     assert measurement.count("days = 7") >= 2
     assert "enforce_workgroup_configuration    = true" in measurement
     assert "bytes_scanned_cutoff_per_query     = 1073741824" in measurement
-    assert "/WAFLogs/cloudfront/tollchat-v2-public-chat/" in measurement
+    assert "/WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert "/WAFLogs/us-east-1/tollchat-v2-public-chat/" not in measurement
     assert '"glue:GetPartition"' in measurement
     assert 'schedule_expression = "cron(15 3 * * ? *)"' in measurement
