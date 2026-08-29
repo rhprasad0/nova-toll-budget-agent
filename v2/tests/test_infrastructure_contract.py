@@ -167,6 +167,7 @@ def test_shared_dynamodb_endpoint_admits_v2_session_table():
         'resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1
     )[1].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
     assert "tollchat-v2-anonymous-sessions" in endpoint
+    assert "tollchat-v2-anonymous-sessions-dev" in endpoint
     assert "table/tollchat-anonymous-sessions" not in endpoint
     assert "dynamodb:*" not in endpoint
     assert '"dynamodb:TransactWriteItems"' in endpoint

@@ -174,7 +174,11 @@ creates PostgreSQL roles or schemas.
 ```sh
 cd v2/infra
 AWS_PROFILE=nova-toll terraform init -backend-config=backend.development.hcl
-AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars
+AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
+  -var loader_package_path=build/loader.zip \
+  -var publisher_package_path=build/publisher.zip \
+  -var agentcore_package_path=build/agentcore.zip \
+  -var chat_proxy_package_path=build/chat-proxy.zip
 ```
 
 The proxy Lambda explicitly depends on its inline policy, so the complete plan
