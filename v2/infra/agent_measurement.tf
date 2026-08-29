@@ -395,7 +395,7 @@ resource "aws_glue_catalog_table" "agent_report_rollup_completions" {
 }
 
 resource "aws_athena_workgroup" "agent_reports" {
-  name = "tollchat-agent-reports"
+  name = "tollchat-agent-reports${local.suffix}"
 
   configuration {
     enforce_workgroup_configuration    = true
@@ -414,7 +414,7 @@ resource "aws_athena_workgroup" "agent_reports" {
 }
 
 resource "aws_athena_named_query" "top_routes" {
-  name        = "TollChat agent reports - top routes by day"
+  name        = "TollChat agent reports - top routes by day${local.suffix}"
   database    = aws_glue_catalog_database.agent_reports.name
   workgroup   = aws_athena_workgroup.agent_reports.name
   description = "Privacy-safe route and representation totals from completed rollups."
@@ -428,7 +428,7 @@ resource "aws_athena_named_query" "top_routes" {
 }
 
 resource "aws_athena_named_query" "recent_routes" {
-  name        = "TollChat agent reports - recent request times"
+  name        = "TollChat agent reports - recent request times${local.suffix}"
   database    = aws_glue_catalog_database.agent_reports.name
   workgroup   = aws_athena_workgroup.agent_reports.name
   description = "Seven-day route timing drill-down without IP, user agent, referrer, cookie, or query string."

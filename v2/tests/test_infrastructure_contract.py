@@ -181,6 +181,19 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'function_name = "toll-v2-pricing-loader${local.suffix}"' in MAIN_TF
     assert "${local.database_roles.loader}" in MAIN_TF
     assert "DB_USER    = local.database_roles.loader" in MAIN_TF
+    assert 'name = "toll-v2-pricing-raw-objects${local.suffix}"' in MAIN_TF
+    assert (
+        'alarm_name          = "toll-v2-pricing-loader-errors${local.suffix}"'
+        in MAIN_TF
+    )
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    assert (
+        'content       = local.is_production ? file("${path.module}/../agent/robots.txt") : "User-agent: *\\nDisallow: /\\n"'
+        in site
+    )
+    assert 'name    = "tollchat-v2-public-chat-routes${local.suffix}"' in site
+    measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
+    assert 'name = "tollchat-agent-reports${local.suffix}"' in measurement
 
 
 def test_v2_declares_a_private_agentcore_application_without_telemetry():
@@ -295,7 +308,10 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
         1
     ].split('resource "aws_s3_object"', maxsplit=1)[0]
     assert 'key           = "robots.txt"' in robots_object
-    assert 'source        = "${path.module}/../agent/robots.txt"' in robots_object
+    assert (
+        'content       = local.is_production ? file("${path.module}/../agent/robots.txt") : "User-agent: *\\nDisallow: /\\n"'
+        in robots_object
+    )
     assert 'content_type  = "text/plain; charset=utf-8"' in robots_object
     assert 'cache_control = "no-cache"' in robots_object
     for user_agent in (

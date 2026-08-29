@@ -149,8 +149,7 @@ resource "aws_s3_object" "terms" {
 resource "aws_s3_object" "robots" {
   bucket        = aws_s3_bucket.site.id
   key           = "robots.txt"
-  source        = "${path.module}/../agent/robots.txt"
-  source_hash   = filebase64sha256("${path.module}/../agent/robots.txt")
+  content       = local.is_production ? file("${path.module}/../agent/robots.txt") : "User-agent: *\nDisallow: /\n"
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 
@@ -324,7 +323,7 @@ resource "aws_cloudfront_origin_access_control" "public_chat" {
 }
 
 resource "aws_cloudfront_function" "public_chat_routes" {
-  name    = "tollchat-v2-public-chat-routes"
+  name    = "tollchat-v2-public-chat-routes${local.suffix}"
   runtime = "cloudfront-js-2.0"
   comment = "Allow only TollChat public API operations"
   publish = true
@@ -332,7 +331,7 @@ resource "aws_cloudfront_function" "public_chat_routes" {
 }
 
 resource "aws_cloudfront_function" "public_report_routes" {
-  name    = "tollchat-v2-public-report-routes"
+  name    = "tollchat-v2-public-report-routes${local.suffix}"
   runtime = "cloudfront-js-2.0"
   comment = "Resolve canonical TollChat report directories"
   publish = true

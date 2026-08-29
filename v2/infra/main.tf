@@ -232,7 +232,7 @@ resource "aws_lambda_function_event_invoke_config" "loader" {
 }
 
 resource "aws_cloudwatch_event_rule" "raw_objects" {
-  name = "toll-v2-pricing-raw-objects"
+  name = "toll-v2-pricing-raw-objects${local.suffix}"
   event_pattern = jsonencode({
     source      = ["aws.s3"]
     detail-type = ["Object Created"]
@@ -312,7 +312,7 @@ resource "aws_cloudwatch_log_metric_filter" "load_success" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "loader_errors" {
-  alarm_name          = "toll-v2-pricing-loader-errors"
+  alarm_name          = "toll-v2-pricing-loader-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.loader.function_name }
@@ -328,7 +328,7 @@ resource "aws_cloudwatch_metric_alarm" "loader_errors" {
 resource "aws_cloudwatch_metric_alarm" "freshness" {
   for_each = toset(["i95", "i66"])
 
-  alarm_name          = "toll-v2-pricing-freshness-${each.key}"
+  alarm_name          = "toll-v2-pricing-freshness-${each.key}${local.suffix}"
   alarm_description   = "No successful v2 ${each.key} load for 30 minutes. Follow v2/README.md."
   namespace           = "NovaToll"
   metric_name         = "V2LoadSuccess"
@@ -348,7 +348,7 @@ resource "aws_cloudwatch_metric_alarm" "failure_queues" {
     delivery = aws_sqs_queue.delivery_failure
   }
 
-  alarm_name          = "toll-v2-pricing-loader-${each.key}-failure-queue"
+  alarm_name          = "toll-v2-pricing-loader-${each.key}-failure-queue${local.suffix}"
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"
   dimensions          = { QueueName = each.value.name }
@@ -547,7 +547,7 @@ resource "aws_lambda_function_event_invoke_config" "publisher" {
 }
 
 resource "aws_cloudwatch_event_rule" "committed_i95_loads" {
-  name = "toll-v2-committed-i95-loads"
+  name = "toll-v2-committed-i95-loads${local.suffix}"
   event_pattern = jsonencode({
     source      = ["tollchat.pricing-loader"]
     detail-type = ["I95 Pricing Load Committed"]
@@ -558,7 +558,7 @@ resource "aws_cloudwatch_event_rule" "committed_i95_loads" {
 }
 
 resource "aws_cloudwatch_event_rule" "report_watchdog" {
-  name                = "toll-v2-report-watchdog"
+  name                = "toll-v2-report-watchdog${local.suffix}"
   schedule_expression = "cron(5/10 * * * ? *)"
 }
 
@@ -657,7 +657,7 @@ resource "aws_cloudwatch_log_metric_filter" "report_generation_success" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
-  alarm_name          = "toll-v2-report-generation-freshness"
+  alarm_name          = "toll-v2-report-generation-freshness${local.suffix}"
   alarm_description   = "No complete I-95/I-495 report generation for 30 minutes."
   namespace           = "NovaToll"
   metric_name         = "V2ReportGenerationSuccess"
@@ -672,7 +672,7 @@ resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "publisher_errors" {
-  alarm_name          = "toll-v2-report-publisher-errors"
+  alarm_name          = "toll-v2-report-publisher-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.publisher.function_name }
@@ -691,7 +691,7 @@ resource "aws_cloudwatch_metric_alarm" "publisher_failed_invocations" {
     watchdog     = aws_cloudwatch_event_rule.report_watchdog
   }
 
-  alarm_name          = "toll-v2-report-publisher-${each.key}-failed-invocations"
+  alarm_name          = "toll-v2-report-publisher-${each.key}-failed-invocations${local.suffix}"
   namespace           = "AWS/Events"
   metric_name         = "FailedInvocations"
   dimensions          = { RuleName = each.value.name }
@@ -710,7 +710,7 @@ resource "aws_cloudwatch_metric_alarm" "publisher_failure_queues" {
     delivery = aws_sqs_queue.publisher_delivery_failure
   }
 
-  alarm_name          = "toll-v2-report-publisher-${each.key}-failure-queue"
+  alarm_name          = "toll-v2-report-publisher-${each.key}-failure-queue${local.suffix}"
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"
   dimensions          = { QueueName = each.value.name }
