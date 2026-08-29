@@ -269,6 +269,25 @@ test("proxy rejects cross-origin and malformed upstream data", async () => {
   );
 });
 
+test("proxy accepts only the configured development origin", async () => {
+  const previous = process.env.PUBLIC_ORIGINS;
+  process.env.PUBLIC_ORIGINS = "https://dev.tollchat.ai";
+  try {
+    const fresh = await import(`./handler.mjs?development-origin=${Date.now()}`);
+    const client = { async send() {
+      return { contentType: "text/event-stream", response: chunks('data: {"type":"final","text":"ok"}\n\n') };
+    } };
+    const request = publicEvent({ message: "Price it" });
+    request.headers.origin = "https://dev.tollchat.ai";
+    assert.notEqual((await fresh.route(request, dependencies(client))).statusCode, 403);
+    request.headers.origin = "https://evil.example";
+    assert.equal((await fresh.route(request, dependencies(client))).statusCode, 403);
+  } finally {
+    if (previous === undefined) delete process.env.PUBLIC_ORIGINS;
+    else process.env.PUBLIC_ORIGINS = previous;
+  }
+});
+
 test("config is available without a frontend", async () => {
   const response = await route(
     { httpMethod: "GET", path: "/api/config", requestContext: { domainName: domain }, headers: {} },
