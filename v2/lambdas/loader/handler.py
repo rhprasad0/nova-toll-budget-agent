@@ -149,6 +149,19 @@ def _i95_watermark(rows: list[I95Row] | list[I66Row]) -> str:
     return next(iter(watermarks)).isoformat().replace("+00:00", "Z")
 
 
+def _i95_success_detail(
+    *, watermark: str, s3_key: str, row_count: int
+) -> dict[str, object]:
+    return {
+        "environment": os.environ.get("TOLLCHAT_ENVIRONMENT", "production"),
+        "schema_version": 1,
+        "facility": "i95_i495",
+        "source_watermark": watermark,
+        "source_key": s3_key,
+        "row_count": row_count,
+    }
+
+
 def _publish_i95_success(*, watermark: str, s3_key: str, row_count: int) -> None:
     events = cast(Any, boto3.client("events"))  # pyright: ignore[reportUnknownMemberType]
     response = events.put_events(
@@ -157,16 +170,9 @@ def _publish_i95_success(*, watermark: str, s3_key: str, row_count: int) -> None
                 "Source": "tollchat.pricing-loader",
                 "DetailType": "I95 Pricing Load Committed",
                 "Detail": json.dumps(
-                    {
-                        "environment": os.environ.get(
-                            "TOLLCHAT_ENVIRONMENT", "production"
-                        ),
-                        "schema_version": 1,
-                        "facility": "i95_i495",
-                        "source_watermark": watermark,
-                        "source_key": s3_key,
-                        "row_count": row_count,
-                    },
+                    _i95_success_detail(
+                        watermark=watermark, s3_key=s3_key, row_count=row_count
+                    ),
                     separators=(",", ":"),
                 ),
             }
