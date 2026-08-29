@@ -31,7 +31,7 @@ REPORT_SQL = "SELECT * FROM oracle.get_i95_i495_report_inputs()"
 CA_BUNDLE_PATH = str(Path(__file__).with_name("rds-ca-bundle.pem"))
 PUBLIC_PREFIX = "tolls/i95-i495"
 MANIFEST_KEY = f"{PUBLIC_PREFIX}/manifest.json"
-PUBLIC_BASE_URL = "https://tollchat.ai"
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://tollchat.ai").rstrip("/")
 PUBLICATION_FORMAT_VERSION = "1.0.0"
 PUBLIC_CACHE_CONTROL = "public, max-age=300"
 MANIFEST_CACHE_CONTROL = "no-cache"
@@ -199,6 +199,7 @@ def _build_slug_map(
 
 
 class _LoadDetail(_Model):
+    environment: Literal["development", "production"]
     schema_version: Literal[1]
     facility: Literal["i95_i495"]
     source_watermark: str
@@ -984,6 +985,8 @@ def _expected_watermark(event: dict[str, Any]) -> datetime | None:
     ):
         raise ValueError("unsupported publisher event")
     detail = _LoadDetail.model_validate(event["detail"])
+    if detail.environment != os.environ.get("TOLLCHAT_ENVIRONMENT", "production"):
+        raise ValueError("publisher event environment does not match runtime")
     return _aware_timestamp(detail.source_watermark, label="source watermark")
 
 
@@ -1030,10 +1033,20 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
         result.update(publication)
         if publication["status"] == "superseded":
             return result
-    logger.info(
-        "V2_REPORT_GENERATION_OK %s %s %s",
-        FACILITY,
-        generation_id,
-        len(generation.routes),
-    )
+    environment = os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
+    if environment == "production":
+        logger.info(
+            "V2_REPORT_GENERATION_OK %s %s %s",
+            FACILITY,
+            generation_id,
+            len(generation.routes),
+        )
+    else:
+        logger.info(
+            "V2_REPORT_GENERATION_OK %s %s %s %s",
+            FACILITY,
+            generation_id,
+            len(generation.routes),
+            environment,
+        )
     return result

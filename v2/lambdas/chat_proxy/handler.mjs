@@ -19,7 +19,8 @@ const COOKIE = "__Host-tollchat-session";
 const USAGE_OPTOUT_COOKIE = "tollchat_usage_optout";
 const USAGE_AGGREGATE_KEY = "usage#all";
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
-const PUBLIC_ORIGINS = new Set(["https://tollchat.ai", "https://www.tollchat.ai"]);
+const PUBLIC_ORIGINS = new Set((process.env.PUBLIC_ORIGINS ?? "https://tollchat.ai,https://www.tollchat.ai")
+  .split(",").filter(Boolean));
 const DRILL_MODE = "runtime_exception_v2";
 const SAFE_ERROR = {
   type: "error",

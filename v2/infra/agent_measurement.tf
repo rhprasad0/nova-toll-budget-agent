@@ -1,7 +1,8 @@
 locals {
-  agent_measurement_database = "tollchat_agent_reports"
-  agent_measurement_bucket   = "aws-waf-logs-tollchat-agent-reports-${data.aws_caller_identity.current.account_id}"
-  agent_measurement_label    = "awswaf:${data.aws_caller_identity.current.account_id}:webacl:tollchat-v2-public-chat:agent-route-report"
+  agent_measurement_database = "tollchat_agent_reports${local.is_production ? "" : "_development"}"
+  agent_measurement_bucket   = "aws-waf-logs-tollchat-agent-reports-${data.aws_caller_identity.current.account_id}${local.suffix}"
+  agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"
+  agent_measurement_label    = "awswaf:${data.aws_caller_identity.current.account_id}:webacl:tollchat-v2-public-chat${local.suffix}:agent-route-report"
 }
 
 data "archive_file" "agent_usage_rollup" {
@@ -63,7 +64,7 @@ resource "aws_kms_key" "agent_measurement" {
 }
 
 resource "aws_kms_alias" "agent_measurement" {
-  name          = "alias/tollchat-v2-agent-measurement"
+  name          = "alias/tollchat-v2-agent-measurement${local.suffix}"
   target_key_id = aws_kms_key.agent_measurement.key_id
 }
 
@@ -231,7 +232,7 @@ resource "aws_glue_catalog_table" "waf_logs" {
     "projection.log_hour.range"  = "0,23"
     "projection.log_hour.digits" = "2"
     # CloudFront-scoped WAF logs use this literal scope token, not the region name.
-    "storage.location.template" = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/tollchat-v2-public-chat/$${log_date}/$${log_hour}/"
+    "storage.location.template" = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/${local.agent_measurement_acl}/$${log_date}/$${log_hour}/"
   }
 
   dynamic "partition_keys" {
@@ -243,7 +244,7 @@ resource "aws_glue_catalog_table" "waf_logs" {
   }
 
   storage_descriptor {
-    location      = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/tollchat-v2-public-chat/"
+    location      = "s3://${aws_s3_bucket.agent_measurement.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/WAFLogs/cloudfront/${local.agent_measurement_acl}/"
     input_format  = "org.apache.hadoop.mapred.TextInputFormat"
     output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
 
@@ -395,7 +396,7 @@ resource "aws_glue_catalog_table" "agent_report_rollup_completions" {
 }
 
 resource "aws_athena_workgroup" "agent_reports" {
-  name = "tollchat-agent-reports"
+  name = "tollchat-agent-reports${local.suffix}"
 
   configuration {
     enforce_workgroup_configuration    = true
@@ -414,7 +415,7 @@ resource "aws_athena_workgroup" "agent_reports" {
 }
 
 resource "aws_athena_named_query" "top_routes" {
-  name        = "TollChat agent reports - top routes by day"
+  name        = "TollChat agent reports - top routes by day${local.suffix}"
   database    = aws_glue_catalog_database.agent_reports.name
   workgroup   = aws_athena_workgroup.agent_reports.name
   description = "Privacy-safe route and representation totals from completed rollups."
@@ -428,7 +429,7 @@ resource "aws_athena_named_query" "top_routes" {
 }
 
 resource "aws_athena_named_query" "recent_routes" {
-  name        = "TollChat agent reports - recent request times"
+  name        = "TollChat agent reports - recent request times${local.suffix}"
   database    = aws_glue_catalog_database.agent_reports.name
   workgroup   = aws_athena_workgroup.agent_reports.name
   description = "Seven-day route timing drill-down without IP, user agent, referrer, cookie, or query string."
@@ -447,7 +448,7 @@ resource "aws_athena_named_query" "recent_routes" {
 }
 
 resource "aws_iam_role" "agent_usage_rollup" {
-  name               = "tollchat-v2-agent-usage-rollup"
+  name               = "tollchat-v2-agent-usage-rollup${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -523,18 +524,18 @@ data "aws_iam_policy_document" "agent_usage_rollup" {
 }
 
 resource "aws_iam_role_policy" "agent_usage_rollup" {
-  name   = "tollchat-v2-agent-usage-rollup"
+  name   = "tollchat-v2-agent-usage-rollup${local.suffix}"
   role   = aws_iam_role.agent_usage_rollup.id
   policy = data.aws_iam_policy_document.agent_usage_rollup.json
 }
 
 resource "aws_cloudwatch_log_group" "agent_usage_rollup" {
-  name              = "/aws/lambda/tollchat-v2-agent-usage-rollup"
-  retention_in_days = 30
+  name              = "/aws/lambda/tollchat-v2-agent-usage-rollup${local.suffix}"
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "agent_usage_rollup" {
-  function_name = "tollchat-v2-agent-usage-rollup"
+  function_name = "tollchat-v2-agent-usage-rollup${local.suffix}"
   role          = aws_iam_role.agent_usage_rollup.arn
   runtime       = "python3.13"
   handler       = "handler.handler"
@@ -545,12 +546,14 @@ resource "aws_lambda_function" "agent_usage_rollup" {
   source_code_hash = data.archive_file.agent_usage_rollup.output_base64sha256
 
   environment {
-    variables = {
+    variables = merge({
       ATHENA_DATABASE       = aws_glue_catalog_database.agent_reports.name
       ATHENA_WORKGROUP      = aws_athena_workgroup.agent_reports.name
-      WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat"
-      WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report"
-    }
+      WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"
+      WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"
+      }, local.is_production ? {} : {
+      TOLLCHAT_ENVIRONMENT = var.environment
+    })
   }
 
   depends_on = [
@@ -562,7 +565,7 @@ resource "aws_lambda_function" "agent_usage_rollup" {
 }
 
 resource "aws_cloudwatch_event_rule" "agent_usage_rollup" {
-  name                = "tollchat-v2-agent-usage-rollup"
+  name                = "tollchat-v2-agent-usage-rollup${local.suffix}"
   schedule_expression = "cron(15 3 * * ? *)"
 }
 
@@ -585,7 +588,7 @@ resource "aws_cloudwatch_event_target" "agent_usage_rollup" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_errors" {
-  alarm_name          = "tollchat-v2-agent-usage-rollup-errors"
+  alarm_name          = "tollchat-v2-agent-usage-rollup-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.agent_usage_rollup.function_name }
@@ -595,26 +598,28 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_rollup_missing" {
-  alarm_name          = "tollchat-v2-agent-usage-rollup-missing"
+  alarm_name          = "tollchat-v2-agent-usage-rollup-missing${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "RollupCompleted"
+  dimensions          = local.is_production ? null : { Environment = var.environment }
   period              = 86400
   evaluation_periods  = 1
   statistic           = "Sum"
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
-  alarm_name          = "tollchat-v2-agent-usage-log-coverage"
+  alarm_name          = "tollchat-v2-agent-usage-log-coverage${local.suffix}"
   namespace           = "TollChat/AgentReports"
   metric_name         = "LogCoveragePercent"
+  dimensions          = local.is_production ? null : { Environment = var.environment }
   period              = 86400
   evaluation_periods  = 2
   datapoints_to_alarm = 2
@@ -622,7 +627,7 @@ resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage" {
   threshold           = 95
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 output "agent_report_web_acl_arn" {

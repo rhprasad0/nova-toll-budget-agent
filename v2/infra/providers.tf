@@ -3,8 +3,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      project = "nova-toll-budget-agent"
-      version = "v2"
+      project     = "nova-toll-budget-agent"
+      version     = "v2"
+      environment = var.environment
     }
   }
 }

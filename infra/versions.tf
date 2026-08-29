@@ -21,10 +21,5 @@ terraform {
   #   3. Re-run `terraform init` (backend config uncommented/active) to
   #      migrate local state into the now-existing bucket.
   # No explicit profile: see providers.tf.
-  backend "s3" {
-    bucket       = "nova-toll-tfstate-920534282028"
-    key          = "nova-toll/terraform.tfstate"
-    region       = "us-east-1"
-    use_lockfile = true
-  }
+  backend "s3" {}
 }

@@ -16,7 +16,7 @@ data "archive_file" "usage_publisher" {
 }
 
 resource "aws_s3_bucket" "site" {
-  bucket = "tollchat-site-920534282028"
+  bucket = "tollchat-site-${data.aws_caller_identity.current.account_id}${local.suffix}"
 }
 
 resource "aws_s3_bucket_public_access_block" "site" {
@@ -62,7 +62,7 @@ resource "aws_kms_key" "site" {
 }
 
 resource "aws_kms_alias" "site" {
-  name          = "alias/tollchat-v2-site"
+  name          = "alias/tollchat-v2-site${local.suffix}"
   target_key_id = aws_kms_key.site.key_id
 }
 
@@ -149,8 +149,9 @@ resource "aws_s3_object" "terms" {
 resource "aws_s3_object" "robots" {
   bucket        = aws_s3_bucket.site.id
   key           = "robots.txt"
-  source        = "${path.module}/../agent/robots.txt"
-  source_hash   = filebase64sha256("${path.module}/../agent/robots.txt")
+  source        = local.is_production ? "${path.module}/../agent/robots.txt" : null
+  source_hash   = local.is_production ? filebase64sha256("${path.module}/../agent/robots.txt") : null
+  content       = local.is_production ? null : "User-agent: *\nDisallow: /\n"
   content_type  = "text/plain; charset=utf-8"
   cache_control = "no-cache"
 
@@ -177,7 +178,7 @@ resource "aws_s3_object" "site_assets" {
 }
 
 resource "aws_iam_role" "usage_publisher" {
-  name               = "tollchat-v2-usage-publisher"
+  name               = "tollchat-v2-usage-publisher${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -210,18 +211,18 @@ data "aws_iam_policy_document" "usage_publisher" {
 }
 
 resource "aws_iam_role_policy" "usage_publisher" {
-  name   = "tollchat-v2-usage-publisher"
+  name   = "tollchat-v2-usage-publisher${local.suffix}"
   role   = aws_iam_role.usage_publisher.id
   policy = data.aws_iam_policy_document.usage_publisher.json
 }
 
 resource "aws_cloudwatch_log_group" "usage_publisher" {
-  name              = "/aws/lambda/tollchat-v2-usage-publisher"
-  retention_in_days = 30
+  name              = "/aws/lambda/tollchat-v2-usage-publisher${local.suffix}"
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "usage_publisher" {
-  function_name = "tollchat-v2-usage-publisher"
+  function_name = "tollchat-v2-usage-publisher${local.suffix}"
   role          = aws_iam_role.usage_publisher.arn
   runtime       = "python3.13"
   handler       = "handler.handler"
@@ -250,7 +251,7 @@ resource "aws_lambda_function" "usage_publisher" {
 }
 
 resource "aws_cloudwatch_event_rule" "usage_publisher" {
-  name                = "tollchat-v2-usage-publisher"
+  name                = "tollchat-v2-usage-publisher${local.suffix}"
   schedule_expression = "cron(15 5 * * ? *)"
 }
 
@@ -275,7 +276,7 @@ resource "aws_cloudwatch_event_target" "usage_publisher" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors" {
-  alarm_name          = "tollchat-v2-usage-publisher-errors"
+  alarm_name          = "tollchat-v2-usage-publisher-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.usage_publisher.function_name }
@@ -285,11 +286,11 @@ resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
-  alarm_name          = "tollchat-v2-usage-publisher-failed-invocations"
+  alarm_name          = "tollchat-v2-usage-publisher-failed-invocations${local.suffix}"
   namespace           = "AWS/Events"
   metric_name         = "FailedInvocations"
   dimensions          = { RuleName = aws_cloudwatch_event_rule.usage_publisher.name }
@@ -299,11 +300,11 @@ resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudfront_origin_access_control" "site" {
-  name                              = "tollchat-v2-site"
+  name                              = "tollchat-v2-site${local.suffix}"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -317,14 +318,14 @@ resource "aws_lambda_function_url" "public_chat" {
 }
 
 resource "aws_cloudfront_origin_access_control" "public_chat" {
-  name                              = "tollchat-v2-public-chat"
+  name                              = "tollchat-v2-public-chat${local.suffix}"
   origin_access_control_origin_type = "lambda"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
 resource "aws_cloudfront_function" "public_chat_routes" {
-  name    = "tollchat-v2-public-chat-routes"
+  name    = "tollchat-v2-public-chat-routes${local.suffix}"
   runtime = "cloudfront-js-2.0"
   comment = "Allow only TollChat public API operations"
   publish = true
@@ -332,7 +333,7 @@ resource "aws_cloudfront_function" "public_chat_routes" {
 }
 
 resource "aws_cloudfront_function" "public_report_routes" {
-  name    = "tollchat-v2-public-report-routes"
+  name    = "tollchat-v2-public-report-routes${local.suffix}"
   runtime = "cloudfront-js-2.0"
   comment = "Resolve canonical TollChat report directories"
   publish = true
@@ -340,7 +341,7 @@ resource "aws_cloudfront_function" "public_report_routes" {
 }
 
 resource "aws_wafv2_web_acl" "public_chat" {
-  name  = "tollchat-v2-public-chat"
+  name  = "tollchat-v2-public-chat${local.suffix}"
   scope = "CLOUDFRONT"
 
   default_action {
@@ -521,7 +522,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "tollchat-v2-agent-route-report"
+      metric_name                = "tollchat-v2-agent-route-report${local.suffix}"
       sampled_requests_enabled   = false
     }
   }
@@ -610,7 +611,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
       rate_based_statement {
         aggregate_key_type    = "IP"
         evaluation_window_sec = 300
-        limit                 = 20
+        limit                 = local.rate_limit
 
         scope_down_statement {
           and_statement {
@@ -654,7 +655,7 @@ resource "aws_wafv2_web_acl" "public_chat" {
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "tollchat-v2-public-chat"
+    metric_name                = "tollchat-v2-public-chat${local.suffix}"
     sampled_requests_enabled   = false
   }
 
@@ -671,11 +672,24 @@ data "aws_cloudfront_origin_request_policy" "all_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+resource "aws_cloudfront_response_headers_policy" "development_noindex" {
+  count = local.is_production ? 0 : 1
+  name  = "tollchat-v2-development-noindex"
+
+  custom_headers_config {
+    items {
+      header   = "X-Robots-Tag"
+      override = true
+      value    = "noindex"
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
-  aliases             = ["tollchat.ai", "www.tollchat.ai"]
+  aliases             = local.domains
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
@@ -701,12 +715,13 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "site"
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
-    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "site"
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    response_headers_policy_id = local.is_production ? null : aws_cloudfront_response_headers_policy.development_noindex[0].id
 
     function_association {
       event_type   = "viewer-request"
@@ -783,8 +798,8 @@ data "cloudflare_zone" "tollchat" {
 }
 
 resource "aws_acm_certificate" "site" {
-  domain_name               = "tollchat.ai"
-  subject_alternative_names = ["www.tollchat.ai"]
+  domain_name               = local.domains[0]
+  subject_alternative_names = slice(local.domains, 1, length(local.domains))
   validation_method         = "DNS"
 
   lifecycle { create_before_destroy = true }
@@ -820,7 +835,7 @@ resource "aws_acm_certificate_validation" "site" {
 
 resource "cloudflare_dns_record" "apex" {
   zone_id = data.cloudflare_zone.tollchat.zone_id
-  name    = "tollchat.ai"
+  name    = local.domains[0]
   type    = "CNAME"
   content = aws_cloudfront_distribution.site.domain_name
   ttl     = 1
@@ -828,6 +843,7 @@ resource "cloudflare_dns_record" "apex" {
 }
 
 resource "cloudflare_dns_record" "www" {
+  count   = local.is_production ? 1 : 0
   zone_id = data.cloudflare_zone.tollchat.zone_id
   name    = "www.tollchat.ai"
   type    = "CNAME"
@@ -840,6 +856,6 @@ output "public_site" {
   description = "Public TollChat v2 deployment."
   value = {
     distribution_id = aws_cloudfront_distribution.site.id
-    url             = "https://tollchat.ai"
+    url             = "https://${local.domains[0]}"
   }
 }

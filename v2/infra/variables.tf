@@ -21,3 +21,13 @@ variable "chat_proxy_package_path" {
   type        = string
   default     = ""
 }
+variable "environment" {
+  description = "Application environment. Production retains the deployed v2 identities."
+  type        = string
+  default     = "production"
+
+  validation {
+    condition     = contains(["development", "production"], var.environment)
+    error_message = "environment must be development or production."
+  }
+}

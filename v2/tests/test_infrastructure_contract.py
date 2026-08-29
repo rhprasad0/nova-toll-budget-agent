@@ -58,11 +58,14 @@ def test_foundation_has_no_site_and_terraform_ci_only_validates():
 def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
 
-    assert (
+    assert 'backend "s3" {}' in (FOUNDATION_ROOT / "versions.tf").read_text()
+    assert 'backend "s3" {}' in VERSIONS_TF
+    assert (FOUNDATION_ROOT / "backend.production.hcl").read_text().find(
         'key          = "nova-toll/terraform.tfstate"'
-        in (FOUNDATION_ROOT / "versions.tf").read_text()
-    )
-    assert 'key          = "nova-toll/v2/terraform.tfstate"' in VERSIONS_TF
+    ) >= 0
+    assert (V2_ROOT / "infra" / "backend.production.hcl").read_text().find(
+        'key          = "nova-toll/v2/terraform.tfstate"'
+    ) >= 0
     assert "postgis/postgis" in CI_WORKFLOW
     assert "python3 v2/scripts/check_schema_versions.py" in CI_WORKFLOW
     assert "v2/scripts/run_db_tests.sh" in CI_WORKFLOW
@@ -105,7 +108,7 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         "update-agent-runtime-endpoint",
         "project = nova-toll-budget-agent",
         "version = v2",
-        "Environment tags are deferred to #300",
+        "environment = production",
         "foundation plan to be zero-change",
         "unexplained action or any replacement",
     ):
@@ -164,28 +167,86 @@ def test_shared_dynamodb_endpoint_admits_v2_session_table():
         'resource "aws_vpc_endpoint" "dynamodb"', maxsplit=1
     )[1].split('resource "aws_s3_bucket" "agentcore_artifacts"', maxsplit=1)[0]
     assert "tollchat-v2-anonymous-sessions" in endpoint
+    assert "tollchat-v2-anonymous-sessions-dev" in endpoint
     assert "table/tollchat-anonymous-sessions" not in endpoint
     assert "dynamodb:*" not in endpoint
     assert '"dynamodb:TransactWriteItems"' in endpoint
 
 
 def test_v2_has_an_independent_state_and_identity():
-    assert 'key          = "nova-toll/v2/terraform.tfstate"' in VERSIONS_TF
-    assert 'function_name = "toll-v2-pricing-loader"' in MAIN_TF
-    assert "/pricing_loader_writer" in MAIN_TF
-    assert 'DB_USER    = "pricing_loader_writer"' in MAIN_TF
+    assert 'environment"' in (V2_ROOT / "infra" / "variables.tf").read_text()
+    assert (
+        "nova-toll/v2/development/terraform.tfstate"
+        in (V2_ROOT / "infra" / "backend.development.hcl").read_text()
+    )
+    assert 'function_name = "toll-v2-pricing-loader${local.suffix}"' in MAIN_TF
+    assert "${local.database_roles.loader}" in MAIN_TF
+    assert re.search(r"DB_USER\s+= local.database_roles.loader", MAIN_TF)
+    assert 'name = "toll-v2-pricing-raw-objects${local.suffix}"' in MAIN_TF
+    assert (
+        'alarm_name          = "toll-v2-pricing-loader-errors${local.suffix}"'
+        in MAIN_TF
+    )
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    assert (
+        'source        = local.is_production ? "${path.module}/../agent/robots.txt" : null'
+        in site
+    )
+    assert 'name    = "tollchat-v2-public-chat-routes${local.suffix}"' in site
+    measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
+    assert 'name = "tollchat-agent-reports${local.suffix}"' in measurement
+    assert (
+        "webacl:tollchat-v2-public-chat${local.suffix}:agent-route-report"
+        in measurement
+    )
+    assert (
+        'WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"'
+        in measurement
+    )
+    assert (
+        'WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"'
+        in measurement
+    )
+    assert (
+        'agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"'
+        in measurement
+    )
+    assert "TOLLCHAT_ENVIRONMENT = var.environment" in measurement
+    assert (
+        "local.is_production ? null : { Environment = var.environment }" in measurement
+    )
+    assert "WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
+    assert (
+        'resource "aws_cloudfront_response_headers_policy" "development_noindex"'
+        in site
+    )
+    assert "count = local.is_production ? 0 : 1" in site
+    assert 'header   = "X-Robots-Tag"' in site
+    assert 'value    = "noindex"' in site
 
 
 def test_v2_declares_a_private_agentcore_application_without_telemetry():
     agentcore_path = V2_ROOT / "infra" / "agentcore.tf"
     assert agentcore_path.exists()
     agentcore = agentcore_path.read_text()
-    assert 'agent_runtime_name = "nova_toll_v2"' in agentcore
+    assert (
+        'agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}"'
+        in agentcore
+    )
     assert 'network_mode = "VPC"' in agentcore
-    assert "dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent" in agentcore
-    assert "dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller" in agentcore
-    assert 'function_name                  = "tollchat-v2-chat-proxy"' in agentcore
-    assert 'name         = "tollchat-v2-anonymous-sessions"' in agentcore
+    assert (
+        "dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.agent}"
+        in agentcore
+    )
+    assert (
+        "dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}"
+        in agentcore
+    )
+    assert (
+        'function_name                  = "tollchat-v2-chat-proxy${local.suffix}"'
+        in agentcore
+    )
+    assert 'name         = "tollchat-v2-anonymous-sessions${local.suffix}"' in agentcore
     assert 'types            = ["PRIVATE"]' in agentcore
     assert 'response_transfer_mode  = "STREAM"' in agentcore
     assert "DenyOutsidePrivateEndpoint" in agentcore
@@ -200,12 +261,26 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "xray" not in agentcore.lower()
     assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
     assert "github_pat_[A-Za-z0-9_-]{20,}" in agentcore
+    guardrail_version = agentcore.split(
+        'resource "aws_bedrock_guardrail_version" "tollchat"', maxsplit=1
+    )[1].split('resource "aws_bedrockagentcore_agent_runtime"', maxsplit=1)[0]
+    assert (
+        "replace_triggered_by = [aws_bedrock_guardrail.tollchat]"
+        not in guardrail_version
+    )
+    for attribute in (
+        "blocked_input_messaging",
+        "blocked_outputs_messaging",
+        "content_policy_config",
+        "sensitive_information_policy_config",
+    ):
+        assert f"aws_bedrock_guardrail.tollchat.{attribute}" in guardrail_version
 
     runtime_logs = agentcore.split(
         'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1
     )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
     assert 'toset(["DEFAULT", "preview"])' in runtime_logs
-    assert "retention_in_days = 1" in runtime_logs
+    assert "retention_in_days = local.is_production ? 1 : 1" in runtime_logs
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
@@ -226,12 +301,16 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
     assert "publish                        = true" in proxy
     assert "reserved_concurrent_executions = 5" in proxy
+    assert agentcore.count('metric_name         = "V2ProxyFailure${local.suffix}"') == 1
+    assert agentcore.count('name      = "V2ProxyFailure${local.suffix}"') == 1
     assert 'resource "aws_lambda_alias" "tollchat_live"' in agentcore
     assert 'name             = "live"' in agentcore
     assert (
         'resource "aws_lambda_provisioned_concurrency_config" "tollchat"' in agentcore
     )
-    assert "provisioned_concurrent_executions = 1" in agentcore
+    assert (
+        "count                             = local.is_production ? 1 : 0" in agentcore
+    )
     assert (
         "qualifier                         = aws_lambda_alias.tollchat_live.name"
         in agentcore
@@ -245,9 +324,9 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'origin_access_control_origin_type = "s3"' in site
     assert 'path_pattern             = "/api/*"' in site
     assert 'code    = file("${path.module}/../agent/public-api-gate.js")' in site
-    assert 'aliases             = ["tollchat.ai", "www.tollchat.ai"]' in site
+    assert "aliases             = local.domains" in site
     assert 'resource "aws_wafv2_web_acl" "public_chat"' in site
-    assert "limit                 = 20" in site
+    assert "limit                 = local.rate_limit" in site
     assert "size                = 32768" in site
     assert 'resource "cloudflare_dns_record" "apex"' in site
     assert 'resource "cloudflare_dns_record" "www"' in site
@@ -274,7 +353,10 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
         1
     ].split('resource "aws_s3_object"', maxsplit=1)[0]
     assert 'key           = "robots.txt"' in robots_object
-    assert 'source        = "${path.module}/../agent/robots.txt"' in robots_object
+    assert (
+        'source        = local.is_production ? "${path.module}/../agent/robots.txt" : null'
+        in robots_object
+    )
     assert 'content_type  = "text/plain; charset=utf-8"' in robots_object
     assert 'cache_control = "no-cache"' in robots_object
     for user_agent in (
@@ -357,7 +439,7 @@ def test_agent_measurement_is_count_only_private_and_bounded():
     assert measurement.count("days = 7") >= 2
     assert "enforce_workgroup_configuration    = true" in measurement
     assert "bytes_scanned_cutoff_per_query     = 1073741824" in measurement
-    assert "/WAFLogs/cloudfront/tollchat-v2-public-chat/" in measurement
+    assert "/WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert "/WAFLogs/us-east-1/tollchat-v2-public-chat/" not in measurement
     assert '"glue:GetPartition"' in measurement
     assert 'schedule_expression = "cron(15 3 * * ? *)"' in measurement
@@ -488,7 +570,7 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
     assert 'resource "aws_lambda_function" "usage_publisher"' in site
-    assert 'function_name = "tollchat-v2-usage-publisher"' in site
+    assert 'function_name = "tollchat-v2-usage-publisher${local.suffix}"' in site
     assert 'schedule_expression = "cron(15 5 * * ? *)"' in site
     assert "maximum_event_age_in_seconds = 86400" in site
     assert "maximum_retry_attempts       = 185" in site
@@ -583,12 +665,12 @@ def test_loader_network_and_data_access_are_scoped():
 def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()
     assert 'variable "publisher_package_path"' in variables
-    assert 'function_name = "toll-v2-report-publisher"' in MAIN_TF
+    assert 'function_name = "toll-v2-report-publisher${local.suffix}"' in MAIN_TF
     assert 'schedule_expression = "cron(5/10 * * * ? *)"' in MAIN_TF
     assert '"tollchat.pricing-loader"' in MAIN_TF
     assert '"I95 Pricing Load Committed"' in MAIN_TF
-    assert "/report_publisher" in MAIN_TF
-    assert re.search(r'DB_USER\s+= "report_publisher"', MAIN_TF)
+    assert "${local.database_roles.publisher}" in MAIN_TF
+    assert re.search(r"DB_USER\s+= local.database_roles.publisher", MAIN_TF)
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_rds"' in MAIN_TF
     policy = MAIN_TF.split('data "aws_iam_policy_document" "publisher"', maxsplit=1)[
         1
@@ -617,9 +699,17 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert "aws_iam_role_policy.publisher" in publisher_lambda
     assert "aws_s3_object.robots" in publisher_lambda
     assert (
-        'pattern        = "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
+        'local.is_production ? "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
         in MAIN_TF
     )
+    assert (
+        '"[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count, environment]"'
+        in MAIN_TF
+    )
+    assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
+    assert "TOLLCHAT_ENVIRONMENT = var.environment" in MAIN_TF
+    assert "}, local.is_production ? {} : {" in publisher_lambda
+    assert 'PUBLIC_BASE_URL      = "https://${local.domains[0]}"' in publisher_lambda
     assert "evaluation_periods  = 3" in MAIN_TF
     assert "period              = 600" in MAIN_TF
     assert 'treat_missing_data  = "breaching"' in MAIN_TF
@@ -632,10 +722,10 @@ def test_timed_ci_uses_the_internal_pricing_caller():
         1
     ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
 
-    assert 'name               = "nova-toll-v2-timed-checks"' in MAIN_TF
+    assert 'name               = "nova-toll-v2-timed-checks${local.suffix}"' in MAIN_TF
     assert 'actions   = ["rds:DescribeDBInstances"]' in policy
     assert 'actions   = ["rds-db:connect"]' in policy
-    assert "/pricing_caller" in policy
+    assert "/${local.database_roles.pricing_caller}" in policy
     assert "/tollchat_agent" not in policy
     assert 'actions   = ["ssm:GetParameter"]' in policy
     assert (

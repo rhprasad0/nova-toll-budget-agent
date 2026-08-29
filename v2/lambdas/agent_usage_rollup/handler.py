@@ -186,12 +186,17 @@ def run_rollup(
         waf_total += value
     waf = int(waf_total)
     coverage = _coverage_percent(logged, waf)
+    environment = os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
+    metric_data: list[dict[str, object]] = [
+        {"MetricName": "LogCoveragePercent", "Value": coverage, "Unit": "Percent"},
+        {"MetricName": "RollupCompleted", "Value": 1, "Unit": "Count"},
+    ]
+    if environment != "production":
+        for metric in metric_data:
+            metric["Dimensions"] = [{"Name": "Environment", "Value": environment}]
     cloudwatch.put_metric_data(
         Namespace="TollChat/AgentReports",
-        MetricData=[
-            {"MetricName": "LogCoveragePercent", "Value": coverage, "Unit": "Percent"},
-            {"MetricName": "RollupCompleted", "Value": 1, "Unit": "Count"},
-        ],
+        MetricData=metric_data,
     )
     return {
         "completed_dates": completed,

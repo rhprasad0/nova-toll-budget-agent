@@ -1,4 +1,5 @@
 import io
+import json
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -238,6 +239,8 @@ def test_i95_success_event_is_emitted_after_commit(monkeypatch):
     )
 
     assert calls[:3] == ["write", "commit", "close"]
+    detail = json.loads(calls[3][1]["Entries"][0]["Detail"])
+    assert detail["environment"] == "production"
     event = calls[3][1]["Entries"][0]
     assert event["Source"] == "tollchat.pricing-loader"
     assert event["DetailType"] == "I95 Pricing Load Committed"

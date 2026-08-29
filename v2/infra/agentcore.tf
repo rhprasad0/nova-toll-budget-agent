@@ -58,13 +58,13 @@ locals {
 }
 
 resource "aws_security_group" "tollchat_runtime" {
-  name        = "nova-toll-v2-agentcore-runtime"
+  name        = "nova-toll-v2-agentcore-runtime${local.suffix}"
   description = "TollChat v2 AgentCore runtime egress"
   vpc_id      = data.aws_vpc.default.id
 }
 
 resource "aws_security_group" "tollchat_proxy" {
-  name        = "nova-toll-v2-chat-proxy"
+  name        = "nova-toll-v2-chat-proxy${local.suffix}"
   description = "TollChat v2 proxy Lambda ENIs"
   vpc_id      = data.aws_vpc.default.id
 }
@@ -121,7 +121,7 @@ resource "aws_vpc_security_group_egress_rule" "proxy_to_dynamodb" {
 }
 
 resource "aws_dynamodb_table" "tollchat_sessions" {
-  name         = "tollchat-v2-anonymous-sessions"
+  name         = "tollchat-v2-anonymous-sessions${local.suffix}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "credential_hash"
 
@@ -142,14 +142,14 @@ resource "aws_dynamodb_table" "tollchat_sessions" {
 
 resource "aws_s3_object" "agentcore" {
   bucket      = data.aws_s3_bucket.agentcore_artifacts.id
-  key         = "runtime/v2/agentcore.zip"
+  key         = "runtime/v2/agentcore${local.is_production ? "" : "-dev"}.zip"
   source      = local.agentcore_zip_path
   source_hash = filebase64sha256(local.agentcore_zip_path)
 }
 
 resource "aws_s3_object" "tollchat_proxy" {
   bucket      = data.aws_s3_bucket.agentcore_artifacts.id
-  key         = "lambda/v2/chat-proxy.zip"
+  key         = "lambda/v2/chat-proxy${local.is_production ? "" : "-dev"}.zip"
   source      = local.proxy_zip_path
   source_hash = local.proxy_zip_hash
 }
@@ -175,7 +175,7 @@ data "aws_iam_policy_document" "agentcore_assume" {
 }
 
 resource "aws_iam_role" "tollchat_runtime" {
-  name               = "nova-toll-v2-agentcore-runtime"
+  name               = "nova-toll-v2-agentcore-runtime${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.agentcore_assume.json
 }
 
@@ -194,8 +194,8 @@ data "aws_iam_policy_document" "tollchat_runtime" {
     sid     = "ConnectRdsIam"
     actions = ["rds-db:connect"]
     resources = [
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/pricing_caller",
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/tollchat_agent",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.agent}",
     ]
   }
   statement {
@@ -214,13 +214,13 @@ data "aws_iam_policy_document" "tollchat_runtime" {
 }
 
 resource "aws_iam_role_policy" "tollchat_runtime" {
-  name   = "nova-toll-v2-agentcore-runtime"
+  name   = "nova-toll-v2-agentcore-runtime${local.suffix}"
   role   = aws_iam_role.tollchat_runtime.id
   policy = data.aws_iam_policy_document.tollchat_runtime.json
 }
 
 resource "aws_bedrock_guardrail" "tollchat" {
-  name                      = "nova-toll-v2-agent"
+  name                      = "nova-toll-v2-agent${local.suffix}"
   description               = "Input and output safety controls for TollChat"
   blocked_input_messaging   = "I can only help with Northern Virginia toll road estimates."
   blocked_outputs_messaging = "I can only help with Northern Virginia toll road estimates."
@@ -312,13 +312,18 @@ resource "aws_bedrock_guardrail_version" "tollchat" {
   skip_destroy  = true
 
   lifecycle {
-    replace_triggered_by = [aws_bedrock_guardrail.tollchat]
+    replace_triggered_by = [
+      aws_bedrock_guardrail.tollchat.blocked_input_messaging,
+      aws_bedrock_guardrail.tollchat.blocked_outputs_messaging,
+      aws_bedrock_guardrail.tollchat.content_policy_config,
+      aws_bedrock_guardrail.tollchat.sensitive_information_policy_config,
+    ]
   }
 }
 
 
 resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
-  agent_runtime_name = "nova_toll_v2"
+  agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}"
   description        = "TollChat v2 pricing agent"
   role_arn           = aws_iam_role.tollchat_runtime.arn
 
@@ -352,8 +357,8 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
   environment_variables = {
     DB_HOST                    = data.aws_db_instance.main.address
     DB_PORT                    = tostring(data.aws_db_instance.main.port)
-    DB_NAME                    = data.aws_db_instance.main.db_name
-    DB_USER                    = "tollchat_agent"
+    DB_NAME                    = local.database_name
+    DB_USER                    = local.database_roles.agent
     DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
     TOLLCHAT_GUARDRAIL_ID      = aws_bedrock_guardrail.tollchat.guardrail_id
     TOLLCHAT_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.tollchat.version
@@ -371,7 +376,7 @@ resource "aws_cloudwatch_log_group" "agentcore_runtime" {
   for_each = toset(["DEFAULT", "preview"])
 
   name              = "/aws/bedrock-agentcore/runtimes/${aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_id}-${each.value}"
-  retention_in_days = 1
+  retention_in_days = local.is_production ? 1 : 1
 }
 
 resource "aws_bedrockagentcore_agent_runtime_endpoint" "tollchat" {
@@ -389,7 +394,7 @@ resource "aws_bedrockagentcore_resource_policy" "tollchat" {
 }
 
 resource "aws_iam_role" "tollchat_proxy" {
-  name               = "nova-toll-v2-chat-proxy"
+  name               = "nova-toll-v2-chat-proxy${local.suffix}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -420,18 +425,18 @@ data "aws_iam_policy_document" "tollchat_proxy" {
 }
 
 resource "aws_iam_role_policy" "tollchat_proxy" {
-  name   = "nova-toll-v2-chat-proxy"
+  name   = "nova-toll-v2-chat-proxy${local.suffix}"
   role   = aws_iam_role.tollchat_proxy.id
   policy = data.aws_iam_policy_document.tollchat_proxy.json
 }
 
 resource "aws_cloudwatch_log_group" "tollchat_proxy" {
-  name              = "/aws/lambda/tollchat-v2-chat-proxy"
-  retention_in_days = 30
+  name              = "/aws/lambda/tollchat-v2-chat-proxy${local.suffix}"
+  retention_in_days = local.log_retention_days
 }
 
 resource "aws_lambda_function" "tollchat_proxy" {
-  function_name                  = "tollchat-v2-chat-proxy"
+  function_name                  = "tollchat-v2-chat-proxy${local.suffix}"
   role                           = aws_iam_role.tollchat_proxy.arn
   runtime                        = "nodejs24.x"
   handler                        = "handler.handler"
@@ -451,11 +456,13 @@ resource "aws_lambda_function" "tollchat_proxy" {
   }
 
   environment {
-    variables = {
+    variables = merge({
       AGENTCORE_RUNTIME_ARN = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
       AGENTCORE_VPCE_URL    = "https://${data.aws_vpc_endpoint.agentcore.dns_entry[0].dns_name}"
       SESSION_TABLE_NAME    = aws_dynamodb_table.tollchat_sessions.name
-    }
+      }, local.is_production ? {} : {
+      PUBLIC_ORIGINS = "https://${local.domains[0]}"
+    })
   }
 
   lifecycle {
@@ -483,13 +490,14 @@ resource "aws_lambda_alias" "tollchat_live" {
 }
 
 resource "aws_lambda_provisioned_concurrency_config" "tollchat" {
+  count                             = local.is_production ? 1 : 0
   function_name                     = aws_lambda_alias.tollchat_live.function_name
   qualifier                         = aws_lambda_alias.tollchat_live.name
   provisioned_concurrent_executions = 1
 }
 
 resource "aws_api_gateway_rest_api" "tollchat" {
-  name = "nova-toll-v2-preview"
+  name = "nova-toll-v2-preview${local.suffix}"
 
   endpoint_configuration {
     types            = ["PRIVATE"]
@@ -588,19 +596,19 @@ resource "aws_lambda_permission" "tollchat_api" {
 }
 
 resource "aws_cloudwatch_log_metric_filter" "proxy_failure" {
-  name           = "V2ProxyFailure"
+  name           = "V2ProxyFailure${local.suffix}"
   log_group_name = aws_cloudwatch_log_group.tollchat_proxy.name
   pattern        = "PROXY_FAILURE"
 
   metric_transformation {
     namespace = "NovaToll"
-    name      = "V2ProxyFailure"
+    name      = "V2ProxyFailure${local.suffix}"
     value     = "1"
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
-  alarm_name          = "tollchat-v2-chat-proxy-errors"
+  alarm_name          = "tollchat-v2-chat-proxy-errors${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
@@ -610,24 +618,24 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_failures" {
-  alarm_name          = "tollchat-v2-chat-proxy-failures"
+  alarm_name          = "tollchat-v2-chat-proxy-failures${local.suffix}"
   namespace           = "NovaToll"
-  metric_name         = "V2ProxyFailure"
+  metric_name         = "V2ProxyFailure${local.suffix}"
   period              = 300
   evaluation_periods  = 1
   statistic           = "Sum"
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_latency" {
-  alarm_name          = "tollchat-v2-chat-proxy-latency"
+  alarm_name          = "tollchat-v2-chat-proxy-latency${local.suffix}"
   namespace           = "AWS/Lambda"
   metric_name         = "Duration"
   dimensions          = { FunctionName = aws_lambda_function.tollchat_proxy.function_name }
@@ -638,11 +646,11 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_proxy_latency" {
   threshold           = 45000
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "tollchat_sessions" {
-  alarm_name          = "tollchat-v2-agentcore-active-sessions"
+  alarm_name          = "tollchat-v2-agentcore-active-sessions${local.suffix}"
   namespace           = "AWS/Bedrock-AgentCore"
   metric_name         = "ActiveSessionCount"
   dimensions          = { Service = "AgentCore.Runtime" }
@@ -653,7 +661,7 @@ resource "aws_cloudwatch_metric_alarm" "tollchat_sessions" {
   threshold           = 10
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.alerts.arn]
+  alarm_actions       = local.alarm_actions
 }
 
 output "private_preview" {

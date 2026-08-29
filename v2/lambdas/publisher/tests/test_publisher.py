@@ -1,11 +1,20 @@
 import copy
+import importlib.util
 import io
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 import report_publisher_handler as publisher
+
+_loader_spec = importlib.util.spec_from_file_location(
+    "loader_detail_test", Path(__file__).parents[2] / "loader" / "handler.py"
+)
+assert _loader_spec and _loader_spec.loader
+loader = importlib.util.module_from_spec(_loader_spec)
+_loader_spec.loader.exec_module(loader)
 
 EVALUATED_AT = datetime(2026, 8, 25, 16, 5, tzinfo=UTC)
 WATERMARK = datetime(2026, 8, 25, 16, 0, tzinfo=UTC)
@@ -106,6 +115,7 @@ def _load_event(watermark=WATERMARK):
         "source": "tollchat.pricing-loader",
         "detail-type": "I95 Pricing Load Committed",
         "detail": {
+            "environment": "production",
             "schema_version": 1,
             "facility": "i95_i495",
             "source_watermark": watermark.isoformat().replace("+00:00", "Z"),
@@ -141,6 +151,37 @@ def test_expected_watermark_matrix():
         )
         == "superseded"
     )
+
+
+def test_load_event_environment_must_match_runtime(monkeypatch):
+    assert publisher._expected_watermark(_load_event()) == WATERMARK
+    monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", "development")
+    with pytest.raises(ValueError, match="environment"):
+        publisher._expected_watermark(_load_event())
+    development = _load_event()
+    development["detail"]["environment"] = "development"
+    assert publisher._expected_watermark(development) == WATERMARK
+
+
+def test_loader_detail_is_accepted_only_by_the_matching_publisher_environment(
+    monkeypatch,
+):
+    detail = loader._i95_success_detail(
+        watermark="2026-08-25T16:00:00Z",
+        s3_key="raw/feed=i95/date=2026-08-25/1600Z.csv",
+        row_count=1,
+    )
+    event = {
+        "source": "tollchat.pricing-loader",
+        "detail-type": "I95 Pricing Load Committed",
+        "detail": detail,
+    }
+    assert publisher._expected_watermark(event) == WATERMARK
+    monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", "development")
+    with pytest.raises(ValueError, match="environment"):
+        publisher._expected_watermark(event)
+    detail["environment"] = "development"
+    assert publisher._expected_watermark(event) == WATERMARK
     with pytest.raises(RuntimeError, match="not visible"):
         publisher._expected_watermark_action(WATERMARK.replace(minute=10), WATERMARK)
     with pytest.raises(RuntimeError, match="not visible"):
