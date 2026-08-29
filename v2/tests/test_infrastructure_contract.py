@@ -700,6 +700,7 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
         in MAIN_TF
     )
     assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
+    assert "TOLLCHAT_ENVIRONMENT = var.environment" in MAIN_TF
     assert "}, local.is_production ? {} : {" in publisher_lambda
     assert 'PUBLIC_BASE_URL      = "https://${local.domains[0]}"' in publisher_lambda
     assert "evaluation_periods  = 3" in MAIN_TF

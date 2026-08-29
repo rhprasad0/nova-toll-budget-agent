@@ -204,13 +204,15 @@ resource "aws_lambda_function" "loader" {
   }
 
   environment {
-    variables = {
+    variables = merge({
       DB_HOST    = data.aws_db_instance.main.address
       DB_PORT    = tostring(data.aws_db_instance.main.port)
       DB_NAME    = local.database_name
       DB_USER    = local.database_roles.loader
       RAW_BUCKET = data.aws_s3_bucket.raw.bucket
-    }
+      }, local.is_production ? {} : {
+      TOLLCHAT_ENVIRONMENT = var.environment
+    })
   }
 
   depends_on = [
