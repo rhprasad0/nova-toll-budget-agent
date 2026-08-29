@@ -194,6 +194,25 @@ def test_v2_has_an_independent_state_and_identity():
     assert 'name    = "tollchat-v2-public-chat-routes${local.suffix}"' in site
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
     assert 'name = "tollchat-agent-reports${local.suffix}"' in measurement
+    assert (
+        "webacl:tollchat-v2-public-chat${local.suffix}:agent-route-report"
+        in measurement
+    )
+    assert (
+        'WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"'
+        in measurement
+    )
+    assert (
+        'WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"'
+        in measurement
+    )
+    assert (
+        'resource "aws_cloudfront_response_headers_policy" "development_noindex"'
+        in site
+    )
+    assert "count = local.is_production ? 0 : 1" in site
+    assert 'header   = "X-Robots-Tag"' in site
+    assert 'value    = "noindex"' in site
 
 
 def test_v2_declares_a_private_agentcore_application_without_telemetry():
