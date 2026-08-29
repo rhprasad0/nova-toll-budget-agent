@@ -546,13 +546,14 @@ resource "aws_lambda_function" "agent_usage_rollup" {
   source_code_hash = data.archive_file.agent_usage_rollup.output_base64sha256
 
   environment {
-    variables = {
+    variables = merge({
       ATHENA_DATABASE       = aws_glue_catalog_database.agent_reports.name
       ATHENA_WORKGROUP      = aws_athena_workgroup.agent_reports.name
-      TOLLCHAT_ENVIRONMENT  = var.environment
       WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"
       WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"
-    }
+      }, local.is_production ? {} : {
+      TOLLCHAT_ENVIRONMENT = var.environment
+    })
   }
 
   depends_on = [
