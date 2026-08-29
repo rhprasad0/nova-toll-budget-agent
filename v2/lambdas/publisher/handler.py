@@ -1033,11 +1033,20 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
         result.update(publication)
         if publication["status"] == "superseded":
             return result
-    logger.info(
-        "V2_REPORT_GENERATION_OK %s %s %s %s",
-        FACILITY,
-        generation_id,
-        len(generation.routes),
-        os.environ.get("TOLLCHAT_ENVIRONMENT", "production"),
-    )
+    environment = os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
+    if environment == "production":
+        logger.info(
+            "V2_REPORT_GENERATION_OK %s %s %s",
+            FACILITY,
+            generation_id,
+            len(generation.routes),
+        )
+    else:
+        logger.info(
+            "V2_REPORT_GENERATION_OK %s %s %s %s",
+            FACILITY,
+            generation_id,
+            len(generation.routes),
+            environment,
+        )
     return result

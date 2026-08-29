@@ -226,9 +226,11 @@ def _load(feed: str, rows: list[I95Row] | list[I66Row], *, s3_key: str) -> None:
             row_count=len(rows),
         )
     logger.info("V2_LOAD_ROWS %s %s", feed, affected_rows)
-    logger.info(
-        "V2_LOAD_OK %s %s", feed, os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
-    )
+    environment = os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
+    if environment == "production":
+        logger.info("V2_LOAD_OK %s", feed)
+    else:
+        logger.info("V2_LOAD_OK %s %s", feed, environment)
     logger.info("V2_LOAD_OBJECT_OK %s %s", feed, s3_key)
 
 

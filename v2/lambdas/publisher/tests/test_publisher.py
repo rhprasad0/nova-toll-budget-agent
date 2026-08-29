@@ -129,10 +129,7 @@ def test_watchdog_builds_one_complete_generation(monkeypatch, caplog):
         "source_watermark": "2026-08-25T16:00:00Z",
         "route_count": 685,
     }
-    assert (
-        "V2_REPORT_GENERATION_OK i95_i495 2026-08-25T16:05:00Z 685 production"
-        in caplog.text
-    )
+    assert "V2_REPORT_GENERATION_OK i95_i495 2026-08-25T16:05:00Z 685" in caplog.text
     generation = publisher.build_generation(_report_rows())
     assert generation.routes[0].structural_facility_legs[0]["facility"] == "i95_i495"
 
