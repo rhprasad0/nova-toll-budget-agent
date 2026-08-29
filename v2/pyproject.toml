@@ -16,6 +16,7 @@ dev = [
     "coverage[toml]>=7.15.4",
     "pyright",
     "pytest",
+    "pyyaml>=6.0.3",
     "ruff",
     "strands-agents-evals==1.1.0",
     "tiktoken==0.14.0",
