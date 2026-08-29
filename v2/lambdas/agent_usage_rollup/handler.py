@@ -189,8 +189,28 @@ def run_rollup(
     cloudwatch.put_metric_data(
         Namespace="TollChat/AgentReports",
         MetricData=[
-            {"MetricName": "LogCoveragePercent", "Value": coverage, "Unit": "Percent"},
-            {"MetricName": "RollupCompleted", "Value": 1, "Unit": "Count"},
+            {
+                "MetricName": "LogCoveragePercent",
+                "Value": coverage,
+                "Unit": "Percent",
+                "Dimensions": [
+                    {
+                        "Name": "Environment",
+                        "Value": os.environ.get("TOLLCHAT_ENVIRONMENT", "production"),
+                    }
+                ],
+            },
+            {
+                "MetricName": "RollupCompleted",
+                "Value": 1,
+                "Unit": "Count",
+                "Dimensions": [
+                    {
+                        "Name": "Environment",
+                        "Value": os.environ.get("TOLLCHAT_ENVIRONMENT", "production"),
+                    }
+                ],
+            },
         ],
     )
     return {

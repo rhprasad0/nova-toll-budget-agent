@@ -180,7 +180,7 @@ def test_v2_has_an_independent_state_and_identity():
     )
     assert 'function_name = "toll-v2-pricing-loader${local.suffix}"' in MAIN_TF
     assert "${local.database_roles.loader}" in MAIN_TF
-    assert "DB_USER    = local.database_roles.loader" in MAIN_TF
+    assert re.search(r"DB_USER\s+= local.database_roles.loader", MAIN_TF)
     assert 'name = "toll-v2-pricing-raw-objects${local.suffix}"' in MAIN_TF
     assert (
         'alarm_name          = "toll-v2-pricing-loader-errors${local.suffix}"'

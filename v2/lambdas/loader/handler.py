@@ -158,6 +158,9 @@ def _publish_i95_success(*, watermark: str, s3_key: str, row_count: int) -> None
                 "DetailType": "I95 Pricing Load Committed",
                 "Detail": json.dumps(
                     {
+                        "environment": os.environ.get(
+                            "TOLLCHAT_ENVIRONMENT", "production"
+                        ),
                         "schema_version": 1,
                         "facility": "i95_i495",
                         "source_watermark": watermark,

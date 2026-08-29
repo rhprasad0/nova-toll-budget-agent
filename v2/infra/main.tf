@@ -205,11 +205,12 @@ resource "aws_lambda_function" "loader" {
 
   environment {
     variables = {
-      DB_HOST    = data.aws_db_instance.main.address
-      DB_PORT    = tostring(data.aws_db_instance.main.port)
-      DB_NAME    = local.database_name
-      DB_USER    = local.database_roles.loader
-      RAW_BUCKET = data.aws_s3_bucket.raw.bucket
+      DB_HOST              = data.aws_db_instance.main.address
+      DB_PORT              = tostring(data.aws_db_instance.main.port)
+      DB_NAME              = local.database_name
+      DB_USER              = local.database_roles.loader
+      RAW_BUCKET           = data.aws_s3_bucket.raw.bucket
+      TOLLCHAT_ENVIRONMENT = var.environment
     }
   }
 
@@ -552,7 +553,8 @@ resource "aws_cloudwatch_event_rule" "committed_i95_loads" {
     source      = ["tollchat.pricing-loader"]
     detail-type = ["I95 Pricing Load Committed"]
     detail = {
-      facility = ["i95_i495"]
+      facility    = ["i95_i495"]
+      environment = [var.environment]
     }
   })
 }

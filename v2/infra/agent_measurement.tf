@@ -548,6 +548,7 @@ resource "aws_lambda_function" "agent_usage_rollup" {
     variables = {
       ATHENA_DATABASE       = aws_glue_catalog_database.agent_reports.name
       ATHENA_WORKGROUP      = aws_athena_workgroup.agent_reports.name
+      TOLLCHAT_ENVIRONMENT  = var.environment
       WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat"
       WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report"
     }
