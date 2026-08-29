@@ -251,6 +251,20 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "xray" not in agentcore.lower()
     assert "TOLLCHAT_TRACE_LOG_GROUP" not in agentcore
     assert "github_pat_[A-Za-z0-9_-]{20,}" in agentcore
+    guardrail_version = agentcore.split(
+        'resource "aws_bedrock_guardrail_version" "tollchat"', maxsplit=1
+    )[1].split('resource "aws_bedrockagentcore_agent_runtime"', maxsplit=1)[0]
+    assert (
+        "replace_triggered_by = [aws_bedrock_guardrail.tollchat]"
+        not in guardrail_version
+    )
+    for attribute in (
+        "blocked_input_messaging",
+        "blocked_outputs_messaging",
+        "content_policy_config",
+        "sensitive_information_policy_config",
+    ):
+        assert f"aws_bedrock_guardrail.tollchat.{attribute}" in guardrail_version
 
     runtime_logs = agentcore.split(
         'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1

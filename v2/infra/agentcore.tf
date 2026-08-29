@@ -312,7 +312,12 @@ resource "aws_bedrock_guardrail_version" "tollchat" {
   skip_destroy  = true
 
   lifecycle {
-    replace_triggered_by = [aws_bedrock_guardrail.tollchat]
+    replace_triggered_by = [
+      aws_bedrock_guardrail.tollchat.blocked_input_messaging,
+      aws_bedrock_guardrail.tollchat.blocked_outputs_messaging,
+      aws_bedrock_guardrail.tollchat.content_policy_config,
+      aws_bedrock_guardrail.tollchat.sensitive_information_policy_config,
+    ]
   }
 }
 
