@@ -54,25 +54,31 @@ Legal edges:
 
 1. Explorer writes `.graph/explore.md`. Implementer does not start without it.
 2. Implementer writes code in the assigned worktree and `.graph/change.md`.
-3. Verifier starts in a **fresh thread**, reads the worktree + artifacts, writes
-   `.graph/verdict.md`. Verifier does not edit application code.
+3. Verifier starts with `fork_turns: "none"`, reads the worktree + artifacts,
+   writes `.graph/verdict.md`, and does not edit application code.
 4. FAIL → the original implementer with `verdict.md` as the spec. At most two
    fix loops, then stop for the user.
 5. PASS is the only path to “done.”
 6. No parallel writers. Fan-out explorers or verifiers only.
 7. No subagents of subagents.
+8. Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
+   `.graph/STATE.md` to match the current node and next legal edge.
 
 ## Parent checklist
 
 1. Create or reuse an isolated path under `.worktrees/` and record it in the
    worktree's `.graph/STATE.md`.
-2. Spawn `code_explorer` with the intent and worktree path. Wait.
-3. If `explore.md` has blocking gaps, stop and ask the user.
-4. Spawn `implementer` with explore.md + worktree. One writer.
-5. Spawn `verifier` fresh. Do not reuse the implementer thread.
-6. On FAIL, return `verdict.md` to the original implementer. Re-verify in a
-   fresh verifier thread.
-7. On PASS, summarize files, checks run, and leftover risk.
+2. Update `STATE.md`, then spawn `code_explorer` with the intent and absolute
+   worktree path. Wait.
+3. If `explore.md` has blocking gaps, update `STATE.md`, stop, and ask the user.
+4. Update `STATE.md`, then spawn `implementer` with explore.md + worktree. One
+   writer.
+5. Update `STATE.md`, then spawn `verifier` with `fork_turns: "none"`. Do not
+   reuse the implementer thread.
+6. On FAIL, update `STATE.md` and return `verdict.md` to the original
+   implementer. Re-verify with a new verifier using `fork_turns: "none"`.
+7. On PASS, update `STATE.md`, then summarize files, checks run, and leftover
+   risk.
 
 ## Artifacts
 
@@ -106,8 +112,6 @@ assumptions, required fix if FAIL. “Looks good” is not a verdict.
 
 - Deployed credentials live in SSM Parameter Store (`SECURITY.md`). Never a
   local secrets file.
-- PRs may use disposable migration validation only.
-- Never mutate deployed databases or schemas.
-- Never expose production deployment credentials.
+- PRs use disposable migration validation only: never mutate deployed databases or schemas, and never expose production deployment credentials.
 - Schema-changing work is not deployable until approved deployed-migration
   automation exists.
