@@ -29,9 +29,50 @@ FOUNDATION_IAM = (FOUNDATION_ROOT / "iam.tf").read_text()
 FOUNDATION_AGENTCORE = (FOUNDATION_ROOT / "agentcore.tf").read_text()
 FOUNDATION_PROVIDER = (FOUNDATION_ROOT / "providers.tf").read_text()
 FOUNDATION_TAILSCALE = (FOUNDATION_ROOT / "tailscale.tf").read_text()
+FOUNDATION_BUDGET = FOUNDATION_ROOT / "budget.tf"
 APPLICATION_VARIABLES = (V2_ROOT / "infra" / "variables.tf").read_text()
 DEPLOYMENT = (V2_ROOT / "RUNBOOK.md").read_text()
 AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
+
+
+def test_foundation_budget_preserves_the_production_notification_contract():
+    budget = FOUNDATION_BUDGET.read_text()
+    variables = (FOUNDATION_ROOT / "variables.tf").read_text()
+
+    assert 'variable "budget_notification_email"' in variables
+    email_variable = variables.split('variable "budget_notification_email"', 1)[1]
+    assert re.search(r"type\s+= string", email_variable)
+    assert re.search(r"sensitive\s+= true", email_variable)
+    assert "default" not in email_variable.split("}", 1)[0]
+    assert 'resource "aws_budgets_budget" "nova_toll_monthly"' in budget
+    for attribute, value in (
+        ("account_id", '"920534282028"'),
+        ("name", '"nova-toll-monthly"'),
+        ("budget_type", '"COST"'),
+        ("limit_amount", '"100"'),
+        ("limit_unit", '"USD"'),
+        ("time_unit", '"MONTHLY"'),
+        ("subscriber_email_addresses", r"\[var\.budget_notification_email\]"),
+    ):
+        assert re.search(rf"{attribute}\s*=\s*{value}", budget)
+    assert budget.count("notification {") == 3
+    assert budget.count('comparison_operator        = "GREATER_THAN"') == 3
+    assert budget.count('threshold_type             = "PERCENTAGE"') == 3
+    assert (
+        budget.count("subscriber_email_addresses = [var.budget_notification_email]")
+        == 3
+    )
+    assert "SNS" not in budget
+    assert "@" not in budget
+    tuples = {
+        (notification_type, threshold)
+        for notification_type, threshold in re.findall(
+            r'notification_type\s*=\s*"(ACTUAL|FORECASTED)".*?threshold\s*=\s*(\d+)',
+            budget,
+            flags=re.DOTALL,
+        )
+    }
+    assert tuples == {("ACTUAL", "80"), ("FORECASTED", "80"), ("ACTUAL", "100")}
 
 
 def test_foundation_publishes_raw_events_without_a_legacy_loader():
