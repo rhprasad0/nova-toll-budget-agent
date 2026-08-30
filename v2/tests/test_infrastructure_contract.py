@@ -1016,6 +1016,18 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
 
 
+def test_committed_i95_load_rule_filters_by_environment_in_every_deployment():
+    committed_load_rule = MAIN_TF.split(
+        'resource "aws_cloudwatch_event_rule" "committed_i95_loads"', maxsplit=1
+    )[1].split('resource "aws_cloudwatch_event_rule" "report_watchdog"', maxsplit=1)[0]
+    assert "local.is_production" not in committed_load_rule
+    assert re.search(
+        r'detail\s+=\s+\{\s*facility\s+=\s+\["i95_i495"\]\s*'
+        r"environment\s+=\s+\[var\.environment\]\s*\}",
+        committed_load_rule,
+    )
+
+
 def test_timed_ci_uses_the_internal_pricing_caller():
     policy = MAIN_TF.split('data "aws_iam_policy_document" "timed_checks"', maxsplit=1)[
         1
