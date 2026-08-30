@@ -164,8 +164,10 @@ unset CLOUDFLARE_API_TOKEN
 
 ## Development environment
 
-Development has its own application state and names but consumes the shared
-network, RDS, artifact, raw-data, and alert foundations read-only. It uses
+Development has its own application state and names but reads the shared
+network, RDS, raw-data, and alert foundations. Its only shared-foundation
+writes are development-keyed artifact objects and the RDS security-group ingress
+rule. It uses
 `dev.tollchat.ai`, `nova_toll_development`, development database roles, shorter
 logs, non-paging alarms, and no provisioned proxy concurrency. Bootstrap its
 AWS-side dependencies separately before planning; this configuration never
@@ -179,6 +181,8 @@ must run the reviewed one-time bootstrap. Store no credential locally: replace
 name, load it only into this process, then remove it when finished.
 
 ```sh
+(
+cd "$(git rev-parse --show-toplevel)"
 if ! NOVA_TOLL_ADMIN_URL="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
   ssm get-parameter --name /approved/administrator/connection --with-decryption \
   --query Parameter.Value --output text)"; then
@@ -192,6 +196,7 @@ if ! python3 v2/scripts/bootstrap_development_database.py; then
   exit 1
 fi
 unset NOVA_TOLL_ADMIN_URL
+)
 ```
 
 The connection value must be a PostgreSQL administrator URL for the shared
@@ -201,13 +206,100 @@ development database/roles do not. It creates only `nova_toll_development` plus
 the fixed `_development` roles.
 
 ```sh
-cd v2/infra
+(
+cd "$(git rev-parse --show-toplevel)/v2/infra"
 AWS_PROFILE=nova-toll terraform init -backend-config=backend.development.hcl
 AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
   -var loader_package_path=build/loader.zip \
   -var publisher_package_path=build/publisher.zip \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip
+)
+```
+
+### Development infrastructure review
+
+Build and record all four reviewed package digests before planning:
+
+```sh
+(
+cd "$(git rev-parse --show-toplevel)/v2"
+./scripts/build_loader_zip.sh
+./scripts/build_publisher_zip.sh
+./scripts/build_agentcore_zips.sh
+(cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip \
+  > DEVELOPMENT_SHA256SUMS && sha256sum --check DEVELOPMENT_SHA256SUMS)
+)
+```
+
+Check direct regional and global quota headroom; stop if either result cannot
+cover the reviewed plan:
+
+```sh
+AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
+  --service-code cloudfront --quota-code L-0EA8095F
+AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
+  --service-code lambda --quota-code L-B99A9384
+AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
+  --service-code elasticloadbalancing --quota-code L-53DA6B97
+AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
+  --service-code iam --quota-code L-FE177D64
+```
+
+Load the Cloudflare token only into this shell. First save and review a
+production zero-change plan; do not continue unless it reports no changes.
+Then create and review the DNS-disabled development plan. It must contain only
+creates—no update, replacement, or destroy—and is the only development plan
+eligible to apply.
+
+```sh
+(
+cd "$(git rev-parse --show-toplevel)/v2/infra"
+export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
+  ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption \
+  --query Parameter.Value --output text)"
+AWS_PROFILE=nova-toll terraform init -backend-config=backend.production.hcl
+AWS_PROFILE=nova-toll terraform plan \
+  -var loader_package_path=build/loader.zip \
+  -var publisher_package_path=build/publisher.zip \
+  -var agentcore_package_path=build/agentcore.zip \
+  -var chat_proxy_package_path=build/chat-proxy.zip \
+  -out=build/production-zero-change.tfplan
+AWS_PROFILE=nova-toll terraform show build/production-zero-change.tfplan
+AWS_PROFILE=nova-toll terraform init -reconfigure -backend-config=backend.development.hcl
+AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
+  -var=enable_public_dns=false \
+  -var loader_package_path=build/loader.zip \
+  -var publisher_package_path=build/publisher.zip \
+  -var agentcore_package_path=build/agentcore.zip \
+  -var chat_proxy_package_path=build/chat-proxy.zip \
+  -out=build/development-create.tfplan
+AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
+AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | \
+  jq -e '[.resource_changes[] | select(.change.actions != ["no-op"]) | .change.actions] | all(. == ["create"])'
+AWS_PROFILE=nova-toll terraform apply build/development-create.tfplan
+```
+
+The apply uses the exact reviewed create plan without `-target`; stop if it
+fails. Before planning DNS, verify CloudFront is deployed, WAF is associated,
+origins remain IAM-only/private, and alarms are non-paging. Then make a
+separate saved plan with only `-var=enable_public_dns=true`. Stop unless it
+adds exactly `cloudflare_dns_record.apex[0]`, then apply that exact plan.
+
+```sh
+AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
+  -var=enable_public_dns=true \
+  -var loader_package_path=build/loader.zip \
+  -var publisher_package_path=build/publisher.zip \
+  -var agentcore_package_path=build/agentcore.zip \
+  -var chat_proxy_package_path=build/chat-proxy.zip \
+  -out=build/development-dns.tfplan
+AWS_PROFILE=nova-toll terraform show build/development-dns.tfplan
+AWS_PROFILE=nova-toll terraform show -json build/development-dns.tfplan | \
+  jq -e '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}] == [{"address":"cloudflare_dns_record.apex[0]","actions":["create"]}]'
+AWS_PROFILE=nova-toll terraform apply build/development-dns.tfplan
+unset CLOUDFLARE_API_TOKEN
+)
 ```
 
 The proxy Lambda explicitly depends on its inline policy, so the complete plan

@@ -632,11 +632,11 @@ def _connect_to_database(user: str) -> object:
 
 
 def connect_to_database() -> object:
-    return _connect_to_database(_AGENT_DB_USER)
+    return _connect_to_database(os.environ.get("DB_USER", _AGENT_DB_USER))
 
 
 def connect_to_pricing_database() -> object:
-    return _connect_to_database(_PRICING_DB_USER)
+    return _connect_to_database(os.environ.get("PRICING_DB_USER", _PRICING_DB_USER))
 
 
 def _log_failure_and_build_error_result(

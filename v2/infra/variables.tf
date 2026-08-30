@@ -31,3 +31,9 @@ variable "environment" {
     error_message = "environment must be development or production."
   }
 }
+
+variable "enable_public_dns" {
+  description = "Whether to publish the public Cloudflare CNAME for this environment."
+  type        = bool
+  default     = true
+}
