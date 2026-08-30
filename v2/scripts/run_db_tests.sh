@@ -2,16 +2,48 @@
 set -euo pipefail
 
 bootstrap_db="nova_toll_v2_bootstrap_test"
+production_db="nova_toll"
+development_db="nova_toll_development"
 retirement_db="nova_toll_v2_retirement_test"
 retirement_divergent_db="nova_toll_v2_retirement_divergent_test"
 retirement_dependent_db="nova_toll_v2_retirement_dependent_test"
 retirement_role_db="nova_toll_v2_retirement_role_test"
 migration_db="nova_toll_v2_migration_test"
 base_ref="${1:-}"
+cleanup_allowed=false
 if [[ -z "$base_ref" ]]; then
   echo "usage: $0 BASE_GIT_REF" >&2
   exit 2
 fi
+require_disposable_cluster() {
+  if [[ -z "${POSTGRES_CONTAINER_ID:-}" ]]; then
+    echo "POSTGRES_CONTAINER_ID is required for destructive database tests" >&2
+    exit 1
+  fi
+  if [[ "$(docker inspect --format '{{.Config.Image}}' "$POSTGRES_CONTAINER_ID")" != "postgis/postgis:17-3.5" ]]; then
+    echo "POSTGRES_CONTAINER_ID is not the expected disposable PostgreSQL service" >&2
+    exit 1
+  fi
+  local container_identifier target_identifier
+  target_identifier="$(psql --dbname postgres --tuples-only --no-align --command \
+    'SELECT system_identifier FROM pg_control_system()')"
+  container_identifier="$(docker exec "$POSTGRES_CONTAINER_ID" \
+    psql -X --username postgres --dbname postgres --tuples-only --no-align --command \
+    'SELECT system_identifier FROM pg_control_system()')"
+  if [[ -z "$target_identifier" || "$target_identifier" != "$container_identifier" ]]; then
+    echo "database target does not match POSTGRES_CONTAINER_ID" >&2
+    exit 1
+  fi
+  local databases
+  databases="$(psql --dbname postgres --tuples-only --no-align --command \
+    'SELECT datname FROM pg_database ORDER BY datname')"
+  if [[ "$databases" != $'postgres\ntemplate0\ntemplate1\ntemplate_postgis' ]]; then
+    echo "database target is not an empty disposable cluster" >&2
+    exit 1
+  fi
+}
+
+require_disposable_cluster
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   # New tags have no base; migration 026's parent is its declared 1.2.0 source.
   base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
@@ -30,15 +62,16 @@ incompatible_pricing_db="nova_toll_v2_oracle_incompatible_pricing_test"
 unsafe_agent_db="nova_toll_v2_oracle_unsafe_agent_test"
 
 cleanup_databases() {
-  for database in "$bootstrap_db" "$retirement_db" "$migration_db" \
+  [[ "$cleanup_allowed" == true ]] || return
+  for database in "$bootstrap_db" "$production_db" "$development_db" "$retirement_db" "$migration_db" \
     "$retirement_divergent_db" "$retirement_dependent_db" \
     "$retirement_role_db" \
     "$oracle_rollback_db" "$missing_pricing_db" "$incompatible_pricing_db" \
     "$unsafe_agent_db"; do
     dropdb --if-exists "$database"
   done
-  psql --dbname postgres --set ON_ERROR_STOP=1 \
-    --command "DROP ROLE IF EXISTS loader_writer"
+  psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, loader_writer"
 }
 
 cleanup() {
@@ -55,6 +88,7 @@ dump_schema() {
   fi
 }
 
+cleanup_allowed=true
 trap cleanup EXIT
 cleanup_databases
 
@@ -66,6 +100,47 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 SQL
+
+createdb --template template0 "$production_db"
+psql --dbname "$production_db" --file v2/db/schema.sql
+psql --dbname "$production_db" --file v2/db/roles.sql
+psql --dbname "$production_db" --file v2/db/oracle/schema.sql
+url_target="$(python3 - <<'PY'
+import os
+from urllib.parse import quote
+
+host = os.environ.get("PGHOST", "localhost")
+host = f"[{host.strip('[]')}]" if ":" in host else host
+port = os.environ.get("PGPORT")
+user = quote(os.environ.get("PGUSER", "postgres"), safe="")
+password = os.environ.get("PGPASSWORD")
+credentials = user if password is None else f"{user}:{quote(password, safe='')}"
+print(f"postgresql://{credentials}@{host}{f':{port}' if port else ''}/postgres")
+PY
+)"
+if ! PGHOST=127.0.0.1 PGPORT=1 PGUSER=ambient PGPASSWORD=ambient \
+  NOVA_TOLL_ADMIN_URL="$url_target" \
+  python3 v2/scripts/bootstrap_development_database.py; then
+  echo "bootstrap URL did not override ambient PostgreSQL settings" >&2
+  exit 1
+fi
+psql --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nova_toll_development') THEN
+    RAISE EXCEPTION 'bootstrap URL did not create the local development database';
+  END IF;
+END $$;
+SQL
+dropdb "$development_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development"
+if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
+  v2/scripts/test_development_database_bootstrap.sh; then
+  echo "disposable bootstrap test accepted NOVA_TOLL_ADMIN_URL" >&2
+  exit 1
+fi
+v2/scripts/test_development_database_bootstrap.sh
 
 createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \

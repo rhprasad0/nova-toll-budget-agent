@@ -102,6 +102,9 @@ assumptions, required fix if FAIL. “Looks good” is not a verdict.
 - `main` is protected. Changes ship through a PR that passes CI.
 - Do not open a PR or push without user authorization.
 - When authorized to open a PR: open it ready for review, never as draft.
+- Do not request additional Codex GitHub reviews (`@codex review` or
+  `@codex security review`) unless the user explicitly asks. Address existing
+  feedback, then use required CI and human approvals as merge gates.
 
 # Tools
 

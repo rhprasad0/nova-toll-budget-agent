@@ -171,6 +171,35 @@ logs, non-paging alarms, and no provisioned proxy concurrency. Bootstrap its
 AWS-side dependencies separately before planning; this configuration never
 creates PostgreSQL roles or schemas.
 
+### One-time development database bootstrap
+
+Before development infrastructure uses the database, an approved administrator
+must run the reviewed one-time bootstrap. Store no credential locally: replace
+`/approved/administrator/connection` with the approved SecureString parameter
+name, load it only into this process, then remove it when finished.
+
+```sh
+if ! NOVA_TOLL_ADMIN_URL="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
+  ssm get-parameter --name /approved/administrator/connection --with-decryption \
+  --query Parameter.Value --output text)"; then
+  echo 'could not retrieve the approved administrator connection' >&2
+  exit 1
+fi
+: "${NOVA_TOLL_ADMIN_URL:?administrator connection was empty}"
+export NOVA_TOLL_ADMIN_URL
+if ! python3 v2/scripts/bootstrap_development_database.py; then
+  unset NOVA_TOLL_ADMIN_URL
+  exit 1
+fi
+unset NOVA_TOLL_ADMIN_URL
+```
+
+The connection value must be a PostgreSQL administrator URL for the shared
+instance. The command fails closed unless its explicit connection target,
+`nova_toll`, `rds_iam`, and all six safe production roles already exist and the
+development database/roles do not. It creates only `nova_toll_development` plus
+the fixed `_development` roles.
+
 ```sh
 cd v2/infra
 AWS_PROFILE=nova-toll terraform init -backend-config=backend.development.hcl
