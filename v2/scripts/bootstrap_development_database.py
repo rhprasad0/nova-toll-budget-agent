@@ -45,6 +45,37 @@ def run(
     subprocess.run(args, input=input, text=True, check=True, env=env)
 
 
+def tls_environment(query: str) -> dict[str, str]:
+    if not query:
+        return {}
+    values: dict[str, str] = {}
+    try:
+        for pair in query.split("&"):
+            if not pair or "=" not in pair:
+                raise ValueError
+            key, value = pair.split("=", 1)
+            if re.search(r"%(?![0-9A-Fa-f]{2})", key + value):
+                raise ValueError
+            key = unquote(key, errors="strict")
+            value = unquote(value, errors="strict")
+            if (
+                not key
+                or not value
+                or key in values
+                or key not in {"sslmode", "sslrootcert"}
+            ):
+                raise ValueError
+            values[key] = value
+    except (UnicodeDecodeError, ValueError):
+        raise RuntimeError("NOVA_TOLL_ADMIN_URL has invalid TLS settings") from None
+    if values.get("sslmode") != "verify-full":
+        raise RuntimeError("NOVA_TOLL_ADMIN_URL has invalid TLS settings")
+    return {
+        "PGSSLMODE": values["sslmode"],
+        **({"PGSSLROOTCERT": values["sslrootcert"]} if "sslrootcert" in values else {}),
+    }
+
+
 def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> None:
     admin_url = os.environ.get("NOVA_TOLL_ADMIN_URL")
     command = ["psql", "-X", "--set", "ON_ERROR_STOP=1"]
@@ -53,16 +84,16 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
             raise RuntimeError("NOVA_TOLL_ADMIN_URL must not be empty")
         try:
             parsed = urlsplit(admin_url)
-        except ValueError as error:
+        except ValueError:
             raise RuntimeError(
                 "NOVA_TOLL_ADMIN_URL must be a PostgreSQL connection URL"
-            ) from error
+            ) from None
         if (
             parsed.scheme not in ("postgres", "postgresql")
             or not parsed.hostname
             or not parsed.username
-            or parsed.query
-            or parsed.fragment
+            or ("?" in admin_url and not parsed.query)
+            or "#" in admin_url
             or "," in parsed.hostname
             or (parsed.path and not re.fullmatch(r"/[A-Za-z0-9_]+", parsed.path))
         ):
@@ -71,10 +102,10 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
             )
         try:
             port = parsed.port
-        except ValueError as error:
+        except ValueError:
             raise RuntimeError(
                 "NOVA_TOLL_ADMIN_URL must be a PostgreSQL connection URL"
-            ) from error
+            ) from None
         environment = {
             key: value for key, value in os.environ.items() if not key.startswith("PG")
         }
@@ -89,6 +120,7 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
             environment["PGPASSWORD"] = unquote(parsed.password)
         if port is not None:
             environment["PGPORT"] = str(port)
+        environment.update(tls_environment(parsed.query))
     else:
         environment = os.environ.copy()
         if not environment.get("PGHOST") or not environment.get("PGUSER"):

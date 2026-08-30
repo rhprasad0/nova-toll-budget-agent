@@ -72,10 +72,21 @@ uv run python oracle/build_oracle_data.py --check
 ```
 
 Database contract and migration checks require PostgreSQL 17 with PostGIS 3.5.
-From the repository root, pass the pull request's base revision to:
+From the repository root, use a disposable container (the script independently
+checks that its configured target is this empty container, so never point it at
+a deployed server):
 
 ```sh
-v2/scripts/run_db_tests.sh BASE_GIT_REF
+container_id="$(docker run -d --rm -e POSTGRES_HOST_AUTH_METHOD=trust \
+  -p 127.0.0.1::5432 postgis/postgis:17-3.5)"
+trap 'docker rm --force "$container_id" >/dev/null' EXIT
+export POSTGRES_CONTAINER_ID="$container_id"
+export PGHOST=127.0.0.1
+export PGPORT="$(docker port "$container_id" 5432/tcp | sed 's/.*://')"
+export PGUSER=postgres
+until docker logs "$container_id" 2>&1 | grep -q 'PostgreSQL init process complete'; do sleep 1; done
+until docker exec "$container_id" pg_isready --username "$PGUSER" --dbname postgres >/dev/null; do sleep 1; done
+v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 ```
 
 Production deployment is manual; CI never runs `terraform plan` or `apply`.

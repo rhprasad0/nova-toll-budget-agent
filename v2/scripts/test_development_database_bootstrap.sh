@@ -37,6 +37,71 @@ if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
   exit 1
 fi
 
+NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full&sslrootcert=%2Ftmp%2Fca%20bundle.pem" \
+  PGSSLMODE=disable PGSSLROOTCERT=ambient python3 - <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+captured = {}
+bootstrap.run = lambda *args, **kwargs: captured.update(args=args, env=kwargs["env"])
+bootstrap.psql("postgres", sql="SELECT 1")
+assert captured["args"] == ("psql", "-X", "--set", "ON_ERROR_STOP=1")
+assert "VERIFIER_SENTINEL_SECRET" not in repr(captured["args"])
+assert captured["env"]["PGSSLMODE"] == "verify-full"
+assert captured["env"]["PGSSLROOTCERT"] == "/tmp/ca bundle.pem"
+PY
+
+NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full&sslrootcert=system" \
+  python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+captured = {}
+bootstrap.run = lambda *args, **kwargs: captured.update(env=kwargs["env"])
+bootstrap.psql("postgres", sql="SELECT 1")
+assert captured["env"]["PGSSLROOTCERT"] == "system"
+PY
+
+for invalid_url in \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?application_name=bootstrap" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslmode=verify-full&sslmode=verify-full" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslmode=disable" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslmode=" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslmode=verify-full&sslrootcert=" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslrootcert=system" \
+  "postgresql://review_user:${sentinel}@example／com/postgres" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres#" \
+  "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslmode=verify-full#fragment"; do
+  if NOVA_TOLL_ADMIN_URL="$invalid_url" python3 - <<'PY' >"$sentinel_output" 2>&1
+import importlib.util
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+bootstrap.psql("postgres", sql="SELECT 1")
+PY
+  then
+    echo 'bootstrap accepted an invalid administrator TLS URL' >&2
+    exit 1
+  fi
+  if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
+    echo 'bootstrap leaked an invalid administrator URL secret' >&2
+    exit 1
+  fi
+done
+
 if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
   mismatch_container="$(docker run -d --rm -e POSTGRES_HOST_AUTH_METHOD=trust \
     -p 127.0.0.1::5432 postgis/postgis:17-3.5)"
