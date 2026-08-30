@@ -280,7 +280,7 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
         'resource "aws_cloudwatch_log_group" "agentcore_runtime"', maxsplit=1
     )[1].split('resource "aws_bedrockagentcore_agent_runtime_endpoint"', maxsplit=1)[0]
     assert 'toset(["DEFAULT", "preview"])' in runtime_logs
-    assert "retention_in_days = local.is_production ? 1 : 1" in runtime_logs
+    assert "retention_in_days = local.is_production ? 1 : 7" in runtime_logs
 
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
