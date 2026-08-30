@@ -50,7 +50,7 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Terraform source | One `v2/infra` root | Prevent configuration drift and preserve one application definition. |
 | Terraform state | Explicit S3 state key per environment | More visible and harder to select accidentally than CLI workspaces. |
 | Production compatibility | Preserve current state key and physical names | The environment refactor must not replace production resources. |
-| Environment identity | Every managed object is identified as `development` or `production` | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
+| Environment identity | Application objects are `development` or `production`; shared foundations are `shared` | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
 | Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; add migrator roles later | Isolates ordinary application mistakes while keeping migration automation out of the initial split. It is not an instance-level security boundary. |
 | Deployable artifact | Build once per commit and address by SHA-256 | Development and production should execute identical bytes. |
 | Migration execution | Retain disposable PR checks; defer deployed migration automation until after the environment split | CI validation is already useful, while environment migrator roles and deployment sequencing can be proven later in development. |
@@ -189,20 +189,21 @@ post-split migration phase.
 
 ### 5.2 Environment labeling and tagging
 
-Use the exact values `environment=development` and `environment=production`.
-Every taggable AWS resource managed by either Terraform root must carry one of
-them. New development resources use `development`; existing application and
-shared-foundation resources use `production`. Shared foundations, including the
-RDS instance, additionally carry `shared_with=development` where development is
-allowed to consume them. Here `environment` records ownership and security
-control, while `shared_with` records the narrower secondary consumer.
+Use the exact values `environment=development`, `environment=production`, and
+`environment=shared`. Every taggable AWS resource managed by either Terraform
+root must carry one of them. Application resources use their deployable
+environment; shared foundations, including the RDS instance and every resource
+marked `shared_with=development`, use `shared`. `shared_with` remains only the
+narrower secondary-consumer marker.
 
 First prove that the environment-aware refactor produces a zero-change
-production plan. Then apply production tags to existing resources as a separate
-reviewed metadata-only plan before creating development. Activate `environment`
-for AWS cost allocation as soon as AWS lists it, because activation is not
-retrospective. Inventory the resulting AWS resources and fail the milestone if
-any taggable resource lacks its environment tag.
+production plan. Then apply the reviewed metadata-only taxonomy: production
+application resources remain `environment=production` and shared foundations
+become `environment=shared`, before creating development. The cost-allocation
+key is Active by owner confirmation; do not attempt Cost Explorer activation.
+Inventory the resulting AWS resources and fail the milestone if any taggable
+resource lacks its environment tag, except the approved PendingDeletion KMS
+keys whose lifecycle must not be changed.
 
 AWS tags apply to the RDS instance, not to individual PostgreSQL databases. Keep
 the existing production database name `nova_toll`, name the new database
@@ -855,10 +856,11 @@ safe.
 
 - Refactoring both production Terraform roots produces zero changes before the
   separate tag-only plans run or development is created.
-- A separately reviewed metadata-only plan tags every taggable existing
-  production and shared-foundation resource with `environment=production`;
-  development resources carry `environment=development`, and shared resources
-  additionally record `shared_with=development`.
+- A separately reviewed metadata-only plan keeps every taggable production
+  application resource at `environment=production`, classifies every shared
+  foundation as `environment=shared`, and gives development resources
+  `environment=development`; shared resources additionally record
+  `shared_with=development`.
 - `dev.tollchat.ai` and `tollchat.ai` use isolated application resources and
   PostgreSQL databases.
 - Pull requests cannot mutate AWS resources or deployed databases.
@@ -870,7 +872,7 @@ safe.
   missing or invalid environment tags. Independently addressable non-taggable
   objects use full-word names, descriptions, comments, or inventory labels;
   child/configuration objects inherit from a parent recorded in that inventory.
-- The shared RDS instance is tagged `environment=production` and
+- The shared RDS instance is tagged `environment=shared` and
   `shared_with=development`; `nova_toll` and `nova_toll_development` carry the
   matching PostgreSQL environment comments and isolated roles.
 - Applicable service quotas were checked before the first development apply.

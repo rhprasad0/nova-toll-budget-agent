@@ -130,4 +130,10 @@ resource "aws_instance" "tailscale_router" {
   tags = {
     Name = "nova-toll-tailscale-router"
   }
+
+  volume_tags = {
+    project     = "nova-toll-budget-agent"
+    environment = "shared"
+    shared_with = "development"
+  }
 }

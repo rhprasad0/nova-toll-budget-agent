@@ -25,6 +25,9 @@ FOUNDATION_TRIGGERS = (FOUNDATION_ROOT / "triggers.tf").read_text()
 FOUNDATION_LAMBDA = (FOUNDATION_ROOT / "lambda.tf").read_text()
 FOUNDATION_IAM = (FOUNDATION_ROOT / "iam.tf").read_text()
 FOUNDATION_AGENTCORE = (FOUNDATION_ROOT / "agentcore.tf").read_text()
+FOUNDATION_PROVIDER = (FOUNDATION_ROOT / "providers.tf").read_text()
+FOUNDATION_TAILSCALE = (FOUNDATION_ROOT / "tailscale.tf").read_text()
+APPLICATION_VARIABLES = (V2_ROOT / "infra" / "variables.tf").read_text()
 DEPLOYMENT = (V2_ROOT / "RUNBOOK.md").read_text()
 AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 
@@ -53,6 +56,23 @@ def test_foundation_has_no_site_and_terraform_ci_only_validates():
     assert "id-token: write" not in workflow
     assert 'resource "aws_iam_role" "terraform_apply"' not in FOUNDATION_IAM
     assert 'resource "aws_iam_role" "github_ci"' not in FOUNDATION_IAM
+
+
+def test_shared_foundation_and_router_volume_are_tagged_shared():
+    assert 'environment = "shared"' in FOUNDATION_PROVIDER
+    assert 'shared_with = "development"' in FOUNDATION_PROVIDER
+    volume_tags = FOUNDATION_TAILSCALE.split("volume_tags = {", maxsplit=1)[1]
+    for tag in (
+        'project     = "nova-toll-budget-agent"',
+        'environment = "shared"',
+        'shared_with = "development"',
+    ):
+        assert tag in volume_tags
+    environment = APPLICATION_VARIABLES.split('variable "environment"', 1)[1].split(
+        'variable "enable_public_dns"', 1
+    )[0]
+    assert 'contains(["development", "production"], var.environment)' in environment
+    assert '"shared"' not in environment
 
 
 def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
@@ -288,8 +308,7 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     assert "ignore_changes = [reserved_concurrent_executions]" in proxy
     assert "aws_iam_role_policy.tollchat_proxy" in proxy
 
-    assert "put-function-concurrency" in DEPLOYMENT
-    assert "--reserved-concurrent-executions 5" in DEPLOYMENT
+    assert "put-function-concurrency" not in DEPLOYMENT
 
 
 def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
@@ -496,10 +515,31 @@ def test_development_dns_and_database_roles_are_isolated():
     )
     assert "alarm_actions       = local.alarm_actions" in agentcore
     assert "service-quotas get-service-quota" in DEPLOYMENT
+    assert "L-24B04930" in DEPLOYMENT
+    assert "get-aws-default-service-quota" in DEPLOYMENT
+    assert "check_lambda_quota_gate.py" in DEPLOYMENT
+    assert "AccountUsage.UnreservedConcurrentExecutions" not in DEPLOYMENT
+    assert (
+        'aws_cloudfront_distribution" and (.change.actions | index("create"))'
+        in DEPLOYMENT
+    )
+    assert "length(DistributionList.Items || `[]`)" in DEPLOYMENT
+    assert (
+        DEPLOYMENT.index("-out=build/development-create.tfplan")
+        < DEPLOYMENT.index("cloudfront_additions")
+        < DEPLOYMENT.index(
+            "terraform apply -input=false build/development-create.tfplan"
+        )
+    )
+    for resource in ("aws_lb", "aws_iam_role"):
+        assert resource in DEPLOYMENT
+    for live, additions, quota in ((2, 1, 500.0), (1, 1, 50), (10, 1, 1000)):
+        assert live + additions <= quota
+        assert quota + 1 > quota
     assert "development-create.tfplan" in DEPLOYMENT
     assert "development-dns.tfplan" in DEPLOYMENT
     create_plan = DEPLOYMENT.split("-out=build/development-create.tfplan", 1)[0]
-    assert "-var=enable_public_dns=false" in create_plan[-500:]
+    assert "-var=enable_public_dns=false" not in create_plan[-500:]
     dns_plan = DEPLOYMENT.split("-out=build/development-dns.tfplan", 1)[0]
     assert "-var=enable_public_dns=true" in dns_plan[-500:]
     assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)"') == 1
