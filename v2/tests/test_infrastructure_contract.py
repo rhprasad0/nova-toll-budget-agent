@@ -1,5 +1,7 @@
 import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import cast
 
@@ -525,9 +527,9 @@ def test_development_dns_and_database_roles_are_isolated():
     )
     assert "length(DistributionList.Items || `[]`)" in DEPLOYMENT
     assert (
-        DEPLOYMENT.index("-out=build/development-create.tfplan")
+        DEPLOYMENT.rindex("-out=build/development-create.tfplan")
         < DEPLOYMENT.index("cloudfront_additions")
-        < DEPLOYMENT.index(
+        < DEPLOYMENT.rindex(
             "terraform apply -input=false build/development-create.tfplan"
         )
     )
@@ -538,10 +540,223 @@ def test_development_dns_and_database_roles_are_isolated():
         assert quota + 1 > quota
     assert "development-create.tfplan" in DEPLOYMENT
     assert "development-dns.tfplan" in DEPLOYMENT
-    create_plan = DEPLOYMENT.split("-out=build/development-create.tfplan", 1)[0]
-    assert "-var=enable_public_dns=false" not in create_plan[-500:]
-    dns_plan = DEPLOYMENT.split("-out=build/development-dns.tfplan", 1)[0]
-    assert "-var=enable_public_dns=true" in dns_plan[-500:]
+    assert (
+        'development_state_addresses="$(AWS_PROFILE=nova-toll terraform state list)"'
+        in DEPLOYMENT
+    )
+    assert "grep -Fxq 'cloudflare_dns_record.apex[0]'" in DEPLOYMENT
+    existing, absent = DEPLOYMENT.split("if printf", 1)[1].split("else", 1)
+    assert "-var=enable_public_dns=false" not in existing
+    assert "-var=enable_public_dns=false" in absent
+    assert "-var=enable_public_dns=true" in absent
+    assert absent.count('development_plan_sha="$(sha256sum') == 1
+    assert (
+        'test "$(sha256sum build/development-create.tfplan | awk \'{print $1}\')" = "$development_plan_sha"\n'
+        "AWS_PROFILE=nova-toll terraform apply -input=false build/development-create.tfplan"
+        in absent
+    )
+    readiness = 'test "${DEVELOPMENT_DNS_READINESS_CONFIRMED:-}" = "yes"'
+    assert readiness in absent
+    assert (
+        absent.index("terraform apply -input=false build/development-create.tfplan")
+        < absent.index(readiness)
+        < absent.index("-out=build/development-dns.tfplan")
+    )
+    assert "aws_lambda_alias.tollchat_live" in DEPLOYMENT
+    assert "aws_lambda_alias.tollchat_proxy_live" not in DEPLOYMENT
+    assert "aws_lambda_provisioned_concurrency_config.tollchat" not in DEPLOYMENT
+    assert DEPLOYMENT.count("sha256sum build/development-dns.tfplan") == 3
+    gates = re.findall(r"jq -e '\n?(.*?)'", DEPLOYMENT, flags=re.DOTALL)
+    production_gate = next(gate for gate in gates if "def proxy:" in gate)
+    existing_gate = next(
+        gate for gate in gates if "def managed:" in gate and "def proxy:" not in gate
+    )
+    absent_gate = next(
+        gate for gate in gates if "data.archive_file.agent_usage_rollup" in gate
+    )
+    dns_gate = next(
+        gate
+        for gate in gates
+        if "cloudflare_dns_record.apex[0]" in gate and "def " not in gate
+    )
+
+    data_addresses: list[str] = []
+    for path in sorted((V2_ROOT / "infra").glob("*.tf")):
+        source = path.read_text()
+        for match in re.finditer(r'^data "([^"]+)" "([^"]+)" \{', source, re.MULTILINE):
+            data_addresses.append(f"data.{match.group(1)}.{match.group(2)}")
+            depth = 1
+            for line in source[match.end() :].splitlines():
+                depth += line.count("{") - line.count("}")
+                if re.match(r"\s*(count|for_each)\s*=", line):
+                    raise AssertionError(f"singleton data source has {line.strip()}")
+                if depth == 0:
+                    break
+    reads_match = re.search(r"def reads: (\[.*?\]);", absent_gate)
+    assert reads_match is not None
+    allowed_reads = json.loads(reads_match.group(1))
+    assert sorted(data_addresses) == sorted(allowed_reads)
+    assert len(allowed_reads) == 39
+
+    def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
+        return {"mode": mode, "address": address, "change": {"actions": actions}}
+
+    core = [
+        "aws_s3_object.agentcore",
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+        "aws_iam_role_policy.tollchat_runtime",
+        "aws_iam_role_policy.tollchat_proxy",
+    ]
+    reads = [
+        "data.aws_iam_policy_document.tollchat_runtime",
+        "data.aws_iam_policy_document.tollchat_proxy",
+    ]
+    proxy = [
+        "aws_s3_object.tollchat_proxy",
+        "aws_lambda_function.tollchat_proxy",
+        "aws_lambda_alias.tollchat_live",
+    ]
+
+    def passes(gate: str, plan: object) -> bool:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as fixture:
+            json.dump(plan, fixture)
+            fixture.flush()
+            return (
+                subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        'set -euo pipefail; jq -e "$1" < "$2" >/dev/null',
+                        "jq-gate",
+                        gate,
+                        fixture.name,
+                    ],
+                    check=False,
+                ).returncode
+                == 0
+            )
+
+    no_op = {"resource_changes": [change("managed", "anything", ["no-op"])]}
+    core_plan = [
+        *(change("managed", address, ["update"]) for address in core),
+        *(change("data", address, ["read"]) for address in reads),
+    ]
+    assert passes(production_gate, no_op)
+    assert passes(
+        production_gate,
+        {
+            "resource_changes": [
+                *core_plan,
+                *(change("managed", address, ["update"]) for address in proxy),
+            ]
+        },
+    )
+    assert passes(existing_gate, {"resource_changes": core_plan})
+    assert passes(
+        absent_gate,
+        {
+            "resource_changes": [
+                change("managed", "aws_s3_bucket.example", ["create"]),
+                *(change("data", address, ["read"]) for address in allowed_reads),
+            ]
+        },
+    )
+    dns_create = change("managed", "cloudflare_dns_record.apex[0]", ["create"])
+    dns_create.update(
+        {
+            "type": "cloudflare_dns_record",
+            "name": "apex",
+            "provider_name": "registry.terraform.io/cloudflare/cloudflare",
+        }
+    )
+    dns_create["change"] = {
+        "actions": ["create"],
+        "before": None,
+        "after": {"name": "tollchat.ai"},
+        "after_unknown": {"id": True},
+    }
+    assert passes(dns_gate, {"resource_changes": [dns_create]})
+
+    for bad in (
+        [*core_plan, change("managed", proxy[0], ["update"])],
+        [
+            *core_plan,
+            *(change("managed", address, ["update"]) for address in proxy[:-1]),
+            change("managed", "aws_lambda_alias.tollchat_proxy_live", ["update"]),
+        ],
+        [
+            *core_plan,
+            *(change("managed", address, ["update"]) for address in proxy),
+            change("managed", proxy[0], ["update"]),
+        ],
+        [
+            *core_plan,
+            *(change("managed", address, ["update"]) for address in proxy[:-1]),
+            change("managed", proxy[-1], ["create"]),
+        ],
+        [
+            *core_plan,
+            change(
+                "managed",
+                "aws_lambda_provisioned_concurrency_config.tollchat",
+                ["update"],
+            ),
+        ],
+    ):
+        assert not passes(production_gate, {"resource_changes": bad})
+    for actions in (
+        ["update"],
+        ["delete"],
+        ["delete", "create"],
+        ["create", "delete"],
+        ["no-op", "create"],
+    ):
+        assert not passes(
+            absent_gate,
+            {"resource_changes": [change("managed", "aws_s3_bucket.example", actions)]},
+        )
+    for bad in (
+        change("data", "data.aws_unknown.example", ["read"]),
+        change("data", allowed_reads[0], ["update"]),
+        change("managed", "cloudflare_dns_record.apex[0]", ["create"]),
+    ):
+        assert not passes(absent_gate, {"resource_changes": [bad]})
+    for bad in (
+        change("managed", "aws_s3_bucket.example", ["update"]),
+        change("managed", "cloudflare_dns_record.apex[0]", ["create"]),
+        *(
+            change("managed", core[0], actions)
+            for actions in (
+                ["create"],
+                ["delete"],
+                ["delete", "create"],
+                ["create", "delete"],
+            )
+        ),
+    ):
+        assert not passes(existing_gate, {"resource_changes": [bad]})
+    for bad in (
+        [],
+        [change("managed", "cloudflare_dns_record.apex[0]", ["create"])] * 2,
+        [
+            change("managed", "cloudflare_dns_record.apex[0]", ["create"]),
+            change("managed", "aws_s3_bucket.example", ["create"]),
+        ],
+        [change("data", "cloudflare_dns_record.apex[0]", ["create"])],
+        [change("managed", "cloudflare_dns_record.apex[0]", ["update"])],
+    ):
+        assert not passes(dns_gate, {"resource_changes": bad})
+    malformed_plans: list[object] = [
+        {},
+        {"resource_changes": None},
+        {"resource_changes": {}},
+        {"resource_changes": [{"mode": "managed"}]},
+        {"resource_changes": [change("managed", "x", [])]},
+    ]
+    for gate in (production_gate, existing_gate, absent_gate, dns_gate):
+        for malformed in malformed_plans:
+            assert not passes(gate, malformed)
     assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)"') == 1
     assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)/v2"') == 1
     assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)/v2/infra"') == 2

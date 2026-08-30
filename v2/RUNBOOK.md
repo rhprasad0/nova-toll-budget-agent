@@ -274,8 +274,11 @@ AWS_PROFILE=nova-toll terraform plan \
   -out=build/production-release.tfplan
 production_plan_sha="$(sha256sum build/production-release.tfplan | awk '{print $1}')"
 AWS_PROFILE=nova-toll terraform show -json build/production-release.tfplan | jq -e '
-  [.resource_changes[]? | select(.change.actions != ["no-op"])] |
-  all((.mode == "managed" and (.address == "aws_s3_object.agentcore" or .address == "aws_bedrockagentcore_agent_runtime.tollchat" or .address == "aws_bedrockagentcore_agent_runtime_endpoint.tollchat" or .address == "aws_iam_role_policy.tollchat_runtime" or .address == "aws_iam_role_policy.tollchat_proxy") and .change.actions == ["update"]) or (.mode == "data" and (.address == "data.aws_iam_policy_document.tollchat_runtime" or .address == "data.aws_iam_policy_document.tollchat_proxy") and .change.actions == ["read"]))'
+  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
+  def managed: ["aws_s3_object.agentcore", "aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_iam_role_policy.tollchat_runtime", "aws_iam_role_policy.tollchat_proxy"];
+  def reads: ["data.aws_iam_policy_document.tollchat_runtime", "data.aws_iam_policy_document.tollchat_proxy"];
+  def proxy: ["aws_s3_object.tollchat_proxy", "aws_lambda_function.tollchat_proxy", "aws_lambda_alias.tollchat_live"];
+  valid and ([.resource_changes[] | select(.change.actions != ["no-op"])] | all(.[]; .address as $address | ((.mode == "managed" and ((managed | index($address)) or (proxy | index($address))) and .change.actions == ["update"]) or (.mode == "data" and (reads | index($address)) and .change.actions == ["read"]))) and ([.[] | select(.address as $address | proxy | index($address)) | .address] as $seen | ($seen | length == 0 or ($seen | length == 3 and ($seen | sort) == (proxy | sort)))))'
 # Review the displayed before/after values for the authorized artifact chain and
 # narrow IAM statements before applying this exact digest.
 AWS_PROFILE=nova-toll terraform show build/production-release.tfplan
@@ -283,16 +286,37 @@ test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$produ
 AWS_PROFILE=nova-toll terraform apply -input=false build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
 AWS_PROFILE=nova-toll terraform init -reconfigure -backend-config=backend.development.hcl
-AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
+development_state_addresses="$(AWS_PROFILE=nova-toll terraform state list)"
+if printf '%s\n' "$development_state_addresses" | grep -Fxq 'cloudflare_dns_record.apex[0]'; then
+  AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
   -var loader_package_path=build/loader.zip \
   -var publisher_package_path=build/publisher.zip \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip \
   -out=build/development-create.tfplan
-AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
+  development_plan_sha="$(sha256sum build/development-create.tfplan | awk '{print $1}')"
 AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | jq -e '
-  [.resource_changes[]? | select(.change.actions != ["no-op"])] |
-  all((.mode == "managed" and (.address == "aws_s3_object.agentcore" or .address == "aws_bedrockagentcore_agent_runtime.tollchat" or .address == "aws_bedrockagentcore_agent_runtime_endpoint.tollchat" or .address == "aws_iam_role_policy.tollchat_runtime" or .address == "aws_iam_role_policy.tollchat_proxy") and .change.actions == ["update"]) or (.mode == "data" and (.address == "data.aws_iam_policy_document.tollchat_runtime" or .address == "data.aws_iam_policy_document.tollchat_proxy") and .change.actions == ["read"]))'
+  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
+  def managed: ["aws_s3_object.agentcore", "aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_iam_role_policy.tollchat_runtime", "aws_iam_role_policy.tollchat_proxy"];
+  def reads: ["data.aws_iam_policy_document.tollchat_runtime", "data.aws_iam_policy_document.tollchat_proxy"];
+  valid and all(.resource_changes[]; .address as $address | .change.actions == ["no-op"] or ((.mode == "managed" and (managed | index($address)) and .change.actions == ["update"]) or (.mode == "data" and (reads | index($address)) and .change.actions == ["read"])))'
+  AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
+  test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
+  AWS_PROFILE=nova-toll terraform apply -input=false build/development-create.tfplan
+  test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
+else
+  AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars -var=enable_public_dns=false \
+  -var loader_package_path=build/loader.zip \
+  -var publisher_package_path=build/publisher.zip \
+  -var agentcore_package_path=build/agentcore.zip \
+  -var chat_proxy_package_path=build/chat-proxy.zip \
+  -out=build/development-create.tfplan
+development_plan_sha="$(sha256sum build/development-create.tfplan | awk '{print $1}')"
+AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | jq -e '
+  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
+  def reads: ["data.archive_file.agent_usage_rollup", "data.archive_file.placeholder", "data.archive_file.usage_publisher", "data.aws_caller_identity.current", "data.aws_cloudfront_cache_policy.caching_disabled", "data.aws_cloudfront_origin_request_policy.all_except_host", "data.aws_db_instance.main", "data.aws_iam_policy_document.agent_measurement_bucket", "data.aws_iam_policy_document.agent_measurement_kms", "data.aws_iam_policy_document.agent_usage_rollup", "data.aws_iam_policy_document.agentcore_assume", "data.aws_iam_policy_document.delivery_failure", "data.aws_iam_policy_document.lambda_assume", "data.aws_iam_policy_document.loader", "data.aws_iam_policy_document.publisher", "data.aws_iam_policy_document.publisher_delivery_failure", "data.aws_iam_policy_document.site_kms", "data.aws_iam_policy_document.timed_checks", "data.aws_iam_policy_document.timed_checks_assume", "data.aws_iam_policy_document.tollchat_proxy", "data.aws_iam_policy_document.tollchat_runtime", "data.aws_iam_policy_document.usage_publisher", "data.aws_kms_alias.raw", "data.aws_prefix_list.dynamodb", "data.aws_prefix_list.s3", "data.aws_region.current", "data.aws_s3_bucket.agentcore_artifacts", "data.aws_s3_bucket.raw", "data.aws_security_group.agentcore_endpoint", "data.aws_security_group.eventbridge_endpoint", "data.aws_security_group.rds", "data.aws_sns_topic.alerts", "data.aws_subnet.tollchat_private_a", "data.aws_subnet.tollchat_private_c", "data.aws_subnets.default", "data.aws_vpc.default", "data.aws_vpc_endpoint.agentcore", "data.aws_vpc_endpoint.tollchat_api", "data.cloudflare_zone.tollchat"];
+  valid and all(.resource_changes[]; .address as $address | $address != "cloudflare_dns_record.apex[0]" and (.change.actions == ["no-op"] or (.mode == "managed" and .change.actions == ["create"]) or (.mode == "data" and (reads | index($address)) and .change.actions == ["read"])))'
+AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
 
 # Derive additions from this exact reviewed saved plan. Each false result exits
 # nonzero, including decimal quota values, and blocks the apply.
@@ -332,18 +356,12 @@ iam_quota="$(AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-ser
   --service-code iam --quota-code L-FE177D64 --query 'Quota.Value' --output text)"
 jq -en --argjson live "$iam_live" --argjson additions "$iam_additions" \
   --argjson quota "$iam_quota" '$live + $additions <= $quota' | grep -qx true
-development_plan_sha="$(sha256sum build/development-create.tfplan | awk '{print $1}')"
 test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
 AWS_PROFILE=nova-toll terraform apply -input=false build/development-create.tfplan
 test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
-```
-
-The apply uses only an exact reviewed plan without `-target`; stop on any DNS
-delete or replacement, unrelated action, or failed quota gate. Before a first
-deployment's DNS staging plan, verify CloudFront is deployed, WAF is associated,
-origins remain IAM-only/private, and alarms are non-paging.
-
-```sh
+# After the reviewed apply, verify CloudFront is deployed, WAF is associated,
+# origins remain IAM-only/private, and alarms are non-paging before DNS staging.
+test "${DEVELOPMENT_DNS_READINESS_CONFIRMED:-}" = "yes"
 AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
   -var=enable_public_dns=true \
   -var loader_package_path=build/loader.zip \
@@ -351,10 +369,14 @@ AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip \
   -out=build/development-dns.tfplan
+development_dns_plan_sha="$(sha256sum build/development-dns.tfplan | awk '{print $1}')"
 AWS_PROFILE=nova-toll terraform show build/development-dns.tfplan
 AWS_PROFILE=nova-toll terraform show -json build/development-dns.tfplan | \
-  jq -e '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}] == [{"address":"cloudflare_dns_record.apex[0]","actions":["create"]}]'
+  jq -e '(.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string")) and ([.resource_changes[] | select(.change.actions != ["no-op"]) | {mode,address,actions:.change.actions}] == [{"mode":"managed","address":"cloudflare_dns_record.apex[0]","actions":["create"]}])'
+test "$(sha256sum build/development-dns.tfplan | awk '{print $1}')" = "$development_dns_plan_sha"
 AWS_PROFILE=nova-toll terraform apply -input=false build/development-dns.tfplan
+test "$(sha256sum build/development-dns.tfplan | awk '{print $1}')" = "$development_dns_plan_sha"
+fi
 unset CLOUDFLARE_API_TOKEN
 )
 ```
