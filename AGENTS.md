@@ -29,7 +29,7 @@ AgentMemory only for background (architecture, past decisions, known pitfalls).
 
 # When to use the graph
 
-Use `code_explorer` → `implementer` → `verifier` only when the change is
+Use `explorer` → `pre_checker` → `builder` → `checker` only when the change is
 **non-trivial**. A change is non-trivial when its scope or risk warrants
 independent exploration and verification, for example when it:
 
@@ -47,37 +47,45 @@ Parent orchestrates only. Parent does not explore the repo in depth, implement,
 or self-verify.
 
 ```
-intent → explorer → implementer → verifier → PASS | FAIL→implementer | human
+intent → explorer → pre-checker → builder → checker → PASS | FAIL→builder | human
 ```
 
 Legal edges:
 
-1. Explorer writes `.graph/explore.md`. Implementer does not start without it.
-2. Implementer writes code in the assigned worktree and `.graph/change.md`.
-3. Verifier starts with `fork_turns: "none"`, reads the worktree + artifacts,
+1. Explorer writes `.graph/explore.md`. Pre-checker does not start without it.
+2. Pre-checker writes `.graph/checklist.md`. If it has blocking gaps, return to
+   the original explorer; builder starts only after a non-blocking checklist.
+3. Builder writes code in the assigned worktree and `.graph/change.md` after
+   reading `explore.md` and `checklist.md`.
+4. Checker starts with `fork_turns: "none"`, reads the worktree + artifacts,
    writes `.graph/verdict.md`, and does not edit application code.
-4. FAIL → the original implementer with `verdict.md` as the spec. At most two
+5. FAIL → the original builder with `verdict.md` as the spec. At most two
    fix loops, then stop for the user.
-5. PASS is the only path to “done.”
-6. No parallel writers. Fan-out explorers or verifiers only.
-7. No subagents of subagents.
-8. Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
+6. PASS is the only path to “done.”
+7. No parallel writers. Fan-out explorers, pre-checkers, or checkers only.
+8. No subagents of subagents.
+9. Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
    `.graph/STATE.md` to match the current node and next legal edge.
 
 ## Parent checklist
 
 1. Create or reuse an isolated path under `.worktrees/` and record it in the
    worktree's `.graph/STATE.md`.
-2. Update `STATE.md`, then spawn `code_explorer` with the intent and absolute
-   worktree path. Wait.
+2. Update `STATE.md`, then spawn `explorer` with `fork_turns: "none"`, the
+   intent, and absolute worktree path. Wait.
 3. If `explore.md` has blocking gaps, update `STATE.md`, stop, and ask the user.
-4. Update `STATE.md`, then spawn `implementer` with explore.md + worktree. One
-   writer.
-5. Update `STATE.md`, then spawn `verifier` with `fork_turns: "none"`. Do not
-   reuse the implementer thread.
-6. On FAIL, update `STATE.md` and return `verdict.md` to the original
-   implementer. Re-verify with a new verifier using `fork_turns: "none"`.
-7. On PASS, update `STATE.md`, then summarize files, checks run, and leftover
+4. Update `STATE.md`, then spawn `pre_checker` with `fork_turns: "none"`,
+   explore.md, and worktree. If its checklist has blocking gaps, return the
+   worktree-local gaps to the original explorer thread, then spawn a new
+   `pre_checker` with `fork_turns: "none"` after repair.
+5. Update `STATE.md`, then spawn `builder` with `fork_turns: "none"`,
+   explore.md, checklist.md, and worktree. One writer.
+6. Update `STATE.md`, then spawn `checker` with `fork_turns: "none"`. Do not
+   reuse the builder thread.
+7. On FAIL, update `STATE.md` and return `.graph/verdict.md` to the original
+   builder thread. After every builder repair, re-check with a new checker
+   using `fork_turns: "none"`; stop for the user after two failed fix loops.
+8. On PASS, update `STATE.md`, then summarize files, checks run, and leftover
    risk.
 
 ## Artifacts
@@ -89,6 +97,9 @@ edge, Blocked by.
 
 `.graph/explore.md` — question, owners/entrypoints, current behavior, files in
 scope, assumptions, falsifiers, out of scope, gaps.
+
+`.graph/checklist.md` — preconditions, numbered acceptance requirements,
+required commands and pass conditions, risk-focused checks, blocking gaps.
 
 `.graph/change.md` — intent, files touched, assumptions accepted, commands run,
 how to verify, what was not done.

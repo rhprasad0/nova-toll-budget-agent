@@ -6,11 +6,14 @@ args = ["-y", "@upstash/context7-mcp@4.0.4"]
 max_threads = 6
 max_depth = 1
 
-[agents.code_explorer]
-config_file = "agents/code_explorer.toml"
+[agents.explorer]
+config_file = "agents/explorer.toml"
 
-[agents.implementer]
-config_file = "agents/implementer.toml"
+[agents.pre_checker]
+config_file = "agents/pre_checker.toml"
 
-[agents.verifier]
-config_file = "agents/verifier.toml"
+[agents.builder]
+config_file = "agents/builder.toml"
+
+[agents.checker]
+config_file = "agents/checker.toml"
