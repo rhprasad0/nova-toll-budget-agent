@@ -2,6 +2,8 @@
 set -euo pipefail
 
 bootstrap_db="nova_toll_v2_bootstrap_test"
+production_db="nova_toll"
+development_db="nova_toll_development"
 retirement_db="nova_toll_v2_retirement_test"
 retirement_divergent_db="nova_toll_v2_retirement_divergent_test"
 retirement_dependent_db="nova_toll_v2_retirement_dependent_test"
@@ -30,15 +32,15 @@ incompatible_pricing_db="nova_toll_v2_oracle_incompatible_pricing_test"
 unsafe_agent_db="nova_toll_v2_oracle_unsafe_agent_test"
 
 cleanup_databases() {
-  for database in "$bootstrap_db" "$retirement_db" "$migration_db" \
+  for database in "$bootstrap_db" "$production_db" "$development_db" "$retirement_db" "$migration_db" \
     "$retirement_divergent_db" "$retirement_dependent_db" \
     "$retirement_role_db" \
     "$oracle_rollback_db" "$missing_pricing_db" "$incompatible_pricing_db" \
     "$unsafe_agent_db"; do
     dropdb --if-exists "$database"
   done
-  psql --dbname postgres --set ON_ERROR_STOP=1 \
-    --command "DROP ROLE IF EXISTS loader_writer"
+  psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, loader_writer"
 }
 
 cleanup() {
@@ -66,6 +68,36 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 SQL
+
+createdb --template template0 "$production_db"
+psql --dbname "$production_db" --file v2/db/schema.sql
+psql --dbname "$production_db" --file v2/db/roles.sql
+psql --dbname "$production_db" --file v2/db/oracle/schema.sql
+url_target_host="${PGHOST:-localhost}"
+url_target_port="${PGPORT:-5432}"
+if ! PGHOST=127.0.0.1 PGPORT=1 PGUSER=ambient PGPASSWORD=ambient \
+  NOVA_TOLL_ADMIN_URL="postgresql://postgres:URL_TARGET_TEST_PASSWORD@${url_target_host}:${url_target_port}/postgres" \
+  python3 v2/scripts/bootstrap_development_database.py; then
+  echo "bootstrap URL did not override ambient PostgreSQL settings" >&2
+  exit 1
+fi
+psql --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nova_toll_development') THEN
+    RAISE EXCEPTION 'bootstrap URL did not create the local development database';
+  END IF;
+END $$;
+SQL
+dropdb "$development_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development"
+if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
+  v2/scripts/test_development_database_bootstrap.sh; then
+  echo "disposable bootstrap test accepted NOVA_TOLL_ADMIN_URL" >&2
+  exit 1
+fi
+v2/scripts/test_development_database_bootstrap.sh
 
 createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \
