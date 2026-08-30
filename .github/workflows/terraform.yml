@@ -27,6 +27,7 @@ jobs:
         working-directory: infra
       - run: terraform validate
         working-directory: infra
+      - run: python3 infra/test_release_plan.py
       - run: terraform fmt -check -recursive
         working-directory: v2/infra
       - run: terraform init -backend=false -input=false
