@@ -543,6 +543,11 @@ def test_iam_tls_connection_contract(monkeypatch):
         },
     ]
 
+    monkeypatch.delenv("PRICING_DB_USER")
+
+    assert route_tool.connect_to_pricing_database() is sentinel
+    assert rds.calls[-1]["DBUsername"] == "pricing_caller"
+
 
 @pytest.mark.parametrize(
     "rows",

@@ -268,11 +268,14 @@ AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
 AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
 AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | \
   jq -e '[.resource_changes[] | select(.change.actions != ["no-op"]) | .change.actions] | all(. == ["create"])'
+AWS_PROFILE=nova-toll terraform apply build/development-create.tfplan
 ```
 
-After CloudFront, WAF, IAM-only origins, and non-paging alarms are ready, make
-a separate saved plan with only `-var=enable_public_dns=true`. Review that it
-adds only `cloudflare_dns_record.apex[0]` before applying that exact plan.
+The apply uses the exact reviewed create plan without `-target`; stop if it
+fails. Before planning DNS, verify CloudFront is deployed, WAF is associated,
+origins remain IAM-only/private, and alarms are non-paging. Then make a
+separate saved plan with only `-var=enable_public_dns=true`. Stop unless it
+adds exactly `cloudflare_dns_record.apex[0]`, then apply that exact plan.
 
 ```sh
 AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
@@ -283,6 +286,9 @@ AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
   -var chat_proxy_package_path=build/chat-proxy.zip \
   -out=build/development-dns.tfplan
 AWS_PROFILE=nova-toll terraform show build/development-dns.tfplan
+AWS_PROFILE=nova-toll terraform show -json build/development-dns.tfplan | \
+  jq -e '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}] == [{"address":"cloudflare_dns_record.apex[0]","actions":["create"]}]'
+AWS_PROFILE=nova-toll terraform apply build/development-dns.tfplan
 unset CLOUDFLARE_API_TOKEN
 ```
 

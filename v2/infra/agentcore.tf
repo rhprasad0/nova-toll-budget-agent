@@ -354,16 +354,20 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
     max_lifetime                 = 3600
   }
 
-  environment_variables = {
-    DB_HOST                    = data.aws_db_instance.main.address
-    DB_PORT                    = tostring(data.aws_db_instance.main.port)
-    DB_NAME                    = local.database_name
-    DB_USER                    = local.database_roles.agent
-    PRICING_DB_USER            = local.database_roles.pricing_caller
-    DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
-    TOLLCHAT_GUARDRAIL_ID      = aws_bedrock_guardrail.tollchat.guardrail_id
-    TOLLCHAT_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.tollchat.version
-  }
+  environment_variables = merge(
+    {
+      DB_HOST                    = data.aws_db_instance.main.address
+      DB_PORT                    = tostring(data.aws_db_instance.main.port)
+      DB_NAME                    = local.database_name
+      DB_USER                    = local.database_roles.agent
+      DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
+      TOLLCHAT_GUARDRAIL_ID      = aws_bedrock_guardrail.tollchat.guardrail_id
+      TOLLCHAT_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.tollchat.version
+    },
+    local.is_production ? {} : {
+      PRICING_DB_USER = local.database_roles.pricing_caller
+    },
+  )
 
   lifecycle {
     precondition {

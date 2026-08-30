@@ -480,7 +480,9 @@ def test_development_dns_and_database_roles_are_isolated():
     assert 'resource "cloudflare_dns_record" "site_cert_validation"' in site
     assert "DB_USER                    = local.database_roles.agent" in agentcore
     assert (
-        "PRICING_DB_USER            = local.database_roles.pricing_caller" in agentcore
+        "environment_variables = merge(" in agentcore
+        and "local.is_production ? {} : {" in agentcore
+        and "PRICING_DB_USER = local.database_roles.pricing_caller" in agentcore
     )
     runtime_policy = agentcore.split(
         'data "aws_iam_policy_document" "tollchat_runtime"', 1
