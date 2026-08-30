@@ -381,7 +381,7 @@ resource "aws_cloudwatch_log_group" "agentcore_runtime" {
   for_each = toset(["DEFAULT", "preview"])
 
   name              = "/aws/bedrock-agentcore/runtimes/${aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_id}-${each.value}"
-  retention_in_days = local.is_production ? 1 : 1
+  retention_in_days = local.is_production ? 1 : 7
 }
 
 resource "aws_bedrockagentcore_agent_runtime_endpoint" "tollchat" {
