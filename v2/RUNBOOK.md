@@ -48,8 +48,9 @@ change their lifecycle.
 Before and after a release, inventory every Resource Groups Tagging API page
 and retain only its sanitized page/resource/value counts. The foundation plan
 must be zero-change after this source update; never apply it. Save and inspect
-each production and development plan as JSON, review every non-no-op action and
-sanitized before/after semantic delta, then apply only that exact reviewed plan.
+each production plan as JSON, review every non-no-op action and sanitized
+before/after semantic delta, then apply only that exact reviewed plan.
+Development deployment is owned by #329.
 Keep ignored package builds and hash-identified saved plans until independent
 review passes; never retain state, tokens, or raw plan JSON.
 
@@ -178,85 +179,10 @@ AWS_PROFILE=nova-toll aws --region us-east-1 iam get-role-policy \
 unset CLOUDFLARE_API_TOKEN
 ```
 
-## Development environment
+### Guarded production release
 
-Development has its own application state and names but reads the shared
-network, RDS, raw-data, and alert foundations. Its only shared-foundation
-writes are development-keyed artifact objects and the RDS security-group ingress
-rule. It uses
-`dev.tollchat.ai`, `nova_toll_development`, development database roles, shorter
-logs, non-paging alarms, and no provisioned proxy concurrency. Bootstrap its
-AWS-side dependencies separately before planning; this configuration never
-creates PostgreSQL roles or schemas.
-
-### One-time development database bootstrap
-
-Before development infrastructure uses the database, an approved administrator
-must run the reviewed one-time bootstrap. Store no credential locally: replace
-`/approved/administrator/connection` with the approved SecureString parameter
-name, load it only into this process, then remove it when finished.
-
-```sh
-(
-cd "$(git rev-parse --show-toplevel)"
-if ! NOVA_TOLL_ADMIN_URL="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
-  ssm get-parameter --name /approved/administrator/connection --with-decryption \
-  --query Parameter.Value --output text)"; then
-  echo 'could not retrieve the approved administrator connection' >&2
-  exit 1
-fi
-: "${NOVA_TOLL_ADMIN_URL:?administrator connection was empty}"
-export NOVA_TOLL_ADMIN_URL
-if ! python3 v2/scripts/bootstrap_development_database.py; then
-  unset NOVA_TOLL_ADMIN_URL
-  exit 1
-fi
-unset NOVA_TOLL_ADMIN_URL
-)
-```
-
-The connection value must be a PostgreSQL administrator URL for the shared
-instance. The command fails closed unless its explicit connection target,
-`nova_toll`, `rds_iam`, and all six safe production roles already exist and the
-development database/roles do not. It creates only `nova_toll_development` plus
-the fixed `_development` roles.
-
-```sh
-(
-set -euo pipefail
-cd "$(git rev-parse --show-toplevel)/v2/infra"
-AWS_PROFILE=nova-toll terraform init -backend-config=backend.development.hcl
-AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
-  -var loader_package_path=build/loader.zip \
-  -var publisher_package_path=build/publisher.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip
-)
-```
-
-### Development infrastructure review
-
-Build and record all four reviewed package digests before planning:
-
-```sh
-(
-cd "$(git rev-parse --show-toplevel)/v2"
-./scripts/build_loader_zip.sh
-./scripts/build_publisher_zip.sh
-./scripts/build_agentcore_zips.sh
-(cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip \
-  > DEVELOPMENT_SHA256SUMS && sha256sum --check DEVELOPMENT_SHA256SUMS)
-)
-```
-
-Load the Cloudflare token only into this shell. First save, hash, and review a
-production release plan; apply it only if every action is within the authorized
-AgentCore/IAM release set. A production no-op still requires the package/live
-identity binding described above.
-For an existing development state, use `development.tfvars` unchanged so its
-managed DNS record stays enabled; reject any DNS delete or replacement. The
-DNS-disabled staging branch below is only for a first deployment whose state
-does not contain `cloudflare_dns_record.apex[0]`.
+Use this production-only workflow for the reviewed release. Its action gate and
+digest check must both pass before applying the saved plan.
 
 ```sh
 (
@@ -285,104 +211,26 @@ AWS_PROFILE=nova-toll terraform show build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
 AWS_PROFILE=nova-toll terraform apply -input=false build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
-AWS_PROFILE=nova-toll terraform init -reconfigure -backend-config=backend.development.hcl
-development_state_addresses="$(AWS_PROFILE=nova-toll terraform state list)"
-if printf '%s\n' "$development_state_addresses" | grep -Fxq 'cloudflare_dns_record.apex[0]'; then
-  AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
-  -var loader_package_path=build/loader.zip \
-  -var publisher_package_path=build/publisher.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip \
-  -out=build/development-create.tfplan
-  development_plan_sha="$(sha256sum build/development-create.tfplan | awk '{print $1}')"
-AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | jq -e '
-  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
-  def managed: ["aws_s3_object.agentcore", "aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_iam_role_policy.tollchat_runtime", "aws_iam_role_policy.tollchat_proxy"];
-  def reads: ["data.aws_iam_policy_document.tollchat_runtime", "data.aws_iam_policy_document.tollchat_proxy"];
-  valid and all(.resource_changes[]; .address as $address | .change.actions == ["no-op"] or ((.mode == "managed" and (managed | index($address)) and .change.actions == ["update"]) or (.mode == "data" and (reads | index($address)) and .change.actions == ["read"])))'
-  AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
-  test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
-  AWS_PROFILE=nova-toll terraform apply -input=false build/development-create.tfplan
-  test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
-else
-  AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars -var=enable_public_dns=false \
-  -var loader_package_path=build/loader.zip \
-  -var publisher_package_path=build/publisher.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip \
-  -out=build/development-create.tfplan
-development_plan_sha="$(sha256sum build/development-create.tfplan | awk '{print $1}')"
-AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | jq -e '
-  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
-  def reads: ["data.archive_file.agent_usage_rollup", "data.archive_file.placeholder", "data.archive_file.usage_publisher", "data.aws_caller_identity.current", "data.aws_cloudfront_cache_policy.caching_disabled", "data.aws_cloudfront_origin_request_policy.all_except_host", "data.aws_db_instance.main", "data.aws_iam_policy_document.agent_measurement_bucket", "data.aws_iam_policy_document.agent_measurement_kms", "data.aws_iam_policy_document.agent_usage_rollup", "data.aws_iam_policy_document.agentcore_assume", "data.aws_iam_policy_document.delivery_failure", "data.aws_iam_policy_document.lambda_assume", "data.aws_iam_policy_document.loader", "data.aws_iam_policy_document.publisher", "data.aws_iam_policy_document.publisher_delivery_failure", "data.aws_iam_policy_document.site_kms", "data.aws_iam_policy_document.timed_checks", "data.aws_iam_policy_document.timed_checks_assume", "data.aws_iam_policy_document.tollchat_proxy", "data.aws_iam_policy_document.tollchat_runtime", "data.aws_iam_policy_document.usage_publisher", "data.aws_kms_alias.raw", "data.aws_prefix_list.dynamodb", "data.aws_prefix_list.s3", "data.aws_region.current", "data.aws_s3_bucket.agentcore_artifacts", "data.aws_s3_bucket.raw", "data.aws_security_group.agentcore_endpoint", "data.aws_security_group.eventbridge_endpoint", "data.aws_security_group.rds", "data.aws_sns_topic.alerts", "data.aws_subnet.tollchat_private_a", "data.aws_subnet.tollchat_private_c", "data.aws_subnets.default", "data.aws_vpc.default", "data.aws_vpc_endpoint.agentcore", "data.aws_vpc_endpoint.tollchat_api", "data.cloudflare_zone.tollchat"];
-  valid and all(.resource_changes[]; .address as $address | $address != "cloudflare_dns_record.apex[0]" and (.change.actions == ["no-op"] or (.mode == "managed" and .change.actions == ["create"]) or (.mode == "data" and (reads | index($address)) and .change.actions == ["read"])))'
-AWS_PROFILE=nova-toll terraform show build/development-create.tfplan
-
-# Derive additions from this exact reviewed saved plan. Each false result exits
-# nonzero, including decimal quota values, and blocks the apply.
-cloudfront_additions="$(AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | \
-  jq '[.resource_changes[]? | select(.type == "aws_cloudfront_distribution" and (.change.actions | index("create"))) ] | length')"
-cloudfront_live="$(AWS_PROFILE=nova-toll aws cloudfront list-distributions \
-  --query 'length(DistributionList.Items || `[]`)' --output text)"
-cloudfront_quota="$(AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
-  --service-code cloudfront --quota-code L-24B04930 --query 'Quota.Value' --output text 2>/dev/null || \
-  AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-aws-default-service-quota \
-  --service-code cloudfront --quota-code L-24B04930 --query 'Quota.Value' --output text)"
-jq -en --argjson live "$cloudfront_live" --argjson additions "$cloudfront_additions" \
-  --argjson quota "$cloudfront_quota" '$live + $additions <= $quota' | grep -qx true
-
-lambda_gate_dir="$(mktemp -d)"
-trap 'rm -rf "$lambda_gate_dir"' EXIT
-AWS_PROFILE=nova-toll aws --region us-east-1 lambda get-account-settings > "$lambda_gate_dir/account-settings.json"
-AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan > "$lambda_gate_dir/plan.json"
-lambda_quota="$(AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
-  --service-code lambda --quota-code L-B99A9384 --query 'Quota.Value' --output text)"
-python3 ../scripts/check_lambda_quota_gate.py --account-settings "$lambda_gate_dir/account-settings.json" \
-  --plan "$lambda_gate_dir/plan.json" --quota "$lambda_quota"
-
-elb_additions="$(AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | \
-  jq '[.resource_changes[]? | select(.type == "aws_lb" and (.change.actions | index("create"))) ] | length')"
-elb_live="$(AWS_PROFILE=nova-toll aws --region us-east-1 elbv2 describe-load-balancers \
-  --query 'length(LoadBalancers)' --output text)"
-elb_quota="$(AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
-  --service-code elasticloadbalancing --quota-code L-53DA6B97 --query 'Quota.Value' --output text)"
-jq -en --argjson live "$elb_live" --argjson additions "$elb_additions" \
-  --argjson quota "$elb_quota" '$live + $additions <= $quota' | grep -qx true
-
-iam_additions="$(AWS_PROFILE=nova-toll terraform show -json build/development-create.tfplan | \
-  jq '[.resource_changes[]? | select(.type == "aws_iam_role" and (.change.actions | index("create"))) ] | length')"
-iam_live="$(AWS_PROFILE=nova-toll aws iam list-roles --query 'length(Roles)' --output text)"
-iam_quota="$(AWS_PROFILE=nova-toll aws --region us-east-1 service-quotas get-service-quota \
-  --service-code iam --quota-code L-FE177D64 --query 'Quota.Value' --output text)"
-jq -en --argjson live "$iam_live" --argjson additions "$iam_additions" \
-  --argjson quota "$iam_quota" '$live + $additions <= $quota' | grep -qx true
-test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
-AWS_PROFILE=nova-toll terraform apply -input=false build/development-create.tfplan
-test "$(sha256sum build/development-create.tfplan | awk '{print $1}')" = "$development_plan_sha"
-# After the reviewed apply, verify CloudFront is deployed, WAF is associated,
-# origins remain IAM-only/private, and alarms are non-paging before DNS staging.
-test "${DEVELOPMENT_DNS_READINESS_CONFIRMED:-}" = "yes"
-AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
-  -var=enable_public_dns=true \
-  -var loader_package_path=build/loader.zip \
-  -var publisher_package_path=build/publisher.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip \
-  -out=build/development-dns.tfplan
-development_dns_plan_sha="$(sha256sum build/development-dns.tfplan | awk '{print $1}')"
-AWS_PROFILE=nova-toll terraform show build/development-dns.tfplan
-AWS_PROFILE=nova-toll terraform show -json build/development-dns.tfplan | \
-  jq -e '(.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string")) and ([.resource_changes[] | select(.change.actions != ["no-op"]) | {mode,address,actions:.change.actions}] == [{"mode":"managed","address":"cloudflare_dns_record.apex[0]","actions":["create"]}])'
-test "$(sha256sum build/development-dns.tfplan | awk '{print $1}')" = "$development_dns_plan_sha"
-AWS_PROFILE=nova-toll terraform apply -input=false build/development-dns.tfplan
-test "$(sha256sum build/development-dns.tfplan | awk '{print $1}')" = "$development_dns_plan_sha"
-fi
 unset CLOUDFLARE_API_TOKEN
 )
 ```
 
-The proxy Lambda explicitly depends on its inline policy, so the complete plan
-applies transaction permission before publishing the new Lambda version.
+## Development environment
+
+The replacement development environment is account-local: see
+[`infra/account-contract.json`](../infra/account-contract.json). Its canonical
+account is `nova-toll-development` (`903859731897`) in `us-east-1`; it owns its
+backend, KMS, network, RDS, storage, audit trail, SSM parameters, and future
+GitHub OIDC identities. It has no approved direct AWS read path to production.
+Routine administration uses IAM Identity Center `AdministratorAccess`; the
+management account uses `OrganizationAccountAccessRole` only for break-glass.
+No long-lived CI credentials are provisioned. Development budget and
+organization-trail implementation are deferred to #330.
+
+The legacy production development state is retained only as the sanitized cleanup
+inventory in [`infra/legacy-development-inventory.md`](../infra/legacy-development-inventory.md).
+#333 must refresh and reconcile that inventory before any separately approved
+cleanup. #329 owns the account-aware Terraform and backend-isolation refactor.
 
 ## Public report launch
 

@@ -1,0 +1,34 @@
+{
+  "region": "us-east-1",
+  "accounts": {
+    "management": {
+      "id": "407645373626"
+    },
+    "production": {
+      "name": "nova-toll-prod",
+      "id": "920534282028",
+      "ownership": "account-local"
+    },
+    "development": {
+      "name": "nova-toll-development",
+      "id": "903859731897",
+      "routine_human_access": "IAM Identity Center AdministratorAccess",
+      "break_glass_role": "OrganizationAccountAccessRole",
+      "long_lived_ci_credentials": false,
+      "owns": [
+        "backend",
+        "KMS",
+        "network",
+        "RDS",
+        "storage",
+        "audit trail",
+        "SSM parameters",
+        "future GitHub OIDC identities"
+      ]
+    }
+  },
+  "shared_access": {
+    "development_to_production_aws_read_paths": [],
+    "cloudflare_dns": "separately trusted foundation workflow; not an AWS shared-read grant"
+  }
+}
