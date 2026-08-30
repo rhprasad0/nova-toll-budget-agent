@@ -20,7 +20,12 @@ login_roles=(
 
 sentinel='VERIFIER_SENTINEL_SECRET'
 sentinel_output="$(mktemp)"
-trap 'rm -f -- "$sentinel_output"' EXIT
+mismatch_container=''
+cleanup() {
+  [[ -z "$mismatch_container" ]] || docker rm --force "$mismatch_container" >/dev/null
+  rm -f -- "$sentinel_output"
+}
+trap cleanup EXIT
 if PGHOST=127.0.0.1 PGPORT=1 PGUSER=ambient PGPASSWORD=ambient \
   NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres" \
   python3 v2/scripts/bootstrap_development_database.py >"$sentinel_output" 2>&1; then
@@ -30,6 +35,40 @@ fi
 if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
   echo 'bootstrap leaked an administrator URL secret' >&2
   exit 1
+fi
+
+if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
+  mismatch_container="$(docker run -d --rm -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -p 127.0.0.1::5432 postgis/postgis:17-3.5)"
+  for attempt in {1..30}; do
+    if docker exec "$mismatch_container" pg_isready --username postgres >/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  mismatch_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$mismatch_container")"
+  interceptors="$(mktemp -d)"
+  real_psql="$(command -v psql)"
+  trap 'rm -rf -- "$interceptors"; cleanup' EXIT
+  printf '%s\n' '#!/usr/bin/env bash' 'echo destructive command reached >&2' 'exit 91' >"$interceptors/dropdb"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo destructive command reached >&2' 'exit 91' >"$interceptors/createdb"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'case "$*" in *"DROP ROLE"*|*"CREATE ROLE"*|*"CREATE DATABASE"*) echo destructive command reached >&2; exit 91;; esac' \
+    "exec $(printf '%q' "$real_psql") \"\$@\"" >"$interceptors/psql"
+  chmod +x "$interceptors/dropdb" "$interceptors/createdb" "$interceptors/psql"
+  if PATH="$interceptors:$PATH" PGHOST=127.0.0.1 PGPORT="$mismatch_port" PGUSER=postgres \
+    v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)" >"$sentinel_output" 2>&1; then
+    echo 'mismatched disposable container was accepted' >&2
+    exit 1
+  fi
+  if rg --fixed-strings --quiet 'destructive command reached' "$sentinel_output"; then
+    echo 'mismatched disposable container reached destructive fixture setup' >&2
+    exit 1
+  fi
+  docker rm --force "$mismatch_container" >/dev/null
+  mismatch_container=''
+  rm -rf -- "$interceptors"
+  trap cleanup EXIT
 fi
 
 createdb --template template0 "$development_db"
@@ -93,6 +132,61 @@ if python3 v2/scripts/bootstrap_development_database.py; then
 fi
 psql --dbname postgres --set ON_ERROR_STOP=1 \
   --command 'GRANT rds_iam TO pricing_reader'
+
+bootstrap_state="$(psql --dbname postgres --tuples-only --no-align --command "
+SELECT datname || '|' || coalesce(shobj_description(oid, 'pg_database'), '') || '|' || coalesce(array_to_string(datacl, ','), '')
+FROM pg_database WHERE datname = '$production_db'
+")"
+assert_failed_bootstrap_is_clean() {
+  local current_state
+  current_state="$(psql --dbname postgres --tuples-only --no-align --command "
+SELECT datname || '|' || coalesce(shobj_description(oid, 'pg_database'), '') || '|' || coalesce(array_to_string(datacl, ','), '')
+FROM pg_database WHERE datname = '$production_db'
+")"
+  [[ "$current_state" == "$bootstrap_state" ]]
+  psql --dbname postgres --set ON_ERROR_STOP=1 --command "
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '$development_db')
+     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ANY (ARRAY['${development_roles[0]}', '${development_roles[1]}', '${development_roles[2]}', '${development_roles[3]}', '${development_roles[4]}', '${development_roles[5]}'])) THEN
+    RAISE EXCEPTION 'failed bootstrap left development artifacts';
+  END IF;
+END \$\$;"
+}
+
+for failure_mode in load finalization; do
+  if BOOTSTRAP_FAILURE_MODE="$failure_mode" python3 - <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+real_psql = bootstrap.psql
+
+def fail_after_create(database, *, sql=None, file=None):
+    if os.environ["BOOTSTRAP_FAILURE_MODE"] == "load" and file is not None:
+        raise RuntimeError("injected load failure")
+    if os.environ["BOOTSTRAP_FAILURE_MODE"] == "finalization" and sql and "COMMENT ON DATABASE nova_toll" in sql:
+        sql = sql.replace("COMMIT;", "DO $$ BEGIN RAISE EXCEPTION 'injected finalization failure'; END $$;\nCOMMIT;", 1)
+    return real_psql(database, sql=sql, file=file)
+
+bootstrap.psql = fail_after_create
+try:
+    bootstrap.main()
+except (RuntimeError, bootstrap.subprocess.CalledProcessError):
+    raise SystemExit(0)
+raise SystemExit("bootstrap accepted injected failure")
+PY
+  then
+    assert_failed_bootstrap_is_clean
+  else
+    echo "bootstrap did not fail during injected $failure_mode failure" >&2
+    exit 1
+  fi
+done
 
 python3 v2/scripts/bootstrap_development_database.py
 psql --dbname "$development_db" --file v2/tests/development_bootstrap_contract.sql

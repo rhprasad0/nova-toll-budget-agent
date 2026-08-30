@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -50,12 +51,16 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
     if admin_url is not None:
         if not admin_url:
             raise RuntimeError("NOVA_TOLL_ADMIN_URL must not be empty")
-        parsed = urlsplit(admin_url)
+        try:
+            parsed = urlsplit(admin_url)
+        except ValueError as error:
+            raise RuntimeError(
+                "NOVA_TOLL_ADMIN_URL must be a PostgreSQL connection URL"
+            ) from error
         if (
             parsed.scheme not in ("postgres", "postgresql")
             or not parsed.hostname
             or not parsed.username
-            or not parsed.password
             or parsed.query
             or parsed.fragment
             or "," in parsed.hostname
@@ -77,10 +82,11 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
             {
                 "PGHOST": parsed.hostname,
                 "PGUSER": unquote(parsed.username),
-                "PGPASSWORD": unquote(parsed.password),
                 "PGDATABASE": database,
             }
         )
+        if parsed.password is not None:
+            environment["PGPASSWORD"] = unquote(parsed.password)
         if port is not None:
             environment["PGPORT"] = str(port)
     else:
@@ -98,6 +104,16 @@ def render(source: Path, destination: Path) -> None:
     pattern = re.compile(r"\b(" + "|".join(map(re.escape, replacements)) + r")\b")
     destination.write_text(
         pattern.sub(lambda match: replacements[match[0]], source.read_text())
+    )
+
+
+def rollback_development() -> None:
+    psql(
+        "postgres",
+        sql=f"""
+DROP DATABASE IF EXISTS {DATABASES["development"]} WITH (FORCE);
+DROP ROLE IF EXISTS {", ".join(ROLES["development"])};
+""",
     )
 
 
@@ -189,18 +205,37 @@ END $$;
             destination.parent.mkdir(parents=True, exist_ok=True)
             render(source, destination)
         # schema.sql resolves analysis.sql beside itself via \ir.
-        psql(
-            "postgres", sql="CREATE DATABASE nova_toll_development TEMPLATE template0;"
-        )
-        psql(DATABASES["development"], file=rendered / "v2/db/schema.sql")
-        psql(DATABASES["development"], file=rendered / "v2/db/roles.sql")
-        psql(DATABASES["development"], file=rendered / "v2/db/oracle/schema.sql")
+        created_development = False
+        try:
+            psql(
+                "postgres",
+                sql="CREATE DATABASE nova_toll_development TEMPLATE template0;",
+            )
+            created_development = True
+            psql(DATABASES["development"], file=rendered / "v2/db/schema.sql")
+            psql(DATABASES["development"], file=rendered / "v2/db/roles.sql")
+            psql(DATABASES["development"], file=rendered / "v2/db/oracle/schema.sql")
+            psql(
+                DATABASES["development"],
+                sql="""
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_foreign_server)
+     OR EXISTS (SELECT 1 FROM pg_user_mappings)
+     OR EXISTS (SELECT 1 FROM pg_extension WHERE extname IN ('dblink', 'postgres_fdw', 'pg_cron')
+                OR extname LIKE 'postgis_%') THEN
+    RAISE EXCEPTION 'development database has forbidden integration objects';
+  END IF;
+END $$;
+""",
+            )
 
-    prod_roles = ", ".join(ROLES["production"])
-    dev_roles_sql = ", ".join(ROLES["development"])
-    psql(
-        "postgres",
-        sql=f"""
+            prod_roles = ", ".join(ROLES["production"])
+            dev_roles_sql = ", ".join(ROLES["development"])
+            psql(
+                "postgres",
+                sql=f"""
+BEGIN;
 COMMENT ON DATABASE nova_toll IS 'environment=production';
 COMMENT ON DATABASE nova_toll_development IS 'environment=development';
 REVOKE CONNECT ON DATABASE nova_toll FROM PUBLIC;
@@ -258,22 +293,14 @@ BEGIN
     WHERE member_role.rolname = 'oracle_owner_development'
   ) THEN RAISE EXCEPTION 'development role has unexpected membership'; END IF;
 END $$;
+COMMIT;
 """,
-    )
-    psql(
-        DATABASES["development"],
-        sql="""
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_foreign_server)
-     OR EXISTS (SELECT 1 FROM pg_user_mappings)
-     OR EXISTS (SELECT 1 FROM pg_extension WHERE extname IN ('dblink', 'postgres_fdw', 'pg_cron')
-                OR extname LIKE 'postgis_%') THEN
-    RAISE EXCEPTION 'development database has forbidden integration objects';
-  END IF;
-END $$;
-""",
-    )
+            )
+        except Exception:
+            if created_development:
+                with suppress(RuntimeError, subprocess.CalledProcessError):
+                    rollback_development()
+            raise
 
     return 0
 
