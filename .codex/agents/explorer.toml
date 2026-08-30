@@ -1,4 +1,4 @@
-name = "code_explorer"
+name = "explorer"
 description = "First node. Maps owners, files, assumptions, and falsifiers into .graph/explore.md. Never implements."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
@@ -22,9 +22,9 @@ Write `.graph/explore.md` (create `.graph/` if needed) with exactly this shape:
 ## Files in scope
 ## Smallest change that could work
 ## Affected contracts
-## Assumptions the implementer may rely on
-## Falsifiers (how verifier can prove this wrong)
-## Checks the implementer must run
+## Assumptions the builder may rely on
+## Falsifiers (how checker can prove this wrong)
+## Checks the builder must run
 ## Out of scope
 ## Open gaps
 
@@ -33,7 +33,7 @@ Rules:
 - Distinguish confirmed facts from validation gaps.
 - Write only `.graph/explore.md`.
 - Do not edit application code.
-- Do not write `.graph/change.md` or `.graph/verdict.md`.
+- Do not write `.graph/checklist.md`, `.graph/change.md`, or `.graph/verdict.md`.
 - If gaps block implementation, say so in Open gaps and stop. Do not invent a brief to keep the graph moving.
 
 Return a short parent summary: path to explore.md, files in scope, blockers. The file is the handoff, not this chat.
