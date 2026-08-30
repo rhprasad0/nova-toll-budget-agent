@@ -21,3 +21,9 @@ variable "fetcher_package_path" {
   type        = string
   default     = ""
 }
+
+variable "budget_notification_email" {
+  description = "Existing AWS Budget email recipient supplied only at runtime."
+  type        = string
+  sensitive   = true
+}
