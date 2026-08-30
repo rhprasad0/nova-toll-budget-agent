@@ -1,1 +1,2 @@
-environment = "development"
+environment       = "development"
+enable_public_dns = false

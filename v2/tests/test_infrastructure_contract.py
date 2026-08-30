@@ -463,6 +463,41 @@ def test_agent_measurement_keeps_cloudflare_dns_only():
     assert 'resource "cloudflare_bot_management"' not in site
 
 
+def test_development_dns_and_database_roles_are_isolated():
+    variables = (V2_ROOT / "infra" / "variables.tf").read_text()
+    development = (V2_ROOT / "infra" / "development.tfvars").read_text()
+    environment = (V2_ROOT / "infra" / "environment.tf").read_text()
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+
+    assert 'variable "enable_public_dns"' in variables
+    assert "default     = true" in variables.split('variable "enable_public_dns"', 1)[1]
+    assert "enable_public_dns = false" in development
+    apex = site.split('resource "cloudflare_dns_record" "apex"', 1)[1].split("\n}", 1)[
+        0
+    ]
+    assert "count   = var.enable_public_dns ? 1 : 0" in apex
+    assert 'resource "cloudflare_dns_record" "site_cert_validation"' in site
+    assert "DB_USER                    = local.database_roles.agent" in agentcore
+    assert (
+        "PRICING_DB_USER            = local.database_roles.pricing_caller" in agentcore
+    )
+    runtime_policy = agentcore.split(
+        'data "aws_iam_policy_document" "tollchat_runtime"', 1
+    )[1].split('resource "aws_iam_role_policy" "tollchat_runtime"', 1)[0]
+    assert 'actions = ["sts:AssumeRole"]' not in runtime_policy
+    assert "/tollchat_agent" not in runtime_policy
+    assert "/pricing_caller" not in runtime_policy
+    assert (
+        "alarm_actions      = local.is_production ? [data.aws_sns_topic.alerts.arn] : []"
+        in environment
+    )
+    assert "alarm_actions       = local.alarm_actions" in agentcore
+    assert "service-quotas get-service-quota" in DEPLOYMENT
+    assert "development-create.tfplan" in DEPLOYMENT
+    assert "development-dns.tfplan" in DEPLOYMENT
+
+
 def test_agent_measurement_privacy_notice_precedes_logging():
     privacy = (V2_ROOT / "agent" / "privacy.txt").read_text()
     for text in (

@@ -503,6 +503,8 @@ def test_iam_tls_connection_contract(monkeypatch):
     monkeypatch.setenv("DB_PORT", "5432")
     monkeypatch.setenv("DB_NAME", "tollchat")
     monkeypatch.setenv("DB_CA_BUNDLE_PATH", "/certs/rds-ca.pem")
+    monkeypatch.setenv("DB_USER", "tollchat_agent_development")
+    monkeypatch.setenv("PRICING_DB_USER", "pricing_caller_development")
 
     assert route_tool.connect_to_database() is sentinel
     assert route_tool.connect_to_pricing_database() is sentinel
@@ -510,12 +512,12 @@ def test_iam_tls_connection_contract(monkeypatch):
         {
             "DBHostname": "db.example.test",
             "Port": 5432,
-            "DBUsername": "tollchat_agent",
+            "DBUsername": "tollchat_agent_development",
         },
         {
             "DBHostname": "db.example.test",
             "Port": 5432,
-            "DBUsername": "pricing_caller",
+            "DBUsername": "pricing_caller_development",
         },
     ]
     assert connect_calls == [
@@ -523,7 +525,7 @@ def test_iam_tls_connection_contract(monkeypatch):
             "host": "db.example.test",
             "port": 5432,
             "dbname": "tollchat",
-            "user": "tollchat_agent",
+            "user": "tollchat_agent_development",
             "password": "temporary-token",
             "sslmode": "verify-full",
             "sslrootcert": "/certs/rds-ca.pem",
@@ -533,7 +535,7 @@ def test_iam_tls_connection_contract(monkeypatch):
             "host": "db.example.test",
             "port": 5432,
             "dbname": "tollchat",
-            "user": "pricing_caller",
+            "user": "pricing_caller_development",
             "password": "temporary-token",
             "sslmode": "verify-full",
             "sslrootcert": "/certs/rds-ca.pem",

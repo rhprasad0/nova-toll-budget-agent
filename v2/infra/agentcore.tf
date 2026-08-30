@@ -359,6 +359,7 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
     DB_PORT                    = tostring(data.aws_db_instance.main.port)
     DB_NAME                    = local.database_name
     DB_USER                    = local.database_roles.agent
+    PRICING_DB_USER            = local.database_roles.pricing_caller
     DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
     TOLLCHAT_GUARDRAIL_ID      = aws_bedrock_guardrail.tollchat.guardrail_id
     TOLLCHAT_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.tollchat.version

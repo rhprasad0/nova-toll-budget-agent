@@ -834,6 +834,7 @@ resource "aws_acm_certificate_validation" "site" {
 }
 
 resource "cloudflare_dns_record" "apex" {
+  count   = var.enable_public_dns ? 1 : 0
   zone_id = data.cloudflare_zone.tollchat.zone_id
   name    = local.domains[0]
   type    = "CNAME"
