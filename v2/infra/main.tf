@@ -553,9 +553,7 @@ resource "aws_cloudwatch_event_rule" "committed_i95_loads" {
   event_pattern = jsonencode({
     source      = ["tollchat.pricing-loader"]
     detail-type = ["I95 Pricing Load Committed"]
-    detail = local.is_production ? {
-      facility = ["i95_i495"]
-      } : {
+    detail = {
       facility    = ["i95_i495"]
       environment = [var.environment]
     }
