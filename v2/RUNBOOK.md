@@ -181,6 +181,8 @@ must run the reviewed one-time bootstrap. Store no credential locally: replace
 name, load it only into this process, then remove it when finished.
 
 ```sh
+(
+cd "$(git rev-parse --show-toplevel)"
 if ! NOVA_TOLL_ADMIN_URL="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
   ssm get-parameter --name /approved/administrator/connection --with-decryption \
   --query Parameter.Value --output text)"; then
@@ -194,6 +196,7 @@ if ! python3 v2/scripts/bootstrap_development_database.py; then
   exit 1
 fi
 unset NOVA_TOLL_ADMIN_URL
+)
 ```
 
 The connection value must be a PostgreSQL administrator URL for the shared
@@ -203,13 +206,15 @@ development database/roles do not. It creates only `nova_toll_development` plus
 the fixed `_development` roles.
 
 ```sh
-cd v2/infra
+(
+cd "$(git rev-parse --show-toplevel)/v2/infra"
 AWS_PROFILE=nova-toll terraform init -backend-config=backend.development.hcl
 AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
   -var loader_package_path=build/loader.zip \
   -var publisher_package_path=build/publisher.zip \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip
+)
 ```
 
 ### Development infrastructure review
@@ -217,12 +222,14 @@ AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
 Build and record all four reviewed package digests before planning:
 
 ```sh
-cd v2
+(
+cd "$(git rev-parse --show-toplevel)/v2"
 ./scripts/build_loader_zip.sh
 ./scripts/build_publisher_zip.sh
 ./scripts/build_agentcore_zips.sh
 (cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip \
   > DEVELOPMENT_SHA256SUMS && sha256sum --check DEVELOPMENT_SHA256SUMS)
+)
 ```
 
 Check direct regional and global quota headroom; stop if either result cannot
@@ -246,7 +253,8 @@ creates—no update, replacement, or destroy—and is the only development plan
 eligible to apply.
 
 ```sh
-cd v2/infra
+(
+cd "$(git rev-parse --show-toplevel)/v2/infra"
 export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
   ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption \
   --query Parameter.Value --output text)"
@@ -260,6 +268,7 @@ AWS_PROFILE=nova-toll terraform plan \
 AWS_PROFILE=nova-toll terraform show build/production-zero-change.tfplan
 AWS_PROFILE=nova-toll terraform init -reconfigure -backend-config=backend.development.hcl
 AWS_PROFILE=nova-toll terraform plan -var-file=development.tfvars \
+  -var=enable_public_dns=false \
   -var loader_package_path=build/loader.zip \
   -var publisher_package_path=build/publisher.zip \
   -var agentcore_package_path=build/agentcore.zip \
@@ -290,6 +299,7 @@ AWS_PROFILE=nova-toll terraform show -json build/development-dns.tfplan | \
   jq -e '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}] == [{"address":"cloudflare_dns_record.apex[0]","actions":["create"]}]'
 AWS_PROFILE=nova-toll terraform apply build/development-dns.tfplan
 unset CLOUDFLARE_API_TOKEN
+)
 ```
 
 The proxy Lambda explicitly depends on its inline policy, so the complete plan

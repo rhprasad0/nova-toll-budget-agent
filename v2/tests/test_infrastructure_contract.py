@@ -472,7 +472,7 @@ def test_development_dns_and_database_roles_are_isolated():
 
     assert 'variable "enable_public_dns"' in variables
     assert "default     = true" in variables.split('variable "enable_public_dns"', 1)[1]
-    assert "enable_public_dns = false" in development
+    assert "enable_public_dns = true" in development
     apex = site.split('resource "cloudflare_dns_record" "apex"', 1)[1].split("\n}", 1)[
         0
     ]
@@ -498,6 +498,13 @@ def test_development_dns_and_database_roles_are_isolated():
     assert "service-quotas get-service-quota" in DEPLOYMENT
     assert "development-create.tfplan" in DEPLOYMENT
     assert "development-dns.tfplan" in DEPLOYMENT
+    create_plan = DEPLOYMENT.split("-out=build/development-create.tfplan", 1)[0]
+    assert "-var=enable_public_dns=false" in create_plan[-500:]
+    dns_plan = DEPLOYMENT.split("-out=build/development-dns.tfplan", 1)[0]
+    assert "-var=enable_public_dns=true" in dns_plan[-500:]
+    assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)"') == 1
+    assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)/v2"') == 1
+    assert DEPLOYMENT.count('cd "$(git rev-parse --show-toplevel)/v2/infra"') == 2
 
 
 def test_agent_measurement_privacy_notice_precedes_logging():
