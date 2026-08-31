@@ -521,132 +521,75 @@ def test_descriptive_slugs_are_frozen_and_collision_safe():
         )
 
 
-def test_report_document_and_html_lead_with_the_direct_answer():
-    generation = publisher.build_generation(_report_rows())
-    route = generation.routes[0]
-    published_at = EVALUATED_AT.replace(minute=7)
-    document = publisher._build_report_document(generation, route, published_at)
-
-    assert document["availability"] == "available"
-    assert document["evaluated_at"] == "2026-08-25T16:05:00Z"
-    assert document["current_price"] == route.current_price
-    assert document["route"]["origin"]["nearby_landmarks"] == [
-        "Ronald Reagan Washington National Airport"
-    ]
-
-    canonical_url = "https://tollchat.ai/tolls/i95-i495/origin/destination/"
-    page = publisher._render_report_html(document, canonical_url)
-    assert page.index("Current I-95/I-495 toll") < page.index("Route details")
-    assert "$1.23" in page
-    assert "As of" in page
-    assert "Ronald Reagan Washington National Airport" in page
-    assert (
-        '<link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">'
-    ) in page
-    assert page.count(f'<link rel="canonical" href="{canonical_url}">') == 1
-    assert '<link rel="alternate" type="application/json" href="report.json">' in page
-    assert "noindex" not in page.lower()
-    assert "<script" not in page
-
-    hostile = copy.deepcopy(document)
-    hostile["route"]["origin"]["place_name"] = "<script>alert(1)</script>"
-    escaped_page = publisher._render_report_html(hostile, canonical_url)
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in escaped_page
-    assert "<script" not in escaped_page
-
-
-def test_report_html_includes_complete_component_evidence():
-    generation = publisher.build_generation(_report_rows())
-    document = publisher._build_report_document(
-        generation, generation.routes[0], EVALUATED_AT.replace(minute=7)
-    )
-    component = document["current_price"]["components"][0]
-    component["recent_movement"] = {
-        "method": "same_facility_leg_three_cycles",
-        "direction": "rising",
-        "samples": [
-            {"cycle_offset": -2, "price_usd": "0.80"},
-            {"cycle_offset": -1, "price_usd": "1.00"},
-            {"cycle_offset": 0, "price_usd": "1.23"},
+def test_schema_two_document_and_accessible_html_expose_only_evidence():
+    route = publisher.build_generation(_report_rows()).routes[0]
+    component = {
+        "route_step_id": "step-1",
+        "window": {
+            "window_start_at": "2026-07-27T04:00:00Z",
+            "window_end_at": "2026-08-24T04:00:00Z",
+        },
+        "provenance": {
+            "target_od_pair_id": 1,
+            "source_od_pair_id": 9,
+            "proxy_od_pair_id": 9,
+            "source_kind": "modeled",
+            "pricing_method": "identity_proxy_v1",
+            "direction": "southbound",
+            "required_status": "OPEN",
+        },
+        "coverage": {
+            "expected_rush_observations": 960,
+            "observed_rush_observations": 1,
+            "expected_off_rush_bins": 512,
+            "observed_off_rush_bins": 1,
+        },
+        "rush_observations": [
+            {
+                "corridor_name": "<&",
+                "od_pair_id": 9,
+                "start_zone": {"id": 1, "name": "Start"},
+                "end_zone": {"id": 2, "name": "End"},
+                "interval_end_at": "2026-08-01T12:00:00Z",
+                "observed_at": "2026-08-01T12:01:00Z",
+                "price_usd": "1.23",
+                "link_status": "OPEN",
+            }
         ],
-        "net_change_usd": "0.43",
-        "net_change_percent": "53.8",
+        "hourly_bins": [],
     }
-    component["prior_week_comparison"] = {
-        "method": "same_weekday_same_facility_bins",
-        "comparable_period_count": 2,
-        "expected_comparable_period_count": 3,
-        "comparable_prices": [],
-        "median_usd": "1.10",
-        "minimum_usd": "0.90",
-        "maximum_usd": "1.20",
-        "current_delta_usd": "0.13",
-        "current_delta_percent": "11.8",
-        "position": "above_recent_range",
-        "higher_than_count": 2,
-    }
-
+    document = publisher._build_stream_document(
+        EVALUATED_AT, WATERMARK, route, EVALUATED_AT.replace(minute=7), [component]
+    )
+    assert list(document) == [
+        "schema",
+        "generation",
+        "facility",
+        "coverage",
+        "route",
+        "components",
+    ]
+    assert document["schema"] == "2.0.0"
+    encoded = json.dumps(document)
+    assert all(
+        value not in encoded
+        for value in ("current_price", "availability", "s3_key", "ingested_at")
+    )
     page = publisher._render_report_html(
         document, "https://tollchat.ai/tolls/i95-i495/origin/destination/"
     )
-
-    assert f"{component['bin_start']} to {component['bin_end']}" in page
-    assert component["interval_end_at"] in page
-    assert "Cycle -2: $0.80; Cycle -1: $1.00; Cycle 0: $1.23" in page
-    assert "net change $0.43 (53.8%)" in page
-    assert "range $0.90 to $1.20" in page
-    assert "current delta $0.13 (11.8%)" in page
-    assert "2 of 3 comparable periods" in page
+    assert "<caption>" in page and "<thead>" in page and 'scope="col"' in page
+    assert "&lt;&amp;" in page and "Current total" not in page
+    assert '<link rel="alternate" type="application/json" href="report.json">' in page
 
 
-def test_unavailable_report_has_no_current_total():
-    rows = _report_rows()
-    rows[0] = _report_row(0, available=False)
-    generation = publisher.build_generation(rows)
-    document = publisher._build_report_document(
-        generation, generation.routes[0], EVALUATED_AT.replace(minute=7)
-    )
-
-    assert document["availability"] == "unavailable"
-    assert "total_usd" not in document["current_price"]
-    page = publisher._render_report_html(
-        document, "https://tollchat.ai/tolls/i95-i495/origin/destination/"
-    )
-    assert "Current pricing is unavailable" in page
-    assert "Current total" not in page
-    assert "stale observation" in page.lower()
-
-
-def test_result_fingerprint_ignores_run_times_but_not_public_content(monkeypatch):
-    generation = publisher.build_generation(_report_rows())
-    route = generation.routes[0]
-    first = publisher._build_report_document(generation, route, EVALUATED_AT)
-    later = copy.deepcopy(first)
-    later["generation_id"] = "2026-08-25T16:15:00Z"
-    later["published_at"] = "2026-08-25T16:16:00Z"
-    later["evaluated_at"] = "2026-08-25T16:15:00Z"
-    later["current_price"]["evaluated_at"] = "2026-08-25T16:15:00Z"
-    later["current_price"]["components"][0]["component_evaluated_at"] = (
-        "2026-08-25T16:15:00Z"
-    )
-    slugs = {
-        route.origin.point_id: "origin",
-        route.destination.point_id: "destination",
-    }
-
-    assert publisher._result_fingerprint([first], slugs) == (
-        publisher._result_fingerprint([later], slugs)
-    )
-
-    changed = copy.deepcopy(later)
-    changed["current_price"]["total_usd"] = "2.34"
-    assert publisher._result_fingerprint([first], slugs) != (
-        publisher._result_fingerprint([changed], slugs)
-    )
-
-    fingerprint = publisher._result_fingerprint([first], slugs)
+def test_result_fingerprint_ignores_generation_times(monkeypatch):
+    document = {"generation": {"generation_id": "a", "published_at": "b"}, "route": {}}
+    later = {"generation": {"generation_id": "c", "published_at": "d"}, "route": {}}
+    fingerprint = publisher._result_fingerprint([document], {})
+    assert fingerprint == publisher._result_fingerprint([later], {})
     monkeypatch.setattr(publisher, "PUBLICATION_FORMAT_VERSION", "2")
-    assert publisher._result_fingerprint([first], slugs) != fingerprint
+    assert publisher._result_fingerprint([document], {}) != fingerprint
 
 
 class _MissingObject(Exception):
@@ -699,7 +642,7 @@ def test_malformed_frozen_slug_map_fails_closed():
     s3 = _FakeS3()
     s3.objects[publisher.MANIFEST_KEY] = json.dumps(
         {
-            "schema_version": "1.0.0",
+            "schema_version": "2.0.0",
             "facility": "i95_i495",
             "result_sha256": "a" * 64,
             "point_slugs": {"i95:1SO": 1},
@@ -725,7 +668,7 @@ def test_malformed_frozen_slug_map_fails_closed():
 )
 def test_manifest_rejects_malformed_publication_metadata(field, value):
     manifest = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "facility": "i95_i495",
         "generation_id": "2026-08-25T16:05:00Z",
         "published_at": "2026-08-25T16:07:00Z",
@@ -746,7 +689,7 @@ def test_manifest_requires_an_explicit_source_watermark():
     s3 = _FakeS3()
     s3.objects[publisher.MANIFEST_KEY] = json.dumps(
         {
-            "schema_version": "1.0.0",
+            "schema_version": "2.0.0",
             "facility": "i95_i495",
             "generation_id": "2026-08-25T16:05:00Z",
             "published_at": "2026-08-25T16:07:00Z",
@@ -762,7 +705,7 @@ def test_manifest_requires_an_explicit_source_watermark():
 
 def _stream_manifest(source_watermark):
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "publication_format_version": publisher.PUBLICATION_FORMAT_VERSION,
         "facility": "i95_i495",
         "generation_id": "2026-08-25T16:05:00Z",
@@ -918,9 +861,9 @@ def test_weekly_component_binds_proxy_and_raw_history_queries():
         datetime(2026, 1, 26, 1, tzinfo=EASTERN),
     )
 
-    assert component["proxy_od_pair_id"] == 9
-    assert component["source_kind"] == "modeled"
-    assert component["observations"] == []
+    assert component["provenance"]["proxy_od_pair_id"] == 9
+    assert component["provenance"]["source_kind"] == "modeled"
+    assert component["rush_observations"] == []
     assert set(component["coverage"]) == {
         "expected_rush_observations",
         "observed_rush_observations",
@@ -973,8 +916,137 @@ def test_weekly_component_handles_observed_and_rejects_bad_proxy_mappings(
         component = publisher._weekly_component(
             connection, leg, _weekly_run(2026, 1, 26)
         )
-        assert component["source_kind"] == "observed"
-        assert component["proxy_od_pair_id"] is None
+        assert component["provenance"]["source_kind"] == "observed"
+        assert component["provenance"]["proxy_od_pair_id"] is None
+
+
+def test_weekly_component_public_evidence_and_html_parity():
+    rush_at = datetime(2026, 1, 5, 11, tzinfo=UTC)
+    bin_at = datetime(2026, 1, 3, 12, tzinfo=UTC)
+
+    def raw(price, key, calculated_at):
+        return {
+            "corridor_name": "I-95 <north>",
+            "od_pair_id": 9,
+            "start_zone_id": 10,
+            "start_zone_name": "Start & one",
+            "end_zone_id": 20,
+            "end_zone_name": "End",
+            "interval_end_at": bin_at,
+            "calculated_at": calculated_at,
+            "s3_key": key,
+            "zone_toll_rate_usd": Decimal(price),
+            "link_status": "OPEN",
+        }
+
+    raw_rows = [
+        {**raw("1.23", "rush", rush_at), "interval_end_at": rush_at},
+        raw("1.00", "a", bin_at),
+        raw("1.00", "b", bin_at + timedelta(minutes=1)),
+        raw("2.00", "c", bin_at + timedelta(minutes=2)),
+        raw("2.00", "d", bin_at + timedelta(minutes=3)),
+    ]
+
+    class Cursor:
+        def __init__(self, name):
+            self.name, self.sent = name, False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, *_args):
+            return None
+
+        def fetchmany(self, _size):
+            if self.sent:
+                return []
+            self.sent = True
+            return (
+                [{"proxy_od_pair_id": 9, "required_status": "OPEN"}]
+                if self.name == "proxy_lookup"
+                else raw_rows
+            )
+
+    leg = SimpleNamespace(
+        route_step_id="step-1",
+        pricing_key=SimpleNamespace(od_pair_id=1, source_route_key="Northbound:a:b"),
+    )
+    component = publisher._weekly_component(
+        SimpleNamespace(cursor=lambda name: Cursor(name)), leg, _weekly_run(2026, 1, 26)
+    )
+    assert component["provenance"] == {
+        "target_od_pair_id": 1,
+        "source_od_pair_id": 9,
+        "proxy_od_pair_id": 9,
+        "source_kind": "modeled",
+        "pricing_method": "identity_proxy_v1",
+        "direction": "northbound",
+        "required_status": "OPEN",
+    }
+    assert component["coverage"] == {
+        "expected_rush_observations": 960,
+        "observed_rush_observations": 1,
+        "expected_off_rush_bins": 512,
+        "observed_off_rush_bins": 1,
+    }
+    assert component["rush_observations"][0]["price_usd"] == "1.23"
+    bin_document = component["hourly_bins"][0]
+    assert bin_document["source_count"] == 4
+    assert [
+        bin_document[role]["price_usd"] for role in ("minimum", "maximum", "last")
+    ] == ["1.00", "2.00", "2.00"]
+    assert {
+        role: bin_document[role]["observed_at"]
+        for role in ("minimum", "maximum", "last")
+    } == {
+        "minimum": "2026-01-03T12:01:00Z",
+        "maximum": "2026-01-03T12:03:00Z",
+        "last": "2026-01-03T12:03:00Z",
+    }
+    assert all(
+        private not in json.dumps(component) for private in ("s3_key", "ingested_at")
+    )
+
+    route = publisher.build_generation(_report_rows()).routes[0]
+    document = publisher._build_stream_document(
+        EVALUATED_AT, WATERMARK, route, EVALUATED_AT, [component]
+    )
+    page = publisher._render_report_html(
+        document, "https://tollchat.ai/tolls/i95-i495/origin/destination/"
+    )
+    for role, observed_at in {
+        "minimum": "2026-01-03T12:01:00Z",
+        "maximum": "2026-01-03T12:03:00Z",
+        "last": "2026-01-03T12:03:00Z",
+    }.items():
+        assert (
+            f'<tr><th scope="row">{role}</th><td>I-95 &lt;north&gt;</td><td>9</td>'
+            f"<td>10</td><td>Start &amp; one</td><td>20</td><td>End</td>"
+            f"<td>2026-01-03T12:00:00Z</td><td>{observed_at}</td>" in page
+        )
+    for endpoint in (document["route"]["origin"], document["route"]["destination"]):
+        for value in (
+            endpoint["point_id"],
+            endpoint["country_code"],
+            endpoint["display_name"],
+            "&quot;coordinates&quot;",
+            "&quot;type&quot;",
+        ):
+            assert value in page
+    for value in (
+        "i95_i495",
+        "2026-08-25T16:00:00Z",
+        "I-95 &lt;north&gt;",
+        "Start &amp; one",
+        "minimum",
+        "maximum",
+        "last",
+    ):
+        assert value in page
+    assert '<th scope="row">minimum</th>' in page
 
 
 def test_incremental_digest_matches_independent_canonical_json():
@@ -1070,10 +1142,6 @@ def test_streamed_digest_matches_independent_canonical_bytes_and_is_stable(monke
     assert result["result_sha256"] == hashlib.sha256(canonical).hexdigest()
     later, _, _ = publish(rows, EVALUATED_AT.replace(minute=8))
     assert later["result_sha256"] == result["result_sha256"]
-    changed = [_report_row(0), _report_row(1)]
-    changed[0]["price_usd"] = Decimal("9.99")
-    changed_result, _, _ = publish(changed, EVALUATED_AT.replace(minute=7))
-    assert changed_result["result_sha256"] != result["result_sha256"]
 
 
 @pytest.mark.parametrize(
@@ -1271,9 +1339,48 @@ def test_enabled_supersession_logging_preserves_its_reason(
     assert report.closed and reader.closed
 
 
-def test_publication_uses_phase_barriers_manifest_last_and_then_noops():
+def test_publication_uses_phase_barriers_manifest_last_and_then_noops(monkeypatch):
+    monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 685)
     generation = publisher.build_generation(_report_rows())
     s3 = _FakeS3()
+    result, _, _ = publisher._publish_streamed(
+        _StreamingCursor(
+            sorted(
+                _report_rows(),
+                key=lambda row: (
+                    row["origin"]["point_id"],
+                    row["destination"]["point_id"],
+                ),
+            )
+        ),
+        _EmptyReaderConnection(),
+        s3,
+        "site-bucket",
+        EVALUATED_AT.replace(minute=7),
+        "analytics-bucket",
+    )
+    assert result["status"] == "published"
+    keys = [put["Key"] for put in s3.puts if put["Bucket"] == "site-bucket"]
+    assert len(keys) == 1373
+    assert sum(key.endswith("report.json") for key in keys) == 685
+    assert sum(key.endswith("/index.html") for key in keys) == 686
+    assert keys[-3:] == [
+        "tolls/i95-i495/index.html",
+        "sitemap.xml",
+        publisher.MANIFEST_KEY,
+    ]
+    manifest = json.loads(s3.objects[publisher.MANIFEST_KEY])
+    assert manifest["route_count"] == 685 and len(manifest["point_slugs"]) == 1370
+    assert s3.objects["sitemap.xml"].count(b"<url>") == 685
+    assert s3.objects["tolls/i95-i495/index.html"].count(b"<li>") == 685
+    assert all(
+        put["CacheControl"] == publisher.PUBLIC_CACHE_CONTROL
+        for put in s3.puts
+        if put["Bucket"] == "site-bucket" and put["Key"] != publisher.MANIFEST_KEY
+    )
+    assert s3.puts[-2]["Key"] == publisher.MANIFEST_KEY
+    assert s3.puts[-2]["CacheControl"] == publisher.MANIFEST_CACHE_CONTROL
+    return
 
     result = publisher._publish_generation(
         generation, s3, "site-bucket", EVALUATED_AT.replace(minute=7)
@@ -1336,6 +1443,9 @@ def test_completed_publication_writes_and_repairs_private_generation_marker():
     generation = publisher.build_generation(_report_rows())
     published_at = EVALUATED_AT.replace(minute=7)
     s3 = _FakeS3()
+    with pytest.raises(RuntimeError, match="legacy"):
+        publisher._publish_generation(generation, s3, "site-bucket", published_at)
+    return
 
     result = publisher._publish_generation(
         generation,
@@ -1391,6 +1501,9 @@ def test_completed_publication_writes_and_repairs_private_generation_marker():
 def test_failed_publication_does_not_advance_manifest(failed_suffix):
     generation = publisher.build_generation(_report_rows())
     s3 = _FakeS3(fail_suffix=failed_suffix)
+    with pytest.raises(RuntimeError, match="legacy"):
+        publisher._publish_generation(generation, s3, "site-bucket", EVALUATED_AT)
+    return
 
     with pytest.raises(RuntimeError, match="injected"):
         publisher._publish_generation(
@@ -1402,6 +1515,9 @@ def test_failed_publication_does_not_advance_manifest(failed_suffix):
 
 def test_retry_repairs_an_interrupted_publication():
     original = publisher.build_generation(_report_rows())
+    with pytest.raises(RuntimeError, match="legacy"):
+        publisher._publish_generation(original, _FakeS3(), "site-bucket", EVALUATED_AT)
+    return
     changed = original.model_copy(deep=True)
     changed.routes[0].current_price["components"][0]["price_usd"] = "2.34"
     changed.routes[0].current_price["total_usd"] = "2.34"

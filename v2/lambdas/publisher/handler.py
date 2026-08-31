@@ -35,7 +35,7 @@ CA_BUNDLE_PATH = str(Path(__file__).with_name("rds-ca-bundle.pem"))
 PUBLIC_PREFIX = "tolls/i95-i495"
 MANIFEST_KEY = f"{PUBLIC_PREFIX}/manifest.json"
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://tollchat.ai").rstrip("/")
-PUBLICATION_FORMAT_VERSION = "1.0.0"
+PUBLICATION_FORMAT_VERSION = "2.0.0"
 PUBLIC_CACHE_CONTROL = "public, max-age=300"
 MANIFEST_CACHE_CONTROL = "no-cache"
 _EASTERN = ZoneInfo("America/New_York")
@@ -150,6 +150,8 @@ class _ObservationCoverage:
 class _ObservationSelection:
     rows: tuple[dict[str, Any], ...]
     coverage: _ObservationCoverage
+    rush_rows: tuple[dict[str, Any], ...]
+    hourly_bins: tuple[tuple[datetime, tuple[dict[str, Any], ...]], ...]
 
 
 @dataclass(frozen=True)
@@ -360,6 +362,11 @@ def _select_weekly_observations(  # pyright: ignore[reportUnusedFunction]
             - 160,
             observed_off_rush_bins=len(off_rush_bins),
         ),
+        rush_rows=tuple(sorted(rush_rows, key=_source_order)),
+        hourly_bins=tuple(
+            (hour_start, tuple(rows))
+            for hour_start, rows in sorted(off_rush_bins.items())
+        ),
     )
 
 
@@ -501,47 +508,37 @@ def build_generation(rows: list[dict[str, Any]]) -> Generation:
     )
 
 
-def _build_report_document(
-    generation: Generation, route: GenerationRoute, published_at: datetime
-) -> dict[str, Any]:
-    current_price = route.current_price
-    return {
-        "schema_version": "1.0.0",
-        "generation_id": _utc_text(generation.generation_id),
-        "published_at": _utc_text(published_at),
-        "evaluated_at": _utc_text(generation.evaluated_at),
-        "availability": "available" if "total_usd" in current_price else "unavailable",
-        "facility": generation.facility,
-        "route": {
-            "origin": route.origin.model_dump(mode="json"),
-            "destination": route.destination.model_dump(mode="json"),
-            "structural_facility_legs": route.structural_facility_legs,
-        },
-        "current_price": current_price,
-    }
-
-
 def _build_stream_document(
     evaluated_at: datetime,
     source_watermark: datetime | None,
     route: GenerationRoute,
     published_at: datetime,
+    weekly: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    del source_watermark  # The public 1.0 report intentionally has no watermark field.
-    current_price = route.current_price
+    if not weekly:
+        raise ValueError("report route has no weekly components")
+    coverage = {
+        key: weekly[0]["window"][key] for key in ("window_start_at", "window_end_at")
+    }
+    if any(item["window"] != coverage for item in weekly[1:]):
+        raise ValueError("weekly component windows disagree")
     return {
-        "schema_version": "1.0.0",
-        "generation_id": _utc_text(evaluated_at),
-        "published_at": _utc_text(published_at),
-        "evaluated_at": _utc_text(evaluated_at),
-        "availability": "available" if "total_usd" in current_price else "unavailable",
+        "schema": "2.0.0",
+        "generation": {
+            "generation_id": _utc_text(evaluated_at),
+            "published_at": _utc_text(published_at),
+            "source_watermark": _utc_text(source_watermark),
+        },
         "facility": FACILITY,
+        "coverage": coverage,
         "route": {
             "origin": route.origin.model_dump(mode="json"),
             "destination": route.destination.model_dump(mode="json"),
-            "structural_facility_legs": route.structural_facility_legs,
         },
-        "current_price": current_price,
+        "components": [
+            {key: value for key, value in item.items() if key != "window"}
+            for item in weekly
+        ],
     }
 
 
@@ -584,32 +581,6 @@ def _display_time(value: str | None) -> str:
     )
 
 
-def _label(value: object) -> str:
-    return str(value).replace("_", " ")
-
-
-def _source_observed_at(current_price: dict[str, Any]) -> str | None:
-    values: list[str] = []
-
-    def collect(value: object) -> None:
-        if isinstance(value, dict):
-            for key, item in cast(dict[str, object], value).items():
-                if key == "observed_at" and isinstance(item, str):
-                    values.append(item)
-                else:
-                    collect(item)
-        elif isinstance(value, list):
-            for item in cast(list[object], value):
-                collect(item)
-
-    collect(current_price)
-    return (
-        max(values, key=lambda item: _aware_timestamp(item, label="observed_at"))
-        if values
-        else None
-    )
-
-
 def _endpoint_html(title: str, endpoint: dict[str, Any]) -> str:
     aliases = ", ".join(escape(str(value)) for value in endpoint["aliases"]) or "None"
     landmarks = (
@@ -618,8 +589,12 @@ def _endpoint_html(title: str, endpoint: dict[str, Any]) -> str:
     )
     return (
         f"<section><h2>{escape(title)}</h2><dl>"
+        f"<dt>Point ID</dt><dd>{escape(str(endpoint['point_id']))}</dd>"
         f"<dt>Place</dt><dd>{escape(str(endpoint['place_name']))}, "
         f"{escape(str(endpoint['region']))}</dd>"
+        f"<dt>Country code</dt><dd>{escape(str(endpoint['country_code']))}</dd>"
+        f"<dt>Display name</dt><dd>{escape(str(endpoint['display_name']))}</dd>"
+        f"<dt>Location</dt><dd>{escape(json.dumps(endpoint['location'], sort_keys=True))}</dd>"
         f"<dt>Roadway access</dt><dd>{escape(str(endpoint['label']))}</dd>"
         f"<dt>Direction and role</dt><dd>{escape(str(endpoint['direction']))} "
         f"{escape(str(endpoint['role']))}</dd>"
@@ -629,140 +604,115 @@ def _endpoint_html(title: str, endpoint: dict[str, Any]) -> str:
     )
 
 
-def _component_html(component: dict[str, Any]) -> str:
-    price = component.get("price_usd")
-    bin_start = component.get("bin_start")
-    bin_end = component.get("bin_end")
-    items = [
-        ("Facility", component.get("facility")),
-        ("Price", f"${price}" if price is not None else None),
-        ("Source", component.get("source_kind")),
-        ("Pricing method", component.get("pricing_method")),
-        ("Source observation", component.get("observed_at")),
-        (
-            "10-minute bin",
-            f"{bin_start} to {bin_end}"
-            if bin_start is not None and bin_end is not None
-            else None,
-        ),
-        ("Source interval end", component.get("interval_end_at")),
-    ]
-    details = "".join(
-        f"<dt>{escape(label)}</dt><dd>{escape(_label(value))}</dd>"
-        for label, value in items
-        if value is not None
-    )
-    movement = component.get("recent_movement")
-    if isinstance(movement, dict):
-        movement_values = cast(dict[str, object], movement)
-        samples = movement_values.get("samples")
-        sample_text = (
-            "; ".join(
-                f"Cycle {escape(str(sample.get('cycle_offset')))}: "
-                f"${escape(str(sample.get('price_usd')))}"
-                for sample in cast(list[dict[str, object]], samples)
-            )
-            if isinstance(samples, list)
-            else "Unavailable"
-        )
-        details += (
-            "<dt>Recent movement</dt><dd>"
-            f"{sample_text}; "
-            f"{escape(_label(movement_values.get('direction', 'unavailable')))}, net change "
-            f"${escape(str(movement_values.get('net_change_usd', 'unavailable')))} "
-            f"({escape(str(movement_values.get('net_change_percent', 'unavailable')))}%)</dd>"
-        )
-    comparison = component.get("prior_week_comparison")
-    if isinstance(comparison, dict):
-        comparison_values = cast(dict[str, object], comparison)
-        details += (
-            "<dt>Prior-week comparison</dt><dd>"
-            f"Median ${escape(str(comparison_values.get('median_usd', 'unavailable')))}; "
-            f"range ${escape(str(comparison_values.get('minimum_usd', 'unavailable')))} to "
-            f"${escape(str(comparison_values.get('maximum_usd', 'unavailable')))}; "
-            f"current delta ${escape(str(comparison_values.get('current_delta_usd', 'unavailable')))} "
-            f"({escape(str(comparison_values.get('current_delta_percent', 'unavailable')))}%); "
-            f"{escape(_label(comparison_values.get('position', 'unavailable')))}; "
-            f"{escape(str(comparison_values.get('comparable_period_count', 0)))} of "
-            f"{escape(str(comparison_values.get('expected_comparable_period_count', 0)))} "
-            "comparable periods"
-            "</dd>"
-        )
-    return f"<section><h3>Priced component</h3><dl>{details}</dl></section>"
-
-
-def _unavailable_html(current_price: dict[str, Any]) -> str:
-    reason = (
-        current_price.get("reason")
-        or current_price.get("status")
-        or current_price.get("error")
-    )
-    parts = [
-        "<p><strong>Current pricing is unavailable.</strong> "
-        f"Reason: {escape(_label(reason or 'unknown'))}.</p>"
-    ]
-    unavailable = current_price.get("unavailable_components")
-    if isinstance(unavailable, list):
-        parts.append("<ul>")
-        for component in cast(list[object], unavailable):
-            if isinstance(component, dict):
-                values = cast(dict[str, object], component)
-                observed_at = values.get("observed_at")
-                parts.append(
-                    "<li>"
-                    f"{escape(_label(values.get('reason', 'unknown')))}; "
-                    f"source observation {_display_time(observed_at if isinstance(observed_at, str) else None)}"
-                    "</li>"
-                )
-        parts.append("</ul>")
-    return "".join(parts)
-
-
 def _render_report_html(document: dict[str, Any], canonical_url: str) -> str:
     route = cast(dict[str, Any], document["route"])
     origin = cast(dict[str, Any], route["origin"])
     destination = cast(dict[str, Any], route["destination"])
-    current_price = cast(dict[str, Any], document["current_price"])
     origin_name = escape(str(origin["place_name"]))
     destination_name = escape(str(destination["place_name"]))
-    title = f"Current I-95/I-495 toll from {origin_name} to {destination_name}"
-    observed_at = _source_observed_at(current_price)
-    if document["availability"] == "available":
-        answer = (
-            f"<p><strong>Current total:</strong> "
-            f"${escape(str(current_price['total_usd']))}</p>"
-        )
-    else:
-        answer = _unavailable_html(current_price)
+    title = f"I-95/I-495 toll evidence from {origin_name} to {destination_name}"
+    generation = cast(dict[str, Any], document["generation"])
+    coverage = cast(dict[str, Any], document["coverage"])
 
-    profile = current_price.get("pricing_profile")
-    profile_html = ""
-    if isinstance(profile, dict):
-        profile_values = cast(dict[str, object], profile)
-        profile_html = (
-            "<p><strong>Pricing profile:</strong> "
-            + ", ".join(escape(_label(value)) for value in profile_values.values())
-            + ".</p>"
+    def rows(values: Any, *, row_headers: bool = False) -> str:  # noqa: ANN401
+        return "".join(
+            "<tr>"
+            + (
+                f'<th scope="row">{escape(str(value_set[0]))}</th>'
+                + "".join(f"<td>{escape(str(value))}</td>" for value in value_set[1:])
+                if row_headers
+                else "".join(f"<td>{escape(str(value))}</td>" for value in value_set)
+            )
+            + "</tr>"
+            for value_set in values
         )
-    components = current_price.get("components")
-    component_html = (
-        "".join(
-            _component_html(cast(dict[str, Any], component))
-            for component in cast(list[object], components)
-            if isinstance(component, dict)
+
+    def source_row(row: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            row["corridor_name"],
+            row["od_pair_id"],
+            row["start_zone"]["id"],
+            row["start_zone"]["name"],
+            row["end_zone"]["id"],
+            row["end_zone"]["name"],
+            row["interval_end_at"],
+            row["observed_at"],
+            row["price_usd"],
+            row["link_status"],
         )
-        if isinstance(components, list)
-        else ""
+
+    headers = (
+        "<tr>"
+        + "".join(
+            f'<th scope="col">{label}</th>'
+            for label in (
+                "Corridor",
+                "Source OD",
+                "Start zone ID",
+                "Start zone",
+                "End zone ID",
+                "End zone",
+                "Interval end",
+                "Observed",
+                "Price",
+                "Link status",
+            )
+        )
+        + "</tr>"
     )
-    tp1 = any(
-        "TP1" in str(endpoint["point_id"]).upper() for endpoint in (origin, destination)
-    )
-    tp1_html = (
-        "<p><strong>Springfield interchange boundary:</strong> This report keeps "
-        "the same TP1 route URL when the reversible facility is closed or unavailable; "
-        "it does not substitute another route or price.</p>"
-        if tp1
-        else ""
+    component_html = "".join(
+        "<section><h3>Component " + escape(str(component["route_step_id"])) + "</h3>"
+        "<table><caption>Component provenance and coverage</caption><thead><tr>"
+        '<th scope="col">Field</th><th scope="col">Value</th>'
+        "</tr></thead><tbody>"
+        + "".join(
+            f'<tr><th scope="row">{escape(key)}</th><td>{escape(str(value))}</td></tr>'
+            for key, value in {
+                **cast(dict[str, Any], component["provenance"]),
+                **cast(dict[str, Any], component["coverage"]),
+            }.items()
+        )
+        + "</tbody></table>"
+        + "<h4>Rush observations</h4><table><caption>Every selected rush observation</caption><thead>"
+        + headers
+        + "</thead><tbody>"
+        + rows(source_row(row) for row in component["rush_observations"])
+        + "</tbody></table>"
+        + "<h4>Off-rush hourly bins</h4>"
+        + "".join(
+            "<table><caption>UTC hour "
+            + escape(str(bin["hour_start_at"]))
+            + "; "
+            + escape(str(bin["source_count"]))
+            + ' source observations</caption><thead><tr><th scope="col">Role</th>'
+            + "".join(
+                f'<th scope="col">{label}</th>'
+                for label in (
+                    "Corridor",
+                    "Source OD",
+                    "Start zone ID",
+                    "Start zone",
+                    "End zone ID",
+                    "End zone",
+                    "Interval end",
+                    "Observed",
+                    "Price",
+                    "Link status",
+                )
+            )
+            + "</tr></thead><tbody>"
+            + rows(
+                (
+                    (role, *source_row(bin[role]))
+                    for role in ("minimum", "maximum", "last")
+                ),
+                row_headers=True,
+            )
+            + "</tbody></table>"
+            for bin in component["hourly_bins"]
+        )
+        + "</section>"
+        for component in cast(list[dict[str, Any]], document["components"])
     )
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -772,20 +722,14 @@ def _render_report_html(document: dict[str, Any], canonical_url: str) -> str:
         f'<link rel="canonical" href="{escape(canonical_url)}">'
         '<link rel="alternate" type="application/json" href="report.json">'
         "</head><body><main>"
-        f"<h1>{title}</h1>{answer}"
-        f"<p><strong>As of:</strong> {_display_time(cast(str, document['evaluated_at']))}. "
-        f"<strong>Published:</strong> {_display_time(cast(str, document['published_at']))}. "
-        f"<strong>Latest source observation:</strong> {_display_time(observed_at)}.</p>"
-        f"{profile_html}{tp1_html}<h2>Route details</h2>"
+        f"<h1>{title}</h1><p>Facility: {escape(str(document['facility']))}.</p>"
+        f"<p>Published {_display_time(cast(str, generation['published_at']))}; source watermark: {escape(str(generation['source_watermark']))}.</p>"
+        f"<p>Evidence window: {escape(str(coverage['window_start_at']))} to {escape(str(coverage['window_end_at']))}.</p>"
+        "<h2>Route details</h2>"
         f"{_endpoint_html('Origin', origin)}{_endpoint_html('Destination', destination)}"
-        f"<section><h2>Price components and provenance</h2>{component_html}</section>"
-        "<section><h2>Important disclosures</h2><p>This is a current estimate for "
-        "a two-axle passenger vehicle using E-ZPass in toll mode, not a quote. "
-        "Modeled components are identified by their source and pricing method. "
-        "Missing, stale, closed, and exceptional-schedule states remain unavailable "
-        "rather than being replaced with another route.</p></section>"
+        f"<section><h2>Component evidence</h2>{component_html}</section>"
         '<p><a href="report.json">View the machine-readable JSON report</a></p>'
-        f"<p>Generation {escape(str(document['generation_id']))}</p>"
+        f"<p>Generation {escape(str(generation['generation_id']))}</p>"
         "</main></body></html>\n"
     )
 
@@ -820,12 +764,13 @@ def _render_index_html(
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        "<title>Current I-95/I-495 toll reports</title>"
+        "<title>I-95/I-495 toll evidence reports</title>"
         '<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/">'
         "</head><body><main>"
-        "<h1>Current I-95/I-495 toll reports</h1><p>Choose a directed entry-to-exit "
-        "route. Each report includes current availability, freshness, price, and "
-        "provenance.</p><ol>" + "".join(links) + "</ol></main></body></html>\n"
+        "<h1>I-95/I-495 toll evidence reports</h1><p>Choose a directed entry-to-exit "
+        "route to inspect four completed weeks of source evidence.</p><ol>"
+        + "".join(links)
+        + "</ol></main></body></html>\n"
     )
 
 
@@ -899,7 +844,7 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
             "point_slugs",
         }
         <= manifest.keys()
-        or manifest.get("schema_version") != "1.0.0"
+        or manifest.get("schema_version") != "2.0.0"
         or manifest.get("facility") != FACILITY
         or not isinstance(publication_format_version, str)
         or not isinstance(manifest.get("generation_id"), str)
@@ -982,6 +927,10 @@ def _publish_generation(  # pyright: ignore[reportUnusedFunction]
     published_at: datetime,
     analytics_bucket: str | None = None,
 ) -> dict[str, Any]:
+    raise RuntimeError(
+        "legacy in-memory publication was removed; use _publish_streamed"
+    )
+
     previous = _read_manifest(s3_client, bucket)
     endpoints = [
         endpoint
@@ -992,10 +941,7 @@ def _publish_generation(  # pyright: ignore[reportUnusedFunction]
         cast(dict[str, str], previous["point_slugs"]) if previous is not None else None
     )
     point_slugs = _build_slug_map(endpoints, existing_slugs)
-    documents = [
-        _build_report_document(generation, route, published_at)
-        for route in generation.routes
-    ]
+    documents: list[dict[str, Any]] = []
     result_sha256 = _result_fingerprint(documents, point_slugs)
     route_keys = [_route_key(document, point_slugs) for document in documents]
     if previous is not None:
@@ -1038,7 +984,7 @@ def _publish_generation(  # pyright: ignore[reportUnusedFunction]
     route_index = _render_index_html(documents, point_slugs)
     sitemap = _render_sitemap(documents, point_slugs, published_at)
     manifest = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "publication_format_version": PUBLICATION_FORMAT_VERSION,
         "facility": generation.facility,
         "generation_id": _utc_text(generation.generation_id),
@@ -1233,7 +1179,9 @@ def _weekly_component(
         "run_at_utc": run_at.astimezone(UTC),
     }
     sql = (
-        "SELECT interval_end_at, calculated_at, s3_key, zone_toll_rate_usd, link_status "
+        "SELECT corridor_name, od_pair_id, start_zone_id, start_zone_name, "
+        "end_zone_id, end_zone_name, interval_end_at, calculated_at, s3_key, "
+        "zone_toll_rate_usd, link_status "
         "FROM pricing.trip_pricing_i95 WHERE od_pair_id = %(source_od_pair_id)s "
         "AND interval_end_at >= %(window_start_utc)s AND interval_end_at < %(window_end_utc)s "
         "AND calculated_at <= %(run_at_utc)s"
@@ -1253,24 +1201,61 @@ def _weekly_component(
     selected = _select_weekly_observations(
         raw, run_at, series_id=source_route_key, direction=direction
     )
+
+    def public_row(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "corridor_name": row["corridor_name"],
+            "od_pair_id": row["od_pair_id"],
+            "start_zone": {"id": row["start_zone_id"], "name": row["start_zone_name"]},
+            "end_zone": {"id": row["end_zone_id"], "name": row["end_zone_name"]},
+            "interval_end_at": _utc_text(row["interval_end_at"]),
+            "observed_at": _utc_text(row["calculated_at"]),
+            "price_usd": f"{row['zone_toll_rate_usd']:.2f}",
+            "link_status": row["link_status"],
+        }
+
+    def bin_document(
+        hour_start: datetime, rows: tuple[dict[str, Any], ...]
+    ) -> dict[str, Any]:
+        minimum_price = min(row["zone_toll_rate_usd"] for row in rows)
+        maximum_price = max(row["zone_toll_rate_usd"] for row in rows)
+        return {
+            "hour_start_at": cast(str, _utc_text(hour_start)),
+            "source_count": len(rows),
+            "minimum": public_row(
+                max(
+                    (row for row in rows if row["zone_toll_rate_usd"] == minimum_price),
+                    key=_source_order,
+                )
+            ),
+            "maximum": public_row(
+                max(
+                    (row for row in rows if row["zone_toll_rate_usd"] == maximum_price),
+                    key=_source_order,
+                )
+            ),
+            "last": public_row(max(rows, key=_source_order)),
+        }
+
     return {
         "route_step_id": leg.route_step_id,
-        "od_pair_id": target,
-        "proxy_od_pair_id": proxy,
-        "source_kind": "modeled" if mapping else "observed",
-        "pricing_method": "identity_proxy_v1" if mapping else "source_observation",
-        "direction": direction,
-        "window_start_at": cast(str, _utc_text(start)),
-        "window_end_at": cast(str, _utc_text(end)),
+        "provenance": {
+            "target_od_pair_id": target,
+            "source_od_pair_id": source,
+            "proxy_od_pair_id": proxy,
+            "source_kind": "modeled" if mapping else "observed",
+            "pricing_method": "identity_proxy_v1" if mapping else "source_observation",
+            "direction": direction,
+            **({"required_status": status} if mapping else {}),
+        },
+        "window": {
+            "window_start_at": cast(str, _utc_text(start)),
+            "window_end_at": cast(str, _utc_text(end)),
+        },
         "coverage": selected.coverage.__dict__,
-        "observations": [
-            {
-                "interval_end_at": _utc_text(row["interval_end_at"]),
-                "observed_at": _utc_text(row["calculated_at"]),
-                "price_usd": f"{row['zone_toll_rate_usd']:.2f}",
-                "source_status": row["link_status"],
-            }
-            for row in selected.rows
+        "rush_observations": [public_row(row) for row in selected.rush_rows],
+        "hourly_bins": [
+            bin_document(hour_start, rows) for hour_start, rows in selected.hourly_bins
         ],
     }
 
@@ -1384,10 +1369,8 @@ def _publish_streamed(
         ]:
             raise ValueError("weekly component alignment is malformed")
         document = _build_stream_document(
-            evaluated_at, source_watermark, route, published_at
+            evaluated_at, source_watermark, route, published_at, weekly
         )
-        # Slice 3 owns public placement; compute and validate weekly values without changing schema 1.0.
-        del weekly
         if route_count:
             digest.update(b",")
         digest.update(
@@ -1453,7 +1436,7 @@ def _publish_streamed(
         PUBLIC_CACHE_CONTROL,
     )
     manifest = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "publication_format_version": PUBLICATION_FORMAT_VERSION,
         "facility": FACILITY,
         "generation_id": _utc_text(evaluated_at),
