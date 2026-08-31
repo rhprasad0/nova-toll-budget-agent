@@ -10,7 +10,8 @@ import re
 import unicodedata
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
 from typing import Annotated, Any, Literal, Protocol, cast
@@ -135,6 +136,20 @@ class Generation(_Model):
     ]
 
 
+@dataclass(frozen=True)
+class _ObservationCoverage:
+    expected_rush_observations: int
+    observed_rush_observations: int
+    expected_off_rush_bins: int
+    observed_off_rush_bins: int
+
+
+@dataclass(frozen=True)
+class _ObservationSelection:
+    rows: tuple[dict[str, Any], ...]
+    coverage: _ObservationCoverage
+
+
 def _slugify(*parts: str) -> str:
     text = "-".join(parts)
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
@@ -228,6 +243,106 @@ def _aware_timestamp(value: str, *, label: str) -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{label} must include a UTC offset")
     return parsed.astimezone(UTC)
+
+
+def _require_aware(value: object, *, label: str) -> datetime:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() is None
+    ):
+        raise ValueError(f"{label} must be an aware datetime")
+    return value
+
+
+def _source_order(row: dict[str, Any]) -> tuple[datetime, datetime, str]:
+    return (
+        _require_aware(row["interval_end_at"], label="interval_end_at").astimezone(UTC),
+        _require_aware(row["calculated_at"], label="calculated_at").astimezone(UTC),
+        row["s3_key"],
+    )
+
+
+def _is_rush_observation(interval_end_at: datetime) -> bool:
+    local = interval_end_at.astimezone(_EASTERN)
+    return local.weekday() < 5 and (6 <= local.hour < 10 or 15 <= local.hour < 19)
+
+
+def _select_weekly_observations(  # pyright: ignore[reportUnusedFunction]
+    rows: list[dict[str, Any]],
+    run_at: datetime,
+    *,
+    series_id: object,
+    direction: Literal["northbound", "southbound"],
+) -> _ObservationSelection:
+    """Select one directed series for the four completed Eastern weeks."""
+    if not isinstance(series_id, str) or not series_id:
+        raise ValueError("series_id must be a non-empty string")
+    if direction not in {"northbound", "southbound"}:
+        raise ValueError("direction must be northbound or southbound")
+    run_local = _require_aware(run_at, label="run_at").astimezone(_EASTERN)
+    if run_local.weekday() != 0 or (
+        run_local.hour,
+        run_local.minute,
+        run_local.second,
+        run_local.microsecond,
+    ) != (1, 0, 0, 0):
+        raise ValueError("run_at must be Monday 01:00 America/New_York")
+    window_end = run_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    window_start = window_end - timedelta(weeks=4)
+    window_start_utc = window_start.astimezone(UTC)
+    window_end_utc = window_end.astimezone(UTC)
+
+    rush_rows: list[dict[str, Any]] = []
+    off_rush_bins: dict[datetime, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row.get("series_id") != series_id or row.get("direction") != direction:
+            raise ValueError("row does not belong to the declared directed series")
+        interval_end_at = _require_aware(
+            row.get("interval_end_at"), label="interval_end_at"
+        )
+        _require_aware(row.get("calculated_at"), label="calculated_at")
+        if not isinstance(row.get("s3_key"), str) or "zone_toll_rate_usd" not in row:
+            raise ValueError("row is missing required source fields")
+        interval_utc = interval_end_at.astimezone(UTC)
+        if not window_start_utc <= interval_utc < window_end_utc:
+            raise ValueError("row is outside the weekly observation window")
+        if _is_rush_observation(interval_end_at):
+            rush_rows.append(row)
+        else:
+            off_rush_bins[
+                interval_utc.replace(minute=0, second=0, microsecond=0)
+            ].append(row)
+
+    selected = list(rush_rows)
+    for bin_rows in off_rush_bins.values():
+        latest = max(bin_rows, key=_source_order)
+        minimum_price = min(row["zone_toll_rate_usd"] for row in bin_rows)
+        maximum_price = max(row["zone_toll_rate_usd"] for row in bin_rows)
+        minimum = max(
+            (row for row in bin_rows if row["zone_toll_rate_usd"] == minimum_price),
+            key=_source_order,
+        )
+        maximum = max(
+            (row for row in bin_rows if row["zone_toll_rate_usd"] == maximum_price),
+            key=_source_order,
+        )
+        selected.extend(
+            {_source_order(row): row for row in (minimum, maximum, latest)}.values()
+        )
+
+    return _ObservationSelection(
+        rows=tuple(sorted(selected, key=_source_order)),
+        coverage=_ObservationCoverage(
+            expected_rush_observations=960,
+            observed_rush_observations=len(rush_rows),
+            expected_off_rush_bins=int(
+                (window_end_utc - window_start_utc).total_seconds() // 3600
+            )
+            - 160,
+            observed_off_rush_bins=len(off_rush_bins),
+        ),
+    )
 
 
 def _expected_watermark_action(

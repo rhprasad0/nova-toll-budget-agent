@@ -2,9 +2,11 @@ import copy
 import importlib.util
 import io
 import json
-from datetime import UTC, datetime
+import sys
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 import report_publisher_handler as publisher
@@ -12,12 +14,14 @@ import report_publisher_handler as publisher
 _loader_spec = importlib.util.spec_from_file_location(
     "loader_detail_test", Path(__file__).parents[2] / "loader" / "handler.py"
 )
+sys.path.insert(0, str(Path(__file__).parents[2] / "loader"))
 assert _loader_spec and _loader_spec.loader
 loader = importlib.util.module_from_spec(_loader_spec)
 _loader_spec.loader.exec_module(loader)
 
 EVALUATED_AT = datetime(2026, 8, 25, 16, 5, tzinfo=UTC)
 WATERMARK = datetime(2026, 8, 25, 16, 0, tzinfo=UTC)
+EASTERN = ZoneInfo("America/New_York")
 
 
 def _endpoint(
@@ -123,6 +127,29 @@ def _load_event(watermark=WATERMARK):
             "row_count": 317,
         },
     }
+
+
+def _observation(
+    interval_end_at,
+    *,
+    price="1.00",
+    key="source.csv",
+    calculated_at=None,
+    series_id="od-1",
+    direction="northbound",
+):
+    return {
+        "series_id": series_id,
+        "direction": direction,
+        "interval_end_at": interval_end_at,
+        "calculated_at": calculated_at or interval_end_at,
+        "s3_key": key,
+        "zone_toll_rate_usd": Decimal(price),
+    }
+
+
+def _weekly_run(year, month, day):
+    return datetime(year, month, day, 1, tzinfo=EASTERN)
 
 
 def test_watchdog_builds_one_complete_generation(monkeypatch, caplog):
@@ -869,3 +896,188 @@ def test_success_is_logged_after_publication(monkeypatch, caplog):
 
     assert result["status"] == "published"
     assert "V2_REPORT_GENERATION_OK i95_i495" in caplog.text
+
+
+def test_weekly_selector_keeps_only_weekday_rush_boundaries_at_source_cadence():
+    run_at = _weekly_run(2026, 1, 26)
+    cases = (
+        ("06:00", datetime(2026, 1, 5, 11, tzinfo=UTC), 1, 0),
+        ("10:00", datetime(2026, 1, 5, 15, tzinfo=UTC), 0, 1),
+        ("15:00", datetime(2026, 1, 5, 20, tzinfo=UTC), 1, 0),
+        ("19:00", datetime(2026, 1, 6, 0, tzinfo=UTC), 0, 1),
+        ("tuesday-09:00", datetime(2026, 1, 6, 14, tzinfo=UTC), 1, 0),
+        ("saturday-09:00", datetime(2026, 1, 10, 14, tzinfo=UTC), 0, 1),
+    )
+
+    for key, interval_end_at, observed_rush, observed_off_rush in cases:
+        row = _observation(interval_end_at, key=key)
+        result = publisher._select_weekly_observations(
+            [row], run_at, series_id="od-1", direction="northbound"
+        )
+
+        assert result.rows == (row,)
+        assert result.rows[0] is row
+        assert result.coverage == publisher._ObservationCoverage(
+            960, observed_rush, 512, observed_off_rush
+        )
+
+
+def test_weekly_selector_uses_utc_bins_ties_and_original_rows_without_gaps():
+    run_at = _weekly_run(2026, 1, 26)
+    hour = datetime(2026, 1, 10, 6, tzinfo=UTC)
+    rows = [
+        _observation(hour, price="5", key="maximum"),
+        _observation(hour + timedelta(minutes=10), price="1", key="old-minimum"),
+        _observation(
+            hour + timedelta(minutes=10),
+            price="1",
+            key="latest-minimum",
+            calculated_at=hour + timedelta(minutes=11),
+        ),
+        _observation(
+            hour + timedelta(minutes=10),
+            price="1",
+            key="s3-tiebreak-minimum",
+            calculated_at=hour + timedelta(minutes=11),
+        ),
+        _observation(hour + timedelta(minutes=50), price="3", key="last"),
+        _observation(hour + timedelta(hours=2), price="2", key="after-empty-hour"),
+    ]
+
+    result = publisher._select_weekly_observations(
+        rows, run_at, series_id="od-1", direction="northbound"
+    )
+
+    assert [row["s3_key"] for row in result.rows] == [
+        "maximum",
+        "s3-tiebreak-minimum",
+        "last",
+        "after-empty-hour",
+    ]
+    assert result.rows[1] is rows[3]
+    assert result.coverage.observed_off_rush_bins == 2
+    assert len(result.rows) == 4
+
+
+def test_weekly_selector_uses_local_calendar_window_for_dst_coverage_and_utc_bins():
+    assert (
+        publisher._select_weekly_observations(
+            [], _weekly_run(2026, 1, 26), series_id="od-1", direction="northbound"
+        ).coverage.expected_off_rush_bins
+        == 512
+    )
+    assert (
+        publisher._select_weekly_observations(
+            [], _weekly_run(2026, 3, 30), series_id="od-1", direction="northbound"
+        ).coverage.expected_off_rush_bins
+        == 511
+    )
+
+    repeated_hour_rows = [
+        _observation(datetime(2026, 11, 1, 5, 30, tzinfo=UTC), key="fold-0"),
+        _observation(datetime(2026, 11, 1, 6, 30, tzinfo=UTC), key="fold-1"),
+    ]
+    result = publisher._select_weekly_observations(
+        repeated_hour_rows,
+        _weekly_run(2026, 11, 2),
+        series_id="od-1",
+        direction="northbound",
+    )
+
+    assert {row["s3_key"] for row in result.rows} == {"fold-0", "fold-1"}
+    assert result.coverage == publisher._ObservationCoverage(960, 0, 513, 2)
+
+
+def test_weekly_selector_partitions_series_and_rejects_invalid_input():
+    run_at = _weekly_run(2026, 1, 26)
+    northbound = [
+        _observation(datetime(2026, 1, 5, 11, tzinfo=UTC), key="north-rush"),
+        _observation(datetime(2026, 1, 10, 6, tzinfo=UTC), key="north-off-rush"),
+    ]
+    southbound = [
+        _observation(
+            datetime(2026, 1, 6, 14, tzinfo=UTC),
+            key="south-rush",
+            series_id="od-2",
+            direction="southbound",
+        ),
+        _observation(
+            datetime(2026, 1, 10, 7, tzinfo=UTC),
+            key="south-off-rush",
+            series_id="od-2",
+            direction="southbound",
+        ),
+    ]
+
+    northbound_result = publisher._select_weekly_observations(
+        northbound, run_at, series_id="od-1", direction="northbound"
+    )
+    southbound_result = publisher._select_weekly_observations(
+        southbound, run_at, series_id="od-2", direction="southbound"
+    )
+    assert {row["s3_key"] for row in northbound_result.rows} == {
+        "north-rush",
+        "north-off-rush",
+    }
+    assert northbound_result.coverage == publisher._ObservationCoverage(960, 1, 512, 1)
+    assert {row["s3_key"] for row in southbound_result.rows} == {
+        "south-rush",
+        "south-off-rush",
+    }
+    assert southbound_result.coverage == publisher._ObservationCoverage(960, 1, 512, 1)
+    with pytest.raises(ValueError, match="declared directed series"):
+        publisher._select_weekly_observations(
+            [*northbound, *southbound],
+            run_at,
+            series_id="od-1",
+            direction="northbound",
+        )
+    with pytest.raises(ValueError, match="Monday 01:00"):
+        publisher._select_weekly_observations(
+            [],
+            datetime(2026, 1, 26, 2, tzinfo=EASTERN),
+            series_id="od-1",
+            direction="northbound",
+        )
+    with pytest.raises(ValueError, match="aware"):
+        publisher._select_weekly_observations(
+            [],
+            datetime(2026, 1, 26, 1, tzinfo=UTC).replace(tzinfo=None),
+            series_id="od-1",
+            direction="northbound",
+        )
+    with pytest.raises(ValueError, match="outside"):
+        publisher._select_weekly_observations(
+            [_observation(datetime(2025, 12, 29, 4, 59, tzinfo=UTC))],
+            run_at,
+            series_id="od-1",
+            direction="northbound",
+        )
+    with pytest.raises(ValueError, match="outside"):
+        publisher._select_weekly_observations(
+            [_observation(datetime(2026, 1, 26, 5, tzinfo=UTC))],
+            run_at,
+            series_id="od-1",
+            direction="northbound",
+        )
+    with pytest.raises(ValueError, match="aware"):
+        publisher._select_weekly_observations(
+            [_observation(datetime(2026, 1, 10, 6, tzinfo=UTC).replace(tzinfo=None))],
+            run_at,
+            series_id="od-1",
+            direction="northbound",
+        )
+    with pytest.raises(ValueError, match="aware"):
+        publisher._select_weekly_observations(
+            [
+                _observation(
+                    datetime(2026, 1, 10, 6, tzinfo=UTC),
+                    calculated_at=datetime(2026, 1, 10, 6, tzinfo=UTC).replace(
+                        tzinfo=None
+                    ),
+                )
+            ],
+            run_at,
+            series_id="od-1",
+            direction="northbound",
+        )
