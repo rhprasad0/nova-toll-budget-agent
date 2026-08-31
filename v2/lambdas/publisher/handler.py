@@ -9,10 +9,12 @@ import os
 import re
 import unicodedata
 from collections import defaultdict
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
+from itertools import groupby
 from pathlib import Path
 from typing import Annotated, Any, Literal, Protocol, cast
 from zoneinfo import ZoneInfo
@@ -148,6 +150,22 @@ class _ObservationCoverage:
 class _ObservationSelection:
     rows: tuple[dict[str, Any], ...]
     coverage: _ObservationCoverage
+
+
+@dataclass(frozen=True)
+class _RouteDescriptor:
+    key: tuple[str, str]
+    origin: Endpoint
+    destination: Endpoint
+    source_watermark: datetime | None
+
+
+def _weekly_run_at(invoked_at: datetime) -> datetime:
+    """Return the completed-week boundary using Eastern calendar arithmetic."""
+    local = _require_aware(invoked_at, label="invoked_at").astimezone(_EASTERN)
+    monday = (local - timedelta(days=local.weekday())).date()
+    boundary = datetime(monday.year, monday.month, monday.day, 1, tzinfo=_EASTERN)
+    return boundary if local >= boundary else boundary - timedelta(weeks=1)
 
 
 def _slugify(*parts: str) -> str:
@@ -494,6 +512,30 @@ def _build_report_document(
         "evaluated_at": _utc_text(generation.evaluated_at),
         "availability": "available" if "total_usd" in current_price else "unavailable",
         "facility": generation.facility,
+        "route": {
+            "origin": route.origin.model_dump(mode="json"),
+            "destination": route.destination.model_dump(mode="json"),
+            "structural_facility_legs": route.structural_facility_legs,
+        },
+        "current_price": current_price,
+    }
+
+
+def _build_stream_document(
+    evaluated_at: datetime,
+    source_watermark: datetime | None,
+    route: GenerationRoute,
+    published_at: datetime,
+) -> dict[str, Any]:
+    del source_watermark  # The public 1.0 report intentionally has no watermark field.
+    current_price = route.current_price
+    return {
+        "schema_version": "1.0.0",
+        "generation_id": _utc_text(evaluated_at),
+        "published_at": _utc_text(published_at),
+        "evaluated_at": _utc_text(evaluated_at),
+        "availability": "available" if "total_usd" in current_price else "unavailable",
+        "facility": FACILITY,
         "route": {
             "origin": route.origin.model_dump(mode="json"),
             "destination": route.destination.model_dump(mode="json"),
@@ -933,7 +975,7 @@ def _put_generation_marker(
     )
 
 
-def _publish_generation(
+def _publish_generation(  # pyright: ignore[reportUnusedFunction]
     generation: Generation,
     s3_client: _S3Client,
     bucket: str,
@@ -1051,13 +1093,15 @@ def _publish_generation(
     return {"status": "published", "result_sha256": result_sha256}
 
 
-def _connect() -> object:
+def _connect(*, reader: bool = False) -> object:
     import psycopg  # type: ignore[import-not-found]
     from psycopg.rows import dict_row  # type: ignore[import-not-found]
 
     host = os.environ["DB_HOST"]
     port = int(os.environ["DB_PORT"])
-    user = os.environ["DB_USER"]
+    user = os.environ.get("DB_READER_USER") if reader else os.environ["DB_USER"]
+    if not user:
+        raise RuntimeError("DB_READER_USER is required for raw history reads")
     rds = cast(Any, boto3.client("rds"))  # pyright: ignore[reportUnknownMemberType]
     token = cast(
         str,
@@ -1090,6 +1134,351 @@ def _read_report_rows() -> list[dict[str, Any]]:
         connection.close()
 
 
+def _cursor_rows(cursor: Any) -> Iterator[dict[str, Any]]:  # noqa: ANN401
+    while batch := cursor.fetchmany(100):
+        yield from batch
+
+
+def _route_identity(row: dict[str, Any]) -> tuple[str, str]:
+    if set(row) != _ROW_FIELDS:
+        raise ValueError("bounded report operation returned malformed rows")
+    origin, destination = row["origin"], row["destination"]
+    if not isinstance(origin, dict) or not isinstance(destination, dict):
+        raise ValueError("report endpoint is malformed")
+    origin_values = cast(dict[str, Any], origin)
+    destination_values = cast(dict[str, Any], destination)
+    key = (origin_values.get("point_id"), destination_values.get("point_id"))
+    if not all(isinstance(value, str) for value in key):
+        raise ValueError("report endpoint ID is malformed")
+    return cast(tuple[str, str], key)
+
+
+def _preflight_report(
+    rows: Iterator[dict[str, Any]],
+) -> tuple[list[_RouteDescriptor], datetime, datetime | None]:
+    descriptors: list[_RouteDescriptor] = []
+    evaluated_at: datetime | None = None
+    source_watermark: datetime | None = None
+    last_key: tuple[str, str] | None = None
+    for key, group in groupby(rows, _route_identity):
+        group_rows = list(group)
+        if key <= last_key if last_key is not None else False:
+            raise ValueError("report routes are not strictly ordered")
+        last_key = key
+        snapshot = group_rows[0]["snapshot_evaluated_at"]
+        if not isinstance(snapshot, datetime) or snapshot.tzinfo is None:
+            raise ValueError("report evaluation timestamp must be timezone-aware")
+        if any(row["snapshot_evaluated_at"] != snapshot for row in group_rows):
+            raise ValueError("route rows disagree on snapshot evaluation timestamp")
+        if evaluated_at is None:
+            evaluated_at = snapshot.astimezone(UTC)
+        elif evaluated_at != snapshot.astimezone(UTC):
+            raise ValueError("report rows do not share one evaluation timestamp")
+        route_watermark = _source_watermark(group_rows)
+        descriptors.append(
+            _RouteDescriptor(
+                key,
+                Endpoint.model_validate(group_rows[0]["origin"]),
+                Endpoint.model_validate(group_rows[0]["destination"]),
+                route_watermark,
+            )
+        )
+        if route_watermark is not None and (
+            source_watermark is None or route_watermark > source_watermark
+        ):
+            source_watermark = route_watermark
+    if len(descriptors) != EXPECTED_ROUTE_COUNT or evaluated_at is None:
+        raise ValueError(f"report snapshot must contain {EXPECTED_ROUTE_COUNT} routes")
+    return descriptors, evaluated_at, source_watermark
+
+
+def _weekly_component(
+    connection: Any,  # noqa: ANN401
+    leg: Any,  # noqa: ANN401
+    run_at: datetime,
+) -> dict[str, Any]:
+    pricing_key = leg.pricing_key
+    target = pricing_key.od_pair_id
+    source_route_key = pricing_key.source_route_key
+    if source_route_key.startswith("Northbound:"):
+        direction: Literal["northbound", "southbound"] = "northbound"
+    elif source_route_key.startswith("Southbound:"):
+        direction = "southbound"
+    else:
+        raise ValueError("facility leg source route key has no supported direction")
+    with connection.cursor("proxy_lookup") as cursor:
+        cursor.execute(
+            "SELECT proxy_od_pair_id, required_status FROM pricing.i95_modeled_od_proxy WHERE target_od_pair_id = %(target_od_pair_id)s",
+            {"target_od_pair_id": target},
+        )
+        mappings = cursor.fetchmany(2)
+    if len(mappings) > 1:
+        raise ValueError("target OD has duplicate proxy mappings")
+    mapping = mappings[0] if mappings else None
+    proxy = mapping["proxy_od_pair_id"] if mapping else None
+    status = mapping["required_status"] if mapping else None
+    if mapping and (
+        not isinstance(proxy, int) or not isinstance(status, str) or not status
+    ):
+        raise ValueError("target OD proxy mapping is malformed")
+    source = proxy if mapping else target
+    local_end = run_at.astimezone(_EASTERN).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    start, end = local_end - timedelta(weeks=4), local_end
+    params: dict[str, Any] = {
+        "source_od_pair_id": source,
+        "window_start_utc": start.astimezone(UTC),
+        "window_end_utc": end.astimezone(UTC),
+        "run_at_utc": run_at.astimezone(UTC),
+    }
+    sql = (
+        "SELECT interval_end_at, calculated_at, s3_key, zone_toll_rate_usd, link_status "
+        "FROM pricing.trip_pricing_i95 WHERE od_pair_id = %(source_od_pair_id)s "
+        "AND interval_end_at >= %(window_start_utc)s AND interval_end_at < %(window_end_utc)s "
+        "AND calculated_at <= %(run_at_utc)s"
+    )
+    if mapping:
+        sql += " AND link_status = %(required_status)s"
+        params["required_status"] = status
+    sql += " ORDER BY interval_end_at ASC, calculated_at ASC, s3_key ASC"
+    raw: list[dict[str, Any]] = []
+    with connection.cursor(f"raw_{leg.route_step_id}") as cursor:
+        cursor.execute(sql, params)
+        while batch := cursor.fetchmany(100):
+            raw.extend(
+                {**row, "series_id": source_route_key, "direction": direction}
+                for row in batch
+            )
+    selected = _select_weekly_observations(
+        raw, run_at, series_id=source_route_key, direction=direction
+    )
+    return {
+        "route_step_id": leg.route_step_id,
+        "od_pair_id": target,
+        "proxy_od_pair_id": proxy,
+        "source_kind": "modeled" if mapping else "observed",
+        "pricing_method": "identity_proxy_v1" if mapping else "source_observation",
+        "direction": direction,
+        "window_start_at": cast(str, _utc_text(start)),
+        "window_end_at": cast(str, _utc_text(end)),
+        "coverage": selected.coverage.__dict__,
+        "observations": [
+            {
+                "interval_end_at": _utc_text(row["interval_end_at"]),
+                "observed_at": _utc_text(row["calculated_at"]),
+                "price_usd": f"{row['zone_toll_rate_usd']:.2f}",
+                "source_status": row["link_status"],
+            }
+            for row in selected.rows
+        ],
+    }
+
+
+def _put_object(
+    s3_client: _S3Client,
+    bucket: str,
+    key: str,
+    body: str,
+    content_type: str,
+    cache_control: str,
+) -> None:
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=body.encode(),
+        ContentType=content_type,
+        CacheControl=cache_control,
+    )
+
+
+def _incremental_prefix(point_slugs: dict[str, str]) -> bytes:
+    # This is the exact sorted outer object prefix used by _result_fingerprint.
+    return (
+        json.dumps(
+            {
+                "point_slugs": point_slugs,
+                "publication_format_version": PUBLICATION_FORMAT_VERSION,
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )[:-1]
+        + ',"reports":['
+    ).encode()
+
+
+def _publish_streamed(
+    report_cursor: Any,  # noqa: ANN401
+    reader_connection: Any,  # noqa: ANN401
+    s3_client: _S3Client,
+    bucket: str,
+    published_at: datetime,
+    analytics_bucket: str,
+    expected: datetime | None = None,
+) -> tuple[dict[str, Any], datetime, datetime | None]:
+    previous = _read_manifest(s3_client, bucket)
+    descriptors, evaluated_at, source_watermark = _preflight_report(
+        _cursor_rows(report_cursor)
+    )
+    if (
+        previous
+        and source_watermark is not None
+        and isinstance(previous.get("source_watermark"), str)
+        and source_watermark
+        < _aware_timestamp(
+            cast(str, previous["source_watermark"]), label="manifest source watermark"
+        )
+    ):
+        return {"status": "superseded"}, evaluated_at, source_watermark
+    if (
+        expected is not None
+        and _expected_watermark_action(expected, source_watermark) == "superseded"
+    ):
+        logger.info(
+            "V2_REPORT_GENERATION_SUPERSEDED %s %s %s",
+            FACILITY,
+            _utc_text(expected),
+            _utc_text(source_watermark),
+        )
+        return {"status": "superseded"}, evaluated_at, source_watermark
+    existing_slugs = cast(dict[str, str], previous["point_slugs"]) if previous else None
+    point_slugs = _build_slug_map(
+        [
+            endpoint
+            for item in descriptors
+            for endpoint in (item.origin, item.destination)
+        ],
+        existing_slugs,
+    )
+    route_keys = [
+        f"{PUBLIC_PREFIX}/{point_slugs[item.key[0]]}/{point_slugs[item.key[1]]}"
+        for item in descriptors
+    ]
+    digest = hashlib.sha256(_incremental_prefix(point_slugs))
+    run_at = _weekly_run_at(published_at)
+    route_count = 0
+    report_cursor.scroll(0, mode="absolute")
+    for key, group in groupby(_cursor_rows(report_cursor), _route_identity):
+        rows = list(group)
+        if route_count >= len(descriptors) or key != descriptors[route_count].key:
+            raise ValueError("report publish pass disagrees with preflight route order")
+        if any(
+            _require_aware(
+                row["snapshot_evaluated_at"], label="snapshot evaluation"
+            ).astimezone(UTC)
+            != evaluated_at
+            for row in rows
+        ):
+            raise ValueError("report publish pass disagrees with preflight evaluation")
+        if _source_watermark(rows) != descriptors[route_count].source_watermark:
+            raise ValueError("report publish pass disagrees with preflight watermark")
+        route = _build_route(rows)
+        legs = [
+            route_validation._I95FacilityLeg.model_validate(value)  # pyright: ignore[reportPrivateUsage]
+            for value in route.structural_facility_legs
+        ]  # pyright: ignore[reportPrivateUsage]
+        weekly = [_weekly_component(reader_connection, leg, run_at) for leg in legs]
+        if [item["route_step_id"] for item in weekly] != [
+            leg.route_step_id for leg in legs
+        ]:
+            raise ValueError("weekly component alignment is malformed")
+        document = _build_stream_document(
+            evaluated_at, source_watermark, route, published_at
+        )
+        # Slice 3 owns public placement; compute and validate weekly values without changing schema 1.0.
+        del weekly
+        if route_count:
+            digest.update(b",")
+        digest.update(
+            json.dumps(
+                _without_runtime_fields(document),
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        )
+        route_key = route_keys[route_count]
+        _put_object(
+            s3_client,
+            bucket,
+            f"{route_key}/report.json",
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            "application/json; charset=utf-8",
+            PUBLIC_CACHE_CONTROL,
+        )
+        _put_object(
+            s3_client,
+            bucket,
+            f"{route_key}/index.html",
+            _render_report_html(document, f"{PUBLIC_BASE_URL}/{route_key}/"),
+            "text/html; charset=utf-8",
+            PUBLIC_CACHE_CONTROL,
+        )
+        route_count += 1
+    if route_count != EXPECTED_ROUTE_COUNT:
+        raise ValueError("report publish pass is missing routes")
+    digest.update(b"]}")
+    result_sha256 = digest.hexdigest()
+    if previous and previous["result_sha256"] == result_sha256:
+        _put_generation_marker(s3_client, analytics_bucket, previous, route_keys)
+        return (
+            {"status": "unchanged", "result_sha256": result_sha256},
+            evaluated_at,
+            source_watermark,
+        )
+    index_descriptors = [
+        {
+            "route": {
+                "origin": item.origin.model_dump(mode="json"),
+                "destination": item.destination.model_dump(mode="json"),
+            }
+        }
+        for item in descriptors
+    ]
+    _put_object(
+        s3_client,
+        bucket,
+        f"{PUBLIC_PREFIX}/index.html",
+        _render_index_html(index_descriptors, point_slugs),
+        "text/html; charset=utf-8",
+        PUBLIC_CACHE_CONTROL,
+    )
+    _put_object(
+        s3_client,
+        bucket,
+        "sitemap.xml",
+        _render_sitemap(index_descriptors, point_slugs, published_at),
+        "application/xml; charset=utf-8",
+        PUBLIC_CACHE_CONTROL,
+    )
+    manifest = {
+        "schema_version": "1.0.0",
+        "publication_format_version": PUBLICATION_FORMAT_VERSION,
+        "facility": FACILITY,
+        "generation_id": _utc_text(evaluated_at),
+        "published_at": _utc_text(published_at),
+        "source_watermark": _utc_text(source_watermark),
+        "result_sha256": result_sha256,
+        "route_count": route_count,
+        "point_slugs": point_slugs,
+    }
+    _put_object(
+        s3_client,
+        bucket,
+        MANIFEST_KEY,
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        "application/json; charset=utf-8",
+        MANIFEST_CACHE_CONTROL,
+    )
+    _put_generation_marker(s3_client, analytics_bucket, manifest, route_keys)
+    return (
+        {"status": "published", "result_sha256": result_sha256},
+        evaluated_at,
+        source_watermark,
+    )
+
+
 def _expected_watermark(event: dict[str, Any]) -> datetime | None:
     if event == {"trigger": "watchdog"}:
         return None
@@ -1107,6 +1496,55 @@ def _expected_watermark(event: dict[str, Any]) -> datetime | None:
 
 def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
     expected = _expected_watermark(event)
+    enabled = os.getenv("REPORT_PUBLICATION_ENABLED", "false").lower()
+    if enabled not in {"true", "false"}:
+        raise ValueError("REPORT_PUBLICATION_ENABLED must be true or false")
+    if enabled == "true":
+        invoked_at = datetime.now(UTC)
+        report_connection = cast(Any, _connect())
+        try:
+            reader_connection = cast(Any, _connect(reader=True))
+            try:
+                with report_connection.transaction(), reader_connection.transaction():
+                    with report_connection.cursor() as cursor:
+                        cursor.execute(
+                            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                        )
+                        cursor.execute("SET LOCAL statement_timeout = '180s'")
+                    with reader_connection.cursor() as cursor:
+                        cursor.execute(
+                            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                        )
+                        cursor.execute("SET LOCAL statement_timeout = '180s'")
+                    with report_connection.cursor(
+                        "report_snapshot", scrollable=True
+                    ) as report_cursor:
+                        report_cursor.execute(REPORT_SQL)
+                        publication, evaluated_at, source_watermark = _publish_streamed(
+                            report_cursor,
+                            reader_connection,
+                            cast(_S3Client, boto3.client("s3")),  # pyright: ignore[reportUnknownMemberType]
+                            os.environ["SITE_BUCKET_NAME"],
+                            invoked_at,
+                            os.environ["AGENT_MEASUREMENT_BUCKET"],
+                            expected,
+                        )
+            finally:
+                reader_connection.close()
+        finally:
+            report_connection.close()
+        result: dict[str, Any] = {
+            "status": publication["status"],
+            "facility": FACILITY,
+            "generation_id": _utc_text(evaluated_at),
+            "source_watermark": _utc_text(source_watermark),
+            "route_count": EXPECTED_ROUTE_COUNT,
+            **publication,
+        }
+        if publication["status"] == "superseded":
+            return result
+        _log_success(cast(str, _utc_text(evaluated_at)), EXPECTED_ROUTE_COUNT)
+        return result
     generation = build_generation(_read_report_rows())
     if expected is not None:
         action = _expected_watermark_action(expected, generation.source_watermark)
@@ -1131,37 +1569,24 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
         "source_watermark": _utc_text(generation.source_watermark),
         "route_count": len(generation.routes),
     }
-    enabled = os.getenv("REPORT_PUBLICATION_ENABLED", "false").lower()
-    if enabled not in {"true", "false"}:
-        raise ValueError("REPORT_PUBLICATION_ENABLED must be true or false")
-    if enabled == "true":
-        publication = _publish_generation(
-            generation,
-            cast(
-                _S3Client,
-                boto3.client("s3"),  # pyright: ignore[reportUnknownMemberType]
-            ),
-            os.environ["SITE_BUCKET_NAME"],
-            datetime.now(UTC),
-            os.environ["AGENT_MEASUREMENT_BUCKET"],
-        )
-        result.update(publication)
-        if publication["status"] == "superseded":
-            return result
+    _log_success(generation_id, len(generation.routes))
+    return result
+
+
+def _log_success(generation_id: str, route_count: int) -> None:
     environment = os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
     if environment == "production":
         logger.info(
             "V2_REPORT_GENERATION_OK %s %s %s",
             FACILITY,
             generation_id,
-            len(generation.routes),
+            route_count,
         )
     else:
         logger.info(
             "V2_REPORT_GENERATION_OK %s %s %s %s",
             FACILITY,
             generation_id,
-            len(generation.routes),
+            route_count,
             environment,
         )
-    return result
