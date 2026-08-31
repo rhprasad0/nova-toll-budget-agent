@@ -50,12 +50,14 @@ Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
 writers or allow subagents to spawn subagents. Explorers, pre-checkers, and
 checkers may fan out.
 
-Both checker spawn tasks must require `$ponytail-review` before completion: the
+Both checker spawn tasks must require a ponytail review before completion: the
 pre-checker reviews the explored design and draft checklist; the checker reviews
-the implementation diff. Unnecessary complexity is blocking when a materially
-simpler design satisfies the intent. Each finding names what to remove and its
-replacement; complexity required by the user, an existing contract, security,
-or data safety is exempt. Each checker records its findings or `Lean already`.
+the implementation diff. Look for unnecessary abstractions, dependencies,
+configurability, operational machinery, and code replaced by the standard
+library or platform. A finding is blocking when a materially simpler design
+satisfies the intent; name its location, what to remove, and the replacement.
+Complexity required by the user, an existing contract, security, or data safety
+is exempt. Each checker records its findings or `Lean already`.
 
 ## Artifacts
 
