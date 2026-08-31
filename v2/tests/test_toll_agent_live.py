@@ -60,7 +60,7 @@ def test_live_prompt_cache_is_reused_by_fresh_agents():
     ("prompt", "origin", "destination"),
     [
         (
-            "What is the current Greenway toll from the Leesburg Bypass to Route 28?",
+            "What is the current Greenway toll from Leesburg to Route 28?",
             "greenway:1:entry:EB",
             "greenway:28:exit:EB",
         ),
@@ -93,7 +93,7 @@ def test_live_current_price_resolution(prompt, origin, destination):
 def test_live_annual_round_trip_uses_reversed_endpoints():
     answer, calls, _agent = _invoke(
         "For Monday through Friday, estimate my annual round-trip commute from "
-        "Leesburg Bypass to Route 28. I leave at 8 AM, return at 5:30 PM, and "
+        "Leesburg to Route 28. I leave at 8 AM, return at 5:30 PM, and "
         "plan 240 commute days. My gross annual income is $120,000."
     )
     assert len(calls) == 1, (answer, calls)
@@ -190,6 +190,25 @@ def test_live_washington_i395_clarification_uses_i95_northbound_exit():
     assert 1 <= len(calls) <= 2, (second, calls)
     assert calls[-1]["input"]["origin_point_id"] == "i95:218NO"
     assert calls[-1]["input"]["destination_point_id"] == "i95:224ND"
+
+
+def test_live_leesburg_washington_i395_uses_connector_exit_once():
+    answer, calls, agent = _invoke(
+        "What is the current toll from Leesburg to Washington?"
+    )
+    assert calls == [], (answer, calls)
+    assert "I-66" in answer and "I-395" in answer
+
+    second = str(agent("I-395."))
+    assert len(calls) == 1, (second, calls)
+    assert calls[0]["name"] == "get_current_toll_price"
+    assert calls[0]["input"]["origin_point_id"] == "greenway:1:entry:EB"
+    assert calls[0]["input"]["destination_point_id"] == "i95:2249ND"
+    assert calls[0]["input"]["pricing_profile"] == {
+        "vehicle_class": "two_axle_passenger",
+        "payment_method": "e_zpass",
+        "transponder_mode": "toll",
+    }
 
 
 def test_live_washington_from_i495_south_uses_connector_exit():

@@ -113,6 +113,23 @@ def test_runtime_rejects_invalid_input_and_enforces_turn_limit():
     }
 
 
+def test_runtime_treats_blank_final_results_as_safe_failures():
+    for answer in ("", "   \t\n"):
+        guardrail = FakeGuardrail()
+        events = collect(
+            TollChatRuntime(lambda answer=answer: FakeAgent(answer), guardrail),
+            {"prompt": "price it"},
+        )
+        assert events[-1] == {
+            "type": "error",
+            "code": "agent_unavailable",
+            "message": "TollChat could not complete that request. Please try again.",
+        }
+        assert all(event["type"] != "answer" for event in events)
+        assert DISCLAIMER not in str(events)
+        assert guardrail.calls == [("INPUT", "price it")]
+
+
 def test_runtime_blocks_guardrail_content_and_returns_safe_failures(
     caplog: LogCaptureFixture,
 ):

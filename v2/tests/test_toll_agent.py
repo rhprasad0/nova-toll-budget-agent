@@ -273,6 +273,15 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
     assert "Westpark uses `i495:185SO`" in normalized
     assert "Jones Branch/Route 123 uses `i495:183SO`" in normalized
     assert "Route 7 uses `i495:186SO`" in normalized
+    assert "The complete endpoint `Leesburg`, case-insensitively, means" in normalized
+    assert (
+        "For a retained current-price trip from bare Leesburg to bare Washington"
+        in normalized
+    )
+    assert "`greenway:1:entry:EB` and `i95:2249ND`" in normalized
+    assert "For bare Leesburg to Route 28, stay on the Greenway" in normalized
+    assert "`greenway:1:entry:EB` to `greenway:28:exit:EB` outbound" in normalized
+    assert "`greenway:28:entry:WB` to `greenway:1:exit:WB`" in normalized
     assert "i95_northbound_requires_i495_restart" in normalized
     assert "suggested_destination_point_id" in normalized
     assert "`prefix` with boundary `i495:192NO`" in normalized
@@ -291,7 +300,7 @@ def test_system_prompt_matches_its_versioned_contract():
     prompt_contract = manifest["system_prompt"]
     renderer_contract = manifest["system_prompt_renderer"]
 
-    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.1" == prompt_contract["current"]
+    assert toll_agent.SYSTEM_PROMPT_VERSION == "2.0.2" == prompt_contract["current"]
     assert (
         toll_agent.SYSTEM_PROMPT_RENDERER_VERSION
         == "1.0.0"
