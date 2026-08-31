@@ -2,6 +2,14 @@
 
 Status: proposed for review
 
+> **Operative release topology:** development and production are current
+> application states in AWS account `920534282028` (`nova-toll-prod`), selected
+> by `backend.development.hcl`/`development.tfvars` and
+> `backend.production.hcl`/`production.tfvars`. Any separately provisioned
+> account, cross-account identity, or database-bootstrap material below is
+> future, non-operative migration context, not current ownership or a release
+> prerequisite.
+
 Scope: TollChat v2 environment separation and follow-on delivery automation
 
 Target region: AWS `us-east-1`

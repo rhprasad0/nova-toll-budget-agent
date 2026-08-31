@@ -385,9 +385,12 @@ resource "aws_sqs_queue" "publisher_delivery_failure" {
 
 data "aws_iam_policy_document" "publisher" {
   statement {
-    sid       = "ConnectRdsIam"
-    actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.publisher}"]
+    sid     = "ConnectRdsIam"
+    actions = ["rds-db:connect"]
+    resources = [
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.publisher}",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.reader}",
+    ]
   }
 
   statement {
@@ -448,6 +451,39 @@ resource "aws_iam_role_policy" "publisher" {
   policy = data.aws_iam_policy_document.publisher.json
 }
 
+data "aws_iam_policy_document" "publisher_scheduler_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "publisher_scheduler" {
+  name               = "toll-v2-report-publisher-scheduler${local.suffix}"
+  assume_role_policy = data.aws_iam_policy_document.publisher_scheduler_assume.json
+}
+
+data "aws_iam_policy_document" "publisher_scheduler" {
+  statement {
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.publisher.arn]
+  }
+
+  statement {
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.publisher_delivery_failure.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "publisher_scheduler" {
+  name   = "toll-v2-report-publisher-scheduler${local.suffix}"
+  role   = aws_iam_role.publisher_scheduler.id
+  policy = data.aws_iam_policy_document.publisher_scheduler.json
+}
+
 resource "aws_security_group" "publisher" {
   name        = "nova-toll-v2-report-publisher${local.suffix}"
   description = "v2 report publisher Lambda ENIs"
@@ -491,8 +527,8 @@ resource "aws_lambda_function" "publisher" {
   role          = aws_iam_role.publisher.arn
   runtime       = "python3.13"
   handler       = "handler.handler"
-  timeout       = 600
-  memory_size   = 512
+  timeout       = 900
+  memory_size   = 2048
 
   filename         = local.publisher_zip_path
   source_code_hash = local.publisher_zip_hash
@@ -510,6 +546,7 @@ resource "aws_lambda_function" "publisher" {
       DB_PORT                    = tostring(data.aws_db_instance.main.port)
       DB_NAME                    = local.database_name
       DB_USER                    = local.database_roles.publisher
+      DB_READER_USER             = local.database_roles.reader
       REPORT_PUBLICATION_ENABLED = "true"
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
       AGENT_MEASUREMENT_BUCKET   = aws_s3_bucket.agent_measurement.id
@@ -548,100 +585,29 @@ resource "aws_lambda_function_event_invoke_config" "publisher" {
   }
 }
 
-resource "aws_cloudwatch_event_rule" "committed_i95_loads" {
-  name = "toll-v2-committed-i95-loads${local.suffix}"
-  event_pattern = jsonencode({
-    source      = ["tollchat.pricing-loader"]
-    detail-type = ["I95 Pricing Load Committed"]
-    detail = {
-      facility    = ["i95_i495"]
-      environment = [var.environment]
+resource "aws_scheduler_schedule" "publisher" {
+  name                         = "toll-v2-report-publisher${local.suffix}"
+  schedule_expression          = "cron(0 1 ? * MON *)"
+  schedule_expression_timezone = "America/New_York"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.publisher.arn
+    role_arn = aws_iam_role.publisher_scheduler.arn
+    input    = jsonencode({ trigger = "watchdog" })
+
+    retry_policy {
+      maximum_event_age_in_seconds = 3600
+      maximum_retry_attempts       = 2
     }
-  })
-}
 
-resource "aws_cloudwatch_event_rule" "report_watchdog" {
-  name                = "toll-v2-report-watchdog${local.suffix}"
-  schedule_expression = "cron(5/10 * * * ? *)"
-}
-
-resource "aws_lambda_permission" "publisher_load_event" {
-  statement_id  = "AllowCommittedI95LoadInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.publisher.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.committed_i95_loads.arn
-}
-
-resource "aws_lambda_permission" "publisher_watchdog" {
-  statement_id  = "AllowReportWatchdogInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.publisher.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.report_watchdog.arn
-}
-
-resource "aws_cloudwatch_event_target" "publisher_load_event" {
-  rule = aws_cloudwatch_event_rule.committed_i95_loads.name
-  arn  = aws_lambda_function.publisher.arn
-
-  retry_policy {
-    maximum_event_age_in_seconds = 86400
-    maximum_retry_attempts       = 185
-  }
-
-  dead_letter_config {
-    arn = aws_sqs_queue.publisher_delivery_failure.arn
-  }
-
-  depends_on = [
-    aws_lambda_permission.publisher_load_event,
-    aws_sqs_queue_policy.publisher_delivery_failure,
-  ]
-}
-
-resource "aws_cloudwatch_event_target" "publisher_watchdog" {
-  rule  = aws_cloudwatch_event_rule.report_watchdog.name
-  arn   = aws_lambda_function.publisher.arn
-  input = jsonencode({ trigger = "watchdog" })
-
-  retry_policy {
-    maximum_event_age_in_seconds = 86400
-    maximum_retry_attempts       = 185
-  }
-
-  dead_letter_config {
-    arn = aws_sqs_queue.publisher_delivery_failure.arn
-  }
-
-  depends_on = [
-    aws_lambda_permission.publisher_watchdog,
-    aws_sqs_queue_policy.publisher_delivery_failure,
-  ]
-}
-
-data "aws_iam_policy_document" "publisher_delivery_failure" {
-  statement {
-    actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.publisher_delivery_failure.arn]
-    principals {
-      type        = "Service"
-      identifiers = ["events.amazonaws.com"]
-    }
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:SourceArn"
-      values = [
-        aws_cloudwatch_event_rule.committed_i95_loads.arn,
-        aws_cloudwatch_event_rule.report_watchdog.arn,
-      ]
+    dead_letter_config {
+      arn = aws_sqs_queue.publisher_delivery_failure.arn
     }
   }
-}
-
-resource "aws_sqs_queue_policy" "publisher_delivery_failure" {
-  queue_url = aws_sqs_queue.publisher_delivery_failure.id
-  policy    = data.aws_iam_policy_document.publisher_delivery_failure.json
 }
 
 resource "aws_cloudwatch_log_metric_filter" "report_generation_success" {
@@ -659,13 +625,13 @@ resource "aws_cloudwatch_log_metric_filter" "report_generation_success" {
 
 resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
   alarm_name          = "toll-v2-report-generation-freshness${local.suffix}"
-  alarm_description   = "No complete I-95/I-495 report generation for 30 minutes."
+  alarm_description   = "No complete I-95/I-495 report generation for eight days."
   namespace           = "NovaToll"
   metric_name         = "V2ReportGenerationSuccess"
   dimensions          = local.is_production ? { facility = "i95_i495" } : { facility = "i95_i495", Environment = var.environment }
   statistic           = "Sum"
-  period              = 600
-  evaluation_periods  = 3
+  period              = 86400
+  evaluation_periods  = 8
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
@@ -677,25 +643,6 @@ resource "aws_cloudwatch_metric_alarm" "publisher_errors" {
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.publisher.function_name }
-  statistic           = "Sum"
-  period              = 300
-  evaluation_periods  = 1
-  threshold           = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  alarm_actions       = local.alarm_actions
-}
-
-resource "aws_cloudwatch_metric_alarm" "publisher_failed_invocations" {
-  for_each = {
-    load_success = aws_cloudwatch_event_rule.committed_i95_loads
-    watchdog     = aws_cloudwatch_event_rule.report_watchdog
-  }
-
-  alarm_name          = "toll-v2-report-publisher-${each.key}-failed-invocations${local.suffix}"
-  namespace           = "AWS/Events"
-  metric_name         = "FailedInvocations"
-  dimensions          = { RuleName = each.value.name }
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1

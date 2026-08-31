@@ -10,6 +10,7 @@ import yaml
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 TIMED_CHECKS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
@@ -41,6 +42,17 @@ LEGACY_DEVELOPMENT_INVENTORY = (
 ).read_text()
 
 
+def terraform_block(source: str, header: str) -> str:
+    """Return one top-level Terraform block, excluding the following block."""
+    remainder = source.split(header, maxsplit=1)[1]
+    following = re.search(r"\n(?:resource|data) ", remainder)
+    return remainder[: following.start()] if following else remainder
+
+
+def assert_assignment(block: str, name: str, value: str) -> None:
+    assert re.search(rf"(?m)^\s*{re.escape(name)}\s*=\s*{re.escape(value)}\s*$", block)
+
+
 def test_account_contract_records_the_replacement_development_boundary():
     accounts = ACCOUNT_CONTRACT["accounts"]
     assert ACCOUNT_CONTRACT["region"] == "us-east-1"
@@ -50,26 +62,19 @@ def test_account_contract_records_the_replacement_development_boundary():
         "id": "920534282028",
         "ownership": "account-local",
     }
-    development = accounts["development"]
-    assert development["name"] == "nova-toll-development"
-    assert development["id"] == "903859731897"
-    assert (
-        development["routine_human_access"] == "IAM Identity Center AdministratorAccess"
-    )
-    assert development["break_glass_role"] == "OrganizationAccountAccessRole"
-    assert development["long_lived_ci_credentials"] is False
-    assert set(development["owns"]) == {
-        "backend",
-        "KMS",
-        "network",
-        "RDS",
-        "storage",
-        "audit trail",
-        "SSM parameters",
-        "future GitHub OIDC identities",
+    assert accounts["development"] == {
+        "name": "nova-toll-prod",
+        "id": "920534282028",
+        "ownership": "application-state",
+        "backend_key": "nova-toll/v2/development/terraform.tfstate",
+        "tfvars": "v2/infra/development.tfvars",
     }
     shared_access = ACCOUNT_CONTRACT["shared_access"]
-    assert shared_access["development_to_production_aws_read_paths"] == []
+    assert shared_access["production"] == {
+        "ownership": "application-state",
+        "backend_key": "nova-toll/v2/terraform.tfstate",
+        "tfvars": "v2/infra/production.tfvars",
+    }
     assert "not an AWS shared-read grant" in shared_access["cloudflare_dns"]
 
 
@@ -100,8 +105,8 @@ def test_legacy_development_inventory_hands_cleanup_to_issue_333():
         assert text in LEGACY_DEVELOPMENT_INVENTORY
     assert "not independent buckets" in LEGACY_DEVELOPMENT_INVENTORY
     assert (
-        "Development budget and\norganization-trail implementation are deferred to #330."
-        in DEPLOYMENT
+        "future, non-operative migration context"
+        in (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
     )
 
 
@@ -512,11 +517,54 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     for training_agent in ("GPTBot", "ClaudeBot", "Amazonbot", "Applebot-Extended"):
         assert training_agent not in robots
     assert "cloudfront wait distribution-deployed" in DEPLOYMENT
-    assert "toll-v2-report-publisher" in DEPLOYMENT
+    assert "aws_lambda_function.publisher" in DEPLOYMENT
     assert 'test "$(wc -l <"$REPORT_URLS")" -eq 685' in DEPLOYMENT
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )
+
+
+def test_public_report_launch_is_selected_environment_and_fresh():
+    launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
+        "## Agent-route measurement launch", 1
+    )[0]
+    for required in (
+        "terraform output -json public_site",
+        ".url | select",
+        '"$SITE_URL/sitemap.xml"',
+        'REPORT_URL="$SITE_URL/tolls/',
+        "PREVIOUS_GENERATION=",
+        "REPORT_STARTED_AT=",
+        ".generation_id != $previous",
+        "(.published_at | instant) >= ($started | instant)",
+        'schema_version == "2.0.0"',
+        "def instant:",
+        "fromdateiso8601",
+    ):
+        assert required in launch
+    assert "https://tollchat.ai" not in launch
+
+    def fresh(published_at: str, started_at: str) -> bool:
+        return (
+            subprocess.run(
+                [
+                    "jq",
+                    "-en",
+                    "--arg",
+                    "published",
+                    published_at,
+                    "--arg",
+                    "started",
+                    started_at,
+                    'def instant: sub("\\\\.[0-9]+Z$"; "Z") | fromdateiso8601; ($published | instant) >= ($started | instant)',
+                ],
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    assert fresh("2026-08-31T12:00:00.123456Z", "2026-08-31T12:00:00.000000Z")
+    assert not fresh("2026-08-31T11:59:59.999999Z", "2026-08-31T12:00:00.000000Z")
 
 
 def test_agent_measurement_is_count_only_private_and_bounded():
@@ -595,55 +643,105 @@ def test_agent_measurement_keeps_cloudflare_dns_only():
     assert 'resource "cloudflare_bot_management"' not in site
 
 
-def test_development_boundary_has_no_legacy_production_deployment_path():
-    development_section = DEPLOYMENT.split("## Development environment", 1)[1].split(
-        "## Public report launch", 1
-    )[0]
-    for forbidden in (
-        "terraform apply",
-        "bootstrap_development_database.py",
-        "AWS_PROFILE=nova-toll",
-    ):
-        assert forbidden not in development_section
-    for required in (
-        "nova-toll-development",
-        "infra/account-contract.json",
-        "infra/legacy-development-inventory.md",
-        "#329",
-        "#333",
-    ):
-        assert required in development_section
-    for forbidden in (
-        "each production and development plan",
-        "bootstrap_development_database.py",
+def test_same_account_release_contract_and_gates_reject_disallowed_plans():
+    for text in (
+        "AWS_PROFILE=nova-toll-prod",
+        'get-caller-identity --query Account --output text)" = "920534282028"',
         "backend.development.hcl",
+        "development.tfvars",
+        "backend.production.hcl",
+        "production.tfvars",
+        "development-release.tfplan",
+        "production-release.tfplan",
+        "Build the four reviewed inputs once",
+        "development first",
+        "-reconfigure",
+        "-lock=false",
     ):
-        assert forbidden not in DEPLOYMENT
-
-
-def test_guarded_production_release_rejects_disallowed_plans():
-    gate = re.search(
-        r"production-release\.tfplan \| jq -e '\n(.*?)'\n# Review",
-        DEPLOYMENT,
-        re.DOTALL,
+        assert text in DEPLOYMENT
+    assert DEPLOYMENT.index("### Guarded development release") < DEPLOYMENT.index(
+        "### Guarded production release"
     )
-    assert gate is not None
+    assert "903859731897" not in DEPLOYMENT
+    assert "terraform workspace" not in DEPLOYMENT
+    assert "terraform -target" not in DEPLOYMENT
 
-    def passes(plan: object) -> bool:
+    gates = [
+        re.search(
+            r"development-release\.tfplan \| jq -e '\n(.*?)'\nAWS_PROFILE",
+            DEPLOYMENT,
+            re.DOTALL,
+        ),
+        re.search(
+            r"production-release\.tfplan \| jq -e '\n(.*?)'\nAWS_PROFILE",
+            DEPLOYMENT,
+            re.DOTALL,
+        ),
+    ]
+    assert all(gates)
+    gate_programs = [gate.group(1) for gate in gates if gate is not None]
+    assert len(gate_programs) == 2
+
+    def outcomes(plan: object) -> list[bool]:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as fixture:
             json.dump(plan, fixture)
             fixture.flush()
-            return (
-                subprocess.run(
-                    ["jq", "-e", gate.group(1), fixture.name], check=False
-                ).returncode
+            return [
+                subprocess.run(["jq", "-e", gate, fixture.name], check=False).returncode
                 == 0
-            )
+                for gate in gate_programs
+            ]
 
     def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
         return {"mode": mode, "address": address, "change": {"actions": actions}}
 
-    assert passes({"resource_changes": [change("managed", "anything", ["no-op"])]})
+    creates = [
+        "aws_iam_role.publisher_scheduler",
+        "aws_iam_role_policy.publisher_scheduler",
+        "aws_scheduler_schedule.publisher",
+    ]
+    updates = [
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+        "aws_cloudwatch_metric_alarm.report_generation_freshness",
+        "aws_iam_role_policy.publisher",
+        "aws_iam_role_policy.tollchat_proxy",
+        "aws_iam_role_policy.tollchat_runtime",
+        "aws_lambda_function.publisher",
+        "aws_s3_object.agentcore",
+        "aws_s3_object.usage",
+    ]
+    deletes = [
+        "aws_cloudwatch_event_rule.committed_i95_loads",
+        "aws_cloudwatch_event_rule.report_watchdog",
+        "aws_cloudwatch_event_target.publisher_load_event",
+        "aws_cloudwatch_event_target.publisher_watchdog",
+        'aws_cloudwatch_metric_alarm.publisher_failed_invocations["load_success"]',
+        'aws_cloudwatch_metric_alarm.publisher_failed_invocations["watchdog"]',
+        "aws_lambda_permission.publisher_load_event",
+        "aws_lambda_permission.publisher_watchdog",
+        "aws_sqs_queue_policy.publisher_delivery_failure",
+    ]
+    reads = [
+        "data.aws_iam_policy_document.publisher_scheduler",
+        "data.aws_iam_policy_document.tollchat_proxy",
+        "data.aws_iam_policy_document.tollchat_runtime",
+    ]
+    assert all(
+        outcomes(
+            {
+                "resource_changes": [
+                    *(change("managed", address, ["create"]) for address in creates),
+                    *(change("managed", address, ["update"]) for address in updates),
+                    *(change("managed", address, ["delete"]) for address in deletes),
+                    *(change("data", address, ["read"]) for address in reads),
+                ]
+            }
+        )
+    )
+    assert all(
+        outcomes({"resource_changes": [change("managed", "anything", ["no-op"])]})
+    )
     malformed_plans: tuple[object, ...] = (
         {},
         {"resource_changes": None},
@@ -652,20 +750,48 @@ def test_guarded_production_release_rejects_disallowed_plans():
         {"resource_changes": [change("managed", "anything", [])]},
     )
     for malformed in malformed_plans:
-        assert not passes(malformed)
-    assert not passes(
-        {
-            "resource_changes": [
-                change("managed", "aws_s3_bucket.unapproved", ["update"])
-            ]
-        }
+        assert not any(outcomes(malformed))
+    assert not any(
+        outcomes(
+            {
+                "resource_changes": [
+                    change("managed", "aws_s3_bucket.unapproved", ["update"])
+                ]
+            }
+        )
     )
-    assert not passes(
+    for plan in (
         {
             "resource_changes": [
-                change("managed", "aws_s3_object.tollchat_proxy", ["update"])
+                change("managed", "infra.aws_s3_bucket.state", ["update"])
             ]
-        }
+        },
+        {"resource_changes": [change("managed", "aws_db_instance.main", ["update"])]},
+        {
+            "resource_changes": [
+                change("managed", "aws_lambda_function.publisher", ["create"])
+            ]
+        },
+        {
+            "resource_changes": [
+                change("managed", "aws_lambda_function.publisher", ["delete", "create"])
+            ]
+        },
+        {
+            "resource_changes": [
+                change("managed", "aws_lambda_function.publisher", ["create", "delete"])
+            ]
+        },
+    ):
+        assert not any(outcomes(plan))
+    assert not any(
+        outcomes(
+            {
+                "resource_changes": [
+                    change("managed", "aws_s3_object.tollchat_proxy", ["update"])
+                ]
+            }
+        )
     )
 
 
@@ -805,8 +931,8 @@ def test_usage_rollout_has_no_retired_foundation_step():
     assert "usage-permissions.tfplan" not in DEPLOYMENT
     assert "usage-prerequisites.tfplan" not in DEPLOYMENT
     assert "Do not use Terraform resource targets" in DEPLOYMENT
-    assert "iam get-role-policy" in DEPLOYMENT
-    assert "dynamodb:TransactWriteItems" in DEPLOYMENT
+    assert "iam get-role-policy" not in DEPLOYMENT
+    assert "dynamodb:TransactWriteItems" not in DEPLOYMENT
     assert "tollchat_usage_optout=1" in DEPLOYMENT
     assert "--consistent-read" in DEPLOYMENT
     assert "must be unchanged" in DEPLOYMENT
@@ -814,7 +940,15 @@ def test_usage_rollout_has_no_retired_foundation_step():
 
 def test_metrics_aware_rollback_preserves_the_aggregate():
     rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
-    assert "events disable-rule" in rollback
+    assert "scheduler get-schedule" in rollback
+    assert "scheduler update-schedule" in rollback
+    assert "--state DISABLED" in rollback
+    assert "--state ENABLED" in rollback
+    assert rollback.count("trap 'rm -f --") == 2
+    assert rollback.count("SCHEDULE_GROUP=") >= 2
+    assert 'SCHEDULE_GROUP="default"' not in rollback
+    assert "toll-v2-committed-i95-loads" not in rollback
+    assert "toll-v2-report-watchdog" not in rollback
     assert "usage publisher" in rollback
     assert "usage#all" in rollback
     assert re.search(r"proxy and\s+public site together", rollback)
@@ -846,18 +980,138 @@ def test_public_openai_egress_has_a_narrow_expiring_trivy_exception():
 
 
 def test_eventbridge_has_both_failure_paths_and_bounded_retries():
-    assert 'detail-type = ["Object Created"]' in MAIN_TF
-    assert '{ prefix = "raw/feed=i95/" }' in MAIN_TF
-    assert '{ prefix = "raw/feed=i66/" }' in MAIN_TF
-    assert "maximum_event_age_in_seconds = 86400" in MAIN_TF
-    assert "maximum_retry_attempts       = 185" in MAIN_TF
-    assert 'resource "aws_sqs_queue" "invoke_failure"' in MAIN_TF
-    assert 'resource "aws_sqs_queue" "delivery_failure"' in MAIN_TF
+    raw_rule = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_event_rule" "raw_objects"'
+    )
+    loader_target = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_event_target" "loader"'
+    )
+    loader_permission = terraform_block(
+        MAIN_TF, 'resource "aws_lambda_permission" "eventbridge_invoke"'
+    )
+    loader_invoke = terraform_block(
+        MAIN_TF, 'resource "aws_lambda_function_event_invoke_config" "loader"'
+    )
+    loader_invoke_queue = terraform_block(
+        MAIN_TF, 'resource "aws_sqs_queue" "invoke_failure"'
+    )
+    loader_delivery_queue = terraform_block(
+        MAIN_TF, 'resource "aws_sqs_queue" "delivery_failure"'
+    )
+    loader_delivery_policy = terraform_block(
+        MAIN_TF, 'data "aws_iam_policy_document" "delivery_failure"'
+    )
+    loader_error_alarm = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_metric_alarm" "loader_errors"'
+    )
+    loader_freshness_alarm = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_metric_alarm" "freshness"'
+    )
+    loader_failure_alarms = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_metric_alarm" "failure_queues"'
+    )
+    assert_assignment(raw_rule, "source", '["aws.s3"]')
+    assert_assignment(raw_rule, "detail-type", '["Object Created"]')
+    assert '{ prefix = "raw/feed=i95/" }' in raw_rule
+    assert '{ prefix = "raw/feed=i66/" }' in raw_rule
+    assert_assignment(
+        loader_permission, "function_name", "aws_lambda_function.loader.function_name"
+    )
+    assert_assignment(loader_permission, "principal", '"events.amazonaws.com"')
+    assert_assignment(
+        loader_permission, "source_arn", "aws_cloudwatch_event_rule.raw_objects.arn"
+    )
+    assert_assignment(
+        loader_target, "rule", "aws_cloudwatch_event_rule.raw_objects.name"
+    )
+    assert_assignment(loader_target, "arn", "aws_lambda_function.loader.arn")
+    assert_assignment(loader_target, "maximum_event_age_in_seconds", "86400")
+    assert_assignment(loader_target, "maximum_retry_attempts", "185")
+    assert_assignment(loader_target, "arn", "aws_sqs_queue.delivery_failure.arn")
+    assert_assignment(
+        loader_invoke, "function_name", "aws_lambda_function.loader.function_name"
+    )
+    assert_assignment(loader_invoke, "maximum_retry_attempts", "2")
+    assert_assignment(loader_invoke, "maximum_event_age_in_seconds", "21600")
+    assert_assignment(loader_invoke, "destination", "aws_sqs_queue.invoke_failure.arn")
+    for queue in (loader_invoke_queue, loader_delivery_queue):
+        assert_assignment(queue, "sqs_managed_sse_enabled", "true")
+        assert_assignment(queue, "message_retention_seconds", "1209600")
+    assert_assignment(
+        loader_delivery_policy, "resources", "[aws_sqs_queue.delivery_failure.arn]"
+    )
+    assert_assignment(loader_delivery_policy, "identifiers", '["events.amazonaws.com"]')
+    assert_assignment(
+        loader_delivery_policy, "values", "[aws_cloudwatch_event_rule.raw_objects.arn]"
+    )
+    for alarm in (loader_error_alarm, loader_freshness_alarm, loader_failure_alarms):
+        assert_assignment(alarm, "alarm_actions", "local.alarm_actions")
+    assert_assignment(loader_error_alarm, "namespace", '"AWS/Lambda"')
+    assert_assignment(loader_error_alarm, "metric_name", '"Errors"')
+    assert_assignment(
+        loader_error_alarm,
+        "dimensions",
+        "{ FunctionName = aws_lambda_function.loader.function_name }",
+    )
+    assert_assignment(loader_error_alarm, "statistic", '"Sum"')
+    assert_assignment(loader_error_alarm, "period", "300")
+    assert_assignment(loader_error_alarm, "evaluation_periods", "1")
+    assert_assignment(loader_error_alarm, "threshold", "1")
+    assert_assignment(
+        loader_error_alarm, "comparison_operator", '"GreaterThanOrEqualToThreshold"'
+    )
+    assert_assignment(loader_error_alarm, "treat_missing_data", '"notBreaching"')
+    assert_assignment(loader_freshness_alarm, "namespace", '"NovaToll"')
+    assert_assignment(loader_freshness_alarm, "metric_name", '"V2LoadSuccess"')
+    assert_assignment(
+        loader_freshness_alarm,
+        "dimensions",
+        "local.is_production ? { feed = each.key } : { feed = each.key, Environment = var.environment }",
+    )
+    assert_assignment(loader_freshness_alarm, "statistic", '"Sum"')
+    assert_assignment(loader_freshness_alarm, "period", "600")
+    assert_assignment(loader_freshness_alarm, "evaluation_periods", "3")
+    assert_assignment(loader_freshness_alarm, "threshold", "1")
+    assert_assignment(
+        loader_freshness_alarm, "comparison_operator", '"LessThanThreshold"'
+    )
+    assert_assignment(loader_freshness_alarm, "treat_missing_data", '"breaching"')
+    assert_assignment(loader_failure_alarms, "invoke", "aws_sqs_queue.invoke_failure")
+    assert_assignment(
+        loader_failure_alarms, "delivery", "aws_sqs_queue.delivery_failure"
+    )
+    assert_assignment(loader_failure_alarms, "namespace", '"AWS/SQS"')
+    assert_assignment(
+        loader_failure_alarms, "metric_name", '"ApproximateNumberOfMessagesVisible"'
+    )
+    assert_assignment(
+        loader_failure_alarms, "dimensions", "{ QueueName = each.value.name }"
+    )
+    assert_assignment(loader_failure_alarms, "statistic", '"Maximum"')
+    assert_assignment(loader_failure_alarms, "period", "300")
+    assert_assignment(loader_failure_alarms, "evaluation_periods", "1")
+    assert_assignment(loader_failure_alarms, "threshold", "1")
+    assert_assignment(
+        loader_failure_alarms,
+        "comparison_operator",
+        '"GreaterThanOrEqualToThreshold"',
+    )
+    assert_assignment(loader_failure_alarms, "treat_missing_data", '"notBreaching"')
     assert 'resource "aws_vpc_endpoint" "eventbridge"' in FOUNDATION_AGENTCORE
     assert (
         'resource "aws_vpc_security_group_egress_rule" "loader_to_eventbridge"'
         in MAIN_TF
     )
+    collector = terraform_block(
+        FOUNDATION_TRIGGERS,
+        'resource "aws_cloudwatch_event_rule" "poll_tick"',
+    )
+    raw_notification = terraform_block(
+        FOUNDATION_TRIGGERS,
+        'resource "aws_s3_bucket_notification" "raw"',
+    )
+    assert_assignment(collector, "schedule_expression", '"cron(0/10 * * * ? *)"')
+    assert_assignment(raw_notification, "eventbridge", "true")
 
 
 def test_loader_network_and_data_access_are_scoped():
@@ -868,19 +1122,23 @@ def test_loader_network_and_data_access_are_scoped():
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
 
 
-def test_report_publisher_is_event_driven_bounded_and_least_privilege():
+def test_report_publisher_is_weekly_bounded_and_least_privilege():
     variables = (V2_ROOT / "infra" / "variables.tf").read_text()
     assert 'variable "publisher_package_path"' in variables
     assert 'function_name = "toll-v2-report-publisher${local.suffix}"' in MAIN_TF
-    assert 'schedule_expression = "cron(5/10 * * * ? *)"' in MAIN_TF
-    assert '"tollchat.pricing-loader"' in MAIN_TF
-    assert '"I95 Pricing Load Committed"' in MAIN_TF
-    assert "${local.database_roles.publisher}" in MAIN_TF
-    assert re.search(r"DB_USER\s+= local.database_roles.publisher", MAIN_TF)
     assert 'resource "aws_vpc_security_group_egress_rule" "publisher_to_rds"' in MAIN_TF
-    policy = MAIN_TF.split('data "aws_iam_policy_document" "publisher"', maxsplit=1)[
-        1
-    ].split('resource "aws_iam_role_policy" "publisher"', maxsplit=1)[0]
+    policy = terraform_block(MAIN_TF, 'data "aws_iam_policy_document" "publisher"')
+    rds_resources = re.search(
+        r'(?s)sid\s*=\s*"ConnectRdsIam"\s+actions\s*=\s*\["rds-db:connect"\]\s+'
+        r"resources\s*=\s*\[(.*?)\]",
+        policy,
+    )
+    assert rds_resources
+    assert re.findall(r'"([^"]+)"', rds_resources.group(1)) == [
+        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.publisher}",
+        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.reader}",
+    ]
+    assert "*" not in rds_resources.group(1)
     assert 'actions   = ["s3:GetObject"]' in policy
     assert "tolls/i95-i495/manifest.json" in policy
     assert 'actions   = ["s3:ListBucket"]' in policy
@@ -897,7 +1155,12 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     )[1].split(
         'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
     )[0]
-    assert "timeout       = 600" in publisher_lambda
+    assert "timeout       = 900" in publisher_lambda
+    assert "memory_size   = 2048" in publisher_lambda
+    assert re.search(r"DB_USER\s+= local.database_roles.publisher", publisher_lambda)
+    assert re.search(
+        r"DB_READER_USER\s+= local.database_roles.reader", publisher_lambda
+    )
     assert 'REPORT_PUBLICATION_ENABLED = "true"' in publisher_lambda
     assert "SITE_BUCKET_NAME           = aws_s3_bucket.site.id" in publisher_lambda
     assert "reserved_concurrent_executions = 1" in publisher_lambda
@@ -916,23 +1179,158 @@ def test_report_publisher_is_event_driven_bounded_and_least_privilege():
     assert "TOLLCHAT_ENVIRONMENT = var.environment" in MAIN_TF
     assert "}, local.is_production ? {} : {" in publisher_lambda
     assert 'PUBLIC_BASE_URL      = "https://${local.domains[0]}"' in publisher_lambda
-    assert "evaluation_periods  = 3" in MAIN_TF
-    assert "period              = 600" in MAIN_TF
-    assert 'treat_missing_data  = "breaching"' in MAIN_TF
+    freshness_alarm = MAIN_TF.split(
+        'resource "aws_cloudwatch_metric_alarm" "report_generation_freshness"',
+        maxsplit=1,
+    )[1].split('resource "aws_cloudwatch_metric_alarm" "publisher_errors"', 1)[0]
+    assert "eight days" in freshness_alarm
+    assert "period              = 86400" in freshness_alarm
+    assert "evaluation_periods  = 8" in freshness_alarm
+    assert "threshold           = 1" in freshness_alarm
+    assert 'comparison_operator = "LessThanThreshold"' in freshness_alarm
+    assert 'treat_missing_data  = "breaching"' in freshness_alarm
+    assert 'facility = "i95_i495"' in freshness_alarm
+    assert "Environment = var.environment" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
     assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
 
-
-def test_committed_i95_load_rule_filters_by_environment_in_every_deployment():
-    committed_load_rule = MAIN_TF.split(
-        'resource "aws_cloudwatch_event_rule" "committed_i95_loads"', maxsplit=1
-    )[1].split('resource "aws_cloudwatch_event_rule" "report_watchdog"', maxsplit=1)[0]
-    assert "local.is_production" not in committed_load_rule
-    assert re.search(
-        r'detail\s+=\s+\{\s*facility\s+=\s+\["i95_i495"\]\s*'
-        r"environment\s+=\s+\[var\.environment\]\s*\}",
-        committed_load_rule,
+    publisher_invoke = terraform_block(
+        MAIN_TF, 'resource "aws_lambda_function_event_invoke_config" "publisher"'
     )
+    publisher_invoke_queue = terraform_block(
+        MAIN_TF, 'resource "aws_sqs_queue" "publisher_invoke_failure"'
+    )
+    publisher_delivery_queue = terraform_block(
+        MAIN_TF, 'resource "aws_sqs_queue" "publisher_delivery_failure"'
+    )
+    publisher_errors = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_metric_alarm" "publisher_errors"'
+    )
+    publisher_queue_alarms = terraform_block(
+        MAIN_TF, 'resource "aws_cloudwatch_metric_alarm" "publisher_failure_queues"'
+    )
+    assert_assignment(
+        publisher_invoke, "function_name", "aws_lambda_function.publisher.function_name"
+    )
+    assert_assignment(publisher_invoke, "maximum_retry_attempts", "2")
+    assert_assignment(publisher_invoke, "maximum_event_age_in_seconds", "21600")
+    assert_assignment(
+        publisher_invoke, "destination", "aws_sqs_queue.publisher_invoke_failure.arn"
+    )
+    for queue in (publisher_invoke_queue, publisher_delivery_queue):
+        assert_assignment(queue, "sqs_managed_sse_enabled", "true")
+        assert_assignment(queue, "message_retention_seconds", "1209600")
+    assert_assignment(publisher_errors, "namespace", '"AWS/Lambda"')
+    assert_assignment(publisher_errors, "metric_name", '"Errors"')
+    assert_assignment(
+        publisher_errors,
+        "dimensions",
+        "{ FunctionName = aws_lambda_function.publisher.function_name }",
+    )
+    assert_assignment(publisher_errors, "statistic", '"Sum"')
+    assert_assignment(publisher_errors, "period", "300")
+    assert_assignment(publisher_errors, "evaluation_periods", "1")
+    assert_assignment(publisher_errors, "threshold", "1")
+    assert_assignment(
+        publisher_errors, "comparison_operator", '"GreaterThanOrEqualToThreshold"'
+    )
+    assert_assignment(publisher_errors, "treat_missing_data", '"notBreaching"')
+    assert_assignment(publisher_errors, "alarm_actions", "local.alarm_actions")
+    assert_assignment(
+        publisher_queue_alarms, "invoke", "aws_sqs_queue.publisher_invoke_failure"
+    )
+    assert_assignment(
+        publisher_queue_alarms, "delivery", "aws_sqs_queue.publisher_delivery_failure"
+    )
+    assert_assignment(publisher_queue_alarms, "namespace", '"AWS/SQS"')
+    assert_assignment(
+        publisher_queue_alarms, "metric_name", '"ApproximateNumberOfMessagesVisible"'
+    )
+    assert_assignment(
+        publisher_queue_alarms, "dimensions", "{ QueueName = each.value.name }"
+    )
+    assert_assignment(publisher_queue_alarms, "statistic", '"Maximum"')
+    assert_assignment(publisher_queue_alarms, "period", "300")
+    assert_assignment(publisher_queue_alarms, "evaluation_periods", "1")
+    assert_assignment(publisher_queue_alarms, "threshold", "1")
+    assert_assignment(
+        publisher_queue_alarms, "comparison_operator", '"GreaterThanOrEqualToThreshold"'
+    )
+    assert_assignment(publisher_queue_alarms, "treat_missing_data", '"notBreaching"')
+    assert_assignment(publisher_queue_alarms, "alarm_actions", "local.alarm_actions")
+
+
+def test_report_publisher_scheduler_and_environment_contract():
+    assert 'reader         = "pricing_reader"' in ENVIRONMENT_TF
+    assert 'reader         = "pricing_reader_development"' in ENVIRONMENT_TF
+    schedule = terraform_block(MAIN_TF, 'resource "aws_scheduler_schedule" "publisher"')
+    assert MAIN_TF.count('resource "aws_scheduler_schedule" "publisher"') == 1
+    for attribute, value in (
+        ("schedule_expression", '"cron(0 1 ? * MON *)"'),
+        ("schedule_expression_timezone", '"America/New_York"'),
+        ("arn", "aws_lambda_function.publisher.arn"),
+        ("role_arn", "aws_iam_role.publisher_scheduler.arn"),
+        ("input", 'jsonencode({ trigger = "watchdog" })'),
+        ("maximum_retry_attempts", "2"),
+        ("maximum_event_age_in_seconds", "3600"),
+    ):
+        assert_assignment(schedule, attribute, value)
+    assert_assignment(schedule, "mode", '"OFF"')
+    assert_assignment(schedule, "arn", "aws_sqs_queue.publisher_delivery_failure.arn")
+
+    assume = MAIN_TF.split(
+        'data "aws_iam_policy_document" "publisher_scheduler_assume"', maxsplit=1
+    )[1].split('resource "aws_iam_role" "publisher_scheduler"', 1)[0]
+    scheduler_policy = MAIN_TF.split(
+        'data "aws_iam_policy_document" "publisher_scheduler"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "publisher_scheduler"', 1)[0]
+    scheduler_role = terraform_block(
+        MAIN_TF, 'resource "aws_iam_role" "publisher_scheduler"'
+    )
+    scheduler_role_policy = terraform_block(
+        MAIN_TF, 'resource "aws_iam_role_policy" "publisher_scheduler"'
+    )
+    assert_assignment(assume, "actions", '["sts:AssumeRole"]')
+    assert assume.count("principals {") == 1
+    assert re.findall(r"identifiers\s*=\s*\[([^\]]+)\]", assume) == [
+        '"scheduler.amazonaws.com"'
+    ]
+    assert_assignment(
+        scheduler_role,
+        "assume_role_policy",
+        "data.aws_iam_policy_document.publisher_scheduler_assume.json",
+    )
+    assert_assignment(
+        scheduler_role_policy, "role", "aws_iam_role.publisher_scheduler.id"
+    )
+    assert_assignment(
+        scheduler_role_policy,
+        "policy",
+        "data.aws_iam_policy_document.publisher_scheduler.json",
+    )
+    statements = re.findall(r"(?s)statement \{(.*?)\n  \}", scheduler_policy)
+    assert len(statements) == 2
+    assert [
+        (
+            re.findall(r'actions\s+=\s+\["([^"]+)"\]', statement),
+            re.findall(r"resources\s+=\s+\[([^\]]+)\]", statement),
+        )
+        for statement in statements
+    ] == [
+        (["lambda:InvokeFunction"], ["aws_lambda_function.publisher.arn"]),
+        (["sqs:SendMessage"], ["aws_sqs_queue.publisher_delivery_failure.arn"]),
+    ]
+    for obsolete in (
+        'resource "aws_cloudwatch_event_rule" "committed_i95_loads"',
+        'resource "aws_cloudwatch_event_rule" "report_watchdog"',
+        'resource "aws_cloudwatch_event_target" "publisher_load_event"',
+        'resource "aws_cloudwatch_event_target" "publisher_watchdog"',
+        'resource "aws_lambda_permission" "publisher_load_event"',
+        'resource "aws_lambda_permission" "publisher_watchdog"',
+        'resource "aws_sqs_queue_policy" "publisher_delivery_failure"',
+        'resource "aws_cloudwatch_metric_alarm" "publisher_failed_invocations"',
+    ):
+        assert obsolete not in MAIN_TF
 
 
 def test_timed_ci_uses_the_internal_pricing_caller():
