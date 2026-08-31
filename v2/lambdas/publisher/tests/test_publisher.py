@@ -1587,7 +1587,11 @@ def test_enabled_handler_captures_invocation_before_setup(monkeypatch):
     [
         (_load_event(WATERMARK.replace(minute=50, hour=15)), None, True),
         (_load_event(), _stream_manifest("2026-08-25T16:10:00Z"), False),
-        ({"trigger": "watchdog"}, _stream_manifest("2026-08-25T16:10:00Z"), False),
+        (
+            {"trigger": "watchdog", "smoke_id": "123e4567-e89b-12d3-a456-426614174000"},
+            _stream_manifest("2026-08-25T16:10:00Z"),
+            False,
+        ),
     ],
 )
 def test_enabled_supersession_logging_preserves_its_reason(
@@ -1628,6 +1632,7 @@ def test_enabled_supersession_logging_preserves_its_reason(
     assert result["status"] == "superseded"
     assert ("V2_REPORT_GENERATION_SUPERSEDED" in caplog.text) is logs_supersession
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
     assert report.closed and reader.closed
 
 
@@ -1868,9 +1873,117 @@ def test_publication_failure_never_logs_success(monkeypatch, caplog):
     monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
 
     with caplog.at_level("INFO"), pytest.raises(RuntimeError, match="publish failed"):
-        publisher.handler({"trigger": "watchdog"}, None)
+        publisher.handler(
+            {
+                "trigger": "watchdog",
+                "smoke_id": "123e4567-e89b-12d3-a456-426614174000",
+            },
+            None,
+        )
 
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
+
+
+def test_unexpected_publication_status_never_logs_success(monkeypatch, caplog):
+    monkeypatch.setattr(
+        publisher, "_connect", lambda **_kwargs: _TransactionConnection()
+    )
+    monkeypatch.setattr(
+        publisher,
+        "_publish_streamed",
+        lambda *_args: (
+            {"status": "failed", "result_sha256": "a" * 64},
+            EVALUATED_AT,
+            WATERMARK,
+        ),
+    )
+    monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "true")
+    monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
+    monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
+    monkeypatch.setenv("DB_READER_USER", "pricing_reader")
+    monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
+
+    with caplog.at_level("INFO"), pytest.raises(RuntimeError, match="status"):
+        publisher.handler(
+            {
+                "trigger": "watchdog",
+                "smoke_id": "123e4567-e89b-12d3-a456-426614174000",
+            },
+            None,
+        )
+
+    assert "V2_REPORT_GENERATION_OK" not in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
+
+
+def test_watchdog_smoke_id_is_canonical_and_validated_before_io(monkeypatch):
+    smoke_id = "123e4567-e89b-12d3-a456-426614174000"
+    assert (
+        publisher._expected_watermark({"trigger": "watchdog", "smoke_id": smoke_id})
+        is None
+    )
+    monkeypatch.setattr(
+        publisher,
+        "_read_report_rows",
+        lambda: pytest.fail("unexpected database access"),
+    )
+    for invalid in (
+        None,
+        1,
+        "",
+        f" {smoke_id}",
+        smoke_id.upper(),
+        smoke_id.replace("-", ""),
+        f"{smoke_id}x",
+    ):
+        with pytest.raises(ValueError, match="smoke_id"):
+            publisher.handler({"trigger": "watchdog", "smoke_id": invalid}, None)
+    with pytest.raises(ValueError, match="unsupported watchdog"):
+        publisher.handler(
+            {"trigger": "watchdog", "smoke_id": smoke_id, "extra": 1}, None
+        )
+    with pytest.raises(ValueError, match="smoke_id"):
+        publisher.handler({**_load_event(), "smoke_id": smoke_id}, None)
+
+
+@pytest.mark.parametrize("status", ["published", "unchanged"])
+def test_smoke_success_is_logged_after_publication(monkeypatch, caplog, status):
+    smoke_id = "123e4567-e89b-12d3-a456-426614174000"
+    order = []
+    monkeypatch.setattr(
+        publisher, "_connect", lambda **_kwargs: _TransactionConnection()
+    )
+    monkeypatch.setattr(
+        publisher,
+        "_publish_streamed",
+        lambda *_args: (
+            order.append("published")
+            or ({"status": status, "result_sha256": "a" * 64}, EVALUATED_AT, WATERMARK)
+        ),
+    )
+    monkeypatch.setattr(
+        publisher, "_log_success", lambda *_args: order.append("generic")
+    )
+    monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "true")
+    monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
+    monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
+    monkeypatch.setenv("DB_READER_USER", "pricing_reader")
+    monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
+
+    with caplog.at_level("INFO"):
+        result = publisher.handler({"trigger": "watchdog", "smoke_id": smoke_id}, None)
+
+    smoke_records = [
+        record.getMessage()
+        for record in caplog.records
+        if "V2_REPORT_SMOKE_OK" in record.getMessage()
+    ]
+    assert result["status"] == status
+    assert order == ["published", "generic"]
+    assert smoke_records == [
+        f"V2_REPORT_SMOKE_OK {smoke_id} {status} 2026-08-25T16:05:00Z {'a' * 64}"
+    ]
 
 
 def test_success_is_logged_after_publication(monkeypatch, caplog):
@@ -1897,6 +2010,7 @@ def test_success_is_logged_after_publication(monkeypatch, caplog):
 
     assert result["status"] == "published"
     assert "V2_REPORT_GENERATION_OK i95_i495" in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
 
 
 def test_weekly_selector_keeps_only_weekday_rush_boundaries_at_source_cadence():

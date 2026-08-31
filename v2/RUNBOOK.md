@@ -236,7 +236,7 @@ verify the complete manifest before testing public URLs:
 ```sh
 set -euo pipefail
 PUBLISHER_FUNCTION="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_lambda_function.publisher | awk -F' = ' '$1 ~ /^    function_name/ {gsub(/"/, "", $2); print $2; exit}')"
-SCHEDULER_NAME="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_scheduler_schedule.publisher | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
+PUBLISHER_LOG_GROUP="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_cloudwatch_log_group.publisher | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
 SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er .distribution_id)"
 SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string" and test("^https://[^/]+$"))')"
 SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
@@ -245,26 +245,45 @@ AWS_PROFILE=nova-toll-prod aws --region us-east-1 cloudfront wait distribution-d
   --id "$SITE_DISTRIBUTION"
 REPORT_INVOKE="$(mktemp)"
 REPORT_MANIFEST="$(mktemp)"
-PREVIOUS_GENERATION="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api get-object --bucket "$SITE_BUCKET" --key tolls/i95-i495/manifest.json "$REPORT_MANIFEST" >/dev/null 2>&1 && jq -er '.generation_id' "$REPORT_MANIFEST" || true)"
-REPORT_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
+trap 'rm -f -- "$REPORT_INVOKE" "$REPORT_MANIFEST"' EXIT
+REPORT_SMOKE_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+REPORT_STARTED_MS="$(date +%s%3N)"
+report_smoke_succeeded() {
+  local smoke_pattern='V2_REPORT_SMOKE_OK '"$REPORT_SMOKE_ID"' (published|unchanged) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z) [a-f0-9]{64}[[:space:]]*$'
+  while IFS=$'\t' read -r event_time event_message; do
+    if [[ "$event_time" =~ ^[0-9]+$ ]] && (( event_time >= REPORT_STARTED_MS )) && \
+      [[ "$event_message" =~ $smoke_pattern ]] && \
+      date -u -d "${BASH_REMATCH[2]}" +%s >/dev/null 2>&1; then
+      return 0
+    fi
+  done <<< "$1"
+  return 1
+}
+report_manifest_is_valid() {
+  jq -e '.schema_version == "2.0.0" and .publication_format_version == "2.0.0" and .route_count == 685 and (.generation_id | type == "string" and length > 0) and (.published_at | type == "string" and length > 0) and (.result_sha256 | test("^[a-f0-9]{64}$"))' "$1"
+}
 AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda invoke \
   --function-name "$PUBLISHER_FUNCTION" --invocation-type Event \
-  --cli-binary-format raw-in-base64-out --payload '{"trigger":"watchdog"}' \
-  "$REPORT_INVOKE"
+  --cli-binary-format raw-in-base64-out \
+  --payload "$(jq -nc --arg smoke_id "$REPORT_SMOKE_ID" '{trigger:"watchdog",smoke_id:$smoke_id}')" \
+  "$REPORT_INVOKE" | jq -e '.StatusCode == 202'
+REPORT_RESULT=""
 for attempt in $(seq 1 90); do
-  if AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api get-object \
-    --bucket "$SITE_BUCKET" --key tolls/i95-i495/manifest.json \
-    "$REPORT_MANIFEST" >/dev/null 2>&1 && \
-    jq -e --arg previous "$PREVIOUS_GENERATION" --arg started "$REPORT_STARTED_AT" 'def instant: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601; .schema_version == "2.0.0" and .publication_format_version == "2.0.0" and .route_count == 685 and (.generation_id != $previous) and ((.published_at | instant) >= ($started | instant))' \
-      "$REPORT_MANIFEST" >/dev/null; then
+  REPORT_RESULT="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 logs filter-log-events \
+    --log-group-name "$PUBLISHER_LOG_GROUP" --start-time "$REPORT_STARTED_MS" \
+    --filter-pattern "\"V2_REPORT_SMOKE_OK $REPORT_SMOKE_ID\"" \
+    --query 'events[].[timestamp,message]' --output text || true)"
+  if report_smoke_succeeded "$REPORT_RESULT"; then
     break
   fi
   sleep 10
 done
-jq -e --arg previous "$PREVIOUS_GENERATION" --arg started "$REPORT_STARTED_AT" 'def instant: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601; .schema_version == "2.0.0" and .publication_format_version == "2.0.0" and .route_count == 685 and (.generation_id != $previous) and ((.published_at | instant) >= ($started | instant))' \
-  "$REPORT_MANIFEST"
-rm -f -- "$REPORT_INVOKE" "$REPORT_MANIFEST"
-unset REPORT_INVOKE REPORT_MANIFEST PREVIOUS_GENERATION REPORT_STARTED_AT SITE_BUCKET SITE_DISTRIBUTION SITE_URL PUBLISHER_FUNCTION SCHEDULER_NAME
+report_smoke_succeeded "$REPORT_RESULT"
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api get-object \
+  --bucket "$SITE_BUCKET" --key tolls/i95-i495/manifest.json \
+  "$REPORT_MANIFEST" >/dev/null
+report_manifest_is_valid "$REPORT_MANIFEST"
+unset REPORT_RESULT REPORT_SMOKE_ID REPORT_STARTED_MS PUBLISHER_LOG_GROUP
 ```
 
 Check every canonical report and JSON sibling with bounded concurrency, then

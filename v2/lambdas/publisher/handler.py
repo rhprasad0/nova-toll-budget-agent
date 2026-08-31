@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import unicodedata
+import uuid
 from collections import defaultdict
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -1483,9 +1484,31 @@ def _publish_streamed(
     )
 
 
-def _expected_watermark(event: dict[str, Any]) -> datetime | None:
-    if event == {"trigger": "watchdog"}:
+def _watchdog_smoke_id(event: dict[str, Any]) -> str | None:
+    if event.get("trigger") != "watchdog":
         return None
+    if set(event) - {"trigger", "smoke_id"}:
+        raise ValueError("unsupported watchdog event")
+    if "smoke_id" not in event:
+        return None
+    smoke_id = event["smoke_id"]
+    if not isinstance(smoke_id, str):
+        raise ValueError("smoke_id must be a canonical UUID")
+    try:
+        canonical = str(uuid.UUID(smoke_id))
+    except ValueError as exc:
+        raise ValueError("smoke_id must be a canonical UUID") from exc
+    if smoke_id != canonical:
+        raise ValueError("smoke_id must be a canonical UUID")
+    return smoke_id
+
+
+def _expected_watermark(event: dict[str, Any]) -> datetime | None:
+    if event.get("trigger") == "watchdog":
+        _watchdog_smoke_id(event)
+        return None
+    if "smoke_id" in event:
+        raise ValueError("smoke_id is valid only for watchdog events")
     if (
         event.get("source") != "tollchat.pricing-loader"
         or event.get("detail-type") != "I95 Pricing Load Committed"
@@ -1500,6 +1523,7 @@ def _expected_watermark(event: dict[str, Any]) -> datetime | None:
 
 def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
     expected = _expected_watermark(event)
+    smoke_id = _watchdog_smoke_id(event)
     enabled = os.getenv("REPORT_PUBLICATION_ENABLED", "false").lower()
     if enabled not in {"true", "false"}:
         raise ValueError("REPORT_PUBLICATION_ENABLED must be true or false")
@@ -1547,7 +1571,17 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
         }
         if publication["status"] == "superseded":
             return result
+        if publication["status"] not in {"published", "unchanged"}:
+            raise RuntimeError("unexpected publication status")
         _log_success(cast(str, _utc_text(evaluated_at)), EXPECTED_ROUTE_COUNT)
+        if smoke_id is not None:
+            logger.info(
+                "V2_REPORT_SMOKE_OK %s %s %s %s",
+                smoke_id,
+                publication["status"],
+                _utc_text(evaluated_at),
+                publication["result_sha256"],
+            )
         return result
     generation = build_generation(_read_report_rows())
     if expected is not None:
