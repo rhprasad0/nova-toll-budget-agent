@@ -211,6 +211,35 @@ def test_live_leesburg_washington_i395_uses_connector_exit_once():
     }
 
 
+def test_live_leesburg_washington_i395_annual_uses_connector_endpoints_once():
+    answer, calls, agent = _invoke(
+        "For Monday through Friday, estimate my annual round-trip commute from "
+        "Leesburg to Washington. I leave at 8 AM, return at 5:30 PM, plan 240 "
+        "commute days, and my gross annual income is $120,000."
+    )
+    assert calls == [], (answer, calls)
+    assert "I-66" in answer and "I-395" in answer
+
+    second = str(agent("I-395."))
+    assert len(calls) == 1, (second, calls)
+    assert calls[0]["name"] == "get_annual_toll_ballpark"
+    assert calls[0]["input"] == {
+        "outbound": {
+            "origin_point_id": "greenway:1:entry:EB",
+            "destination_point_id": "i95:2249ND",
+            "departure_time": "08:00:00",
+        },
+        "return": {
+            "origin_point_id": "i95:2232SO",
+            "destination_point_id": "greenway:1:exit:WB",
+            "departure_time": "17:30:00",
+        },
+        "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        "planned_annual_commute_days": 240,
+        "gross_annual_income_usd": "120000.00",
+    }
+
+
 def test_live_washington_from_i495_south_uses_connector_exit():
     answer, calls, _agent = _invoke(
         "What is the current toll from 495 Express Lanes Start/Georg Wash. "

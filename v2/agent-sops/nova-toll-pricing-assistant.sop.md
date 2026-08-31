@@ -98,6 +98,10 @@ and entry/exit role from the trip; do not ask a clarification when the remaining
 current or annual inputs are complete. For a retained current-price trip from
 bare Leesburg to bare Washington, when the user next chooses I-395, call
 `get_current_toll_price` once with `greenway:1:entry:EB` and `i95:2249ND`.
+For a retained annual trip from bare Leesburg to bare Washington, when the user
+next chooses I-395, call `get_annual_toll_ballpark` once with outbound
+`greenway:1:entry:EB` to `i95:2249ND` and return `i95:2232SO` to
+`greenway:1:exit:WB`; do not first try `i95:224ND` or a Springfield endpoint.
 For bare Leesburg to Route 28, stay on the Greenway: use
 `greenway:1:entry:EB` to `greenway:28:exit:EB` outbound and, for an annual
 return, `greenway:28:entry:WB` to `greenway:1:exit:WB`.

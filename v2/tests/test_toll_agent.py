@@ -279,6 +279,11 @@ def test_system_prompt_contains_rds_points_and_v2_behavior():
         in normalized
     )
     assert "`greenway:1:entry:EB` and `i95:2249ND`" in normalized
+    assert (
+        "For a retained annual trip from bare Leesburg to bare Washington" in normalized
+    )
+    assert "`i95:2232SO` to `greenway:1:exit:WB`" in normalized
+    assert "do not first try `i95:224ND` or a Springfield endpoint" in normalized
     assert "For bare Leesburg to Route 28, stay on the Greenway" in normalized
     assert "`greenway:1:entry:EB` to `greenway:28:exit:EB` outbound" in normalized
     assert "`greenway:28:entry:WB` to `greenway:1:exit:WB`" in normalized

@@ -1,6 +1,6 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs eight current-toll routing cases and six
+This code-graded Strands suite runs nine current-toll routing cases and seven
 annual job-offer affordability cases through a fresh production agent. It
 verifies exact tool calls, route/fallback behavior, required-input and income
 clarification, adjustable 52-week commute-day estimates, safe annual route
@@ -31,12 +31,45 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
-The six annual cases are independent of the live I-95 direction:
+The seven annual cases are independent of the live I-95 direction:
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window all --suite annual
 ```
+
+The Leesburg-to-Washington current and annual cases each send their prompt,
+then the optional scalar `follow_up` (`I-395.`), to one retained agent. The
+first turn must ask between I-66 and I-395 without a tool call. The current
+case then calls Greenway entry `greenway:1:entry:EB` to Washington exit
+`i95:2249ND`; the annual case uses that outbound route and the reverse
+`i95:2232SO` to `greenway:1:exit:WB` return with the supplied schedule and
+income. A current lane-closure result is valid only when its exact route and
+grounded closure explanation are present. An annual `no_complete_paired_days`
+result is valid only after that exact route call; `route_unavailable` or a
+Springfield alternative remains a failure.
+
+Run each targeted workflow five times as a delivery check (not a reliability
+claim):
+
+```bash
+for run in 1 2 3 4 5; do
+  env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+    uv run python eval/run_evaluation.py --window i95_southbound --suite direct \
+    | tee "/tmp/leesburg-i395-current-${run}.txt" || exit
+done
+
+for run in 1 2 3 4 5; do
+  env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
+    uv run python eval/run_evaluation.py --window all --suite annual \
+    | tee "/tmp/leesburg-i395-annual-${run}.txt" || exit
+done
+```
+
+The cumulative delivery gate is the offline check, focused live workflows and
+live tests, then the normal v2 lint/format/type/test/contract/build checks and
+disposable PostgreSQL migration/contracts validation. Live reports are ignored;
+the checks read existing services only and do not deploy or mutate deployed data.
 
 The live run needs the RDS CA bundle at `infra/build/ca/rds-ca-bundle.pem`, AWS
 access to RDS and `/nova-toll/openai_api_key`, and network access to the private
