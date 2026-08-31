@@ -1575,6 +1575,7 @@ def test_enabled_handler_captures_invocation_before_setup(monkeypatch):
     monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
     monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
     monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
+    monkeypatch.setattr(publisher, "_log_success", lambda *_args: None)
 
     publisher.handler({"trigger": "watchdog"}, None)
 
@@ -1595,7 +1596,7 @@ def test_enabled_handler_captures_invocation_before_setup(monkeypatch):
     ],
 )
 def test_enabled_supersession_logging_preserves_its_reason(
-    monkeypatch, caplog, event, old_manifest, logs_supersession
+    monkeypatch, caplog, capsys, event, old_manifest, logs_supersession
 ):
     monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 2)
     report_cursor = _StreamingCursor([_report_row(0), _report_row(1)])
@@ -1633,6 +1634,7 @@ def test_enabled_supersession_logging_preserves_its_reason(
     assert ("V2_REPORT_GENERATION_SUPERSEDED" in caplog.text) is logs_supersession
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
     assert "V2_REPORT_SMOKE_OK" not in caplog.text
+    assert capsys.readouterr().out == ""
     assert report.closed and reader.closed
 
 
@@ -1857,7 +1859,7 @@ def test_disabled_handler_never_opens_s3(monkeypatch):
     assert result["status"] == "generated"
 
 
-def test_publication_failure_never_logs_success(monkeypatch, caplog):
+def test_publication_failure_never_logs_success(monkeypatch, caplog, capsys):
     monkeypatch.setattr(
         publisher, "_connect", lambda **_kwargs: _TransactionConnection()
     )
@@ -1883,9 +1885,10 @@ def test_publication_failure_never_logs_success(monkeypatch, caplog):
 
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
     assert "V2_REPORT_SMOKE_OK" not in caplog.text
+    assert capsys.readouterr().out == ""
 
 
-def test_unexpected_publication_status_never_logs_success(monkeypatch, caplog):
+def test_unexpected_publication_status_never_logs_success(monkeypatch, caplog, capsys):
     monkeypatch.setattr(
         publisher, "_connect", lambda **_kwargs: _TransactionConnection()
     )
@@ -1915,6 +1918,7 @@ def test_unexpected_publication_status_never_logs_success(monkeypatch, caplog):
 
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
     assert "V2_REPORT_SMOKE_OK" not in caplog.text
+    assert capsys.readouterr().out == ""
 
 
 def test_watchdog_smoke_id_is_canonical_and_validated_before_io(monkeypatch):
@@ -1986,7 +1990,8 @@ def test_smoke_success_is_logged_after_publication(monkeypatch, caplog, status):
     ]
 
 
-def test_success_is_logged_after_publication(monkeypatch, caplog):
+@pytest.mark.parametrize("status", ["published", "unchanged"])
+def test_success_is_logged_after_publication(monkeypatch, caplog, capsys, status):
     monkeypatch.setattr(
         publisher, "_connect", lambda **_kwargs: _TransactionConnection()
     )
@@ -1994,7 +1999,7 @@ def test_success_is_logged_after_publication(monkeypatch, caplog):
         publisher,
         "_publish_streamed",
         lambda *_args: (
-            {"status": "published", "result_sha256": "a" * 64},
+            {"status": status, "result_sha256": "a" * 64},
             EVALUATED_AT,
             WATERMARK,
         ),
@@ -2008,9 +2013,72 @@ def test_success_is_logged_after_publication(monkeypatch, caplog):
     with caplog.at_level("INFO"):
         result = publisher.handler({"trigger": "watchdog"}, None)
 
-    assert result["status"] == "published"
+    assert result["status"] == status
     assert "V2_REPORT_GENERATION_OK i95_i495" in caplog.text
     assert "V2_REPORT_SMOKE_OK" not in caplog.text
+    assert len(capsys.readouterr().out.splitlines()) == 1
+
+
+@pytest.mark.parametrize(
+    ("environment", "invoked_at", "dimensions", "marker"),
+    [
+        (
+            "production",
+            datetime(2026, 3, 9, 5, tzinfo=UTC),
+            {"facility": "i95_i495"},
+            datetime(2026, 3, 9, 6, 30, tzinfo=UTC),
+        ),
+        (
+            "development",
+            datetime(2026, 11, 2, 6, tzinfo=UTC),
+            {"facility": "i95_i495", "Environment": "development"},
+            datetime(2026, 11, 2, 6, 30, tzinfo=UTC),
+        ),
+    ],
+)
+def test_success_emits_raw_normalized_emf(
+    monkeypatch, caplog, capsys, environment, invoked_at, dimensions, marker
+):
+    monkeypatch.setenv("TOLLCHAT_ENVIRONMENT", environment)
+
+    with caplog.at_level("INFO"):
+        publisher._log_success("2026-08-25T16:05:00Z", 685, invoked_at)
+
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1
+    assert caplog.records[-1].getMessage().startswith("V2_REPORT_GENERATION_OK")
+    assert json.loads(lines[0]) == {
+        "_aws": {
+            "Timestamp": int(marker.timestamp() * 1000),
+            "CloudWatchMetrics": [
+                {
+                    "Namespace": "NovaToll",
+                    "Dimensions": [list(dimensions)],
+                    "Metrics": [{"Name": "V2ReportGenerationSuccess", "Unit": "Count"}],
+                }
+            ],
+        },
+        **dimensions,
+        "V2ReportGenerationSuccess": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (datetime(2026, 3, 2, 6, tzinfo=UTC), datetime(2026, 3, 9, 5, tzinfo=UTC)),
+        (datetime(2026, 10, 26, 5, tzinfo=UTC), datetime(2026, 11, 2, 6, tzinfo=UTC)),
+    ],
+)
+def test_success_emf_markers_remain_seven_days_apart_across_dst(capsys, first, second):
+    publisher._log_success("first", 1, first)
+    publisher._log_success("second", 1, second)
+
+    timestamps = [
+        json.loads(line)["_aws"]["Timestamp"]
+        for line in capsys.readouterr().out.splitlines()
+    ]
+    assert timestamps[1] - timestamps[0] == 7 * 86400 * 1000
 
 
 def test_weekly_selector_keeps_only_weekday_rush_boundaries_at_source_cadence():

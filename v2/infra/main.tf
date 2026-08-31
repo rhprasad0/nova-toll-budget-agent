@@ -610,28 +610,16 @@ resource "aws_scheduler_schedule" "publisher" {
   }
 }
 
-resource "aws_cloudwatch_log_metric_filter" "report_generation_success" {
-  name           = "V2ReportGenerationSuccess"
-  log_group_name = aws_cloudwatch_log_group.publisher.name
-  pattern        = local.is_production ? "[..., event=\"V2_REPORT_GENERATION_OK\", facility, generation_id, route_count]" : "[..., event=\"V2_REPORT_GENERATION_OK\", facility, generation_id, route_count, environment]"
-
-  metric_transformation {
-    namespace  = "NovaToll"
-    name       = "V2ReportGenerationSuccess"
-    value      = "1"
-    dimensions = local.is_production ? { facility = "$facility" } : { facility = "$facility", Environment = "$environment" }
-  }
-}
-
 resource "aws_cloudwatch_metric_alarm" "report_generation_freshness" {
   alarm_name          = "toll-v2-report-generation-freshness${local.suffix}"
-  alarm_description   = "No complete I-95/I-495 report generation for eight days."
+  alarm_description   = "No complete I-95/I-495 report generation in the trailing seven-day sliding window."
   namespace           = "NovaToll"
   metric_name         = "V2ReportGenerationSuccess"
   dimensions          = local.is_production ? { facility = "i95_i495" } : { facility = "i95_i495", Environment = var.environment }
   statistic           = "Sum"
   period              = 86400
-  evaluation_periods  = 8
+  evaluation_periods  = 7
+  datapoints_to_alarm = 7
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"

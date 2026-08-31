@@ -1527,8 +1527,8 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
     enabled = os.getenv("REPORT_PUBLICATION_ENABLED", "false").lower()
     if enabled not in {"true", "false"}:
         raise ValueError("REPORT_PUBLICATION_ENABLED must be true or false")
+    invoked_at = datetime.now(UTC)
     if enabled == "true":
-        invoked_at = datetime.now(UTC)
         report_connection = cast(Any, _connect())
         try:
             reader_connection = cast(Any, _connect(reader=True))
@@ -1573,7 +1573,9 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
             return result
         if publication["status"] not in {"published", "unchanged"}:
             raise RuntimeError("unexpected publication status")
-        _log_success(cast(str, _utc_text(evaluated_at)), EXPECTED_ROUTE_COUNT)
+        _log_success(
+            cast(str, _utc_text(evaluated_at)), EXPECTED_ROUTE_COUNT, invoked_at
+        )
         if smoke_id is not None:
             logger.info(
                 "V2_REPORT_SMOKE_OK %s %s %s %s",
@@ -1607,11 +1609,11 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
         "source_watermark": _utc_text(generation.source_watermark),
         "route_count": len(generation.routes),
     }
-    _log_success(generation_id, len(generation.routes))
+    _log_success(generation_id, len(generation.routes), invoked_at)
     return result
 
 
-def _log_success(generation_id: str, route_count: int) -> None:
+def _log_success(generation_id: str, route_count: int, invoked_at: datetime) -> None:
     environment = os.environ.get("TOLLCHAT_ENVIRONMENT", "production")
     if environment == "production":
         logger.info(
@@ -1628,3 +1630,30 @@ def _log_success(generation_id: str, route_count: int) -> None:
             route_count,
             environment,
         )
+    dimensions = {"facility": FACILITY}
+    if environment != "production":
+        dimensions["Environment"] = environment
+    weekly_run_at = _weekly_run_at(invoked_at)
+    marker = datetime(
+        weekly_run_at.year, weekly_run_at.month, weekly_run_at.day, 6, 30, tzinfo=UTC
+    )
+    print(
+        json.dumps(
+            {
+                "_aws": {
+                    "Timestamp": int(marker.timestamp() * 1000),
+                    "CloudWatchMetrics": [
+                        {
+                            "Namespace": "NovaToll",
+                            "Dimensions": [list(dimensions)],
+                            "Metrics": [
+                                {"Name": "V2ReportGenerationSuccess", "Unit": "Count"}
+                            ],
+                        }
+                    ],
+                },
+                **dimensions,
+                "V2ReportGenerationSuccess": 1,
+            }
+        )
+    )
