@@ -1,6 +1,6 @@
 # TollChat v2 routing oracle
 
-- **Status:** Adopted for oracle schema `1.13.1`
+- **Status:** Adopted for oracle schema `1.14.0`
 - **Scope:** V2 directed toll-road reachability and least-privilege pricing access
 
 ## Purpose
@@ -115,7 +115,7 @@ to an unqualified pricing view, or leaving a partially granted function.
 ### Schema version and CI contract
 
 Every v2 application schema has an independent canonical SemVer contract. The
-oracle is at version `1.13.1`, stored as the single row in
+oracle is at version `1.14.0`, stored as the single row in
 `oracle.schema_version` with the same singleton, SemVer-format, and installation
 timestamp invariants used by `pricing.schema_version`. The canonical oracle
 bootstrap declares the same version in its file header and inserted row; a
@@ -363,7 +363,7 @@ I-66 and Dulles Toll Road require two directed handoffs:
 | `i66_to_dulles_toll_road` | `i66:6` | `dtr:66` |
 | `dulles_toll_road_to_i66` | `dtr:66` | `i66:6` |
 
-Dulles Toll Road and I-495 require five directed handoffs:
+Dulles Toll Road and I-495 require six directed handoffs:
 
 | Connection ID | From exit | To entry |
 | --- | --- | --- |
@@ -371,11 +371,12 @@ Dulles Toll Road and I-495 require five directed handoffs:
 | `dulles_toll_road_to_i495_north` | `dtr:1819` | `i495:182NO` |
 | `dulles_toll_road_westbound_to_i495_north` | `dtr:1819:WB` | `i495:182NO` |
 | `i495_to_dulles_toll_road` | `i495:182ND` | `dtr:1819` |
+| `i495_1829_to_dulles_toll_road` | `i495:1829ND` | `dtr:1819` |
 | `i495_south_to_dulles_toll_road` | `i495:182SD` | `dtr:1819` |
 
 These handoffs are connectivity facts; only the two Greenway/DTR rows also
 carry the published DTR connection charge. Handoffs are never made reversible
-implicitly; only the thirteen rows above authorize travel across the four
+implicitly; only the fourteen rows above authorize travel across the four
 junctions.
 
 The two northbound I-495 handoffs from DTR are distinct movements. One starts
@@ -710,7 +711,7 @@ DTR connection charge; only crossing either directed handoff adds it.
   reject cross-row semantic violations.
 - A blank-database bootstrap and an upgrade from pricing schema `1.0.0` install
   PostGIS 3.5.x and every v2 routing object in `oracle` beside `pricing`.
-- `oracle.schema_version` contains exactly one row at `1.13.1`, its canonical
+- `oracle.schema_version` contains exactly one row at `1.14.0`, its canonical
   bootstrap declaration matches that row, and `application-schemas.json`
   registers both `oracle` and `pricing` exactly once.
 - CI rejects an oracle SQL contract change without a monotonic oracle SemVer

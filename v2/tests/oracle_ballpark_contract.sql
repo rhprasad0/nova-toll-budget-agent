@@ -59,6 +59,39 @@ BEGIN
 END $$;
 
 DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_ballpark_route('i95:2232SO', 'greenway:1:exit:WB');
+    IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.point_ids IS DISTINCT FROM ARRAY[
+           'i95:2232SO', 'i495:1829ND', 'dtr:1819:entry:WB',
+           'dtr:28:exit:WB', 'greenway:28:entry:WB', 'greenway:1:exit:WB'
+       ]::text[]
+       OR jsonb_array_length(result.general_purpose_gaps) <> 1
+       OR result.general_purpose_gaps->0->'fallback_required' <> 'null'::jsonb
+       OR jsonb_array_length(result.facility_legs) <> 5
+       OR result.facility_legs->0 IS DISTINCT FROM jsonb_build_object(
+           'route_step_id', 'step-1', 'facility', 'i95_i495',
+           'point_ids', jsonb_build_array('i95:2232SO', 'i495:192SD'),
+           'connection_ids', jsonb_build_array('source:i95_shared:Southbound:2232SO:1829ND'),
+           'pricing_key', jsonb_build_object('source_route_key', 'Southbound:2232SO:1829ND', 'od_pair_id', 1204)
+       )
+       OR result.facility_legs->1 IS DISTINCT FROM jsonb_build_object(
+           'route_step_id', 'step-2', 'facility', 'i95_i495',
+           'point_ids', jsonb_build_array('i495:192SD', 'i495:1829ND'),
+           'connection_ids', jsonb_build_array('source:i95_shared:Southbound:2232SO:1829ND'),
+           'pricing_key', jsonb_build_object('source_route_key', 'Southbound:2232SO:1829ND', 'od_pair_id', 1007)
+       )
+       OR result.facility_legs->2->'connection_ids' <> jsonb_build_array('source:dtr:WB:1819:28')
+       OR result.facility_legs->3->'connection_ids' <> jsonb_build_array('dtr_to_greenway')
+       OR result.facility_legs->4->'connection_ids' <> jsonb_build_array('source:greenway:WB:28:1') THEN
+        RAISE EXCEPTION 'I-95-to-Greenway ballpark route changed: %', row_to_json(result);
+    END IF;
+END $$;
+
+DO $$
 DECLARE
     legs jsonb := jsonb_build_array(jsonb_build_object(
         'point_ids', jsonb_build_array('i66:1:entry:EB', 'i66:4:exit:EB')

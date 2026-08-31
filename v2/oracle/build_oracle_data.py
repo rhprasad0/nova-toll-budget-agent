@@ -23,8 +23,8 @@ SOURCE_FILES = {
 }
 
 EXPECTED_POINTS = 220
-EXPECTED_CONNECTIONS = 995
-EXPECTED_REACHABLE_PAIRS = 2745
+EXPECTED_CONNECTIONS = 996
+EXPECTED_REACHABLE_PAIRS = 2853
 EXPECTED_MAX_SHORTEST_PATH = 7
 _DTR_CONNECTION_CHARGE = {
     "label": "Dulles Toll Road connection",
@@ -878,6 +878,12 @@ def build_connections(points: dict[str, Point]) -> dict[str, Connection]:
             "toll_handoff",
         ),
         _curated_connection(
+            "i495_1829_to_dulles_toll_road",
+            "i495:1829ND",
+            "dtr:1819:entry:WB",
+            "toll_handoff",
+        ),
+        _curated_connection(
             "i495_south_to_dulles_toll_road",
             "i495:182SD",
             "dtr:1819:entry:WB",
@@ -1143,7 +1149,7 @@ def validate(points: dict[str, Point], connections: dict[str, Connection]) -> No
     expected_counts = {
         "within_facility": 670,
         "general_purpose_gap": 300,
-        "toll_handoff": 13,
+        "toll_handoff": 14,
         "airport_access": 12,
     }
     if dict(counts) != expected_counts:

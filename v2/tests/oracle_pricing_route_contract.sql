@@ -32,6 +32,55 @@ END
 $$;
 
 DO $$
+DECLARE result record;
+BEGIN
+    PERFORM pg_temp.set_i95_state('CLOSED', 'SOUTHBOUND_OPEN');
+    SELECT * INTO result
+    FROM oracle.validate_pricing_route('i95:2232SO', 'greenway:1:exit:WB');
+    IF result.status <> 'valid'
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'source:i95_shared:Southbound:2232SO:1829ND',
+           'i495_1829_to_dulles_toll_road', 'source:dtr:WB:1819:28',
+           'dtr_to_greenway', 'source:greenway:WB:28:1'
+       ]::text[]
+       OR result.facility_legs IS DISTINCT FROM jsonb_build_array(
+           jsonb_build_object(
+               'route_step_id', 'step-1', 'facility', 'i95_i495',
+               'point_ids', jsonb_build_array('i95:2232SO', 'i495:192SD'),
+               'connection_ids', jsonb_build_array('source:i95_shared:Southbound:2232SO:1829ND'),
+               'pricing_key', jsonb_build_object('source_route_key', 'Southbound:2232SO:1829ND', 'od_pair_id', 1204)
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-2', 'facility', 'i95_i495',
+               'point_ids', jsonb_build_array('i495:192SD', 'i495:1829ND'),
+               'connection_ids', jsonb_build_array('source:i95_shared:Southbound:2232SO:1829ND'),
+               'pricing_key', jsonb_build_object('source_route_key', 'Southbound:2232SO:1829ND', 'od_pair_id', 1007)
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-3', 'facility', 'dtr',
+               'point_ids', jsonb_build_array('dtr:1819:entry:WB', 'dtr:28:exit:WB'),
+               'connection_ids', jsonb_build_array('source:dtr:WB:1819:28'),
+               'pricing_key', jsonb_build_object('source_route_key', 'WB:1819:28', 'charge_index', 1)
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-4', 'facility', 'dtr',
+               'point_ids', jsonb_build_array('dtr:28:exit:WB', 'greenway:28:entry:WB'),
+               'connection_ids', jsonb_build_array('dtr_to_greenway'),
+               'pricing_key', jsonb_build_object('source_route_key', 'dtr_to_greenway', 'charge_index', 1)
+           ),
+           jsonb_build_object(
+               'route_step_id', 'step-5', 'facility', 'greenway',
+               'point_ids', jsonb_build_array('greenway:28:entry:WB', 'greenway:1:exit:WB'),
+               'connection_ids', jsonb_build_array('source:greenway:WB:28:1'),
+               'pricing_key', jsonb_build_object('source_route_key', 'WB:28:1', 'charge_index', 1)
+           )
+       ) THEN
+        RAISE EXCEPTION 'I-95-to-Greenway pricing isolation changed: %', row_to_json(result);
+    END IF;
+END
+$$;
+
+DO $$
 DECLARE
     connector record;
     result record;

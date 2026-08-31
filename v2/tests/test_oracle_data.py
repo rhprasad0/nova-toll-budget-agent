@@ -27,7 +27,7 @@ def test_curated_provenance_uses_the_oracle_contract() -> None:
     sql = build_sql()
 
     assert "v2/docs/" not in sql
-    assert sql.count('"basis":"v2/db/oracle/CONTRACT.md"') == 31
+    assert sql.count('"basis":"v2/db/oracle/CONTRACT.md"') == 32
 
 
 def test_all_route_points_have_coordinate_provenance() -> None:
@@ -160,6 +160,16 @@ def test_greenway_and_dtr_pricing_metadata_stays_discrete() -> None:
                 "price_peak_usd": "2.00",
             },
         }
+
+    handoff = connections["i495_1829_to_dulles_toll_road"]
+    assert handoff.from_point_id == "i495:1829ND"
+    assert handoff.to_point_id == "dtr:1819:entry:WB"
+    assert handoff.required_i95_direction is None
+    assert handoff.source_route_key is None
+    assert handoff.source_metadata == {
+        "curated": True,
+        "basis": "v2/db/oracle/CONTRACT.md",
+    }
 
 
 def test_boundary_points_and_i95_requirements_are_explicit() -> None:

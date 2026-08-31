@@ -292,6 +292,24 @@ SQL
       done
     fi
 
+    if [[ "$schema_name:$target_version" == "oracle:1.14.0" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.schema_version SET version = '1.13.0' WHERE singleton"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.14.0 upgrade accepted a wrong source version" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.13.0' THEN
+    RAISE EXCEPTION 'failed oracle 1.14.0 version guard changed the installed version';
+  END IF;
+END $$;
+UPDATE oracle.schema_version SET version = '1.13.1' WHERE singleton;
+SQL
+    fi
+
     psql --dbname "$migration_db" --file "$migration"
 
     installed_version="$(
@@ -324,6 +342,34 @@ SQL
       fi
       psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
         --command "GRANT SELECT ON pricing.i66_ballpark_samples TO oracle_owner"
+    fi
+
+    if [[ "$schema_name:$target_version" == "oracle:1.14.0" ]]; then
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "DELETE FROM oracle.toll_connection WHERE connection_id = 'i495_1829_to_dulles_toll_road'"
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.14.0 rerun repaired a missing handoff" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 <<'SQL'
+INSERT INTO oracle.toll_connection (
+  connection_id, from_point_id, to_point_id, connection_type,
+  required_i95_direction, source_route_key, source_metadata
+) VALUES (
+  'i495_1829_to_dulles_toll_road', 'i495:1829ND', 'dtr:1819:entry:WB',
+  'toll_handoff', NULL, NULL,
+  '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb
+);
+UPDATE oracle.toll_connection
+SET source_metadata = '{"curated":true}'::jsonb
+WHERE connection_id = 'i495_1829_to_dulles_toll_road';
+SQL
+      if psql --dbname "$migration_db" --file "$migration"; then
+        echo "oracle 1.14.0 rerun accepted a corrupt handoff" >&2
+        exit 1
+      fi
+      psql --dbname "$migration_db" --set ON_ERROR_STOP=1 \
+        --command "UPDATE oracle.toll_connection SET source_metadata = '{\"basis\":\"v2/db/oracle/CONTRACT.md\",\"curated\":true}'::jsonb WHERE connection_id = 'i495_1829_to_dulles_toll_road'"
     fi
 
     psql --dbname "$migration_db" --file "$migration"

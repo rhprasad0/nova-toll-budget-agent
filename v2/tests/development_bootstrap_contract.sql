@@ -22,9 +22,9 @@ BEGIN
     RAISE EXCEPTION 'database environment comments are wrong';
   END IF;
   IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.3.0'
-     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.13.1'
+     OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.0'
      OR (SELECT count(*) FROM oracle.toll_route_point) <> 220
-     OR (SELECT count(*) FROM oracle.toll_connection) <> 995 THEN
+     OR (SELECT count(*) FROM oracle.toll_connection) <> 996 THEN
     RAISE EXCEPTION 'development bootstrap data/version contract is wrong';
   END IF;
   IF EXISTS (
