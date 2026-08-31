@@ -12,6 +12,7 @@ import yaml
 V2_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
+PUBLISHER_HANDLER = (V2_ROOT / "lambdas" / "publisher" / "handler.py").read_text()
 ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 TIMED_CHECKS_WORKFLOW = (
@@ -1261,13 +1262,14 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert "aws_iam_role_policy.publisher" in publisher_lambda
     assert "aws_s3_object.robots" in publisher_lambda
     assert (
-        'local.is_production ? "[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count]"'
-        in MAIN_TF
+        'resource "aws_cloudwatch_log_metric_filter" "report_generation_success"'
+        not in MAIN_TF
     )
-    assert (
-        '"[..., event=\\"V2_REPORT_GENERATION_OK\\", facility, generation_id, route_count, environment]"'
-        in MAIN_TF
-    )
+    assert "cloudwatch:PutMetricData" not in MAIN_TF
+    assert "put_metric_data" not in PUBLISHER_HANDLER
+    assert "print(" in PUBLISHER_HANDLER
+    assert '"Timestamp": int(marker.timestamp() * 1000)' in PUBLISHER_HANDLER
+    assert "_weekly_run_at(invoked_at)" in PUBLISHER_HANDLER
     assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
     assert "TOLLCHAT_ENVIRONMENT = var.environment" in MAIN_TF
     assert "}, local.is_production ? {} : {" in publisher_lambda
@@ -1276,14 +1278,23 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
         'resource "aws_cloudwatch_metric_alarm" "report_generation_freshness"',
         maxsplit=1,
     )[1].split('resource "aws_cloudwatch_metric_alarm" "publisher_errors"', 1)[0]
-    assert "eight days" in freshness_alarm
+    assert "trailing seven-day sliding window" in freshness_alarm
+    assert (
+        'alarm_name          = "toll-v2-report-generation-freshness${local.suffix}"'
+        in freshness_alarm
+    )
+    assert 'namespace           = "NovaToll"' in freshness_alarm
+    assert 'metric_name         = "V2ReportGenerationSuccess"' in freshness_alarm
     assert "period              = 86400" in freshness_alarm
-    assert "evaluation_periods  = 8" in freshness_alarm
+    assert "evaluation_periods  = 7" in freshness_alarm
+    assert "datapoints_to_alarm = 7" in freshness_alarm
+    assert 'statistic           = "Sum"' in freshness_alarm
     assert "threshold           = 1" in freshness_alarm
     assert 'comparison_operator = "LessThanThreshold"' in freshness_alarm
     assert 'treat_missing_data  = "breaching"' in freshness_alarm
     assert 'facility = "i95_i495"' in freshness_alarm
     assert "Environment = var.environment" in freshness_alarm
+    assert "alarm_actions       = local.alarm_actions" in freshness_alarm
     assert (V2_ROOT / "scripts" / "build_publisher_zip.sh").exists()
     assert "./scripts/build_publisher_zip.sh" in CI_WORKFLOW
 
