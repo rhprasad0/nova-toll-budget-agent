@@ -238,6 +238,7 @@ INSERT INTO oracle.toll_connection (
     ('dulles_toll_road_to_i66', 'dtr:66:exit:EB', 'i66:6:entry:EB', 'toll_handoff', NULL, NULL, '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb),
     ('dulles_toll_road_westbound_to_i495_north', 'dtr:1819:exit:WB', 'i495:182NO', 'toll_handoff', NULL, NULL, '{"basis":"v2/db/oracle/CONTRACT.md","curated":true,"evidence_url":"https://495next.vdot.virginia.gov/about/using/"}'::jsonb),
     ('greenway_to_dtr', 'greenway:28:exit:EB', 'dtr:28:entry:EB', 'toll_handoff', NULL, 'greenway_to_dtr', '{"basis":"v2/db/oracle/CONTRACT.md","curated":true,"pricing_charge":{"label":"Dulles Toll Road connection","price_off_peak_usd":"2.00","price_peak_usd":"2.00"},"pricing_facility":"dtr"}'::jsonb),
+    ('i495_1829_to_dulles_toll_road', 'i495:1829ND', 'dtr:1819:entry:WB', 'toll_handoff', NULL, NULL, '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb),
     ('i495_north_to_iad', 'i495:182ND', 'airport_iad', 'airport_access', NULL, NULL, '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb),
     ('i495_south_to_dulles_toll_road', 'i495:182SD', 'dtr:1819:entry:WB', 'toll_handoff', NULL, NULL, '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb),
     ('i495_south_to_i66', 'i495:187SD', 'i66:5:entry:EB', 'toll_handoff', NULL, NULL, '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb),

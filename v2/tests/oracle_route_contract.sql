@@ -1120,6 +1120,10 @@ BEGIN
         END IF;
     END LOOP;
 
+    tested_handoffs := array_append(
+        tested_handoffs, 'i495_1829_to_dulles_toll_road'
+    );
+
     SELECT array_agg(connection_id ORDER BY connection_id)
     INTO configured_handoffs
     FROM oracle.toll_connection
@@ -1183,6 +1187,60 @@ BEGIN
             row_to_json(result);
     END IF;
 END $$;
+
+SELECT pg_temp.set_i95_state(
+    'CLOSED', 'SOUTHBOUND_OPEN', statement_timestamp() - interval '1 minute'
+);
+
+DO $$
+DECLARE result record;
+BEGIN
+    SELECT * INTO result
+    FROM oracle.validate_toll_route('i95:2232SO', 'greenway:1:exit:WB');
+    IF result.status <> 'valid'
+       OR result.reason IS NOT NULL
+       OR result.point_ids IS DISTINCT FROM ARRAY[
+           'i95:2232SO', 'i495:1829ND', 'dtr:1819:entry:WB',
+           'dtr:28:exit:WB', 'greenway:28:entry:WB', 'greenway:1:exit:WB'
+       ]::text[]
+       OR result.connection_ids IS DISTINCT FROM ARRAY[
+           'source:i95_shared:Southbound:2232SO:1829ND',
+           'i495_1829_to_dulles_toll_road', 'source:dtr:WB:1819:28',
+           'dtr_to_greenway', 'source:greenway:WB:28:1'
+       ]::text[]
+       OR result.connection_types IS DISTINCT FROM ARRAY[
+           'general_purpose_gap', 'toll_handoff', 'within_facility',
+           'toll_handoff', 'within_facility'
+       ]::text[]
+       OR jsonb_array_length(result.general_purpose_gaps) <> 1 THEN
+        RAISE EXCEPTION 'I-95-to-Greenway route changed: %', row_to_json(result);
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM oracle.toll_connection
+        WHERE from_point_id = 'dtr:1819:entry:WB'
+          AND to_point_id = 'i495:1829ND'
+    ) THEN
+        RAISE EXCEPTION 'I-495/DTR handoff was made reversible';
+    END IF;
+
+    BEGIN
+        DELETE FROM oracle.toll_connection
+        WHERE connection_id = 'i495_1829_to_dulles_toll_road';
+        SELECT * INTO result
+        FROM oracle.validate_toll_route('i95:2232SO', 'greenway:1:exit:WB');
+        IF result.status = 'valid' THEN
+            RAISE EXCEPTION 'removing I-495/DTR handoff left a route: %', row_to_json(result);
+        END IF;
+        RAISE EXCEPTION 'restore I-495/DTR handoff fixture';
+    EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'restore I-495/DTR handoff fixture' THEN RAISE; END IF;
+    END;
+END $$;
+
+SELECT pg_temp.set_i95_state(
+    'NORTHBOUND_OPEN', 'CLOSED', statement_timestamp() - interval '1 minute',
+    false, 'I-95-SB', 'I-95-SB'
+);
 
 DO $$
 DECLARE result record;
@@ -1371,7 +1429,7 @@ BEGIN
           )
       );
 
-    IF expected_count <> 2745
+    IF expected_count <> 2853
        OR actual_count <> expected_count
        OR difference_count <> 0
        OR invalid_path_count <> 0 THEN

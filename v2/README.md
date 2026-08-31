@@ -25,7 +25,7 @@ version is stored in `pricing.schema_version`; CI tests
 the bootstrap, privileges, analytics, cleanup guard, and monotonic SemVer policy
 on PostgreSQL 17.9.
 
-The independently versioned `oracle` schema is at **1.13.1**. It installs
+The independently versioned `oracle` schema is at **1.14.0**. It installs
 core PostGIS 3.5.x inside `oracle`, loads the directed toll-access graph, and
 exposes route validation plus bounded prompt-point retrieval to `tollchat_agent`
 and internal pricing operations to `pricing_caller`.

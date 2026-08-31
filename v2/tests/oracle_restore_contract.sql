@@ -44,9 +44,9 @@ BEGIN
         (SELECT count(*) FROM oracle.toll_connection
          WHERE connection_type = 'airport_access') AS airports
     INTO counts;
-    IF counts.points <> 220 OR counts.connections <> 995 OR counts.located <> 220
+    IF counts.points <> 220 OR counts.connections <> 996 OR counts.located <> 220
        OR counts.within_facility <> 670 OR counts.gaps <> 300
-       OR counts.handoffs <> 13 OR counts.airports <> 12 THEN
+       OR counts.handoffs <> 14 OR counts.airports <> 12 THEN
         RAISE EXCEPTION 'unexpected oracle seed counts: %', row_to_json(counts);
     END IF;
 END $$;
@@ -54,7 +54,7 @@ END $$;
 DO $$
 BEGIN
     IF (SELECT count(*) FROM oracle.schema_version) <> 1
-       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.13.1' THEN
+       OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.0' THEN
         RAISE EXCEPTION 'oracle schema version is invalid';
     END IF;
     IF (SELECT count(*) FROM oracle.toll_connection
