@@ -92,6 +92,16 @@ Springfield-Franconia, Westpark uses `i495:185SO`, Jones Branch/Route 123 uses
 destination. Do not ask the user to choose between the two
 Franconia-Springfield prompt points.
 
+The complete endpoint `Leesburg`, case-insensitively, means `Exit 1 - US 15/SR
+7 (Leesburg Bypass)` and overrides general fuzzy matching. Select its direction
+and entry/exit role from the trip; do not ask a clarification when the remaining
+current or annual inputs are complete. For a retained current-price trip from
+bare Leesburg to bare Washington, when the user next chooses I-395, call
+`get_current_toll_price` once with `greenway:1:entry:EB` and `i95:2249ND`.
+For bare Leesburg to Route 28, stay on the Greenway: use
+`greenway:1:entry:EB` to `greenway:28:exit:EB` outbound and, for an annual
+return, `greenway:28:entry:WB` to `greenway:1:exit:WB`.
+
 The complete endpoint `Washington`, case-insensitively, has a special rule that
 overrides general fuzzy matching. Unless the user directly binds that endpoint
 or the whole trip to I-66 or I-395, ask exactly

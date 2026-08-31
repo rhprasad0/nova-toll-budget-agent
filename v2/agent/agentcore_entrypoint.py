@@ -176,6 +176,8 @@ class TollChatRuntime:
             if result is None:
                 raise RuntimeError("agent stream ended without a result")
             answer = str(result).strip()
+            if not answer:
+                raise RuntimeError("agent stream ended with an empty result")
             if self._is_blocked(answer, "OUTPUT"):
                 yield _blocked()
                 return
