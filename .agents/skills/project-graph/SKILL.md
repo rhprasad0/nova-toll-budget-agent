@@ -50,6 +50,15 @@ Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
 writers or allow subagents to spawn subagents. Explorers, pre-checkers, and
 checkers may fan out.
 
+Both checker spawn tasks must require a ponytail review before completion: the
+pre-checker reviews the explored design and draft checklist; the checker reviews
+the implementation diff. Look for unnecessary abstractions, dependencies,
+configurability, operational machinery, and code replaced by the standard
+library or platform. A finding is blocking when a materially simpler design
+satisfies the intent; name its location, what to remove, and the replacement.
+Complexity required by the user, an existing contract, security, or data safety
+is exempt. Each checker records its findings or `Lean already`.
+
 ## Artifacts
 
 All paths are relative to the assigned worktree:
@@ -59,11 +68,12 @@ All paths are relative to the assigned worktree:
 - `.graph/explore.md`: question, owners/entrypoints, current behavior, files in
   scope, assumptions, falsifiers, out of scope, gaps.
 - `.graph/checklist.md`: preconditions, numbered acceptance requirements,
-  required commands and pass conditions, risk-focused checks, blocking gaps.
+  required commands and pass conditions, risk-focused checks, ponytail findings,
+  blocking gaps.
 - `.graph/change.md`: intent, files touched, assumptions accepted, commands
   run, how to verify, what was not done.
 - `.graph/verdict.md`: PASS or FAIL, checks and evidence, broken assumptions,
-  and the required fix on FAIL. “Looks good” is not a verdict.
+  ponytail findings, and the required fix on FAIL. “Looks good” is not a verdict.
 
 ## Current-run truth
 
