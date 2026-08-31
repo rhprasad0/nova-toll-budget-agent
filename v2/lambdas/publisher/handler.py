@@ -44,6 +44,7 @@ _RUNTIME_FIELDS = {
     "evaluated_at",
     "generation_id",
     "published_at",
+    "source_watermark",
 }
 
 
