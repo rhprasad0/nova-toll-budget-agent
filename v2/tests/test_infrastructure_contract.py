@@ -62,26 +62,19 @@ def test_account_contract_records_the_replacement_development_boundary():
         "id": "920534282028",
         "ownership": "account-local",
     }
-    development = accounts["development"]
-    assert development["name"] == "nova-toll-development"
-    assert development["id"] == "903859731897"
-    assert (
-        development["routine_human_access"] == "IAM Identity Center AdministratorAccess"
-    )
-    assert development["break_glass_role"] == "OrganizationAccountAccessRole"
-    assert development["long_lived_ci_credentials"] is False
-    assert set(development["owns"]) == {
-        "backend",
-        "KMS",
-        "network",
-        "RDS",
-        "storage",
-        "audit trail",
-        "SSM parameters",
-        "future GitHub OIDC identities",
+    assert accounts["development"] == {
+        "name": "nova-toll-prod",
+        "id": "920534282028",
+        "ownership": "application-state",
+        "backend_key": "nova-toll/v2/development/terraform.tfstate",
+        "tfvars": "v2/infra/development.tfvars",
     }
     shared_access = ACCOUNT_CONTRACT["shared_access"]
-    assert shared_access["development_to_production_aws_read_paths"] == []
+    assert shared_access["production"] == {
+        "ownership": "application-state",
+        "backend_key": "nova-toll/v2/terraform.tfstate",
+        "tfvars": "v2/infra/production.tfvars",
+    }
     assert "not an AWS shared-read grant" in shared_access["cloudflare_dns"]
 
 
@@ -112,8 +105,8 @@ def test_legacy_development_inventory_hands_cleanup_to_issue_333():
         assert text in LEGACY_DEVELOPMENT_INVENTORY
     assert "not independent buckets" in LEGACY_DEVELOPMENT_INVENTORY
     assert (
-        "Development budget and\norganization-trail implementation are deferred to #330."
-        in DEPLOYMENT
+        "future, non-operative migration context"
+        in (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
     )
 
 
@@ -524,11 +517,54 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     for training_agent in ("GPTBot", "ClaudeBot", "Amazonbot", "Applebot-Extended"):
         assert training_agent not in robots
     assert "cloudfront wait distribution-deployed" in DEPLOYMENT
-    assert "toll-v2-report-publisher" in DEPLOYMENT
+    assert "aws_lambda_function.publisher" in DEPLOYMENT
     assert 'test "$(wc -l <"$REPORT_URLS")" -eq 685' in DEPLOYMENT
     assert (
         "Disabling publication does not withdraw existing report objects" in DEPLOYMENT
     )
+
+
+def test_public_report_launch_is_selected_environment_and_fresh():
+    launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
+        "## Agent-route measurement launch", 1
+    )[0]
+    for required in (
+        "terraform output -json public_site",
+        ".url | select",
+        '"$SITE_URL/sitemap.xml"',
+        'REPORT_URL="$SITE_URL/tolls/',
+        "PREVIOUS_GENERATION=",
+        "REPORT_STARTED_AT=",
+        ".generation_id != $previous",
+        "(.published_at | instant) >= ($started | instant)",
+        'schema_version == "2.0.0"',
+        "def instant:",
+        "fromdateiso8601",
+    ):
+        assert required in launch
+    assert "https://tollchat.ai" not in launch
+
+    def fresh(published_at: str, started_at: str) -> bool:
+        return (
+            subprocess.run(
+                [
+                    "jq",
+                    "-en",
+                    "--arg",
+                    "published",
+                    published_at,
+                    "--arg",
+                    "started",
+                    started_at,
+                    'def instant: sub("\\\\.[0-9]+Z$"; "Z") | fromdateiso8601; ($published | instant) >= ($started | instant)',
+                ],
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    assert fresh("2026-08-31T12:00:00.123456Z", "2026-08-31T12:00:00.000000Z")
+    assert not fresh("2026-08-31T11:59:59.999999Z", "2026-08-31T12:00:00.000000Z")
 
 
 def test_agent_measurement_is_count_only_private_and_bounded():
@@ -607,55 +643,105 @@ def test_agent_measurement_keeps_cloudflare_dns_only():
     assert 'resource "cloudflare_bot_management"' not in site
 
 
-def test_development_boundary_has_no_legacy_production_deployment_path():
-    development_section = DEPLOYMENT.split("## Development environment", 1)[1].split(
-        "## Public report launch", 1
-    )[0]
-    for forbidden in (
-        "terraform apply",
-        "bootstrap_development_database.py",
-        "AWS_PROFILE=nova-toll",
-    ):
-        assert forbidden not in development_section
-    for required in (
-        "nova-toll-development",
-        "infra/account-contract.json",
-        "infra/legacy-development-inventory.md",
-        "#329",
-        "#333",
-    ):
-        assert required in development_section
-    for forbidden in (
-        "each production and development plan",
-        "bootstrap_development_database.py",
+def test_same_account_release_contract_and_gates_reject_disallowed_plans():
+    for text in (
+        "AWS_PROFILE=nova-toll-prod",
+        'get-caller-identity --query Account --output text)" = "920534282028"',
         "backend.development.hcl",
+        "development.tfvars",
+        "backend.production.hcl",
+        "production.tfvars",
+        "development-release.tfplan",
+        "production-release.tfplan",
+        "Build the four reviewed inputs once",
+        "development first",
+        "-reconfigure",
+        "-lock=false",
     ):
-        assert forbidden not in DEPLOYMENT
-
-
-def test_guarded_production_release_rejects_disallowed_plans():
-    gate = re.search(
-        r"production-release\.tfplan \| jq -e '\n(.*?)'\n# Review",
-        DEPLOYMENT,
-        re.DOTALL,
+        assert text in DEPLOYMENT
+    assert DEPLOYMENT.index("### Guarded development release") < DEPLOYMENT.index(
+        "### Guarded production release"
     )
-    assert gate is not None
+    assert "903859731897" not in DEPLOYMENT
+    assert "terraform workspace" not in DEPLOYMENT
+    assert "terraform -target" not in DEPLOYMENT
 
-    def passes(plan: object) -> bool:
+    gates = [
+        re.search(
+            r"development-release\.tfplan \| jq -e '\n(.*?)'\nAWS_PROFILE",
+            DEPLOYMENT,
+            re.DOTALL,
+        ),
+        re.search(
+            r"production-release\.tfplan \| jq -e '\n(.*?)'\nAWS_PROFILE",
+            DEPLOYMENT,
+            re.DOTALL,
+        ),
+    ]
+    assert all(gates)
+    gate_programs = [gate.group(1) for gate in gates if gate is not None]
+    assert len(gate_programs) == 2
+
+    def outcomes(plan: object) -> list[bool]:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as fixture:
             json.dump(plan, fixture)
             fixture.flush()
-            return (
-                subprocess.run(
-                    ["jq", "-e", gate.group(1), fixture.name], check=False
-                ).returncode
+            return [
+                subprocess.run(["jq", "-e", gate, fixture.name], check=False).returncode
                 == 0
-            )
+                for gate in gate_programs
+            ]
 
     def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
         return {"mode": mode, "address": address, "change": {"actions": actions}}
 
-    assert passes({"resource_changes": [change("managed", "anything", ["no-op"])]})
+    creates = [
+        "aws_iam_role.publisher_scheduler",
+        "aws_iam_role_policy.publisher_scheduler",
+        "aws_scheduler_schedule.publisher",
+    ]
+    updates = [
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+        "aws_cloudwatch_metric_alarm.report_generation_freshness",
+        "aws_iam_role_policy.publisher",
+        "aws_iam_role_policy.tollchat_proxy",
+        "aws_iam_role_policy.tollchat_runtime",
+        "aws_lambda_function.publisher",
+        "aws_s3_object.agentcore",
+        "aws_s3_object.usage",
+    ]
+    deletes = [
+        "aws_cloudwatch_event_rule.committed_i95_loads",
+        "aws_cloudwatch_event_rule.report_watchdog",
+        "aws_cloudwatch_event_target.publisher_load_event",
+        "aws_cloudwatch_event_target.publisher_watchdog",
+        'aws_cloudwatch_metric_alarm.publisher_failed_invocations["load_success"]',
+        'aws_cloudwatch_metric_alarm.publisher_failed_invocations["watchdog"]',
+        "aws_lambda_permission.publisher_load_event",
+        "aws_lambda_permission.publisher_watchdog",
+        "aws_sqs_queue_policy.publisher_delivery_failure",
+    ]
+    reads = [
+        "data.aws_iam_policy_document.publisher_scheduler",
+        "data.aws_iam_policy_document.tollchat_proxy",
+        "data.aws_iam_policy_document.tollchat_runtime",
+    ]
+    assert all(
+        outcomes(
+            {
+                "resource_changes": [
+                    *(change("managed", address, ["create"]) for address in creates),
+                    *(change("managed", address, ["update"]) for address in updates),
+                    *(change("managed", address, ["delete"]) for address in deletes),
+                    *(change("data", address, ["read"]) for address in reads),
+                ]
+            }
+        )
+    )
+    assert all(
+        outcomes({"resource_changes": [change("managed", "anything", ["no-op"])]})
+    )
     malformed_plans: tuple[object, ...] = (
         {},
         {"resource_changes": None},
@@ -664,20 +750,48 @@ def test_guarded_production_release_rejects_disallowed_plans():
         {"resource_changes": [change("managed", "anything", [])]},
     )
     for malformed in malformed_plans:
-        assert not passes(malformed)
-    assert not passes(
-        {
-            "resource_changes": [
-                change("managed", "aws_s3_bucket.unapproved", ["update"])
-            ]
-        }
+        assert not any(outcomes(malformed))
+    assert not any(
+        outcomes(
+            {
+                "resource_changes": [
+                    change("managed", "aws_s3_bucket.unapproved", ["update"])
+                ]
+            }
+        )
     )
-    assert not passes(
+    for plan in (
         {
             "resource_changes": [
-                change("managed", "aws_s3_object.tollchat_proxy", ["update"])
+                change("managed", "infra.aws_s3_bucket.state", ["update"])
             ]
-        }
+        },
+        {"resource_changes": [change("managed", "aws_db_instance.main", ["update"])]},
+        {
+            "resource_changes": [
+                change("managed", "aws_lambda_function.publisher", ["create"])
+            ]
+        },
+        {
+            "resource_changes": [
+                change("managed", "aws_lambda_function.publisher", ["delete", "create"])
+            ]
+        },
+        {
+            "resource_changes": [
+                change("managed", "aws_lambda_function.publisher", ["create", "delete"])
+            ]
+        },
+    ):
+        assert not any(outcomes(plan))
+    assert not any(
+        outcomes(
+            {
+                "resource_changes": [
+                    change("managed", "aws_s3_object.tollchat_proxy", ["update"])
+                ]
+            }
+        )
     )
 
 
@@ -817,8 +931,8 @@ def test_usage_rollout_has_no_retired_foundation_step():
     assert "usage-permissions.tfplan" not in DEPLOYMENT
     assert "usage-prerequisites.tfplan" not in DEPLOYMENT
     assert "Do not use Terraform resource targets" in DEPLOYMENT
-    assert "iam get-role-policy" in DEPLOYMENT
-    assert "dynamodb:TransactWriteItems" in DEPLOYMENT
+    assert "iam get-role-policy" not in DEPLOYMENT
+    assert "dynamodb:TransactWriteItems" not in DEPLOYMENT
     assert "tollchat_usage_optout=1" in DEPLOYMENT
     assert "--consistent-read" in DEPLOYMENT
     assert "must be unchanged" in DEPLOYMENT
@@ -826,7 +940,15 @@ def test_usage_rollout_has_no_retired_foundation_step():
 
 def test_metrics_aware_rollback_preserves_the_aggregate():
     rollback = DEPLOYMENT.split("## Rollback", maxsplit=1)[1]
-    assert "events disable-rule" in rollback
+    assert "scheduler get-schedule" in rollback
+    assert "scheduler update-schedule" in rollback
+    assert "--state DISABLED" in rollback
+    assert "--state ENABLED" in rollback
+    assert rollback.count("trap 'rm -f --") == 2
+    assert rollback.count("SCHEDULE_GROUP=") >= 2
+    assert 'SCHEDULE_GROUP="default"' not in rollback
+    assert "toll-v2-committed-i95-loads" not in rollback
+    assert "toll-v2-report-watchdog" not in rollback
     assert "usage publisher" in rollback
     assert "usage#all" in rollback
     assert re.search(r"proxy and\s+public site together", rollback)

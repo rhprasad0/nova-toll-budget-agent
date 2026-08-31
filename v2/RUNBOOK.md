@@ -48,9 +48,8 @@ change their lifecycle.
 Before and after a release, inventory every Resource Groups Tagging API page
 and retain only its sanitized page/resource/value counts. The foundation plan
 must be zero-change after this source update; never apply it. Save and inspect
-each production plan as JSON, review every non-no-op action and sanitized
+each saved application plan as JSON, review every non-no-op action and sanitized
 before/after semantic delta, then apply only that exact reviewed plan.
-Development deployment is owned by #329.
 Keep ignored package builds and hash-identified saved plans until independent
 review passes; never retain state, tokens, or raw plan JSON.
 
@@ -69,20 +68,6 @@ npm test --prefix lambdas/chat_proxy
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
 
-Create a saved plan with the reviewed packages and the explicit production
-profile. Load the Cloudflare token from SSM only into the Terraform process
-environment, then review every action before applying that exact file:
-
-Enter `v2/infra` and initialize the explicit production application state for every release:
-
-```sh
-cd infra
-export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
-  ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption \
-  --query Parameter.Value --output text)"
-AWS_PROFILE=nova-toll terraform init -backend-config=backend.production.hcl
-```
-
 Before applying, set `RELEASE_EVIDENCE` to a unique per-release path (for
 example, `build/release-evidence-20260829T120000Z.txt`). The file must be
 retained with that release; capture never overwrites an existing record.
@@ -92,11 +77,11 @@ retained with that release; capture never overwrites an existing record.
   set -eu
   : "${RELEASE_EVIDENCE:?set a unique release-evidence path}"
   test ! -e "$RELEASE_EVIDENCE"
-  LAMBDA_LIVE_FUNCTION_VERSION="$(AWS_PROFILE=nova-toll aws --region us-east-1 lambda get-alias \
+  LAMBDA_LIVE_FUNCTION_VERSION="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda get-alias \
     --function-name tollchat-v2-chat-proxy --name live --query FunctionVersion --output text)"
-  AGENTCORE_RUNTIME_ID="$(AWS_PROFILE=nova-toll aws --region us-east-1 bedrock-agentcore-control list-agent-runtimes \
+  AGENTCORE_RUNTIME_ID="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 bedrock-agentcore-control list-agent-runtimes \
     --query "agentRuntimes[?agentRuntimeName=='nova_toll_v2'].agentRuntimeId | [0]" --output text)"
-  AGENTCORE_ENDPOINT_LIVE_VERSION="$(AWS_PROFILE=nova-toll aws --region us-east-1 bedrock-agentcore-control get-agent-runtime-endpoint \
+  AGENTCORE_ENDPOINT_LIVE_VERSION="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 bedrock-agentcore-control get-agent-runtime-endpoint \
     --agent-runtime-id "$AGENTCORE_RUNTIME_ID" --endpoint-name preview --query liveVersion --output text)"
   case "$LAMBDA_LIVE_FUNCTION_VERSION" in ""|None|*[!0-9]*) exit 1 ;; esac
   case "$AGENTCORE_RUNTIME_ID" in ""|None|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) exit 1 ;; esac
@@ -113,25 +98,25 @@ objects' KMS and CloudFront dependencies also pull the proxy and runtime into a
 targeted plan.
 
 ```sh
-SITE_BUCKET="$(AWS_PROFILE=nova-toll terraform state show -no-color \
+SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
   aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
-SITE_KMS_ARN="$(AWS_PROFILE=nova-toll aws --region us-east-1 kms describe-key \
+SITE_KMS_ARN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 kms describe-key \
   --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
 EMPTY_USAGE="$(mktemp)"
 printf '{}\n' >"$EMPTY_USAGE"
-AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
   --bucket "$SITE_BUCKET" --key index.html --body ../agent/dev_chat.html \
   --content-type 'text/html; charset=utf-8' --cache-control no-cache \
   --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
   --bucket "$SITE_BUCKET" --key faq.html --body ../agent/faq.html \
   --content-type 'text/html; charset=utf-8' --cache-control no-cache \
   --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
   --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
   --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
   --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
   --bucket "$SITE_BUCKET" --key usage.json --body "$EMPTY_USAGE" \
   --content-type 'application/json; charset=utf-8' --cache-control no-cache \
   --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
@@ -148,11 +133,11 @@ WAF API calls, but it cannot prove the notice was already visible through the
 deployed CloudFront surface.
 
 ```sh
-SITE_BUCKET="$(AWS_PROFILE=nova-toll terraform state show -no-color \
+SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
   aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
-SITE_KMS_ARN="$(AWS_PROFILE=nova-toll aws --region us-east-1 kms describe-key \
+SITE_KMS_ARN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 kms describe-key \
   --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
-AWS_PROFILE=nova-toll aws --region us-east-1 s3api put-object \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
   --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
   --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
   --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
@@ -161,76 +146,85 @@ curl --fail-with-body --silent --show-error https://tollchat.ai/privacy.txt \
 unset SITE_BUCKET SITE_KMS_ARN
 ```
 
-After those one-time prerequisites, use the guarded production-release workflow
-below. Do not apply `release.tfplan`; it has no digest/action gate.
+## Guarded development then production release
 
-```sh
-AWS_PROFILE=nova-toll terraform plan \
-  -var loader_package_path=build/loader.zip \
-  -var publisher_package_path=build/publisher.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip \
-  -out=build/release.tfplan
-AWS_PROFILE=nova-toll terraform show build/release.tfplan
-AWS_PROFILE=nova-toll aws --region us-east-1 iam get-role-policy \
-  --role-name nova-toll-v2-chat-proxy \
-  --policy-name nova-toll-v2-chat-proxy \
-  --query PolicyDocument --output json | grep -F 'dynamodb:TransactWriteItems'
-unset CLOUDFLARE_API_TOKEN
-```
+Build the four reviewed inputs once, then release **development first** and
+only continue after its gate, digest, apply, and smoke pass. Both states are
+application states in account `920534282028`; never select individual resources
+or Terraform workspaces. Load the Cloudflare token only into this subshell and
+never echo it.
 
-### Guarded production release
-
-Use this production-only workflow for the reviewed release. Its action gate and
-digest check must both pass before applying the saved plan.
+### Guarded development release
 
 ```sh
 (
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)/v2/infra"
-export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll aws --region us-east-1 \
+test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
+export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
   ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption \
   --query Parameter.Value --output text)"
-AWS_PROFILE=nova-toll terraform init -backend-config=backend.production.hcl
-AWS_PROFILE=nova-toll terraform plan \
+AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.development.hcl
+AWS_PROFILE=nova-toll-prod terraform plan \
+  -input=false -lock=false -var-file=development.tfvars \
   -var loader_package_path=build/loader.zip \
   -var publisher_package_path=build/publisher.zip \
   -var agentcore_package_path=build/agentcore.zip \
   -var chat_proxy_package_path=build/chat-proxy.zip \
-  -out=build/production-release.tfplan
-production_plan_sha="$(sha256sum build/production-release.tfplan | awk '{print $1}')"
-AWS_PROFILE=nova-toll terraform show -json build/production-release.tfplan | jq -e '
+  -out=build/development-release.tfplan
+development_plan_sha="$(sha256sum build/development-release.tfplan | awk '{print $1}')"
+AWS_PROFILE=nova-toll-prod terraform show -json build/development-release.tfplan | jq -e '
   def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
-  def managed: ["aws_s3_object.agentcore", "aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_iam_role_policy.tollchat_runtime", "aws_iam_role_policy.tollchat_proxy"];
-  def reads: ["data.aws_iam_policy_document.tollchat_runtime", "data.aws_iam_policy_document.tollchat_proxy"];
-  def proxy: ["aws_s3_object.tollchat_proxy", "aws_lambda_function.tollchat_proxy", "aws_lambda_alias.tollchat_live"];
-  valid and ([.resource_changes[] | select(.change.actions != ["no-op"])] | all(.[]; .address as $address | ((.mode == "managed" and ((managed | index($address)) or (proxy | index($address))) and .change.actions == ["update"]) or (.mode == "data" and (reads | index($address)) and .change.actions == ["read"]))) and ([.[] | select(.address as $address | proxy | index($address)) | .address] as $seen | ($seen | length == 0 or ($seen | length == 3 and ($seen | sort) == (proxy | sort)))))'
-# Review the displayed before/after values for the authorized artifact chain and
-# narrow IAM statements before applying this exact digest.
-AWS_PROFILE=nova-toll terraform show build/production-release.tfplan
+  def creates: ["aws_iam_role.publisher_scheduler", "aws_iam_role_policy.publisher_scheduler", "aws_scheduler_schedule.publisher"];
+  def updates: ["aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_cloudwatch_metric_alarm.report_generation_freshness", "aws_iam_role_policy.publisher", "aws_iam_role_policy.tollchat_proxy", "aws_iam_role_policy.tollchat_runtime", "aws_lambda_function.publisher", "aws_s3_object.agentcore", "aws_s3_object.usage"];
+  def deletes: ["aws_cloudwatch_event_rule.committed_i95_loads", "aws_cloudwatch_event_rule.report_watchdog", "aws_cloudwatch_event_target.publisher_load_event", "aws_cloudwatch_event_target.publisher_watchdog", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"load_success\"]", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"watchdog\"]", "aws_lambda_permission.publisher_load_event", "aws_lambda_permission.publisher_watchdog", "aws_sqs_queue_policy.publisher_delivery_failure"];
+  def reads: ["data.aws_iam_policy_document.publisher_scheduler", "data.aws_iam_policy_document.tollchat_proxy", "data.aws_iam_policy_document.tollchat_runtime"];
+  def approved: .address as $a | ((.mode == "managed" and (((creates | index($a)) != null and .change.actions == ["create"]) or ((updates | index($a)) != null and .change.actions == ["update"]) or ((deletes | index($a)) != null and .change.actions == ["delete"]))) or (.mode == "data" and ((reads | index($a)) != null) and .change.actions == ["read"]));
+  valid and all(.resource_changes[]; if .change.actions == ["no-op"] then true else approved end)'
+AWS_PROFILE=nova-toll-prod terraform show build/development-release.tfplan
+test "$(sha256sum build/development-release.tfplan | awk '{print $1}')" = "$development_plan_sha"
+AWS_PROFILE=nova-toll-prod terraform apply -input=false build/development-release.tfplan
+test "$(sha256sum build/development-release.tfplan | awk '{print $1}')" = "$development_plan_sha"
+unset CLOUDFLARE_API_TOKEN
+)
+```
+
+Run **Public report launch** below while the development backend remains selected.
+Only then repeat the same guarded process for production.
+
+### Guarded production release
+
+Repeat the preceding command block with `backend.production.hcl`,
+`production.tfvars`, `build/production-release.tfplan`, and
+`production_plan_sha`; run the identical jq program below before its exact
+saved-plan apply. Repeat the STS account check first. Do not proceed if any
+development step failed.
+
+```sh
+(
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)/v2/infra"
+test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
+export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)"
+AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
+AWS_PROFILE=nova-toll-prod terraform plan -input=false -lock=false -var-file=production.tfvars -var loader_package_path=build/loader.zip -var publisher_package_path=build/publisher.zip -var agentcore_package_path=build/agentcore.zip -var chat_proxy_package_path=build/chat-proxy.zip -out=build/production-release.tfplan
+production_plan_sha="$(sha256sum build/production-release.tfplan | awk '{print $1}')"
+AWS_PROFILE=nova-toll-prod terraform show -json build/production-release.tfplan | jq -e '
+  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
+  def creates: ["aws_iam_role.publisher_scheduler", "aws_iam_role_policy.publisher_scheduler", "aws_scheduler_schedule.publisher"]; def updates: ["aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_cloudwatch_metric_alarm.report_generation_freshness", "aws_iam_role_policy.publisher", "aws_iam_role_policy.tollchat_proxy", "aws_iam_role_policy.tollchat_runtime", "aws_lambda_function.publisher", "aws_s3_object.agentcore", "aws_s3_object.usage"]; def deletes: ["aws_cloudwatch_event_rule.committed_i95_loads", "aws_cloudwatch_event_rule.report_watchdog", "aws_cloudwatch_event_target.publisher_load_event", "aws_cloudwatch_event_target.publisher_watchdog", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"load_success\"]", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"watchdog\"]", "aws_lambda_permission.publisher_load_event", "aws_lambda_permission.publisher_watchdog", "aws_sqs_queue_policy.publisher_delivery_failure"]; def reads: ["data.aws_iam_policy_document.publisher_scheduler", "data.aws_iam_policy_document.tollchat_proxy", "data.aws_iam_policy_document.tollchat_runtime"];
+  def approved: .address as $a | ((.mode == "managed" and (((creates | index($a)) != null and .change.actions == ["create"]) or ((updates | index($a)) != null and .change.actions == ["update"]) or ((deletes | index($a)) != null and .change.actions == ["delete"]))) or (.mode == "data" and ((reads | index($a)) != null) and .change.actions == ["read"]));
+  valid and all(.resource_changes[]; if .change.actions == ["no-op"] then true else approved end)'
+AWS_PROFILE=nova-toll-prod terraform show build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
-AWS_PROFILE=nova-toll terraform apply -input=false build/production-release.tfplan
+AWS_PROFILE=nova-toll-prod terraform apply -input=false build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
 unset CLOUDFLARE_API_TOKEN
 )
 ```
 
-## Development environment
-
-The replacement development environment is account-local: see
-[`infra/account-contract.json`](../infra/account-contract.json). Its canonical
-account is `nova-toll-development` (`903859731897`) in `us-east-1`; it owns its
-backend, KMS, network, RDS, storage, audit trail, SSM parameters, and future
-GitHub OIDC identities. It has no approved direct AWS read path to production.
-Routine administration uses IAM Identity Center `AdministratorAccess`; the
-management account uses `OrganizationAccountAccessRole` only for break-glass.
-No long-lived CI credentials are provisioned. Development budget and
-organization-trail implementation are deferred to #330.
-
-The legacy production development state is retained only as the sanitized cleanup
-inventory in [`infra/legacy-development-inventory.md`](../infra/legacy-development-inventory.md).
-#333 must refresh and reconcile that inventory before any separately approved
-cleanup. #329 owns the account-aware Terraform and backend-isolation refactor.
+The legacy development inventory is historical read-only cleanup context. A
+separate-account migration is future, non-operative work; it is neither a
+current ownership boundary nor a release prerequisite.
 
 ## Public report launch
 
@@ -240,31 +234,37 @@ rewrite has deployed. Wait for the distribution, enqueue one watchdog run, and
 verify the complete manifest before testing public URLs:
 
 ```sh
-SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll terraform output -json public_site | jq -r .distribution_id)"
-SITE_BUCKET="$(AWS_PROFILE=nova-toll terraform state show -no-color \
+set -euo pipefail
+PUBLISHER_FUNCTION="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_lambda_function.publisher | awk -F' = ' '$1 ~ /^    function_name/ {gsub(/"/, "", $2); print $2; exit}')"
+SCHEDULER_NAME="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_scheduler_schedule.publisher | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
+SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er .distribution_id)"
+SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string" and test("^https://[^/]+$"))')"
+SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
   aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
-AWS_PROFILE=nova-toll aws --region us-east-1 cloudfront wait distribution-deployed \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 cloudfront wait distribution-deployed \
   --id "$SITE_DISTRIBUTION"
 REPORT_INVOKE="$(mktemp)"
-AWS_PROFILE=nova-toll aws --region us-east-1 lambda invoke \
-  --function-name toll-v2-report-publisher --invocation-type Event \
+REPORT_MANIFEST="$(mktemp)"
+PREVIOUS_GENERATION="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api get-object --bucket "$SITE_BUCKET" --key tolls/i95-i495/manifest.json "$REPORT_MANIFEST" >/dev/null 2>&1 && jq -er '.generation_id' "$REPORT_MANIFEST" || true)"
+REPORT_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda invoke \
+  --function-name "$PUBLISHER_FUNCTION" --invocation-type Event \
   --cli-binary-format raw-in-base64-out --payload '{"trigger":"watchdog"}' \
   "$REPORT_INVOKE"
-REPORT_MANIFEST="$(mktemp)"
 for attempt in $(seq 1 90); do
-  if AWS_PROFILE=nova-toll aws --region us-east-1 s3api get-object \
+  if AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api get-object \
     --bucket "$SITE_BUCKET" --key tolls/i95-i495/manifest.json \
     "$REPORT_MANIFEST" >/dev/null 2>&1 && \
-    jq -e '.publication_format_version == "1.0.0" and .route_count == 685' \
+    jq -e --arg previous "$PREVIOUS_GENERATION" --arg started "$REPORT_STARTED_AT" 'def instant: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601; .schema_version == "2.0.0" and .publication_format_version == "2.0.0" and .route_count == 685 and (.generation_id != $previous) and ((.published_at | instant) >= ($started | instant))' \
       "$REPORT_MANIFEST" >/dev/null; then
     break
   fi
   sleep 10
 done
-jq -e '.publication_format_version == "1.0.0" and .route_count == 685' \
+jq -e --arg previous "$PREVIOUS_GENERATION" --arg started "$REPORT_STARTED_AT" 'def instant: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601; .schema_version == "2.0.0" and .publication_format_version == "2.0.0" and .route_count == 685 and (.generation_id != $previous) and ((.published_at | instant) >= ($started | instant))' \
   "$REPORT_MANIFEST"
 rm -f -- "$REPORT_INVOKE" "$REPORT_MANIFEST"
-unset REPORT_INVOKE REPORT_MANIFEST SITE_BUCKET SITE_DISTRIBUTION
+unset REPORT_INVOKE REPORT_MANIFEST PREVIOUS_GENERATION REPORT_STARTED_AT SITE_BUCKET SITE_DISTRIBUTION SITE_URL PUBLISHER_FUNCTION SCHEDULER_NAME
 ```
 
 Check every canonical report and JSON sibling with bounded concurrency, then
@@ -272,8 +272,10 @@ deep-check both hostnames, the crawler policy, representative agent families,
 and API isolation:
 
 ```sh
+set -euo pipefail
+SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string" and test("^https://[^/]+$"))')"
 REPORT_URLS="$(mktemp)"
-curl --fail-with-body --silent --show-error https://tollchat.ai/sitemap.xml \
+curl --fail-with-body --silent --show-error "$SITE_URL/sitemap.xml" \
   | grep -o '<loc>[^<]*</loc>' | sed 's#</\?loc>##g' >"$REPORT_URLS"
 test "$(wc -l <"$REPORT_URLS")" -eq 685
 xargs -P 8 -n 1 sh -c '
@@ -284,28 +286,24 @@ xargs -P 8 -n 1 sh -c '
     | grep -qi "^content-type: application/json"
 ' _ <"$REPORT_URLS"
 
-REPORT_URL="https://tollchat.ai/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
+REPORT_URL="$SITE_URL/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
 REPORT_PAGE="$(mktemp)"
 curl --fail-with-body --silent --show-error "$REPORT_URL" >"$REPORT_PAGE"
 grep -F '<link rel="canonical" href="'"$REPORT_URL"'">' "$REPORT_PAGE"
 grep -F '<link rel="alternate" type="application/json" href="report.json">' "$REPORT_PAGE"
 ! grep -qi 'noindex\|<script' "$REPORT_PAGE"
-curl --fail-with-body --silent --show-error \
-  "${REPORT_URL/tollchat.ai/www.tollchat.ai}" >/dev/null
-for host in tollchat.ai www.tollchat.ai; do
-  curl --fail-with-body --silent --show-error "https://$host/robots.txt" \
-    | grep -F 'Sitemap: https://tollchat.ai/sitemap.xml'
-done
+curl --fail-with-body --silent --show-error "$SITE_URL/robots.txt" \
+  | grep -F "Sitemap: $SITE_URL/sitemap.xml"
 for agent in OAI-SearchBot Googlebot Claude-SearchBot PerplexityBot bingbot \
   Amzn-SearchBot Applebot DuckAssistBot; do
   curl --fail-with-body --silent --show-error --user-agent "$agent" \
     "$REPORT_URL" >/dev/null
 done
-curl --fail-with-body --silent --show-error https://tollchat.ai/api/config >/dev/null
+curl --fail-with-body --silent --show-error "$SITE_URL/api/config" >/dev/null
 test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
-  https://tollchat.ai/api/chat)" -eq 404
+  "$SITE_URL/api/chat")" -eq 404
 rm -f -- "$REPORT_PAGE" "$REPORT_URLS"
-unset REPORT_PAGE REPORT_URL REPORT_URLS
+unset REPORT_PAGE REPORT_URL REPORT_URLS SITE_URL
 ```
 
 ## Agent-route measurement launch
@@ -316,14 +314,14 @@ The WAF logging destination can take several minutes to deliver its first file.
 
 ```sh
 REPORT_URL="https://tollchat.ai/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
-AWS_PROFILE=nova-toll aws --region us-east-1 wafv2 get-logging-configuration \
-  --resource-arn "$(AWS_PROFILE=nova-toll terraform output -raw agent_report_web_acl_arn)"
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 wafv2 get-logging-configuration \
+  --resource-arn "$(AWS_PROFILE=nova-toll-prod terraform output -raw agent_report_web_acl_arn)"
 curl --fail-with-body --silent --show-error --user-agent 'ChatGPT-User Task6Smoke' \
   "$REPORT_URL" >/dev/null
 curl --fail-with-body --silent --show-error --user-agent 'ChatGPT-User Task6Smoke' \
   "${REPORT_URL}report.json" >/dev/null
 curl --fail-with-body --silent --show-error --head "$REPORT_URL" >/dev/null
-AWS_PROFILE=nova-toll aws --region us-east-1 lambda invoke \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda invoke \
   --function-name tollchat-v2-agent-usage-rollup --payload '{}' \
   --cli-binary-format raw-in-base64-out /tmp/agent-usage-rollup.json
 jq -e '.completed_dates | length == 3' /tmp/agent-usage-rollup.json
@@ -368,7 +366,7 @@ After the private check passes, verify the public edge and warm alias:
 ```sh
 curl --fail-with-body https://tollchat.ai/
 curl --fail-with-body https://tollchat.ai/api/config
-AWS_PROFILE=nova-toll aws --region us-east-1 lambda get-provisioned-concurrency-config \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda get-provisioned-concurrency-config \
   --function-name tollchat-v2-chat-proxy --qualifier live
 ```
 
@@ -377,7 +375,7 @@ chat only after opting that browser out. First save the consistent aggregate
 returned by this command:
 
 ```sh
-AWS_PROFILE=nova-toll aws --region us-east-1 dynamodb get-item \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 dynamodb get-item \
   --table-name tollchat-v2-anonymous-sessions \
   --key '{"credential_hash":{"S":"usage#all"}}' \
   --projection-expression 'engaged_sessions, completed_responses' \
@@ -403,13 +401,44 @@ invocation.
 For a report-rendering regression, keep the CloudFront rewrite active, deploy
 corrected publisher code with a bumped publication format version, and invoke a
 watchdog run to replace the complete generation. If report source content is
-unsafe, stop new report writes first:
+unsafe, stop new report writes with EventBridge Scheduler. First read and review
+the exact schedule (including its group when it is not `default`), then preserve
+only its required update fields in a reviewed temporary input. Do not pass the
+raw `get-schedule` response back to AWS because it contains read-only fields.
 
 ```sh
-AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
-  --name toll-v2-committed-i95-loads
-AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
-  --name toll-v2-report-watchdog
+(
+set -euo pipefail
+SCHEDULE_SOURCE="$(mktemp)"; SCHEDULE_UPDATE="$(mktemp)"
+trap 'rm -f -- "$SCHEDULE_SOURCE" "$SCHEDULE_UPDATE"' EXIT
+SCHEDULE_STATE="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_scheduler_schedule.publisher)"
+SCHEDULE_NAME="$(printf '%s\n' "$SCHEDULE_STATE" | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
+SCHEDULE_GROUP="$(printf '%s\n' "$SCHEDULE_STATE" | awk -F' = ' '$1 ~ /^    group_name/ {gsub(/"/, "", $2); print $2; exit}')"
+case "$SCHEDULE_NAME:$SCHEDULE_GROUP" in :*|*:|*:None|*:null) exit 1 ;; esac
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 scheduler get-schedule --name "$SCHEDULE_NAME" --group-name "$SCHEDULE_GROUP" >"$SCHEDULE_SOURCE"
+jq -e '{ScheduleExpression, ScheduleExpressionTimezone, FlexibleTimeWindow, Target} | select(.ScheduleExpression and .FlexibleTimeWindow and .Target and .Target.Arn and .Target.RoleArn)' "$SCHEDULE_SOURCE" >"$SCHEDULE_UPDATE"
+# Review $SCHEDULE_UPDATE in an approved secure viewer; it retains input, retry policy, and DLQ.
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 scheduler update-schedule --name "$SCHEDULE_NAME" --group-name "$SCHEDULE_GROUP" --state DISABLED --schedule-expression "$(jq -er .ScheduleExpression "$SCHEDULE_UPDATE")" --schedule-expression-timezone "$(jq -er .ScheduleExpressionTimezone "$SCHEDULE_UPDATE")" --flexible-time-window "$(jq -c .FlexibleTimeWindow "$SCHEDULE_UPDATE")" --target "$(jq -c .Target "$SCHEDULE_UPDATE")"
+)
+```
+
+Resume with the same complete selected-state procedure, freshly retrieving and
+reviewing its fields before mutation:
+
+```sh
+(
+set -euo pipefail
+SCHEDULE_SOURCE="$(mktemp)"; SCHEDULE_UPDATE="$(mktemp)"
+trap 'rm -f -- "$SCHEDULE_SOURCE" "$SCHEDULE_UPDATE"' EXIT
+SCHEDULE_STATE="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_scheduler_schedule.publisher)"
+SCHEDULE_NAME="$(printf '%s\n' "$SCHEDULE_STATE" | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
+SCHEDULE_GROUP="$(printf '%s\n' "$SCHEDULE_STATE" | awk -F' = ' '$1 ~ /^    group_name/ {gsub(/"/, "", $2); print $2; exit}')"
+case "$SCHEDULE_NAME:$SCHEDULE_GROUP" in :*|*:|*:None|*:null) exit 1 ;; esac
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 scheduler get-schedule --name "$SCHEDULE_NAME" --group-name "$SCHEDULE_GROUP" >"$SCHEDULE_SOURCE"
+jq -e '{ScheduleExpression, ScheduleExpressionTimezone, FlexibleTimeWindow, Target} | select(.ScheduleExpression and .FlexibleTimeWindow and .Target and .Target.Arn and .Target.RoleArn)' "$SCHEDULE_SOURCE" >"$SCHEDULE_UPDATE"
+# Review $SCHEDULE_UPDATE in an approved secure viewer before enabling.
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 scheduler update-schedule --name "$SCHEDULE_NAME" --group-name "$SCHEDULE_GROUP" --state ENABLED --schedule-expression "$(jq -er .ScheduleExpression "$SCHEDULE_UPDATE")" --schedule-expression-timezone "$(jq -er .ScheduleExpressionTimezone "$SCHEDULE_UPDATE")" --flexible-time-window "$(jq -c .FlexibleTimeWindow "$SCHEDULE_UPDATE")" --target "$(jq -c .Target "$SCHEDULE_UPDATE")"
+)
 ```
 
 Disabling publication does not withdraw existing report objects. The site
@@ -421,7 +450,7 @@ part of an ordinary application rollback.
 Disable daily publication before preparing a rollback:
 
 ```sh
-AWS_PROFILE=nova-toll aws --region us-east-1 events disable-rule \
+AWS_PROFILE=nova-toll-prod aws --region us-east-1 events disable-rule \
   --name tollchat-v2-usage-publisher
 ```
 
@@ -441,10 +470,10 @@ the saved-plan deployment below must reconcile:
   LAMBDA_LIVE_FUNCTION_VERSION="$(sed -n 's/^lambda_live_function_version=//p' "$RELEASE_EVIDENCE")"
   AGENTCORE_RUNTIME_ID="$(sed -n 's/^agentcore_runtime_id=//p' "$RELEASE_EVIDENCE")"
   AGENTCORE_ENDPOINT_LIVE_VERSION="$(sed -n 's/^agentcore_endpoint_live_version=//p' "$RELEASE_EVIDENCE")"
-  AWS_PROFILE=nova-toll aws --region us-east-1 lambda update-alias \
+  AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda update-alias \
     --function-name tollchat-v2-chat-proxy --name live \
     --function-version "$LAMBDA_LIVE_FUNCTION_VERSION"
-  AWS_PROFILE=nova-toll aws --region us-east-1 bedrock-agentcore-control update-agent-runtime-endpoint \
+  AWS_PROFILE=nova-toll-prod aws --region us-east-1 bedrock-agentcore-control update-agent-runtime-endpoint \
     --agent-runtime-id "$AGENTCORE_RUNTIME_ID" --endpoint-name preview \
     --agent-runtime-version "$AGENTCORE_ENDPOINT_LIVE_VERSION"
 )

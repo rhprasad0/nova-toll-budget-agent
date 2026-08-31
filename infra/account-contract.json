@@ -10,25 +10,19 @@
       "ownership": "account-local"
     },
     "development": {
-      "name": "nova-toll-development",
-      "id": "903859731897",
-      "routine_human_access": "IAM Identity Center AdministratorAccess",
-      "break_glass_role": "OrganizationAccountAccessRole",
-      "long_lived_ci_credentials": false,
-      "owns": [
-        "backend",
-        "KMS",
-        "network",
-        "RDS",
-        "storage",
-        "audit trail",
-        "SSM parameters",
-        "future GitHub OIDC identities"
-      ]
+      "name": "nova-toll-prod",
+      "id": "920534282028",
+      "ownership": "application-state",
+      "backend_key": "nova-toll/v2/development/terraform.tfstate",
+      "tfvars": "v2/infra/development.tfvars"
     }
   },
   "shared_access": {
-    "development_to_production_aws_read_paths": [],
+    "production": {
+      "ownership": "application-state",
+      "backend_key": "nova-toll/v2/terraform.tfstate",
+      "tfvars": "v2/infra/production.tfvars"
+    },
     "cloudflare_dns": "separately trusted foundation workflow; not an AWS shared-read grant"
   }
 }
