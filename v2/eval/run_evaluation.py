@@ -325,11 +325,22 @@ def evaluate_westpark_turn(
     if "total_usd" not in payload:
         if payload.get("status") in metadata.get("allowed_route_statuses", []):
             folded = response.casefold()
-            if not any(term in folded for term in ("stale", "unknown", "inconclusive")):
+            terms = (
+                ("unavailable", "closed")
+                if payload.get("status") == "currently_unavailable"
+                else ("stale", "unknown", "inconclusive")
+            )
+            if not any(term in folded for term in terms):
                 return _result(
                     False,
-                    "response did not explain unknown route availability",
+                    "response did not explain route availability",
                     "ungrounded_unavailability",
+                )
+            if re.search(r"\$\s*\d", response):
+                return _result(
+                    False,
+                    "response invented a toll for an unpriced route",
+                    "invented_financials",
                 )
             if style_error := _response_style_error(response, "response"):
                 return style_error
@@ -412,6 +423,35 @@ def evaluate_westpark_turn(
     if context_error := _component_context_error(payload, response):
         return context_error
     return _result(True, "exact route call and grounded response passed", "passed")
+
+
+def evaluate_current_clarification_turns(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 2 or turns[0].get("calls"):
+        return _result(
+            False,
+            "clarification must precede the current-price tool call",
+            "bad_clarification",
+        )
+    clarification = str(turns[0].get("response", ""))
+    required_choices = metadata["expected_clarification"]
+    if not clarification.strip() or (
+        any(
+            choice.casefold() not in clarification.casefold()
+            for choice in required_choices
+        )
+        or "?" not in clarification
+    ):
+        return _result(
+            False, "clarification omitted a route choice", "bad_clarification"
+        )
+    answer = str(turns[1].get("response", ""))
+    if not answer.strip():
+        return _result(False, "current-price answer was blank", "blank_response")
+    return evaluate_westpark_turn(
+        cast(list[dict[str, Any]], turns[1].get("calls", [])), answer, metadata
+    )
 
 
 def _i66_holidays(year: int) -> set[date]:
@@ -695,6 +735,116 @@ def evaluate_annual_turn(
     if call.get("input") != metadata["expected_call"]:
         return _result(False, "annual arguments did not match", "input_mismatch")
     payload = call.get("tool_result")
+    if metadata.get("annual_behavior") == "no_complete_paired_days":
+        if (
+            call.get("is_error")
+            or not isinstance(payload, dict)
+            or payload.get("error") != "ballpark_unavailable"
+            or payload.get("reason") != "no_complete_paired_days"
+            or payload.get("coverage", {}).get("complete_pair_count") != 0
+        ):
+            return _result(False, "annual tool returned no scenarios", "tool_error")
+        if not response.strip():
+            return _result(False, "annual answer was blank", "blank_response")
+        if style_error := _response_style_error(response, "annual response"):
+            return style_error
+        folded = response.casefold()
+        if not (
+            "complete" in folded
+            and any(
+                term in folded for term in ("unavailable", "insufficient", "cannot")
+            )
+        ):
+            return _result(
+                False,
+                "response did not explain missing complete paired days",
+                "ungrounded_unavailability",
+            )
+        income = payload.get("income", {})
+        vehicle_cost = payload.get("vehicle_cost", {})
+        assumptions = payload.get("assumptions", {})
+        bindings: list[tuple[Decimal, tuple[tuple[str, ...], ...]]] = []
+        if isinstance(income, dict):
+            bindings.extend(
+                (Decimal(str(value)), tuple((term,) for term in terms))
+                for key, terms in (
+                    ("gross_annual_usd", ("gross", "income")),
+                    ("estimated_tax_usd", ("estimated", "tax")),
+                    ("estimated_after_tax_usd", ("after", "tax")),
+                )
+                if (value := income.get(key)) is not None
+            )
+        if isinstance(vehicle_cost, dict):
+            bindings.extend(
+                (Decimal(str(value)), terms)
+                for key, terms in (
+                    (
+                        "daily_usd",
+                        (
+                            ("vehicle",),
+                            ("cost",),
+                            (
+                                "daily",
+                                "per day",
+                                "per office day",
+                                "per commute day",
+                                "per round trip",
+                            ),
+                        ),
+                    ),
+                    ("annual_usd", (("vehicle",), ("cost",), ("annual", "annually"))),
+                )
+                if (value := vehicle_cost.get(key)) is not None
+            )
+        if (
+            isinstance(assumptions, dict)
+            and (per_mile := assumptions.get("vehicle_cost_per_mile_usd")) is not None
+        ):
+            bindings.append(
+                (Decimal(str(per_mile)), (("per",), ("mile",), ("vehicle",), ("cost",)))
+            )
+        for line in response.splitlines():
+            first_money = re.search(r"\$\s*[\d,]+(?:\.\d+)?", line)
+            for match in re.finditer(r"\$\s*([\d,]+(?:\.\d+)?)", line):
+                value = Decimal(match.group(1).replace(",", ""))
+                clause_start = line.rfind(";", 0, match.start()) + 1
+                clause_end = line.find(";", match.end())
+                clause = line[clause_start : None if clause_end < 0 else clause_end]
+                context = (
+                    line[: first_money.start()] + clause
+                    if first_money is not None
+                    else clause
+                ).casefold()
+                if value == 0 and re.search(
+                    r"(?:do\s+not\s+treat\s+(?:the\s+)?(?:missing\s+)?toll(?:\s+amount)?\s+as\s*\$0|not\s+(?:treated|counted|reported)\s+as\s*\$0|\$0(?:\.00)?\s+is\s+not)",
+                    line,
+                    re.IGNORECASE,
+                ):
+                    continue
+                matching_terms = [
+                    terms for expected, terms in bindings if value == expected
+                ]
+                if not matching_terms:
+                    return _result(
+                        False,
+                        "response invented financial values absent from the tool result",
+                        "invented_financials",
+                    )
+                if not any(
+                    all(
+                        any(term in context for term in alternatives)
+                        for alternatives in terms
+                    )
+                    for terms in matching_terms
+                ):
+                    return _result(
+                        False,
+                        "response relabeled a financial value from the tool result",
+                        "misbound_money",
+                    )
+        return _result(
+            True, "annual route validated but has no complete paired days", "passed"
+        )
     if (
         call.get("is_error")
         or not isinstance(payload, dict)
@@ -1035,7 +1185,11 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     turns = []
     response: object = ""
     previous_call_count = 0
-    for prompt in (case.metadata or {}).get("conversation", [str(case.input)]):
+    metadata = case.metadata or {}
+    prompts = list(metadata.get("conversation", [str(case.input)]))
+    if follow_up := metadata.get("follow_up"):
+        prompts.append(str(follow_up))
+    for prompt in prompts:
         response = agent(prompt)
         all_calls = _calls(response)
         turns.append(
@@ -1078,6 +1232,8 @@ class TollChatEvaluator(Evaluator[str, str]):
             if behavior == "route_unavailable":
                 return evaluate_annual_route_unavailable(turns, metadata)
             return evaluate_annual_turn(turns, metadata)
+        if metadata.get("expected_clarification"):
+            return evaluate_current_clarification_turns(turns, metadata)
         calls = turns[0].get("calls", []) if len(turns) == 1 else []
         return evaluate_westpark_turn(
             cast(list[dict[str, Any]], calls),
@@ -1088,7 +1244,7 @@ class TollChatEvaluator(Evaluator[str, str]):
 
 def _configure_database() -> None:
     os.environ.setdefault("DB_NAME", "nova_toll")
-    default_ca = Path("infra/build/ca/rds-ca-bundle.pem")
+    default_ca = _V2_ROOT / "infra/build/loader/rds-ca-bundle.pem"
     if default_ca.exists():
         os.environ.setdefault("DB_CA_BUNDLE_PATH", str(default_ca))
     if "DB_HOST" not in os.environ or "DB_PORT" not in os.environ:
@@ -1136,6 +1292,8 @@ def _self_check() -> None:
         "dulles-to-reagan-current-price",
         "i66-west-to-route-7-current-price",
         "route-7-to-i495-south-current-price",
+        "leesburg-to-washington-i395-current-price",
+        "leesburg-to-washington-i395-job-offer",
     ]
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "springfield-franconia-to-westpark",
@@ -1156,6 +1314,7 @@ def _self_check() -> None:
         "old-keene-mill-to-reagan-i95-unavailable",
         "i66-west-to-route-7-current-price",
         "route-7-to-i495-south-current-price",
+        "leesburg-to-washington-i395-current-price",
     ]
     assert [case.name for case in load_cases(window="greenway_eb_peak")] == [
         "i66-west-to-route-7-current-price",
@@ -1164,7 +1323,7 @@ def _self_check() -> None:
     assert date(2026, 7, 3) in _i66_holidays(2026)
     assert date(2026, 7, 5) not in _i66_holidays(2026)
     assert date(2027, 7, 5) in _i66_holidays(2027)
-    i66_free = rows[-2]
+    i66_free = rows[12]
     i66_free_call = {
         "name": "get_current_toll_price",
         "input": i66_free["expected_call"],
@@ -1235,7 +1394,7 @@ def _self_check() -> None:
         )[0].label
         == "state_mismatch"
     )
-    wb_active = rows[-1]
+    wb_active = rows[13]
     i66_wb_active = json.loads(json.dumps(i66_active_call))
     i66_wb_active["input"] = wb_active["expected_call"]
     i66_wb_active["tool_result"].update(
@@ -1313,6 +1472,74 @@ def _self_check() -> None:
         "range $11.25-$12.30"
     )
     assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
+    washington_current = rows[14]
+    washington_current_call = json.loads(json.dumps(success))
+    washington_current_call["input"] = washington_current["expected_call"]
+    washington_current_call["tool_result"].update(
+        origin_point_id="greenway:1:entry:EB", destination_point_id="i95:2249ND"
+    )
+    washington_current_turns = [
+        {"response": "### 🛣️ Route choice\n\n**I-66 or I-395?**", "calls": []},
+        {"response": good_response, "calls": [washington_current_call]},
+    ]
+    assert evaluate_current_clarification_turns(
+        washington_current_turns, washington_current
+    )[0].test_pass
+    closed_current = json.loads(json.dumps(washington_current_turns))
+    closed_current[1]["calls"][0]["tool_result"] = {
+        "status": "currently_unavailable",
+        "point_ids": ["greenway:1:entry:EB", "i95:2249ND"],
+    }
+    closed_current[1]["response"] = (
+        "### 🚧 Current toll unavailable\n\nThe route is currently unavailable."
+    )
+    assert evaluate_current_clarification_turns(closed_current, washington_current)[
+        0
+    ].test_pass
+    invented_closed_toll = json.loads(json.dumps(closed_current))
+    invented_closed_toll[1]["response"] += " It would cost $999.00."
+    assert (
+        evaluate_current_clarification_turns(invented_closed_toll, washington_current)[
+            0
+        ].label
+        == "invented_financials"
+    )
+    premature_current = json.loads(json.dumps(washington_current_turns))
+    premature_current[0]["calls"] = [washington_current_call]
+    assert (
+        evaluate_current_clarification_turns(premature_current, washington_current)[
+            0
+        ].label
+        == "bad_clarification"
+    )
+    extra_current = json.loads(json.dumps(washington_current_turns))
+    extra_current[1]["calls"].append(washington_current_call)
+    assert (
+        evaluate_current_clarification_turns(extra_current, washington_current)[0].label
+        == "tool_mismatch"
+    )
+    wrong_current_input = json.loads(json.dumps(washington_current_turns))
+    wrong_current_input[1]["calls"][0]["input"]["destination_point_id"] = "wrong"
+    assert (
+        evaluate_current_clarification_turns(wrong_current_input, washington_current)[
+            0
+        ].label
+        == "input_mismatch"
+    )
+    blank_current = json.loads(json.dumps(washington_current_turns))
+    blank_current[1]["response"] = "  "
+    assert (
+        evaluate_current_clarification_turns(blank_current, washington_current)[0].label
+        == "blank_response"
+    )
+    ungrounded_current = json.loads(json.dumps(washington_current_turns))
+    ungrounded_current[1]["response"] = "### 🚗 Current toll\n\n**Estimate pending.**"
+    assert (
+        evaluate_current_clarification_turns(ungrounded_current, washington_current)[
+            0
+        ].label
+        == "ungrounded_price"
+    )
     assert (
         evaluate_westpark_turn(
             [success],
@@ -1654,6 +1881,113 @@ def _self_check() -> None:
     )
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
+    washington_annual = rows[15]
+    washington_annual_call = json.loads(json.dumps(annual_call))
+    washington_annual_call["input"] = washington_annual["expected_call"]
+    washington_annual_call["tool_result"] = {
+        "error": "ballpark_unavailable",
+        "reason": "no_complete_paired_days",
+        "coverage": {"complete_pair_count": 0},
+        "income": {
+            "gross_annual_usd": "120000.00",
+            "estimated_tax_usd": "40000.00",
+            "estimated_after_tax_usd": "80000.00",
+        },
+        "vehicle_cost": {"daily_usd": "7.85", "annual_usd": "1885.12"},
+        "assumptions": {"vehicle_cost_per_mile_usd": "0.685"},
+    }
+    washington_annual_turns = [
+        {"response": "### 🛣️ Route choice\n\n**I-66 or I-395?**", "calls": []},
+        {
+            "response": (
+                "### ⚠️ Annual estimate unavailable\n\n"
+                "There are no complete paired days, so the annual estimate is unavailable."
+            ),
+            "calls": [washington_annual_call],
+        },
+    ]
+    assert evaluate_annual_turn(washington_annual_turns, washington_annual)[0].test_pass
+    invented_annual_money = json.loads(json.dumps(washington_annual_turns))
+    invented_annual_money[1]["response"] += (
+        " Your income after commuting is $999999.00."
+    )
+    assert (
+        evaluate_annual_turn(invented_annual_money, washington_annual)[0].label
+        == "invented_financials"
+    )
+    misbound_annual_money = json.loads(json.dumps(washington_annual_turns))
+    misbound_annual_money[1]["response"] += " Income after commuting is $120000.00."
+    assert (
+        evaluate_annual_turn(misbound_annual_money, washington_annual)[0].label
+        == "misbound_money"
+    )
+    for response in (
+        "Estimated tax is $80000.00.",
+        "After-tax income is $40000.00.",
+        "Annual vehicle cost is $7.85.",
+        "Daily vehicle cost is $1885.12.",
+    ):
+        swapped_annual_money = json.loads(json.dumps(washington_annual_turns))
+        swapped_annual_money[1]["response"] += f"\n{response}"
+        assert (
+            evaluate_annual_turn(swapped_annual_money, washington_annual)[0].label
+            == "misbound_money"
+        )
+    same_line_swapped_vehicle_money = json.loads(json.dumps(washington_annual_turns))
+    same_line_swapped_vehicle_money[1]["response"] += (
+        "\nVehicle cost: $1885.12 per day; $7.85 annually."
+    )
+    assert (
+        evaluate_annual_turn(same_line_swapped_vehicle_money, washington_annual)[
+            0
+        ].label
+        == "misbound_money"
+    )
+    for daily_context in (
+        "daily",
+        "per day",
+        "per office day",
+        "per commute day",
+        "per round trip",
+    ):
+        grounded_annual_money = json.loads(json.dumps(washington_annual_turns))
+        grounded_annual_money[1]["response"] += (
+            "\nGross annual income: $120000.00."
+            "\nEstimated tax: $40000.00."
+            "\nAfter-tax income: $80000.00."
+            f"\nVehicle cost: $7.85 {daily_context}; $1885.12 annually."
+            "\nVehicle cost: $0.685 per mile."
+        )
+        assert evaluate_annual_turn(grounded_annual_money, washington_annual)[
+            0
+        ].test_pass
+    after_tax_assumption = json.loads(json.dumps(washington_annual_turns))
+    after_tax_assumption[1]["response"] += (
+        "\nAfter the one-third tax assumption: $80000.00."
+    )
+    assert evaluate_annual_turn(after_tax_assumption, washington_annual)[0].test_pass
+    missing_toll_not_zero = json.loads(json.dumps(washington_annual_turns))
+    missing_toll_not_zero[1]["response"] += "\nDo not treat the missing toll as $0."
+    assert evaluate_annual_turn(missing_toll_not_zero, washington_annual)[0].test_pass
+    premature_washington_annual = json.loads(json.dumps(washington_annual_turns))
+    premature_washington_annual[0]["calls"] = [washington_annual_call]
+    assert (
+        evaluate_annual_turn(premature_washington_annual, washington_annual)[0].label
+        == "bad_clarification"
+    )
+    springfield_annual = json.loads(json.dumps(washington_annual_turns))
+    springfield_annual[1]["calls"][0]["input"]["outbound"]["destination_point_id"] = (
+        "i95:206NO"
+    )
+    assert (
+        evaluate_annual_turn(springfield_annual, washington_annual)[0].label
+        == "input_mismatch"
+    )
+    blank_washington_annual = json.loads(json.dumps(washington_annual_turns))
+    blank_washington_annual[1]["response"] = "\t"
+    assert not evaluate_annual_turn(blank_washington_annual, washington_annual)[
+        0
+    ].test_pass
     bold_scenario_labels = annual_response
     for label, description in (
         ("P25", "lower historical scenario"),
