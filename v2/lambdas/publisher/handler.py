@@ -835,6 +835,7 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
     if (
         not {
             "schema_version",
+            "publication_format_version",
             "facility",
             "generation_id",
             "published_at",
@@ -844,7 +845,7 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
             "point_slugs",
         }
         <= manifest.keys()
-        or manifest.get("schema_version") != "2.0.0"
+        or manifest.get("schema_version") not in {"1.0.0", "2.0.0"}
         or manifest.get("facility") != FACILITY
         or not isinstance(publication_format_version, str)
         or not isinstance(manifest.get("generation_id"), str)
@@ -1340,76 +1341,95 @@ def _publish_streamed(
         f"{PUBLIC_PREFIX}/{point_slugs[item.key[0]]}/{point_slugs[item.key[1]]}"
         for item in descriptors
     ]
-    digest = hashlib.sha256(_incremental_prefix(point_slugs))
     run_at = _weekly_run_at(published_at)
-    route_count = 0
-    report_cursor.scroll(0, mode="absolute")
-    for key, group in groupby(_cursor_rows(report_cursor), _route_identity):
-        rows = list(group)
-        if route_count >= len(descriptors) or key != descriptors[route_count].key:
-            raise ValueError("report publish pass disagrees with preflight route order")
-        if any(
-            _require_aware(
-                row["snapshot_evaluated_at"], label="snapshot evaluation"
-            ).astimezone(UTC)
-            != evaluated_at
-            for row in rows
-        ):
-            raise ValueError("report publish pass disagrees with preflight evaluation")
-        if _source_watermark(rows) != descriptors[route_count].source_watermark:
-            raise ValueError("report publish pass disagrees with preflight watermark")
-        route = _build_route(rows)
-        legs = [
-            route_validation._I95FacilityLeg.model_validate(value)  # pyright: ignore[reportPrivateUsage]
-            for value in route.structural_facility_legs
-        ]  # pyright: ignore[reportPrivateUsage]
-        weekly = [_weekly_component(reader_connection, leg, run_at) for leg in legs]
-        if [item["route_step_id"] for item in weekly] != [
-            leg.route_step_id for leg in legs
-        ]:
-            raise ValueError("weekly component alignment is malformed")
-        document = _build_stream_document(
-            evaluated_at, source_watermark, route, published_at, weekly
-        )
-        if route_count:
-            digest.update(b",")
-        digest.update(
-            json.dumps(
-                _without_runtime_fields(document),
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode()
-        )
-        route_key = route_keys[route_count]
-        _put_object(
-            s3_client,
-            bucket,
-            f"{route_key}/report.json",
-            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            "application/json; charset=utf-8",
-            PUBLIC_CACHE_CONTROL,
-        )
-        _put_object(
-            s3_client,
-            bucket,
-            f"{route_key}/index.html",
-            _render_report_html(document, f"{PUBLIC_BASE_URL}/{route_key}/"),
-            "text/html; charset=utf-8",
-            PUBLIC_CACHE_CONTROL,
-        )
-        route_count += 1
-    if route_count != EXPECTED_ROUTE_COUNT:
-        raise ValueError("report publish pass is missing routes")
-    digest.update(b"]}")
-    result_sha256 = digest.hexdigest()
-    if previous and previous["result_sha256"] == result_sha256:
+
+    def build_pass(*, publish: bool) -> tuple[str, int]:
+        digest = hashlib.sha256(_incremental_prefix(point_slugs))
+        route_count = 0
+        report_cursor.scroll(0, mode="absolute")
+        for key, group in groupby(_cursor_rows(report_cursor), _route_identity):
+            rows = list(group)
+            if route_count >= len(descriptors) or key != descriptors[route_count].key:
+                raise ValueError(
+                    "report publish pass disagrees with preflight route order"
+                )
+            if any(
+                _require_aware(
+                    row["snapshot_evaluated_at"], label="snapshot evaluation"
+                ).astimezone(UTC)
+                != evaluated_at
+                for row in rows
+            ):
+                raise ValueError(
+                    "report publish pass disagrees with preflight evaluation"
+                )
+            if _source_watermark(rows) != descriptors[route_count].source_watermark:
+                raise ValueError(
+                    "report publish pass disagrees with preflight watermark"
+                )
+            route = _build_route(rows)
+            legs = [
+                route_validation._I95FacilityLeg.model_validate(value)  # pyright: ignore[reportPrivateUsage]
+                for value in route.structural_facility_legs
+            ]  # pyright: ignore[reportPrivateUsage]
+            weekly = [_weekly_component(reader_connection, leg, run_at) for leg in legs]
+            if [item["route_step_id"] for item in weekly] != [
+                leg.route_step_id for leg in legs
+            ]:
+                raise ValueError("weekly component alignment is malformed")
+            document = _build_stream_document(
+                evaluated_at, source_watermark, route, published_at, weekly
+            )
+            if route_count:
+                digest.update(b",")
+            digest.update(
+                json.dumps(
+                    _without_runtime_fields(document),
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+            )
+            if publish:
+                route_key = route_keys[route_count]
+                _put_object(
+                    s3_client,
+                    bucket,
+                    f"{route_key}/report.json",
+                    json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
+                    + "\n",
+                    "application/json; charset=utf-8",
+                    PUBLIC_CACHE_CONTROL,
+                )
+                _put_object(
+                    s3_client,
+                    bucket,
+                    f"{route_key}/index.html",
+                    _render_report_html(document, f"{PUBLIC_BASE_URL}/{route_key}/"),
+                    "text/html; charset=utf-8",
+                    PUBLIC_CACHE_CONTROL,
+                )
+            route_count += 1
+        if route_count != EXPECTED_ROUTE_COUNT:
+            raise ValueError("report publish pass is missing routes")
+        digest.update(b"]}")
+        return digest.hexdigest(), route_count
+
+    result_sha256, route_count = build_pass(publish=False)
+    if (
+        previous
+        and previous["schema_version"] == "2.0.0"
+        and previous["result_sha256"] == result_sha256
+    ):
         _put_generation_marker(s3_client, analytics_bucket, previous, route_keys)
         return (
             {"status": "unchanged", "result_sha256": result_sha256},
             evaluated_at,
             source_watermark,
         )
+    published_sha256, route_count = build_pass(publish=True)
+    if published_sha256 != result_sha256:
+        raise ValueError("report publish pass disagrees with digest pass")
     index_descriptors = [
         {
             "route": {

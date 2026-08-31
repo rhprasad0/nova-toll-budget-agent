@@ -179,6 +179,7 @@ class _StreamingCursor:
         self.rows = rows
         self.position = 0
         self.scrolled = False
+        self.scroll_count = 0
 
     def fetchmany(self, size):
         batch = self.rows[self.position : self.position + size]
@@ -189,6 +190,7 @@ class _StreamingCursor:
         assert (value, mode) == (0, "absolute")
         self.position = 0
         self.scrolled = True
+        self.scroll_count += 1
 
     def __enter__(self):
         return self
@@ -669,6 +671,7 @@ def test_malformed_frozen_slug_map_fails_closed():
 def test_manifest_rejects_malformed_publication_metadata(field, value):
     manifest = {
         "schema_version": "2.0.0",
+        "publication_format_version": "2.0.0",
         "facility": "i95_i495",
         "generation_id": "2026-08-25T16:05:00Z",
         "published_at": "2026-08-25T16:07:00Z",
@@ -722,6 +725,14 @@ def _stream_manifest(source_watermark):
     }
 
 
+def _legacy_stream_manifest(source_watermark):
+    return {
+        **_stream_manifest(source_watermark),
+        "schema_version": "1.0.0",
+        "publication_format_version": "1.0.0",
+    }
+
+
 def test_streamed_publication_rewinds_one_cursor_and_writes_one_route_at_a_time(
     monkeypatch,
 ):
@@ -740,6 +751,7 @@ def test_streamed_publication_rewinds_one_cursor_and_writes_one_route_at_a_time(
 
     assert result["status"] == "published"
     assert cursor.scrolled
+    assert cursor.scroll_count == 2
     keys = [item["Key"] for item in s3.puts if item["Bucket"] == "site-bucket"]
     assert [key.rsplit("/", 1)[-1] for key in keys[:4]] == [
         "report.json",
@@ -748,6 +760,58 @@ def test_streamed_publication_rewinds_one_cursor_and_writes_one_route_at_a_time(
         "index.html",
     ]
     assert keys[-1] == publisher.MANIFEST_KEY
+
+
+def test_streamed_publication_migrates_a_complete_legacy_manifest(monkeypatch):
+    monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 2)
+    s3 = _FakeS3()
+    s3.objects[publisher.MANIFEST_KEY] = json.dumps(
+        _legacy_stream_manifest("2026-08-25T15:00:00Z")
+    ).encode()
+
+    result, _, _ = publisher._publish_streamed(
+        _StreamingCursor([_report_row(0), _report_row(1)]),
+        _EmptyReaderConnection(),
+        s3,
+        "site-bucket",
+        EVALUATED_AT.replace(minute=7),
+        "analytics-bucket",
+    )
+
+    manifest = json.loads(s3.objects[publisher.MANIFEST_KEY])
+    assert result["status"] == "published"
+    assert manifest["schema_version"] == "2.0.0"
+    assert manifest["publication_format_version"] == "2.0.0"
+    assert {put["Key"] for put in s3.puts if put["Bucket"] == "site-bucket"} >= {
+        "tolls/i95-i495/zero/zero-d/report.json",
+        "tolls/i95-i495/one/one-d/report.json",
+    }
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        {**_legacy_stream_manifest("2026-08-25T15:00:00Z"), "published_at": None},
+        {**_stream_manifest("2026-08-25T15:00:00Z"), "schema_version": "3.0.0"},
+    ],
+)
+def test_streamed_publication_rejects_bad_legacy_or_unknown_manifest_before_writes(
+    monkeypatch, manifest
+):
+    monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 2)
+    s3 = _FakeS3()
+    s3.objects[publisher.MANIFEST_KEY] = json.dumps(manifest).encode()
+
+    with pytest.raises(ValueError, match="publication manifest is malformed"):
+        publisher._publish_streamed(
+            _StreamingCursor([_report_row(0), _report_row(1)]),
+            _EmptyReaderConnection(),
+            s3,
+            "site-bucket",
+            EVALUATED_AT.replace(minute=7),
+            "analytics-bucket",
+        )
+    assert not s3.puts
 
 
 def test_streamed_publication_rejects_stale_manifest_before_route_writes(monkeypatch):
@@ -1203,6 +1267,11 @@ def test_streamed_marker_failure_repairs_the_committed_manifest(monkeypatch):
             "analytics-bucket",
         )
     committed = s3.objects[publisher.MANIFEST_KEY]
+    site_objects = {
+        key: value
+        for key, value in s3.objects.items()
+        if key.startswith("tolls/") or key == "sitemap.xml"
+    }
     s3.fail_suffix = None
     put_count = len(s3.puts)
     result, _, _ = publisher._publish_streamed(
@@ -1210,17 +1279,23 @@ def test_streamed_marker_failure_repairs_the_committed_manifest(monkeypatch):
         _EmptyReaderConnection(),
         s3,
         "site-bucket",
-        published_at,
+        published_at.replace(minute=8),
         "analytics-bucket",
     )
     assert result["status"] == "unchanged"
     assert s3.objects[publisher.MANIFEST_KEY] == committed
-    assert not {
-        "tolls/i95-i495/index.html",
-        "sitemap.xml",
-        publisher.MANIFEST_KEY,
-    } & {put["Key"] for put in s3.puts[put_count:] if put["Bucket"] == "site-bucket"}
+    assert {
+        key: value
+        for key, value in s3.objects.items()
+        if key.startswith("tolls/") or key == "sitemap.xml"
+    } == site_objects
+    assert not [put for put in s3.puts[put_count:] if put["Bucket"] == "site-bucket"]
     assert s3.puts[-1]["Bucket"] == "analytics-bucket"
+    marker = json.loads(s3.puts[-1]["Body"])
+    manifest = json.loads(committed)
+    assert marker["generation_id"] == manifest["generation_id"]
+    assert marker["published_at"] == manifest["published_at"]
+    assert marker["result_sha256"] == manifest["result_sha256"]
 
 
 def test_reader_connection_failure_closes_the_oracle_connection(monkeypatch):
