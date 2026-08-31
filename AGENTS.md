@@ -3,6 +3,11 @@
 TollChat.ai is a Strands/AgentCore reference implementation for practical agent
 development and deployment. It is not a live end-user service.
 
+Prefer the smallest design that clearly demonstrates the intended pattern.
+Optimize for readability and teachability, not hypothetical scale or enterprise
+flexibility. Do not add abstractions, configurability, or operational machinery
+unless the user, an existing contract, security, or data safety requires it.
+
 # Style
 
 Keep responses concise. Bold the important parts. Be a friendly colleague; humor
