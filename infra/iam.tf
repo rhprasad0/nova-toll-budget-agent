@@ -108,6 +108,45 @@ resource "aws_iam_role_policy" "replay" {
   policy = data.aws_iam_policy_document.replay.json
 }
 
+# This human-operated role is intentionally separate from every application
+# identity. Its database permissions name only the two migration logins.
+data "aws_iam_policy_document" "oracle_migrator_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:MultiFactorAuthPresent"
+      values   = ["true"]
+    }
+  }
+}
+
+resource "aws_iam_role" "oracle_migrator" {
+  name                 = "nova-toll-v2-database-migrator"
+  assume_role_policy   = data.aws_iam_policy_document.oracle_migrator_assume.json
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "oracle_migrator" {
+  statement {
+    actions = ["rds-db:connect"]
+    resources = [
+      "arn:aws:rds-db:us-east-1:920534282028:dbuser:db-WHGCQ3B5SB4WPB5RTJMU3CE664/oracle_migrator_development",
+      "arn:aws:rds-db:us-east-1:920534282028:dbuser:db-WHGCQ3B5SB4WPB5RTJMU3CE664/oracle_migrator",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "oracle_migrator" {
+  name   = "nova-toll-v2-database-migrator"
+  role   = aws_iam_role.oracle_migrator.id
+  policy = data.aws_iam_policy_document.oracle_migrator.json
+}
+
 # --- GitHub Actions OIDC foundation retained for v2 timed checks -----------
 
 resource "aws_iam_openid_connect_provider" "github" {

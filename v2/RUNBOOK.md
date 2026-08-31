@@ -7,9 +7,89 @@ Terraform plan or apply.
 
 PRs use disposable PostGIS migration validation only; they never access or
 mutate deployed databases or schemas. `main` continues to run validation only.
-Published releases are manual, reviewed deployments from `main`; schema-changing
-work is not deployable until approved deployed-migration automation exists.
-Current releases are schema-neutral.
+Published releases are manual, reviewed deployments from `main`. Schema changes
+use the guarded Oracle procedure below; PR CI remains disposable-only.
+
+## Guarded Oracle migration
+
+This procedure is only for reviewed `030_upgrade_oracle_1_13_1_to_1_14_0.sql`.
+From a clean, merged `main` checkout, build the checked CA bundle, authenticate
+with `aws login --profile nova-toll-prod`, and verify account `920534282028` / region
+`us-east-1`. Confirm the Tailscale route from `ryan-desk.tailbd5c0d.ts.net` through
+`tag:nova-toll-router` to the private RDS network before continuing.
+
+The first release needs the separately authorized, one-time administrator ceremony:
+
+```sh
+(
+set -euo pipefail
+cd infra
+mkdir -p build
+chmod 700 build
+AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
+AWS_PROFILE=nova-toll-prod terraform plan -input=false -out=build/oracle-migrator.tfplan
+AWS_PROFILE=nova-toll-prod terraform show -json build/oracle-migrator.tfplan | jq -e '
+  [.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}] | sort_by(.address) ==
+  [{"address":"aws_iam_role.oracle_migrator","actions":["create"]},{"address":"aws_iam_role_policy.oracle_migrator","actions":["create"]}]'
+plan_sha="$(sha256sum build/oracle-migrator.tfplan | awk '{print $1}')"
+printf 'oracle_migrator_foundation_plan_sha256=%s\n' "$plan_sha"
+test "$(sha256sum build/oracle-migrator.tfplan | awk '{print $1}')" = "$plan_sha"
+AWS_PROFILE=nova-toll-prod terraform apply -input=false build/oracle-migrator.tfplan
+test "$(sha256sum build/oracle-migrator.tfplan | awk '{print $1}')" = "$plan_sha"
+)
+```
+
+Retain the sanitized plan digest and stop on any action outside those IAM objects.
+After this one-time foundation apply, the foundation plan must again be zero-change
+for application releases.
+
+```sh
+cd v2
+./scripts/build_loader_zip.sh
+./scripts/bootstrap_oracle_migrators.sh
+```
+
+It reads the RDS-managed primary-master secret only into its process environment,
+creates/proves the two IAM logins, then discards it. It never copies a secret to SSM,
+a file, or the recurring runner. Stop if it fails.
+
+Assume-role MFA is required by the runner. It writes owner-only sanitized evidence
+under `v2/build/deployed-migration-evidence`; do not edit, copy, or reuse it.
+
+```sh
+cd v2
+./scripts/deploy_oracle_migration.py development
+```
+
+Review its schema evidence, deploy the development application with the guarded
+development release below, then finalize the separate application smoke/eval gate:
+
+Write `development-release-receipt.txt` into the just-created development evidence
+directory only after that exact development saved-plan apply and smoke pass, with exactly
+`commit=<main commit>` and `application_smoke=passed`. The finalizer rejects any other receipt.
+
+```sh
+cd v2
+./scripts/finalize_development_migration_evidence.py
+```
+
+This runs and retains successful `leesburg-to-washington-i395-current-price`
+and `leesburg-to-washington-i395-job-offer` reports against `nova_toll_development`.
+Independently confirm the exact
+private `nova-toll-db` status, source versions, seven-day backup/PITR readiness, and
+the matching immutable development evidence before continuing:
+
+```sh
+cd v2
+./scripts/deploy_oracle_migration.py production
+```
+
+After production migration, use the existing guarded production release and the same
+live smoke/eval gates. Stop at the first failed gate. A failed migration transaction
+rolls back; a committed schema change has no application-level downgrade. Application
+artifact rollback does not revert the database. Preserve evidence and use separately
+authorized RDS backup/PITR incident handling for after-commit recovery; this automation
+never restores, snapshots, or downgrades a database.
 
 The current production baseline is AWS account `920534282028` in `us-east-1`:
 

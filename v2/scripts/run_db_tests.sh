@@ -71,7 +71,7 @@ cleanup_databases() {
     dropdb --if-exists "$database"
   done
   psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, loader_writer"
+    "DROP ROLE IF EXISTS oracle_migrator_development, oracle_migrator, pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, loader_writer"
 }
 
 cleanup() {
@@ -100,7 +100,6 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 SQL
-
 createdb --template template0 "$production_db"
 psql --dbname "$production_db" --file v2/db/schema.sql
 psql --dbname "$production_db" --file v2/db/roles.sql
@@ -141,6 +140,31 @@ if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   exit 1
 fi
 v2/scripts/test_development_database_bootstrap.sh
+
+# The deployed migration login bootstrap remains separately reviewed, but its
+# privilege boundary is proved here on the disposable cluster.
+psql --dbname postgres --set ON_ERROR_STOP=1 --file v2/scripts/bootstrap_oracle_migrators.sql
+psql --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF NOT pg_has_role('oracle_migrator_development', 'rds_iam', 'MEMBER')
+     OR NOT pg_has_role('oracle_migrator', 'rds_iam', 'MEMBER')
+     OR NOT pg_has_role('oracle_migrator_development', 'oracle_owner_development', 'MEMBER')
+     OR NOT pg_has_role('oracle_migrator', 'oracle_owner', 'MEMBER')
+     OR has_database_privilege('oracle_migrator_development', 'nova_toll', 'CONNECT')
+     OR has_database_privilege('oracle_migrator', 'nova_toll_development', 'CONNECT') THEN
+    RAISE EXCEPTION 'migrator bootstrap isolation is wrong';
+  END IF;
+END $$;
+SQL
+psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+  'GRANT pricing_reader TO oracle_migrator'
+if psql --dbname postgres --set ON_ERROR_STOP=1 --file v2/scripts/bootstrap_oracle_migrators.sql; then
+  echo "migrator bootstrap accepted an unrelated runtime membership" >&2
+  exit 1
+fi
+psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+  'REVOKE pricing_reader FROM oracle_migrator'
 
 createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \

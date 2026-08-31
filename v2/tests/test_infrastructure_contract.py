@@ -220,12 +220,15 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     for text in (
         "PRs use disposable migration validation only",
         "never mutate deployed databases or schemas",
-        "Schema-changing work is not deployable",
+        "Schema-changing work is not deployable until approved deployed-migration",
     ):
         assert text in AGENTS
     for text in (
         "PRs use disposable PostGIS migration validation only",
-        "Current releases are schema-neutral",
+        "## Guarded Oracle migration",
+        "deploy_oracle_migration.py development",
+        "deploy_oracle_migration.py production",
+        "backup/PITR incident handling",
         "nova-toll-tfstate-920534282028",
         "nova-toll/terraform.tfstate",
         "nova-toll/v2/terraform.tfstate",
