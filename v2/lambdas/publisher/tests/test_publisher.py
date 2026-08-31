@@ -586,8 +586,22 @@ def test_schema_two_document_and_accessible_html_expose_only_evidence():
 
 
 def test_result_fingerprint_ignores_generation_times(monkeypatch):
-    document = {"generation": {"generation_id": "a", "published_at": "b"}, "route": {}}
-    later = {"generation": {"generation_id": "c", "published_at": "d"}, "route": {}}
+    document = {
+        "generation": {
+            "generation_id": "a",
+            "published_at": "b",
+            "source_watermark": "c",
+        },
+        "route": {},
+    }
+    later = {
+        "generation": {
+            "generation_id": "d",
+            "published_at": "e",
+            "source_watermark": "f",
+        },
+        "route": {},
+    }
     fingerprint = publisher._result_fingerprint([document], {})
     assert fingerprint == publisher._result_fingerprint([later], {})
     monkeypatch.setattr(publisher, "PUBLICATION_FORMAT_VERSION", "2")
@@ -604,6 +618,7 @@ class _FakeS3:
     def __init__(self, *, fail_suffix=None, fail_bucket=None):
         self.objects = {}
         self.puts = []
+        self.gets = []
         self.lists = []
         self.fail_suffix = fail_suffix
         self.fail_bucket = fail_bucket
@@ -618,7 +633,7 @@ class _FakeS3:
         }
 
     def get_object(self, *, Bucket, Key):
-        del Bucket
+        self.gets.append({"Bucket": Bucket, "Key": Key})
         try:
             body = self.objects[Key]
         except KeyError as error:
@@ -1185,6 +1200,7 @@ def test_streamed_digest_matches_independent_canonical_bytes_and_is_stable(monke
                     "evaluated_at",
                     "generation_id",
                     "published_at",
+                    "source_watermark",
                 }
             }
         if isinstance(value, list):
@@ -1206,6 +1222,198 @@ def test_streamed_digest_matches_independent_canonical_bytes_and_is_stable(monke
     assert result["result_sha256"] == hashlib.sha256(canonical).hexdigest()
     later, _, _ = publish(rows, EVALUATED_AT.replace(minute=8))
     assert later["result_sha256"] == result["result_sha256"]
+
+
+def test_streamed_newer_provenance_watermark_is_idempotent(monkeypatch):
+    monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 2)
+    s3 = _FakeS3()
+    rows = [_report_row(0), _report_row(1)]
+    first, _, _ = publisher._publish_streamed(
+        _StreamingCursor(rows),
+        _EmptyReaderConnection(),
+        s3,
+        "site-bucket",
+        EVALUATED_AT.replace(minute=7),
+        "analytics-bucket",
+    )
+    manifest = s3.objects[publisher.MANIFEST_KEY]
+    public_objects = {
+        key: value
+        for key, value in s3.objects.items()
+        if key.startswith("tolls/") or key == "sitemap.xml"
+    }
+    first_marker = next(put for put in s3.puts if put["Bucket"] == "analytics-bucket")
+    committed = json.loads(manifest)
+    route_keys = [
+        put["Key"].removesuffix("/report.json")
+        for put in s3.puts
+        if put["Bucket"] == "site-bucket" and put["Key"].endswith("/report.json")
+    ]
+    marker_body = (
+        json.dumps(
+            {
+                "schema_version": 1,
+                "facility": committed["facility"],
+                "generation_id": committed["generation_id"],
+                "published_at": committed["published_at"],
+                "result_sha256": committed["result_sha256"],
+                "route_keys": route_keys,
+            },
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    advanced = copy.deepcopy(rows)
+    advanced_watermark = WATERMARK + timedelta(minutes=20)
+    for row in advanced:
+        row["i95_evidence"]["northbound_interval_end_at"] = (
+            advanced_watermark.isoformat()
+        )
+        row["i95_evidence"]["southbound_interval_end_at"] = (
+            advanced_watermark.isoformat()
+        )
+
+    put_count = len(s3.puts)
+    second, _, returned_watermark = publisher._publish_streamed(
+        _StreamingCursor(advanced),
+        _EmptyReaderConnection(),
+        s3,
+        "site-bucket",
+        EVALUATED_AT.replace(minute=8),
+        "analytics-bucket",
+    )
+
+    assert second == {"status": "unchanged", "result_sha256": first["result_sha256"]}
+    assert returned_watermark == advanced_watermark
+    assert s3.objects[publisher.MANIFEST_KEY] == manifest
+    assert {
+        key: value
+        for key, value in s3.objects.items()
+        if key.startswith("tolls/") or key == "sitemap.xml"
+    } == public_objects
+    writes = s3.puts[put_count:]
+    assert len(writes) == 1 and writes[0]["Bucket"] == "analytics-bucket"
+    assert writes[0]["Key"] == first_marker["Key"]
+    assert writes[0]["Body"] == marker_body
+    assert writes[0]["ContentType"] == "application/json"
+    assert writes[0]["CacheControl"] == "no-store"
+    assert not [call for call in s3.gets if call["Bucket"] == "analytics-bucket"]
+    assert not [call for call in s3.lists if call["Bucket"] == "analytics-bucket"]
+    document = json.loads(
+        next(
+            value
+            for key, value in public_objects.items()
+            if key.endswith("report.json")
+        )
+    )
+    assert document["generation"]["source_watermark"] == WATERMARK.isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+@pytest.mark.parametrize(
+    "change", ["component_value", "selected_observation", "coverage_window"]
+)
+def test_streamed_selected_content_change_publishes(monkeypatch, change):
+    monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 2)
+
+    class Cursor:
+        def __init__(self, name, price, extra):
+            self.name, self.price, self.extra, self.params, self.sent = (
+                name,
+                price,
+                extra,
+                {},
+                False,
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, _sql, params):
+            self.params = params
+
+        def fetchmany(self, _size):
+            if self.name == "proxy_lookup" or self.sent:
+                return []
+            self.sent = True
+            rows = [
+                {
+                    "corridor_name": "Southbound",
+                    "od_pair_id": self.params["source_od_pair_id"],
+                    "start_zone_id": 1,
+                    "start_zone_name": "Start",
+                    "end_zone_id": 2,
+                    "end_zone_name": "End",
+                    "interval_end_at": datetime(2026, 8, 3, 12, tzinfo=UTC),
+                    "calculated_at": datetime(2026, 8, 3, 12, tzinfo=UTC),
+                    "s3_key": "selected.csv",
+                    "zone_toll_rate_usd": Decimal(self.price),
+                    "link_status": "OPEN",
+                }
+            ]
+            if self.extra:
+                rows.append(
+                    {
+                        **rows[0],
+                        "interval_end_at": datetime(2026, 8, 4, 12, tzinfo=UTC),
+                        "calculated_at": datetime(2026, 8, 4, 12, tzinfo=UTC),
+                        "s3_key": "selected-extra.csv",
+                    }
+                )
+            return rows
+
+    class Reader:
+        def __init__(self, price, *, extra=False):
+            self.price, self.extra = price, extra
+
+        def cursor(self, name):
+            return Cursor(name, self.price, self.extra)
+
+    s3 = _FakeS3()
+    first, _, _ = publisher._publish_streamed(
+        _StreamingCursor([_report_row(0), _report_row(1)]),
+        Reader("1.23"),
+        s3,
+        "site-bucket",
+        EVALUATED_AT.replace(minute=7),
+        "analytics-bucket",
+    )
+    reader = Reader("2.34") if change == "component_value" else Reader("1.23")
+    published_at = EVALUATED_AT.replace(minute=8)
+    if change == "selected_observation":
+        reader = Reader("1.23", extra=True)
+    if change == "coverage_window":
+        published_at = datetime(2026, 8, 31, 5, 7, tzinfo=UTC)
+    site_put_count = len([put for put in s3.puts if put["Bucket"] == "site-bucket"])
+    second, _, _ = publisher._publish_streamed(
+        _StreamingCursor([_report_row(0), _report_row(1)]),
+        reader,
+        s3,
+        "site-bucket",
+        published_at,
+        "analytics-bucket",
+    )
+
+    assert first["status"] == "published"
+    assert second["status"] == "published"
+    assert second["result_sha256"] != first["result_sha256"]
+    site_writes = [put for put in s3.puts if put["Bucket"] == "site-bucket"]
+    assert site_writes[site_put_count:][-1]["Key"] == publisher.MANIFEST_KEY
+    assert s3.puts[-1]["Bucket"] == "analytics-bucket"
+    document = json.loads(
+        next(value for key, value in s3.objects.items() if key.endswith("report.json"))
+    )
+    if change == "component_value":
+        assert document["components"][0]["rush_observations"][0]["price_usd"] == "2.34"
+    elif change == "selected_observation":
+        assert len(document["components"][0]["rush_observations"]) == 2
+        assert document["components"][0]["coverage"]["observed_rush_observations"] == 2
+    else:
+        assert document["coverage"]["window_start_at"] == "2026-08-03T04:00:00Z"
 
 
 @pytest.mark.parametrize(
@@ -1290,9 +1498,18 @@ def test_streamed_marker_failure_repairs_the_committed_manifest(monkeypatch):
         if key.startswith("tolls/") or key == "sitemap.xml"
     } == site_objects
     assert not [put for put in s3.puts[put_count:] if put["Bucket"] == "site-bucket"]
-    assert s3.puts[-1]["Bucket"] == "analytics-bucket"
-    marker = json.loads(s3.puts[-1]["Body"])
+    repairs = [
+        put for put in s3.puts[put_count:] if put["Bucket"] == "analytics-bucket"
+    ]
+    assert len(repairs) == 1
+    marker = json.loads(repairs[0]["Body"])
     manifest = json.loads(committed)
+    assert repairs[0]["Key"] == (
+        f"generations/date={manifest['published_at'][:10]}/"
+        f"{manifest['published_at'].replace(':', '')}-{manifest['result_sha256']}.json"
+    )
+    assert repairs[0]["ContentType"] == "application/json"
+    assert repairs[0]["CacheControl"] == "no-store"
     assert marker["generation_id"] == manifest["generation_id"]
     assert marker["published_at"] == manifest["published_at"]
     assert marker["result_sha256"] == manifest["result_sha256"]
@@ -1370,7 +1587,11 @@ def test_enabled_handler_captures_invocation_before_setup(monkeypatch):
     [
         (_load_event(WATERMARK.replace(minute=50, hour=15)), None, True),
         (_load_event(), _stream_manifest("2026-08-25T16:10:00Z"), False),
-        ({"trigger": "watchdog"}, _stream_manifest("2026-08-25T16:10:00Z"), False),
+        (
+            {"trigger": "watchdog", "smoke_id": "123e4567-e89b-12d3-a456-426614174000"},
+            _stream_manifest("2026-08-25T16:10:00Z"),
+            False,
+        ),
     ],
 )
 def test_enabled_supersession_logging_preserves_its_reason(
@@ -1411,6 +1632,7 @@ def test_enabled_supersession_logging_preserves_its_reason(
     assert result["status"] == "superseded"
     assert ("V2_REPORT_GENERATION_SUPERSEDED" in caplog.text) is logs_supersession
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
     assert report.closed and reader.closed
 
 
@@ -1651,9 +1873,117 @@ def test_publication_failure_never_logs_success(monkeypatch, caplog):
     monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
 
     with caplog.at_level("INFO"), pytest.raises(RuntimeError, match="publish failed"):
-        publisher.handler({"trigger": "watchdog"}, None)
+        publisher.handler(
+            {
+                "trigger": "watchdog",
+                "smoke_id": "123e4567-e89b-12d3-a456-426614174000",
+            },
+            None,
+        )
 
     assert "V2_REPORT_GENERATION_OK" not in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
+
+
+def test_unexpected_publication_status_never_logs_success(monkeypatch, caplog):
+    monkeypatch.setattr(
+        publisher, "_connect", lambda **_kwargs: _TransactionConnection()
+    )
+    monkeypatch.setattr(
+        publisher,
+        "_publish_streamed",
+        lambda *_args: (
+            {"status": "failed", "result_sha256": "a" * 64},
+            EVALUATED_AT,
+            WATERMARK,
+        ),
+    )
+    monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "true")
+    monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
+    monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
+    monkeypatch.setenv("DB_READER_USER", "pricing_reader")
+    monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
+
+    with caplog.at_level("INFO"), pytest.raises(RuntimeError, match="status"):
+        publisher.handler(
+            {
+                "trigger": "watchdog",
+                "smoke_id": "123e4567-e89b-12d3-a456-426614174000",
+            },
+            None,
+        )
+
+    assert "V2_REPORT_GENERATION_OK" not in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
+
+
+def test_watchdog_smoke_id_is_canonical_and_validated_before_io(monkeypatch):
+    smoke_id = "123e4567-e89b-12d3-a456-426614174000"
+    assert (
+        publisher._expected_watermark({"trigger": "watchdog", "smoke_id": smoke_id})
+        is None
+    )
+    monkeypatch.setattr(
+        publisher,
+        "_read_report_rows",
+        lambda: pytest.fail("unexpected database access"),
+    )
+    for invalid in (
+        None,
+        1,
+        "",
+        f" {smoke_id}",
+        smoke_id.upper(),
+        smoke_id.replace("-", ""),
+        f"{smoke_id}x",
+    ):
+        with pytest.raises(ValueError, match="smoke_id"):
+            publisher.handler({"trigger": "watchdog", "smoke_id": invalid}, None)
+    with pytest.raises(ValueError, match="unsupported watchdog"):
+        publisher.handler(
+            {"trigger": "watchdog", "smoke_id": smoke_id, "extra": 1}, None
+        )
+    with pytest.raises(ValueError, match="smoke_id"):
+        publisher.handler({**_load_event(), "smoke_id": smoke_id}, None)
+
+
+@pytest.mark.parametrize("status", ["published", "unchanged"])
+def test_smoke_success_is_logged_after_publication(monkeypatch, caplog, status):
+    smoke_id = "123e4567-e89b-12d3-a456-426614174000"
+    order = []
+    monkeypatch.setattr(
+        publisher, "_connect", lambda **_kwargs: _TransactionConnection()
+    )
+    monkeypatch.setattr(
+        publisher,
+        "_publish_streamed",
+        lambda *_args: (
+            order.append("published")
+            or ({"status": status, "result_sha256": "a" * 64}, EVALUATED_AT, WATERMARK)
+        ),
+    )
+    monkeypatch.setattr(
+        publisher, "_log_success", lambda *_args: order.append("generic")
+    )
+    monkeypatch.setenv("REPORT_PUBLICATION_ENABLED", "true")
+    monkeypatch.setenv("SITE_BUCKET_NAME", "site-bucket")
+    monkeypatch.setenv("AGENT_MEASUREMENT_BUCKET", "analytics-bucket")
+    monkeypatch.setenv("DB_READER_USER", "pricing_reader")
+    monkeypatch.setattr(publisher.boto3, "client", lambda _service: object())
+
+    with caplog.at_level("INFO"):
+        result = publisher.handler({"trigger": "watchdog", "smoke_id": smoke_id}, None)
+
+    smoke_records = [
+        record.getMessage()
+        for record in caplog.records
+        if "V2_REPORT_SMOKE_OK" in record.getMessage()
+    ]
+    assert result["status"] == status
+    assert order == ["published", "generic"]
+    assert smoke_records == [
+        f"V2_REPORT_SMOKE_OK {smoke_id} {status} 2026-08-25T16:05:00Z {'a' * 64}"
+    ]
 
 
 def test_success_is_logged_after_publication(monkeypatch, caplog):
@@ -1680,6 +2010,7 @@ def test_success_is_logged_after_publication(monkeypatch, caplog):
 
     assert result["status"] == "published"
     assert "V2_REPORT_GENERATION_OK i95_i495" in caplog.text
+    assert "V2_REPORT_SMOKE_OK" not in caplog.text
 
 
 def test_weekly_selector_keeps_only_weekday_rush_boundaries_at_source_cadence():

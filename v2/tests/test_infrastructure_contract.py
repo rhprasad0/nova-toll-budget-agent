@@ -1,7 +1,9 @@
 import json
+import os
 import re
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
@@ -524,7 +526,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
     )
 
 
-def test_public_report_launch_is_selected_environment_and_fresh():
+def test_public_report_launch_is_selected_environment_and_correlated():
     launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
         "## Agent-route measurement launch", 1
     )[0]
@@ -533,38 +535,129 @@ def test_public_report_launch_is_selected_environment_and_fresh():
         ".url | select",
         '"$SITE_URL/sitemap.xml"',
         'REPORT_URL="$SITE_URL/tolls/',
-        "PREVIOUS_GENERATION=",
-        "REPORT_STARTED_AT=",
-        ".generation_id != $previous",
-        "(.published_at | instant) >= ($started | instant)",
+        "aws_cloudwatch_log_group.publisher",
+        "REPORT_SMOKE_ID=",
+        "REPORT_STARTED_MS=",
+        "--invocation-type Event",
+        ".StatusCode == 202",
+        "logs filter-log-events",
+        '--start-time "$REPORT_STARTED_MS"',
+        "V2_REPORT_SMOKE_OK $REPORT_SMOKE_ID",
+        "(published|unchanged)",
         'schema_version == "2.0.0"',
-        "def instant:",
-        "fromdateiso8601",
+        'publication_format_version == "2.0.0"',
+        "route_count == 685",
+        'test("^[a-f0-9]{64}$")',
+        "trap 'rm -f --",
     ):
         assert required in launch
     assert "https://tollchat.ai" not in launch
 
-    def fresh(published_at: str, started_at: str) -> bool:
+    shell_match = re.search(r"```sh\n(.*?)\n```", launch, re.DOTALL)
+    if shell_match is None:
+        raise AssertionError("missing public report launch shell block")
+    shell = shell_match.group(1)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
+        script.write(shell)
+        script.flush()
+        assert subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
+
+    def shell_function(name: str) -> str:
+        match = re.search(rf"(?ms)^{name}\(\) \{{.*?^\}}", shell)
+        if match is None:
+            raise AssertionError(f"missing {name}")
+        return match.group(0)
+
+    smoke_check = shell_function("report_smoke_succeeded")
+    manifest_check = shell_function("report_manifest_is_valid")
+    smoke_id = "123e4567-e89b-12d3-a456-426614174000"
+    generation_id = "2026-08-25T16:05:00Z"
+    result_sha256 = "a" * 64
+
+    def smoke_passes(records: str) -> bool:
         return (
             subprocess.run(
                 [
-                    "jq",
-                    "-en",
-                    "--arg",
-                    "published",
-                    published_at,
-                    "--arg",
-                    "started",
-                    started_at,
-                    'def instant: sub("\\\\.[0-9]+Z$"; "Z") | fromdateiso8601; ($published | instant) >= ($started | instant)',
+                    "bash",
+                    "-c",
+                    f'set -euo pipefail; {smoke_check}; report_smoke_succeeded "$REPORT_RESULT"',
                 ],
                 check=False,
+                env={
+                    **os.environ,
+                    "REPORT_SMOKE_ID": smoke_id,
+                    "REPORT_STARTED_MS": "1000",
+                    "REPORT_RESULT": records,
+                },
             ).returncode
             == 0
         )
 
-    assert fresh("2026-08-31T12:00:00.123456Z", "2026-08-31T12:00:00.000000Z")
-    assert not fresh("2026-08-31T11:59:59.999999Z", "2026-08-31T12:00:00.000000Z")
+    assert smoke_passes(
+        f"1000\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {result_sha256}"
+    )
+    assert smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} unchanged {generation_id} {result_sha256}"
+    )
+    assert smoke_passes(
+        f"1001\t2026-08-25T16:05:01Z INFO V2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {result_sha256}"
+    )
+    assert not smoke_passes(
+        f"999\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {result_sha256}"
+    )
+    assert not smoke_passes(
+        "1001\tV2_REPORT_SMOKE_OK 123e4567-e89b-12d3-a456-426614174001 "
+        f"published {generation_id} {result_sha256}"
+    )
+    assert not smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} superseded {generation_id} {result_sha256}"
+    )
+    assert not smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} error {generation_id} {result_sha256}"
+    )
+    assert not smoke_passes(f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published ")
+    assert not smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published malformed {result_sha256}"
+    )
+    assert not smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published 2026-99-25T16:05:00Z {result_sha256}"
+    )
+    assert not smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {'A' * 64}"
+    )
+    assert not smoke_passes(
+        f"1001\tV2_REPORT_SMOKE_OK {smoke_id} published {generation_id} {'a' * 63}"
+    )
+    assert not smoke_passes("1001\tV2_REPORT_GENERATION_OK i95_i495")
+
+    def manifest_passes(manifest: Mapping[str, object]) -> bool:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as fixture:
+            json.dump(manifest, fixture)
+            fixture.flush()
+            return (
+                subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        f'set -euo pipefail; {manifest_check}; report_manifest_is_valid "$REPORT_MANIFEST"',
+                    ],
+                    check=False,
+                    env={**os.environ, "REPORT_MANIFEST": fixture.name},
+                ).returncode
+                == 0
+            )
+
+    manifest: dict[str, object] = {
+        "schema_version": "2.0.0",
+        "publication_format_version": "2.0.0",
+        "route_count": 685,
+        "generation_id": "old-generation",
+        "published_at": "2026-08-01T00:00:00Z",
+        "result_sha256": "a" * 64,
+    }
+    assert manifest_passes(manifest)
+    assert not manifest_passes({**manifest, "generation_id": ""})
+    assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
 
 
 def test_agent_measurement_is_count_only_private_and_bounded():
