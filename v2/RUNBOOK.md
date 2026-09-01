@@ -661,29 +661,28 @@ if ! AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" sh
     "aws_budgets_budget.nova_toll_monthly"
   ];
   def foundation_data_addresses: [
-    "data.aws_caller_identity.current", "data.aws_region.current",
-    "data.aws_vpc.default", "data.aws_subnets.default",
-    "data.aws_route_tables.default", "data.aws_iam_policy_document.agentcore_artifacts",
-    "data.aws_iam_policy_document.raw_bucket", "data.aws_iam_policy_document.tfstate_bucket",
-    "data.archive_file.placeholder", "data.aws_iam_policy_document.lambda_assume",
-    "data.aws_iam_policy_document.fetcher", "data.aws_iam_policy_document.replay_assume",
-    "data.aws_iam_policy_document.replay", "data.aws_iam_policy_document.audit_kms",
-    "data.aws_iam_policy_document.alerts_kms", "data.aws_iam_policy_document.audit_bucket",
-    "data.aws_prefix_list.s3", "data.aws_iam_policy_document.ec2_assume",
-    "data.aws_iam_policy_document.tailscale_router", "data.aws_subnet.tailscale_router"
+    "data.aws_caller_identity.current",
+    "data.aws_region.current",
+    "data.aws_vpc.default",
+    "data.aws_subnets.default",
+    "data.aws_route_tables.default",
+    "data.aws_subnet.tailscale_router"
   ];
-  (.resource_changes | type == "array") and
-  all(.resource_changes[];
-    type == "object" and
-    (.address | type == "string" and length > 0) and
-    (.mode | type == "string") and
-    (.change | type == "object") and
-    (.change.actions | type == "array") and
-    (.address as $address |
-      ((.mode == "managed" and .change.actions == ["no-op"] and (foundation_create_addresses | index($address)) != null) or
-       (.mode == "managed" and .change.actions == ["create"] and (foundation_create_addresses | index($address)) != null) or
-       (.mode == "data" and (foundation_data_addresses | index($address)) != null and .change.actions == ["read"])))
-  )
+  def expected_changes:
+    ([foundation_create_addresses[] | {mode: "managed", address: ., actions: ["create"]}] +
+     [foundation_data_addresses[] | {mode: "data", address: ., actions: ["read"]}])
+    | sort_by([.mode, .address, (.actions | join(","))]);
+  def actual_changes:
+    if (.resource_changes | type) != "array" then error("invalid resource_changes")
+    else [.resource_changes[] |
+      if type != "object" or (.address | type) != "string" or (.change | type) != "object" or
+        (.change.actions | type) != "array" or any(.change.actions[]; type != "string") then
+        error("invalid resource change")
+      else {mode, address, actions: .change.actions}
+      end
+    ] | sort_by([.mode, .address, (.actions | join(","))])
+    end;
+  actual_changes == expected_changes
 ' >/dev/null 2>/dev/null; then
   printf 'Development foundation plan scope gate failed.\n' >&2
   exit 1
@@ -750,7 +749,29 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'failure_stage=interrupted; exit 130' HUP INT TERM
-expect_absent() { if "$@" >/dev/null 2>/dev/null; then fail; fi; }
+expect_absent_error() {
+  local expected_error error_text return_code
+  expected_error=$1
+  shift
+  set +e
+  error_text="$("$@" 2>&1 >/dev/null)"
+  return_code=$?
+  set -e
+  test "$return_code" -ne 0
+  printf '%s' "$error_text" | grep -qiE "$expected_error"
+}
+absent_s3_bucket() { expect_absent_error '404|NoSuchBucket|Not Found' "$@"; }
+absent_kms_key() { expect_absent_error 'NotFoundException' "$@"; }
+absent_rds_instance() { expect_absent_error 'DBInstanceNotFound' "$@"; }
+absent_lambda_function() { expect_absent_error 'ResourceNotFoundException' "$@"; }
+absent_sns_topic() { expect_absent_error 'NotFound' "$@"; }
+absent_cloudtrail() { expect_absent_error 'TrailNotFoundException' "$@"; }
+absent_event_rule() { expect_absent_error 'ResourceNotFoundException' "$@"; }
+absent_iam_role() { expect_absent_error 'NoSuchEntity' "$@"; }
+absent_instance_profile() { expect_absent_error 'NoSuchEntity' "$@"; }
+absent_rds_subnet_group() { expect_absent_error 'DBSubnetGroupNotFoundFault' "$@"; }
+absent_oidc_provider() { expect_absent_error 'NoSuchEntity' "$@"; }
+absent_budget() { expect_absent_error 'NotFoundException' "$@"; }
 test "$(stat -c '%a' "$ROOT")" = 700
 test "$(stat -c '%a' "$PLAN")" = 600
 test "$(stat -c '%a' "$FETCHER")" = 600
@@ -780,21 +801,21 @@ manifest_digest() {
 FIRST="$(manifest_digest)"; SECOND="$(manifest_digest)"; test "$FIRST" = "$SECOND"; test "$FIRST" = "$EXPECTED_MANIFEST"
 test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$DEV_ACCOUNT"
 test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" ec2 describe-availability-zones --query 'AvailabilityZones[0].RegionName' --output text)" = "$REGION"
-for bucket in nova-toll-tfstate-$DEV_ACCOUNT nova-toll-raw-$DEV_ACCOUNT nova-toll-audit-$DEV_ACCOUNT nova-toll-agentcore-$DEV_ACCOUNT; do expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" s3api head-bucket --bucket "$bucket"; done
-for alias in alias/nova-toll-raw alias/nova-toll-tfstate alias/nova-toll-audit alias/nova-toll-alerts; do expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" kms describe-key --key-id "$alias"; done
-expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" rds describe-db-instances --db-instance-identifier nova-toll-db
-expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" lambda get-function --function-name toll-fetcher
-expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" sns get-topic-attributes --topic-arn "arn:aws:sns:$REGION:$DEV_ACCOUNT:nova-toll-alerts"
-expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" cloudtrail get-trail --name nova-toll-audit
-for rule in toll-poll-tick toll-poll-tick-i66; do expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" events describe-rule --name "$rule"; done
-for role in toll-fetcher toll-raw-replay nova-toll-tailscale-router; do expect_absent env AWS_PROFILE=nova-toll-dev aws iam get-role --role-name "$role"; done
-expect_absent env AWS_PROFILE=nova-toll-dev aws iam get-instance-profile --instance-profile-name nova-toll-tailscale-router
+for bucket in nova-toll-tfstate-$DEV_ACCOUNT nova-toll-raw-$DEV_ACCOUNT nova-toll-audit-$DEV_ACCOUNT nova-toll-agentcore-$DEV_ACCOUNT; do absent_s3_bucket env AWS_PROFILE=nova-toll-dev aws --region "$REGION" s3api head-bucket --bucket "$bucket"; done
+for alias in alias/nova-toll-raw alias/nova-toll-tfstate alias/nova-toll-audit alias/nova-toll-alerts; do absent_kms_key env AWS_PROFILE=nova-toll-dev aws --region "$REGION" kms describe-key --key-id "$alias"; done
+absent_rds_instance env AWS_PROFILE=nova-toll-dev aws --region "$REGION" rds describe-db-instances --db-instance-identifier nova-toll-db
+absent_lambda_function env AWS_PROFILE=nova-toll-dev aws --region "$REGION" lambda get-function --function-name toll-fetcher
+absent_sns_topic env AWS_PROFILE=nova-toll-dev aws --region "$REGION" sns get-topic-attributes --topic-arn "arn:aws:sns:$REGION:$DEV_ACCOUNT:nova-toll-alerts"
+absent_cloudtrail env AWS_PROFILE=nova-toll-dev aws --region "$REGION" cloudtrail get-trail --name nova-toll-audit
+for rule in toll-poll-tick toll-poll-tick-i66; do absent_event_rule env AWS_PROFILE=nova-toll-dev aws --region "$REGION" events describe-rule --name "$rule"; done
+for role in toll-fetcher toll-raw-replay nova-toll-tailscale-router; do absent_iam_role env AWS_PROFILE=nova-toll-dev aws iam get-role --role-name "$role"; done
+absent_instance_profile env AWS_PROFILE=nova-toll-dev aws iam get-instance-profile --instance-profile-name nova-toll-tailscale-router
 for parameter in /nova-toll/i95-token /nova-toll/i66-token /nova-toll/tailscale-authkey; do test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" ssm describe-parameters --parameter-filters "Key=Name,Option=Equals,Values=$parameter" --query 'length(Parameters)' --output text)" = 0; done
 VPC_ID="$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)"; test -n "$VPC_ID"; test "$VPC_ID" != None
-expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" rds describe-db-subnet-groups --db-subnet-group-name nova-toll-db
+absent_rds_subnet_group env AWS_PROFILE=nova-toll-dev aws --region "$REGION" rds describe-db-subnet-groups --db-subnet-group-name nova-toll-db
 test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" logs describe-log-groups --log-group-name-prefix /aws/lambda/toll-fetcher --query 'length(logGroups[?logGroupName==`/aws/lambda/toll-fetcher`])' --output text)" = 0
-expect_absent env AWS_PROFILE=nova-toll-dev aws iam get-open-id-connect-provider --open-id-connect-provider-arn "arn:aws:iam::$DEV_ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
-expect_absent env AWS_PROFILE=nova-toll-dev aws --region "$REGION" budgets describe-budget --account-id "$DEV_ACCOUNT" --budget-name nova-toll-monthly
+absent_oidc_provider env AWS_PROFILE=nova-toll-dev aws iam get-open-id-connect-provider --open-id-connect-provider-arn "arn:aws:iam::$DEV_ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
+absent_budget env AWS_PROFILE=nova-toll-dev aws --region "$REGION" budgets describe-budget --account-id "$DEV_ACCOUNT" --budget-name nova-toll-monthly
 test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" cloudwatch describe-alarms --alarm-names toll-fetcher-errors nova-toll-raw-storage-10gb nova-toll-tfstate-storage-10gb toll-rds-free-storage toll-rds-cpu toll-rds-free-memory toll-rds-connections toll-rds-cpu-credits --query 'length(MetricAlarms)' --output text)" = 0
 for sg in nova-toll-rds nova-toll-tailscale-router nova-toll-preview-api-endpoint nova-toll-agentcore-endpoint nova-toll-eventbridge-endpoint; do test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" ec2 describe-security-groups --filters Name=vpc-id,Values="$VPC_ID" Name=group-name,Values="$sg" --query 'length(SecurityGroups)' --output text)" = 0; done
 for service in bedrock-agentcore execute-api events dynamodb s3; do

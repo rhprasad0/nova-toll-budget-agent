@@ -544,6 +544,58 @@ def test_development_foundation_shell_is_plan_only_and_retains_exact_handoff():
     assert '"$DEVELOPMENT_FOUNDATION_VARS"' not in shell
 
 
+def test_development_absence_probes_fail_closed_on_unexpected_errors():
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    shell = (
+        development.split(
+            "##### Successful exact-plan apply, migration, and evidence", maxsplit=1
+        )[1]
+        .split("```sh\n", maxsplit=1)[1]
+        .split("\n```", maxsplit=1)[0]
+    )
+    helper_match = re.search(
+        r"(expect_absent_error\(\) \{.*?^absent_budget\(\)[^\n]*\n)",
+        shell,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert helper_match is not None
+    helpers = helper_match.group(1)
+    expected_errors = {
+        "absent_s3_bucket": "404",
+        "absent_kms_key": "NotFoundException",
+        "absent_rds_instance": "DBInstanceNotFound",
+        "absent_lambda_function": "ResourceNotFoundException",
+        "absent_sns_topic": "NotFound",
+        "absent_cloudtrail": "TrailNotFoundException",
+        "absent_event_rule": "ResourceNotFoundException",
+        "absent_iam_role": "NoSuchEntity",
+        "absent_instance_profile": "NoSuchEntity",
+        "absent_rds_subnet_group": "DBSubnetGroupNotFoundFault",
+        "absent_oidc_provider": "NoSuchEntity",
+        "absent_budget": "NotFoundException",
+    }
+    assert "expect_absent " not in shell
+    for helper in expected_errors:
+        assert f"{helper} " in shell
+
+    def probe_status(helper: str, error: str) -> int:
+        script = f"""{helpers}
+probe() {{ printf '%s' '{error}' >&2; return 1; }}
+{helper} probe
+"""
+        return subprocess.run(
+            ["bash", "-c", script], capture_output=True, check=False
+        ).returncode
+
+    for helper, expected_error in expected_errors.items():
+        assert probe_status(helper, expected_error) == 0
+        assert probe_status(helper, "AccessDenied") != 0
+        assert probe_status(helper, "ExpiredToken") != 0
+
+
 def test_development_foundation_reads_and_cleans_the_budget_recipient_ephemerally():
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
@@ -718,7 +770,7 @@ def test_development_foundation_reads_and_cleans_the_budget_recipient_ephemerall
     assert not accepts("")
 
 
-def test_development_foundation_gate_accepts_only_expected_creates():
+def test_development_foundation_gate_requires_the_complete_expected_set():
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
@@ -732,69 +784,62 @@ def test_development_foundation_gate_accepts_only_expected_creates():
     )
     assert gate is not None
 
-    def change(address: str, actions: list[str]) -> dict[str, object]:
-        return {
-            "address": address,
-            "mode": "managed",
-            "change": {"actions": actions},
-        }
-
-    accepted_plan = {
-        "resource_changes": [
-            change("aws_s3_bucket.tfstate", ["create"]),
-            change(
-                'aws_s3_bucket_versioning.hardened["tfstate"]',
-                ["create"],
-            ),
-            change("aws_kms_key.tfstate", ["no-op"]),
-            {
-                "address": "data.aws_caller_identity.current",
-                "mode": "data",
-                "change": {"actions": ["read"]},
-            },
+    def addresses(definition: str) -> list[str]:
+        match = re.search(
+            rf"def {definition}: \[\n(.*?)\n  \];", gate.group(1), re.DOTALL
+        )
+        assert match is not None
+        return [
+            json.loads(line.strip().rstrip(",")) for line in match.group(1).splitlines()
         ]
-    }
-    result = subprocess.run(
-        ["jq", "-e", gate.group(1)],
-        input=json.dumps(accepted_plan),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
 
-    for actions in (["update"], ["delete"], ["create", "delete"]):
-        rejected_plan = {"resource_changes": [change("aws_s3_bucket.tfstate", actions)]}
+    create_addresses = addresses("foundation_create_addresses")
+    data_addresses = addresses("foundation_data_addresses")
+    assert len(create_addresses) == len(set(create_addresses)) == 95
+    assert set(data_addresses) == {
+        "data.aws_caller_identity.current",
+        "data.aws_region.current",
+        "data.aws_vpc.default",
+        "data.aws_subnets.default",
+        "data.aws_route_tables.default",
+        "data.aws_subnet.tailscale_router",
+    }
+
+    def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
+        return {"address": address, "mode": mode, "change": {"actions": actions}}
+
+    expected_changes = [
+        *(change("managed", address, ["create"]) for address in create_addresses),
+        *(change("data", address, ["read"]) for address in data_addresses),
+    ]
+
+    def passes(changes: object) -> bool:
         result = subprocess.run(
             ["jq", "-e", gate.group(1)],
-            input=json.dumps(rejected_plan),
+            input=json.dumps({"resource_changes": changes}),
             text=True,
             capture_output=True,
             check=False,
         )
-        assert result.returncode != 0
-    rejected_plan = {
-        "resource_changes": [change("aws_s3_bucket.unexpected", ["create"])]
-    }
-    result = subprocess.run(
-        ["jq", "-e", gate.group(1)],
-        input=json.dumps(rejected_plan),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode != 0
-    rejected_plan = {
-        "resource_changes": [change("aws_s3_bucket.unexpected", ["no-op"])]
-    }
-    result = subprocess.run(
-        ["jq", "-e", gate.group(1)],
-        input=json.dumps(rejected_plan),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode != 0
+        return result.returncode == 0
+
+    assert passes(expected_changes)
+    assert not passes([])
+    assert not passes(expected_changes[1:])
+    assert not passes([*expected_changes, change("managed", "unexpected", ["create"])])
+    assert not passes([*expected_changes, expected_changes[0]])
+
+    for actions in (["no-op"], ["update"], ["delete"], ["create", "delete"]):
+        changed = [*expected_changes]
+        changed[0] = change("managed", create_addresses[0], actions)
+        assert not passes(changed)
+
+    changed = [*expected_changes]
+    changed[-1] = change("managed", data_addresses[-1], ["read"])
+    assert not passes(changed)
+    changed = [*expected_changes]
+    changed[-1] = change("data", "unexpected", ["read"])
+    assert not passes(changed)
 
 
 def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
@@ -1873,13 +1918,13 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         ),
     )
     for plan in accepted:
-        assert all(outcomes(plan))
+        assert outcomes(plan) == [False, True]
     for address in (
         "aws_s3_bucket.tfstate",
         'aws_s3_bucket_versioning.hardened["tfstate"]',
     ):
         assert outcomes(foundation_plan([change("managed", address, ["create"])])) == [
-            True,
+            False,
             False,
         ]
 
@@ -1977,7 +2022,7 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         foundation_plan([], nested_missing),
         missing_foundation_output,
     ):
-        assert outcomes(plan) == [True, False]
+        assert outcomes(plan) == [False, False]
 
 
 def test_agent_measurement_privacy_notice_precedes_logging():
@@ -2730,13 +2775,12 @@ def test_exact_plan_success_path_is_private_ordered_and_fail_closed():
     ) < success.index("probe_denied s3api head-object")
 
 
-def test_issue330_repairs_preserve_cumulative_inputs_roles_and_migration_gate():
+def test_issue330_repairs_preserve_roles_and_migration_gate():
     handoff = DEPLOYMENT.split("## Account-local foundation handoff", maxsplit=1)[1]
     development = DEPLOYMENT.split(
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
     )[1].split("### Guarded production release", maxsplit=1)[0]
-    change = (REPO_ROOT / ".graph" / "change.md").read_text()
     normalized_handoff = " ".join(handoff.split())
     normalized_development = " ".join(development.split())
 
@@ -2752,19 +2796,7 @@ def test_issue330_repairs_preserve_cumulative_inputs_roles_and_migration_gate():
         in normalized_development
     )
 
-    for path in (
-        "infra/backend.development.hcl",
-        "infra/backend.production.hcl",
-        "infra/providers.tf",
-        "infra/s3.tf",
-        "v2/infra/backend.development.hcl",
-        "v2/infra/backend.production.hcl",
-        "v2/infra/providers.tf",
-    ):
-        assert path in change
-    assert "cumulative approved slice-1" in change
-    assert "approved inputs for this slice" in change
-    assert "development_iam_roles_present=true" in change
+    assert "development_iam_roles_present=true" in normalized_development
 
     assert (
         "for role in toll-fetcher toll-raw-replay nova-toll-tailscale-router"
