@@ -1,5 +1,5 @@
 provider "aws" {
-  # No explicit profile: local runs set AWS_PROFILE=nova-toll in the shell.
+  # Credentials are selected out-of-band by the deployment shell.
   region = "us-east-1"
 
   default_tags {

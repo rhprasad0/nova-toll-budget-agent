@@ -2,13 +2,12 @@
 
 Status: proposed for review
 
-> **Operative release topology:** development and production are current
-> application states in AWS account `920534282028` (`nova-toll-prod`), selected
-> by `backend.development.hcl`/`development.tfvars` and
-> `backend.production.hcl`/`production.tfvars`. Any separately provisioned
-> account, cross-account identity, or database-bootstrap material below is
-> future, non-operative migration context, not current ownership or a release
-> prerequisite.
+> **Operative release topology:** production is owned by AWS account
+> `920534282028` (`nova-toll-prod`) and development is owned by account
+> `903859731897` (`nova-toll-development`). Each account has independent
+> foundation and application state backends. The application root receives a
+> reviewed, non-secret foundation object from the selected account; it does not
+> read the other account's state or discover its resources by name.
 
 Scope: TollChat v2 environment separation and follow-on delivery automation
 
@@ -31,10 +30,11 @@ expensive shared foundations or adding tools that TollChat does not need.
 
 ## 2. Current state
 
-- `infra/` owns shared network, RDS, storage, polling, security, and the
-  `nova-toll/terraform.tfstate` state.
-- `v2/infra/` owns the TollChat application stack in the fixed
-  `nova-toll/v2/terraform.tfstate` state.
+- Each account-local `infra/` root owns its account's network, RDS, storage,
+  polling, security, and foundation state (`nova-toll/terraform.tfstate` in
+  production).
+- Each account-local `v2/infra/` root owns that account's TollChat application
+  state (`nova-toll/v2/terraform.tfstate` in production).
 - `v2/infra/` currently hard-codes production domains and many globally unique
   resource names, so a second state would collide rather than create an
   isolated environment.
@@ -54,11 +54,11 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Area | Decision | Reason |
 | :-- | :-- | :-- |
 | Remote environments | Development and production | Enough promotion ceremony without a speculative third environment. |
-| AWS accounts | One account initially | AWS recommends separate accounts as the stronger environment boundary, but that cost and ceremony are disproportionate for this reference implementation. Revisit if TollChat becomes a live service. |
+| AWS accounts | Separate production and development accounts | Development account `903859731897` owns its backend, KMS, network, RDS, storage, audit trail, SSM parameters, and future GitHub OIDC identities; it has no production AWS read path. |
 | Terraform source | One `v2/infra` root | Prevent configuration drift and preserve one application definition. |
 | Terraform state | Explicit S3 state key per environment | More visible and harder to select accidentally than CLI workspaces. |
 | Production compatibility | Preserve current state key and physical names | The environment refactor must not replace production resources. |
-| Environment identity | Application objects are `development` or `production`; shared foundations are `shared` | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
+| Environment identity | Application objects are `development` or `production`; each account-local foundation uses `shared` internally | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
 | Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; add migrator roles later | Isolates ordinary application mistakes while keeping migration automation out of the initial split. It is not an instance-level security boundary. |
 | Deployable artifact | Build once per commit and address by SHA-256 | Development and production should execute identical bytes. |
 | Migration execution | Retain disposable PR checks; defer deployed migration automation until after the environment split | CI validation is already useful, while environment migrator roles and deployment sequencing can be proven later in development. |
@@ -66,7 +66,7 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Timed deterministic probes | EventBridge Scheduler invokes separate development and production Lambda functions built from one artifact | AWS owns the clock while environment-specific functions, roles, databases, result prefixes, and failure handling preserve least privilege. |
 | Timed agent evaluations | Run selectively in development; use only a small post-release production canary | Full Strands evaluations are CI/release work, not a continuously duplicated Lambda workload. |
 | Production trigger | Published GitHub Release with an allowed `v*` tag | Creates an auditable promotion event distinct from merging code. |
-| Saved production plans | Dedicated short-lived S3 bucket managed by the shared foundation | Keeps sensitive plans separate from durable Terraform state and runtime artifacts with their different access, encryption, immutability, and lifecycle requirements. |
+| Saved production plans | Dedicated short-lived S3 bucket managed by the production foundation | Keeps sensitive plans separate from durable Terraform state and runtime artifacts with their different access, encryption, immutability, and lifecycle requirements. |
 | Production canary | One Dulles Greenway current-price conversation after every production apply | Exercises the public endpoint, agent, pricing tool, and production database without I-95 direction or feed-freshness instability. |
 | Evaluation | Retain cheap PR checks and a basic split smoke test; add the release ceremony after the environment split | Isolation needs a working-dev check, not the full promotion gate. |
 | Rollback | Roll Lambda and AgentCore versions back | Deployed schema changes are outside this plan. |
@@ -83,8 +83,8 @@ flowchart TB
 
   DEV --> DEVDB[(nova_toll_development database)]
   PROD --> PRODDB[(nova_toll database)]
-  DEVDB --> RDS[(Shared protected RDS instance)]
-  PRODDB --> RDS
+  DEVDB --> DEVRDS[(Development protected RDS instance)]
+  PRODDB --> PRODRDS[(Production protected RDS instance)]
 
   DEVSCHED[Development Scheduler group] --> DEVPROBE[Development timed-probe Lambda]
   PRODSCHED[Production Scheduler group] --> PRODPROBE[Production timed-probe Lambda]
@@ -93,32 +93,33 @@ flowchart TB
   DEVPROBE --> DEVRESULTS[(Development probe results)]
   PRODPROBE --> PRODRESULTS[(Production probe results)]
 
-  DEV --> SHARED[Shared VPC, endpoints, raw pricing bucket, alert foundation]
-  PROD --> SHARED
+  DEV --> DEVFOUNDATION[Development account-local foundation]
+  PROD --> PRODFOUNDATION[Production account-local foundation]
 
   GH --> ARTIFACTS[(Encrypted versioned S3 artifacts)]
   ARTIFACTS --> DEV
   ARTIFACTS --> PROD
 ```
 
-### 4.1 Shared foundations
+### 4.1 Account-local foundations
 
-Keep the existing `infra/` state responsible for:
+Each account-local `infra/` state is responsible for its own:
 
 - AWS account and region selection;
-- VPC, private subnets, endpoints, and shared security foundations;
+- VPC, private subnets, endpoints, and account-local security foundations;
 - the protected RDS PostgreSQL instance and its backups;
-- raw pricing storage and common KMS foundations;
+- raw pricing storage and account-local KMS foundations;
 - Terraform state storage and locking;
-- the dedicated production release-plan bucket and KMS key;
+- the dedicated release-plan bucket and KMS key;
 - the existing multi-Region CloudTrail and protected audit bucket;
-- the existing production alert destination.
+- its alert destination.
 
-Shared does not mean broadly writable. Development deployment and runtime roles
-must receive only the environment-specific grants they require. Reuse the
-existing trail rather than creating an application-specific duplicate, and
-verify that it records development management events plus protected state and
-artifact object activity.
+The foundation and application roots are separate states with no
+`terraform_remote_state`, shared workspace, or cross-account read. Development
+deployment and runtime roles receive only development grants. Reuse the
+account-local trail rather than creating an application-specific duplicate, and
+verify that it records that account's management events plus protected state
+and artifact object activity.
 
 ### 4.2 Environment-isolated resources
 
@@ -173,19 +174,33 @@ Centralize derived names in locals. The production values must resolve to the
 current literal names so existing state addresses and physical resources remain
 unchanged.
 
-Do not split every resource into a module merely to call it twice. The same
-root will be initialized against one of two explicit backend configurations:
+Do not split every resource into a module merely to call it twice. Each root is
+initialized against one of two explicit, account-local backend configurations:
 
-- production: existing `nova-toll/v2/terraform.tfstate`;
-- development: `nova-toll/v2/development/terraform.tfstate`.
+- production: existing `nova-toll-tfstate-920534282028` bucket and
+  `nova-toll/v2/terraform.tfstate` key;
+- development: `nova-toll-tfstate-903859731897` bucket and
+  `nova-toll/v2/development/terraform.tfstate` key.
 
 That root declares the same timed-probe resources in each state. The two states
 produce separate Scheduler groups, schedules, Lambda functions, execution
 roles, log groups, alarms, dead-letter queues, and result prefixes while
 referencing the same digest-addressed probe package.
 
-Commit non-secret backend configuration and tfvars. Credentials remain in OIDC,
-IAM, and SSM Parameter Store.
+Commit non-secret backend configuration and environment selectors, but never
+commit mutable foundation IDs. The selected account-local foundation handoff
+is the guarded no-apply, no-op foundation-plan procedure in the runbook: assert
+the selected account with STS, initialize its backend, and run
+`terraform plan -lock=false -out=...`. Its gate permits only managed no-ops and
+expected data reads.
+Extract the reviewed non-secret value with
+`terraform show -json ... | jq -er '.planned_values.outputs.foundation.value'`,
+wrap it as `{ "foundation": ... }`
+in an untracked temporary `*.tfvars.json` file, review it, pass it explicitly
+to the selected v2 plan, and remove the file with the EXIT cleanup trap.
+`terraform init` does not backfill newly declared outputs into an existing
+state, so this planned-output path is required; the temporary handoff contains
+only that non-secret object, never credentials or secrets.
 
 The AWS provider does not manage PostgreSQL databases or roles. Create the
 development database and its initial roles through a separately approved,
@@ -200,14 +215,14 @@ post-split migration phase.
 Use the exact values `environment=development`, `environment=production`, and
 `environment=shared`. Every taggable AWS resource managed by either Terraform
 root must carry one of them. Application resources use their deployable
-environment; shared foundations, including the RDS instance and every resource
-marked `shared_with=development`, use `shared`. `shared_with` remains only the
-narrower secondary-consumer marker.
+environment; account-local foundations use `shared` only as an internal
+foundation tag. `shared_with`, if present on an existing production resource,
+is only a descriptive marker and does not grant development an AWS read path.
 
 First prove that the environment-aware refactor produces a zero-change
 production plan. Then apply the reviewed metadata-only taxonomy: production
-application resources remain `environment=production` and shared foundations
-become `environment=shared`, before creating development. The cost-allocation
+application resources remain `environment=production` and production
+foundations use `environment=shared`, before creating development. The cost-allocation
 key is Active by owner confirmation; do not attempt Cost Explorer activation.
 Inventory the resulting AWS resources and fail the milestone if any taggable
 resource lacks its environment tag, except the approved PendingDeletion KMS
@@ -237,13 +252,15 @@ Before creating development:
 5. Check the applicable regional and global service quotas for the additional
    development resources and resolve any shortfall before the first apply.
 
-Pull requests should produce non-mutating development and production plan
-summaries. Saved binary plans can contain sensitive values and must not be
-published as artifacts from a public repository.
+Pull requests remain credential-free: formatting, backend-disabled
+initialization/validation, and static contract tests only. Approved operators
+may create read-only plans after the reviewed foundation handoff. Saved binary
+plans can contain sensitive values and must not be published as artifacts from
+a public repository.
 
 For a production release, upload the exact saved plan to a unique versioned key
 such as `production/<release-tag>/<run-id>/release.tfplan` in a dedicated private
-release-plan S3 bucket managed by the shared foundation. Do not store plans in
+release-plan S3 bucket managed by the production foundation. Do not store plans in
 the Terraform state or AgentCore runtime-artifact buckets. Enable Bucket Owner
 Enforced ownership, Block Public Access, versioning, SSE-KMS with a dedicated
 customer-managed key, and bucket-default Object Lock Compliance retention of
@@ -266,9 +283,11 @@ production apply role may read and decrypt only the recorded plan version,
 Get/Put the exact production state object, and Get/Put/Delete its exact lockfile
 so Terraform can persist the apply safely. Bucket policy and KMS encryption-
 context conditions provide a second layer. Include release-plan object data
-events in the existing CloudTrail. Planning uses a Cloudflare zone/DNS read
-token; applying uses separate mutation credentials released only after
-approval.
+events in the account-local CloudTrail. Cloudflare DNS remains separately
+trusted: certificate-validation records are unconditional in `v2/infra/site.tf`,
+so `enable_public_dns = false` gates only the apex record. DNS-provider
+credentials and the DNS/CI cutover are deferred to #332; an AWS-only identity
+cannot write Cloudflare DNS.
 
 After the trusted planner exists, run a weekly and manually dispatchable,
 report-only `terraform plan -detailed-exitcode` against both state keys. Report
@@ -290,10 +309,14 @@ disposable checks:
 
 ### 6.2 Initial environment split
 
-The environment split needs one approved administrator bootstrap to create
-`nova_toll_development`, its runtime role and grants, its environment comment,
-and the current canonical schemas. It does not need reusable migrator roles or
-a deployment migration runner.
+Development foundation bootstrap is owned by #330. Application and database
+bootstrap, including `nova_toll_development`, its runtime role and grants, its
+environment comment, and the current canonical schemas, is owned by #331.
+Cloudflare DNS/CI cutover and any DNS-provider credential is owned by #332;
+legacy production-account development cleanup is owned by #333. This issue
+does not apply any of those changes or provide an operative development
+application release procedure. The development handoff remains non-operative
+until #330, #331, and #332 complete their separately approved boundaries.
 
 Until the follow-on migration phase is complete, do not deploy changes that
 require a deployed schema change. Production keeps its existing database and
@@ -331,7 +354,7 @@ milestone.
 
 ```mermaid
 flowchart LR
-  PR[Pull request] --> CI[Tests, disposable DB migrations, eval check, tf plans]
+  PR[Pull request] --> CI[Tests, disposable DB migrations, eval check, contract checks]
   CI --> MAIN[Merge to main]
   MAIN --> BUILD[Build once and record digests]
   BUILD --> DAPPLY[Apply development Terraform]
@@ -348,7 +371,8 @@ flowchart LR
 
 - Run existing application, database, security, and offline evaluator checks.
 - Build deterministic packages and verify their manifests.
-- Run read-only plans for both application states.
+- Keep Terraform planning outside pull-request validation; approved operators
+  use the account-local handoff and `-lock=false` for read-only evidence.
 - Do not expose apply roles, Cloudflare credentials, or deployed-database
   privileges to pull-request jobs.
 
@@ -566,9 +590,10 @@ Only technically valid, representative reports should be curated in
   probes use their environment VPC path directly and do not depend on Tailscale.
 - Production mutation credentials must not be available before environment
   approval. A release workflow may use separately scoped read-only AWS,
-  database-inspection, and Cloudflare credentials for the approval packet.
-- Read the Cloudflare write token from SSM only inside the approved Terraform
-  apply process and unset it afterward.
+  database-inspection, and separately trusted Cloudflare credentials only after
+  #332 owns the DNS cutover.
+- Do not claim an AWS-only identity can write Cloudflare DNS; certificate
+  validation records remain unconditional even when `enable_public_dns = false`.
 - Never place database credentials, provider tokens, plan files, or decrypted
   parameters in job summaries or public artifacts.
 - Use exact KMS key ARNs in IAM, key, and bucket policies. Verify development
@@ -683,12 +708,12 @@ instructions.
 ### Step 2: Make both Terraform roots environment-aware and tag existing resources
 
 **Objective:** Allow the application root to describe development and
-production, and label existing application and shared-foundation resources,
+production, and label existing application and account-local foundation resources,
 without replacing production infrastructure.
 
 **Guidance:** Introduce the minimal inputs and derived names, explicit backend
 configs, domains, operational settings, and environment tags in `v2/infra/`.
-Add the matching production/shared tags to resources owned by `infra/`.
+Add the matching production-foundation tags to resources owned by `infra/`.
 Preserve production defaults and resource addresses in both states. First prove
 that refactoring each root produces no changes, then apply separate reviewed
 tag-only plans for both roots, activate the cost-allocation key as soon as AWS
@@ -700,8 +725,8 @@ environment value, and require a zero-change production refactor before the
 tag-only plan.
 
 **Integration:** Builds on the written production baseline, prepares the
-application root for a second state, and labels the shared foundation it will
-consume.
+application root for a second state, and labels the account-local foundation
+that it will consume through the reviewed handoff.
 
 **Demo:** Show zero-change refactors and tag-only applies for both roots, then
 initialize production and development application backends from the same
@@ -712,19 +737,19 @@ checkout with distinct names and domains.
 **Objective:** Create `nova_toll_development` and deploy a usable
 `dev.tollchat.ai`.
 
-**Guidance:** Run one separately approved administrator bootstrap to create the
-development database and environment-specific identities/grants, bootstrap
-canonical schemas, add the required PostgreSQL environment comments, check
-applicable service quotas, apply the development Terraform state, and keep
-shared foundations read-only where possible. Reuse the existing account audit
-trail.
+**Guidance:** Development foundation bootstrap is owned by #330. Application
+and database bootstrap, including the `nova_toll_development` database and
+environment-specific identities/grants, is owned by #331. DNS/CI cutover and
+any Cloudflare credential is owned by #332. Legacy production-account
+development cleanup is owned by #333. This issue does not apply any of those
+changes.
 
 **Tests:** Verify database-role isolation, canonical schema versions, DNS/TLS,
 private origins, WAF behavior, public API gates, no production resource changes,
 and CloudTrail delivery for development management and protected state events.
 
-**Integration:** Uses the environment-aware root and existing shared network,
-RDS, raw data, and state foundations.
+**Integration:** Uses the environment-aware root and the reviewed,
+account-local foundation handoff once #330 and #331 are complete.
 
 **Demo:** Load the development site, stream a development chat response, and
 show that its session data and database are separate from production.
@@ -865,10 +890,9 @@ safe.
 - Refactoring both production Terraform roots produces zero changes before the
   separate tag-only plans run or development is created.
 - A separately reviewed metadata-only plan keeps every taggable production
-  application resource at `environment=production`, classifies every shared
+  application resource at `environment=production`, classifies the production
   foundation as `environment=shared`, and gives development resources
-  `environment=development`; shared resources additionally record
-  `shared_with=development`.
+  `environment=development`; no tag grants cross-account access.
 - `dev.tollchat.ai` and `tollchat.ai` use isolated application resources and
   PostgreSQL databases.
 - Pull requests cannot mutate AWS resources or deployed databases.
@@ -880,12 +904,12 @@ safe.
   missing or invalid environment tags. Independently addressable non-taggable
   objects use full-word names, descriptions, comments, or inventory labels;
   child/configuration objects inherit from a parent recorded in that inventory.
-- The shared RDS instance is tagged `environment=shared` and
-  `shared_with=development`; `nova_toll` and `nova_toll_development` carry the
-  matching PostgreSQL environment comments and isolated roles.
+- Each account-local RDS instance is tagged `environment=shared` in its
+  foundation state; `nova_toll` and `nova_toll_development` carry matching
+  PostgreSQL environment comments and isolated roles.
 - Applicable service quotas were checked before the first development apply.
-- The existing CloudTrail records development management and protected state
-  activity; no duplicate application trail is introduced.
+- The development account-local CloudTrail records development management and
+  protected state activity; no duplicate application trail is introduced.
 - Existing disposable migration tests remain in pull-request CI.
 - Only the existing network-free evaluator check and a basic development smoke
   and isolation check are required for the split.
@@ -954,7 +978,6 @@ environment split milestone.
 
 ## 16. Deferred until evidence justifies them
 
-- Separate AWS accounts for development and production.
 - A third persistent staging environment.
 - Kubernetes, GitOps controllers, or a custom deployment platform.
 - Canary traffic shifting beyond the existing Lambda alias and concurrency

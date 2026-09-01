@@ -2,7 +2,7 @@ locals {
   agentcore_zip_path = var.agentcore_package_path != "" ? var.agentcore_package_path : data.archive_file.placeholder.output_path
   proxy_zip_path     = var.chat_proxy_package_path != "" ? var.chat_proxy_package_path : data.archive_file.placeholder.output_path
   proxy_zip_hash     = var.chat_proxy_package_path != "" ? filebase64sha256(var.chat_proxy_package_path) : data.archive_file.placeholder.output_base64sha256
-  private_subnets    = [data.aws_subnet.tollchat_private_a.id, data.aws_subnet.tollchat_private_c.id]
+  private_subnets    = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
   private_api_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -11,14 +11,14 @@ locals {
         Principal = "*"
         Action    = "execute-api:Invoke"
         Resource  = "${aws_api_gateway_rest_api.tollchat.execution_arn}/*"
-        Condition = { StringEquals = { "aws:SourceVpce" = data.aws_vpc_endpoint.tollchat_api.id } }
+        Condition = { StringEquals = { "aws:SourceVpce" = var.foundation.tollchat_api_vpc_endpoint_id } }
       },
       {
         Effect    = "Deny"
         Principal = "*"
         Action    = "execute-api:Invoke"
         Resource  = "${aws_api_gateway_rest_api.tollchat.execution_arn}/*"
-        Condition = { StringNotEquals = { "aws:SourceVpce" = data.aws_vpc_endpoint.tollchat_api.id } }
+        Condition = { StringNotEquals = { "aws:SourceVpce" = var.foundation.tollchat_api_vpc_endpoint_id } }
       },
     ]
   })
@@ -39,7 +39,7 @@ locals {
             "bedrock-agentcore:StopRuntimeSession",
           ]
           Resource  = arn
-          Condition = { StringEquals = { "aws:SourceVpce" = data.aws_vpc_endpoint.agentcore.id } }
+          Condition = { StringEquals = { "aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id } }
         },
         {
           Sid       = "DenyOutsidePrivateEndpoint"
@@ -50,7 +50,7 @@ locals {
             "bedrock-agentcore:StopRuntimeSession",
           ]
           Resource  = arn
-          Condition = { StringNotEquals = { "aws:SourceVpce" = data.aws_vpc_endpoint.agentcore.id } }
+          Condition = { StringNotEquals = { "aws:SourceVpce" = var.foundation.agentcore_vpc_endpoint_id } }
         },
       ]
     })
@@ -60,17 +60,17 @@ locals {
 resource "aws_security_group" "tollchat_runtime" {
   name        = "nova-toll-v2-agentcore-runtime${local.suffix}"
   description = "TollChat v2 AgentCore runtime egress"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = var.foundation.vpc_id
 }
 
 resource "aws_security_group" "tollchat_proxy" {
   name        = "nova-toll-v2-chat-proxy${local.suffix}"
   description = "TollChat v2 proxy Lambda ENIs"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = var.foundation.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_runtime" {
-  security_group_id            = data.aws_security_group.rds.id
+  security_group_id            = var.foundation.rds_security_group_id
   description                  = "TollChat v2 AgentCore runtime"
   referenced_security_group_id = aws_security_group.tollchat_runtime.id
   from_port                    = 5432
@@ -80,7 +80,7 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_runtime" {
 
 resource "aws_vpc_security_group_egress_rule" "runtime_to_rds" {
   security_group_id            = aws_security_group.tollchat_runtime.id
-  referenced_security_group_id = data.aws_security_group.rds.id
+  referenced_security_group_id = var.foundation.rds_security_group_id
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"
@@ -95,7 +95,7 @@ resource "aws_vpc_security_group_egress_rule" "runtime_https" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "agentcore_from_proxy" {
-  security_group_id            = data.aws_security_group.agentcore_endpoint.id
+  security_group_id            = var.foundation.agentcore_endpoint_security_group_id
   description                  = "TollChat v2 private proxy"
   referenced_security_group_id = aws_security_group.tollchat_proxy.id
   from_port                    = 443
@@ -105,7 +105,7 @@ resource "aws_vpc_security_group_ingress_rule" "agentcore_from_proxy" {
 
 resource "aws_vpc_security_group_egress_rule" "proxy_https" {
   security_group_id = aws_security_group.tollchat_proxy.id
-  cidr_ipv4         = data.aws_vpc.default.cidr_block
+  cidr_ipv4         = var.foundation.vpc_cidr_block
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
@@ -141,14 +141,14 @@ resource "aws_dynamodb_table" "tollchat_sessions" {
 }
 
 resource "aws_s3_object" "agentcore" {
-  bucket      = data.aws_s3_bucket.agentcore_artifacts.id
+  bucket      = var.foundation.agentcore_artifacts_bucket_name
   key         = "runtime/v2/agentcore${local.is_production ? "" : "-dev"}.zip"
   source      = local.agentcore_zip_path
   source_hash = filebase64sha256(local.agentcore_zip_path)
 }
 
 resource "aws_s3_object" "tollchat_proxy" {
-  bucket      = data.aws_s3_bucket.agentcore_artifacts.id
+  bucket      = var.foundation.agentcore_artifacts_bucket_name
   key         = "lambda/v2/chat-proxy${local.is_production ? "" : "-dev"}.zip"
   source      = local.proxy_zip_path
   source_hash = local.proxy_zip_hash
@@ -194,8 +194,8 @@ data "aws_iam_policy_document" "tollchat_runtime" {
     sid     = "ConnectRdsIam"
     actions = ["rds-db:connect"]
     resources = [
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}",
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.agent}",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}",
     ]
   }
   statement {
@@ -333,7 +333,7 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
       runtime     = "PYTHON_3_13"
       code {
         s3 {
-          bucket     = data.aws_s3_bucket.agentcore_artifacts.id
+          bucket     = var.foundation.agentcore_artifacts_bucket_name
           prefix     = aws_s3_object.agentcore.key
           version_id = aws_s3_object.agentcore.version_id
         }
@@ -356,8 +356,8 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
 
   environment_variables = merge(
     {
-      DB_HOST                    = data.aws_db_instance.main.address
-      DB_PORT                    = tostring(data.aws_db_instance.main.port)
+      DB_HOST                    = var.foundation.db_instance.address
+      DB_PORT                    = tostring(var.foundation.db_instance.port)
       DB_NAME                    = local.database_name
       DB_USER                    = local.database_roles.agent
       DB_CA_BUNDLE_PATH          = "/var/task/rds-ca-bundle.pem"
@@ -450,7 +450,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
   publish                        = true
   reserved_concurrent_executions = 5
 
-  s3_bucket         = data.aws_s3_bucket.agentcore_artifacts.id
+  s3_bucket         = var.foundation.agentcore_artifacts_bucket_name
   s3_key            = aws_s3_object.tollchat_proxy.key
   s3_object_version = aws_s3_object.tollchat_proxy.version_id
   source_code_hash  = local.proxy_zip_hash
@@ -463,7 +463,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
   environment {
     variables = merge({
       AGENTCORE_RUNTIME_ARN = aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn
-      AGENTCORE_VPCE_URL    = "https://${data.aws_vpc_endpoint.agentcore.dns_entry[0].dns_name}"
+      AGENTCORE_VPCE_URL    = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
       SESSION_TABLE_NAME    = aws_dynamodb_table.tollchat_sessions.name
       }, local.is_production ? {} : {
       PUBLIC_ORIGINS = "https://${local.domains[0]}"
@@ -506,7 +506,7 @@ resource "aws_api_gateway_rest_api" "tollchat" {
 
   endpoint_configuration {
     types            = ["PRIVATE"]
-    vpc_endpoint_ids = [data.aws_vpc_endpoint.tollchat_api.id]
+    vpc_endpoint_ids = [var.foundation.tollchat_api_vpc_endpoint_id]
   }
 
 }
@@ -674,7 +674,7 @@ output "private_preview" {
   value = {
     api_id = aws_api_gateway_rest_api.tollchat.id
     stage  = aws_api_gateway_stage.tollchat.stage_name
-    origin = "https://${aws_api_gateway_rest_api.tollchat.id}-${data.aws_vpc_endpoint.tollchat_api.id}.execute-api.${data.aws_region.current.region}.amazonaws.com"
-    url    = "https://${aws_api_gateway_rest_api.tollchat.id}-${data.aws_vpc_endpoint.tollchat_api.id}.execute-api.${data.aws_region.current.region}.amazonaws.com/${aws_api_gateway_stage.tollchat.stage_name}"
+    origin = "https://${aws_api_gateway_rest_api.tollchat.id}-${var.foundation.tollchat_api_vpc_endpoint_id}.execute-api.${data.aws_region.current.region}.amazonaws.com"
+    url    = "https://${aws_api_gateway_rest_api.tollchat.id}-${var.foundation.tollchat_api_vpc_endpoint_id}.execute-api.${data.aws_region.current.region}.amazonaws.com/${aws_api_gateway_stage.tollchat.stage_name}"
   }
 }

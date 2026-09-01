@@ -9,6 +9,8 @@
 # SSE-KMS, so folding it in would mean conditionals, not less code.
 
 locals {
+  account_id = data.aws_caller_identity.current.account_id
+
   hardened_buckets = {
     raw     = { id = aws_s3_bucket.raw.id, kms_key_arn = aws_kms_key.raw.arn }
     audit   = { id = aws_s3_bucket.audit.id, kms_key_arn = aws_kms_key.audit.arn }
@@ -133,7 +135,7 @@ moved {
 # --- raw payload bucket -----------------------------------------------
 
 resource "aws_s3_bucket" "raw" {
-  bucket = "nova-toll-raw-920534282028"
+  bucket = "nova-toll-raw-${local.account_id}"
 }
 
 data "aws_iam_policy_document" "raw_bucket" {
@@ -232,7 +234,7 @@ resource "aws_s3_bucket_policy" "raw" {
 # against local state, then state is migrated in).
 
 resource "aws_s3_bucket" "tfstate" {
-  bucket = "nova-toll-tfstate-920534282028"
+  bucket = "nova-toll-tfstate-${local.account_id}"
 }
 
 data "aws_iam_policy_document" "tfstate_bucket" {

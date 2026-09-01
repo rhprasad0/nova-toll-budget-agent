@@ -1,7 +1,8 @@
 locals {
-  is_production = var.environment == "production"
-  suffix        = local.is_production ? "" : "-dev"
-  database_name = local.is_production ? "nova_toll" : "nova_toll_development"
+  is_production  = var.environment == "production"
+  suffix         = local.is_production ? "" : "-dev"
+  raw_bucket_arn = "arn:aws:s3:::${var.foundation.raw_bucket_name}"
+  database_name  = local.is_production ? "nova_toll" : "nova_toll_development"
   database_roles = local.is_production ? {
     pricing_caller = "pricing_caller"
     agent          = "tollchat_agent"
@@ -17,6 +18,6 @@ locals {
   }
   domains            = local.is_production ? ["tollchat.ai", "www.tollchat.ai"] : ["dev.tollchat.ai"]
   log_retention_days = local.is_production ? 30 : 7
-  alarm_actions      = local.is_production ? [data.aws_sns_topic.alerts.arn] : []
+  alarm_actions      = local.is_production ? [var.foundation.alerts_topic_arn] : []
   rate_limit         = local.is_production ? 20 : 10
 }

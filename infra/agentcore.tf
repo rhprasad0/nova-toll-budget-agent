@@ -133,7 +133,7 @@ resource "aws_vpc_endpoint" "dynamodb" {
 }
 
 resource "aws_s3_bucket" "agentcore_artifacts" {
-  bucket = "nova-toll-agentcore-920534282028"
+  bucket = "nova-toll-agentcore-${local.account_id}"
 }
 
 resource "aws_s3_bucket_public_access_block" "agentcore_artifacts" {

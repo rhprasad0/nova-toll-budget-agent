@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "audit" {
-  bucket = "nova-toll-audit-920534282028"
+  bucket = "nova-toll-audit-${local.account_id}"
 }
 
 # Versioning, ownership, public-access block, SSE-KMS and the lifecycle rule

@@ -23,14 +23,18 @@ The current production baseline is AWS account `920534282028` in `us-east-1`:
   `nova-toll-rds`, `nova-toll-private-a`, `nova-toll-private-c`,
   `nova-toll-agentcore-endpoint`, and `nova-toll-eventbridge-endpoint`.
 - Default application tags are `project = nova-toll-budget-agent`, `version = v2`,
-  and `environment = production`. Shared foundation resources use
-  `environment = shared`; `shared_with = development` is only their
-  secondary-consumer marker.
+  and `environment = production`. Production foundation resources use
+  `environment = shared`; any `shared_with = development` tag is descriptive
+  only and grants no development-account access.
 - Release artifacts overwrite `s3://nova-toll-agentcore-920534282028/runtime/v2/agentcore.zip`
   and `s3://nova-toll-agentcore-920534282028/lambda/v2/chat-proxy.zip`; retained
   S3 object versions are the rollback source.
 - Stable release targets are the `live` alias of `tollchat-v2-chat-proxy` and
   the `preview` endpoint of AgentCore runtime `nova_toll_v2`.
+- Development is owned by AWS account `903859731897` (`nova-toll-development`)
+  with its own foundation and application state backends. It consumes only a
+  reviewed non-secret foundation handoff from that account; it has no AWS read
+  path into production account `920534282028`.
 
 Before release apply, require the foundation plan to be zero-change. Review every
 action in the saved candidate application plan against intended reviewed release
@@ -261,9 +265,9 @@ artifacts.
 ## Environment-tag inventory and release safety
 
 The active cost-allocation key is the lowercase `environment`. Its only values
-are `development`, `production`, and `shared`. Shared foundations, including
-RDS and every `shared_with=development` resource, use `shared`; `shared_with`
-is a consumer marker, not an environment value. Do not attempt Cost Explorer
+are `development`, `production`, and `shared`. Production foundation resources
+use `shared`; any existing `shared_with=development` tag is descriptive only
+and grants no development-account access. Do not attempt Cost Explorer
 activation. The two project-tagged KMS keys `640b50c9-72f7-4bd7-9a44-a00a59fc3f24`
 and `74f426f1-6016-4969-922a-7f8b99763f45` are the only temporary exceptions:
 both are `PendingDeletion` through 2026-09-22. Do not retag, cancel, or otherwise
@@ -277,6 +281,28 @@ before/after semantic delta, then apply only that exact reviewed plan.
 Keep ignored package builds and hash-identified saved plans until independent
 review passes; never retain state, tokens, or raw plan JSON.
 
+## Account-local foundation handoff
+
+The foundation and application roots have independent state. For the selected
+account, the matching guarded release block below initializes that account's
+foundation backend, makes a read-only foundation plan, and extracts only its
+reviewed non-secret `foundation` value from `terraform show -json` planned
+values. It wraps that value as the required application input and passes its
+own temporary file to the matching v2 plan with all reviewed package arguments.
+Each block asserts its STS account before handoff, reviews the object, and
+removes its distinct untracked `*.tfvars.json` file through an EXIT trap after
+plan/apply; no credentials or SSM values are included. If an authorized
+bootstrap has already persisted the new output, #330 may reuse it during its
+separately authorized development bootstrap; this issue does not assume that a
+pre-existing state contains a newly declared output or read it from state.
+
+The development foundation bootstrap is #330 and its application/database
+bootstrap is #331. Cloudflare DNS writes (including unconditional ACM
+certificate-validation records) and any DNS-provider credential belong to #332;
+`enable_public_dns = false` gates only the apex record and is not a DNS
+ownership boundary. Legacy production-account development cleanup belongs to
+#333.
+
 ## Build and review
 
 From `v2/`:
@@ -289,6 +315,7 @@ npm test --prefix lambdas/chat_proxy
 ./scripts/build_loader_zip.sh
 ./scripts/build_publisher_zip.sh
 ./scripts/build_agentcore_zips.sh
+./scripts/build_fetcher_zip.sh
 (cd infra/build && sha256sum --check AGENTCORE_SHA256SUMS)
 ```
 
@@ -370,68 +397,195 @@ curl --fail-with-body --silent --show-error https://tollchat.ai/privacy.txt \
 unset SITE_BUCKET SITE_KMS_ARN
 ```
 
-## Guarded development then production release
+## Development handoff and guarded production release
 
-Build the four reviewed inputs once, then release **development first** and
-only continue after its gate, digest, apply, and smoke pass. Both states are
-application states in account `920534282028`; never select individual resources
-or Terraform workspaces. Load the Cloudflare token only into this subshell and
-never echo it.
+Development application release is non-operative in this runbook. Do not run
+the development application Terraform plan, apply, or public report procedure
+from this document: the
+account-local foundation bootstrap is owned by #330, the application/database
+bootstrap is owned by #331, and Cloudflare/DNS/CI cutover is owned by #332.
+Those follow-on procedures must establish their own approved account, backend,
+and credential boundaries before any development operation. Legacy cleanup
+remains owned by #333. An AWS-only identity cannot write Cloudflare DNS.
 
-### Guarded development release
+### Development handoff (non-operative)
+
+After #330 and #331 complete, pass only the reviewed non-secret foundation
+handoff into the #331 application/database bootstrap. Do not use this runbook
+to reach the unconditional Cloudflare resources in `v2/infra/site.tf`; #332
+owns the separately trusted DNS/CI cutover. Pull-request validation remains
+credential-free and account-local backend/configuration isolation remains
+covered by the contract tests.
+
+### Development foundation handoff (#330; no application release)
+
+Issue #330 owns this read-only foundation handoff. It stops after reviewing the
+planned non-secret output: this runbook does not initialize, plan, or apply the
+development application, and it does not reach the unconditional Cloudflare
+resources in `v2/infra/site.tf`.
 
 ```sh
 (
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)/v2/infra"
-test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
-export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
-  ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption \
-  --query Parameter.Value --output text)"
-AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.development.hcl
-AWS_PROFILE=nova-toll-prod terraform plan \
-  -input=false -lock=false -var-file=development.tfvars \
-  -var loader_package_path=build/loader.zip \
-  -var publisher_package_path=build/publisher.zip \
-  -var agentcore_package_path=build/agentcore.zip \
-  -var chat_proxy_package_path=build/chat-proxy.zip \
-  -out=build/development-release.tfplan
-development_plan_sha="$(sha256sum build/development-release.tfplan | awk '{print $1}')"
-AWS_PROFILE=nova-toll-prod terraform show -json build/development-release.tfplan | jq -e '
-  def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
-  def creates: ["aws_iam_role.publisher_scheduler", "aws_iam_role_policy.publisher_scheduler", "aws_scheduler_schedule.publisher"];
-  def updates: ["aws_bedrockagentcore_agent_runtime.tollchat", "aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "aws_cloudwatch_metric_alarm.report_generation_freshness", "aws_iam_role_policy.publisher", "aws_iam_role_policy.tollchat_proxy", "aws_iam_role_policy.tollchat_runtime", "aws_lambda_function.publisher", "aws_s3_object.agentcore", "aws_s3_object.usage"];
-  def deletes: ["aws_cloudwatch_event_rule.committed_i95_loads", "aws_cloudwatch_event_rule.report_watchdog", "aws_cloudwatch_event_target.publisher_load_event", "aws_cloudwatch_event_target.publisher_watchdog", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"load_success\"]", "aws_cloudwatch_metric_alarm.publisher_failed_invocations[\"watchdog\"]", "aws_lambda_permission.publisher_load_event", "aws_lambda_permission.publisher_watchdog", "aws_sqs_queue_policy.publisher_delivery_failure"];
-  def reads: ["data.aws_iam_policy_document.publisher_scheduler", "data.aws_iam_policy_document.tollchat_proxy", "data.aws_iam_policy_document.tollchat_runtime"];
-  def approved: .address as $a | ((.mode == "managed" and (((creates | index($a)) != null and .change.actions == ["create"]) or ((updates | index($a)) != null and .change.actions == ["update"]) or ((deletes | index($a)) != null and .change.actions == ["delete"]))) or (.mode == "data" and ((reads | index($a)) != null) and .change.actions == ["read"]));
-  valid and all(.resource_changes[]; if .change.actions == ["no-op"] then true else approved end)'
-AWS_PROFILE=nova-toll-prod terraform show build/development-release.tfplan
-test "$(sha256sum build/development-release.tfplan | awk '{print $1}')" = "$development_plan_sha"
-AWS_PROFILE=nova-toll-prod terraform apply -input=false build/development-release.tfplan
-test "$(sha256sum build/development-release.tfplan | awk '{print $1}')" = "$development_plan_sha"
-unset CLOUDFLARE_API_TOKEN
+ROOT="$(git rev-parse --show-toplevel)"
+DEVELOPMENT_FOUNDATION_PLAN="$(mktemp --suffix=.tfplan)"
+DEVELOPMENT_FOUNDATION_VARS="$(mktemp --suffix=.tfvars.json)"
+trap 'rm -f -- "$DEVELOPMENT_FOUNDATION_PLAN" "$DEVELOPMENT_FOUNDATION_VARS"' EXIT
+test "$(AWS_PROFILE=nova-toll-development aws sts get-caller-identity --query Account --output text)" = "903859731897"
+: "${TF_VAR_budget_notification_email:?set the existing foundation budget notification input}"
+AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" init -reconfigure -input=false \
+  -backend-config="$ROOT/infra/backend.development.hcl"
+rm -f -- "$DEVELOPMENT_FOUNDATION_PLAN"
+AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" plan \
+  -input=false -lock=false -var fetcher_package_path="$ROOT/infra/build/fetcher.zip" \
+  -out="$DEVELOPMENT_FOUNDATION_PLAN"
+AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" show -json "$DEVELOPMENT_FOUNDATION_PLAN" | jq -e '
+  def foundation_data_addresses: [
+    "data.aws_caller_identity.current", "data.aws_region.current",
+    "data.aws_vpc.default", "data.aws_subnets.default",
+    "data.aws_route_tables.default", "data.aws_iam_policy_document.agentcore_artifacts",
+    "data.aws_iam_policy_document.raw_bucket", "data.aws_iam_policy_document.tfstate_bucket",
+    "data.archive_file.placeholder", "data.aws_iam_policy_document.lambda_assume",
+    "data.aws_iam_policy_document.fetcher", "data.aws_iam_policy_document.replay_assume",
+    "data.aws_iam_policy_document.replay", "data.aws_iam_policy_document.audit_kms",
+    "data.aws_iam_policy_document.alerts_kms", "data.aws_iam_policy_document.audit_bucket",
+    "data.aws_prefix_list.s3", "data.aws_iam_policy_document.ec2_assume",
+    "data.aws_iam_policy_document.tailscale_router", "data.aws_subnet.tailscale_router"
+  ];
+  def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+  def foundation_value_is_valid:
+    try (
+      . as $foundation |
+      exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and
+      all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string") and
+      ($foundation.private_subnet_ids | exact_keys(["a", "c"])) and
+      all(["a", "c"][]; $foundation.private_subnet_ids[.] | type == "string") and
+      ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"])) and
+      all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string") and
+      ($foundation.db_instance.port | type == "number")
+    ) catch false;
+  (.resource_changes | type == "array") and
+  all(.resource_changes[];
+    type == "object" and
+    (.address | type == "string" and length > 0) and
+    (.mode | type == "string") and
+    (.change | type == "object") and
+    (.change.actions | type == "array") and
+    (.address as $address |
+      ((.mode == "managed" and .change.actions == ["no-op"]) or
+       (.mode == "data" and (foundation_data_addresses | index($address)) != null and .change.actions == ["read"])))
+  ) and
+  (.planned_values.outputs.foundation.value | foundation_value_is_valid)
+' >/dev/null
+development_foundation_json="$(AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" show -json "$DEVELOPMENT_FOUNDATION_PLAN" | jq -er '
+  def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+  def foundation_value_is_valid:
+    try (
+      . as $foundation |
+      exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and
+      all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string") and
+      ($foundation.private_subnet_ids | exact_keys(["a", "c"])) and
+      all(["a", "c"][]; $foundation.private_subnet_ids[.] | type == "string") and
+      ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"])) and
+      all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string") and
+      ($foundation.db_instance.port | type == "number")
+    ) catch false;
+  .planned_values.outputs.foundation.value | select(foundation_value_is_valid)
+')"
+rm -f -- "$DEVELOPMENT_FOUNDATION_PLAN"
+jq -n --argjson foundation "$development_foundation_json" '{"foundation": $foundation}' >"$DEVELOPMENT_FOUNDATION_VARS"
+jq -e 'has("foundation") and (.foundation | type == "object")' "$DEVELOPMENT_FOUNDATION_VARS" >/dev/null
+jq . "$DEVELOPMENT_FOUNDATION_VARS"  # review the development-account object for #331
+rm -f -- "$DEVELOPMENT_FOUNDATION_VARS"
+trap - EXIT
 )
 ```
 
-Run **Public report launch** below while the development backend remains selected.
-Only then repeat the same guarded process for production.
-
 ### Guarded production release
 
-Repeat the preceding command block with `backend.production.hcl`,
-`production.tfvars`, `build/production-release.tfplan`, and
-`production_plan_sha`; run the identical jq program below before its exact
-saved-plan apply. Repeat the STS account check first. Do not proceed if any
-development step failed.
+The production block independently creates and reviews its production-account
+foundation plan before wrapping its planned output. It then uses
+`backend.production.hcl`, `production.tfvars`,
+`build/production-release.tfplan`, and `production_plan_sha`; repeat the STS
+account check first and do not proceed if any development step failed.
 
 ```sh
 (
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)/v2/infra"
+ROOT="$(git rev-parse --show-toplevel)"
+PRODUCTION_FOUNDATION_PLAN="$(mktemp --suffix=.tfplan)"
+PRODUCTION_FOUNDATION_VARS="$(mktemp --suffix=.tfvars.json)"
+trap 'rm -f -- "$PRODUCTION_FOUNDATION_PLAN" "$PRODUCTION_FOUNDATION_VARS"' EXIT
 test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
-export CLOUDFLARE_API_TOKEN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 ssm get-parameter --name /nova-toll/cloudflare-api-token --with-decryption --query Parameter.Value --output text)"
+: "${TF_VAR_budget_notification_email:?set the existing foundation budget notification input}"
+# #332 must supply separately trusted Cloudflare credentials before any DNS
+# change, including the unconditional ACM certificate-validation records.
+AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" init -reconfigure -input=false \
+  -backend-config="$ROOT/infra/backend.production.hcl"
+rm -f -- "$PRODUCTION_FOUNDATION_PLAN"
+AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" plan \
+  -input=false -lock=false -var fetcher_package_path="$ROOT/infra/build/fetcher.zip" \
+  -out="$PRODUCTION_FOUNDATION_PLAN"
+AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" show -json "$PRODUCTION_FOUNDATION_PLAN" | jq -e '
+  def foundation_data_addresses: [
+    "data.aws_caller_identity.current", "data.aws_region.current",
+    "data.aws_vpc.default", "data.aws_subnets.default",
+    "data.aws_route_tables.default", "data.aws_iam_policy_document.agentcore_artifacts",
+    "data.aws_iam_policy_document.raw_bucket", "data.aws_iam_policy_document.tfstate_bucket",
+    "data.archive_file.placeholder", "data.aws_iam_policy_document.lambda_assume",
+    "data.aws_iam_policy_document.fetcher", "data.aws_iam_policy_document.replay_assume",
+    "data.aws_iam_policy_document.replay", "data.aws_iam_policy_document.audit_kms",
+    "data.aws_iam_policy_document.alerts_kms", "data.aws_iam_policy_document.audit_bucket",
+    "data.aws_prefix_list.s3", "data.aws_iam_policy_document.ec2_assume",
+    "data.aws_iam_policy_document.tailscale_router", "data.aws_subnet.tailscale_router"
+  ];
+  def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+  def foundation_value_is_valid:
+    try (
+      . as $foundation |
+      exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and
+      all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string") and
+      ($foundation.private_subnet_ids | exact_keys(["a", "c"])) and
+      all(["a", "c"][]; $foundation.private_subnet_ids[.] | type == "string") and
+      ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"])) and
+      all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string") and
+      ($foundation.db_instance.port | type == "number")
+    ) catch false;
+  (.resource_changes | type == "array") and
+  all(.resource_changes[];
+    type == "object" and
+    (.address | type == "string" and length > 0) and
+    (.mode | type == "string") and
+    (.change | type == "object") and
+    (.change.actions | type == "array") and
+    (.address as $address |
+      ((.mode == "managed" and .change.actions == ["no-op"]) or
+       (.mode == "data" and (foundation_data_addresses | index($address)) != null and .change.actions == ["read"])))
+  ) and
+  (.planned_values.outputs.foundation.value | foundation_value_is_valid)
+' >/dev/null
+production_foundation_json="$(AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" show -json "$PRODUCTION_FOUNDATION_PLAN" | jq -er '
+  def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+  def foundation_value_is_valid:
+    try (
+      . as $foundation |
+      exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and
+      all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string") and
+      ($foundation.private_subnet_ids | exact_keys(["a", "c"])) and
+      all(["a", "c"][]; $foundation.private_subnet_ids[.] | type == "string") and
+      ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"])) and
+      all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string") and
+      ($foundation.db_instance.port | type == "number")
+    ) catch false;
+  .planned_values.outputs.foundation.value | select(foundation_value_is_valid)
+')"
+rm -f -- "$PRODUCTION_FOUNDATION_PLAN"
+jq -n --argjson foundation "$production_foundation_json" '{"foundation": $foundation}' >"$PRODUCTION_FOUNDATION_VARS"
+jq -e 'has("foundation") and (.foundation | type == "object")' "$PRODUCTION_FOUNDATION_VARS" >/dev/null
+jq . "$PRODUCTION_FOUNDATION_VARS"  # review the production-account object
+cd "$ROOT/v2/infra"
 AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
-AWS_PROFILE=nova-toll-prod terraform plan -input=false -lock=false -var-file=production.tfvars -var loader_package_path=build/loader.zip -var publisher_package_path=build/publisher.zip -var agentcore_package_path=build/agentcore.zip -var chat_proxy_package_path=build/chat-proxy.zip -out=build/production-release.tfplan
+AWS_PROFILE=nova-toll-prod terraform plan -input=false -lock=false -var-file=production.tfvars -var-file="$PRODUCTION_FOUNDATION_VARS" -var loader_package_path=build/loader.zip -var publisher_package_path=build/publisher.zip -var agentcore_package_path=build/agentcore.zip -var chat_proxy_package_path=build/chat-proxy.zip -out=build/production-release.tfplan
 production_plan_sha="$(sha256sum build/production-release.tfplan | awk '{print $1}')"
 AWS_PROFILE=nova-toll-prod terraform show -json build/production-release.tfplan | jq -e '
   def valid: (.resource_changes | type == "array") and all(.resource_changes[]; type == "object" and (.mode | type == "string") and (.address | type == "string") and (.change | type == "object") and (.change.actions | type == "array") and all(.change.actions[]; type == "string"));
@@ -442,29 +596,43 @@ AWS_PROFILE=nova-toll-prod terraform show build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
 AWS_PROFILE=nova-toll-prod terraform apply -input=false build/production-release.tfplan
 test "$(sha256sum build/production-release.tfplan | awk '{print $1}')" = "$production_plan_sha"
-unset CLOUDFLARE_API_TOKEN
+rm -f -- "$PRODUCTION_FOUNDATION_VARS"
+trap - EXIT
 )
 ```
 
-The legacy development inventory is historical read-only cleanup context. A
-separate-account migration is future, non-operative work; it is neither a
-current ownership boundary nor a release prerequisite.
+The legacy development inventory is historical read-only cleanup context for
+#333. Development account ownership and account-local backends are current;
+this issue does not perform the cleanup or any deployed migration.
 
-## Public report launch
+## Public report launch (production only)
 
 The report publisher depends on the CloudFront distribution and `robots.txt`,
 so enabling publication in the complete saved plan happens only after the edge
 rewrite has deployed. Wait for the distribution, enqueue one watchdog run, and
-verify the complete manifest before testing public URLs:
+verify the complete manifest before testing public URLs. Run this section only
+after the production guarded release; never run it while the development
+backend is selected. Development public report publication, Cloudflare, and DNS
+remain deferred to #332.
 
 ```sh
 set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT/v2/infra"
+test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
+AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
 PUBLISHER_FUNCTION="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_lambda_function.publisher | awk -F' = ' '$1 ~ /^    function_name/ {gsub(/"/, "", $2); print $2; exit}')"
 PUBLISHER_LOG_GROUP="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_cloudwatch_log_group.publisher | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
-SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er .distribution_id)"
-SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string" and test("^https://[^/]+$"))')"
+SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.distribution_id | select(type == "string")')"
+SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string")')"
 SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
   aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
+test "$PUBLISHER_FUNCTION" = "toll-v2-report-publisher"
+test "$PUBLISHER_LOG_GROUP" = "/aws/lambda/toll-v2-report-publisher"
+test "$SITE_BUCKET" = "tollchat-site-920534282028"
+test -n "$SITE_DISTRIBUTION"
+[[ "$SITE_DISTRIBUTION" =~ ^[A-Z0-9]+$ ]]
+test "$SITE_URL" = "https://tollchat.ai"
 AWS_PROFILE=nova-toll-prod aws --region us-east-1 cloudfront wait distribution-deployed \
   --id "$SITE_DISTRIBUTION"
 REPORT_INVOKE="$(mktemp)"
@@ -516,7 +684,22 @@ and API isolation:
 
 ```sh
 set -euo pipefail
-SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string" and test("^https://[^/]+$"))')"
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT/v2/infra"
+test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
+AWS_PROFILE=nova-toll-prod terraform init -reconfigure -input=false -backend-config=backend.production.hcl
+PUBLISHER_FUNCTION="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_lambda_function.publisher | awk -F' = ' '$1 ~ /^    function_name/ {gsub(/"/, "", $2); print $2; exit}')"
+PUBLISHER_LOG_GROUP="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color aws_cloudwatch_log_group.publisher | awk -F' = ' '$1 ~ /^    name/ {gsub(/"/, "", $2); print $2; exit}')"
+SITE_DISTRIBUTION="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.distribution_id | select(type == "string")')"
+SITE_URL="$(AWS_PROFILE=nova-toll-prod terraform output -json public_site | jq -er '.url | select(type == "string")')"
+SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
+  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
+test "$PUBLISHER_FUNCTION" = "toll-v2-report-publisher"
+test "$PUBLISHER_LOG_GROUP" = "/aws/lambda/toll-v2-report-publisher"
+test "$SITE_BUCKET" = "tollchat-site-920534282028"
+test -n "$SITE_DISTRIBUTION"
+[[ "$SITE_DISTRIBUTION" =~ ^[A-Z0-9]+$ ]]
+test "$SITE_URL" = "https://tollchat.ai"
 REPORT_URLS="$(mktemp)"
 curl --fail-with-body --silent --show-error "$SITE_URL/sitemap.xml" \
   | grep -o '<loc>[^<]*</loc>' | sed 's#</\?loc>##g' >"$REPORT_URLS"

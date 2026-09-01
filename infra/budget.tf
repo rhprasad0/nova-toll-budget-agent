@@ -1,10 +1,5 @@
-import {
-  to = aws_budgets_budget.nova_toll_monthly
-  id = "920534282028:nova-toll-monthly"
-}
-
 resource "aws_budgets_budget" "nova_toll_monthly" {
-  account_id        = "920534282028"
+  account_id        = local.account_id
   name              = "nova-toll-monthly"
   budget_type       = "COST"
   limit_amount      = "100"
