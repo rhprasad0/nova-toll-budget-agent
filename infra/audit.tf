@@ -95,7 +95,7 @@ resource "aws_cloudtrail" "audit" {
     }
     field_selector {
       field       = "resources.ARN"
-      starts_with = ["${aws_s3_bucket.raw.arn}/", "${aws_s3_bucket.tfstate.arn}/", "${aws_s3_bucket.agentcore_artifacts.arn}/"]
+      starts_with = ["${aws_s3_bucket.raw.arn}/", "${aws_s3_bucket.tfstate.arn}/", "${aws_s3_bucket.agentcore_artifacts.arn}/", "${aws_s3_bucket.release_plan.arn}/"]
     }
   }
 
