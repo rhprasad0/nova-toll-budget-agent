@@ -189,18 +189,14 @@ referencing the same digest-addressed probe package.
 
 Commit non-secret backend configuration and environment selectors, but never
 commit mutable foundation IDs. The selected account-local foundation handoff
-is the guarded no-apply, no-op foundation-plan procedure in the runbook: assert
-the selected account with STS, initialize its backend, and run
-`terraform plan -lock=false -out=...`. Its gate permits only managed no-ops and
-expected data reads.
-Extract the reviewed non-secret value with
-`terraform show -json ... | jq -er '.planned_values.outputs.foundation.value'`,
-wrap it as `{ "foundation": ... }`
-in an untracked temporary `*.tfvars.json` file, review it, pass it explicitly
-to the selected v2 plan, and remove the file with the EXIT cleanup trap.
-`terraform init` does not backfill newly declared outputs into an existing
-state, so this planned-output path is required; the temporary handoff contains
-only that non-secret object, never credentials or secrets.
+is the guarded #330 exact-plan apply and migration procedure in the runbook:
+the operator uses the retained private root, verifies its coupled plan,
+fetcher, provider, CLI, and manifest digests, bootstraps local state, migrates
+to the encrypted development backend, and records only sanitized evidence.
+The procedure does not publish plan/state output or create a generic apply
+path; the retained root is kept through independent review and isolation
+checks. The #331 application/database bootstrap receives only its separately
+approved non-secret inputs and owns its own state and credentials.
 
 The AWS provider does not manage PostgreSQL databases or roles. Create the
 development database and its initial roles through a separately approved,

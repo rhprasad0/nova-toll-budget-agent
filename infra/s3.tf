@@ -271,6 +271,22 @@ data "aws_iam_policy_document" "tfstate_bucket" {
       values   = ["false"]
     }
   }
+
+  statement {
+    sid       = "DenyOutsideCallerAccount"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.tfstate.arn, "${aws_s3_bucket.tfstate.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:PrincipalAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "tfstate" {
