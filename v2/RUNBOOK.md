@@ -7,9 +7,11 @@ Terraform plan or apply.
 
 PRs use disposable PostGIS migration validation only; they never access or
 mutate deployed databases or schemas. `main` continues to run validation only.
-Published releases are manual, reviewed deployments from `main`; schema-changing
-work is not deployable until approved deployed-migration automation exists.
-Current releases are schema-neutral.
+Published releases are manual, reviewed deployments from `main`. The sole
+schema-change exception is the separately authorized, reviewed migration 030
+procedure below; no other schema-changing release is authorized here, and
+future exceptions require approved deployment automation. Application release
+artifacts do not apply schema changes; this procedure is separate.
 
 The current production baseline is AWS account `920534282028` in `us-east-1`:
 
@@ -33,6 +35,228 @@ The current production baseline is AWS account `920534282028` in `us-east-1`:
 Before release apply, require the foundation plan to be zero-change. Review every
 action in the saved candidate application plan against intended reviewed release
 changes. Stop on any unexplained action or any replacement.
+
+## Manual Oracle migration 030
+
+Migration `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` is the
+only currently approved manual schema change. Applying it requires separate,
+explicit operator authorization and a reviewed checkout containing that exact
+file. This procedure is not a PR or CI step: PRs remain offline and use only
+disposable PostgreSQL migration validation.
+
+Before starting, confirm all of the following in the operator's environment;
+these are runtime preconditions, not repository-verified facts:
+
+- The operator is authorized for this change and is using an authenticated
+  `nova-toll-prod` profile in AWS account `920534282028`, region `us-east-1`.
+- The reviewed checkout is the intended checkout, the terminal/session is
+  non-traced, and `aws`, `git`, `jq`, `psql`, `curl`, and `sha256sum` are
+  available.
+- The operator has private-network/Tailscale reachability to the private RDS
+  endpoint. Do not continue when any precondition is false.
+
+The block below is the one copy/paste procedure. It reads the current endpoint,
+port, and managed secret ARN from the one `nova-toll-db` instance using
+read-only RDS metadata. It validates the expected account, available/private
+target, managed `SecretString`, and username/password before any connection.
+Secret data is captured only in the non-traced process memory, never printed,
+logged, redirected to a file, persisted, placed in an argument, or recorded as
+evidence.
+The only credential delivery is the `PGUSER`/`PGPASSWORD` environment of each
+`psql` process. The temporary CA is removed by the exit trap.
+
+If `psql` reports a SQL error before `COMMIT`, the migration transaction rolls
+back. A connection loss during or after `COMMIT` makes the outcome unknown. The
+block stops and queries the exact target state before retrying an apply or
+starting recovery; do not retry blindly or treat an application/artifact
+rollback as a database downgrade.
+
+The source check must pass immediately before each apply: pricing `1.3.0`,
+Oracle `1.13.1`, exactly 995 total `oracle.toll_connection` rows, exactly 13
+`toll_handoff` rows, and no `i495_1829_to_dulles_toll_road` row. The postcheck
+must pass after each apply: pricing `1.3.0`, Oracle `1.14.0`, exactly 996 total
+connections, exactly 14 handoffs, and one target handoff with the complete
+IDs, `toll_handoff` type, null direction/source key, and curated source
+metadata. The development apply and postcheck complete before the production
+source check or apply; stop at the first failure. If this block is resumed,
+each environment accepts only its exact source state (apply and postcheck) or
+its exact target state (verify and skip); every other or corrupt state is
+rejected.
+
+```sh
+(
+set -euo pipefail
+set +x
+
+EXPECTED_ACCOUNT=920534282028
+DB_INSTANCE_IDENTIFIER=nova-toll-db
+MIGRATION_RELATIVE=v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql
+CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+CA_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+CA_FILE=
+MIGRATION_SHA256=101ee53eb4e37f00e4bf711d9c97bf97b4c53981f5b0a6bd7a932cfea9ecee40
+RDS_METADATA=
+SECRET_ARN=
+SECRET_JSON=
+DB_HOST=
+DB_PORT=
+DB_USER=
+DB_PASSWORD=
+
+cleanup() {
+  unset DB_PASSWORD DB_USER SECRET_JSON SECRET_ARN RDS_METADATA PGPASSWORD
+  if [ -n "${CA_FILE:-}" ]; then
+    rm -f -- "$CA_FILE"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' HUP INT TERM
+
+for command_name in aws git jq psql curl sha256sum; do
+  command -v "$command_name" >/dev/null
+done
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+MIGRATION="$REPO_ROOT/$MIGRATION_RELATIVE"
+test -f "$MIGRATION"
+test ! -L "$MIGRATION"
+printf '%s  %s\n' "$MIGRATION_SHA256" "$MIGRATION" | sha256sum --check --status
+test "$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
+  sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+
+RDS_METADATA="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
+  rds describe-db-instances --db-instance-identifier nova-toll-db \
+  --query 'DBInstances' --output json)"
+printf '%s\n' "$RDS_METADATA" | jq -e --arg expected "$DB_INSTANCE_IDENTIFIER" '
+  type == "array" and length == 1 and
+  .[0].DBInstanceIdentifier == $expected and
+  .[0].DBInstanceStatus == "available" and
+  .[0].PubliclyAccessible == false and
+  (.[0].Endpoint.Address | type == "string" and
+    . != "None" and
+    test("^[A-Za-z0-9][A-Za-z0-9.-]*[.]rds[.]amazonaws[.]com$")) and
+  (.[0].Endpoint.Port | type == "number" and floor == . and . > 0 and . < 65536) and
+  (.[0].MasterUserSecret.SecretArn | type == "string" and
+    test("^arn:aws:secretsmanager:us-east-1:920534282028:secret:[^[:space:]]+$"))
+' >/dev/null
+DB_HOST="$(jq -er '.[0].Endpoint.Address' <<<"$RDS_METADATA")"
+DB_PORT="$(jq -er '.[0].Endpoint.Port | tostring' <<<"$RDS_METADATA")"
+SECRET_ARN="$(jq -er '.[0].MasterUserSecret.SecretArn' <<<"$RDS_METADATA")"
+unset RDS_METADATA
+
+CA_FILE="$(mktemp)"
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+  "$CA_URL" --output "$CA_FILE"
+if ! printf '%s  %s\n' "$CA_SHA256" "$CA_FILE" | sha256sum --check --status; then
+  printf '%s\n' 'RDS CA bundle digest mismatch; stop and review the approved CA source.' >&2
+  exit 1
+fi
+
+SECRET_JSON="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 \
+  secretsmanager get-secret-value --secret-id "$SECRET_ARN" \
+  --query SecretString --output text)"
+jq -e '
+  type == "object" and
+  (.username | type == "string" and length > 0 and test("^[^[:space:]]+$")) and
+  (.password | type == "string" and length > 0)
+' <<<"$SECRET_JSON" >/dev/null
+DB_USER="$(jq -er '.username' <<<"$SECRET_JSON")"
+DB_PASSWORD="$(jq -er '.password' <<<"$SECRET_JSON")"
+
+source_state() {
+  local database="$1"
+  PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" \
+    PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE" PGDATABASE="$database" \
+    psql -X --set ON_ERROR_STOP=1 --tuples-only --no-align --quiet <<'SQL'
+SELECT
+  (SELECT version FROM pricing.schema_version WHERE singleton) || '|' ||
+  (SELECT version FROM oracle.schema_version WHERE singleton) || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection) || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection
+   WHERE connection_type = 'toll_handoff') || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection
+   WHERE connection_id = 'i495_1829_to_dulles_toll_road');
+SQL
+}
+
+target_state() {
+  local database="$1"
+  PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" \
+    PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE" PGDATABASE="$database" \
+    psql -X --set ON_ERROR_STOP=1 --tuples-only --no-align --quiet <<'SQL'
+SELECT
+  (SELECT version FROM pricing.schema_version WHERE singleton) || '|' ||
+  (SELECT version FROM oracle.schema_version WHERE singleton) || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection) || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection
+   WHERE connection_type = 'toll_handoff') || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection
+   WHERE connection_id = 'i495_1829_to_dulles_toll_road') || '|' ||
+  (SELECT count(*)::text FROM oracle.toll_connection
+   WHERE connection_id = 'i495_1829_to_dulles_toll_road'
+     AND from_point_id = 'i495:1829ND'
+     AND to_point_id = 'dtr:1819:entry:WB'
+     AND connection_type = 'toll_handoff'
+     AND required_i95_direction IS NULL
+     AND source_route_key IS NULL
+     AND source_metadata = '{"basis":"v2/db/oracle/CONTRACT.md","curated":true}'::jsonb);
+SQL
+}
+
+require_target_state() {
+  local database="$1" actual
+  actual="$(target_state "$database")"
+  test "$actual" = '1.3.0|1.14.0|996|14|1|1'
+}
+
+apply_migration() {
+  local database="$1" actual
+  if PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" \
+      PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE" PGDATABASE="$database" \
+      psql -X --set ON_ERROR_STOP=1 --quiet --file "$MIGRATION"; then
+    return 0
+  fi
+  printf '%s\n' 'Apply outcome is unknown; querying exact target state before retry or recovery.' >&2
+  if ! actual="$(target_state "$database")"; then
+    printf '%s\n' 'Unable to query target state; stop for separately authorized incident handling.' >&2
+    exit 1
+  fi
+  printf 'Observed post-failure state: %s\n' "$actual" >&2
+  exit 1
+}
+
+process_environment() {
+  local database="$1" source target
+  source="$(source_state "$database")"
+  if [ "$source" = '1.3.0|1.13.1|995|13|0' ]; then
+    apply_migration "$database"
+    require_target_state "$database"
+    printf '%s migration and postcondition passed\n' "$database"
+    return 0
+  fi
+
+  target="$(target_state "$database")"
+  if [ "$target" = '1.3.0|1.14.0|996|14|1|1' ]; then
+    printf '%s already has the exact target state; verifying and skipping\n' "$database"
+    return 0
+  fi
+  printf 'Incompatible migration state for %s; stop without applying.\n' "$database" >&2
+  exit 1
+}
+
+process_environment nova_toll_development
+process_environment nova_toll
+cleanup
+)
+```
+
+SQL errors before `COMMIT` roll back the migration transaction. A connection
+loss during or after `COMMIT` leaves the outcome unknown, so the exact target
+state must be queried before retrying or recovering. A committed migration
+cannot be downgraded or undone by application/artifact rollback; recovery
+requires separately authorized RDS backup/PITR incident handling. This
+procedure does not create backups, automatic rollback/downgrade, or evidence
+artifacts.
 
 ## Environment-tag inventory and release safety
 

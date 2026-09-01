@@ -42,5 +42,9 @@ app if it would actually help.
 - Deployed credentials live in SSM Parameter Store (`SECURITY.md`). Never a
   local secrets file.
 - PRs use disposable migration validation only: never mutate deployed databases or schemas, and never expose production deployment credentials.
-- Schema-changing work is not deployable until approved deployed-migration
-  automation exists.
+- Only the reviewed, explicitly authorized Oracle migration
+  `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` may be applied to
+  a deployed database, and only by following its bounded procedure in
+  `v2/RUNBOOK.md`. Generic or future manual migrations are not authorized;
+  other schema-changing work remains blocked pending approved deployment
+  automation.

@@ -220,12 +220,14 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     for text in (
         "PRs use disposable migration validation only",
         "never mutate deployed databases or schemas",
-        "Schema-changing work is not deployable",
+        "Only the reviewed, explicitly authorized Oracle migration",
+        "Generic or future manual migrations are not authorized",
     ):
         assert text in AGENTS
     for text in (
         "PRs use disposable PostGIS migration validation only",
-        "Current releases are schema-neutral",
+        "sole\nschema-change exception is the separately authorized, reviewed migration 030",
+        "Application release\nartifacts do not apply schema changes; this procedure is separate",
         "nova-toll-tfstate-920534282028",
         "nova-toll/terraform.tfstate",
         "nova-toll/v2/terraform.tfstate",
@@ -260,6 +262,143 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
     )
     assert "temporary drift" in rollback
     assert "require it to report no changes" in rollback
+
+
+def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_checked():
+    section = DEPLOYMENT.split("## Manual Oracle migration 030", maxsplit=1)[1].split(
+        "## Environment-tag inventory", maxsplit=1
+    )[0]
+    shell_blocks = re.findall(r"```sh\n(.*?)\n```", section, flags=re.DOTALL)
+    assert len(shell_blocks) == 1
+    shell = shell_blocks[0]
+
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
+        script.write(shell)
+        script.flush()
+        assert subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
+
+    for required in (
+        "explicit operator authorization",
+        "nova-toll-prod",
+        "920534282028",
+        "us-east-1",
+        "AWS_PROFILE=nova-toll-prod aws --region us-east-1",
+        "set -euo pipefail",
+        "set +x",
+        'command -v "$command_name"',
+        "MIGRATION_SHA256=101ee53eb4e37f00e4bf711d9c97bf97b4c53981f5b0a6bd7a932cfea9ecee40",
+        'test ! -L "$MIGRATION"',
+        '"$MIGRATION_SHA256" "$MIGRATION"',
+        "describe-db-instances",
+        "--db-instance-identifier nova-toll-db",
+        "--query 'DBInstances'",
+        "Endpoint.Address",
+        "Endpoint.Port",
+        "MasterUserSecret.SecretArn",
+        'DBInstanceStatus == "available"',
+        "PubliclyAccessible == false",
+        '. != "None"',
+        'test("^[A-Za-z0-9][A-Za-z0-9.-]*[.]rds[.]amazonaws[.]com$")',
+        'get-secret-value --secret-id "$SECRET_ARN"',
+        'type == "object"',
+        "CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem",
+        "CA_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3",
+        "sha256sum --check --status",
+        "PGSSLMODE=verify-full",
+        'PGSSLROOTCERT="$CA_FILE"',
+        "psql -X --set ON_ERROR_STOP=1",
+        "1.3.0|1.13.1|995|13|0",
+        "1.3.0|1.14.0|996|14|1|1",
+        "required_i95_direction IS NULL",
+        "source_route_key IS NULL",
+        'source_metadata = \'{"basis":"v2/db/oracle/CONTRACT.md","curated":true}\'::jsonb',
+        "trap cleanup EXIT",
+        "rm -f --",
+        "unset DB_PASSWORD DB_USER SECRET_JSON",
+        "v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql",
+        "process_environment()",
+        'source="$(source_state "$database")"',
+        "if [ \"$source\" = '1.3.0|1.13.1|995|13|0' ]; then",
+        'apply_migration "$database"',
+        'require_target_state "$database"',
+        'target="$(target_state "$database")"',
+        "if [ \"$target\" = '1.3.0|1.14.0|996|14|1|1' ]; then",
+        "already has the exact target state; verifying and skipping",
+        "Incompatible migration state for %s; stop without applying.",
+        "process_environment nova_toll_development",
+        "process_environment nova_toll",
+        "Apply outcome is unknown",
+        'actual="$(target_state "$database")"',
+        "SQL error before `COMMIT`",
+        "connection loss during or after `COMMIT` makes the outcome unknown",
+        "before retrying an apply or",
+        "separately authorized RDS backup/PITR incident handling",
+    ):
+        assert required in section
+
+    assert not re.search(r"(?m)^\s*set\s+-x(?:\s|$)", shell)
+    assert not re.search(r"(?m)^\s*SECRET_ARN=arn:", shell)
+    assert not re.search(r"(?m)^DB_HOST=(?:[A-Za-z0-9]|['\"][A-Za-z0-9])", shell)
+    assert not re.search(
+        r"(?m)^\s*(?:echo|printf).*\$(?:SECRET_JSON|DB_PASSWORD)", shell
+    )
+    assert not re.search(r"(?m)^\s*.*>[^\n]*\$(?:SECRET_JSON|DB_PASSWORD)", shell)
+    assert 'PGPASSWORD="$DB_PASSWORD"' in shell
+    assert "sslmode=require" not in shell
+    assert "sslmode=disable" not in shell
+    assert "sslmode=verify-ca" not in shell
+    assert "AWS_ACCESS_KEY_ID" not in shell
+    assert "AWS_SECRET_ACCESS_KEY" not in shell
+    for forbidden in (
+        "Schema-changing work is not deployable",
+        "Current releases are schema-neutral",
+    ):
+        assert forbidden not in (DEPLOYMENT + AGENTS)
+    for forbidden in (
+        "deploy_oracle_migration.py",
+        "migration-finalizer",
+        "migrator_role",
+        "RELEASE_EVIDENCE",
+        "configure-aws-credentials",
+    ):
+        assert forbidden not in section
+
+    for before, after in (
+        ("describe-db-instances", "get-secret-value"),
+        ('test ! -L "$MIGRATION"\n', "get-secret-value"),
+        ("sha256sum --check --status", "get-secret-value"),
+        ("get-secret-value", "psql -X --set ON_ERROR_STOP=1"),
+        (
+            "process_environment() {\n",
+            "process_environment nova_toll_development\n",
+        ),
+        (
+            "process_environment nova_toll_development\n",
+            "process_environment nova_toll\n",
+        ),
+    ):
+        assert shell.index(before) < shell.index(after)
+
+    process_body = re.search(r"(?ms)^process_environment\(\) \{.*?^\}", shell)
+    assert process_body is not None
+    process_body = process_body.group(0)
+    source_branch = process_body.split(
+        "if [ \"$source\" = '1.3.0|1.13.1|995|13|0' ]; then", maxsplit=1
+    )[1].split('target="$(target_state "$database")"', maxsplit=1)[0]
+    assert source_branch.index('apply_migration "$database"') < source_branch.index(
+        'require_target_state "$database"'
+    )
+    target_branch = process_body.split(
+        'target="$(target_state "$database")"', maxsplit=1
+    )[1]
+    assert "apply_migration" not in target_branch
+    assert "Incompatible migration state" in target_branch
+    assert "exit 1" in target_branch
+    assert process_body.index('require_target_state "$database"') < process_body.index(
+        "return 0"
+    )
+    target_skip = process_body.index("already has the exact target state")
+    assert target_skip < process_body.index("return 0", target_skip)
 
 
 def test_pull_request_workflows_have_no_production_access():
