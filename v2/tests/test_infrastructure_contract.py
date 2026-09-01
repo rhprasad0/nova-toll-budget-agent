@@ -120,6 +120,77 @@ def test_account_local_backends_keep_production_paths_and_lockfiles_distinct():
     assert "nova-toll-tfstate-920534282028" not in application_development
 
 
+def test_all_backends_pin_native_kms_encryption_and_locking():
+    for backend_path in (
+        FOUNDATION_ROOT / "backend.production.hcl",
+        FOUNDATION_ROOT / "backend.development.hcl",
+        V2_ROOT / "infra" / "backend.production.hcl",
+        V2_ROOT / "infra" / "backend.development.hcl",
+    ):
+        backend = backend_path.read_text()
+        assert "use_lockfile = true" in backend
+        assert "encrypt      = true" in backend
+        assert 'kms_key_id   = "alias/nova-toll-tfstate"' in backend
+        assert "s3:x-amz-server-side-encryption" not in backend
+
+
+def test_provider_account_guards_derive_from_the_account_contract():
+    foundation = FOUNDATION_PROVIDER
+    application = (V2_ROOT / "infra" / "providers.tf").read_text()
+
+    assert (
+        'jsondecode(file("${path.module}/account-contract.json")).accounts[var.environment].id'
+        in foundation
+    )
+    assert (
+        'jsondecode(file("${path.module}/../../infra/account-contract.json")).accounts[var.environment].id'
+        in application
+    )
+    for provider in (foundation, application):
+        assert "allowed_account_ids" in provider
+        assert "903859731897" not in provider
+        assert "920534282028" not in provider
+
+
+def test_tfstate_bucket_is_hardened_and_denies_foreign_accounts():
+    s3 = (FOUNDATION_ROOT / "s3.tf").read_text()
+    kms = (FOUNDATION_ROOT / "kms.tf").read_text()
+    policy = terraform_block(s3, 'data "aws_iam_policy_document" "tfstate_bucket"')
+    key = terraform_block(kms, 'resource "aws_kms_key" "tfstate"')
+
+    for resource in (
+        'resource "aws_s3_bucket_versioning" "hardened"',
+        'resource "aws_s3_bucket_ownership_controls" "hardened"',
+        'resource "aws_s3_bucket_public_access_block" "hardened"',
+        'resource "aws_s3_bucket_server_side_encryption_configuration" "hardened"',
+        'resource "aws_s3_bucket_lifecycle_configuration" "hardened"',
+    ):
+        assert resource in s3
+    assert (
+        "tfstate = { id = aws_s3_bucket.tfstate.id, kms_key_arn = aws_kms_key.tfstate.arn }"
+        in s3
+    )
+    assert 'sse_algorithm     = "aws:kms"' in s3
+    assert "kms_master_key_id = each.value.kms_key_arn" in s3
+    assert 'object_ownership = "BucketOwnerEnforced"' in s3
+    assert "block_public_acls       = true" in s3
+    assert "block_public_policy     = true" in s3
+    assert "ignore_public_acls      = true" in s3
+    assert "restrict_public_buckets = true" in s3
+    assert 'variable = "aws:SecureTransport"' in policy
+    assert 'sid       = "DenyOutsideCallerAccount"' in policy
+    assert 'test     = "StringNotEquals"' in policy
+    assert 'variable = "aws:PrincipalAccount"' in policy
+    assert "data.aws_caller_identity.current.account_id" in policy
+    assert "aws_s3_bucket.tfstate.arn" in policy
+    assert '"${aws_s3_bucket.tfstate.arn}/*"' in policy
+    assert "s3:x-amz-server-side-encryption" not in policy
+    assert "920534282028" not in policy
+    assert "policy" not in key
+    assert "enable_key_rotation     = true" in key
+    assert "deletion_window_in_days = 30" in key
+
+
 def test_foundation_names_and_budget_use_the_caller_account():
     foundation_s3 = (FOUNDATION_ROOT / "s3.tf").read_text()
     foundation_agentcore = FOUNDATION_AGENTCORE
@@ -281,6 +352,10 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
             assert text in document
     assert "provide an operative development" in plan
     assert "Development application release is non-operative" in runbook
+    assert "local-backend plan generation and review" in runbook
+    assert "later exact-plan apply" in runbook
+    assert "separately authorized state migration or recovery" in runbook
+    assert "not the guarded production release's `production.tfvars`" in runbook
     for tfvars in (V2_ROOT / "infra").glob("*.tfvars"):
         assert "vpc-" not in tfvars.read_text()
         assert "subnet-" not in tfvars.read_text()
@@ -291,74 +366,480 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
     )[1].split("### Guarded production release", maxsplit=1)[0]
+    development_plan_stage = development.split(
+        "#### Later authorized exact-plan apply and recovery", maxsplit=1
+    )[0]
+    later_apply = development.split(
+        "#### Later authorized exact-plan apply and recovery", maxsplit=1
+    )[1]
     production = runbook.split("### Guarded production release", maxsplit=1)[1].split(
         "The legacy development inventory", maxsplit=1
     )[0]
-    for block, prefix, account, backend in (
-        (
-            development,
-            "DEVELOPMENT",
-            "903859731897",
-            "backend.development.hcl",
-        ),
-        (
-            production,
-            "PRODUCTION",
-            "920534282028",
-            "backend.production.hcl",
-        ),
+    assert (
+        'test "$(AWS_PROFILE=nova-toll-dev aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"'
+        in development_plan_stage
+    )
+    assert (
+        'DEVELOPMENT_FOUNDATION_PLAN="$DEVELOPMENT_FOUNDATION_DIR/development-foundation.tfplan"'
+        in development_plan_stage
+    )
+    assert 'chmod 700 -- "$DEVELOPMENT_FOUNDATION_DIR"' in development_plan_stage
+    assert 'chmod 600 -- "$DEVELOPMENT_FOUNDATION_PLAN"' in development_plan_stage
+    assert "init -backend=false -input=false" in development_plan_stage
+    assert (
+        '-var fetcher_package_path="$DEVELOPMENT_FETCHER_PACKAGE"'
+        in development_plan_stage
+    )
+    assert 'show -json "$DEVELOPMENT_FOUNDATION_PLAN"' in development_plan_stage
+    assert "sort_by(.address)" in development_plan_stage
+    for forbidden in (
+        "terraform apply",
+        "terraform import",
+        "terraform state list",
+        "-migrate-state",
+        "-backend-config",
+        "-reconfigure",
+        "terraform -target",
+        "terraform_remote_state",
+        "get-parameter",
+        "cloudflare",
     ):
-        foundation_vars = f"{prefix}_FOUNDATION_VARS"
-        foundation_plan = f"{prefix}_FOUNDATION_PLAN"
-        assert f'{foundation_vars}="$(mktemp --suffix=.tfvars.json)"' in block
-        assert f'{foundation_plan}="$(mktemp --suffix=.tfplan)"' in block
-        assert (
-            f'trap \'rm -f -- "${foundation_plan}" "${foundation_vars}"\' EXIT' in block
-        )
-        assert f'query Account --output text)" = "{account}"' in block
-        assert backend in block
-        assert "show -json" in block
-        assert "planned_values.outputs.foundation.value" in block
-        foundation_handoff = block.split('cd "$ROOT/v2/infra"', maxsplit=1)[0]
-        assert "terraform apply" not in foundation_handoff
-        assert f"${foundation_plan}" in foundation_handoff
-        assert "-lock=false" in foundation_handoff
-        assert (
-            ': "${TF_VAR_budget_notification_email:?set the existing foundation budget notification input}"'
-            in foundation_handoff
-        )
-        assert (
-            '-var fetcher_package_path="$ROOT/infra/build/fetcher.zip"'
-            in foundation_handoff
-        )
-        assert 'type == "object"' in foundation_handoff
-        assert '(.address | type == "string" and length > 0)' in foundation_handoff
-        assert (
-            '(.mode == "managed" and .change.actions == ["no-op"])'
-            in foundation_handoff
-        )
-        assert (
-            '(.mode == "data" and (foundation_data_addresses | index($address)) != null and .change.actions == ["read"])'
-            in foundation_handoff
-        )
-        assert f'rm -f -- "${foundation_vars}"' in block
-        if prefix == "PRODUCTION":
-            assert "-var-file=production.tfvars" in block
-            assert f'-var-file="${foundation_vars}"' in block
-            for package_arg in (
-                "-var loader_package_path=build/loader.zip",
-                "-var publisher_package_path=build/publisher.zip",
-                "-var agentcore_package_path=build/agentcore.zip",
-                "-var chat_proxy_package_path=build/chat-proxy.zip",
-            ):
-                assert package_arg in block
-        else:
-            assert "terraform apply" not in block
-            assert "development-release.tfplan" not in block
+        assert forbidden not in development_plan_stage.lower()
+    assert '"$DEVELOPMENT_FOUNDATION_VARS"' not in development_plan_stage
+    assert 'TF_DATA_DIR="$ROOT/.terraform-data"' in later_apply
+    assert 'FETCHER="$ROOT/build/fetcher.zip"' in later_apply
+    assert 'terraform -chdir="$ROOT" apply -input=false "$PLAN"' in later_apply
+    assert (
+        'terraform -chdir="$ROOT" init -migrate-state -force-copy -input=false'
+        in later_apply
+    )
+    assert 'cp -- "$ROOT/versions.tf.with-backend" "$ROOT/versions.tf"' in later_apply
+    development_account_assertion = (
+        'test "$(AWS_PROFILE=nova-toll-dev aws --region "$REGION" sts '
+        'get-caller-identity --query Account --output text)" = "$DEV_ACCOUNT"'
+    )
+    assert later_apply.count(development_account_assertion) == 2
+    apply_command = 'TF_DATA_DIR="$ROOT/.terraform-data" AWS_PROFILE=nova-toll-dev terraform -chdir="$ROOT" apply'
+    recovery_command = 'TF_DATA_DIR="$ROOT/.terraform-data" AWS_PROFILE=nova-toll-dev terraform -chdir="$ROOT" init -migrate-state'
+    first_assertion = later_apply.index(development_account_assertion)
+    second_assertion = later_apply.index(
+        development_account_assertion,
+        first_assertion + len(development_account_assertion),
+    )
+    assert first_assertion < later_apply.index(apply_command)
+    assert second_assertion < later_apply.index(recovery_command)
+    assert later_apply.index(development_account_assertion) < later_apply.index(
+        apply_command
+    )
+    assert second_assertion < later_apply.index(recovery_command)
+
+    assert 'PRODUCTION_FOUNDATION_PLAN="$(mktemp --suffix=.tfplan)"' in production
+    assert 'PRODUCTION_FOUNDATION_VARS="$(mktemp --suffix=.tfvars.json)"' in production
+    assert 'query Account --output text)" = "920534282028"' in production
+    assert "backend.production.hcl" in production
+    assert "planned_values.outputs.foundation.value" in production
+    assert "-var-file=production.tfvars" in production
+    for package_arg in (
+        "-var loader_package_path=build/loader.zip",
+        "-var publisher_package_path=build/publisher.zip",
+        "-var agentcore_package_path=build/agentcore.zip",
+        "-var chat_proxy_package_path=build/chat-proxy.zip",
+    ):
+        assert package_arg in production
     assert '"$FOUNDATION_VARS"' not in runbook
     assert "terraform output -json foundation" not in runbook
-    assert '"$DEVELOPMENT_FOUNDATION_VARS"' in development
     assert '"$PRODUCTION_FOUNDATION_VARS"' in production
+
+
+def test_development_foundation_shell_is_plan_only_and_retains_exact_handoff():
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    shell_match = re.search(r"```sh\n(.*?)\n```", development, flags=re.DOTALL)
+    assert shell_match is not None
+    shell = shell_match.group(1)
+
+    assert "umask 077" in shell
+    assert 'DEVELOPMENT_FOUNDATION_DIR="$(mktemp -d)"' in shell
+    assert 'chmod 700 -- "$DEVELOPMENT_FOUNDATION_DIR"' in shell
+    assert 'test "$(stat -c \'%a\' "$DEVELOPMENT_FOUNDATION_DIR")" = "700"' in shell
+    assert (
+        'DEVELOPMENT_FOUNDATION_PLAN="$DEVELOPMENT_FOUNDATION_DIR/development-foundation.tfplan"'
+        in shell
+    )
+    assert 'chmod 600 -- "$DEVELOPMENT_FOUNDATION_PLAN"' in shell
+    assert 'test "$(stat -c \'%a\' "$DEVELOPMENT_FOUNDATION_PLAN")" = "600"' in shell
+    assert (
+        'DEVELOPMENT_TF_DATA_DIR="$DEVELOPMENT_FOUNDATION_DIR/.terraform-data"' in shell
+    )
+    assert 'export TF_DATA_DIR="$DEVELOPMENT_TF_DATA_DIR"' in shell
+    assert 'rm -rf -- "$DEVELOPMENT_FOUNDATION_DIR/.terraform"' in shell
+    assert "terraform.tfstate.d" in shell
+    assert 'test ! -e "$DEVELOPMENT_FOUNDATION_DIR/terraform.tfstate"' in shell
+    assert 'test ! -e "$DEVELOPMENT_FOUNDATION_DIR/terraform.tfstate.backup"' in shell
+    assert (
+        'sed -i \'/^[[:space:]]*backend "s3" {}/d\' "$DEVELOPMENT_FOUNDATION_DIR/versions.tf"'
+        in shell
+    )
+
+    assert (
+        'test "$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "920534282028"'
+        in shell
+    )
+    assert (
+        'test "$(AWS_PROFILE=nova-toll-dev aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"'
+        in shell
+    )
+    terraform_commands = re.findall(
+        r"(?m)^\s*(?:if ! )?AWS_PROFILE=([^\s]+) terraform\b", shell
+    )
+    assert terraform_commands
+    assert set(terraform_commands) == {"nova-toll-dev"}
+    assert "AWS_PROFILE=nova-toll-prod terraform" not in shell
+
+    assert "init -backend=false -input=false" in shell
+    assert "-reconfigure" not in shell
+    assert "-migrate-state" not in shell
+    assert "-backend-config" not in shell
+    assert "-target" not in shell
+    assert "terraform apply" not in shell
+    assert "terraform import" not in shell
+    assert "terraform state" not in shell
+    assert "terraform_remote_state" not in shell
+    assert "get-parameter" not in shell
+    assert "cloudflare" not in shell.lower()
+    assert "show -no-color" not in shell
+    assert "planned_values" not in shell
+    assert 'show -json "$DEVELOPMENT_FOUNDATION_PLAN"' in shell
+    assert "| jq -e" in shell
+    assert "jq -ce" in shell
+    assert "sort_by(.address)" in shell
+    assert "{address: .address, actions: .change.actions}" in shell
+    assert "printf 'Development foundation root: %s\\n'" in shell
+    assert "printf 'Development foundation plan SHA-256: %s\\n'" in shell
+    assert "printf '%s\\n' \"$DEVELOPMENT_FOUNDATION_SUMMARY\"" in shell
+    assert 'test -r "$ROOT/infra/build/fetcher.zip"' in shell
+    assert 'test -s "$ROOT/infra/build/fetcher.zip"' in shell
+    assert "set +x" in shell
+    assert shell.index("set +x") < shell.index(
+        "AWS_PROFILE=nova-toll-prod aws --region us-east-1 budgets"
+    )
+    assert shell.index(
+        'AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" init'
+    ) < shell.index(
+        'AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" plan'
+    )
+    assert shell.index(
+        'AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" plan'
+    ) < shell.index(
+        'AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" show'
+    )
+    assert (
+        'rm -f -- "$DEVELOPMENT_BUDGET_RECIPIENTS" "$DEVELOPMENT_BUDGET_SUBSCRIBERS"'
+        in shell
+    )
+    assert 'rm -rf -- "$DEVELOPMENT_FOUNDATION_DIR"' not in shell
+    assert 'rm -f -- "$DEVELOPMENT_FOUNDATION_PLAN"' not in shell
+    assert '"$DEVELOPMENT_FOUNDATION_VARS"' not in shell
+
+
+def test_development_absence_probes_fail_closed_on_unexpected_errors():
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    shell = (
+        development.split(
+            "##### Successful exact-plan apply, migration, and evidence", maxsplit=1
+        )[1]
+        .split("```sh\n", maxsplit=1)[1]
+        .split("\n```", maxsplit=1)[0]
+    )
+    helper_match = re.search(
+        r"(expect_absent_error\(\) \{.*?^absent_budget\(\)[^\n]*\n)",
+        shell,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert helper_match is not None
+    helpers = helper_match.group(1)
+    expected_errors = {
+        "absent_s3_bucket": "404",
+        "absent_kms_key": "NotFoundException",
+        "absent_rds_instance": "DBInstanceNotFound",
+        "absent_lambda_function": "ResourceNotFoundException",
+        "absent_sns_topic": "NotFound",
+        "absent_cloudtrail": "TrailNotFoundException",
+        "absent_event_rule": "ResourceNotFoundException",
+        "absent_iam_role": "NoSuchEntity",
+        "absent_instance_profile": "NoSuchEntity",
+        "absent_rds_subnet_group": "DBSubnetGroupNotFoundFault",
+        "absent_oidc_provider": "NoSuchEntity",
+        "absent_budget": "NotFoundException",
+    }
+    assert "expect_absent " not in shell
+    for helper in expected_errors:
+        assert f"{helper} " in shell
+
+    def probe_status(helper: str, error: str) -> int:
+        script = f"""{helpers}
+probe() {{ printf '%s' '{error}' >&2; return 1; }}
+{helper} probe
+"""
+        return subprocess.run(
+            ["bash", "-c", script], capture_output=True, check=False
+        ).returncode
+
+    for helper, expected_error in expected_errors.items():
+        assert probe_status(helper, expected_error) == 0
+        assert probe_status(helper, "AccessDenied") != 0
+        assert probe_status(helper, "ExpiredToken") != 0
+
+
+def test_development_foundation_reads_and_cleans_the_budget_recipient_ephemerally():
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    shell = development.split("```sh\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+
+    production_assertion = (
+        'test "$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 sts '
+        'get-caller-identity --query Account --output text)" = "920534282028"'
+    )
+    development_assertion = (
+        'test "$(AWS_PROFILE=nova-toll-dev aws --region us-east-1 sts '
+        'get-caller-identity --query Account --output text)" = "903859731897"'
+    )
+    assert production_assertion in shell
+    assert development_assertion in shell
+    assert shell.index(production_assertion) < shell.index(
+        "describe-notifications-for-budget"
+    )
+    assert shell.index("describe-notifications-for-budget") < shell.index(
+        "describe-subscribers-for-notification"
+    )
+    assert shell.index("describe-subscribers-for-notification") < shell.index(
+        development_assertion
+    )
+    assert "describe-budget" not in shell
+    assert "NotificationsWithSubscribers" not in shell
+    assert "--account-id 920534282028" in shell
+    assert "--budget-name nova-toll-monthly" in shell
+    assert '--notification "$notification"' in shell
+    assert 'DEVELOPMENT_BUDGET_RECIPIENTS="$(mktemp)"' in shell
+    assert 'DEVELOPMENT_BUDGET_SUBSCRIBERS="$(mktemp)"' in shell
+    assert "chmod 600 --" in shell
+    assert "set +x" in shell
+    assert "2>/dev/null" in shell
+    assert "if ! jq -e '" in shell
+    assert ".Subscribers[]?" in shell
+    assert '.SubscriptionType == "EMAIL"' in shell
+    assert "--output json" in shell
+    assert "unique" in shell
+    assert "length == 1" in shell
+    assert "expected exactly one non-empty EMAIL subscriber" in shell
+    assert not re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", shell)
+    assert 'export TF_VAR_budget_notification_email="$(' in shell
+    assert "unset TF_VAR_budget_notification_email" in shell
+    assert (
+        'rm -f -- "$DEVELOPMENT_BUDGET_RECIPIENTS" "$DEVELOPMENT_BUDGET_SUBSCRIBERS"'
+        in shell
+    )
+    assert "terraform apply" not in shell
+    assert "-migrate-state" not in shell
+    assert "-backend-config" not in shell
+
+    notifications_filter_match = re.search(
+        r"jq -ce '(.*?)'\s+\\\s*<<<", shell, flags=re.DOTALL
+    )
+    assert notifications_filter_match is not None
+    notifications_filter = notifications_filter_match.group(1)
+    notifications_result = subprocess.run(
+        ["jq", "-ce", notifications_filter],
+        input=json.dumps(
+            {
+                "Notifications": [
+                    {"NotificationType": "ACTUAL"},
+                    {"NotificationType": "FORECASTED"},
+                ]
+            }
+        ),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert notifications_result.returncode == 0, notifications_result.stderr
+    assert len(notifications_result.stdout.splitlines()) == 2
+    malformed_notifications = subprocess.run(
+        ["jq", "-ce", notifications_filter],
+        input=json.dumps({"Notifications": []}),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert malformed_notifications.returncode != 0
+
+    subscriber_filter_match = re.search(
+        r"jq -r '([^']*\.Subscribers\[\]\?[^']*)'", shell
+    )
+    assert subscriber_filter_match is not None
+    subscriber_filter = subscriber_filter_match.group(1)
+    valid_recipient = "recipient" + chr(64) + "example.com"
+    subscribers_result = subprocess.run(
+        ["jq", "-r", subscriber_filter],
+        input=json.dumps(
+            {
+                "Subscribers": [
+                    {"SubscriptionType": "EMAIL", "Address": valid_recipient},
+                    {"SubscriptionType": "SNS", "Address": "arn:aws:sns:example"},
+                    {"SubscriptionType": "EMAIL", "Address": ""},
+                    {"SubscriptionType": "EMAIL", "Address": None},
+                ]
+            }
+        ),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert subscribers_result.returncode == 0, subscribers_result.stderr
+    assert valid_recipient in subscribers_result.stdout
+    assert "arn:aws:sns:example" not in subscribers_result.stdout
+
+    subscriber_validation_match = re.search(
+        r"if ! jq -e '\n(.*?)\n\s+' \"\$DEVELOPMENT_BUDGET_SUBSCRIBERS\" >/dev/null",
+        shell,
+        flags=re.DOTALL,
+    )
+    assert subscriber_validation_match is not None
+    subscriber_validation = subscriber_validation_match.group(1)
+    for response in (
+        {"Subscribers": [{"SubscriptionType": "EMAIL", "Address": valid_recipient}]},
+        {
+            "Subscribers": [
+                {"SubscriptionType": "SNS", "Address": "arn:aws:sns:example"}
+            ]
+        },
+    ):
+        result = subprocess.run(
+            ["jq", "-e", subscriber_validation],
+            input=json.dumps(response),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+    for response in (
+        {},
+        {"Subscribers": None},
+        {"Subscribers": [{"SubscriptionType": "EMAIL"}]},
+        {"Subscribers": [{"SubscriptionType": "EMAIL", "Address": None}]},
+    ):
+        result = subprocess.run(
+            ["jq", "-e", subscriber_validation],
+            input=json.dumps(response),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode != 0
+
+    recipient_filter_match = re.search(
+        r"jq -R -s -er '\n(.*?)\n\s+' \"\$DEVELOPMENT_BUDGET_RECIPIENTS\"\n\)",
+        shell,
+        flags=re.DOTALL,
+    )
+    assert recipient_filter_match is not None
+    recipient_filter = recipient_filter_match.group(1)
+
+    def accepts(lines: str) -> bool:
+        return (
+            subprocess.run(
+                ["jq", "-R", "-s", "-er", recipient_filter, "-"],
+                input=lines,
+                text=True,
+                capture_output=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    assert accepts(f"{valid_recipient}\n{valid_recipient}\n")
+    assert not accepts(f"{valid_recipient}\nother{chr(64)}example.com\n")
+    assert not accepts("recipient\n")
+    assert not accepts("")
+
+
+def test_development_foundation_gate_requires_the_complete_expected_set():
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    shell = re.search(r"```sh\n(.*?)\n```", development, flags=re.DOTALL)
+    assert shell is not None
+    gate = re.search(
+        r'show -json "\$DEVELOPMENT_FOUNDATION_PLAN" 2>/dev/null \| jq -e \'\n(.*?)\n\' >/dev/null 2>/dev/null;',
+        shell.group(1),
+        flags=re.DOTALL,
+    )
+    assert gate is not None
+
+    def addresses(definition: str) -> list[str]:
+        match = re.search(
+            rf"def {definition}: \[\n(.*?)\n  \];", gate.group(1), re.DOTALL
+        )
+        assert match is not None
+        return [
+            json.loads(line.strip().rstrip(",")) for line in match.group(1).splitlines()
+        ]
+
+    create_addresses = addresses("foundation_create_addresses")
+    data_addresses = addresses("foundation_data_addresses")
+    assert len(create_addresses) == len(set(create_addresses)) == 95
+    assert set(data_addresses) == {
+        "data.aws_caller_identity.current",
+        "data.aws_region.current",
+        "data.aws_vpc.default",
+        "data.aws_subnets.default",
+        "data.aws_route_tables.default",
+        "data.aws_subnet.tailscale_router",
+    }
+
+    def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
+        return {"address": address, "mode": mode, "change": {"actions": actions}}
+
+    expected_changes = [
+        *(change("managed", address, ["create"]) for address in create_addresses),
+        *(change("data", address, ["read"]) for address in data_addresses),
+    ]
+
+    def passes(changes: object) -> bool:
+        result = subprocess.run(
+            ["jq", "-e", gate.group(1)],
+            input=json.dumps({"resource_changes": changes}),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
+
+    assert passes(expected_changes)
+    assert not passes([])
+    assert not passes(expected_changes[1:])
+    assert not passes([*expected_changes, change("managed", "unexpected", ["create"])])
+    assert not passes([*expected_changes, expected_changes[0]])
+
+    for actions in (["no-op"], ["update"], ["delete"], ["create", "delete"]):
+        changed = [*expected_changes]
+        changed[0] = change("managed", create_addresses[0], actions)
+        assert not passes(changed)
+
+    changed = [*expected_changes]
+    changed[-1] = change("managed", data_addresses[-1], ["read"])
+    assert not passes(changed)
+    changed = [*expected_changes]
+    changed[-1] = change("data", "unexpected", ["read"])
+    assert not passes(changed)
 
 
 def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
@@ -369,7 +850,7 @@ def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
         "terraform plan",
         "terraform apply",
         "terraform import",
-        "terraform state",
+        "terraform state list",
         "aws sts",
         "ssm get-parameter",
     ):
@@ -1291,9 +1772,8 @@ def test_agent_measurement_keeps_cloudflare_dns_only():
 
 def test_account_local_release_contract_and_foundation_gates_fail_closed():
     for text in (
-        "AWS_PROFILE=nova-toll-development",
+        "AWS_PROFILE=nova-toll-dev",
         'get-caller-identity --query Account --output text)" = "903859731897"',
-        "backend.development.hcl",
         "backend.production.hcl",
         "production.tfvars",
         "production-release.tfplan",
@@ -1315,16 +1795,43 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         "### Development foundation handoff (#330; no application release)",
         maxsplit=1,
     )[1].split("### Guarded production release", maxsplit=1)[0]
-    assert "terraform apply" not in development_handoff
-    assert "development-release.tfplan" not in development_handoff
+    development_plan_stage = development_handoff.split(
+        "#### Later authorized exact-plan apply and recovery", maxsplit=1
+    )[0]
+    later_apply = development_handoff.split(
+        "#### Later authorized exact-plan apply and recovery", maxsplit=1
+    )[1]
+    assert "apply -input=false" not in development_plan_stage
+    assert "init -backend=false" in development_plan_stage
+    assert "DEVELOPMENT_FOUNDATION_DIR" in development_plan_stage
+    assert "development-release.tfplan" not in development_plan_stage
+    for forbidden in (
+        "terraform apply",
+        "terraform import",
+        "terraform state list",
+        "-migrate-state",
+        "-backend-config",
+        "show -no-color",
+    ):
+        assert forbidden not in development_plan_stage
+    assert 'TF_DATA_DIR="$ROOT/.terraform-data"' in later_apply
+    assert (
+        "EXPECTED_PLAN=0efda359505d7142a45792ec79e12d40d0540b7e3e961a7e04891328ca94e597"
+        in later_apply
+    )
+    assert (
+        "EXPECTED_FETCHER=9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1"
+        in later_apply
+    )
 
     gates = re.findall(
-        r'show -json "\$(?:DEVELOPMENT|PRODUCTION)_FOUNDATION_PLAN" \| jq -e \'\n(.*?)\n\' >/dev/null',
+        r'show -json "\$(?:DEVELOPMENT|PRODUCTION)_FOUNDATION_PLAN"(?: 2>/dev/null)? \| jq -e \'\n(.*?)\n\' >/dev/null(?: 2>/dev/null; then)?',
         DEPLOYMENT,
         re.DOTALL,
     )
     assert len(gates) == 2
-    assert gates[0] == gates[1]
+    assert "foundation_create_addresses" in gates[0]
+    assert "foundation_create_addresses" not in gates[1]
 
     data_addresses = (
         "data.aws_caller_identity.current",
@@ -1394,25 +1901,32 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
             == 0
             for gate in gates
         ]
-        assert results[0] == results[1]
         return results
 
     accepted = (
         foundation_plan([]),
-        foundation_plan([change("managed", "aws_s3_bucket.state", ["no-op"])]),
+        foundation_plan([change("managed", "aws_s3_bucket.tfstate", ["no-op"])]),
         foundation_plan([change("data", "data.aws_vpc.default", ["read"])]),
         foundation_plan(
             [change("data", address, ["read"]) for address in data_addresses]
         ),
         foundation_plan(
             [
-                change("managed", "aws_s3_bucket.state", ["no-op"]),
+                change("managed", "aws_s3_bucket.tfstate", ["no-op"]),
                 change("data", "data.aws_vpc.default", ["read"]),
             ]
         ),
     )
     for plan in accepted:
-        assert all(outcomes(plan))
+        assert outcomes(plan) == [False, True]
+    for address in (
+        "aws_s3_bucket.tfstate",
+        'aws_s3_bucket_versioning.hardened["tfstate"]',
+    ):
+        assert outcomes(foundation_plan([change("managed", address, ["create"])])) == [
+            False,
+            False,
+        ]
 
     malformed: tuple[object, ...] = (
         "not json",
@@ -1495,17 +2009,20 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         foundation_plan([change("data", "x", ["read", "read"])]),
         foundation_plan([change("unknown", "x", ["read"])]),
         foundation_plan([change("managed", "x", ["no-op", "read"])]),
-        foundation_plan([], extra_output),
-        foundation_plan([], missing_output_key),
-        foundation_plan([], nested_extra),
-        foundation_plan([], nested_missing),
-        missing_foundation_output,
         foundation_plan(
             [change("data", "data.aws_ssm_parameter.production_secret", ["read"])]
         ),
     )
     for plan in disallowed:
         assert not any(outcomes(plan))
+    for plan in (
+        foundation_plan([], extra_output),
+        foundation_plan([], missing_output_key),
+        foundation_plan([], nested_extra),
+        foundation_plan([], nested_missing),
+        missing_foundation_output,
+    ):
+        assert outcomes(plan) == [False, False]
 
 
 def test_agent_measurement_privacy_notice_precedes_logging():
@@ -2171,3 +2688,126 @@ def test_timed_ci_checks_both_greenway_peak_windows():
 
     assert "test_live_greenway_peak_price" in TIMED_ROUTE_TEST
     assert "if: startsWith(inputs.window_id, 'i95_')" not in TIMED_CHECKS_WORKFLOW
+
+
+def test_exact_plan_success_path_is_private_ordered_and_fail_closed():
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    success_block = development.split(
+        "##### Successful exact-plan apply, migration, and evidence", maxsplit=1
+    )[1]
+    success = success_block.split("```sh\n", maxsplit=1)[1].split("\n```", maxsplit=1)[
+        0
+    ]
+
+    for text in (
+        "set -euo pipefail",
+        "set +x",
+        "umask 077",
+        "ROOT=/tmp/tmp.1nuZtAcl8L",
+        'PLAN="$ROOT/development-foundation.tfplan"',
+        'FETCHER="$ROOT/build/fetcher.zip"',
+        "EXPECTED_PLAN=0efda359505d7142a45792ec79e12d40d0540b7e3e961a7e04891328ca94e597",
+        "EXPECTED_FETCHER=9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1",
+        "EXPECTED_MANIFEST=d42489b4f0e971e6eeb06d0ba033b68584ab95ff19763a0e40724db657e8acc8",
+        "find . -maxdepth 1 -type f \\( -name '*.tf' -o -name '*.tf.json' \\) -printf '%P\\0'",
+        "find .terraform-data/providers -type f -perm /111 -name 'terraform-provider-*'",
+        "@terraform-cli",
+        "@terraform-version",
+        "terraform version -json",
+        "LC_ALL=C sort -z -u",
+        'FIRST="$(manifest_digest)"; SECOND="$(manifest_digest)"',
+        'test "$FIRST" = "$SECOND"; test "$FIRST" = "$EXPECTED_MANIFEST"',
+        'terraform -chdir="$ROOT" apply -input=false "$PLAN" >/dev/null 2>/dev/null',
+        'terraform -chdir="$ROOT" init -migrate-state -force-copy -input=false -backend-config="$ROOT/backend.development.hcl" >/dev/null 2>/dev/null',
+        'chmod 600 -- "$ROOT/terraform.tfstate"',
+        'timeout 30s env TF_DATA_DIR="$ROOT/.terraform-data"',
+        'state_object_absent "$STATE_KEY"; state_object_absent "$STATE_KEY.tflock"',
+        's3api head-object --bucket "$STATE_BUCKET" --key "$key" 2>&1 >/dev/null',
+        "404|Not Found|NoSuchKey",
+        'cp -- "$ROOT/versions.tf.with-backend" "$ROOT/versions.tf"',
+        'probe_denied s3api head-object --bucket "$STATE_BUCKET" --key "$STATE_KEY"',
+        'probe_denied kms describe-key --key-id "$STATE_KMS_ARN"',
+        "aws iam get-role --role-name \"$role\" --query 'Role.RoleName'",
+        "toll-fetcher toll-raw-replay nova-toll-tailscale-router",
+        "AccessDenied|403|Forbidden",
+        "nova-toll-monthly",
+        "SSM_COUNT",
+        "describe-parameters",
+        "cloudtrail",
+        "foundation_alarms=8",
+        "development_iam_roles_present=true",
+    ):
+        assert text in success
+
+    for forbidden in (
+        "terraform show",
+        "terraform output",
+        "terraform plan",
+        "terraform import",
+        "terraform_remote_state",
+        "get-parameter",
+        "cloudflare",
+        "terraform -target",
+        "rm -rf",
+        "subscriber_email_addresses",
+        "Parameter.Value",
+    ):
+        assert forbidden not in success
+
+    apply = 'terraform -chdir="$ROOT" apply -input=false "$PLAN"'
+    migration = 'terraform -chdir="$ROOT" init -migrate-state -force-copy -input=false'
+    assert success.index('test "$(sha256sum "$PLAN"') < success.index(apply)
+    assert success.index('test "$(printf \'%s\\n\' "$STATE_LIST"') < success.index(
+        'state_object_absent "$STATE_KEY"; state_object_absent "$STATE_KEY.tflock"'
+    )
+    assert success.index(
+        'state_object_absent "$STATE_KEY"; state_object_absent "$STATE_KEY.tflock"'
+    ) < success.index('cp -- "$ROOT/versions.tf.with-backend" "$ROOT/versions.tf"')
+    assert success.index(
+        'cp -- "$ROOT/versions.tf.with-backend" "$ROOT/versions.tf"'
+    ) < success.index(migration)
+    assert success.index(migration) < success.index('STATE_HEAD="$(AWS_PROFILE')
+    assert success.index(
+        'test "$(AWS_PROFILE=nova-toll-prod aws --region "$REGION" sts'
+    ) < success.index("probe_denied s3api head-object")
+
+
+def test_issue330_repairs_preserve_roles_and_migration_gate():
+    handoff = DEPLOYMENT.split("## Account-local foundation handoff", maxsplit=1)[1]
+    development = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    normalized_handoff = " ".join(handoff.split())
+    normalized_development = " ".join(development.split())
+
+    assert "production-only" in normalized_handoff
+    assert (
+        "Do not use that generic planned-output or tfvars flow for development"
+        in normalized_handoff
+    )
+    assert "state is not discovered through a foundation output" in normalized_handoff
+    assert "approved protected exception" in normalized_development
+    assert (
+        "private reviewed plan and encrypted, access-controlled Terraform state"
+        in normalized_development
+    )
+
+    assert "development_iam_roles_present=true" in normalized_development
+
+    assert (
+        "for role in toll-fetcher toll-raw-replay nova-toll-tailscale-router"
+        in development
+    )
+    assert "iam get-role --role-name \"$role\" --query 'Role.RoleName'" in development
+    assert (
+        'state_object_absent "$STATE_KEY"; state_object_absent "$STATE_KEY.tflock"'
+        in development
+    )
+    assert "2>&1 >/dev/null" in development
+    assert development.index("state_object_absent") < development.index(
+        'cp -- "$ROOT/versions.tf.with-backend" "$ROOT/versions.tf"'
+    )

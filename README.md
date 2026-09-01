@@ -136,21 +136,23 @@ operations details.
 
 ## Shared foundation changes
 
-Build and pass the real fetcher package for every root `infra/` plan. The
-bucket-policy guard rejects placeholder plans:
+Build and review the real fetcher package for every root `infra/` plan. The
+development foundation handoff for #330 is the retained, exact-plan procedure
+in [`v2/RUNBOOK.md`](v2/RUNBOOK.md): it verifies the private root, coupled
+plan/artifact/manifest digests, local bootstrap, encrypted state migration,
+sanitized evidence, and production isolation probes. Do not use a generic
+plan display or unbounded apply command; application release remains a
+separately approved follow-on operation.
 
 ```sh
 v2/scripts/build_fetcher_zip.sh
-AWS_PROFILE=nova-toll terraform -chdir=infra init
-AWS_PROFILE=nova-toll terraform -chdir=infra plan \
-  -var='fetcher_package_path=build/fetcher.zip' \
-  -out=build/foundation.tfplan
-AWS_PROFILE=nova-toll terraform -chdir=infra show build/foundation.tfplan
-AWS_PROFILE=nova-toll terraform -chdir=infra apply build/foundation.tfplan
+AWS_PROFILE=nova-toll-dev terraform -chdir=infra init -backend=false -input=false
+AWS_PROFILE=nova-toll-dev terraform -chdir=infra validate
 ```
 
-Review the saved plan before applying it. Load credentials from SSM into the
-process environment only; never place them in Terraform variables or plans.
+Pull-request checks remain credential-free. Load any runtime-only credentials
+from SSM into the process environment; never place them in Terraform variables,
+plans, state evidence, or documentation.
 
 ## License
 
