@@ -1,7 +1,7 @@
 name = "security_reviewer"
 description = "Read-only security reviewer for high-confidence, exploitable vulnerabilities in code, infrastructure, CI, and agent trust boundaries."
-model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
 developer_instructions = """
