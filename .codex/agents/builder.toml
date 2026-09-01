@@ -1,7 +1,7 @@
 name = "builder"
 description = "Single writer. Implements only .graph/explore.md and .graph/checklist.md inside the assigned .worktrees/ path, then writes .graph/change.md."
-model = "gpt-5.6-terra"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """

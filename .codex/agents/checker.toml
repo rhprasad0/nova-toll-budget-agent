@@ -1,7 +1,7 @@
 name = "checker"
 description = "Fresh-context gate. Reads worktree + explore.md + checklist.md + change.md, writes .graph/verdict.md. Never implements."
-model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
