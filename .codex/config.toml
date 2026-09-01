@@ -17,3 +17,6 @@ config_file = "agents/builder.toml"
 
 [agents.checker]
 config_file = "agents/checker.toml"
+
+[agents.security_reviewer]
+config_file = "agents/security_reviewer.toml"

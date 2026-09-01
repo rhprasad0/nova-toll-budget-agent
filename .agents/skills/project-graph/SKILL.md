@@ -23,7 +23,7 @@ The parent orchestrates only. Do not inspect the repository, implement, or
 verify in the parent thread.
 
 ```text
-intent → explorer → pre-checker → builder → checker → PASS | FAIL→builder | human
+intent → explorer → pre-checker → builder → checker + security_reviewer → PASS | FAIL→builder | human
 ```
 
 1. Create or reuse an isolated project-root `.worktrees/` path. Keep `.graph/`
@@ -38,26 +38,40 @@ intent → explorer → pre-checker → builder → checker → PASS | FAIL→bu
 5. Update `STATE.md`, then spawn one `builder` with `fork_turns: "none"`, the
    worktree, `explore.md`, and `checklist.md`. It implements and writes
    `change.md`.
-6. Update `STATE.md`, then spawn a new `checker` with `fork_turns: "none"`.
-   It reads the worktree and artifacts, writes `verdict.md`, and never edits
-   application code.
-7. On FAIL, update `STATE.md` and return `verdict.md` to the original builder.
-   After repair, run a new checker. Stop for the user after two failed fix loops.
+6. After every builder pass, update `STATE.md`, then spawn a fresh `checker`
+   and a fresh `security_reviewer`, both with `fork_turns: "none"`, before
+   waiting for either result. They review the same builder output concurrently.
+   Checker reads the worktree and artifacts, writes `verdict.md`, and never
+   edits application code. Security reviewer remains read-only and reports its
+   result to the parent without writing a graph artifact.
+7. Wait for both lanes. PASS requires checker PASS and no actionable security
+   findings. If either lane fails, update `STATE.md` and return evidence from
+   every failing lane, and no evidence from passing lanes, to the original
+   builder. After repair, repeat step 6 for both lanes. The initial failure
+   opens a repair loop; on each failed post-repair review, increment only that
+   lane's failed-fix-loop count. A pass in either lane never resets or consumes
+   either count. This applies to checker-only, security-only, and joint
+   failures; either previously passing lane may fail after a repair. Stop for
+   human intervention immediately when checker or security reaches two failed
+   post-repair reviews; do not start another repair.
 8. On PASS, update `STATE.md`, then summarize files, checks, and remaining risk.
 
 Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
-`STATE.md` to match the current node and next legal edge. Never run parallel
-writers or allow subagents to spawn subagents. Explorers, pre-checkers, and
-checkers may fan out.
+`STATE.md` to match the current node and next legal edge. Keep its exactly five
+lines—Intent, Worktree, Current node, Next legal edge (including separate
+checker and security failed-fix-loop counts), Blocked by. Never run parallel
+writers or allow subagents to spawn subagents; checker alone writes
+`verdict.md`, security reviewer writes no artifact, and their two post-builder
+review lanes are the only concurrent work.
 
-Both checker spawn tasks must require a ponytail review before completion: the
-pre-checker reviews the explored design and draft checklist; the checker reviews
-the implementation diff. Look for unnecessary abstractions, dependencies,
-configurability, operational machinery, and code replaced by the standard
-library or platform. A finding is blocking when a materially simpler design
-satisfies the intent; name its location, what to remove, and the replacement.
-Complexity required by the user, an existing contract, security, or data safety
-is exempt. Each checker records its findings or `Lean already`.
+The pre-checker and final checker must require a ponytail review before
+completion: the pre-checker reviews the explored design and draft checklist;
+the checker reviews the implementation diff. Look for unnecessary abstractions,
+dependencies, configurability, operational machinery, and code replaced by the
+standard library or platform. A finding is blocking when a materially simpler
+design satisfies the intent; name its location, what to remove, and the
+replacement. Complexity required by the user, an existing contract, security,
+or data safety is exempt. Each checker records its findings or `Lean already`.
 
 ## Artifacts
 
@@ -83,6 +97,7 @@ but never determines the current node.
 
 Continue until:
 
-- the checker returns PASS
+- checker returns PASS and security reviewer reports no actionable findings
 - a blocking gap requires human input after the prescribed explorer return
-- two failed fix loops require user intervention
+- checker or security reviewer reaches two failed post-repair reviews, which
+  requires user intervention
