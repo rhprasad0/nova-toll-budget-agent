@@ -30,6 +30,8 @@ test-results/
 /v2/infra/*.tfstate
 /v2/infra/*.tfstate.*
 /v2/infra/build/
+/v2/build/
+/v2/eval/results/*.json
 /v2/infra/*.tfplan
 *.tfvars
 !infra/production.tfvars

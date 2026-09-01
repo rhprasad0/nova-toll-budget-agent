@@ -208,7 +208,7 @@ def rds_target(env: dict[str, str], production: bool) -> str:
             valid = (
                 valid
                 and instance["DBInstanceStatus"] == "available"
-                and int(instance["BackupRetentionPeriod"]) > 0
+                and int(instance["BackupRetentionPeriod"]) >= 7
                 and restorable <= datetime.now(UTC)
                 and datetime.now(UTC) - restorable < timedelta(hours=1)
             )
@@ -447,8 +447,19 @@ def validate_eval_report(path: Path, case: str) -> None:
 
 
 def capture_eval(case: str, window: str, suite: str) -> Path:
+    if os.environ.get("DB_HOST") or os.environ.get("DB_PORT"):
+        raise Stop("development evaluations refuse ambient database targets")
+    host = rds_target(
+        {**os.environ, "AWS_PROFILE": "nova-toll-prod", "AWS_DEFAULT_REGION": REGION},
+        False,
+    )
     results = V2_ROOT / "eval/results"
     before = set(results.glob("*.json"))
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "PRICING_DB_USER"}
+    }
     command(
         [
             "uv",
@@ -461,10 +472,12 @@ def capture_eval(case: str, window: str, suite: str) -> Path:
             suite,
         ],
         env={
-            **os.environ,
+            **environment,
             "AWS_PROFILE": "nova-toll-prod",
             "AWS_DEFAULT_REGION": REGION,
             "DB_NAME": "nova_toll_development",
+            "DB_HOST": host,
+            "DB_PORT": "5432",
             "DB_USER": "tollchat_agent_development",
             "PRICING_DB_USER": "pricing_caller_development",
             "DB_CA_BUNDLE_PATH": str(CA_BUNDLE),

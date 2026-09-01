@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -87,6 +88,88 @@ def test_rds_target_rejects_public_wrong_or_unrestorable_instances(monkeypatch):
     instance.pop("LatestRestorableTime")
     with pytest.raises(migration.Stop):
         migration.rds_target({}, True)
+    instance["LatestRestorableTime"] = datetime.now(UTC).isoformat()
+    instance["BackupRetentionPeriod"] = 6
+    with pytest.raises(migration.Stop):
+        migration.rds_target({}, True)
+
+
+def test_development_evaluation_refuses_ambient_database_target(monkeypatch):
+    monkeypatch.setenv("DB_HOST", "wrong.example")
+    with pytest.raises(migration.Stop):
+        migration.capture_eval("case", "window", "suite")
+
+
+def test_development_evaluation_refuses_ambient_database_port(monkeypatch):
+    monkeypatch.setenv("DB_PORT", "5432")
+    with pytest.raises(migration.Stop):
+        migration.capture_eval("case", "window", "suite")
+
+
+def test_development_evaluation_binds_the_reviewed_target_and_identities(
+    monkeypatch, tmp_path
+):
+    results = tmp_path / "eval/results"
+    results.mkdir(parents=True)
+    monkeypatch.setattr(migration, "V2_ROOT", tmp_path)
+    monkeypatch.setattr(migration, "CA_BUNDLE", tmp_path / "rds-ca.pem")
+    monkeypatch.setattr(
+        migration, "rds_target", lambda *_args: "nova-toll-db.example.rds.amazonaws.com"
+    )
+    captured = {}
+
+    def fake_command(_args, *, env=None, input=None):
+        captured.update(env or {})
+        (results / "new.json").write_text(
+            json.dumps(
+                {
+                    "cases": [{"name": "case"}],
+                    "detailed_results": [[{"test_pass": True}]],
+                }
+            )
+        )
+        return ""
+
+    monkeypatch.setattr(migration, "command", fake_command)
+    migration.capture_eval("case", "window", "suite")
+    assert {
+        key: captured[key]
+        for key in (
+            "DB_HOST",
+            "DB_PORT",
+            "DB_NAME",
+            "DB_USER",
+            "PRICING_DB_USER",
+            "AWS_PROFILE",
+            "AWS_DEFAULT_REGION",
+            "DB_CA_BUNDLE_PATH",
+        )
+    } == {
+        "DB_HOST": "nova-toll-db.example.rds.amazonaws.com",
+        "DB_PORT": "5432",
+        "DB_NAME": "nova_toll_development",
+        "DB_USER": "tollchat_agent_development",
+        "PRICING_DB_USER": "pricing_caller_development",
+        "AWS_PROFILE": "nova-toll-prod",
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "DB_CA_BUNDLE_PATH": str(migration.CA_BUNDLE),
+    }
+
+
+def test_operator_outputs_are_ignored_without_ignoring_tracked_eval_history():
+    def ignored(path: str) -> bool:
+        return (
+            subprocess.run(
+                ["git", "check-ignore", "-q", path], cwd=REPO, check=False
+            ).returncode
+            == 0
+        )
+
+    assert ignored(
+        "v2/build/deployed-migration-evidence/development-release-receipt.txt"
+    )
+    assert ignored("v2/eval/results/new-live-report.json")
+    assert not ignored("v2/eval/results/20260822T150912Z.json")
 
 
 def test_state_requires_exact_versions_and_postconditions():
