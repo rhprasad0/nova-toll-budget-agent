@@ -66,19 +66,340 @@ def test_account_contract_records_the_replacement_development_boundary():
         "ownership": "account-local",
     }
     assert accounts["development"] == {
-        "name": "nova-toll-prod",
-        "id": "920534282028",
-        "ownership": "application-state",
-        "backend_key": "nova-toll/v2/development/terraform.tfstate",
-        "tfvars": "v2/infra/development.tfvars",
+        "name": "nova-toll-development",
+        "id": "903859731897",
+        "routine_human_access": "IAM Identity Center AdministratorAccess",
+        "break_glass_role": "OrganizationAccountAccessRole",
+        "long_lived_ci_credentials": False,
+        "owns": [
+            "backend",
+            "KMS",
+            "network",
+            "RDS",
+            "storage",
+            "audit trail",
+            "SSM parameters",
+            "future GitHub OIDC identities",
+        ],
     }
     shared_access = ACCOUNT_CONTRACT["shared_access"]
-    assert shared_access["production"] == {
-        "ownership": "application-state",
-        "backend_key": "nova-toll/v2/terraform.tfstate",
-        "tfvars": "v2/infra/production.tfvars",
-    }
+    assert shared_access["development_to_production_aws_read_paths"] == []
     assert "not an AWS shared-read grant" in shared_access["cloudflare_dns"]
+
+
+def test_account_local_backends_keep_production_paths_and_lockfiles_distinct():
+    foundation_production = (FOUNDATION_ROOT / "backend.production.hcl").read_text()
+    foundation_development = (FOUNDATION_ROOT / "backend.development.hcl").read_text()
+    application_production = (V2_ROOT / "infra" / "backend.production.hcl").read_text()
+    application_development = (
+        V2_ROOT / "infra" / "backend.development.hcl"
+    ).read_text()
+
+    assert 'bucket       = "nova-toll-tfstate-920534282028"' in foundation_production
+    assert 'key          = "nova-toll/terraform.tfstate"' in foundation_production
+    assert 'bucket       = "nova-toll-tfstate-903859731897"' in foundation_development
+    assert (
+        'key          = "nova-toll/development/terraform.tfstate"'
+        in foundation_development
+    )
+    assert 'bucket       = "nova-toll-tfstate-920534282028"' in application_production
+    assert 'key          = "nova-toll/v2/terraform.tfstate"' in application_production
+    assert 'bucket       = "nova-toll-tfstate-903859731897"' in application_development
+    assert (
+        'key          = "nova-toll/v2/development/terraform.tfstate"'
+        in application_development
+    )
+    for backend in (
+        foundation_production,
+        foundation_development,
+        application_production,
+        application_development,
+    ):
+        assert "use_lockfile = true" in backend
+    assert "nova-toll-tfstate-920534282028" not in foundation_development
+    assert "nova-toll-tfstate-920534282028" not in application_development
+
+
+def test_foundation_names_and_budget_use_the_caller_account():
+    foundation_s3 = (FOUNDATION_ROOT / "s3.tf").read_text()
+    foundation_agentcore = FOUNDATION_AGENTCORE
+    foundation_audit = (FOUNDATION_ROOT / "audit.tf").read_text()
+    budget = FOUNDATION_BUDGET.read_text()
+
+    assert "account_id = data.aws_caller_identity.current.account_id" in foundation_s3
+    for name, source in (
+        ("nova-toll-raw-${local.account_id}", foundation_s3),
+        ("nova-toll-tfstate-${local.account_id}", foundation_s3),
+        ("nova-toll-agentcore-${local.account_id}", foundation_agentcore),
+        ("nova-toll-audit-${local.account_id}", foundation_audit),
+    ):
+        assert name in source
+    assert "account_id        = local.account_id" in budget
+    assert "920534282028" not in "".join(
+        path.read_text() for path in FOUNDATION_ROOT.glob("*.tf")
+    )
+
+
+def test_foundation_output_and_application_input_are_the_exact_non_secret_boundary():
+    output = (FOUNDATION_ROOT / "outputs.tf").read_text()
+    variable = APPLICATION_VARIABLES.split('variable "foundation"', maxsplit=1)[
+        1
+    ].split('variable "environment"', maxsplit=1)[0]
+    fields = (
+        "vpc_id",
+        "vpc_cidr_block",
+        "private_subnet_ids",
+        "rds_security_group_id",
+        "agentcore_endpoint_security_group_id",
+        "eventbridge_endpoint_security_group_id",
+        "agentcore_vpc_endpoint_id",
+        "agentcore_vpc_endpoint_dns_name",
+        "tollchat_api_vpc_endpoint_id",
+        "raw_bucket_name",
+        "raw_kms_key_arn",
+        "agentcore_artifacts_bucket_name",
+        "db_instance",
+        "alerts_topic_arn",
+    )
+    assert output.count('output "foundation"') == 1
+    assert output.count("output ") == 1
+    assert "sensitive   = false" in output
+    assert "sensitive = true" not in output
+    assert "sensitive = true" not in variable
+    assert "default" not in variable
+    for field in fields:
+        assert field in output
+        assert field in variable
+    assert re.search(
+        r"private_subnet_ids\s*=\s*object\(\{\s*a\s*=\s*string,\s*c\s*=\s*string\s*\}\)",
+        variable,
+    )
+    for field in ("identifier", "resource_id", "address", "port"):
+        assert field in output and field in variable
+    for forbidden in (
+        "password",
+        "ssm",
+        "master",
+        "terraform_remote_state",
+    ):
+        assert forbidden not in output.lower()
+
+
+def test_development_foundation_cannot_advertise_the_shared_vpc_route():
+    variables = (FOUNDATION_ROOT / "variables.tf").read_text()
+    router = FOUNDATION_TAILSCALE
+    development_handoff = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+
+    assert 'variable "environment"' in variables
+    assert 'default     = "production"' in variables
+    assert 'variable "tailscale_advertise_routes"' in variables
+    assert "default     = true" in variables
+    assert (
+        'condition     = (data.aws_caller_identity.current.account_id == local.production_account_id && var.environment == "production") || !var.tailscale_advertise_routes'
+        in router
+    )
+    advertisement = router.split("%{if var.tailscale_advertise_routes~}", maxsplit=1)[
+        1
+    ].split("%{endif~}", maxsplit=1)[0]
+    for option in (
+        "--advertise-routes=",
+        "--advertise-exit-node",
+        "--advertise-tags=tag:nova-toll-router",
+    ):
+        assert option in advertisement
+    assert "-var environment=development" in development_handoff
+    assert "-var tailscale_advertise_routes=false" in development_handoff
+    assert "non-overlapping" in DEPLOYMENT
+    assert "environment-specific ACL identity" in DEPLOYMENT
+
+
+def test_v2_uses_the_typed_boundary_without_foundation_discovery():
+    terraform_sources = "\n".join(
+        path.read_text() for path in (V2_ROOT / "infra").glob("*.tf")
+    )
+    for forbidden in (
+        "terraform_remote_state",
+        'data "aws_vpc"',
+        'data "aws_subnets"',
+        'data "aws_subnet"',
+        'data "aws_vpc_endpoint"',
+        'data "aws_security_group"',
+        'data "aws_s3_bucket"',
+        'data "aws_kms_alias"',
+        'data "aws_db_instance"',
+        'data "aws_sns_topic"',
+        "nova-toll-raw-920534282028",
+        "nova-toll-agentcore-920534282028",
+    ):
+        assert forbidden not in terraform_sources
+    for field in (
+        "vpc_id",
+        "vpc_cidr_block",
+        "private_subnet_ids",
+        "rds_security_group_id",
+        "agentcore_endpoint_security_group_id",
+        "eventbridge_endpoint_security_group_id",
+        "agentcore_vpc_endpoint_id",
+        "agentcore_vpc_endpoint_dns_name",
+        "tollchat_api_vpc_endpoint_id",
+        "raw_bucket_name",
+        "raw_kms_key_arn",
+        "agentcore_artifacts_bucket_name",
+        "db_instance",
+        "alerts_topic_arn",
+    ):
+        assert f"var.foundation.{field}" in terraform_sources
+
+
+def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
+    runbook = DEPLOYMENT
+    plan = (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
+    for text in (
+        "terraform show -json",
+        "planned_values.outputs.foundation.value",
+        "*.tfvars.json",
+        "jq -n --argjson foundation",
+        '"foundation": $foundation',
+        "review",
+        "rm -f --",
+    ):
+        assert text in runbook
+    for document in (runbook, plan):
+        for text in (
+            "#330",
+            "#331",
+            "#332",
+            "#333",
+            "certificate-validation",
+            "enable_public_dns = false",
+            "AWS-only identity",
+            "cannot write Cloudflare DNS",
+        ):
+            assert text in document
+    assert "provide an operative development" in plan
+    assert "Development application release is non-operative" in runbook
+    for tfvars in (V2_ROOT / "infra").glob("*.tfvars"):
+        assert "vpc-" not in tfvars.read_text()
+        assert "subnet-" not in tfvars.read_text()
+        assert "sg-" not in tfvars.read_text()
+        assert "arn:aws" not in tfvars.read_text()
+
+    development = runbook.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    production = runbook.split("### Guarded production release", maxsplit=1)[1].split(
+        "The legacy development inventory", maxsplit=1
+    )[0]
+    for block, prefix, account, backend in (
+        (
+            development,
+            "DEVELOPMENT",
+            "903859731897",
+            "backend.development.hcl",
+        ),
+        (
+            production,
+            "PRODUCTION",
+            "920534282028",
+            "backend.production.hcl",
+        ),
+    ):
+        foundation_vars = f"{prefix}_FOUNDATION_VARS"
+        foundation_plan = f"{prefix}_FOUNDATION_PLAN"
+        assert f'{foundation_vars}="$(mktemp --suffix=.tfvars.json)"' in block
+        assert f'{foundation_plan}="$(mktemp --suffix=.tfplan)"' in block
+        assert (
+            f'trap \'rm -f -- "${foundation_plan}" "${foundation_vars}"\' EXIT' in block
+        )
+        assert f'query Account --output text)" = "{account}"' in block
+        assert backend in block
+        assert "show -json" in block
+        assert "planned_values.outputs.foundation.value" in block
+        foundation_handoff = block.split('cd "$ROOT/v2/infra"', maxsplit=1)[0]
+        assert "terraform apply" not in foundation_handoff
+        assert f"${foundation_plan}" in foundation_handoff
+        assert "-lock=false" in foundation_handoff
+        assert (
+            ': "${TF_VAR_budget_notification_email:?set the existing foundation budget notification input}"'
+            in foundation_handoff
+        )
+        assert (
+            '-var fetcher_package_path="$ROOT/infra/build/fetcher.zip"'
+            in foundation_handoff
+        )
+        assert 'type == "object"' in foundation_handoff
+        assert '(.address | type == "string" and length > 0)' in foundation_handoff
+        assert (
+            '(.mode == "managed" and .change.actions == ["no-op"])'
+            in foundation_handoff
+        )
+        assert (
+            '(.mode == "data" and (foundation_data_addresses | index($address)) != null and .change.actions == ["read"])'
+            in foundation_handoff
+        )
+        assert f'rm -f -- "${foundation_vars}"' in block
+        if prefix == "PRODUCTION":
+            assert "-var-file=production.tfvars" in block
+            assert f'-var-file="${foundation_vars}"' in block
+            for package_arg in (
+                "-var loader_package_path=build/loader.zip",
+                "-var publisher_package_path=build/publisher.zip",
+                "-var agentcore_package_path=build/agentcore.zip",
+                "-var chat_proxy_package_path=build/chat-proxy.zip",
+            ):
+                assert package_arg in block
+        else:
+            assert "terraform apply" not in block
+            assert "development-release.tfplan" not in block
+    assert '"$FOUNDATION_VARS"' not in runbook
+    assert "terraform output -json foundation" not in runbook
+    assert '"$DEVELOPMENT_FOUNDATION_VARS"' in development
+    assert '"$PRODUCTION_FOUNDATION_VARS"' in production
+
+
+def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+    for forbidden in (
+        "configure-aws-credentials",
+        "id-token: write",
+        "terraform plan",
+        "terraform apply",
+        "terraform import",
+        "terraform state",
+        "aws sts",
+        "ssm get-parameter",
+    ):
+        assert forbidden not in workflow
+
+
+def test_backend_and_provider_configuration_has_no_credential_or_workspace_coupling():
+    configuration = "\n".join(
+        path.read_text()
+        for path in (
+            FOUNDATION_ROOT / "providers.tf",
+            FOUNDATION_ROOT / "versions.tf",
+            FOUNDATION_ROOT / "backend.production.hcl",
+            FOUNDATION_ROOT / "backend.development.hcl",
+            V2_ROOT / "infra" / "providers.tf",
+            V2_ROOT / "infra" / "versions.tf",
+            V2_ROOT / "infra" / "backend.production.hcl",
+            V2_ROOT / "infra" / "backend.development.hcl",
+        )
+    ).lower()
+    for forbidden in (
+        "profile",
+        "access_key",
+        "secret_key",
+        "assume_role",
+        "workspace",
+        "terraform_remote_state",
+        "dynamodb_table",
+    ):
+        assert forbidden not in configuration
 
 
 def test_legacy_development_inventory_hands_cleanup_to_issue_333():
@@ -107,10 +428,9 @@ def test_legacy_development_inventory_hands_cleanup_to_issue_333():
     ):
         assert text in LEGACY_DEVELOPMENT_INVENTORY
     assert "not independent buckets" in LEGACY_DEVELOPMENT_INVENTORY
-    assert (
-        "future, non-operative migration context"
-        in (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
-    )
+    plan = (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
+    assert "account-local foundation handoff" in plan
+    assert "legacy production-account development cleanup is owned by #333" in plan
 
 
 def test_foundation_budget_preserves_the_production_notification_contract():
@@ -124,7 +444,7 @@ def test_foundation_budget_preserves_the_production_notification_contract():
     assert "default" not in email_variable.split("}", 1)[0]
     assert 'resource "aws_budgets_budget" "nova_toll_monthly"' in budget
     for attribute, value in (
-        ("account_id", '"920534282028"'),
+        ("account_id", r"local\.account_id"),
         ("name", '"nova-toll-monthly"'),
         ("budget_type", '"COST"'),
         ("limit_amount", '"100"'),
@@ -151,6 +471,7 @@ def test_foundation_budget_preserves_the_production_notification_contract():
         )
     }
     assert tuples == {("ACTUAL", "80"), ("FORECASTED", "80"), ("ACTUAL", "100")}
+    assert "import {" not in budget
 
 
 def test_foundation_publishes_raw_events_without_a_legacy_loader():
@@ -515,11 +836,11 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     )
     assert 'network_mode = "VPC"' in agentcore
     assert (
-        "dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.agent}"
+        "dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}"
         in agentcore
     )
     assert (
-        "dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}"
+        "dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}"
         in agentcore
     )
     assert (
@@ -612,6 +933,46 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'resource "aws_acm_certificate" "site"' in site
 
 
+def test_development_site_has_no_cloudflare_reads_or_writes():
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    development_tfvars = (V2_ROOT / "infra" / "development.tfvars").read_text()
+    zone = site.split('data "cloudflare_zone" "tollchat"', maxsplit=1)[1].split(
+        'resource "aws_acm_certificate" "site"', maxsplit=1
+    )[0]
+    certificate_records = site.split(
+        'resource "cloudflare_dns_record" "site_cert_validation"', maxsplit=1
+    )[1].split('resource "aws_acm_certificate_validation" "site"', maxsplit=1)[0]
+    certificate_validation = site.split(
+        'resource "aws_acm_certificate_validation" "site"', maxsplit=1
+    )[1].split('resource "cloudflare_dns_record" "apex"', maxsplit=1)[0]
+    apex = site.split('resource "cloudflare_dns_record" "apex"', maxsplit=1)[1].split(
+        'resource "cloudflare_dns_record" "www"', maxsplit=1
+    )[0]
+    www = site.split('resource "cloudflare_dns_record" "www"', maxsplit=1)[1].split(
+        'output "public_site"', maxsplit=1
+    )[0]
+
+    assert "count  = local.is_production ? 1 : 0" in zone
+    assert "for_each = local.is_production ? {" in certificate_records
+    assert "data.cloudflare_zone.tollchat.zone_id" not in site
+    assert "data.cloudflare_zone.tollchat[0].zone_id" in site
+    assert "count           = local.is_production ? 1 : 0" in certificate_validation
+    assert (
+        "depends_on = [cloudflare_dns_record.site_cert_validation]"
+        in certificate_validation
+    )
+    assert "from = data.cloudflare_zone.tollchat" in site
+    assert "to   = data.cloudflare_zone.tollchat[0]" in site
+    assert "from = aws_acm_certificate_validation.site" in site
+    assert "to   = aws_acm_certificate_validation.site[0]" in site
+    assert "count   = local.is_production && var.enable_public_dns ? 1 : 0" in apex
+    assert "count   = local.is_production ? 1 : 0" in www
+    assert 'environment       = "development"' in development_tfvars
+    assert "enable_public_dns = false" in development_tfvars
+    assert "development path has no Cloudflare data or resource instances" in DEPLOYMENT
+    assert "development DNS/certificate validation" in DEPLOYMENT
+
+
 def test_public_report_surface_is_canonical_crawlable_and_isolated():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     robots = (V2_ROOT / "agent" / "robots.txt").read_text()
@@ -670,6 +1031,14 @@ def test_public_report_launch_is_selected_environment_and_correlated():
     launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
         "## Agent-route measurement launch", 1
     )[0]
+    assert "production only" in launch.lower()
+    assert re.search(
+        r"never run it while the development\s+backend is selected", launch
+    )
+    assert re.search(
+        r"Development public report publication, Cloudflare, and DNS\s+remain deferred to #332",
+        launch,
+    )
     for required in (
         "terraform output -json public_site",
         ".url | select",
@@ -691,16 +1060,60 @@ def test_public_report_launch_is_selected_environment_and_correlated():
         "trap 'rm -f --",
     ):
         assert required in launch
-    assert "https://tollchat.ai" not in launch
 
-    shell_match = re.search(r"```sh\n(.*?)\n```", launch, re.DOTALL)
-    if shell_match is None:
-        raise AssertionError("missing public report launch shell block")
-    shell = shell_match.group(1)
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
-        script.write(shell)
-        script.flush()
-        assert subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
+    shells = re.findall(r"```sh\n(.*?)\n```", launch, re.DOTALL)
+    assert len(shells) == 2
+    for shell in shells:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
+            script.write(shell)
+            script.flush()
+            assert (
+                subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
+            )
+        for required in (
+            'ROOT="$(git rev-parse --show-toplevel)"',
+            'cd "$ROOT/v2/infra"',
+            'get-caller-identity --query Account --output text)" = "920534282028"',
+            "terraform init -reconfigure -input=false -backend-config=backend.production.hcl",
+            'test "$PUBLISHER_FUNCTION" = "toll-v2-report-publisher"',
+            'test "$PUBLISHER_LOG_GROUP" = "/aws/lambda/toll-v2-report-publisher"',
+            'test "$SITE_BUCKET" = "tollchat-site-920534282028"',
+            'test -n "$SITE_DISTRIBUTION"',
+            '[[ "$SITE_DISTRIBUTION" =~ ^[A-Z0-9]+$ ]]',
+            'test "$SITE_URL" = "https://tollchat.ai"',
+        ):
+            assert required in shell
+        assert not re.search(r'SITE_DISTRIBUTION="E[A-Z0-9]+"', shell)
+        selection = shell.index('test "$(AWS_PROFILE=nova-toll-prod aws sts')
+        initialization = shell.index(
+            "terraform init -reconfigure -input=false -backend-config=backend.production.hcl"
+        )
+        state_reads = [
+            shell.index("terraform state show"),
+            shell.index("terraform output -json public_site"),
+        ]
+        assert selection < initialization < min(state_reads)
+        validation = max(
+            shell.index('test "$PUBLISHER_FUNCTION"'),
+            shell.index('test "$PUBLISHER_LOG_GROUP"'),
+            shell.index('test "$SITE_BUCKET"'),
+            shell.index('test -n "$SITE_DISTRIBUTION"'),
+            shell.index('[[ "$SITE_DISTRIBUTION"'),
+            shell.index('test "$SITE_URL"'),
+        )
+        report_operations = [
+            shell.find("cloudfront wait"),
+            shell.find("lambda invoke"),
+            shell.find("logs filter-log-events"),
+            shell.find("s3api get-object"),
+            shell.find("curl --fail"),
+        ]
+        report_operations = [
+            position for position in report_operations if position >= 0
+        ]
+        assert report_operations and validation < min(report_operations)
+
+    shell = shells[0]
 
     def shell_function(name: str) -> str:
         match = re.search(rf"(?ms)^{name}\(\) \{{.*?^\}}", shell)
@@ -876,156 +1289,223 @@ def test_agent_measurement_keeps_cloudflare_dns_only():
     assert 'resource "cloudflare_bot_management"' not in site
 
 
-def test_same_account_release_contract_and_gates_reject_disallowed_plans():
+def test_account_local_release_contract_and_foundation_gates_fail_closed():
     for text in (
-        "AWS_PROFILE=nova-toll-prod",
-        'get-caller-identity --query Account --output text)" = "920534282028"',
+        "AWS_PROFILE=nova-toll-development",
+        'get-caller-identity --query Account --output text)" = "903859731897"',
         "backend.development.hcl",
-        "development.tfvars",
         "backend.production.hcl",
         "production.tfvars",
-        "development-release.tfplan",
         "production-release.tfplan",
-        "Build the four reviewed inputs once",
-        "development first",
+        "Development application release is non-operative",
+        "#330",
+        "#331",
+        "#332",
         "-reconfigure",
         "-lock=false",
     ):
         assert text in DEPLOYMENT
-    assert DEPLOYMENT.index("### Guarded development release") < DEPLOYMENT.index(
-        "### Guarded production release"
-    )
-    assert "903859731897" not in DEPLOYMENT
+    assert DEPLOYMENT.index(
+        "### Development foundation handoff (#330; no application release)"
+    ) < DEPLOYMENT.index("### Guarded production release")
+    assert "903859731897" in DEPLOYMENT
     assert "terraform workspace" not in DEPLOYMENT
     assert "terraform -target" not in DEPLOYMENT
+    development_handoff = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+    assert "terraform apply" not in development_handoff
+    assert "development-release.tfplan" not in development_handoff
 
-    gates = [
-        re.search(
-            r"development-release\.tfplan \| jq -e '\n(.*?)'\nAWS_PROFILE",
-            DEPLOYMENT,
-            re.DOTALL,
-        ),
-        re.search(
-            r"production-release\.tfplan \| jq -e '\n(.*?)'\nAWS_PROFILE",
-            DEPLOYMENT,
-            re.DOTALL,
-        ),
-    ]
-    assert all(gates)
-    gate_programs = [gate.group(1) for gate in gates if gate is not None]
-    assert len(gate_programs) == 2
+    gates = re.findall(
+        r'show -json "\$(?:DEVELOPMENT|PRODUCTION)_FOUNDATION_PLAN" \| jq -e \'\n(.*?)\n\' >/dev/null',
+        DEPLOYMENT,
+        re.DOTALL,
+    )
+    assert len(gates) == 2
+    assert gates[0] == gates[1]
 
-    def outcomes(plan: object) -> list[bool]:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as fixture:
-            json.dump(plan, fixture)
-            fixture.flush()
-            return [
-                subprocess.run(["jq", "-e", gate, fixture.name], check=False).returncode
-                == 0
-                for gate in gate_programs
-            ]
+    data_addresses = (
+        "data.aws_caller_identity.current",
+        "data.aws_region.current",
+        "data.aws_vpc.default",
+        "data.aws_subnets.default",
+        "data.aws_route_tables.default",
+        "data.aws_iam_policy_document.agentcore_artifacts",
+        "data.aws_iam_policy_document.raw_bucket",
+        "data.aws_iam_policy_document.tfstate_bucket",
+        "data.archive_file.placeholder",
+        "data.aws_iam_policy_document.lambda_assume",
+        "data.aws_iam_policy_document.fetcher",
+        "data.aws_iam_policy_document.replay_assume",
+        "data.aws_iam_policy_document.replay",
+        "data.aws_iam_policy_document.audit_kms",
+        "data.aws_iam_policy_document.alerts_kms",
+        "data.aws_iam_policy_document.audit_bucket",
+        "data.aws_prefix_list.s3",
+        "data.aws_iam_policy_document.ec2_assume",
+        "data.aws_iam_policy_document.tailscale_router",
+        "data.aws_subnet.tailscale_router",
+    )
+
+    def foundation_value() -> dict[str, object]:
+        return {
+            "vpc_id": "vpc-123",
+            "vpc_cidr_block": "10.0.0.0/16",
+            "private_subnet_ids": {"a": "subnet-a", "c": "subnet-c"},
+            "rds_security_group_id": "sg-rds",
+            "agentcore_endpoint_security_group_id": "sg-agentcore",
+            "eventbridge_endpoint_security_group_id": "sg-eventbridge",
+            "agentcore_vpc_endpoint_id": "vpce-agentcore",
+            "agentcore_vpc_endpoint_dns_name": "vpce.example.com",
+            "tollchat_api_vpc_endpoint_id": "vpce-api",
+            "raw_bucket_name": "raw-bucket",
+            "raw_kms_key_arn": "arn:aws:kms:us-east-1:920534282028:key/raw",
+            "agentcore_artifacts_bucket_name": "agentcore-bucket",
+            "db_instance": {
+                "identifier": "nova-toll-db",
+                "resource_id": "db-123",
+                "address": "db.example.com",
+                "port": 5432,
+            },
+            "alerts_topic_arn": "arn:aws:sns:us-east-1:920534282028:alerts",
+        }
+
+    def foundation_plan(
+        changes: object, foundation: object | None = None
+    ) -> dict[str, object]:
+        if foundation is None:
+            foundation = foundation_value()
+        return {
+            "resource_changes": changes,
+            "planned_values": {"outputs": {"foundation": {"value": foundation}}},
+        }
 
     def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
         return {"mode": mode, "address": address, "change": {"actions": actions}}
 
-    creates = [
-        "aws_iam_role.publisher_scheduler",
-        "aws_iam_role_policy.publisher_scheduler",
-        "aws_scheduler_schedule.publisher",
-    ]
-    updates = [
-        "aws_bedrockagentcore_agent_runtime.tollchat",
-        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
-        "aws_cloudwatch_metric_alarm.report_generation_freshness",
-        "aws_iam_role_policy.publisher",
-        "aws_iam_role_policy.tollchat_proxy",
-        "aws_iam_role_policy.tollchat_runtime",
-        "aws_lambda_function.publisher",
-        "aws_s3_object.agentcore",
-        "aws_s3_object.usage",
-    ]
-    deletes = [
-        "aws_cloudwatch_event_rule.committed_i95_loads",
-        "aws_cloudwatch_event_rule.report_watchdog",
-        "aws_cloudwatch_event_target.publisher_load_event",
-        "aws_cloudwatch_event_target.publisher_watchdog",
-        'aws_cloudwatch_metric_alarm.publisher_failed_invocations["load_success"]',
-        'aws_cloudwatch_metric_alarm.publisher_failed_invocations["watchdog"]',
-        "aws_lambda_permission.publisher_load_event",
-        "aws_lambda_permission.publisher_watchdog",
-        "aws_sqs_queue_policy.publisher_delivery_failure",
-    ]
-    reads = [
-        "data.aws_iam_policy_document.publisher_scheduler",
-        "data.aws_iam_policy_document.tollchat_proxy",
-        "data.aws_iam_policy_document.tollchat_runtime",
-    ]
-    assert all(
-        outcomes(
-            {
-                "resource_changes": [
-                    *(change("managed", address, ["create"]) for address in creates),
-                    *(change("managed", address, ["update"]) for address in updates),
-                    *(change("managed", address, ["delete"]) for address in deletes),
-                    *(change("data", address, ["read"]) for address in reads),
-                ]
-            }
-        )
+    def outcomes(plan: object | str) -> list[bool]:
+        input_data = plan if isinstance(plan, str) else json.dumps(plan)
+        results = [
+            subprocess.run(
+                ["jq", "-e", gate], input=input_data, text=True, check=False
+            ).returncode
+            == 0
+            for gate in gates
+        ]
+        assert results[0] == results[1]
+        return results
+
+    accepted = (
+        foundation_plan([]),
+        foundation_plan([change("managed", "aws_s3_bucket.state", ["no-op"])]),
+        foundation_plan([change("data", "data.aws_vpc.default", ["read"])]),
+        foundation_plan(
+            [change("data", address, ["read"]) for address in data_addresses]
+        ),
+        foundation_plan(
+            [
+                change("managed", "aws_s3_bucket.state", ["no-op"]),
+                change("data", "data.aws_vpc.default", ["read"]),
+            ]
+        ),
     )
-    assert all(
-        outcomes({"resource_changes": [change("managed", "anything", ["no-op"])]})
-    )
-    malformed_plans: tuple[object, ...] = (
+    for plan in accepted:
+        assert all(outcomes(plan))
+
+    malformed: tuple[object, ...] = (
+        "not json",
         {},
-        {"resource_changes": None},
-        {"resource_changes": {}},
-        {"resource_changes": [{"mode": "managed", "address": "anything"}]},
-        {"resource_changes": [change("managed", "anything", [])]},
+        foundation_plan({}),
+        foundation_plan(None),
+        foundation_plan({"resource_changes": []}),
+        foundation_plan([None]),
+        foundation_plan(["resource"]),
+        foundation_plan([1]),
+        foundation_plan([{**change("managed", "", ["no-op"])}]),
+        foundation_plan(
+            [
+                {
+                    key: value
+                    for key, value in change("managed", "x", ["no-op"]).items()
+                    if key != "address"
+                }
+            ]
+        ),
+        foundation_plan([{**change("managed", "x", ["no-op"]), "mode": None}]),
+        foundation_plan(
+            [{**change("managed", "x", ["no-op"]), "mode": cast(object, [])}]
+        ),
+        foundation_plan([{"address": "x", "change": {"actions": ["no-op"]}}]),
+        foundation_plan([{**change("managed", "x", ["no-op"]), "change": None}]),
+        foundation_plan(
+            [{**change("managed", "x", ["no-op"]), "change": cast(object, [])}]
+        ),
+        foundation_plan([{"mode": "managed", "address": "x"}]),
+        foundation_plan(
+            [
+                {
+                    "mode": "managed",
+                    "address": "x",
+                    "change": cast(object, {}),
+                }
+            ]
+        ),
+        foundation_plan(
+            [{**change("managed", "x", ["no-op"]), "change": {"actions": None}}]
+        ),
+        foundation_plan(
+            [
+                {
+                    **change("managed", "x", ["no-op"]),
+                    "change": {"actions": cast(object, {})},
+                }
+            ]
+        ),
+        foundation_plan(
+            [{**change("managed", "x", ["no-op"]), "change": {"actions": "no-op"}}]
+        ),
     )
-    for malformed in malformed_plans:
-        assert not any(outcomes(malformed))
-    assert not any(
-        outcomes(
-            {
-                "resource_changes": [
-                    change("managed", "aws_s3_bucket.unapproved", ["update"])
-                ]
-            }
-        )
-    )
-    for plan in (
-        {
-            "resource_changes": [
-                change("managed", "infra.aws_s3_bucket.state", ["update"])
-            ]
-        },
-        {"resource_changes": [change("managed", "aws_db_instance.main", ["update"])]},
-        {
-            "resource_changes": [
-                change("managed", "aws_lambda_function.publisher", ["create"])
-            ]
-        },
-        {
-            "resource_changes": [
-                change("managed", "aws_lambda_function.publisher", ["delete", "create"])
-            ]
-        },
-        {
-            "resource_changes": [
-                change("managed", "aws_lambda_function.publisher", ["create", "delete"])
-            ]
-        },
-    ):
+    for plan in malformed:
         assert not any(outcomes(plan))
-    assert not any(
-        outcomes(
-            {
-                "resource_changes": [
-                    change("managed", "aws_s3_object.tollchat_proxy", ["update"])
-                ]
-            }
-        )
+
+    extra_output = foundation_value()
+    extra_output["unexpected_secret"] = "should reject"
+    missing_output_key = foundation_value()
+    del missing_output_key["raw_kms_key_arn"]
+    nested_extra = foundation_value()
+    cast(dict[str, object], nested_extra["db_instance"])["password"] = "should reject"
+    nested_missing = foundation_value()
+    del cast(dict[str, object], nested_missing["private_subnet_ids"])["c"]
+    missing_foundation_output = foundation_plan([], foundation_value())
+    del cast(
+        dict[str, object],
+        cast(dict[str, object], missing_foundation_output["planned_values"])["outputs"],
+    )["foundation"]
+    disallowed = (
+        *(
+            foundation_plan([change("managed", "x", [action])])
+            for action in ("create", "update", "delete", "read")
+        ),
+        *(
+            foundation_plan([change("data", "x", [action])])
+            for action in ("no-op", "create", "update", "delete")
+        ),
+        foundation_plan([change("data", "x", ["read", "read"])]),
+        foundation_plan([change("unknown", "x", ["read"])]),
+        foundation_plan([change("managed", "x", ["no-op", "read"])]),
+        foundation_plan([], extra_output),
+        foundation_plan([], missing_output_key),
+        foundation_plan([], nested_extra),
+        foundation_plan([], nested_missing),
+        missing_foundation_output,
+        foundation_plan(
+            [change("data", "data.aws_ssm_parameter.production_secret", ["read"])]
+        ),
     )
+    for plan in disallowed:
+        assert not any(outcomes(plan))
 
 
 def test_agent_measurement_privacy_notice_precedes_logging():
@@ -1349,8 +1829,8 @@ def test_eventbridge_has_both_failure_paths_and_bounded_retries():
 
 def test_loader_network_and_data_access_are_scoped():
     assert "${data.aws_s3_bucket.raw.arn}/*" not in MAIN_TF
-    assert '"${data.aws_s3_bucket.raw.arn}/raw/feed=i95/*"' in MAIN_TF
-    assert '"${data.aws_s3_bucket.raw.arn}/raw/feed=i66/*"' in MAIN_TF
+    assert '"${local.raw_bucket_arn}/raw/feed=i95/*"' in MAIN_TF
+    assert '"${local.raw_bucket_arn}/raw/feed=i66/*"' in MAIN_TF
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_rds"' in MAIN_TF
     assert 'resource "aws_vpc_security_group_egress_rule" "loader_to_s3"' in MAIN_TF
 
@@ -1368,8 +1848,8 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     )
     assert rds_resources
     assert re.findall(r'"([^"]+)"', rds_resources.group(1)) == [
-        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.publisher}",
-        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.reader}",
+        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.publisher}",
+        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.reader}",
     ]
     assert "*" not in rds_resources.group(1)
     assert 'actions   = ["s3:GetObject"]' in policy

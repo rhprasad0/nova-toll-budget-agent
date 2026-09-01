@@ -21,6 +21,32 @@ variable "chat_proxy_package_path" {
   type        = string
   default     = ""
 }
+
+variable "foundation" {
+  description = "Reviewed, non-secret inputs emitted by the account-local foundation root."
+  type = object({
+    vpc_id                                 = string
+    vpc_cidr_block                         = string
+    private_subnet_ids                     = object({ a = string, c = string })
+    rds_security_group_id                  = string
+    agentcore_endpoint_security_group_id   = string
+    eventbridge_endpoint_security_group_id = string
+    agentcore_vpc_endpoint_id              = string
+    agentcore_vpc_endpoint_dns_name        = string
+    tollchat_api_vpc_endpoint_id           = string
+    raw_bucket_name                        = string
+    raw_kms_key_arn                        = string
+    agentcore_artifacts_bucket_name        = string
+    db_instance = object({
+      identifier  = string
+      resource_id = string
+      address     = string
+      port        = number
+    })
+    alerts_topic_arn = string
+  })
+}
+
 variable "environment" {
   description = "Application environment. Production retains the deployed v2 identities."
   type        = string

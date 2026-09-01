@@ -1,2 +1,2 @@
 environment       = "development"
-enable_public_dns = true
+enable_public_dns = false

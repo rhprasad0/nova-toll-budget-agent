@@ -22,7 +22,8 @@
 # the new node rejoined the tailnet and its subnet route is live before
 # assuming the bridge is back.
 locals {
-  tailscale_router_ami = "ami-03c42c6db44b3949a"
+  tailscale_router_ami  = "ami-03c42c6db44b3949a"
+  production_account_id = jsondecode(file("${path.module}/account-contract.json")).accounts.production.id
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -90,6 +91,13 @@ resource "aws_instance" "tailscale_router" {
   vpc_security_group_ids = [aws_security_group.tailscale_router.id]
   iam_instance_profile   = aws_iam_instance_profile.tailscale_router.name
 
+  lifecycle {
+    precondition {
+      condition     = (data.aws_caller_identity.current.account_id == local.production_account_id && var.environment == "production") || !var.tailscale_advertise_routes
+      error_message = "Development cannot advertise the default VPC or exit-node routes until #330 provisions a non-overlapping VPC and #332 supplies an environment-specific Tailscale ACL identity."
+    }
+  }
+
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
@@ -118,11 +126,14 @@ resource "aws_instance" "tailscale_router" {
       --output text \
       --region ${data.aws_region.current.region})
 
+    # Development joins without advertising a route or shared ACL tag.
     tailscale up \
       --authkey="$AUTHKEY" \
+%{if var.tailscale_advertise_routes~}
       --advertise-routes=${data.aws_vpc.default.cidr_block} \
       --advertise-exit-node \
       --advertise-tags=tag:nova-toll-router \
+%{endif~}
       --ssh
     set -x
   EOF

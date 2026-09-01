@@ -20,6 +20,6 @@ terraform {
   #      creates the bucket via the resource below.
   #   3. Re-run `terraform init` (backend config uncommented/active) to
   #      migrate local state into the now-existing bucket.
-  # No explicit profile: see providers.tf.
+  # Credentials remain outside Terraform configuration.
   backend "s3" {}
 }

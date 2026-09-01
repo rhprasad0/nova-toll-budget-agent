@@ -9,6 +9,8 @@
 # SSE-KMS, so folding it in would mean conditionals, not less code.
 
 locals {
+  account_id = data.aws_caller_identity.current.account_id
+
   hardened_buckets = {
     raw     = { id = aws_s3_bucket.raw.id, kms_key_arn = aws_kms_key.raw.arn }
     audit   = { id = aws_s3_bucket.audit.id, kms_key_arn = aws_kms_key.audit.arn }
@@ -132,8 +134,17 @@ moved {
 
 # --- raw payload bucket -----------------------------------------------
 
+# These controls are attached through local.hardened_buckets below. Trivy
+# v0.70 cannot follow that for_each map; remove these temporary ignores when
+# the scanner recognizes the shared controls. CloudTrail's S3 object data
+# events remain the audit path for this bucket.
+#trivy:ignore:AVD-AWS-0086:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0087:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0091:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0093:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0132:exp:2026-12-01
 resource "aws_s3_bucket" "raw" {
-  bucket = "nova-toll-raw-920534282028"
+  bucket = "nova-toll-raw-${local.account_id}"
 }
 
 data "aws_iam_policy_document" "raw_bucket" {
@@ -231,8 +242,17 @@ resource "aws_s3_bucket_policy" "raw" {
 # backend config points here, so the first apply necessarily happens
 # against local state, then state is migrated in).
 
+# These controls are attached through local.hardened_buckets above. Trivy
+# v0.70 cannot follow that for_each map; remove these temporary ignores when
+# the scanner recognizes the shared controls. CloudTrail's S3 object data
+# events remain the audit path for this bucket.
+#trivy:ignore:AVD-AWS-0086:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0087:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0091:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0093:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0132:exp:2026-12-01
 resource "aws_s3_bucket" "tfstate" {
-  bucket = "nova-toll-tfstate-920534282028"
+  bucket = "nova-toll-tfstate-${local.account_id}"
 }
 
 data "aws_iam_policy_document" "tfstate_bucket" {

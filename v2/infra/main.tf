@@ -53,22 +53,22 @@ data "aws_iam_policy_document" "loader" {
   statement {
     sid       = "DecryptRawObjects"
     actions   = ["kms:Decrypt"]
-    resources = [data.aws_kms_alias.raw.target_key_arn]
+    resources = [var.foundation.raw_kms_key_arn]
   }
 
   statement {
     sid     = "GetRawObjects"
     actions = ["s3:GetObject"]
     resources = [
-      "${data.aws_s3_bucket.raw.arn}/raw/feed=i95/*",
-      "${data.aws_s3_bucket.raw.arn}/raw/feed=i66/*",
+      "${local.raw_bucket_arn}/raw/feed=i95/*",
+      "${local.raw_bucket_arn}/raw/feed=i66/*",
     ]
   }
 
   statement {
     sid       = "ConnectRdsIam"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.loader}"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.loader}"]
   }
 
   statement {
@@ -116,13 +116,13 @@ data "aws_iam_policy_document" "timed_checks" {
   statement {
     sid       = "DescribeRdsEndpoint"
     actions   = ["rds:DescribeDBInstances"]
-    resources = ["arn:aws:rds:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:db:${data.aws_db_instance.main.db_instance_identifier}"]
+    resources = ["arn:aws:rds:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:db:${var.foundation.db_instance.identifier}"]
   }
 
   statement {
     sid       = "ConnectAsPricingCaller"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.pricing_caller}"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}"]
   }
 
   statement {
@@ -141,11 +141,11 @@ resource "aws_iam_role_policy" "timed_checks" {
 resource "aws_security_group" "loader" {
   name        = "nova-toll-v2-pricing-loader${local.suffix}"
   description = "v2 pricing loader Lambda ENIs"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = var.foundation.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_loader" {
-  security_group_id            = data.aws_security_group.rds.id
+  security_group_id            = var.foundation.rds_security_group_id
   description                  = "v2 pricing loader Lambda"
   referenced_security_group_id = aws_security_group.loader.id
   from_port                    = 5432
@@ -156,7 +156,7 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_loader" {
 resource "aws_vpc_security_group_egress_rule" "loader_to_rds" {
   security_group_id            = aws_security_group.loader.id
   description                  = "RDS only"
-  referenced_security_group_id = data.aws_security_group.rds.id
+  referenced_security_group_id = var.foundation.rds_security_group_id
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"
@@ -174,7 +174,7 @@ resource "aws_vpc_security_group_egress_rule" "loader_to_s3" {
 resource "aws_vpc_security_group_egress_rule" "loader_to_eventbridge" {
   security_group_id            = aws_security_group.loader.id
   description                  = "Private EventBridge API endpoint"
-  referenced_security_group_id = data.aws_security_group.eventbridge_endpoint.id
+  referenced_security_group_id = var.foundation.eventbridge_endpoint_security_group_id
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
@@ -199,17 +199,17 @@ resource "aws_lambda_function" "loader" {
   reserved_concurrent_executions = 5
 
   vpc_config {
-    subnet_ids         = [data.aws_subnet.tollchat_private_a.id, data.aws_subnet.tollchat_private_c.id]
+    subnet_ids         = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
     security_group_ids = [aws_security_group.loader.id]
   }
 
   environment {
     variables = merge({
-      DB_HOST    = data.aws_db_instance.main.address
-      DB_PORT    = tostring(data.aws_db_instance.main.port)
+      DB_HOST    = var.foundation.db_instance.address
+      DB_PORT    = tostring(var.foundation.db_instance.port)
       DB_NAME    = local.database_name
       DB_USER    = local.database_roles.loader
-      RAW_BUCKET = data.aws_s3_bucket.raw.bucket
+      RAW_BUCKET = var.foundation.raw_bucket_name
       }, local.is_production ? {} : {
       TOLLCHAT_ENVIRONMENT = var.environment
     })
@@ -239,7 +239,7 @@ resource "aws_cloudwatch_event_rule" "raw_objects" {
     source      = ["aws.s3"]
     detail-type = ["Object Created"]
     detail = {
-      bucket = { name = [data.aws_s3_bucket.raw.bucket] }
+      bucket = { name = [var.foundation.raw_bucket_name] }
       object = {
         key = [
           { prefix = "raw/feed=i95/" },
@@ -388,8 +388,8 @@ data "aws_iam_policy_document" "publisher" {
     sid     = "ConnectRdsIam"
     actions = ["rds-db:connect"]
     resources = [
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.publisher}",
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.aws_db_instance.main.resource_id}/${local.database_roles.reader}",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.publisher}",
+      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.reader}",
     ]
   }
 
@@ -487,11 +487,11 @@ resource "aws_iam_role_policy" "publisher_scheduler" {
 resource "aws_security_group" "publisher" {
   name        = "nova-toll-v2-report-publisher${local.suffix}"
   description = "v2 report publisher Lambda ENIs"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = var.foundation.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_publisher" {
-  security_group_id            = data.aws_security_group.rds.id
+  security_group_id            = var.foundation.rds_security_group_id
   description                  = "v2 report publisher Lambda"
   referenced_security_group_id = aws_security_group.publisher.id
   from_port                    = 5432
@@ -502,7 +502,7 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_publisher" {
 resource "aws_vpc_security_group_egress_rule" "publisher_to_rds" {
   security_group_id            = aws_security_group.publisher.id
   description                  = "RDS only"
-  referenced_security_group_id = data.aws_security_group.rds.id
+  referenced_security_group_id = var.foundation.rds_security_group_id
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"
@@ -536,14 +536,14 @@ resource "aws_lambda_function" "publisher" {
   reserved_concurrent_executions = 1
 
   vpc_config {
-    subnet_ids         = [data.aws_subnet.tollchat_private_a.id, data.aws_subnet.tollchat_private_c.id]
+    subnet_ids         = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
     security_group_ids = [aws_security_group.publisher.id]
   }
 
   environment {
     variables = merge({
-      DB_HOST                    = data.aws_db_instance.main.address
-      DB_PORT                    = tostring(data.aws_db_instance.main.port)
+      DB_HOST                    = var.foundation.db_instance.address
+      DB_PORT                    = tostring(var.foundation.db_instance.port)
       DB_NAME                    = local.database_name
       DB_USER                    = local.database_roles.publisher
       DB_READER_USER             = local.database_roles.reader
