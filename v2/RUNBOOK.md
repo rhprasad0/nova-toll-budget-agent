@@ -297,11 +297,12 @@ separately authorized development bootstrap; this issue does not assume that a
 pre-existing state contains a newly declared output or read it from state.
 
 The development foundation bootstrap is #330 and its application/database
-bootstrap is #331. Cloudflare DNS writes (including unconditional ACM
-certificate-validation records) and any DNS-provider credential belong to #332;
-`enable_public_dns = false` gates only the apex record and is not a DNS
-ownership boundary. Legacy production-account development cleanup belongs to
-#333.
+bootstrap is #331. Cloudflare DNS reads and writes (zone lookup, ACM
+certificate-validation records, and apex/www records) are production-only in
+`v2/infra/site.tf`; development DNS/certificate validation belongs to #332.
+`enable_public_dns = false` remains the production apex switch, while the
+development path has no Cloudflare data or resource instances. Legacy
+production-account development cleanup belongs to #333.
 
 ## Build and review
 
@@ -412,17 +413,19 @@ remains owned by #333. An AWS-only identity cannot write Cloudflare DNS.
 
 After #330 and #331 complete, pass only the reviewed non-secret foundation
 handoff into the #331 application/database bootstrap. Do not use this runbook
-to reach the unconditional Cloudflare resources in `v2/infra/site.tf`; #332
-owns the separately trusted DNS/CI cutover. Pull-request validation remains
-credential-free and account-local backend/configuration isolation remains
-covered by the contract tests.
+to reach the production-only Cloudflare resources in `v2/infra/site.tf`; #332
+owns the separately trusted development DNS/certificate and CI cutover.
+Pull-request validation remains credential-free and account-local
+backend/configuration isolation remains covered by the contract tests.
 
 ### Development foundation handoff (#330; no application release)
 
 Issue #330 owns this read-only foundation handoff. It stops after reviewing the
 planned non-secret output: this runbook does not initialize, plan, or apply the
-development application, and it does not reach the unconditional Cloudflare
-resources in `v2/infra/site.tf`.
+development application, and it does not reach the production-only Cloudflare
+resources in `v2/infra/site.tf`. The development foundation plan explicitly
+disables Tailscale route advertisement until #330 provisions a non-overlapping
+VPC and #332 supplies an environment-specific ACL identity.
 
 ```sh
 (
@@ -437,7 +440,9 @@ AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" init -reconfigu
   -backend-config="$ROOT/infra/backend.development.hcl"
 rm -f -- "$DEVELOPMENT_FOUNDATION_PLAN"
 AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" plan \
-  -input=false -lock=false -var fetcher_package_path="$ROOT/infra/build/fetcher.zip" \
+  -input=false -lock=false -var environment=development \
+  -var tailscale_advertise_routes=false \
+  -var fetcher_package_path="$ROOT/infra/build/fetcher.zip" \
   -out="$DEVELOPMENT_FOUNDATION_PLAN"
 AWS_PROFILE=nova-toll-development terraform -chdir="$ROOT/infra" show -json "$DEVELOPMENT_FOUNDATION_PLAN" | jq -e '
   def foundation_data_addresses: [
@@ -518,8 +523,9 @@ PRODUCTION_FOUNDATION_VARS="$(mktemp --suffix=.tfvars.json)"
 trap 'rm -f -- "$PRODUCTION_FOUNDATION_PLAN" "$PRODUCTION_FOUNDATION_VARS"' EXIT
 test "$(AWS_PROFILE=nova-toll-prod aws sts get-caller-identity --query Account --output text)" = "920534282028"
 : "${TF_VAR_budget_notification_email:?set the existing foundation budget notification input}"
-# #332 must supply separately trusted Cloudflare credentials before any DNS
-# change, including the unconditional ACM certificate-validation records.
+# #332 must supply separately trusted Cloudflare credentials before any
+# production DNS change; development DNS and certificate validation are gated
+# out of the v2 Terraform path until that handoff.
 AWS_PROFILE=nova-toll-prod terraform -chdir="$ROOT/infra" init -reconfigure -input=false \
   -backend-config="$ROOT/infra/backend.production.hcl"
 rm -f -- "$PRODUCTION_FOUNDATION_PLAN"

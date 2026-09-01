@@ -284,10 +284,11 @@ Get/Put the exact production state object, and Get/Put/Delete its exact lockfile
 so Terraform can persist the apply safely. Bucket policy and KMS encryption-
 context conditions provide a second layer. Include release-plan object data
 events in the account-local CloudTrail. Cloudflare DNS remains separately
-trusted: certificate-validation records are unconditional in `v2/infra/site.tf`,
-so `enable_public_dns = false` gates only the apex record. DNS-provider
-credentials and the DNS/CI cutover are deferred to #332; an AWS-only identity
-cannot write Cloudflare DNS.
+trusted: zone lookup and certificate-validation/apex/www records are
+production-only in `v2/infra/site.tf`; the development path has no Cloudflare
+data or resource instances. `enable_public_dns = false` remains the production
+apex switch. Development DNS/certificate validation and DNS-provider
+credentials are deferred to #332; an AWS-only identity cannot write Cloudflare DNS.
 
 After the trusted planner exists, run a weekly and manually dispatchable,
 report-only `terraform plan -detailed-exitcode` against both state keys. Report
@@ -592,8 +593,8 @@ Only technically valid, representative reports should be curated in
   approval. A release workflow may use separately scoped read-only AWS,
   database-inspection, and separately trusted Cloudflare credentials only after
   #332 owns the DNS cutover.
-- Do not claim an AWS-only identity can write Cloudflare DNS; certificate
-  validation records remain unconditional even when `enable_public_dns = false`.
+- Do not claim an AWS-only identity can write Cloudflare DNS; development
+  certificate validation records are gated out and #332 owns the DNS handoff.
 - Never place database credentials, provider tokens, plan files, or decrypted
   parameters in job summaries or public artifacts.
 - Use exact KMS key ARNs in IAM, key, and bucket policies. Verify development

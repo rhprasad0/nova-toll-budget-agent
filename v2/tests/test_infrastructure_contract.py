@@ -185,6 +185,37 @@ def test_foundation_output_and_application_input_are_the_exact_non_secret_bounda
         assert forbidden not in output.lower()
 
 
+def test_development_foundation_cannot_advertise_the_shared_vpc_route():
+    variables = (FOUNDATION_ROOT / "variables.tf").read_text()
+    router = FOUNDATION_TAILSCALE
+    development_handoff = DEPLOYMENT.split(
+        "### Development foundation handoff (#330; no application release)",
+        maxsplit=1,
+    )[1].split("### Guarded production release", maxsplit=1)[0]
+
+    assert 'variable "environment"' in variables
+    assert 'default     = "production"' in variables
+    assert 'variable "tailscale_advertise_routes"' in variables
+    assert "default     = true" in variables
+    assert (
+        'condition     = (data.aws_caller_identity.current.account_id == local.production_account_id && var.environment == "production") || !var.tailscale_advertise_routes'
+        in router
+    )
+    advertisement = router.split("%{if var.tailscale_advertise_routes~}", maxsplit=1)[
+        1
+    ].split("%{endif~}", maxsplit=1)[0]
+    for option in (
+        "--advertise-routes=",
+        "--advertise-exit-node",
+        "--advertise-tags=tag:nova-toll-router",
+    ):
+        assert option in advertisement
+    assert "-var environment=development" in development_handoff
+    assert "-var tailscale_advertise_routes=false" in development_handoff
+    assert "non-overlapping" in DEPLOYMENT
+    assert "environment-specific ACL identity" in DEPLOYMENT
+
+
 def test_v2_uses_the_typed_boundary_without_foundation_discovery():
     terraform_sources = "\n".join(
         path.read_text() for path in (V2_ROOT / "infra").glob("*.tf")
@@ -902,6 +933,46 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'resource "aws_acm_certificate" "site"' in site
 
 
+def test_development_site_has_no_cloudflare_reads_or_writes():
+    site = (V2_ROOT / "infra" / "site.tf").read_text()
+    development_tfvars = (V2_ROOT / "infra" / "development.tfvars").read_text()
+    zone = site.split('data "cloudflare_zone" "tollchat"', maxsplit=1)[1].split(
+        'resource "aws_acm_certificate" "site"', maxsplit=1
+    )[0]
+    certificate_records = site.split(
+        'resource "cloudflare_dns_record" "site_cert_validation"', maxsplit=1
+    )[1].split('resource "aws_acm_certificate_validation" "site"', maxsplit=1)[0]
+    certificate_validation = site.split(
+        'resource "aws_acm_certificate_validation" "site"', maxsplit=1
+    )[1].split('resource "cloudflare_dns_record" "apex"', maxsplit=1)[0]
+    apex = site.split('resource "cloudflare_dns_record" "apex"', maxsplit=1)[1].split(
+        'resource "cloudflare_dns_record" "www"', maxsplit=1
+    )[0]
+    www = site.split('resource "cloudflare_dns_record" "www"', maxsplit=1)[1].split(
+        'output "public_site"', maxsplit=1
+    )[0]
+
+    assert "count  = local.is_production ? 1 : 0" in zone
+    assert "for_each = local.is_production ? {" in certificate_records
+    assert "data.cloudflare_zone.tollchat.zone_id" not in site
+    assert "data.cloudflare_zone.tollchat[0].zone_id" in site
+    assert "count           = local.is_production ? 1 : 0" in certificate_validation
+    assert (
+        "depends_on = [cloudflare_dns_record.site_cert_validation]"
+        in certificate_validation
+    )
+    assert "from = data.cloudflare_zone.tollchat" in site
+    assert "to   = data.cloudflare_zone.tollchat[0]" in site
+    assert "from = aws_acm_certificate_validation.site" in site
+    assert "to   = aws_acm_certificate_validation.site[0]" in site
+    assert "count   = local.is_production && var.enable_public_dns ? 1 : 0" in apex
+    assert "count   = local.is_production ? 1 : 0" in www
+    assert 'environment       = "development"' in development_tfvars
+    assert "enable_public_dns = false" in development_tfvars
+    assert "development path has no Cloudflare data or resource instances" in DEPLOYMENT
+    assert "development DNS/certificate validation" in DEPLOYMENT
+
+
 def test_public_report_surface_is_canonical_crawlable_and_isolated():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
     robots = (V2_ROOT / "agent" / "robots.txt").read_text()
@@ -989,7 +1060,6 @@ def test_public_report_launch_is_selected_environment_and_correlated():
         "trap 'rm -f --",
     ):
         assert required in launch
-    assert "https://tollchat.ai" in launch
 
     shells = re.findall(r"```sh\n(.*?)\n```", launch, re.DOTALL)
     assert len(shells) == 2

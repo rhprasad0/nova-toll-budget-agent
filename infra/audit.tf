@@ -1,3 +1,12 @@
+# These controls are attached through local.hardened_buckets in s3.tf. Trivy
+# v0.70 cannot follow that for_each map; remove these temporary ignores when
+# the scanner recognizes the shared controls. CloudTrail's protected S3 object
+# data events provide the audit coverage instead of S3 server access logging.
+#trivy:ignore:AVD-AWS-0086:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0087:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0091:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0093:exp:2026-12-01
+#trivy:ignore:AVD-AWS-0132:exp:2026-12-01
 resource "aws_s3_bucket" "audit" {
   bucket = "nova-toll-audit-${local.account_id}"
 }

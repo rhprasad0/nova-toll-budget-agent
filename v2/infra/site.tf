@@ -752,7 +752,7 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.site.certificate_arn
+    acm_certificate_arn      = local.is_production ? aws_acm_certificate_validation.site[0].certificate_arn : aws_acm_certificate.site.arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
@@ -794,7 +794,13 @@ resource "aws_s3_bucket_policy" "site" {
 }
 
 data "cloudflare_zone" "tollchat" {
+  count  = local.is_production ? 1 : 0
   filter = { name = "tollchat.ai" }
+}
+
+moved {
+  from = data.cloudflare_zone.tollchat
+  to   = data.cloudflare_zone.tollchat[0]
 }
 
 resource "aws_acm_certificate" "site" {
@@ -806,15 +812,15 @@ resource "aws_acm_certificate" "site" {
 }
 
 resource "cloudflare_dns_record" "site_cert_validation" {
-  for_each = {
+  for_each = local.is_production ? {
     for dvo in aws_acm_certificate.site.domain_validation_options : dvo.domain_name => {
       name  = trimsuffix(dvo.resource_record_name, ".")
       type  = dvo.resource_record_type
       value = trimsuffix(dvo.resource_record_value, ".")
     }
-  }
+  } : {}
 
-  zone_id = data.cloudflare_zone.tollchat.zone_id
+  zone_id = data.cloudflare_zone.tollchat[0].zone_id
   name    = each.value.name
   type    = each.value.type
   content = each.value.value
@@ -825,6 +831,7 @@ resource "cloudflare_dns_record" "site_cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "site" {
+  count           = local.is_production ? 1 : 0
   certificate_arn = aws_acm_certificate.site.arn
   validation_record_fqdns = [
     for dvo in aws_acm_certificate.site.domain_validation_options : dvo.resource_record_name
@@ -833,9 +840,14 @@ resource "aws_acm_certificate_validation" "site" {
   depends_on = [cloudflare_dns_record.site_cert_validation]
 }
 
+moved {
+  from = aws_acm_certificate_validation.site
+  to   = aws_acm_certificate_validation.site[0]
+}
+
 resource "cloudflare_dns_record" "apex" {
-  count   = var.enable_public_dns ? 1 : 0
-  zone_id = data.cloudflare_zone.tollchat.zone_id
+  count   = local.is_production && var.enable_public_dns ? 1 : 0
+  zone_id = data.cloudflare_zone.tollchat[0].zone_id
   name    = local.domains[0]
   type    = "CNAME"
   content = aws_cloudfront_distribution.site.domain_name
@@ -845,7 +857,7 @@ resource "cloudflare_dns_record" "apex" {
 
 resource "cloudflare_dns_record" "www" {
   count   = local.is_production ? 1 : 0
-  zone_id = data.cloudflare_zone.tollchat.zone_id
+  zone_id = data.cloudflare_zone.tollchat[0].zone_id
   name    = "www.tollchat.ai"
   type    = "CNAME"
   content = aws_cloudfront_distribution.site.domain_name
