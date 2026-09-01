@@ -78,7 +78,10 @@ must pass after each apply: pricing `1.3.0`, Oracle `1.14.0`, exactly 996 total
 connections, exactly 14 handoffs, and one target handoff with the complete
 IDs, `toll_handoff` type, null direction/source key, and curated source
 metadata. The development apply and postcheck complete before the production
-source check or apply; stop at the first failure.
+source check or apply; stop at the first failure. If this block is resumed,
+each environment accepts only its exact source state (apply and postcheck) or
+its exact target state (verify and skip); every other or corrupt state is
+rejected.
 
 ```sh
 (
@@ -200,12 +203,6 @@ SELECT
 SQL
 }
 
-require_source_state() {
-  local database="$1" actual
-  actual="$(source_state "$database")"
-  test "$actual" = '1.3.0|1.13.1|995|13|0'
-}
-
 require_target_state() {
   local database="$1" actual
   actual="$(target_state "$database")"
@@ -228,15 +225,27 @@ apply_migration() {
   exit 1
 }
 
-require_source_state nova_toll_development
-apply_migration nova_toll_development
-require_target_state nova_toll_development
-printf '%s\n' 'nova_toll_development migration and postcondition passed'
+process_environment() {
+  local database="$1" source target
+  source="$(source_state "$database")"
+  if [ "$source" = '1.3.0|1.13.1|995|13|0' ]; then
+    apply_migration "$database"
+    require_target_state "$database"
+    printf '%s migration and postcondition passed\n' "$database"
+    return 0
+  fi
 
-require_source_state nova_toll
-apply_migration nova_toll
-require_target_state nova_toll
-printf '%s\n' 'nova_toll migration and postcondition passed'
+  target="$(target_state "$database")"
+  if [ "$target" = '1.3.0|1.14.0|996|14|1|1' ]; then
+    printf '%s already has the exact target state; verifying and skipping\n' "$database"
+    return 0
+  fi
+  printf 'Incompatible migration state for %s; stop without applying.\n' "$database" >&2
+  exit 1
+}
+
+process_environment nova_toll_development
+process_environment nova_toll
 cleanup
 )
 ```

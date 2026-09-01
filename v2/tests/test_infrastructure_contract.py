@@ -316,8 +316,17 @@ def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_chec
         "rm -f --",
         "unset DB_PASSWORD DB_USER SECRET_JSON",
         "v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql",
-        "apply_migration nova_toll_development",
-        "apply_migration nova_toll",
+        "process_environment()",
+        'source="$(source_state "$database")"',
+        "if [ \"$source\" = '1.3.0|1.13.1|995|13|0' ]; then",
+        'apply_migration "$database"',
+        'require_target_state "$database"',
+        'target="$(target_state "$database")"',
+        "if [ \"$target\" = '1.3.0|1.14.0|996|14|1|1' ]; then",
+        "already has the exact target state; verifying and skipping",
+        "Incompatible migration state for %s; stop without applying.",
+        "process_environment nova_toll_development",
+        "process_environment nova_toll",
         "Apply outcome is unknown",
         'actual="$(target_state "$database")"',
         "SQL error before `COMMIT`",
@@ -360,21 +369,36 @@ def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_chec
         ("sha256sum --check --status", "get-secret-value"),
         ("get-secret-value", "psql -X --set ON_ERROR_STOP=1"),
         (
-            "require_source_state nova_toll_development\n",
-            "apply_migration nova_toll_development\n",
+            "process_environment() {\n",
+            "process_environment nova_toll_development\n",
         ),
         (
-            "apply_migration nova_toll_development\n",
-            "require_target_state nova_toll_development\n",
+            "process_environment nova_toll_development\n",
+            "process_environment nova_toll\n",
         ),
-        (
-            "require_target_state nova_toll_development\n",
-            "require_source_state nova_toll\n",
-        ),
-        ("require_source_state nova_toll\n", "apply_migration nova_toll\n"),
-        ("apply_migration nova_toll\n", "require_target_state nova_toll\n"),
     ):
         assert shell.index(before) < shell.index(after)
+
+    process_body = re.search(r"(?ms)^process_environment\(\) \{.*?^\}", shell)
+    assert process_body is not None
+    process_body = process_body.group(0)
+    source_branch = process_body.split(
+        "if [ \"$source\" = '1.3.0|1.13.1|995|13|0' ]; then", maxsplit=1
+    )[1].split('target="$(target_state "$database")"', maxsplit=1)[0]
+    assert source_branch.index('apply_migration "$database"') < source_branch.index(
+        'require_target_state "$database"'
+    )
+    target_branch = process_body.split(
+        'target="$(target_state "$database")"', maxsplit=1
+    )[1]
+    assert "apply_migration" not in target_branch
+    assert "Incompatible migration state" in target_branch
+    assert "exit 1" in target_branch
+    assert process_body.index('require_target_state "$database"') < process_body.index(
+        "return 0"
+    )
+    target_skip = process_body.index("already has the exact target state")
+    assert target_skip < process_body.index("return 0", target_skip)
 
 
 def test_pull_request_workflows_have_no_production_access():
