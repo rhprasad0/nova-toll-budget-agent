@@ -1574,13 +1574,10 @@ def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence():
     assert pattern is not None
     allowed = "arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key"
     unexpected = "arn:aws:ssm:us-east-1:903859731897:parameter/unexpected"
-    matches = subprocess.run(
-        ["rg", "--only-matching", "--", pattern.group(1)],
-        input=json.dumps({"allowed": allowed, "unexpected": unexpected}),
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout.splitlines()
+    python_pattern = pattern.group(1).replace("[:alnum:]", "A-Za-z0-9")
+    matches = re.findall(
+        python_pattern, json.dumps({"allowed": allowed, "unexpected": unexpected})
+    )
     assert matches == [allowed, unexpected]
     assert (
         'test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"'
