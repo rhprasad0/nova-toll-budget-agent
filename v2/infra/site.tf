@@ -689,7 +689,7 @@ resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
-  aliases             = local.domains
+  aliases             = local.is_production ? local.domains : []
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
@@ -752,9 +752,10 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = local.is_production ? aws_acm_certificate_validation.site[0].certificate_arn : aws_acm_certificate.site.arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn            = local.is_production ? aws_acm_certificate_validation.site[0].certificate_arn : null
+    cloudfront_default_certificate = !local.is_production
+    ssl_support_method             = local.is_production ? "sni-only" : null
+    minimum_protocol_version       = local.is_production ? "TLSv1.2_2021" : "TLSv1"
   }
 }
 
@@ -804,6 +805,7 @@ moved {
 }
 
 resource "aws_acm_certificate" "site" {
+  count                     = local.is_production ? 1 : 0
   domain_name               = local.domains[0]
   subject_alternative_names = slice(local.domains, 1, length(local.domains))
   validation_method         = "DNS"
@@ -811,9 +813,14 @@ resource "aws_acm_certificate" "site" {
   lifecycle { create_before_destroy = true }
 }
 
+moved {
+  from = aws_acm_certificate.site
+  to   = aws_acm_certificate.site[0]
+}
+
 resource "cloudflare_dns_record" "site_cert_validation" {
   for_each = local.is_production ? {
-    for dvo in aws_acm_certificate.site.domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.site[0].domain_validation_options : dvo.domain_name => {
       name  = trimsuffix(dvo.resource_record_name, ".")
       type  = dvo.resource_record_type
       value = trimsuffix(dvo.resource_record_value, ".")
@@ -832,9 +839,9 @@ resource "cloudflare_dns_record" "site_cert_validation" {
 
 resource "aws_acm_certificate_validation" "site" {
   count           = local.is_production ? 1 : 0
-  certificate_arn = aws_acm_certificate.site.arn
+  certificate_arn = aws_acm_certificate.site[0].arn
   validation_record_fqdns = [
-    for dvo in aws_acm_certificate.site.domain_validation_options : dvo.resource_record_name
+    for dvo in aws_acm_certificate.site[0].domain_validation_options : dvo.resource_record_name
   ]
 
   depends_on = [cloudflare_dns_record.site_cert_validation]
@@ -869,6 +876,7 @@ output "public_site" {
   description = "Public TollChat v2 deployment."
   value = {
     distribution_id = aws_cloudfront_distribution.site.id
-    url             = "https://${local.domains[0]}"
+    hostname        = aws_cloudfront_distribution.site.domain_name
+    url             = local.public_site_url
   }
 }

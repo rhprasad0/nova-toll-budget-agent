@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SCRIPT = "scripts/check_lambda_quota_gate.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_lambda_quota_gate.py"
 type JsonObject = dict[str, Any]
 
 
