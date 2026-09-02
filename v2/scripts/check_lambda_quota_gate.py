@@ -20,6 +20,12 @@ def number(value: object, name: str) -> Decimal:
     return result
 
 
+def reserved_concurrency(value: object, name: str) -> Decimal:
+    if value == -1:
+        return Decimal(0)
+    return number(value, name)
+
+
 def allocation(change: dict[str, Any], side: str) -> dict[str, Any]:
     value = change.get(side)
     if value is None:
@@ -50,7 +56,7 @@ def capacity(plan: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal]:
                 name = value.get("function_name")
                 if not isinstance(name, str) or not name:
                     raise ValueError(f"missing function name ({label})")
-                functions.setdefault(name, {})[label] = number(
+                functions.setdefault(name, {})[label] = reserved_concurrency(
                     value.get("reserved_concurrent_executions"),
                     f"reserved concurrency for {name}",
                 )

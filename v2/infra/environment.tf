@@ -20,4 +20,5 @@ locals {
   log_retention_days = local.is_production ? 30 : 7
   alarm_actions      = local.is_production ? [var.foundation.alerts_topic_arn] : []
   rate_limit         = local.is_production ? 20 : 10
+  public_site_url    = local.is_production ? "https://${local.domains[0]}" : (var.public_preview_hostname == "" ? "" : "https://${var.public_preview_hostname}")
 }

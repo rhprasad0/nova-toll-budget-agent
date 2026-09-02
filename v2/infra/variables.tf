@@ -63,3 +63,14 @@ variable "enable_public_dns" {
   type        = bool
   default     = true
 }
+
+variable "public_preview_hostname" {
+  description = "The generated CloudFront hostname used by the development preview."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.public_preview_hostname == "" || can(regex("^d[A-Za-z0-9]+\\.cloudfront\\.net$", var.public_preview_hostname))
+    error_message = "public_preview_hostname must be a CloudFront default hostname."
+  }
+}

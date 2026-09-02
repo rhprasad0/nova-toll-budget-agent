@@ -466,13 +466,11 @@ resource "aws_lambda_function" "tollchat_proxy" {
       AGENTCORE_VPCE_URL    = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
       SESSION_TABLE_NAME    = aws_dynamodb_table.tollchat_sessions.name
       }, local.is_production ? {} : {
-      PUBLIC_ORIGINS = "https://${local.domains[0]}"
+      PUBLIC_ORIGINS = local.public_site_url
     })
   }
 
   lifecycle {
-    ignore_changes = [reserved_concurrent_executions]
-
     precondition {
       condition     = var.chat_proxy_package_path != ""
       error_message = "Chat proxy deployment requires the reviewed v2 proxy package."

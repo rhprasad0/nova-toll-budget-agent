@@ -551,7 +551,7 @@ resource "aws_lambda_function" "publisher" {
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
       AGENT_MEASUREMENT_BUCKET   = aws_s3_bucket.agent_measurement.id
       }, local.is_production ? {} : {
-      PUBLIC_BASE_URL      = "https://${local.domains[0]}"
+      PUBLIC_BASE_URL      = local.public_site_url
       TOLLCHAT_ENVIRONMENT = var.environment
     })
   }

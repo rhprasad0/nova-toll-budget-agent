@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SCRIPT = "scripts/check_lambda_quota_gate.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_lambda_quota_gate.py"
 type JsonObject = dict[str, Any]
 
 
@@ -104,6 +104,31 @@ def test_lambda_quota_gate_counts_each_function_increase_and_summed_provisioning
     assert (
         result.stdout
         == "lambda_live=22 lambda_additions=12 lambda_quota=400 pass=true\n"
+    )
+
+
+def test_lambda_quota_gate_treats_terraform_unreserved_sentinel_as_zero(
+    tmp_path: Path,
+) -> None:
+    account = {
+        "AccountLimit": {
+            "ConcurrentExecutions": 1000,
+            "UnreservedConcurrentExecutions": 1000,
+        }
+    }
+    resources = [
+        function(
+            {"function_name": "proxy", "reserved_concurrent_executions": -1},
+            {"function_name": "proxy", "reserved_concurrent_executions": 5},
+        )
+    ]
+
+    result = run(tmp_path, account, resources, "1000.0")
+
+    assert result.returncode == 0
+    assert (
+        result.stdout
+        == "lambda_live=0 lambda_additions=5 lambda_quota=1000.0 pass=true\n"
     )
 
 

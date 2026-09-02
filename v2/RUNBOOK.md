@@ -400,15 +400,571 @@ unset SITE_BUCKET SITE_KMS_ARN
 
 ## Development handoff and guarded production release
 
-Development application release is non-operative in this runbook; public report
-publication is also non-operative. The #330 foundation handoff is the
-documented sequence of local-backend plan generation and review, later exact-plan apply,
-and separately authorized state migration or recovery; it does not release the development
-application. The application/database bootstrap is owned by #331, and
-Cloudflare/DNS/CI cutover is owned by #332. Those follow-on procedures must
-establish their own approved account, backend, and credential boundaries before
-any development operation. Legacy cleanup remains owned by #333. An AWS-only identity
-cannot write Cloudflare DNS.
+The bounded #331 application release and database validation below is the operative
+development release path. Deployed database bootstrap remains non-operative until
+approved deployment automation exists; this procedure only validates the already
+present development schema and isolation. Public report publication also remains
+non-operative: the existing publisher and scheduler are deployed unchanged, but no
+publication is manually invoked and no report data is copied. The #330 foundation
+handoff remains the documented sequence of local-backend plan generation and review,
+later exact-plan apply, and separately authorized state migration or recovery.
+Cloudflare/DNS/CI cutover is owned by #332, and legacy cleanup remains owned by
+#333. An AWS-only identity cannot write Cloudflare DNS.
+
+### Development application release and database validation (#331)
+
+This is the only operative #331 release procedure. It uses only the development
+account and the two development state backends. The typed, non-secret foundation
+output is consumed ephemerally from the #330 development foundation state. The
+first plan creates a CloudFront distribution with no aliases and the CloudFront
+default certificate. After that apply returns its d*.cloudfront.net hostname, the
+second plan supplies that hostname to the proxy allowlist and preview output. No
+custom-domain certificate, Cloudflare lookup/resource, Route 53 record, or change
+to dev.tollchat.ai is part of either plan.
+
+When direct workstation access to the private RDS endpoint is unavailable, an
+already-authorized development private path may forward the endpoint to a local
+port. Set `NOVA_TOLL_RDS_LOCAL_PORT` to that port before this procedure; the
+procedure keeps `PGHOST` set to the RDS endpoint so TLS hostname verification
+still applies and uses only `127.0.0.1` as the transport address.
+
+This procedure must not create or migrate a deployed database. If the development
+database is absent or invalid, stop; do not run
+`bootstrap_development_database.py` against it. That bootstrap remains limited to
+the disposable PostgreSQL contract harness until approved deployment automation
+exists.
+
+Keep the terminal non-traced. The development RDS-managed Secrets Manager JSON and
+its extracted username/password exist only in process memory and are never
+printed, placed in an argument, written to a file, put in Terraform input/state/
+plan, or recorded in evidence.
+
+~~~sh
+(
+set -euo pipefail
+set +x
+umask 077
+ROOT="$(git rev-parse --show-toplevel)"
+EXPECTED_ACCOUNT=903859731897
+REGION=us-east-1
+AWS_PROFILE=nova-toll-dev
+: "$RELEASE_EVIDENCE"
+case "$RELEASE_EVIDENCE" in /*) ;; *) exit 1 ;; esac
+RELEASE_EVIDENCE="$(readlink -m -- "$RELEASE_EVIDENCE")"
+case "$RELEASE_EVIDENCE" in "$ROOT"|"$ROOT"/*) exit 1 ;; esac
+test ! -e "$RELEASE_EVIDENCE"
+test "$(git -C "$ROOT" rev-parse --show-toplevel)" = "$ROOT"
+git -C "$ROOT" diff --check
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
+for command_name in aws curl dig find git jq psql python3 rg sha256sum terraform unzip uv; do command -v "$command_name" >/dev/null; done
+RELEASE_DIR="$(mktemp -d -t nova-toll-331-XXXXXX)"
+FOUNDATION_TF_DATA_DIR="$RELEASE_DIR/foundation-tfdata"
+APP_TF_DATA_DIR="$RELEASE_DIR/application-tfdata"
+FOUNDATION_JSON="$RELEASE_DIR/foundation.json"
+DEV_FOUNDATION_VARS="$RELEASE_DIR/foundation.tfvars.json"
+PHASE_ONE_PLAN="$RELEASE_DIR/development-phase-one.tfplan"
+PHASE_TWO_PLAN="$RELEASE_DIR/development-phase-two.tfplan"
+PHASE_ONE_PLAN_JSON="$RELEASE_DIR/development-phase-one.tfplan.json"
+PHASE_TWO_PLAN_JSON="$RELEASE_DIR/development-phase-two.tfplan.json"
+PLAN_JSON=
+CA_FILE="$RELEASE_DIR/global-bundle.pem"
+IDENTITY_JSON="$RELEASE_DIR/identity.json"
+RESET_BODY="$RELEASE_DIR/reset.json"
+RESET_REQUEST="$RELEASE_DIR/reset-request.json"
+LAMBDA_ACCOUNT_SETTINGS="$RELEASE_DIR/lambda-account-settings.json"
+SECRET_ARN=
+SECRET_JSON=
+PGUSER=
+PGPASSWORD=
+cleanup() {
+  unset PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE PGSSLMODE PGSSLROOTCERT
+  unset SECRET_JSON SECRET_ARN RDS_METADATA DB_USER DB_PASSWORD DB_HOST DB_PORT
+  rm -f -- "$FOUNDATION_JSON" "$DEV_FOUNDATION_VARS" "$PHASE_ONE_PLAN_JSON" "$PHASE_TWO_PLAN_JSON" "$CA_FILE" "$IDENTITY_JSON" "$RESET_BODY" "$RESET_REQUEST" "$LAMBDA_ACCOUNT_SETTINGS" "$PHASE_ONE_PLAN" "$PHASE_TWO_PLAN"
+  rm -rf -- "$ROOT/v2/infra/build"
+  rm -rf -- "$RELEASE_DIR"
+}
+trap cleanup EXIT
+account() {
+  AWS_PROFILE="$AWS_PROFILE" AWS_DEFAULT_REGION="$REGION" aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output json >"$IDENTITY_JSON"
+  jq -e --arg account "$EXPECTED_ACCOUNT" 'select(.Account == $account)' "$IDENTITY_JSON" >/dev/null
+}
+aws_dev() {
+  account
+  AWS_PROFILE="$AWS_PROFILE" AWS_DEFAULT_REGION="$REGION" aws --region "$REGION" "$@"
+}
+tf_dev() {
+  account
+  AWS_PROFILE="$AWS_PROFILE" AWS_DEFAULT_REGION="$REGION" TF_DATA_DIR="$TF_DATA_DIR" terraform "$@"
+}
+
+export TF_DATA_DIR="$FOUNDATION_TF_DATA_DIR"
+grep -F 'bucket       = "nova-toll-tfstate-903859731897"' "$ROOT/infra/backend.development.hcl" >/dev/null
+grep -F 'key          = "nova-toll/development/terraform.tfstate"' "$ROOT/infra/backend.development.hcl" >/dev/null
+grep -F 'kms_key_id   = "alias/nova-toll-tfstate"' "$ROOT/infra/backend.development.hcl" >/dev/null
+tf_dev -chdir="$ROOT/infra" init -reconfigure -input=false -backend-config="$ROOT/infra/backend.development.hcl" >/dev/null
+tf_dev -chdir="$ROOT/infra" output -json foundation >"$FOUNDATION_JSON"
+jq -e 'def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort)); . as $foundation | exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"]) and all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string" and length > 0) and ($foundation.private_subnet_ids | exact_keys(["a", "c"]) and all(.[]; type == "string" and length > 0)) and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and .identifier != "" and .resource_id != "" and .address != "" and (.port | type == "number"))' "$FOUNDATION_JSON" >/dev/null
+if rg --fixed-strings --quiet '920534282028' "$FOUNDATION_JSON" || rg --ignore-case --quiet 'password|secret|ssm|terraform_remote_state' "$FOUNDATION_JSON"; then exit 1; fi
+jq -n --argjson foundation "$(<"$FOUNDATION_JSON")" '{foundation: $foundation}' >"$DEV_FOUNDATION_VARS"
+chmod 600 -- "$FOUNDATION_JSON" "$DEV_FOUNDATION_VARS"
+DNS_BEFORE="$(dig +short dev.tollchat.ai CNAME | tr -d '\r')"
+test "$DNS_BEFORE" = "dmsiz11apblcv.cloudfront.net."
+cd "$ROOT/v2"
+./scripts/build_loader_zip.sh >/dev/null
+./scripts/build_publisher_zip.sh >/dev/null
+./scripts/build_agentcore_zips.sh >/dev/null
+for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do test -s "$package"; ! unzip -Z1 "$package" | rg --line-regexp '(^|/)\.env$'; done
+LOADER_SHA256="$(sha256sum infra/build/loader.zip | cut -d' ' -f1)"
+PUBLISHER_SHA256="$(sha256sum infra/build/publisher.zip | cut -d' ' -f1)"
+AGENTCORE_SHA256="$(sha256sum infra/build/agentcore.zip | cut -d' ' -f1)"
+PROXY_SHA256="$(sha256sum infra/build/chat-proxy.zip | cut -d' ' -f1)"
+ARTIFACT_SCAN_PATTERN='920534282028|nova-toll-prod|backend\.production\.hcl|terraform_remote_state|arn:aws:secretsmanager:|AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*[:=][[:space:]]*[^[:space:]}\"]{8,}|PGPASSWORD=|NOVA_TOLL_ADMIN_URL=|SECRET_(ARN|STRING)[[:space:]]*[:=][[:space:]]*[^[:space:]}\"]{8,}|\"(secret(_arn|string)?|password)\"[[:space:]]*[:=][[:space:]]*\"?[[:alnum:]/+=_-]{8,}'
+PACKAGE_SCAN_PATTERN='920534282028|nova-toll-prod|backend\.production\.hcl|terraform_remote_state|PGPASSWORD=|NOVA_TOLL_ADMIN_URL=|SECRET_(ARN|STRING)[[:space:]]*[:=][[:space:]}\"]{8,}'
+SSM_ARN_PATTERN='arn:aws:ssm:[[:alnum:]-]+:[0-9]{12}:parameter/[[:alnum:]_.:/=+-]+'
+ALLOWED_SSM_REFERENCE='arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key'
+scan_ssm_references() {
+  local reference
+  while IFS= read -r reference; do
+    test "$reference" = "$ALLOWED_SSM_REFERENCE"
+  done
+}
+scan_release_file() {
+  local file="$1" references
+  if rg --text --ignore-case --quiet -- "$ARTIFACT_SCAN_PATTERN" "$file"; then
+    exit 1
+  elif [ "$?" -ne 1 ]; then
+    exit 1
+  fi
+  if references="$(rg --text --only-matching -- "$SSM_ARN_PATTERN" "$file")"; then
+    scan_ssm_references <<<"$references"
+  elif [ "$?" -ne 1 ]; then
+    exit 1
+  fi
+}
+scan_package() {
+  local package="$1" references
+  unzip -t "$package" >/dev/null
+  if unzip -Z1 "$package" | rg --ignore-case --quiet '(^|/)\.env$'; then
+    exit 1
+  elif [ "$?" -ne 1 ]; then
+    exit 1
+  fi
+  if unzip -p "$package" | rg --text --ignore-case --quiet -- "$PACKAGE_SCAN_PATTERN"; then
+    exit 1
+  elif [ "$?" -ne 1 ]; then
+    exit 1
+  fi
+  if references="$(unzip -p "$package" | rg --text --only-matching -- "$SSM_ARN_PATTERN")"; then
+    scan_ssm_references <<<"$references"
+  elif [ "$?" -ne 1 ]; then
+    exit 1
+  fi
+}
+scan_release_directory() {
+  while IFS= read -r -d '' file; do
+    scan_release_file "$file"
+  done < <(find "$RELEASE_DIR" -type f -print0)
+}
+for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+  scan_package "$package"
+done
+
+export TF_DATA_DIR="$APP_TF_DATA_DIR"
+grep -F 'bucket       = "nova-toll-tfstate-903859731897"' infra/backend.development.hcl >/dev/null
+grep -F 'key          = "nova-toll/v2/development/terraform.tfstate"' infra/backend.development.hcl >/dev/null
+grep -F 'kms_key_id   = "alias/nova-toll-tfstate"' infra/backend.development.hcl >/dev/null
+tf_dev -chdir="$ROOT/v2/infra" init -reconfigure -input=false -backend-config="$ROOT/v2/infra/backend.development.hcl" >/dev/null
+plan_policy() {
+  local plan="$1"
+  local phase="${2:-}"
+  if [ "$phase" = phase-two ]; then
+    PLAN_JSON="$PHASE_TWO_PLAN_JSON"
+  else
+    PLAN_JSON="$PHASE_ONE_PLAN_JSON"
+  fi
+  tf_dev -chdir="$ROOT/v2/infra" show -json "$plan" >"$PLAN_JSON"
+  if ! jq -e '(.resource_changes | type == "array") and all(.resource_changes[]; (.change.actions | type == "array" and length > 0 and all(.[]; . != "delete")) and (.address | test("cloudflare|route53|aws_acm_certificate|aws_acm_certificate_validation"; "i") | not) and (.mode == "managed" or .mode == "data"))' "$PLAN_JSON" >/dev/null; then exit 1; fi
+  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" '
+    ($allowlist | split("\n") | map(select(length > 0))) as $allowed |
+    all(.resource_changes[] | select(.mode == "managed");
+      (.address as $address |
+        any($allowed[]; . as $base | ($address == $base or ($address | startswith($base + "["))))
+        and (.change.actions | type == "array" and length > 0 and all(.[]; . == "create" or . == "update" or . == "no-op"))))
+  ' "$PLAN_JSON" >/dev/null; then exit 1; fi
+  if ! jq -e --arg allowlist "$DEVELOPMENT_DATA_ALLOWLIST" '
+    ($allowlist | split("\n") | map(select(length > 0))) as $allowed |
+    all(.resource_changes[] | select(.mode == "data");
+      (.address as $address |
+        any($allowed[]; . as $base | ($address == $base or ($address | startswith($base + "["))))
+        and (.change.actions | type == "array" and length > 0 and all(.[]; . == "read" or . == "no-op"))))
+  ' "$PLAN_JSON" >/dev/null; then exit 1; fi
+  if jq -r '.resource_changes[]? | [.address, (.change.after // {} | tostring)] | @json' "$PLAN_JSON" | rg --quiet '920534282028|dev.tollchat.ai' || jq -r '.resource_changes[]?.address' "$PLAN_JSON" | rg --ignore-case --quiet 'cloudflare|route53|terraform_remote_state'; then exit 1; fi
+  if ! jq -e '
+    def account_ok($value):
+      (((($value | test("^arn:aws:[^:]*:[^:]*:[0-9]{12}:")) | not)
+       or ($value | test("^arn:aws:[^:]*:[^:]*:903859731897:"))));
+    def no_known_value($value):
+      (["toll-v2-pricing-loader", "toll-v2-report-publisher", "tollchat-v2-chat-proxy", "tollchat-v2-usage-publisher", "tollchat-v2-agent-usage-rollup", "nova-toll-v2-chat-proxy", "nova-toll-v2-preview", "tollchat-v2-anonymous-sessions", "tollchat-v2-agentcore-runtime"] | any(.[]; . == $value) | not);
+    def identifier_ok($value):
+      (($value | test("(^|[/:\"])(nova_toll|pricing_loader_writer|pricing_reader|oracle_owner|tollchat_agent|pricing_caller|report_publisher)([/:\"]|$)"; "i")) | not);
+    def app_name_ok($value):
+      (($value | test("(^|[/:\"])(toll-v2-pricing-loader|toll-v2-report-publisher|tollchat-v2-chat-proxy|tollchat-v2-usage-publisher|tollchat-v2-agent-usage-rollup|nova-toll-v2-chat-proxy|nova-toll-v2-preview|tollchat-v2-anonymous-sessions|nova-toll-v2-agentcore-runtime)([/:\"]|$)"; "i")) | not);
+    def suffix_ok($after):
+      all(["function_name", "role", "role_arn", "table_name", "queue_name", "log_group_name", "alarm_name", "database_name", "workgroup_name"][];
+        . as $key |
+        ($after[$key] == null
+          or ($after[$key] | type != "string")
+          or (($after[$key] | test("(^|[/:-])(toll-v2|tollchat-v2|nova-toll-v2)"; "i")) | not)
+          or ($after[$key] | test("-dev([/:]|$)|-development([/:]|$)|_development([/:]|$)"))
+        )
+      );
+    def plan_strings($after):
+      [$after | .. | strings] + [$after | .. | strings | try fromjson catch empty | .. | strings] | .[];
+    def environment_ok($after):
+      ([
+        (($after.environment[]?.variables? // {}) | to_entries[]?),
+        (($after.environment_variables // {}) | to_entries[]?)
+      ] | all(.[]?;
+        (.key as $key | .value as $value |
+          (($key | test("^(DB_NAME|DB_USER|DB_READER_USER|PRICING_DB_USER|ATHENA_DATABASE|SESSION_TABLE_NAME|SITE_BUCKET_NAME|AGENT_MEASUREMENT_BUCKET)$")) | not)
+          or ($value | type != "string")
+          or ($value | test("-dev([/:]|$)|-development([/:]|$)|_development([/:]|$)"))
+        )
+      ));
+    all(.resource_changes[] | select(.mode == "managed" and .change.after != null);
+      .change.after as $after |
+      (all(plan_strings($after); . as $value | account_ok($value) and no_known_value($value) and identifier_ok($value) and app_name_ok($value))
+        and suffix_ok($after)
+        and environment_ok($after))
+    )
+  ' "$PLAN_JSON" >/dev/null; then exit 1; fi
+  if ! jq -e '
+    def managed_changes($address):
+      [.resource_changes[]? | select(.mode == "managed" and .address == $address)] as $changes |
+      if ($changes | length) == 1 then $changes[0] else false end;
+    def reserved($address; $expected):
+      managed_changes($address) as $resource |
+      if ($resource | type) != "object" then false
+      elif (($resource.change.after_unknown? // {}) | (.reserved_concurrent_executions? // false)) then false
+      else ($resource.change.after | type == "object" and .reserved_concurrent_executions == $expected)
+      end;
+    def default_edge:
+      managed_changes("aws_cloudfront_distribution.site") as $resource |
+      if ($resource | type) != "object" then false
+      else $resource.change.after as $after |
+        if ($after | type) != "object" then false
+        elif (($after.aliases | type) != "array" or ($after.aliases | length) != 0) then false
+        elif (($after.viewer_certificate | type) != "array" or ($after.viewer_certificate | length) != 1) then false
+        elif (($after.viewer_certificate[0] | type) != "object") then false
+        else $after.viewer_certificate[0] as $certificate |
+          ($certificate | has("acm_certificate_arn") and (.acm_certificate_arn == null or .acm_certificate_arn == "")
+            and has("cloudfront_default_certificate") and .cloudfront_default_certificate == true
+            and has("minimum_protocol_version") and .minimum_protocol_version == "TLSv1"
+            and has("ssl_support_method") and (.ssl_support_method == null or .ssl_support_method == ""))
+        end
+      end;
+    all(.resource_changes[]; (.change.actions | type == "array" and length > 0))
+      and reserved("aws_lambda_function.loader"; 5)
+      and reserved("aws_lambda_function.publisher"; 1)
+      and reserved("aws_lambda_function.tollchat_proxy"; 5)
+      and default_edge
+  ' "$PLAN_JSON" >/dev/null; then exit 1; fi
+  if [ "$phase" = phase-two ]; then
+    if ! jq -e 'all(.resource_changes[]; (.change.actions | type == "array" and length > 0) and (.mode == "data" or .change.actions == ["update"] or .change.actions == ["no-op"]))' "$PLAN_JSON" >/dev/null; then exit 1; fi
+  fi
+  sha256sum "$plan" | cut -d' ' -f1
+}
+PLAN_ARGS="-var-file=$ROOT/v2/infra/development.tfvars -var-file=$DEV_FOUNDATION_VARS -var loader_package_path=$ROOT/v2/infra/build/loader.zip -var publisher_package_path=$ROOT/v2/infra/build/publisher.zip -var agentcore_package_path=$ROOT/v2/infra/build/agentcore.zip -var chat_proxy_package_path=$ROOT/v2/infra/build/chat-proxy.zip"
+read -r -d '' DEVELOPMENT_RESOURCE_ALLOWLIST <<'EOF' || true
+aws_api_gateway_deployment.tollchat
+aws_api_gateway_integration.tollchat_proxy
+aws_api_gateway_integration.tollchat_root
+aws_api_gateway_method.tollchat_proxy
+aws_api_gateway_method.tollchat_root
+aws_api_gateway_method_settings.tollchat
+aws_api_gateway_resource.tollchat_proxy
+aws_api_gateway_rest_api.tollchat
+aws_api_gateway_rest_api_policy.tollchat
+aws_api_gateway_stage.tollchat
+aws_athena_named_query.recent_routes
+aws_athena_named_query.top_routes
+aws_athena_workgroup.agent_reports
+aws_bedrock_guardrail.tollchat
+aws_bedrock_guardrail_version.tollchat
+aws_bedrockagentcore_agent_runtime.tollchat
+aws_bedrockagentcore_agent_runtime_endpoint.tollchat
+aws_bedrockagentcore_resource_policy.tollchat
+aws_cloudfront_distribution.site
+aws_cloudfront_function.public_chat_routes
+aws_cloudfront_function.public_report_routes
+aws_cloudfront_origin_access_control.public_chat
+aws_cloudfront_origin_access_control.site
+aws_cloudfront_response_headers_policy.development_noindex
+aws_cloudwatch_event_rule.agent_usage_rollup
+aws_cloudwatch_event_rule.raw_objects
+aws_cloudwatch_event_rule.usage_publisher
+aws_cloudwatch_event_target.agent_usage_rollup
+aws_cloudwatch_event_target.loader
+aws_cloudwatch_event_target.usage_publisher
+aws_cloudwatch_log_group.agent_usage_rollup
+aws_cloudwatch_log_group.agentcore_runtime
+aws_cloudwatch_log_group.loader
+aws_cloudwatch_log_group.publisher
+aws_cloudwatch_log_group.tollchat_proxy
+aws_cloudwatch_log_group.usage_publisher
+aws_cloudwatch_log_metric_filter.load_success
+aws_cloudwatch_log_metric_filter.proxy_failure
+aws_cloudwatch_metric_alarm.agent_usage_log_coverage
+aws_cloudwatch_metric_alarm.agent_usage_rollup_errors
+aws_cloudwatch_metric_alarm.agent_usage_rollup_missing
+aws_cloudwatch_metric_alarm.failure_queues
+aws_cloudwatch_metric_alarm.freshness
+aws_cloudwatch_metric_alarm.loader_errors
+aws_cloudwatch_metric_alarm.publisher_errors
+aws_cloudwatch_metric_alarm.publisher_failure_queues
+aws_cloudwatch_metric_alarm.report_generation_freshness
+aws_cloudwatch_metric_alarm.tollchat_proxy_errors
+aws_cloudwatch_metric_alarm.tollchat_proxy_failures
+aws_cloudwatch_metric_alarm.tollchat_proxy_latency
+aws_cloudwatch_metric_alarm.tollchat_sessions
+aws_cloudwatch_metric_alarm.usage_publisher_errors
+aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
+aws_dynamodb_table.tollchat_sessions
+aws_glue_catalog_database.agent_reports
+aws_glue_catalog_table.agent_registry
+aws_glue_catalog_table.agent_report_generations
+aws_glue_catalog_table.agent_report_rollup_completions
+aws_glue_catalog_table.agent_report_rollups
+aws_glue_catalog_table.waf_logs
+aws_iam_role.agent_usage_rollup
+aws_iam_role.loader
+aws_iam_role.publisher
+aws_iam_role.publisher_scheduler
+aws_iam_role.timed_checks
+aws_iam_role.tollchat_proxy
+aws_iam_role.tollchat_runtime
+aws_iam_role.usage_publisher
+aws_iam_role_policy.agent_usage_rollup
+aws_iam_role_policy.loader
+aws_iam_role_policy.publisher
+aws_iam_role_policy.publisher_scheduler
+aws_iam_role_policy.timed_checks
+aws_iam_role_policy.tollchat_proxy
+aws_iam_role_policy.tollchat_runtime
+aws_iam_role_policy.usage_publisher
+aws_iam_role_policy_attachment.loader_vpc
+aws_iam_role_policy_attachment.publisher_vpc
+aws_iam_role_policy_attachment.tollchat_proxy_vpc
+aws_kms_alias.agent_measurement
+aws_kms_alias.site
+aws_kms_key.agent_measurement
+aws_kms_key.site
+aws_lambda_alias.tollchat_live
+aws_lambda_function.agent_usage_rollup
+aws_lambda_function.loader
+aws_lambda_function.publisher
+aws_lambda_function.tollchat_proxy
+aws_lambda_function.usage_publisher
+aws_lambda_function_event_invoke_config.loader
+aws_lambda_function_event_invoke_config.publisher
+aws_lambda_function_url.public_chat
+aws_lambda_permission.agent_usage_rollup
+aws_lambda_permission.eventbridge_invoke
+aws_lambda_permission.public_chat_invoke
+aws_lambda_permission.public_chat_url
+aws_lambda_permission.tollchat_api
+aws_lambda_permission.usage_publisher
+aws_lambda_provisioned_concurrency_config.tollchat
+aws_s3_bucket.agent_measurement
+aws_s3_bucket.site
+aws_s3_bucket_lifecycle_configuration.agent_measurement
+aws_s3_bucket_policy.agent_measurement
+aws_s3_bucket_policy.site
+aws_s3_bucket_public_access_block.agent_measurement
+aws_s3_bucket_public_access_block.site
+aws_s3_bucket_server_side_encryption_configuration.agent_measurement
+aws_s3_bucket_server_side_encryption_configuration.site
+aws_s3_object.agent_registry
+aws_s3_object.agentcore
+aws_s3_object.chat
+aws_s3_object.faq
+aws_s3_object.index
+aws_s3_object.privacy
+aws_s3_object.robots
+aws_s3_object.site_assets
+aws_s3_object.terms
+aws_s3_object.tollchat_proxy
+aws_s3_object.usage
+aws_scheduler_schedule.publisher
+aws_security_group.loader
+aws_security_group.publisher
+aws_security_group.tollchat_proxy
+aws_security_group.tollchat_runtime
+aws_sqs_queue.delivery_failure
+aws_sqs_queue.invoke_failure
+aws_sqs_queue.publisher_delivery_failure
+aws_sqs_queue.publisher_invoke_failure
+aws_sqs_queue_policy.delivery_failure
+aws_vpc_security_group_egress_rule.loader_to_eventbridge
+aws_vpc_security_group_egress_rule.loader_to_rds
+aws_vpc_security_group_egress_rule.loader_to_s3
+aws_vpc_security_group_egress_rule.proxy_https
+aws_vpc_security_group_egress_rule.proxy_to_dynamodb
+aws_vpc_security_group_egress_rule.publisher_to_rds
+aws_vpc_security_group_egress_rule.publisher_to_s3
+aws_vpc_security_group_egress_rule.runtime_https
+aws_vpc_security_group_egress_rule.runtime_to_rds
+aws_vpc_security_group_ingress_rule.agentcore_from_proxy
+aws_vpc_security_group_ingress_rule.rds_from_loader
+aws_vpc_security_group_ingress_rule.rds_from_publisher
+aws_vpc_security_group_ingress_rule.rds_from_runtime
+aws_wafv2_web_acl.public_chat
+aws_wafv2_web_acl_logging_configuration.agent_reports
+EOF
+read -r -d '' DEVELOPMENT_DATA_ALLOWLIST <<'EOF' || true
+data.archive_file.agent_usage_rollup
+data.archive_file.placeholder
+data.archive_file.usage_publisher
+data.aws_caller_identity.current
+data.aws_cloudfront_cache_policy.caching_disabled
+data.aws_cloudfront_origin_request_policy.all_except_host
+data.aws_iam_policy_document.agent_measurement_bucket
+data.aws_iam_policy_document.agent_measurement_kms
+data.aws_iam_policy_document.agent_usage_rollup
+data.aws_iam_policy_document.agentcore_assume
+data.aws_iam_policy_document.delivery_failure
+data.aws_iam_policy_document.lambda_assume
+data.aws_iam_policy_document.loader
+data.aws_iam_policy_document.publisher
+data.aws_iam_policy_document.publisher_scheduler
+data.aws_iam_policy_document.publisher_scheduler_assume
+data.aws_iam_policy_document.site_kms
+data.aws_iam_policy_document.timed_checks
+data.aws_iam_policy_document.timed_checks_assume
+data.aws_iam_policy_document.tollchat_proxy
+data.aws_iam_policy_document.tollchat_runtime
+data.aws_iam_policy_document.usage_publisher
+data.aws_prefix_list.dynamodb
+data.aws_prefix_list.s3
+data.aws_region.current
+EOF
+source_tree_digest() {
+  git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do
+    sha256sum "$ROOT/$path"
+  done | sha256sum | cut -d' ' -f1
+}
+SOURCE_REVISION="$(git -C "$ROOT" rev-parse HEAD)"
+SOURCE_TREE_SHA256="$(source_tree_digest)"
+SOURCE_DIFF_SHA256="$(git -C "$ROOT" diff HEAD --no-ext-diff --binary -- . ':(exclude).graph' | sha256sum | cut -d' ' -f1)"
+tf_dev -chdir="$ROOT/v2/infra" plan -input=false $PLAN_ARGS -var public_preview_hostname= -out="$PHASE_ONE_PLAN" >/dev/null
+PHASE_ONE_PLAN_SHA256="$(plan_policy "$PHASE_ONE_PLAN")"
+scan_release_file "$PHASE_ONE_PLAN"
+scan_release_file "$PHASE_ONE_PLAN_JSON"
+scan_release_directory
+aws_dev lambda get-account-settings >"$LAMBDA_ACCOUNT_SETTINGS"
+LAMBDA_QUOTA="$(aws_dev service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --query 'Quota.Value' --output text)"
+uv run --project "$ROOT/v2" python "$ROOT/v2/scripts/check_lambda_quota_gate.py" --account-settings "$LAMBDA_ACCOUNT_SETTINGS" --plan "$PHASE_ONE_PLAN_JSON" --quota "$LAMBDA_QUOTA" >/dev/null
+tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_ONE_PLAN" >/dev/null
+PUBLIC_SITE_JSON="$(tf_dev -chdir="$ROOT/v2/infra" output -json public_site)"
+PREVIEW_HOST="$(jq -er '.hostname | select(test("^d[A-Za-z0-9]+[.]cloudfront[.]net$"))' <<<"$PUBLIC_SITE_JSON")"
+PREVIEW_URL="https://$PREVIEW_HOST"
+test "$(jq -r '.url' <<<"$PUBLIC_SITE_JSON")" = ""
+tf_dev -chdir="$ROOT/v2/infra" plan -input=false $PLAN_ARGS -var "public_preview_hostname=$PREVIEW_HOST" -out="$PHASE_TWO_PLAN" >/dev/null
+PHASE_TWO_PLAN_SHA256="$(plan_policy "$PHASE_TWO_PLAN" phase-two)"
+scan_release_file "$PHASE_TWO_PLAN"
+scan_release_file "$PHASE_TWO_PLAN_JSON"
+scan_release_directory
+aws_dev lambda get-account-settings >"$LAMBDA_ACCOUNT_SETTINGS"
+LAMBDA_QUOTA="$(aws_dev service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --query 'Quota.Value' --output text)"
+uv run --project "$ROOT/v2" python "$ROOT/v2/scripts/check_lambda_quota_gate.py" --account-settings "$LAMBDA_ACCOUNT_SETTINGS" --plan "$PHASE_TWO_PLAN_JSON" --quota "$LAMBDA_QUOTA" >/dev/null
+tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_TWO_PLAN" >/dev/null
+PUBLIC_SITE_JSON="$(tf_dev -chdir="$ROOT/v2/infra" output -json public_site)"
+test "$(jq -r '.url' <<<"$PUBLIC_SITE_JSON")" = "$PREVIEW_URL"
+DIST_ID="$(jq -er '.distribution_id' <<<"$PUBLIC_SITE_JSON")"
+aws_dev cloudfront wait distribution-deployed --id "$DIST_ID"
+DIST_INFO="$(aws_dev cloudfront get-distribution --id "$DIST_ID" --query 'Distribution.{domain:DomainName,status:Status,aliases:DistributionConfig.Aliases.Items,default_certificate:DistributionConfig.ViewerCertificate.CloudFrontDefaultCertificate,minimum_protocol_version:DistributionConfig.ViewerCertificate.MinimumProtocolVersion}' --output json)"
+jq -e --arg host "$PREVIEW_HOST" '(.domain == $host) and (.status == "Deployed") and ((.aliases // []) | length == 0) and (.default_certificate == true) and (.minimum_protocol_version == "TLSv1")' <<<"$DIST_INFO" >/dev/null
+PUBLIC_ORIGINS="$(aws_dev lambda get-function-configuration --function-name tollchat-v2-chat-proxy-dev --query 'Environment.Variables.PUBLIC_ORIGINS' --output text)"
+test "$PUBLIC_ORIGINS" = "$PREVIEW_URL"
+PUBLIC_BASE_URL="$(aws_dev lambda get-function-configuration --function-name toll-v2-report-publisher-dev --query 'Environment.Variables.PUBLIC_BASE_URL' --output text)"
+test "$PUBLIC_BASE_URL" = "$PREVIEW_URL"
+assert_reserved_concurrency() {
+  local function_name="$1" expected="$2"
+  test "$(aws_dev lambda get-function-concurrency --function-name "$function_name" --query ReservedConcurrentExecutions --output text)" = "$expected"
+}
+assert_reserved_concurrency toll-v2-pricing-loader-dev 5
+assert_reserved_concurrency toll-v2-report-publisher-dev 1
+assert_reserved_concurrency tollchat-v2-chat-proxy-dev 5
+FOUNDATION_DIGEST="$(sha256sum "$FOUNDATION_JSON" | cut -d' ' -f1)"
+RDS_METADATA="$(aws_dev rds describe-db-instances --db-instance-identifier "$(jq -er '.db_instance.identifier' "$FOUNDATION_JSON")" --query 'DBInstances[0].{status:DBInstanceStatus,address:Endpoint.Address,port:Endpoint.Port,private:PubliclyAccessible,secret:MasterUserSecret.SecretArn}' --output json)"
+DB_HOST="$(jq -er '.address' <<<"$RDS_METADATA")"
+DB_PORT="$(jq -er '.port | tostring' <<<"$RDS_METADATA")"
+jq -e --arg address "$(jq -er '.db_instance.address' "$FOUNDATION_JSON")" --argjson port "$(jq -er '.db_instance.port' "$FOUNDATION_JSON")" '(.status == "available") and (.private == false) and (.address == $address) and (.port == $port) and (.secret | type == "string" and length > 0)' <<<"$RDS_METADATA" >/dev/null
+SECRET_ARN="$(jq -er '.secret' <<<"$RDS_METADATA")"
+secret_json() {
+  account
+  SECRET_ARN="$SECRET_ARN" AWS_PROFILE="$AWS_PROFILE" AWS_DEFAULT_REGION="$REGION" \
+    uv run --project "$ROOT/v2" python - <<'PY'
+import boto3
+import os
+
+client = boto3.client("secretsmanager", region_name=os.environ["AWS_DEFAULT_REGION"])
+print(client.get_secret_value(SecretId=os.environ["SECRET_ARN"])["SecretString"])
+PY
+}
+SECRET_JSON="$(secret_json)"
+jq -e 'type == "object" and (.username | type == "string" and length > 0) and (.password | type == "string" and length > 0)' <<<"$SECRET_JSON" >/dev/null
+DB_USER="$(jq -er '.username' <<<"$SECRET_JSON")"
+DB_PASSWORD="$(jq -er '.password' <<<"$SECRET_JSON")"
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o "$CA_FILE"
+echo 'e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  '"$CA_FILE" | sha256sum --check --status
+export PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD" PGSSLMODE=verify-full PGSSLROOTCERT="$CA_FILE"
+if [ -n "${NOVA_TOLL_RDS_LOCAL_PORT:-}" ]; then
+  case "$NOVA_TOLL_RDS_LOCAL_PORT" in (*[!0-9]*|'') exit 1 ;; esac
+  export PGHOSTADDR=127.0.0.1 PGPORT="$NOVA_TOLL_RDS_LOCAL_PORT"
+fi
+psql --dbname nova_toll_development --file "$ROOT/v2/tests/development_bootstrap_contract.sql" >/dev/null
+for role in pricing_loader_writer pricing_reader tollchat_agent pricing_caller report_publisher; do
+  psql --dbname postgres --tuples-only --no-align --command "SELECT has_database_privilege('$role', 'nova_toll', 'CONNECT') AND NOT has_database_privilege('$role', 'nova_toll_development', 'CONNECT');" | grep -qx t
+done
+for role in pricing_loader_writer_development pricing_reader_development tollchat_agent_development pricing_caller_development report_publisher_development; do
+  psql --dbname postgres --tuples-only --no-align --command "SELECT has_database_privilege('$role', 'nova_toll_development', 'CONNECT') AND NOT has_database_privilege('$role', 'nova_toll', 'CONNECT');" | grep -qx t
+done
+for role in oracle_owner oracle_owner_development; do
+  psql --dbname postgres --tuples-only --no-align --command "SELECT NOT rolcanlogin FROM pg_roles WHERE rolname = '$role';" | grep -qx t
+done
+DB_CONTRACT=pass
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "$PREVIEW_URL/" -o /dev/null
+printf '{}' >"$RESET_REQUEST"
+RESET_BODY_SHA256="$(sha256sum "$RESET_REQUEST" | cut -d' ' -f1)"
+RESET_CONTENT_TYPE="$(curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+  --request POST "$PREVIEW_URL/api/reset" \
+  --header "Origin: $PREVIEW_URL" \
+  --header 'Content-Type: application/json' \
+  --header 'Sec-Fetch-Site: same-origin' \
+  --header "x-amz-content-sha256: $RESET_BODY_SHA256" \
+  --data-binary "@$RESET_REQUEST" \
+  --output "$RESET_BODY" \
+  --write-out '%{content_type}')"
+test "$RESET_CONTENT_TYPE" = "application/json"
+jq -e '.ok == true' "$RESET_BODY" >/dev/null
+DNS_AFTER="$(dig +short dev.tollchat.ai CNAME | tr -d '\r')"
+test "$DNS_AFTER" = "$DNS_BEFORE"
+RESOURCE_COUNT="$(tf_dev -chdir="$ROOT/v2/infra" state list | wc -l | tr -d ' ')"
+RESOURCE_TYPES="$(tf_dev -chdir="$ROOT/v2/infra" state list | awk -F. '{print $1}' | sort -u | paste -sd, -)"
+test -n "$RESOURCE_TYPES"
+scan_release_directory
+test "$(git -C "$ROOT" rev-parse HEAD)" = "$SOURCE_REVISION"
+test "$SOURCE_TREE_SHA256" = "$(source_tree_digest)"
+test "$SOURCE_DIFF_SHA256" = "$(git -C "$ROOT" diff HEAD --no-ext-diff --binary -- . ':(exclude).graph' | sha256sum | cut -d' ' -f1)"
+printf '%s\n' "account=$EXPECTED_ACCOUNT" "region=$REGION" "source_revision=$(git -C "$ROOT" rev-parse HEAD)" "source_tree_sha256=$SOURCE_TREE_SHA256" "source_diff_sha256=$SOURCE_DIFF_SHA256" "foundation_sha256=$FOUNDATION_DIGEST" "phase_one_plan_sha256=$PHASE_ONE_PLAN_SHA256" "phase_two_plan_sha256=$PHASE_TWO_PLAN_SHA256" "loader_sha256=$LOADER_SHA256" "publisher_sha256=$PUBLISHER_SHA256" "agentcore_sha256=$AGENTCORE_SHA256" "chat_proxy_sha256=$PROXY_SHA256" "plan_policy=pass" "lambda_quota=$LAMBDA_QUOTA" "lambda_reservations=5,1,5" "apply=pass" "database_bootstrap=not-run" "database_contract=$DB_CONTRACT" "resource_count=$RESOURCE_COUNT" "resource_inventory=$RESOURCE_TYPES" "preview_url=$PREVIEW_URL" "smoke=pass" "dns_before=$DNS_BEFORE" "dns_after=$DNS_AFTER" >"$RELEASE_EVIDENCE"
+if rg --text --ignore-case --quiet 'password|secret_arn|secretstring|920534282028|dev.tollchat.ai|cloudflare|terraform\.tfstate|\.tfplan' "$RELEASE_EVIDENCE"; then
+  exit 1
+elif [ "$?" -ne 1 ]; then
+  exit 1
+fi
+)
+~~~
 
 ### Development handoff (non-operative)
 

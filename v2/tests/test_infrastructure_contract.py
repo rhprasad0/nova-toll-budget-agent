@@ -351,7 +351,10 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
         ):
             assert text in document
     assert "provide an operative development" in plan
-    assert "Development application release is non-operative" in runbook
+    assert (
+        "The bounded #331 application release and database validation below is the operative"
+        in runbook
+    )
     assert "local-backend plan generation and review" in runbook
     assert "later exact-plan apply" in runbook
     assert "separately authorized state migration or recovery" in runbook
@@ -1367,7 +1370,7 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
     proxy = agentcore.split(
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
     )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
-    assert "ignore_changes = [reserved_concurrent_executions]" in proxy
+    assert "ignore_changes = [reserved_concurrent_executions]" not in proxy
     assert "aws_iam_role_policy.tollchat_proxy" in proxy
 
     assert "put-function-concurrency" not in DEPLOYMENT
@@ -1375,6 +1378,7 @@ def test_v2_declares_a_private_agentcore_application_without_telemetry():
 
 def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    main = (V2_ROOT / "infra" / "main.tf").read_text()
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
     proxy = agentcore.split(
@@ -1382,6 +1386,30 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
     assert "publish                        = true" in proxy
     assert "reserved_concurrent_executions = 5" in proxy
+    assert "ignore_changes = [reserved_concurrent_executions]" not in proxy
+    assert "PUBLIC_ORIGINS = local.public_site_url" in proxy
+    assert 'PUBLIC_ORIGINS = "https://${local.domains[0]}"' not in proxy
+    loader = main.split('resource "aws_lambda_function" "loader"', maxsplit=1)[1].split(
+        'resource "aws_lambda_function" "agent_usage_rollup"', maxsplit=1
+    )[0]
+    publisher = main.split('resource "aws_lambda_function" "publisher"', maxsplit=1)[
+        1
+    ].split(
+        'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
+    )[0]
+    assert "reserved_concurrent_executions = 5" in loader
+    assert "reserved_concurrent_executions = 1" in publisher
+    assert "PUBLIC_BASE_URL      = local.public_site_url" in publisher
+    assert 'request POST "$PREVIEW_URL/api/reset"' in DEPLOYMENT
+    assert "Origin: $PREVIEW_URL" in DEPLOYMENT
+    assert "Content-Type: application/json" in DEPLOYMENT
+    assert "Sec-Fetch-Site: same-origin" in DEPLOYMENT
+    assert "printf '{}' >\"$RESET_REQUEST\"" in DEPLOYMENT
+    assert 'RESET_BODY_SHA256="$(sha256sum "$RESET_REQUEST"' in DEPLOYMENT
+    assert "x-amz-content-sha256: $RESET_BODY_SHA256" in DEPLOYMENT
+    assert '--data-binary "@$RESET_REQUEST"' in DEPLOYMENT
+    assert "write-out '%{content_type}'" in DEPLOYMENT
+    assert "jq -e '.ok == true'" in DEPLOYMENT
     assert agentcore.count('metric_name         = "V2ProxyFailure${local.suffix}"') == 1
     assert agentcore.count('name      = "V2ProxyFailure${local.suffix}"') == 1
     assert 'resource "aws_lambda_alias" "tollchat_live"' in agentcore
@@ -1405,13 +1433,184 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'origin_access_control_origin_type = "s3"' in site
     assert 'path_pattern             = "/api/*"' in site
     assert 'code    = file("${path.module}/../agent/public-api-gate.js")' in site
-    assert "aliases             = local.domains" in site
+    assert "aliases             = local.is_production ? local.domains : []" in site
+    assert "cloudfront_default_certificate = !local.is_production" in site
+    assert (
+        'minimum_protocol_version       = local.is_production ? "TLSv1.2_2021" : "TLSv1"'
+        in site
+    )
+    development_release = DEPLOYMENT.split(
+        "### Development application release and database validation (#331)", maxsplit=1
+    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
+    for text in (
+        "def reserved($address; $expected)",
+        "def default_edge:",
+        'minimum_protocol_version == "TLSv1"',
+        "get-function-concurrency",
+        "function-name tollchat-v2-chat-proxy-dev",
+        "PUBLIC_BASE_URL",
+        'PHASE_ONE_PLAN_JSON="$RELEASE_DIR/development-phase-one.tfplan.json"',
+        'PHASE_TWO_PLAN_JSON="$RELEASE_DIR/development-phase-two.tfplan.json"',
+        "ARTIFACT_SCAN_PATTERN=",
+        "PACKAGE_SCAN_PATTERN=",
+        "scan_release_file",
+        "scan_package",
+        "scan_release_directory",
+        'unzip -p "$package"',
+        "check_lambda_quota_gate.py",
+        "assert_reserved_concurrency",
+        "resource_inventory=$RESOURCE_TYPES",
+        'rm -rf -- "$ROOT/v2/infra/build"',
+    ):
+        assert text in development_release
     assert 'resource "aws_wafv2_web_acl" "public_chat"' in site
     assert "limit                 = local.rate_limit" in site
     assert "size                = 32768" in site
     assert 'resource "cloudflare_dns_record" "apex"' in site
     assert 'resource "cloudflare_dns_record" "www"' in site
     assert 'resource "aws_acm_certificate" "site"' in site
+
+
+def test_development_plan_policy_requires_reservations_and_valid_default_edge():
+    release = DEPLOYMENT.split(
+        "### Development application release and database validation (#331)", maxsplit=1
+    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
+    policy_match = re.search(
+        r"if ! jq -e '(\n\s+def managed_changes\(\$address\):.*?\n\s+)' \"\$PLAN_JSON\"",
+        release,
+        flags=re.DOTALL,
+    )
+    assert policy_match is not None
+    policy = policy_match.group(1)
+
+    def change(address: str, after: object) -> dict[str, object]:
+        return {
+            "mode": "managed",
+            "address": address,
+            "change": {"actions": ["create"], "after": after, "after_unknown": {}},
+        }
+
+    edge = {
+        "aliases": [],
+        "viewer_certificate": [
+            {
+                "acm_certificate_arn": None,
+                "cloudfront_default_certificate": True,
+                "minimum_protocol_version": "TLSv1",
+                "ssl_support_method": None,
+            }
+        ],
+    }
+    plan = {
+        "resource_changes": [
+            change(
+                "aws_lambda_function.loader",
+                {"reserved_concurrent_executions": 5},
+            ),
+            change(
+                "aws_lambda_function.publisher",
+                {"reserved_concurrent_executions": 1},
+            ),
+            change(
+                "aws_lambda_function.tollchat_proxy",
+                {"reserved_concurrent_executions": 5},
+            ),
+            change("aws_cloudfront_distribution.site", edge),
+        ]
+    }
+
+    def passes(candidate: object) -> bool:
+        return (
+            subprocess.run(
+                ["jq", "-e", policy],
+                input=json.dumps(candidate),
+                text=True,
+                capture_output=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    assert passes(plan)
+    empty_actions = json.loads(json.dumps(plan))
+    for resource in empty_actions["resource_changes"]:
+        resource["change"]["actions"] = []
+    assert not passes(empty_actions)
+    for address, key, value in (
+        ("aws_lambda_function.loader", "reserved_concurrent_executions", None),
+        ("aws_lambda_function.publisher", "reserved_concurrent_executions", 5),
+        ("aws_lambda_function.tollchat_proxy", "reserved_concurrent_executions", -1),
+        ("aws_cloudfront_distribution.site", "aliases", ["preview.example"]),
+        (
+            "aws_cloudfront_distribution.site",
+            "minimum_protocol_version",
+            "TLSv1.2_2021",
+        ),
+    ):
+        candidate = json.loads(json.dumps(plan))
+        after = next(
+            resource
+            for resource in candidate["resource_changes"]
+            if resource["address"] == address
+        )["change"]["after"]
+        if address.endswith("distribution.site") and key != "aliases":
+            after["viewer_certificate"][0][key] = value
+        else:
+            after[key] = value
+        assert not passes(candidate)
+
+
+def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence():
+    release = DEPLOYMENT.split(
+        "### Development application release and database validation (#331)", maxsplit=1
+    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
+    assert "secret_json()" in release
+    assert 'SECRET_ARN="$SECRET_ARN"' in release
+    assert 'SecretId=os.environ["SECRET_ARN"]' in release
+    assert 'get-secret-value --secret-id "$SECRET_ARN"' not in release
+    assert "--only-matching" in release
+    assert 'test "$reference" = "$ALLOWED_SSM_REFERENCE"' in release
+    pattern = re.search(r"SSM_ARN_PATTERN='([^']+)'", release)
+    assert pattern is not None
+    allowed = "arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key"
+    unexpected = "arn:aws:ssm:us-east-1:903859731897:parameter/unexpected"
+    python_pattern = pattern.group(1).replace("[:alnum:]", "A-Za-z0-9")
+    matches = re.findall(
+        python_pattern, json.dumps({"allowed": allowed, "unexpected": unexpected})
+    )
+    assert matches == [allowed, unexpected]
+    assert (
+        'test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"'
+        in release
+    )
+    assert "source_tree_sha256=$SOURCE_TREE_SHA256" in release
+    assert "source_diff_sha256=$SOURCE_DIFF_SHA256" in release
+    assert release.index('SOURCE_TREE_SHA256="$(source_tree_digest)"') < release.index(
+        'tf_dev -chdir="$ROOT/v2/infra" plan'
+    )
+
+
+def test_development_release_scans_before_apply_and_never_bootstraps_deployed_database():
+    release = DEPLOYMENT.split(
+        "### Development application release and database validation (#331)", maxsplit=1
+    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
+
+    phase_one_apply = (
+        'tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_ONE_PLAN"'
+    )
+    phase_two_apply = (
+        'tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_TWO_PLAN"'
+    )
+    assert release.index('scan_package "$package"') < release.index(phase_one_apply)
+    assert release.index('scan_release_file "$PHASE_ONE_PLAN"') < release.index(
+        phase_one_apply
+    )
+    assert release.index('scan_release_file "$PHASE_TWO_PLAN"') < release.index(
+        phase_two_apply
+    )
+    assert 'python3 "$ROOT/v2/scripts/bootstrap_development_database.py"' not in release
+    assert "database_bootstrap=not-run" in release
+    assert "psql --dbname nova_toll_development --file" in release
 
 
 def test_development_site_has_no_cloudflare_reads_or_writes():
@@ -1777,7 +1976,7 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         "backend.production.hcl",
         "production.tfvars",
         "production-release.tfplan",
-        "Development application release is non-operative",
+        "The bounded #331 application release and database validation below is the operative",
         "#330",
         "#331",
         "#332",
@@ -2409,7 +2608,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     assert 'local.is_production ? "[..., event=\\"V2_LOAD_OK\\", feed]"' in MAIN_TF
     assert "TOLLCHAT_ENVIRONMENT = var.environment" in MAIN_TF
     assert "}, local.is_production ? {} : {" in publisher_lambda
-    assert 'PUBLIC_BASE_URL      = "https://${local.domains[0]}"' in publisher_lambda
+    assert "PUBLIC_BASE_URL      = local.public_site_url" in publisher_lambda
     freshness_alarm = MAIN_TF.split(
         'resource "aws_cloudwatch_metric_alarm" "report_generation_freshness"',
         maxsplit=1,
