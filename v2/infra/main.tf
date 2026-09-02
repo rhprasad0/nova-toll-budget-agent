@@ -196,7 +196,7 @@ resource "aws_lambda_function" "loader" {
   filename         = local.loader_zip_path
   source_code_hash = local.loader_zip_hash
 
-  reserved_concurrent_executions = local.is_production ? 5 : null
+  reserved_concurrent_executions = 5
 
   vpc_config {
     subnet_ids         = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
@@ -533,7 +533,7 @@ resource "aws_lambda_function" "publisher" {
   filename         = local.publisher_zip_path
   source_code_hash = local.publisher_zip_hash
 
-  reserved_concurrent_executions = local.is_production ? 1 : null
+  reserved_concurrent_executions = 1
 
   vpc_config {
     subnet_ids         = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]

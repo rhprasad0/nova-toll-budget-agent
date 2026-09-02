@@ -352,7 +352,7 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
             assert text in document
     assert "provide an operative development" in plan
     assert (
-        "The bounded #331 application/database bootstrap below is the operative"
+        "The bounded #331 application release and database validation below is the operative"
         in runbook
     )
     assert "local-backend plan generation and review" in runbook
@@ -1385,7 +1385,7 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
         'resource "aws_lambda_function" "tollchat_proxy"', maxsplit=1
     )[1].split('resource "aws_api_gateway_rest_api"', maxsplit=1)[0]
     assert "publish                        = true" in proxy
-    assert "reserved_concurrent_executions = local.is_production ? 5 : null" in proxy
+    assert "reserved_concurrent_executions = 5" in proxy
     assert "ignore_changes = [reserved_concurrent_executions]" not in proxy
     assert "PUBLIC_ORIGINS = local.public_site_url" in proxy
     assert 'PUBLIC_ORIGINS = "https://${local.domains[0]}"' not in proxy
@@ -1397,10 +1397,8 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     ].split(
         'resource "aws_lambda_function_event_invoke_config" "publisher"', maxsplit=1
     )[0]
-    assert "reserved_concurrent_executions = local.is_production ? 5 : null" in loader
-    assert (
-        "reserved_concurrent_executions = local.is_production ? 1 : null" in publisher
-    )
+    assert "reserved_concurrent_executions = 5" in loader
+    assert "reserved_concurrent_executions = 1" in publisher
     assert "PUBLIC_BASE_URL      = local.public_site_url" in publisher
     assert 'request POST "$PREVIEW_URL/api/reset"' in DEPLOYMENT
     assert "Origin: $PREVIEW_URL" in DEPLOYMENT
@@ -1442,10 +1440,10 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
         in site
     )
     development_release = DEPLOYMENT.split(
-        "### Development application/database bootstrap (#331)", maxsplit=1
+        "### Development application release and database validation (#331)", maxsplit=1
     )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
     for text in (
-        "def unreserved($address)",
+        "def reserved($address; $expected)",
         "def default_edge:",
         'minimum_protocol_version == "TLSv1"',
         "get-function-concurrency",
@@ -1459,6 +1457,8 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
         "scan_package",
         "scan_release_directory",
         'unzip -p "$package"',
+        "check_lambda_quota_gate.py",
+        "assert_reserved_concurrency",
         "resource_inventory=$RESOURCE_TYPES",
         'rm -rf -- "$ROOT/v2/infra/build"',
     ):
@@ -1471,9 +1471,9 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'resource "aws_acm_certificate" "site"' in site
 
 
-def test_development_plan_policy_rejects_reservations_and_invalid_default_edge():
+def test_development_plan_policy_requires_reservations_and_valid_default_edge():
     release = DEPLOYMENT.split(
-        "### Development application/database bootstrap (#331)", maxsplit=1
+        "### Development application release and database validation (#331)", maxsplit=1
     )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
     policy_match = re.search(
         r"if ! jq -e '(\n\s+def managed_changes\(\$address\):.*?\n\s+)' \"\$PLAN_JSON\"",
@@ -1503,14 +1503,18 @@ def test_development_plan_policy_rejects_reservations_and_invalid_default_edge()
     }
     plan = {
         "resource_changes": [
-            *[
-                change(address, {"reserved_concurrent_executions": None})
-                for address in (
-                    "aws_lambda_function.loader",
-                    "aws_lambda_function.publisher",
-                    "aws_lambda_function.tollchat_proxy",
-                )
-            ],
+            change(
+                "aws_lambda_function.loader",
+                {"reserved_concurrent_executions": 5},
+            ),
+            change(
+                "aws_lambda_function.publisher",
+                {"reserved_concurrent_executions": 1},
+            ),
+            change(
+                "aws_lambda_function.tollchat_proxy",
+                {"reserved_concurrent_executions": 5},
+            ),
             change("aws_cloudfront_distribution.site", edge),
         ]
     }
@@ -1532,15 +1536,10 @@ def test_development_plan_policy_rejects_reservations_and_invalid_default_edge()
     for resource in empty_actions["resource_changes"]:
         resource["change"]["actions"] = []
     assert not passes(empty_actions)
-    provider_sentinels = json.loads(json.dumps(plan))
-    for resource in provider_sentinels["resource_changes"][:3]:
-        resource["change"]["after"]["reserved_concurrent_executions"] = -1
-    provider_sentinels["resource_changes"][3]["change"]["after"]["viewer_certificate"][
-        0
-    ].update({"acm_certificate_arn": "", "ssl_support_method": ""})
-    assert passes(provider_sentinels)
     for address, key, value in (
-        ("aws_lambda_function.loader", "reserved_concurrent_executions", 1),
+        ("aws_lambda_function.loader", "reserved_concurrent_executions", None),
+        ("aws_lambda_function.publisher", "reserved_concurrent_executions", 5),
+        ("aws_lambda_function.tollchat_proxy", "reserved_concurrent_executions", -1),
         ("aws_cloudfront_distribution.site", "aliases", ["preview.example"]),
         (
             "aws_cloudfront_distribution.site",
@@ -1563,17 +1562,58 @@ def test_development_plan_policy_rejects_reservations_and_invalid_default_edge()
 
 def test_development_secret_fetch_keeps_arn_out_of_argv_and_evidence():
     release = DEPLOYMENT.split(
-        "### Development application/database bootstrap (#331)", maxsplit=1
+        "### Development application release and database validation (#331)", maxsplit=1
     )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
     assert "secret_json()" in release
     assert 'SECRET_ARN="$SECRET_ARN"' in release
     assert 'SecretId=os.environ["SECRET_ARN"]' in release
     assert 'get-secret-value --secret-id "$SECRET_ARN"' not in release
+    assert "--only-matching" in release
+    assert 'test "$reference" = "$ALLOWED_SSM_REFERENCE"' in release
+    pattern = re.search(r"SSM_ARN_PATTERN='([^']+)'", release)
+    assert pattern is not None
+    allowed = "arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key"
+    unexpected = "arn:aws:ssm:us-east-1:903859731897:parameter/unexpected"
+    matches = subprocess.run(
+        ["rg", "--only-matching", "--", pattern.group(1)],
+        input=json.dumps({"allowed": allowed, "unexpected": unexpected}),
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.splitlines()
+    assert matches == [allowed, unexpected]
+    assert (
+        'test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"'
+        in release
+    )
     assert "source_tree_sha256=$SOURCE_TREE_SHA256" in release
     assert "source_diff_sha256=$SOURCE_DIFF_SHA256" in release
     assert release.index('SOURCE_TREE_SHA256="$(source_tree_digest)"') < release.index(
         'tf_dev -chdir="$ROOT/v2/infra" plan'
     )
+
+
+def test_development_release_scans_before_apply_and_never_bootstraps_deployed_database():
+    release = DEPLOYMENT.split(
+        "### Development application release and database validation (#331)", maxsplit=1
+    )[1].split("### Development handoff (non-operative)", maxsplit=1)[0]
+
+    phase_one_apply = (
+        'tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_ONE_PLAN"'
+    )
+    phase_two_apply = (
+        'tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_TWO_PLAN"'
+    )
+    assert release.index('scan_package "$package"') < release.index(phase_one_apply)
+    assert release.index('scan_release_file "$PHASE_ONE_PLAN"') < release.index(
+        phase_one_apply
+    )
+    assert release.index('scan_release_file "$PHASE_TWO_PLAN"') < release.index(
+        phase_two_apply
+    )
+    assert 'python3 "$ROOT/v2/scripts/bootstrap_development_database.py"' not in release
+    assert "database_bootstrap=not-run" in release
+    assert "psql --dbname nova_toll_development --file" in release
 
 
 def test_development_site_has_no_cloudflare_reads_or_writes():
@@ -1939,7 +1979,7 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         "backend.production.hcl",
         "production.tfvars",
         "production-release.tfplan",
-        "The bounded #331 application/database bootstrap below is the operative",
+        "The bounded #331 application release and database validation below is the operative",
         "#330",
         "#331",
         "#332",
@@ -2555,10 +2595,7 @@ def test_report_publisher_is_weekly_bounded_and_least_privilege():
     )
     assert 'REPORT_PUBLICATION_ENABLED = "true"' in publisher_lambda
     assert "SITE_BUCKET_NAME           = aws_s3_bucket.site.id" in publisher_lambda
-    assert (
-        "reserved_concurrent_executions = local.is_production ? 1 : null"
-        in publisher_lambda
-    )
+    assert "reserved_concurrent_executions = 1" in publisher_lambda
     assert "aws_cloudfront_distribution.site" in publisher_lambda
     assert "aws_iam_role_policy.publisher" in publisher_lambda
     assert "aws_s3_object.robots" in publisher_lambda

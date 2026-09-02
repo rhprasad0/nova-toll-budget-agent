@@ -400,16 +400,18 @@ unset SITE_BUCKET SITE_KMS_ARN
 
 ## Development handoff and guarded production release
 
-The bounded #331 application/database bootstrap below is the operative
-development release path. Public report publication remains non-operative during
-bootstrap: the existing publisher and scheduler are deployed unchanged, but no
+The bounded #331 application release and database validation below is the operative
+development release path. Deployed database bootstrap remains non-operative until
+approved deployment automation exists; this procedure only validates the already
+present development schema and isolation. Public report publication also remains
+non-operative: the existing publisher and scheduler are deployed unchanged, but no
 publication is manually invoked and no report data is copied. The #330 foundation
 handoff remains the documented sequence of local-backend plan generation and review,
 later exact-plan apply, and separately authorized state migration or recovery.
 Cloudflare/DNS/CI cutover is owned by #332, and legacy cleanup remains owned by
 #333. An AWS-only identity cannot write Cloudflare DNS.
 
-### Development application/database bootstrap (#331)
+### Development application release and database validation (#331)
 
 This is the only operative #331 release procedure. It uses only the development
 account and the two development state backends. The typed, non-secret foundation
@@ -425,6 +427,12 @@ already-authorized development private path may forward the endpoint to a local
 port. Set `NOVA_TOLL_RDS_LOCAL_PORT` to that port before this procedure; the
 procedure keeps `PGHOST` set to the RDS endpoint so TLS hostname verification
 still applies and uses only `127.0.0.1` as the transport address.
+
+This procedure must not create or migrate a deployed database. If the development
+database is absent or invalid, stop; do not run
+`bootstrap_development_database.py` against it. That bootstrap remains limited to
+the disposable PostgreSQL contract harness until approved deployment automation
+exists.
 
 Keep the terminal non-traced. The development RDS-managed Secrets Manager JSON and
 its extracted username/password exist only in process memory and are never
@@ -447,6 +455,7 @@ case "$RELEASE_EVIDENCE" in "$ROOT"|"$ROOT"/*) exit 1 ;; esac
 test ! -e "$RELEASE_EVIDENCE"
 test "$(git -C "$ROOT" rev-parse --show-toplevel)" = "$ROOT"
 git -C "$ROOT" diff --check
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
 for command_name in aws curl dig find git jq psql python3 rg sha256sum terraform unzip uv; do command -v "$command_name" >/dev/null; done
 RELEASE_DIR="$(mktemp -d -t nova-toll-331-XXXXXX)"
 FOUNDATION_TF_DATA_DIR="$RELEASE_DIR/foundation-tfdata"
@@ -462,15 +471,15 @@ CA_FILE="$RELEASE_DIR/global-bundle.pem"
 IDENTITY_JSON="$RELEASE_DIR/identity.json"
 RESET_BODY="$RELEASE_DIR/reset.json"
 RESET_REQUEST="$RELEASE_DIR/reset-request.json"
+LAMBDA_ACCOUNT_SETTINGS="$RELEASE_DIR/lambda-account-settings.json"
 SECRET_ARN=
 SECRET_JSON=
 PGUSER=
 PGPASSWORD=
-BOOTSTRAP_STATUS=pass
 cleanup() {
   unset PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE PGSSLMODE PGSSLROOTCERT
   unset SECRET_JSON SECRET_ARN RDS_METADATA DB_USER DB_PASSWORD DB_HOST DB_PORT
-  rm -f -- "$FOUNDATION_JSON" "$DEV_FOUNDATION_VARS" "$PHASE_ONE_PLAN_JSON" "$PHASE_TWO_PLAN_JSON" "$CA_FILE" "$IDENTITY_JSON" "$RESET_BODY" "$RESET_REQUEST" "$PHASE_ONE_PLAN" "$PHASE_TWO_PLAN"
+  rm -f -- "$FOUNDATION_JSON" "$DEV_FOUNDATION_VARS" "$PHASE_ONE_PLAN_JSON" "$PHASE_TWO_PLAN_JSON" "$CA_FILE" "$IDENTITY_JSON" "$RESET_BODY" "$RESET_REQUEST" "$LAMBDA_ACCOUNT_SETTINGS" "$PHASE_ONE_PLAN" "$PHASE_TWO_PLAN"
   rm -rf -- "$ROOT/v2/infra/build"
   rm -rf -- "$RELEASE_DIR"
 }
@@ -511,29 +520,29 @@ AGENTCORE_SHA256="$(sha256sum infra/build/agentcore.zip | cut -d' ' -f1)"
 PROXY_SHA256="$(sha256sum infra/build/chat-proxy.zip | cut -d' ' -f1)"
 ARTIFACT_SCAN_PATTERN='920534282028|nova-toll-prod|backend\.production\.hcl|terraform_remote_state|arn:aws:secretsmanager:|AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*[:=][[:space:]]*[^[:space:]}\"]{8,}|PGPASSWORD=|NOVA_TOLL_ADMIN_URL=|SECRET_(ARN|STRING)[[:space:]]*[:=][[:space:]]*[^[:space:]}\"]{8,}|\"(secret(_arn|string)?|password)\"[[:space:]]*[:=][[:space:]]*\"?[[:alnum:]/+=_-]{8,}'
 PACKAGE_SCAN_PATTERN='920534282028|nova-toll-prod|backend\.production\.hcl|terraform_remote_state|PGPASSWORD=|NOVA_TOLL_ADMIN_URL=|SECRET_(ARN|STRING)[[:space:]]*[:=][[:space:]}\"]{8,}'
-ARTIFACT_SSM_PATTERN='arn:aws:ssm:'
+SSM_ARN_PATTERN='arn:aws:ssm:[[:alnum:]-]+:[0-9]{12}:parameter/[[:alnum:]_.:/=+-]+'
 ALLOWED_SSM_REFERENCE='arn:aws:ssm:us-east-1:903859731897:parameter/nova-toll/openai_api_key'
+scan_ssm_references() {
+  local reference
+  while IFS= read -r reference; do
+    test "$reference" = "$ALLOWED_SSM_REFERENCE"
+  done
+}
 scan_release_file() {
-  local file="$1" statuses
+  local file="$1" references
   if rg --text --ignore-case --quiet -- "$ARTIFACT_SCAN_PATTERN" "$file"; then
     exit 1
   elif [ "$?" -ne 1 ]; then
     exit 1
   fi
-  if rg --text --ignore-case --quiet -- "$ARTIFACT_SSM_PATTERN" "$file"; then
-    if rg --text --ignore-case -- "$ARTIFACT_SSM_PATTERN" "$file" | rg --invert-match --fixed-strings --quiet -- "$ALLOWED_SSM_REFERENCE"; then
-      exit 1
-    fi
-    statuses=("${PIPESTATUS[@]}")
-    if [ "${statuses[0]}" -ne 0 ] || [ "${statuses[1]}" -ne 1 ]; then
-      exit 1
-    fi
+  if references="$(rg --text --only-matching -- "$SSM_ARN_PATTERN" "$file")"; then
+    scan_ssm_references <<<"$references"
   elif [ "$?" -ne 1 ]; then
     exit 1
   fi
 }
 scan_package() {
-  local package="$1" statuses
+  local package="$1" references
   unzip -t "$package" >/dev/null
   if unzip -Z1 "$package" | rg --ignore-case --quiet '(^|/)\.env$'; then
     exit 1
@@ -545,14 +554,8 @@ scan_package() {
   elif [ "$?" -ne 1 ]; then
     exit 1
   fi
-  if unzip -p "$package" | rg --text --ignore-case --quiet -- "$ARTIFACT_SSM_PATTERN"; then
-    if unzip -p "$package" | rg --text --ignore-case -- "$ARTIFACT_SSM_PATTERN" | rg --invert-match --fixed-strings --quiet -- "$ALLOWED_SSM_REFERENCE"; then
-      exit 1
-    fi
-    statuses=("${PIPESTATUS[@]}")
-    if [ "${statuses[0]}" -ne 0 ] || [ "${statuses[1]}" -ne 1 ]; then
-      exit 1
-    fi
+  if references="$(unzip -p "$package" | rg --text --only-matching -- "$SSM_ARN_PATTERN")"; then
+    scan_ssm_references <<<"$references"
   elif [ "$?" -ne 1 ]; then
     exit 1
   fi
@@ -562,6 +565,9 @@ scan_release_directory() {
     scan_release_file "$file"
   done < <(find "$RELEASE_DIR" -type f -print0)
 }
+for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+  scan_package "$package"
+done
 
 export TF_DATA_DIR="$APP_TF_DATA_DIR"
 grep -F 'bucket       = "nova-toll-tfstate-903859731897"' infra/backend.development.hcl >/dev/null
@@ -636,11 +642,11 @@ plan_policy() {
     def managed_changes($address):
       [.resource_changes[]? | select(.mode == "managed" and .address == $address)] as $changes |
       if ($changes | length) == 1 then $changes[0] else false end;
-    def unreserved($address):
+    def reserved($address; $expected):
       managed_changes($address) as $resource |
       if ($resource | type) != "object" then false
       elif (($resource.change.after_unknown? // {}) | (.reserved_concurrent_executions? // false)) then false
-      else ($resource.change.after | type == "object" and has("reserved_concurrent_executions") and (.reserved_concurrent_executions == null or .reserved_concurrent_executions == -1))
+      else ($resource.change.after | type == "object" and .reserved_concurrent_executions == $expected)
       end;
     def default_edge:
       managed_changes("aws_cloudfront_distribution.site") as $resource |
@@ -658,9 +664,9 @@ plan_policy() {
         end
       end;
     all(.resource_changes[]; (.change.actions | type == "array" and length > 0))
-      and unreserved("aws_lambda_function.loader")
-      and unreserved("aws_lambda_function.publisher")
-      and unreserved("aws_lambda_function.tollchat_proxy")
+      and reserved("aws_lambda_function.loader"; 5)
+      and reserved("aws_lambda_function.publisher"; 1)
+      and reserved("aws_lambda_function.tollchat_proxy"; 5)
       and default_edge
   ' "$PLAN_JSON" >/dev/null; then exit 1; fi
   if [ "$phase" = phase-two ]; then
@@ -852,6 +858,12 @@ SOURCE_TREE_SHA256="$(source_tree_digest)"
 SOURCE_DIFF_SHA256="$(git -C "$ROOT" diff HEAD --no-ext-diff --binary -- . ':(exclude).graph' | sha256sum | cut -d' ' -f1)"
 tf_dev -chdir="$ROOT/v2/infra" plan -input=false $PLAN_ARGS -var public_preview_hostname= -out="$PHASE_ONE_PLAN" >/dev/null
 PHASE_ONE_PLAN_SHA256="$(plan_policy "$PHASE_ONE_PLAN")"
+scan_release_file "$PHASE_ONE_PLAN"
+scan_release_file "$PHASE_ONE_PLAN_JSON"
+scan_release_directory
+aws_dev lambda get-account-settings >"$LAMBDA_ACCOUNT_SETTINGS"
+LAMBDA_QUOTA="$(aws_dev service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --query 'Quota.Value' --output text)"
+uv run --project "$ROOT/v2" python "$ROOT/v2/scripts/check_lambda_quota_gate.py" --account-settings "$LAMBDA_ACCOUNT_SETTINGS" --plan "$PHASE_ONE_PLAN_JSON" --quota "$LAMBDA_QUOTA" >/dev/null
 tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_ONE_PLAN" >/dev/null
 PUBLIC_SITE_JSON="$(tf_dev -chdir="$ROOT/v2/infra" output -json public_site)"
 PREVIEW_HOST="$(jq -er '.hostname | select(test("^d[A-Za-z0-9]+[.]cloudfront[.]net$"))' <<<"$PUBLIC_SITE_JSON")"
@@ -859,6 +871,12 @@ PREVIEW_URL="https://$PREVIEW_HOST"
 test "$(jq -r '.url' <<<"$PUBLIC_SITE_JSON")" = ""
 tf_dev -chdir="$ROOT/v2/infra" plan -input=false $PLAN_ARGS -var "public_preview_hostname=$PREVIEW_HOST" -out="$PHASE_TWO_PLAN" >/dev/null
 PHASE_TWO_PLAN_SHA256="$(plan_policy "$PHASE_TWO_PLAN" phase-two)"
+scan_release_file "$PHASE_TWO_PLAN"
+scan_release_file "$PHASE_TWO_PLAN_JSON"
+scan_release_directory
+aws_dev lambda get-account-settings >"$LAMBDA_ACCOUNT_SETTINGS"
+LAMBDA_QUOTA="$(aws_dev service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --query 'Quota.Value' --output text)"
+uv run --project "$ROOT/v2" python "$ROOT/v2/scripts/check_lambda_quota_gate.py" --account-settings "$LAMBDA_ACCOUNT_SETTINGS" --plan "$PHASE_TWO_PLAN_JSON" --quota "$LAMBDA_QUOTA" >/dev/null
 tf_dev -chdir="$ROOT/v2/infra" apply -input=false "$PHASE_TWO_PLAN" >/dev/null
 PUBLIC_SITE_JSON="$(tf_dev -chdir="$ROOT/v2/infra" output -json public_site)"
 test "$(jq -r '.url' <<<"$PUBLIC_SITE_JSON")" = "$PREVIEW_URL"
@@ -870,19 +888,13 @@ PUBLIC_ORIGINS="$(aws_dev lambda get-function-configuration --function-name toll
 test "$PUBLIC_ORIGINS" = "$PREVIEW_URL"
 PUBLIC_BASE_URL="$(aws_dev lambda get-function-configuration --function-name toll-v2-report-publisher-dev --query 'Environment.Variables.PUBLIC_BASE_URL' --output text)"
 test "$PUBLIC_BASE_URL" = "$PREVIEW_URL"
-assert_no_reserved_concurrency() {
-  local function_name="$1" response
-  if response="$(aws_dev lambda get-function-concurrency --function-name "$function_name" --output json 2>&1)"; then
-    if [ -n "$response" ]; then
-      jq -e '(.ReservedConcurrentExecutions? // null) == null' <<<"$response" >/dev/null
-    fi
-  else
-    grep -Fq 'ResourceNotFoundException' <<<"$response"
-  fi
+assert_reserved_concurrency() {
+  local function_name="$1" expected="$2"
+  test "$(aws_dev lambda get-function-concurrency --function-name "$function_name" --query ReservedConcurrentExecutions --output text)" = "$expected"
 }
-for function_name in toll-v2-pricing-loader-dev toll-v2-report-publisher-dev tollchat-v2-chat-proxy-dev; do
-  assert_no_reserved_concurrency "$function_name"
-done
+assert_reserved_concurrency toll-v2-pricing-loader-dev 5
+assert_reserved_concurrency toll-v2-report-publisher-dev 1
+assert_reserved_concurrency tollchat-v2-chat-proxy-dev 5
 FOUNDATION_DIGEST="$(sha256sum "$FOUNDATION_JSON" | cut -d' ' -f1)"
 RDS_METADATA="$(aws_dev rds describe-db-instances --db-instance-identifier "$(jq -er '.db_instance.identifier' "$FOUNDATION_JSON")" --query 'DBInstances[0].{status:DBInstanceStatus,address:Endpoint.Address,port:Endpoint.Port,private:PubliclyAccessible,secret:MasterUserSecret.SecretArn}' --output json)"
 DB_HOST="$(jq -er '.address' <<<"$RDS_METADATA")"
@@ -910,10 +922,6 @@ export PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PAS
 if [ -n "${NOVA_TOLL_RDS_LOCAL_PORT:-}" ]; then
   case "$NOVA_TOLL_RDS_LOCAL_PORT" in (*[!0-9]*|'') exit 1 ;; esac
   export PGHOSTADDR=127.0.0.1 PGPORT="$NOVA_TOLL_RDS_LOCAL_PORT"
-fi
-if ! python3 "$ROOT/v2/scripts/bootstrap_development_database.py" >/dev/null 2>"$RELEASE_DIR/bootstrap.err"; then
-  grep -Fx 'ERROR:  development database already exists' "$RELEASE_DIR/bootstrap.err" >/dev/null
-  BOOTSTRAP_STATUS=already-present
 fi
 psql --dbname nova_toll_development --file "$ROOT/v2/tests/development_bootstrap_contract.sql" >/dev/null
 for role in pricing_loader_writer pricing_reader tollchat_agent pricing_caller report_publisher; do
@@ -945,17 +953,11 @@ test "$DNS_AFTER" = "$DNS_BEFORE"
 RESOURCE_COUNT="$(tf_dev -chdir="$ROOT/v2/infra" state list | wc -l | tr -d ' ')"
 RESOURCE_TYPES="$(tf_dev -chdir="$ROOT/v2/infra" state list | awk -F. '{print $1}' | sort -u | paste -sd, -)"
 test -n "$RESOURCE_TYPES"
-for plan in "$PHASE_ONE_PLAN" "$PHASE_TWO_PLAN" "$PHASE_ONE_PLAN_JSON" "$PHASE_TWO_PLAN_JSON"; do
-  scan_release_file "$plan"
-done
-for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
-  scan_package "$package"
-done
 scan_release_directory
 test "$(git -C "$ROOT" rev-parse HEAD)" = "$SOURCE_REVISION"
 test "$SOURCE_TREE_SHA256" = "$(source_tree_digest)"
 test "$SOURCE_DIFF_SHA256" = "$(git -C "$ROOT" diff HEAD --no-ext-diff --binary -- . ':(exclude).graph' | sha256sum | cut -d' ' -f1)"
-printf '%s\n' "account=$EXPECTED_ACCOUNT" "region=$REGION" "source_revision=$(git -C "$ROOT" rev-parse HEAD)" "source_tree_sha256=$SOURCE_TREE_SHA256" "source_diff_sha256=$SOURCE_DIFF_SHA256" "foundation_sha256=$FOUNDATION_DIGEST" "phase_one_plan_sha256=$PHASE_ONE_PLAN_SHA256" "phase_two_plan_sha256=$PHASE_TWO_PLAN_SHA256" "loader_sha256=$LOADER_SHA256" "publisher_sha256=$PUBLISHER_SHA256" "agentcore_sha256=$AGENTCORE_SHA256" "chat_proxy_sha256=$PROXY_SHA256" "plan_policy=pass" "apply=pass" "bootstrap=$BOOTSTRAP_STATUS" "database_contract=$DB_CONTRACT" "resource_count=$RESOURCE_COUNT" "resource_inventory=$RESOURCE_TYPES" "preview_url=$PREVIEW_URL" "smoke=pass" "dns_before=$DNS_BEFORE" "dns_after=$DNS_AFTER" >"$RELEASE_EVIDENCE"
+printf '%s\n' "account=$EXPECTED_ACCOUNT" "region=$REGION" "source_revision=$(git -C "$ROOT" rev-parse HEAD)" "source_tree_sha256=$SOURCE_TREE_SHA256" "source_diff_sha256=$SOURCE_DIFF_SHA256" "foundation_sha256=$FOUNDATION_DIGEST" "phase_one_plan_sha256=$PHASE_ONE_PLAN_SHA256" "phase_two_plan_sha256=$PHASE_TWO_PLAN_SHA256" "loader_sha256=$LOADER_SHA256" "publisher_sha256=$PUBLISHER_SHA256" "agentcore_sha256=$AGENTCORE_SHA256" "chat_proxy_sha256=$PROXY_SHA256" "plan_policy=pass" "lambda_quota=$LAMBDA_QUOTA" "lambda_reservations=5,1,5" "apply=pass" "database_bootstrap=not-run" "database_contract=$DB_CONTRACT" "resource_count=$RESOURCE_COUNT" "resource_inventory=$RESOURCE_TYPES" "preview_url=$PREVIEW_URL" "smoke=pass" "dns_before=$DNS_BEFORE" "dns_after=$DNS_AFTER" >"$RELEASE_EVIDENCE"
 if rg --text --ignore-case --quiet 'password|secret_arn|secretstring|920534282028|dev.tollchat.ai|cloudflare|terraform\.tfstate|\.tfplan' "$RELEASE_EVIDENCE"; then
   exit 1
 elif [ "$?" -ne 1 ]; then

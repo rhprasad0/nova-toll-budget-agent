@@ -448,7 +448,7 @@ resource "aws_lambda_function" "tollchat_proxy" {
   timeout                        = 50
   memory_size                    = 256
   publish                        = true
-  reserved_concurrent_executions = local.is_production ? 5 : null
+  reserved_concurrent_executions = 5
 
   s3_bucket         = var.foundation.agentcore_artifacts_bucket_name
   s3_key            = aws_s3_object.tollchat_proxy.key
