@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -3379,7 +3380,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    assert set(jobs) == {"build", "deploy"}
+    assert set(jobs) == {"build", "oidc-proof", "deploy"}
 
     build = jobs["build"]
     assert build["permissions"] == {"contents": "read"}
@@ -3416,8 +3417,55 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "v2-development-checksums",
     }
 
+    proof = jobs["oidc-proof"]
+    assert proof["if"] == "github.ref == 'refs/heads/main'"
+    assert proof["environment"] == "development"
+    assert proof["permissions"] == {"contents": "read", "id-token": "write"}
+    assert proof["outputs"] == {
+        "artifact_id": "${{ steps.upload-proof.outputs.artifact-id }}"
+    }
+    proof_steps = cast(list[dict[str, object]], proof["steps"])
+    proof_source = _workflow_run_source(proof)
+    assert all(
+        not cast(str, step.get("uses", "")).startswith(
+            ("aws-actions/configure-aws-credentials@", "hashicorp/setup-terraform@")
+        )
+        for step in proof_steps
+    )
+    assert "ACTIONS_ID_TOKEN_REQUEST_URL" in proof_source
+    assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" in proof_source
+    assert "sts.amazonaws.com" in proof_source
+    assert "https://token.actions.githubusercontent.com" in proof_source
+    assert "base64.urlsafe_b64decode" in proof_source
+    assert (
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+        in proof_source
+    )
+    assert '"environment": "development"' in proof_source
+    assert '"repository": "rhprasad0/nova-toll-budget-agent"' in proof_source
+    assert '"ref": "refs/heads/main"' in proof_source
+    assert '"sha": expected_sha' in proof_source
+    assert '"$RUNNER_TEMP/protected-main-oidc.json"' in proof_source
+    proof_uploads = [
+        step
+        for step in proof_steps
+        if cast(str, step.get("uses", "")).startswith("actions/upload-artifact@")
+    ]
+    assert len(proof_uploads) == 1
+    assert proof_uploads[0]["id"] == "upload-proof"
+    assert cast(dict[str, object], proof_uploads[0]["with"]) == {
+        "name": "protected-main-oidc-proof",
+        "path": "${{ runner.temp }}/protected-main-oidc.json",
+        "if-no-files-found": "error",
+        "retention-days": 1,
+        "overwrite": False,
+        "include-hidden-files": False,
+    }
+    assert "oidc_token" in proof_source
+    assert "full claims" not in proof_source.lower()
+
     deploy = jobs["deploy"]
-    assert deploy["needs"] == "build"
+    assert deploy["needs"] == ["build", "oidc-proof"]
     assert deploy["if"] == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'"
     assert (
         "Repository variable: environment variables are unavailable to this pre-job gate."
@@ -3432,10 +3480,26 @@ def _assert_development_delivery_workflow(source: str) -> None:
         for step in deploy_steps
         if cast(str, step.get("uses", "")).startswith("actions/download-artifact@")
     ]
-    assert {cast(dict[str, str], step["with"])["name"] for step in downloads} == {
+    assert {
+        cast(dict[str, str], step["with"])["name"]
+        for step in downloads
+        if "name" in cast(dict[str, str], step["with"])
+    } == {
         "v2-development-packages",
         "v2-development-checksums",
     }
+    proof_downloads = [
+        step
+        for step in downloads
+        if "artifact-ids" in cast(dict[str, str], step["with"])
+    ]
+    assert len(proof_downloads) == 1
+    proof_download_with = cast(dict[str, str], proof_downloads[0]["with"])
+    assert proof_download_with == {
+        "artifact-ids": "${{ needs.oidc-proof.outputs.artifact_id }}",
+        "path": "${{ runner.temp }}",
+    }
+    assert "name" not in proof_download_with
     assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in deploy_source
     assert "aws-actions/configure-aws-credentials@" in "\n".join(
         cast(str, step.get("uses", "")) for step in deploy_steps
@@ -3470,19 +3534,21 @@ def _assert_development_delivery_workflow(source: str) -> None:
         str, identity_step["run"]
     )
     assert '= "903859731897"' in cast(str, identity_step["run"])
-    assert "Record protected-main OIDC proof" in source
-    assert 'test "$GITHUB_REF" = "refs/heads/main"' in deploy_source
-    assert (
-        'test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"'
-        in deploy_source
-    )
+    assert "Record protected-main OIDC proof" not in source
     assert (
         "rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
-        not in deploy_source
+        in proof_source
     )
     assert "protected-main-oidc.json" in deploy_source
-    assert '"commit_sha":"%s"' in deploy_source
+    assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in deploy_source
     assert '(.commit_sha | test("^[0-9a-f]{40}$"))' in deploy_source
+    assert ".commit_sha == $commit" in deploy_source
+    proof_validation_index = next(
+        index
+        for index, step in enumerate(deploy_steps)
+        if step.get("name") == "Validate protected-main OIDC proof"
+    )
+    assert proof_validation_index < configure_index
     assert (
         "terraform -chdir=infra init -input=false -backend-config=backend.development.hcl"
         in deploy_source
@@ -3541,6 +3607,121 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "920534282028",
     ):
         assert forbidden not in source
+
+
+def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    proof_source = _workflow_run_source(jobs["oidc-proof"])
+    match = re.search(
+        r'python3 - "\$GITHUB_SHA" <<\x27PY\x27\n(.*?)\nPY',
+        proof_source,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    validator = dedent(match.group(1))
+    expected_sha = "a" * 40
+    claims = {
+        "iss": "https://token.actions.githubusercontent.com",
+        "aud": "sts.amazonaws.com",
+        "sub": "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+        "environment": "development",
+        "repository": "rhprasad0/nova-toll-budget-agent",
+        "ref": "refs/heads/main",
+        "sha": expected_sha,
+    }
+
+    def segment(value: object) -> bytes:
+        return base64.urlsafe_b64encode(
+            json.dumps(value, separators=(",", ":")).encode()
+        ).rstrip(b"=")
+
+    def token_for(values: Mapping[str, object]) -> str:
+        return b".".join(
+            (segment({"alg": "RS256"}), segment(values), segment("signature"))
+        ).decode()
+
+    def run(token: str, sha: str = expected_sha) -> subprocess.CompletedProcess[str]:
+        environment = os.environ.copy()
+        environment["OIDC_TOKEN"] = token
+        return subprocess.run(
+            [sys.executable, "-", sha],
+            input=validator,
+            text=True,
+            capture_output=True,
+            env=environment,
+            check=False,
+        )
+
+    valid = run(token_for(claims))
+    assert valid.returncode == 0, valid.stderr
+    for name, value in (
+        ("iss", "https://evil.example"),
+        ("aud", "wrong-audience"),
+        ("sub", "repo:evil/fork:ref:refs/heads/main"),
+        ("environment", "production"),
+        ("repository", "evil/fork"),
+        ("ref", "refs/heads/release"),
+        ("sha", "b" * 40),
+    ):
+        invalid_token = token_for({**claims, name: value})
+        invalid = run(invalid_token)
+        assert invalid.returncode != 0
+        assert invalid_token not in invalid.stdout + invalid.stderr
+    malformed_json = ".".join(
+        (
+            segment({"alg": "RS256"}).decode(),
+            base64.urlsafe_b64encode(b"not JSON").rstrip(b"=").decode(),
+            segment("signature").decode(),
+        )
+    )
+    for malformed in (
+        "not-a-jwt",
+        "a!.e30.signature",
+        "a.e30.signature",
+        malformed_json,
+    ):
+        invalid = run(malformed)
+        assert invalid.returncode != 0
+        assert malformed not in invalid.stdout + invalid.stderr
+    assert run(token_for(claims), "A" * 40).returncode != 0
+
+
+def test_development_oidc_proof_schema_rejects_extra_fields_and_stale_sha():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    deploy_source = _workflow_run_source(jobs["deploy"])
+    match = re.search(
+        r'jq -e --arg commit "\$GITHUB_SHA" \'\n(.*?)\n\' "\$PROOF"',
+        deploy_source,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    schema = match.group(1)
+    sha = "a" * 40
+    proof = {
+        "account": "903859731897",
+        "commit_sha": sha,
+        "environment": "development",
+        "proof": "protected-main-oidc",
+        "ref": "refs/heads/main",
+        "repository": "rhprasad0/nova-toll-budget-agent",
+    }
+
+    def passes(value: Mapping[str, object], commit: str = sha) -> bool:
+        result = subprocess.run(
+            ["jq", "-e", "--arg", "commit", commit, schema],
+            input=json.dumps(value),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
+
+    assert passes(proof)
+    assert not passes({**proof, "extra": "rejected"})
+    assert not passes({**proof, "commit_sha": "b" * 40})
+    assert not passes(proof, "b" * 40)
 
 
 def _assert_development_delivery_trust(source: str) -> None:
@@ -4001,21 +4182,25 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
         ("environment: development", "environment: production"),
         ("903859731897", "920534282028"),
         (
-            'test "$GITHUB_REF" = "refs/heads/main"',
-            'test "$GITHUB_REF" = "refs/heads/release"',
+            "if: github.ref == 'refs/heads/main'",
+            "if: github.ref == 'refs/heads/release'",
         ),
         (
-            'test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"',
-            'test "$GITHUB_REPOSITORY" = "evil/fork"',
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+            "repo:evil/fork:environment:development",
         ),
         (
-            'test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"',
-            'test "$GITHUB_REPOSITORY" = "rhprasad0@91573985/nova-toll-budget-agent"',
+            '"repository": "rhprasad0/nova-toll-budget-agent"',
+            '"repository": "evil/fork"',
         ),
         ("backend.development.hcl", "backend.production.hcl"),
         ("build/loader.zip", "build/placeholder.zip"),
         ('version: "0.12.5"', "version: latest"),
         ('terraform_version: "1.15.8"', "terraform_version: latest"),
+        (
+            "${{ needs.oidc-proof.outputs.artifact_id }}",
+            "protected-main-oidc-proof",
+        ),
     ):
         _must_reject(
             _assert_development_delivery_workflow,
@@ -6620,6 +6805,51 @@ def test_slice_2a_post_advertisement_check_catches_toctou_and_multi_owner_routes
             post_advertisement=True,
             require_host_route=True,
         )
+
+
+def test_slice_2a_intended_device_rejects_ipv4_in_both_route_fields():
+    namespace = _slice_2a_allocation_namespace()
+    check_allocation = cast(Callable[..., object], namespace["check_allocation"])
+    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
+    other = _slice_2a_device("other-device")
+    devices = {"devices": [intended, other]}
+    production_ipv4 = "172.31.0.0/16"
+    for advertised, enabled in (
+        ([production_ipv4], []),
+        ([], [production_ipv4]),
+        ([production_ipv4], [production_ipv4]),
+    ):
+        with pytest.raises(ValueError):
+            check_allocation(
+                devices,
+                {
+                    "dev-router": _slice_2a_routes(
+                        advertised=advertised, enabled=enabled
+                    ),
+                    "other-device": _slice_2a_routes(),
+                },
+                "dev-router",
+            )
+
+    for malformed in (["not-a-route"], [production_ipv4, production_ipv4]):
+        with pytest.raises(ValueError):
+            check_allocation(
+                devices,
+                {
+                    "dev-router": _slice_2a_routes(advertised=malformed),
+                    "other-device": _slice_2a_routes(),
+                },
+                "dev-router",
+            )
+
+    assert check_allocation(
+        devices,
+        {
+            "dev-router": _slice_2a_routes(),
+            "other-device": _slice_2a_routes(advertised=[production_ipv4]),
+        },
+        "dev-router",
+    )
 
 
 def test_slice_2a_allocation_gate_uses_read_only_authenticated_api_and_no_fallback():

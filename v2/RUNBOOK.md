@@ -2169,6 +2169,10 @@ on any API, response, schema, route, duplicate, or ownership error. It has no
 route-enable or other mutation path; the token is supplied only in the process
 environment and is never printed.
 
+The intended development device may not advertise or enable any IPv4 route. The
+separate production router remains permitted to advertise its `172.31.0.0/16`
+route.
+
 ```sh
 set +x
 : "${TAILSCALE_API_TOKEN:?set a read-only Tailscale API token in the environment}"
@@ -2207,7 +2211,7 @@ def _devices(document):
     return devices, ids
 
 
-def _site_one_route(route):
+def _site_one_route(route, *, reject_ipv4=False):
     if not isinstance(route, str) or not route:
         raise ValueError("invalid route")
     try:
@@ -2216,7 +2220,11 @@ def _site_one_route(route):
         raise ValueError("invalid route") from error
     if str(network) != route:
         raise ValueError("non-canonical route")
-    if network.version == 4 or not network.overlaps(VIA6_SPACE):
+    if network.version == 4:
+        if reject_ipv4:
+            raise ValueError("intended development device may not advertise or enable IPv4")
+        return False
+    if not network.overlaps(VIA6_SPACE):
         return False
     if network.prefixlen < 96:
         raise ValueError("ambiguous 4via6 route")
@@ -2273,7 +2281,7 @@ def check_allocation(
             if len(routes) != len(set(routes)):
                 raise ValueError("duplicate route")
             for route in routes:
-                if _site_one_route(route):
+                if _site_one_route(route, reject_ipv4=device_id == intended_device_id):
                     if allowed_routes is not None and route not in allowed_routes:
                         raise ValueError("unexpected site-1 route")
                     owners.setdefault(route, set()).add(device_id)

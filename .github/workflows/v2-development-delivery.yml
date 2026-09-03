@@ -53,9 +53,103 @@ jobs:
           path: v2/infra/build/DEPLOYMENT_SHA256SUMS
           if-no-files-found: error
 
+  oidc-proof:
+    name: Prove protected main OIDC claims
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      artifact_id: ${{ steps.upload-proof.outputs.artifact-id }}
+    steps:
+      - name: Validate runner OIDC claims
+        run: |
+          set +x
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          case "$ACTIONS_ID_TOKEN_REQUEST_URL" in
+            *\?*) oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" ;;
+            *) oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}?audience=sts.amazonaws.com" ;;
+          esac
+          oidc_response="$(curl --fail --silent --show-error \
+            --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$oidc_url")"
+          oidc_token="$(jq -er '.value | strings' <<<"$oidc_response")"
+          OIDC_TOKEN="$oidc_token" python3 - "$GITHUB_SHA" <<'PY'
+          import base64
+          import binascii
+          import json
+          import os
+          import re
+          import sys
+
+          token = os.environ.pop("OIDC_TOKEN", "")
+          expected_sha = sys.argv[1]
+          expected = {
+              "iss": "https://token.actions.githubusercontent.com",
+              "aud": "sts.amazonaws.com",
+              "sub": "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+              "environment": "development",
+              "repository": "rhprasad0/nova-toll-budget-agent",
+              "ref": "refs/heads/main",
+              "sha": expected_sha,
+          }
+
+          def decode(segment: str) -> bytes:
+              if not re.fullmatch(r"[A-Za-z0-9_-]+", segment) or len(segment) % 4 == 1:
+                  raise ValueError("malformed OIDC token")
+              try:
+                  decoded = base64.urlsafe_b64decode(
+                      segment + "=" * (-len(segment) % 4)
+                  )
+              except binascii.Error as error:
+                  raise ValueError("malformed OIDC token") from error
+              if base64.urlsafe_b64encode(decoded).rstrip(b"=").decode() != segment:
+                  raise ValueError("malformed OIDC token")
+              return decoded
+
+          parts = token.split(".")
+          if len(parts) != 3:
+              raise ValueError("malformed OIDC token")
+          try:
+              header = json.loads(decode(parts[0]).decode("utf-8"))
+              claims = json.loads(decode(parts[1]).decode("utf-8"))
+              decode(parts[2])
+          except (UnicodeDecodeError, json.JSONDecodeError) as error:
+              raise ValueError("malformed OIDC token") from error
+          if not isinstance(header, dict) or not isinstance(claims, dict) or not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
+              raise ValueError("invalid OIDC claims")
+          if any(claims.get(name) != value for name, value in expected.items()):
+              raise ValueError("invalid OIDC claims")
+          PY
+          jq -n --arg commit "$GITHUB_SHA" \
+            '{account:"903859731897",commit_sha:$commit,environment:"development",proof:"protected-main-oidc",ref:"refs/heads/main",repository:"rhprasad0/nova-toll-budget-agent"}' \
+            >"$RUNNER_TEMP/protected-main-oidc.json"
+          chmod 600 -- "$RUNNER_TEMP/protected-main-oidc.json"
+          jq -e '
+            type == "object" and (keys_unsorted | sort) == ["account", "commit_sha", "environment", "proof", "ref", "repository"] and
+            .account == "903859731897" and .commit_sha == env.GITHUB_SHA and
+            .environment == "development" and .proof == "protected-main-oidc" and
+            .ref == "refs/heads/main" and .repository == "rhprasad0/nova-toll-budget-agent"
+          ' "$RUNNER_TEMP/protected-main-oidc.json" >/dev/null
+
+      - name: Upload protected-main OIDC proof
+        id: upload-proof
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: protected-main-oidc-proof
+          path: ${{ runner.temp }}/protected-main-oidc.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: false
+          include-hidden-files: false
+
   deploy:
     name: Deploy v2 to development
-    needs: build
+    needs: [build, oidc-proof]
     # Repository variable: environment variables are unavailable to this pre-job gate.
     if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'
     runs-on: ubuntu-latest
@@ -92,6 +186,25 @@ jobs:
         working-directory: v2/infra/build
         run: sha256sum --check DEPLOYMENT_SHA256SUMS
 
+      - name: Download protected-main OIDC proof
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.oidc-proof.outputs.artifact_id }}
+          path: ${{ runner.temp }}
+
+      - name: Validate protected-main OIDC proof
+        run: |
+          set -euo pipefail
+          PROOF="$RUNNER_TEMP/protected-main-oidc.json"
+          test -f "$PROOF" && test ! -L "$PROOF"
+          jq -e --arg commit "$GITHUB_SHA" '
+            type == "object" and (keys_unsorted | sort) == ["account", "commit_sha", "environment", "proof", "ref", "repository"] and
+            .account == "903859731897" and .commit_sha == $commit and
+            (.commit_sha | test("^[0-9a-f]{40}$")) and .environment == "development" and
+            .proof == "protected-main-oidc" and .ref == "refs/heads/main" and
+            .repository == "rhprasad0/nova-toll-budget-agent"
+          ' "$PROOF" >/dev/null
+
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery
@@ -99,21 +212,6 @@ jobs:
 
       - name: Confirm development account
         run: test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
-
-      - name: Record protected-main OIDC proof
-        run: |
-          set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
-          test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
-          printf '{"account":"903859731897","commit_sha":"%s","environment":"development","proof":"protected-main-oidc","ref":"%s","repository":"%s"}\n' \
-            "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_REPOSITORY" >"$RUNNER_TEMP/protected-main-oidc.json"
-          jq -e '
-            type == "object" and (keys_unsorted | sort) == ["account", "commit_sha", "environment", "proof", "ref", "repository"] and
-            .proof == "protected-main-oidc" and .account == "903859731897" and
-            (.commit_sha | test("^[0-9a-f]{40}$")) and
-            .environment == "development" and .ref == "refs/heads/main" and
-            .repository == "rhprasad0/nova-toll-budget-agent"
-          ' "$RUNNER_TEMP/protected-main-oidc.json" >/dev/null
 
       - name: Plan and apply the reviewed development release
         run: |
