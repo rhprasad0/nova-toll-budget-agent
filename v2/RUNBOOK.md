@@ -447,8 +447,12 @@ address, and a development-only refresh/read result. A missing resource or
 import is a bootstrap failure. The administrator fixes it at that address and
 does not widen the OIDC role. The bootstrap administrator also applies the
 required `environment=development` and `version=v2` tags to application KMS
-keys before enabling CI; the delivery policy uses the two exact application key
-ARNs and cannot retarget an alias to a foundation or state key.
+keys before enabling CI; the delivery role's exact allowlist is stored in the
+three inline policies `nova-toll-v2-development-delivery-state`,
+`nova-toll-v2-development-delivery-compute`, and
+`nova-toll-v2-development-delivery-application`. These policies use the two
+exact application key ARNs and cannot retarget an alias to a foundation or
+state key.
 
 The following is the executable, fail-closed inventory and repair procedure.
 Run it from this checkout as a development-account administrator. It writes
@@ -759,15 +763,26 @@ decode_lambda_policy_response() {
 }
 
 ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"
-EXPECTED_POLICY_NAME="$ROLE_NAME"
 EXPECTED_TRUST="$WORK_DIR/expected-trust.json"
-EXPECTED_POLICY="$WORK_DIR/expected-policy.json"
 ACTUAL_TRUST="$WORK_DIR/actual-trust.json"
-ACTUAL_POLICY="$WORK_DIR/actual-policy.json"
+EXPECTED_POLICY_DIR="$WORK_DIR/expected-policies"
+ACTUAL_POLICY_DIR="$WORK_DIR/actual-policies"
+PREVIOUS_POLICY_DIR="$WORK_DIR/previous-policies"
+mkdir -p -- "$EXPECTED_POLICY_DIR" "$ACTUAL_POLICY_DIR" "$PREVIOUS_POLICY_DIR"
+declare -a EXPECTED_POLICY_KEYS=(state compute application)
+declare -A EXPECTED_POLICY_NAMES=()
+declare -A EXPECTED_POLICIES=()
+declare -A ACTUAL_POLICIES=()
+declare -A PREVIOUS_POLICIES=()
+for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+  EXPECTED_POLICY_NAMES["$policy_key"]="$ROLE_NAME-$policy_key"
+  EXPECTED_POLICIES["$policy_key"]="$EXPECTED_POLICY_DIR/$policy_key.json"
+  ACTUAL_POLICIES["$policy_key"]="$ACTUAL_POLICY_DIR/$policy_key.json"
+  PREVIOUS_POLICIES["$policy_key"]="$PREVIOUS_POLICY_DIR/$policy_key.json"
+done
 ROLE_INFO="$WORK_DIR/delivery-role.json"
 ROLE_POLICY_NAMES="$WORK_DIR/delivery-role-policies.json"
 ROLE_ATTACHMENTS="$WORK_DIR/delivery-role-attachments.json"
-PREVIOUS_POLICY="$WORK_DIR/previous-delivery-policy.json"
 PREVIOUS_ROLE_INFO="$WORK_DIR/previous-delivery-role.json"
 PREVIOUS_TRUST="$WORK_DIR/previous-delivery-trust.json"
 PREVIOUS_POLICY_NAMES="$WORK_DIR/previous-delivery-policy-names.json"
@@ -782,10 +797,15 @@ declare -A STATE_IMPORTED_BY_THIS_RUN=()
 
 render_document 'data.aws_iam_policy_document.development_delivery_assume.json' "$EXPECTED_TRUST" ||
   die "could not render expected delivery trust policy"
-render_document 'data.aws_iam_policy_document.development_delivery.json' "$EXPECTED_POLICY" ||
-  die "could not render expected delivery inline policy"
 TRUST_SHA256="$(sha256sum "$EXPECTED_TRUST" | awk '{print $1}')"
-POLICY_SHA256="$(sha256sum "$EXPECTED_POLICY" | awk '{print $1}')"
+for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+  render_document "local.development_delivery_policy_documents.${policy_key}" "${EXPECTED_POLICIES[$policy_key]}" ||
+    die "could not render expected delivery inline policy: $policy_key"
+done
+POLICY_SHA256="$(for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+  sha256sum "${EXPECTED_POLICIES[$policy_key]}" | awk '{print $1}'
+done | sha256sum | awk '{print $1}')"
+EXPECTED_POLICY_NAMES_JSON="$(printf '%s\n' "${EXPECTED_POLICY_KEYS[@]}" | jq -R -s --arg role "$ROLE_NAME" 'split("\n") | map(select(length > 0) | ($role + "-" + .))')"
 
 STATE_BUCKET="nova-toll-tfstate-${EXPECTED_ACCOUNT}"
 LOCK_KEY="nova-toll/v2/development/bootstrap-lock"
@@ -877,8 +897,13 @@ bootstrap_cleanup() {
   if test "$status" -ne 0; then
     set +e
     if test "$MUTATION_AMBIGUOUS" -eq 0; then
-      if declare -F rollback_delivery_state >/dev/null; then rollback_delivery_state; fi
       if declare -F rollback_created_role >/dev/null; then rollback_created_role; fi
+      if test "$MUTATION_AMBIGUOUS" -eq 0 && declare -F rollback_delivery_state >/dev/null; then
+        rollback_delivery_state || MUTATION_AMBIGUOUS=1
+      fi
+      if test "$MUTATION_AMBIGUOUS" -ne 0; then
+        printf 'bootstrap cleanup stopped: ambiguous mutation result preserved for manual reconciliation\n' >&2
+      fi
     else
       printf 'bootstrap cleanup stopped: ambiguous mutation result preserved for manual reconciliation\n' >&2
     fi
@@ -919,19 +944,24 @@ policy_set_is_empty() {
 }
 
 policy_set_is_exact() {
-  jq -e --arg expected "$EXPECTED_POLICY_NAME" '.PolicyNames == [$expected]' "$ROLE_POLICY_NAMES" >/dev/null &&
+  jq -e --argjson expected "$EXPECTED_POLICY_NAMES_JSON" '.PolicyNames | sort == ($expected | sort)' "$ROLE_POLICY_NAMES" >/dev/null &&
     jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null
 }
 
-read_expected_policy() {
-  aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME" \
-    --query PolicyDocument --output json >"$WORK_DIR/actual-policy.raw" || return 1
-  canonicalize_json "$WORK_DIR/actual-policy.raw" "$ACTUAL_POLICY"
+read_expected_policies() {
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" \
+      --query PolicyDocument --output json >"$WORK_DIR/actual-policy-${policy_key}.raw" || return 1
+    canonicalize_json "$WORK_DIR/actual-policy-${policy_key}.raw" "${ACTUAL_POLICIES[$policy_key]}" || return 1
+  done
 }
 
 role_documents_match() {
   read_role && role_identity_matches && read_policy_set && policy_set_is_exact &&
-    read_expected_policy && cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"
+    read_expected_policies || return 1
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}" || return 1
+  done
 }
 
 snapshot_role_state() {
@@ -939,6 +969,12 @@ snapshot_role_state() {
   cp -- "$ACTUAL_TRUST" "$PREVIOUS_TRUST"
   cp -- "$ROLE_POLICY_NAMES" "$PREVIOUS_POLICY_NAMES"
   cp -- "$ROLE_ATTACHMENTS" "$PREVIOUS_ATTACHMENTS"
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    if test -e "${ACTUAL_POLICIES[$policy_key]}"; then
+      cp -- "${ACTUAL_POLICIES[$policy_key]}" "${PREVIOUS_POLICIES[$policy_key]}"
+      chmod 600 -- "${PREVIOUS_POLICIES[$policy_key]}"
+    fi
+  done
   chmod 600 -- "$PREVIOUS_ROLE_INFO" "$PREVIOUS_TRUST" "$PREVIOUS_POLICY_NAMES" "$PREVIOUS_ATTACHMENTS"
 }
 
@@ -948,38 +984,69 @@ rollback_created_role() {
   read_policy_set || die "cannot safely inspect created role for rollback"
   jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null ||
     die "refusing rollback of created role with unexpected managed attachments"
-  jq -e '.PolicyNames == [] or .PolicyNames == ["nova-toll-v2-development-delivery"]' \
-    "$ROLE_POLICY_NAMES" >/dev/null ||
+  jq -e --argjson expected "$EXPECTED_POLICY_NAMES_JSON" \
+    '.PolicyNames == [] or (.PolicyNames | sort == ($expected | sort))' "$ROLE_POLICY_NAMES" >/dev/null ||
     die "refusing rollback of created role with unexpected inline policies"
   if ! policy_set_is_empty; then
-    assert_dev_account
-    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME (target $ROLE_ARN)"
-    aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"
-    read_policy_set && policy_set_is_empty || die "created role policy was not removed during rollback"
+    for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+      if jq -e --arg expected "${EXPECTED_POLICY_NAMES[$policy_key]}" '.PolicyNames | index($expected) != null' "$ROLE_POLICY_NAMES" >/dev/null; then
+        assert_dev_account
+        test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role-policy --role-name $ROLE_NAME --policy-name ${EXPECTED_POLICY_NAMES[$policy_key]} (target $ROLE_ARN)"
+        if ! aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"; then
+          MUTATION_AMBIGUOUS=1
+          printf 'delivery role policy deletion failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
+          return 1
+        fi
+      fi
+    done
+    if ! read_policy_set || ! policy_set_is_empty; then
+      MUTATION_AMBIGUOUS=1
+      printf '%s\n' 'created role policy rollback could not be verified; preserving role and policies for manual exact reconciliation' >&2
+      return 1
+    fi
   fi
   assert_dev_account
   test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role --role-name $ROLE_NAME (target $ROLE_ARN)"
-  aws iam delete-role --role-name "$ROLE_NAME"
+  if ! aws iam delete-role --role-name "$ROLE_NAME"; then
+    MUTATION_AMBIGUOUS=1
+    printf '%s\n' 'delivery role deletion failed; preserving role and policies for manual exact reconciliation' >&2
+    return 1
+  fi
   if aws iam get-role --role-name "$ROLE_NAME" \
     >"$WORK_DIR/rollback-role.json" 2>"$WORK_DIR/rollback-role.error"; then
-    die "created delivery role remained after rollback"
+    MUTATION_AMBIGUOUS=1
+    printf '%s\n' 'created delivery role remained after rollback' >&2
+    return 1
   fi
-  grep -q 'NoSuchEntity' "$WORK_DIR/rollback-role.error" ||
-    die "could not verify created delivery role rollback"
+  if ! grep -q 'NoSuchEntity' "$WORK_DIR/rollback-role.error"; then
+    MUTATION_AMBIGUOUS=1
+    printf '%s\n' 'could not verify created delivery role rollback' >&2
+    return 1
+  fi
   ROLE_CREATED=0
 }
 
-restore_previous_policy() {
+restore_previous_policies() {
   test "$PREVIOUS_POLICY_PRESENT" -eq 1 || return 0
   lock_is_current || die "refusing delivery policy restore after lock ownership changed"
-  assert_dev_account
-  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam put-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME --policy-document file://$PREVIOUS_POLICY (target $ROLE_ARN)"
-  aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME" \
-    --policy-document "file://$PREVIOUS_POLICY"
-  role_documents_match || die "pre-existing delivery policy could not be restored exactly"
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before restoring ${EXPECTED_POLICY_NAMES[$policy_key]} (target $ROLE_ARN)"
+    if ! aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" \
+      --policy-document "file://${PREVIOUS_POLICIES[$policy_key]}"; then
+      MUTATION_AMBIGUOUS=1
+      printf 'delivery policy restore failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
+      return 1
+    fi
+  done
+  if ! role_documents_match; then
+    MUTATION_AMBIGUOUS=1
+    printf '%s\n' 'pre-existing delivery policy restore could not be verified; preserving role and policies for manual exact reconciliation' >&2
+    return 1
+  fi
 }
 
-restore_absent_policy() {
+restore_absent_policies() {
   test "$ROLE_CREATED" -eq 0 || return 0
   lock_is_current || die "refusing delivery policy rollback after lock ownership changed"
   read_policy_set || die "cannot inspect policy after failed delivery policy write"
@@ -987,10 +1054,20 @@ restore_absent_policy() {
     return 0
   fi
   policy_set_is_exact || die "refusing to remove an unexpected policy after failed delivery policy write"
-  assert_dev_account
-  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME (target $ROLE_ARN)"
-  aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"
-  read_policy_set && policy_set_is_empty || die "absent delivery policy was not restored"
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before removing ${EXPECTED_POLICY_NAMES[$policy_key]} (target $ROLE_ARN)"
+    if ! aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"; then
+      MUTATION_AMBIGUOUS=1
+      printf 'absent delivery policy deletion failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
+      return 1
+    fi
+  done
+  if ! read_policy_set || ! policy_set_is_empty; then
+    MUTATION_AMBIGUOUS=1
+    printf '%s\n' 'absent delivery policy rollback could not be verified; preserving role and policies for manual exact reconciliation' >&2
+    return 1
+  fi
 }
 
 acquire_bootstrap_lock
@@ -1054,13 +1131,15 @@ if test "$ROLE_PRESENT" -eq 1 && test "$ROLE_CREATED" -eq 0; then
   if policy_set_is_empty; then
     POLICY_NEEDS_PUT=1
   elif policy_set_is_exact; then
-    if ! read_expected_policy; then
+    if ! read_expected_policies; then
       die "expected delivery inline policy is unreadable"
     fi
-    if ! cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"; then
+    POLICY_MATCH=1
+    for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+      cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}" || POLICY_MATCH=0
+    done
+    if test "$POLICY_MATCH" -eq 0; then
       snapshot_role_state
-      cp -- "$ACTUAL_POLICY" "$PREVIOUS_POLICY"
-      chmod 600 -- "$PREVIOUS_POLICY"
       PREVIOUS_POLICY_PRESENT=1
       POLICY_NEEDS_PUT=1
     fi
@@ -1073,16 +1152,18 @@ if test "$POLICY_NEEDS_PUT" -eq 1; then
   if test "$ROLE_PRESENT" -eq 1 && test ! -e "$PREVIOUS_ROLE_INFO"; then
     snapshot_role_state
   fi
-  assert_dev_account
-  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam put-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME --policy-document file://$EXPECTED_POLICY (target $ROLE_ARN)"
-  aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME" \
-    --policy-document "file://$EXPECTED_POLICY" || {
-      MUTATION_AMBIGUOUS=1
-      die "delivery inline policy write failed; preserving any matching post-state for manual exact reconciliation"
-    }
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam put-role-policy --role-name $ROLE_NAME --policy-name ${EXPECTED_POLICY_NAMES[$policy_key]} --policy-document file://${EXPECTED_POLICIES[$policy_key]} (target $ROLE_ARN)"
+    aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" \
+      --policy-document "file://${EXPECTED_POLICIES[$policy_key]}" || {
+        MUTATION_AMBIGUOUS=1
+        die "delivery inline policy write failed; preserving any matching post-state for manual exact reconciliation: $policy_key"
+      }
+  done
   if ! role_documents_match; then
-    if test "$PREVIOUS_POLICY_PRESENT" -eq 1; then restore_previous_policy; fi
-    if test "$PREVIOUS_POLICY_PRESENT" -eq 0; then restore_absent_policy; fi
+    if test "$PREVIOUS_POLICY_PRESENT" -eq 1; then restore_previous_policies; fi
+    if test "$PREVIOUS_POLICY_PRESENT" -eq 0; then restore_absent_policies; fi
     if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
     die "delivery role failed post-write exact effective-policy validation"
   fi
@@ -1108,17 +1189,17 @@ PY
 }
 rollback_delivery_state() {
   local address target failed=0 state_list="$WORK_DIR/foundation-state-rollback.list"
+  if test "${MUTATION_AMBIGUOUS:-0}" -ne 0; then
+    printf 'state rollback stopped: ambiguous IAM mutation result preserved for manual reconciliation\n' >&2
+    return 1
+  fi
   test "${LOCK_ACQUIRED:-0}" -eq 1 || return 1
   lock_is_current || return 1
   terraform -chdir="$ROOT/infra" state list >"$state_list" || return 1
-  for address in 'aws_iam_role_policy.development_delivery[0]' 'aws_iam_role.development_delivery[0]'; do
-    if test "$address" = 'aws_iam_role_policy.development_delivery[0]'; then
-      test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
-      target="$ROLE_NAME:$EXPECTED_POLICY_NAME"
-    else
-      test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
-      target="$ROLE_ARN"
-    fi
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    address="aws_iam_role_policy.development_delivery[\"$policy_key\"]"
+    test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+    target="$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}"
     if state_list_contains "$state_list" "$address"; then
       if ! verify_foundation_state "$address" "$target" "$WORK_DIR/rollback-${address//[^A-Za-z0-9]/_}.state"; then
         printf 'refusing rollback of %s: current state ID is not the exact target %s\n' "$address" "$target" >&2
@@ -1127,10 +1208,33 @@ rollback_delivery_state() {
       fi
       assert_dev_account
       test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra state rm $address (target $target)"
-      terraform -chdir="$ROOT/infra" state rm "$address"
+      if ! terraform -chdir="$ROOT/infra" state rm "$address"; then
+        MUTATION_AMBIGUOUS=1
+        printf 'delivery policy state removal failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
+        return 1
+      fi
     fi
     STATE_IMPORTED_BY_THIS_RUN["$address"]=0
   done
+  address='aws_iam_role.development_delivery[0]'
+  if test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1; then
+    target="$ROLE_ARN"
+    if state_list_contains "$state_list" "$address"; then
+      if ! verify_foundation_state "$address" "$target" "$WORK_DIR/rollback-${address//[^A-Za-z0-9]/_}.state"; then
+        printf 'refusing rollback of %s: current state ID is not the exact target %s\n' "$address" "$target" >&2
+        failed=1
+      else
+        assert_dev_account
+        test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra state rm $address (target $target)"
+        if ! terraform -chdir="$ROOT/infra" state rm "$address"; then
+          MUTATION_AMBIGUOUS=1
+          printf '%s\n' 'delivery role state removal failed; preserving role and policies for manual exact reconciliation' >&2
+          return 1
+        fi
+      fi
+    fi
+    STATE_IMPORTED_BY_THIS_RUN["$address"]=0
+  fi
   return "$failed"
 }
 verify_foundation_state() {
@@ -1163,29 +1267,36 @@ else
     "$WORK_DIR/delivery-role-import.state" ||
     die "delivery role import state ID or ARN is not the exact target"
 fi
-if state_list_contains "$FOUNDATION_STATE_LIST" 'aws_iam_role_policy.development_delivery[0]'; then
-  STATE_PREEXISTING['aws_iam_role_policy.development_delivery[0]']=1
-else
-  role_documents_match || die "delivery role changed before policy state import"
-  assert_dev_account
-  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra import -input=false -var environment=development aws_iam_role_policy.development_delivery[0] $ROLE_NAME:$ROLE_NAME (target $ROLE_NAME:$EXPECTED_POLICY_NAME)"
-  if ! terraform -chdir="$ROOT/infra" import -input=false \
-    -var environment=development \
-    'aws_iam_role_policy.development_delivery[0]' "$ROLE_NAME:$ROLE_NAME" \
-    >"$WORK_DIR/delivery-policy-import.log" 2>&1; then
-    if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/delivery-policy-import.log"; then
-      die "delivery policy import is already managed or concurrent; refusing state removal"
+for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+  address="aws_iam_role_policy.development_delivery[\"$policy_key\"]"
+  if state_list_contains "$FOUNDATION_STATE_LIST" "$address"; then
+    STATE_PREEXISTING["$address"]=1
+  else
+    role_documents_match || die "delivery role changed before policy state import: $policy_key"
+    assert_dev_account
+    target="$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}"
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra import -input=false -var environment=development $address $target (target $target)"
+    if ! terraform -chdir="$ROOT/infra" import -input=false \
+      -var environment=development \
+      "$address" "$target" \
+      >"$WORK_DIR/delivery-policy-${policy_key}-import.log" 2>&1; then
+      if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/delivery-policy-${policy_key}-import.log"; then
+        die "delivery policy import is already managed or concurrent; refusing state removal: $policy_key"
+      fi
+      die "delivery policy import failed; state ownership is unproven and was retained: $policy_key"
     fi
-    die "delivery policy import failed; state ownership is unproven and was retained"
+    STATE_IMPORTED_BY_THIS_RUN["$address"]=1
+    verify_foundation_state "$address" "$target" \
+      "$WORK_DIR/delivery-policy-${policy_key}-import.state" ||
+      die "delivery policy import state ID is not the exact target: $policy_key"
   fi
-  STATE_IMPORTED_BY_THIS_RUN['aws_iam_role_policy.development_delivery[0]']=1
-  verify_foundation_state 'aws_iam_role_policy.development_delivery[0]' "$ROLE_NAME:$EXPECTED_POLICY_NAME" \
-    "$WORK_DIR/delivery-policy-import.state" ||
-    die "delivery policy import state ID is not the exact target"
-fi
+done
 if ! role_documents_match; then
-  rollback_delivery_state
   if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  if ! rollback_delivery_state; then
+    MUTATION_AMBIGUOUS=1
+    die "delivery role changed after foundation state imports; state rollback was not proven"
+  fi
   die "delivery role changed after foundation state imports; imported state was rolled back"
 fi
 
@@ -1199,22 +1310,30 @@ verify_delivery_state() {
   grep -Fxq "    arn                = \"$ROLE_ARN\"" "$WORK_DIR/delivery-role.state" ||
     grep -Fxq "    arn = \"$ROLE_ARN\"" "$WORK_DIR/delivery-role.state" ||
     return 1
-  terraform -chdir="$ROOT/infra" state show -no-color \
-    'aws_iam_role_policy.development_delivery[0]' >"$WORK_DIR/delivery-policy.state" ||
-    return 1
-  grep -Fxq "    id                 = \"$ROLE_NAME:$EXPECTED_POLICY_NAME\"" "$WORK_DIR/delivery-policy.state" ||
-    grep -Fxq "    id = \"$ROLE_NAME:$EXPECTED_POLICY_NAME\"" "$WORK_DIR/delivery-policy.state" ||
-    return 1
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    address="aws_iam_role_policy.development_delivery[\"$policy_key\"]"
+    terraform -chdir="$ROOT/infra" state show -no-color "$address" >"$WORK_DIR/delivery-policy-${policy_key}.state" ||
+      return 1
+    grep -Fxq "    id                 = \"$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}\"" "$WORK_DIR/delivery-policy-${policy_key}.state" ||
+      grep -Fxq "    id = \"$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}\"" "$WORK_DIR/delivery-policy-${policy_key}.state" ||
+      return 1
+  done
 }
 if ! verify_delivery_state; then
-  rollback_delivery_state
   if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  if ! rollback_delivery_state; then
+    MUTATION_AMBIGUOUS=1
+    die "delivery Terraform state verification failed; state rollback was not proven"
+  fi
   die "delivery Terraform state verification failed for the imported role/policy addresses"
 fi
 
 FOUNDATION_OUTPUT="$(terraform -chdir="$ROOT/infra" output -json foundation)" || {
-  rollback_delivery_state
   if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  if ! rollback_delivery_state; then
+    MUTATION_AMBIGUOUS=1
+    die "development foundation output verification failed; state rollback was not proven"
+  fi
   die "development foundation output verification failed; imported state was rolled back"
 }
 BOOTSTRAP_FOUNDATION_VARS="$WORK_DIR/foundation.tfvars.json"
@@ -1425,8 +1544,10 @@ cleanup_on_failure() {
     if test "$MUTATION_AMBIGUOUS" -eq 0; then
       if declare -F rollback_url_state >/dev/null; then rollback_url_state; fi
       rollback_created_url
-      rollback_delivery_state
       if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+      if test "$MUTATION_AMBIGUOUS" -eq 0; then
+        rollback_delivery_state || MUTATION_AMBIGUOUS=1
+      fi
     else
       printf 'bootstrap cleanup stopped: ambiguous mutation result preserved for manual reconciliation\n' >&2
     fi
@@ -1589,7 +1710,10 @@ printf 'aws_cloudfront_response_headers_policy.development_noindex\t%s\n' "$(jq 
 printf 'aws_wafv2_web_acl.public_chat\t%s\n' "$(jq -r '.arn' <<<"$WAF_INFO")" >>"$ADDRESS_INVENTORY"
 printf 'aws_wafv2_web_acl_logging_configuration.agent_reports\t%s\n' "$(jq -r '.arn' <<<"$WAF_INFO")" >>"$ADDRESS_INVENTORY"
 printf 'aws_iam_role.development_delivery[0]\t%s\n' "$ROLE_ARN" >>"$ADDRESS_INVENTORY"
-printf 'aws_iam_role_policy.development_delivery[0]\t%s:%s\n' "$ROLE_NAME" "$EXPECTED_POLICY_NAME" >>"$ADDRESS_INVENTORY"
+for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+  printf 'aws_iam_role_policy.development_delivery["%s"]\t%s:%s\n' \
+    "$policy_key" "$ROLE_NAME" "${EXPECTED_POLICY_NAMES[$policy_key]}" >>"$ADDRESS_INVENTORY"
+done
 printf 'aws_kms_alias.agent_measurement\talias/tollchat-v2-agent-measurement-dev\n' >>"$ADDRESS_INVENTORY"
 printf 'aws_kms_alias.site\talias/tollchat-v2-site-dev\n' >>"$ADDRESS_INVENTORY"
 printf 'aws_s3_bucket.agent_measurement\taws-waf-logs-tollchat-agent-reports-%s-dev\n' "$EXPECTED_ACCOUNT" >>"$ADDRESS_INVENTORY"
@@ -2410,9 +2534,13 @@ delivery, Terraform, apply, package, write-capable AWS, production secret,
 production route, or production SQL path.
 
 Before dispatch, an AWS development-account administrator must confirm that
-the timed-check role trust retains audience `sts.amazonaws.com`, retains the
-protected-main subject, and includes exactly:
+the timed-check role trust retains audience `sts.amazonaws.com` and, for the
+development deployment, includes exactly the development environment subject
 `repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development`.
+The `development` branch of the IaC condition must not admit the
+protected-main branch subject; the secret-bearing connectivity role is usable
+only by the protected `development` environment. The production foundation
+variant retains only the protected-main branch subject.
 The IaC trust in `v2/infra/main.tf` is the source of truth. The role policy is
 limited to development `rds:DescribeDBInstances`, development
 `rds-db:connect` as `pricing_caller_development`, and its pre-existing
@@ -4145,3 +4273,527 @@ reviewed saved Terraform plan.
 
 Database and shared polling/storage infrastructure are not part of application
 rollback.
+
+## Legacy development retirement (#333)
+
+This is a **source-only lower PR**. It does not authorize a destroy, a DNS
+delete, a database connection, or a schema mutation. The procedure below is
+legal only from a clean, merged `origin/main` checkout after every #332
+cutover/health/isolation gate has passed, the captured rollback window has
+expired, all fresh inventory and SQL preflight evidence is reviewed, and a
+separately authorized protected operator approves each destructive phase. A
+dirty checkout, a feature branch, a stale or ambiguous read, drift, lock
+contention, or any unknown result is a hard stop; do not retry or guess.
+
+The production account is `920534282028` in `us-east-1`. The only initial
+destroy universe is the exact managed instances in the versioned legacy
+application state object:
+
+```text
+s3://nova-toll-tfstate-920534282028/nova-toll/v2/development/terraform.tfstate
+```
+
+The foundation object
+`s3://nova-toll-tfstate-920534282028/nova-toll/terraform.tfstate`, the
+production application object `nova-toll/v2/terraform.tfstate`, and both
+development-account objects are never read as destroy input. Tags and the
+historical 73/77 inventory counts are reconciliation signals only; they never
+select a target.
+
+### Ordered retirement gates
+
+1. From the clean protected checkout, prove the #332 DNS cutover, rollback
+   snapshot, rollback-window expiry, new-account health, delivery identity,
+   cross-account isolation, production regression, and #301 resume gates.
+   Capture sanitized old/new CloudFront and ACM status, the exact current
+   `dev.tollchat.ai`, apex, and `www` records, the old ACM validation record,
+   RDS metadata, and both state identities. The old distribution
+   `E1JXKQYNAN39E4` / `dmsiz11apblcv.cloudfront.net` and old certificate and
+   validation record remain available until this gate is complete.
+
+2. Assert the operator account and region, then re-read the exact canonical
+   state object and require the fresh VersionId, ETag, serial `22`, lineage
+   `2b1cca15-f9a6-6b00-7e68-238ab13ab1f7`, Terraform version `1.15.8`, and
+   managed-instance/address-pair counts expected by the reviewed inventory.
+   The observed VersionId `DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3` is only a
+   comparison hint; accept it only when this fresh read returns it unchanged.
+   Reject a missing, changed, or version-ambiguous object; a foundation
+   address; a production or development-account ID; an unknown address; or
+   any state/live reconciliation mismatch. The saved plan must later prove
+   this same identity again immediately before detach and apply.
+
+3. Before any state mutation, copy exactly that S3 object version to an
+   explicit encrypted archive key under
+   `nova-toll/v2/development/retirement-archives/`, where the suffix is
+   derived only from the validated source VersionId. Use SSE-KMS, read the
+   exact archive VersionId back privately, and compare source/archive SHA-256
+   digests and non-secret serial/lineage/Terraform-version metadata. Retain
+   only bucket/key, canonical/archive VersionIds, ETags, metadata, managed
+   count, timestamp, and digest. Never print, commit, upload, cache, or retain
+   raw state, plan JSON/binary, credentials, tokens, authorization headers,
+   SQL, or secret-bearing errors. S3 versioning supplies recovery, but this
+   bucket has no Object Lock; do not test restore or delete against production.
+
+4. Build a durable detach manifest after the archive and identity checks. The
+   only exact state addresses that may be detached are:
+
+   ```text
+   cloudflare_dns_record.apex[0]                         # current cutover record
+   cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"] # old validation, until DNS step
+   aws_bedrock_guardrail.tollchat                         # prevent_destroy retained
+   aws_bedrock_guardrail_version.tollchat                 # skip_destroy retained
+   ```
+
+   State-list/show and remote identity checks must pass for each address before
+   using one exact multi-address `terraform state rm` command under one
+   Terraform lock. Never use a pattern, `-target`, lifecycle edit, current
+   `d4830c9`, `-refresh=false`, or `-auto-approve`. The command has four named
+   retention reasons; its postflight immediately captures the current state
+   VersionId, ETag, serial, and exact absence of all four addresses. The normal
+   lifecycle settings remain unchanged.
+
+   The following is the bounded archive/detach skeleton. Set the expected
+   values only from the fresh read-only evidence above; every output containing
+   state or plan data stays in the private temporary directory.
+
+   Before entering the block, capture a fresh, independently reviewed live
+   identity manifest (not derived from Terraform state) at the private path
+   supplied as `LIVE_IDENTITY_MANIFEST`. It must have this shape, with one
+   entry for every managed legacy application address and the exact production
+   account on every entry:
+
+   ```json
+   {"manifest":"legacy-live-identity-v1","account_id":"920534282028",
+    "source_remote":"https://github.com/rhprasad0/nova-toll-budget-agent.git",
+    "source_commit":"4c1f684c02bf81187c2cc5f15883727cf15b11ee",
+    "identity_source":"account-scoped-live-api-v1",
+    "resources":[{"address":"aws_lambda_function.loader","type":"aws_lambda_function",
+    "id":"...","account_id":"920534282028"}]}
+   ```
+
+   Generate each resource entry in one machine-produced capture from its
+   provider's read-only API, invoking the AWS/Cloudflare clients with the
+   fixed production profile/account and `us-east-1` region. The capture must
+   assert the STS account first, write the manifest to a mode-0600 private
+   temporary file, and atomically rename it to `LIVE_IDENTITY_MANIFEST`; do
+   not hand-edit it or copy IDs from state. Keep only the manifest and its
+   sanitized review evidence: the source remote, immutable source commit,
+   account/region, `identity_source`, and the exact API-returned identities.
+   The reviewer must independently compare the address/type/API identity rule
+   and account for every entry before setting
+   `RETIRE_LEGACY_LIVE_IDENTITY_REVIEWED=YES`.
+
+   The validator rejects missing, extra, swapped, foundation/shared,
+   new-development, or type/ID-mismatched entries, and requires the canonical
+   repository remote plus the full immutable compatibility source commit in
+   the manifest, and requires an `account-scoped-live-api-v1` capture source.
+   Verify those values from the clean checkout and independent live APIs, not
+   from the archived state or the manifest itself. The fixed application
+   address/type inventory and explicit foundation/shared/new-development
+   denylist are in `validate_legacy_retirement_plan.py`; the development
+   compatibility inventory is exactly 166 managed instances, with every
+   count/for_each index reviewed (there is no base-address fallback). Every
+   state/manifest address and type must match, and the archived state alone
+   can never authorize a deletion. Set `STATE_SSEKMS_KEY_ID` to the exact reviewed
+   production state CMK ID/ARN captured from the source object's
+   `SSEKMSKeyId`; the source and archive must both be checked against it.
+
+   ```sh
+   (
+   set -euo pipefail
+   set +x
+   umask 077
+   ROOT="$(git rev-parse --show-toplevel)"
+   ORIGIN_URL="$(git -C "$ROOT" remote get-url origin 2>/dev/null)"
+   case "$ORIGIN_URL" in
+     git@github.com:rhprasad0/nova-toll-budget-agent.git|https://github.com/rhprasad0/nova-toll-budget-agent.git) ;;
+     *) exit 1 ;;
+   esac
+   git fetch --no-tags origin main
+   test "$(git -C "$ROOT" rev-parse HEAD)" = "$(git -C "$ROOT" rev-parse origin/main)"
+   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)"
+   COMPATIBILITY_COMMIT="$(git -C "$ROOT" rev-parse 4c1f684^{commit})"
+   test "$COMPATIBILITY_COMMIT" = 4c1f684c02bf81187c2cc5f15883727cf15b11ee
+   EXPECTED_ACCOUNT=920534282028
+   REGION=us-east-1
+   STATE_BUCKET=nova-toll-tfstate-920534282028
+   STATE_KEY=nova-toll/v2/development/terraform.tfstate
+   FOUNDATION_KEY=nova-toll/terraform.tfstate
+   STATE_VERSION=EXPECTED_FRESH_VERSION_ID
+   STATE_ETAG=EXPECTED_FRESH_ETAG
+   STATE_SERIAL=22
+   STATE_LINEAGE=2b1cca15-f9a6-6b00-7e68-238ab13ab1f7
+   STATE_TERRAFORM_VERSION=1.15.8
+   STATE_SSEKMS_KEY_ID=EXPECTED_APPROVED_PRODUCTION_STATE_CMK
+   LIVE_IDENTITY_MANIFEST=EXPECTED_PRIVATE_LIVE_IDENTITY_MANIFEST
+   WORK_DIR="$(mktemp -d -t nova-toll-333-state-XXXXXX)"
+   COMPAT_ROOT="$WORK_DIR/compat"
+   SOURCE_STATE="$WORK_DIR/source-state.json"
+   ARCHIVE_STATE_PRIVATE="$WORK_DIR/archive-state.json"
+   LIVE_STATE_PRIVATE="$WORK_DIR/live-state-before-detach.json"
+   LIVE_STATE_AFTER_DETACH="$WORK_DIR/live-state-after-detach.json"
+   DESTROY_PLAN="$WORK_DIR/legacy-retirement.tfplan"
+   DESTROY_PLAN_JSON="$WORK_DIR/legacy-retirement.tfplan.json"
+   DESTROY_PLAN_APPLY_JSON="$WORK_DIR/legacy-retirement.tfplan.immediately-before-apply.json"
+   trap 'git worktree remove --force "$COMPAT_ROOT" >/dev/null 2>&1 || true; rm -f -- "$SOURCE_STATE" "$ARCHIVE_STATE_PRIVATE" "$LIVE_STATE_PRIVATE" "$LIVE_STATE_AFTER_DETACH" "$DESTROY_PLAN" "$DESTROY_PLAN_JSON" "$DESTROY_PLAN_APPLY_JSON" "$WORK_DIR/head.json" "$WORK_DIR/foundation-head.json" "$WORK_DIR/archive-copy.json" "$WORK_DIR/archive-head.json" "$WORK_DIR/head-before-detach.json" "$WORK_DIR/head-after-detach.json" "$WORK_DIR/head-before-plan.json" "$WORK_DIR/head-before-plan-render.json" "$WORK_DIR/head-immediately-before-render.json" "$WORK_DIR/head-immediately-before-apply.json" "$WORK_DIR/state-list.txt" "$WORK_DIR/state-list-after-detach.txt" "$WORK_DIR"/state-show_*.txt; rmdir "$WORK_DIR"' EXIT
+   export AWS_PROFILE=nova-toll-prod
+   export AWS_DEFAULT_REGION=us-east-1
+   export AWS_REGION=us-east-1
+   test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+   terraform_prod() {
+     test "${AWS_PROFILE:-}" = nova-toll-prod
+     test "${AWS_REGION:-}" = "$REGION"
+     test "${AWS_DEFAULT_REGION:-}" = "$REGION"
+     test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+     terraform "$@"
+   }
+   assert_current_state() {
+     local expected_version="$1" expected_etag="$2" output="$3"
+     aws --region "$REGION" s3api head-object --bucket "$STATE_BUCKET" --key "$STATE_KEY" >"$output"
+     jq -e --arg version "$expected_version" --arg etag "$expected_etag" --arg cmk "$STATE_SSEKMS_KEY_ID" \
+       '.VersionId == $version and .ETag == $etag and .ServerSideEncryption == "aws:kms" and .SSEKMSKeyId == $cmk' \
+       "$output" >/dev/null
+   }
+   test "$STATE_VERSION" != EXPECTED_FRESH_VERSION_ID
+   test "$STATE_ETAG" != EXPECTED_FRESH_ETAG
+   test "$STATE_SSEKMS_KEY_ID" != EXPECTED_APPROVED_PRODUCTION_STATE_CMK
+   test -s "$LIVE_IDENTITY_MANIFEST"
+   test ! -L "$LIVE_IDENTITY_MANIFEST"
+   test "${RETIRE_LEGACY_LIVE_IDENTITY_REVIEWED:-}" = YES
+   jq -e --arg account "$EXPECTED_ACCOUNT" --arg remote "$ORIGIN_URL" --arg commit "$COMPATIBILITY_COMMIT" \
+     '.manifest == "legacy-live-identity-v1" and .account_id == $account and .source_remote == $remote and .source_commit == $commit and .identity_source == "account-scoped-live-api-v1" and (.resources | type == "array" and length > 0)' \
+     "$LIVE_IDENTITY_MANIFEST" >/dev/null
+   HEAD_JSON="$WORK_DIR/head.json"
+   aws --region "$REGION" s3api head-object --bucket "$STATE_BUCKET" --key "$STATE_KEY" --version-id "$STATE_VERSION" >"$HEAD_JSON"
+   jq -e --arg etag "\"$STATE_ETAG\"" --arg version "$STATE_VERSION" --arg cmk "$STATE_SSEKMS_KEY_ID" '.ETag == $etag and .VersionId == $version and .ServerSideEncryption == "aws:kms" and .SSEKMSKeyId == $cmk' "$HEAD_JSON" >/dev/null
+   FOUNDATION_HEAD="$WORK_DIR/foundation-head.json"
+   aws --region "$REGION" s3api head-object --bucket "$STATE_BUCKET" --key "$FOUNDATION_KEY" >"$FOUNDATION_HEAD"
+   test "$FOUNDATION_KEY" = nova-toll/terraform.tfstate
+   test "$STATE_KEY" != "$FOUNDATION_KEY"
+   jq -e '.ServerSideEncryption == "aws:kms" and (.SSEKMSKeyId | type == "string" and length > 0)' "$FOUNDATION_HEAD" >/dev/null
+   ARCHIVE_KEY="nova-toll/v2/development/retirement-archives/state-${STATE_VERSION}.json"
+   case "$ARCHIVE_KEY" in nova-toll/v2/development/retirement-archives/state-[A-Za-z0-9_-]*.json) ;; *) exit 1 ;; esac
+   aws --region "$REGION" s3api copy-object \
+     --bucket "$STATE_BUCKET" --key "$ARCHIVE_KEY" \
+     --copy-source "$STATE_BUCKET/$STATE_KEY?versionId=$STATE_VERSION" \
+     --metadata-directive COPY --server-side-encryption aws:kms --ssekms-key-id "$STATE_SSEKMS_KEY_ID" \
+     >"$WORK_DIR/archive-copy.json"
+   ARCHIVE_VERSION="$(jq -er '.VersionId | strings' "$WORK_DIR/archive-copy.json")"
+   aws --region "$REGION" s3api head-object --bucket "$STATE_BUCKET" --key "$ARCHIVE_KEY" --version-id "$ARCHIVE_VERSION" >"$WORK_DIR/archive-head.json"
+   jq -e --arg cmk "$STATE_SSEKMS_KEY_ID" '.ServerSideEncryption == "aws:kms" and .SSEKMSKeyId == $cmk' "$WORK_DIR/archive-head.json" >/dev/null
+   aws --region "$REGION" s3api get-object --bucket "$STATE_BUCKET" --key "$STATE_KEY" --version-id "$STATE_VERSION" "$SOURCE_STATE" >/dev/null
+   aws --region "$REGION" s3api get-object --bucket "$STATE_BUCKET" --key "$ARCHIVE_KEY" --version-id "$ARCHIVE_VERSION" "$ARCHIVE_STATE_PRIVATE" >/dev/null
+   test "$(sha256sum "$SOURCE_STATE" | awk '{print $1}')" = "$(sha256sum "$ARCHIVE_STATE_PRIVATE" | awk '{print $1}')"
+   jq -e --arg serial "$STATE_SERIAL" --arg lineage "$STATE_LINEAGE" --arg version "$STATE_TERRAFORM_VERSION" \
+     '.serial == ($serial | tonumber) and .lineage == $lineage and .terraform_version == $version and (.resources | type == "array" and all(.[]; .mode == "managed" or .mode == "data" or .mode == null))' \
+     "$ARCHIVE_STATE_PRIVATE" >/dev/null
+   git worktree add --detach "$COMPAT_ROOT" "$COMPATIBILITY_COMMIT"
+   test "$(git -C "$COMPAT_ROOT" rev-parse HEAD)" = "$COMPATIBILITY_COMMIT"
+   test "$(git -C "$COMPAT_ROOT" remote get-url origin 2>/dev/null)" = "$ORIGIN_URL"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" init -reconfigure -input=false \
+     -backend-config="bucket=$STATE_BUCKET" -backend-config="key=$STATE_KEY" \
+     -backend-config="region=$REGION" -backend-config="use_lockfile=true" \
+     -backend-config="encrypt=true" -backend-config="kms_key_id=alias/nova-toll-tfstate" >/dev/null
+   test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state list >"$WORK_DIR/state-list.txt"
+   for address in \
+     'cloudflare_dns_record.apex[0]' \
+     'cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"]' \
+     'aws_bedrock_guardrail.tollchat' \
+     'aws_bedrock_guardrail_version.tollchat'; do
+     grep -Fqx "$address" "$WORK_DIR/state-list.txt"
+     terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state show -no-color "$address" >"$WORK_DIR/state-show-${address//[^A-Za-z0-9]/_}.txt"
+   done
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state pull >"$LIVE_STATE_PRIVATE"
+   # Parse the complete backend snapshot, rather than trusting text output.
+   python3 "$ROOT/v2/scripts/validate_legacy_retirement_plan.py" --state "$LIVE_STATE_PRIVATE" --identity-manifest "$LIVE_IDENTITY_MANIFEST" --state-only
+   python3 "$ROOT/v2/scripts/validate_legacy_retirement_plan.py" --state "$ARCHIVE_STATE_PRIVATE" --identity-manifest "$LIVE_IDENTITY_MANIFEST" --state-only
+   for address in \
+     'cloudflare_dns_record.apex[0]' \
+     'cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"]' \
+     'aws_bedrock_guardrail.tollchat' \
+     'aws_bedrock_guardrail_version.tollchat'; do
+     expected_id="$(jq -er --arg address "$address" \
+       '[.resources[] | select(.address == $address) | .id] | if length == 1 then .[0] else error("retained identity cardinality") end' \
+       "$LIVE_IDENTITY_MANIFEST")"
+     actual_id="$(sed -nE 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"?([^" ]*)"?[[:space:]]*$/\1/p' \
+       "$WORK_DIR/state-show-${address//[^A-Za-z0-9]/_}.txt")"
+     test "$(printf '%s\n' "$actual_id" | awk 'NF {count++} END {print count + 0}')" -eq 1
+     test "$actual_id" = "$expected_id"
+   done
+   # One exact multi-address invocation obtains one Terraform lock for all four
+   # retained addresses; do not retry or restore from the archive automatically.
+   assert_current_state "$STATE_VERSION" "\"$STATE_ETAG\"" "$WORK_DIR/head-before-detach.json"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state rm \
+     'cloudflare_dns_record.apex[0]' \
+     'cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"]' \
+     'aws_bedrock_guardrail.tollchat' \
+     'aws_bedrock_guardrail_version.tollchat'
+   aws --region "$REGION" s3api head-object --bucket "$STATE_BUCKET" --key "$STATE_KEY" >"$WORK_DIR/head-after-detach.json"
+   PLAN_STATE_VERSION="$(jq -er '.VersionId | strings' "$WORK_DIR/head-after-detach.json")"
+   PLAN_STATE_ETAG="$(jq -er '.ETag | strings' "$WORK_DIR/head-after-detach.json")"
+   test "$PLAN_STATE_VERSION" != "$STATE_VERSION"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state pull >"$LIVE_STATE_AFTER_DETACH"
+   PLAN_STATE_SERIAL="$(jq -er '.serial | numbers' "$LIVE_STATE_AFTER_DETACH")"
+   test "$PLAN_STATE_SERIAL" -gt "$STATE_SERIAL"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state list >"$WORK_DIR/state-list-after-detach.txt"
+   for address in \
+     'cloudflare_dns_record.apex[0]' \
+     'cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"]' \
+     'aws_bedrock_guardrail.tollchat' \
+     'aws_bedrock_guardrail_version.tollchat'; do
+     if grep -Fqx "$address" "$WORK_DIR/state-list-after-detach.txt"; then
+       exit 1
+     fi
+   done
+   assert_current_state "$PLAN_STATE_VERSION" "$PLAN_STATE_ETAG" "$WORK_DIR/head-before-plan.json"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" plan -destroy -input=false -out="$DESTROY_PLAN" >/dev/null
+   assert_current_state "$PLAN_STATE_VERSION" "$PLAN_STATE_ETAG" "$WORK_DIR/head-before-plan-render.json"
+   terraform_prod -chdir="$COMPAT_ROOT/v2/infra" show -json "$DESTROY_PLAN" >"$DESTROY_PLAN_JSON"
+   python3 "$ROOT/v2/scripts/validate_legacy_retirement_plan.py" --state "$ARCHIVE_STATE_PRIVATE" --plan "$DESTROY_PLAN_JSON" --identity-manifest "$LIVE_IDENTITY_MANIFEST"
+   chmod 400 "$DESTROY_PLAN" "$DESTROY_PLAN_JSON"
+   plan_metadata() {
+     stat -Lc '%d:%i:%u:%g:%a:%h:%F' -- "$1"
+   }
+   assert_plan_path() {
+     test -f "$1"
+     test ! -L "$1"
+     test "$(plan_metadata "$1")" = "$PLAN_METADATA"
+   }
+   assert_plan_fd() {
+     test -r "$PLAN_FD_PATH"
+     test "$(plan_metadata "$PLAN_FD_PATH")" = "$PLAN_METADATA"
+   }
+   PLAN_METADATA="$(plan_metadata "$DESTROY_PLAN")"
+   IFS=: read -r PLAN_DEVICE PLAN_INODE PLAN_UID PLAN_GID PLAN_MODE PLAN_LINKS PLAN_TYPE <<<"$PLAN_METADATA"
+   test "$PLAN_UID" = "$(id -u)"
+   test "$PLAN_GID" = "$(id -g)"
+   test "$PLAN_MODE" = 400
+   test "$PLAN_LINKS" = 1
+   test "$PLAN_TYPE" = "regular file"
+   PLAN_SHA256="$(sha256sum "$DESTROY_PLAN" | awk '{print $1}')"
+   printf '%s\n' "$PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$'
+   revalidate_before_apply() {
+     test "${RETIRE_LEGACY_LIVE_IDENTITY_REVIEWED:-}" = YES
+     test "$(git -C "$ROOT" remote get-url origin 2>/dev/null)" = "$ORIGIN_URL"
+     test "$(git -C "$COMPAT_ROOT" rev-parse HEAD)" = "$COMPATIBILITY_COMMIT"
+     test "$(git -C "$COMPAT_ROOT" remote get-url origin 2>/dev/null)" = "$ORIGIN_URL"
+     assert_plan_path "$DESTROY_PLAN"
+     assert_plan_fd
+     CURRENT_PLAN_SHA256="$(sha256sum "$PLAN_FD_PATH" | awk '{print $1}')"
+     test "$CURRENT_PLAN_SHA256" = "$PLAN_SHA256"
+     assert_current_state "$PLAN_STATE_VERSION" "$PLAN_STATE_ETAG" "$WORK_DIR/head-immediately-before-render.json"
+     terraform_prod -chdir="$COMPAT_ROOT/v2/infra" show -json "$PLAN_FD_PATH" >"$DESTROY_PLAN_APPLY_JSON"
+     chmod 400 "$DESTROY_PLAN_APPLY_JSON"
+     python3 "$ROOT/v2/scripts/validate_legacy_retirement_plan.py" --state "$ARCHIVE_STATE_PRIVATE" --plan "$DESTROY_PLAN_APPLY_JSON" --identity-manifest "$LIVE_IDENTITY_MANIFEST" >/dev/null
+     assert_plan_fd
+     test "$(sha256sum "$PLAN_FD_PATH" | awk '{print $1}')" = "$PLAN_SHA256"
+     test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+     assert_current_state "$PLAN_STATE_VERSION" "$PLAN_STATE_ETAG" "$WORK_DIR/head-immediately-before-apply.json"
+     assert_plan_fd
+   }
+   if test "${RETIRE_LEGACY_TERRAFORM_APPLY_APPROVED:-}" = YES; then
+     REVIEWED_PLAN_SHA256="${RETIRE_LEGACY_REVIEWED_PLAN_SHA256:?set the reviewed saved-plan SHA-256 after human approval}"
+     printf '%s\n' "$REVIEWED_PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$'
+     assert_plan_path "$DESTROY_PLAN"
+     exec {PLAN_FD}<"$DESTROY_PLAN"
+     PLAN_FD_PATH="/proc/self/fd/$PLAN_FD"
+     assert_plan_fd
+     REVIEWED_BINARY_PLAN_SHA256="$(sha256sum "$PLAN_FD_PATH" | awk '{print $1}')"
+     test "$REVIEWED_BINARY_PLAN_SHA256" = "$REVIEWED_PLAN_SHA256"
+     PLAN_SHA256="$REVIEWED_BINARY_PLAN_SHA256"
+     revalidate_before_apply
+     terraform_prod -chdir="$COMPAT_ROOT/v2/infra" apply "$PLAN_FD_PATH"
+   fi
+   )
+   ```
+
+   Replace each `EXPECTED_*` marker only with a value captured and reviewed
+   during this invocation, and set `RETIRE_LEGACY_LIVE_IDENTITY_REVIEWED=YES`
+   only after independent review of the fresh live manifest. If archive
+   copy/readback, digest, metadata, state
+   identity, or any exact state-show check fails, stop with the canonical state
+   untouched and do not run a detach command.
+
+   A state-lock/error result after the multi-address mutation, or any inability
+   to prove the new VersionId, ETag, serial, and exact address absence, is an
+   unknown outcome: stop without retrying and without automatically restoring
+   from the archive. Any recovery or archive restore requires human
+   reconciliation of the canonical unversioned state against the retained,
+   version-specific archive evidence.
+
+5. Use an ephemeral detached checkout of immutable compatibility revision
+   `4c1f684`, its checked-in provider lockfile, and the legacy production
+   backend key `nova-toll/v2/development/terraform.tfstate`. Initialize and
+   refresh only after the account/backend assertions. Run one saved full
+   `terraform plan -destroy`; do not use a second permanent root or regenerate
+   the binary plan at apply time. Render its JSON and run the pure local
+   validator:
+
+   The validator command in the bounded block is the authoritative invocation;
+   it uses the in-scope `ARCHIVE_STATE_PRIVATE`, saved plan JSON, and required
+   independent `LIVE_IDENTITY_MANIFEST`. Record the SHA-256 of the saved binary
+   plan, then have the human reviewer approve that exact digest. Immediately
+   before the first detach, the unversioned canonical state object's current
+   `VersionId` and ETag must equal the captured `STATE_VERSION` and
+   `STATE_ETAG`. After the multi-address detach, capture the new unversioned
+   current `PLAN_STATE_VERSION`/ETag and serial actually used by the plan (and
+   require the VersionId differs and serial advances from `STATE_SERIAL`); any
+   newer/current mismatch fails closed.
+   before a separately authorized apply, the guarded
+   `revalidate_before_apply` function opens the mode-0400 binary read-only,
+   verifies its device/inode/owner/mode/link-count metadata and digest, asserts
+   that same unversioned `PLAN_STATE_VERSION`/ETag immediately before each
+   rendering and immediately before apply, renders fresh JSON from that same
+   `/proc/self/fd/<descriptor>` inode, reruns the validator against the fresh
+   rendering, and reasserts the canonical remote/source commit, source
+   VersionId/ETag/CMK, and live-identity manifest.
+   The apply receives that still-open read-only descriptor path, so replacement
+   of the named plan path cannot swap the bytes being applied. Set
+   `RETIRE_LEGACY_TERRAFORM_APPLY_APPROVED=YES` only after independent human
+   approval and pass its reviewed digest as
+   `RETIRE_LEGACY_REVIEWED_PLAN_SHA256`; otherwise the block performs no apply.
+
+   It must report only a sanitized count/hash manifest: every managed
+   non-no-op action is exactly one `delete`, each address and prior remote ID
+   is present in the archived state, every non-retained instance is deleted
+   once, and no create/update/replace/unknown action, unmanaged identity,
+   foundation address, or new-account identity appears. Approved data sources
+   are counted separately; their no-op/read refresh actions never enter the
+   deletion digest. A plan error, drift, lifecycle block, incomplete inventory,
+   or changed state VersionId stops before apply.
+
+6. A human reviewer approves the validator manifest and exact remote identity
+   allowlist. Only then may a separately authorized protected operator run the
+   saved `terraform apply <saved-plan>`. The plan must be delete-only; it must
+   not destroy the four retained objects, shared RDS, production roles,
+   foundation resources, current development account, artifact/evidence data,
+   or current `dev.tollchat.ai`. Refresh and check every legacy identity after
+   apply, then require clean production application/foundation plans and
+   unchanged new-development state/resource IDs. Preserve the archive and
+   sanitized action/evidence manifest.
+
+7. After old certificate/distribution retirement and rollback expiry, retain
+   the old ACM validation record. Capture its exact reviewed
+   `{id,name,type,content,ttl,proxied}` snapshot (including the canonical
+   record ID) in the private retirement evidence and record the explicit reason
+   for retention: the protected Cloudflare workflow has no safe compare-and-swap delete operation,
+   and deleting a validation record is not required for the resource retirement.
+   This explicit retention decision supersedes checklist requirement 7's former
+   destructive DNS design because Cloudflare provides no compare-and-swap delete.
+   Reconcile that snapshot read-only if needed; do
+   not call Cloudflare to delete it. The existing protected workflow remains
+   limited to its prior POST/PUT-only stage, cutover, and rollback behavior;
+   it has no retirement operation, DELETE path, or new workflow inputs.
+
+8. Database retirement is a separate approved automation action, never a
+   manual SQL fallback, migration 030, bootstrap rollback, Terraform
+   PostgreSQL/null resource, runtime role, wildcard, `CASCADE`, or
+   `DROP ... IF EXISTS`. The only reviewed implementation is
+   `v2/scripts/retire_legacy_development_database.py`. Its default is a
+   read-only preflight; destructive mode requires both `--execute` and the
+   literal `RETIRE_LEGACY_DEVELOPMENT_APPROVED=YES`. It uses only stdlib, the
+   AWS CLI for fixed-account read-only identity/RDS checks, and `psql`; it
+   requires the asserted RDS endpoint/port, `sslmode=verify-full`, and the
+   reviewed CA bundle.
+
+   The production wrapper below is the credential boundary and creates a
+   reviewed, runbook-verified handoff manifest. The read-only
+   preflight first, then obtain separate approval before adding `--execute`.
+   The fetched secret, username, password, endpoint, CA, raw SQL, and psql
+   stderr stay in process memory; no value is a file, argument, plan, or
+   evidence. The wrapper asserts profile/account/region, one private available
+   `nova-toll-db`, the managed master-secret ARN, and the CA SHA-256 before
+   invoking the script against `postgres`. The script itself repeats fixed
+   account/region and `nova-toll-db` `DescribeDBInstances` checks immediately
+   before preflight, and rejects any handoff endpoint, port, managed secret ARN,
+   or caller account that differs from that fresh API truth. It does not accept
+   a standalone target or ambient `PG*` variables; it uses only the two
+   short-lived `RETIRE_LEGACY_DB_*` credential variables set by this wrapper.
+   The script pins the reviewed CA SHA-256
+   `e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3` and
+   requires both the handoff digest and actual CA file digest to equal it.
+
+   ```sh
+   (
+   set -euo pipefail
+   set +x
+   umask 077
+   EXPECTED_ACCOUNT=920534282028
+   REGION=us-east-1
+   AWS_PROFILE=nova-toll-prod
+   ROOT="$(git rev-parse --show-toplevel)"
+   DB_INSTANCE=nova-toll-db
+   CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+   CA_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+   WORK_DIR="$(mktemp -d -t nova-toll-333-db-XXXXXX)"
+   CA_FILE="$WORK_DIR/global-bundle.pem"
+   HANDOFF="$WORK_DIR/legacy-db-handoff.json"
+   RDS_JSON= SECRET_JSON= DB_HOST= DB_PORT= DB_USER= DB_PASSWORD=
+   cleanup() { unset DB_PASSWORD DB_USER SECRET_JSON SECRET_ARN RDS_JSON RETIRE_LEGACY_DB_PASSWORD RETIRE_LEGACY_DB_USER; rm -rf -- "$WORK_DIR"; }
+   trap cleanup EXIT
+   trap 'exit 130' HUP INT TERM
+   test "$(AWS_PROFILE="$AWS_PROFILE" aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+   RDS_JSON="$(AWS_PROFILE="$AWS_PROFILE" aws --region "$REGION" rds describe-db-instances \
+     --db-instance-identifier "$DB_INSTANCE" --query DBInstances --output json)"
+   printf '%s\n' "$RDS_JSON" | jq -e --arg account "$EXPECTED_ACCOUNT" --arg instance "$DB_INSTANCE" '
+     type == "array" and length == 1 and .[0].DBInstanceIdentifier == $instance and
+     .[0].DBInstanceStatus == "available" and .[0].PubliclyAccessible == false and
+     (.[0].Endpoint.Address | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9.-]*[.]rds[.]amazonaws[.]com$")) and
+     (.[0].Endpoint.Port | type == "number" and floor == . and . > 0 and . < 65536) and
+     (.[0].MasterUserSecret.SecretArn | type == "string" and test("^arn:aws:secretsmanager:us-east-1:920534282028:secret:[^[:space:]]+$"))
+   ' >/dev/null
+   DB_HOST="$(jq -er '.[0].Endpoint.Address' <<<"$RDS_JSON")"
+   DB_PORT="$(jq -er '.[0].Endpoint.Port | tostring' <<<"$RDS_JSON")"
+   SECRET_ARN="$(jq -er '.[0].MasterUserSecret.SecretArn' <<<"$RDS_JSON")"; unset RDS_JSON
+   curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "$CA_URL" --output "$CA_FILE"
+   printf '%s  %s\n' "$CA_SHA256" "$CA_FILE" | sha256sum --check --status
+   jq -n --arg manifest legacy-db-handoff-v1 --arg account "$EXPECTED_ACCOUNT" \
+     --arg region "$REGION" --arg instance "$DB_INSTANCE" --arg host "$DB_HOST" \
+     --argjson port "$DB_PORT" --arg ca_sha256 "$CA_SHA256" --arg secret_arn "$SECRET_ARN" \
+     '{manifest: $manifest, account_id: $account, region: $region, instance_identifier: $instance, host: $host, port: $port, ca_sha256: $ca_sha256, secret_arn: $secret_arn}' >"$HANDOFF"
+   chmod 600 "$HANDOFF"
+   SECRET_JSON="$(AWS_PROFILE="$AWS_PROFILE" aws --region "$REGION" secretsmanager get-secret-value \
+     --secret-id "$SECRET_ARN" --query SecretString --output text)"
+   jq -e '.username | type == "string" and length > 0 and test("^[^[:space:]]+$")' <<<"$SECRET_JSON" >/dev/null
+   jq -e '.password | type == "string" and length > 0' <<<"$SECRET_JSON" >/dev/null
+   DB_USER="$(jq -er .username <<<"$SECRET_JSON")"; DB_PASSWORD="$(jq -er .password <<<"$SECRET_JSON")"; unset SECRET_JSON SECRET_ARN
+   export RETIRE_LEGACY_HANDOFF_APPROVED=YES
+   export RETIRE_LEGACY_DB_USER="$DB_USER" RETIRE_LEGACY_DB_PASSWORD="$DB_PASSWORD"
+   python3 "$ROOT/v2/scripts/retire_legacy_development_database.py" --host "$DB_HOST" --port "$DB_PORT" --ca-file "$CA_FILE" --handoff "$HANDOFF"
+   # After independent review and approval only:
+   # RETIRE_LEGACY_DEVELOPMENT_APPROVED=YES python3 ... --host "$DB_HOST" --port "$DB_PORT" --ca-file "$CA_FILE" --handoff "$HANDOFF" --execute
+   unset RETIRE_LEGACY_HANDOFF_APPROVED RETIRE_LEGACY_DB_USER RETIRE_LEGACY_DB_PASSWORD DB_USER DB_PASSWORD
+   )
+   ```
+
+   SQL preflight and postflight require production database `nova_toll` and
+   exactly its six production roles and isolation/role-shape invariants to
+   remain present. They require exactly database `nova_toll_development` with
+   comment `environment=development` and exactly the six development roles
+   `pricing_loader_writer_development`, `pricing_reader_development`,
+   `oracle_owner_development`, `tollchat_agent_development`,
+   `pricing_caller_development`, and `report_publisher_development`. Unknown
+   ownership, membership, dependency, foreign server/user mapping, extension,
+   external integration, login/admin attribute, or production-contract change
+   stops the action. The positive development baseline also requires the
+   six production roles to have `CONNECT` on `nova_toll` and no
+   development-role cross-grant, and all six development roles to have
+   `CONNECT` on `nova_toll_development` only. After the database and each
+   role mutation, the postcondition requires all six production roles to
+   retain `CONNECT` on `nova_toll`.
+   reviewed pricing/database-owner and `oracle_owner_development` schema
+   owners, exactly `plpgsql` plus `postgis` (PostGIS in `oracle`), no
+   subscriptions, publications, replication slots, foreign wrappers/tables,
+   user mappings, event triggers, or unreviewed catalog dependencies. The
+   script executes only
+   `DROP DATABASE nova_toll_development WITH (FORCE)`, verifies the database
+   is absent and production is unchanged, then drops each exact development
+   role with a dependency check and verifies the remaining exact set after
+   each statement. It never wraps the database drop in a transaction.
+
+   A connection loss or error after any attempted mutation is an unknown
+   outcome: the script performs one read-only status query if possible, takes
+   no retry or next destructive step, and stops for human reconciliation.
+   Retain only fixed pass/fail/count/hash evidence. Do not retain SQL output,
+   psql stderr, credentials, endpoint secrets, or authorization headers.
