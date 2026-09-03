@@ -426,7 +426,7 @@ dirty feature worktree or before that merge.
 
 The administrator owns the following addresses and their dependencies:
 
-- all application `aws_iam_role.*`, `aws_iam_role_policy.*`, and
+- all application `aws_iam_role.*`, `aws_iam_role_policy.*`, `aws_iam_policy.*`, and
   `aws_iam_role_policy_attachment.*` resources;
 - `aws_bedrockagentcore_agent_runtime.tollchat`,
   `aws_bedrockagentcore_agent_runtime_endpoint.tollchat`, and every instance
@@ -447,10 +447,9 @@ address, and a development-only refresh/read result. A missing resource or
 import is a bootstrap failure. The administrator fixes it at that address and
 does not widen the OIDC role. The bootstrap administrator also applies the
 required `environment=development` and `version=v2` tags to application KMS
-keys before enabling CI; the delivery role's exact allowlist is stored in the
-three inline policies `nova-toll-v2-development-delivery-state`,
-`nova-toll-v2-development-delivery-compute`, and
-`nova-toll-v2-development-delivery-application`. These policies use the two
+keys before enabling CI; the delivery role's exact allowlist is stored in seven
+customer-managed policies `nova-toll-v2-development-delivery-{state,compute,observability,storage,data,runtime,edge}`
+under path `/nova-toll/v2/development/`, attached only to that role. These policies use the two
 exact application key ARNs and cannot retarget an alias to a foundation or
 state key.
 
@@ -767,45 +766,43 @@ EXPECTED_TRUST="$WORK_DIR/expected-trust.json"
 ACTUAL_TRUST="$WORK_DIR/actual-trust.json"
 EXPECTED_POLICY_DIR="$WORK_DIR/expected-policies"
 ACTUAL_POLICY_DIR="$WORK_DIR/actual-policies"
-PREVIOUS_POLICY_DIR="$WORK_DIR/previous-policies"
-mkdir -p -- "$EXPECTED_POLICY_DIR" "$ACTUAL_POLICY_DIR" "$PREVIOUS_POLICY_DIR"
-declare -a EXPECTED_POLICY_KEYS=(state compute application)
+mkdir -p -- "$EXPECTED_POLICY_DIR" "$ACTUAL_POLICY_DIR"
+declare -a EXPECTED_POLICY_KEYS=(state compute observability storage data runtime edge)
+EXPECTED_POLICY_PATH="/nova-toll/v2/development/"
 declare -A EXPECTED_POLICY_NAMES=()
+declare -A EXPECTED_POLICY_ARNS=()
 declare -A EXPECTED_POLICIES=()
 declare -A ACTUAL_POLICIES=()
 declare -A PREVIOUS_POLICIES=()
 for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
   EXPECTED_POLICY_NAMES["$policy_key"]="$ROLE_NAME-$policy_key"
+  EXPECTED_POLICY_ARNS["$policy_key"]="arn:aws:iam::$EXPECTED_ACCOUNT:policy${EXPECTED_POLICY_PATH}${EXPECTED_POLICY_NAMES[$policy_key]}"
   EXPECTED_POLICIES["$policy_key"]="$EXPECTED_POLICY_DIR/$policy_key.json"
   ACTUAL_POLICIES["$policy_key"]="$ACTUAL_POLICY_DIR/$policy_key.json"
-  PREVIOUS_POLICIES["$policy_key"]="$PREVIOUS_POLICY_DIR/$policy_key.json"
 done
 ROLE_INFO="$WORK_DIR/delivery-role.json"
 ROLE_POLICY_NAMES="$WORK_DIR/delivery-role-policies.json"
 ROLE_ATTACHMENTS="$WORK_DIR/delivery-role-attachments.json"
-PREVIOUS_ROLE_INFO="$WORK_DIR/previous-delivery-role.json"
-PREVIOUS_TRUST="$WORK_DIR/previous-delivery-trust.json"
-PREVIOUS_POLICY_NAMES="$WORK_DIR/previous-delivery-policy-names.json"
-PREVIOUS_ATTACHMENTS="$WORK_DIR/previous-delivery-attachments.json"
 ROLE_PRESENT=0
 ROLE_CREATED=0
-POLICY_NEEDS_PUT=0
-PREVIOUS_POLICY_PRESENT=0
+POLICY_NEEDS_ATTACH=0
 MUTATION_AMBIGUOUS=0
 declare -A STATE_PREEXISTING=()
 declare -A STATE_IMPORTED_BY_THIS_RUN=()
+declare -A POLICY_PRESENT=()
+declare -A ATTACHMENT_CREATED_BY_THIS_RUN=()
 
 render_document 'data.aws_iam_policy_document.development_delivery_assume.json' "$EXPECTED_TRUST" ||
   die "could not render expected delivery trust policy"
 TRUST_SHA256="$(sha256sum "$EXPECTED_TRUST" | awk '{print $1}')"
 for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
   render_document "local.development_delivery_policy_documents.${policy_key}" "${EXPECTED_POLICIES[$policy_key]}" ||
-    die "could not render expected delivery inline policy: $policy_key"
+    die "could not render expected delivery managed policy: $policy_key"
 done
 POLICY_SHA256="$(for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
   sha256sum "${EXPECTED_POLICIES[$policy_key]}" | awk '{print $1}'
 done | sha256sum | awk '{print $1}')"
-EXPECTED_POLICY_NAMES_JSON="$(printf '%s\n' "${EXPECTED_POLICY_KEYS[@]}" | jq -R -s --arg role "$ROLE_NAME" 'split("\n") | map(select(length > 0) | ($role + "-" + .))')"
+EXPECTED_POLICY_ARNS_JSON="$(printf '%s\n' "${EXPECTED_POLICY_KEYS[@]}" | jq -R -s --arg account "$EXPECTED_ACCOUNT" --arg path "$EXPECTED_POLICY_PATH" --arg role "$ROLE_NAME" 'split("\n") | map(select(length > 0) | ("arn:aws:iam::" + $account + ":policy" + $path + $role + "-" + .))')"
 
 STATE_BUCKET="nova-toll-tfstate-${EXPECTED_ACCOUNT}"
 LOCK_KEY="nova-toll/v2/development/bootstrap-lock"
@@ -898,6 +895,9 @@ bootstrap_cleanup() {
     set +e
     if test "$MUTATION_AMBIGUOUS" -eq 0; then
       if declare -F rollback_created_role >/dev/null; then rollback_created_role; fi
+      if test "$MUTATION_AMBIGUOUS" -eq 0 && test "$ROLE_CREATED" -eq 0 && declare -F rollback_created_attachments >/dev/null; then
+        rollback_created_attachments || MUTATION_AMBIGUOUS=1
+      fi
       if test "$MUTATION_AMBIGUOUS" -eq 0 && declare -F rollback_delivery_state >/dev/null; then
         rollback_delivery_state || MUTATION_AMBIGUOUS=1
       fi
@@ -935,7 +935,33 @@ read_policy_set() {
   aws iam list-role-policies --role-name "$ROLE_NAME" --output json >"$ROLE_POLICY_NAMES" || return 1
   aws iam list-attached-role-policies --role-name "$ROLE_NAME" --output json >"$ROLE_ATTACHMENTS" || return 1
   jq -e '(.PolicyNames | type == "array") and (.NextToken? // null) == null' "$ROLE_POLICY_NAMES" >/dev/null || return 1
-  jq -e '(.AttachedPolicies | type == "array") and (.NextToken? // null) == null' "$ROLE_ATTACHMENTS" >/dev/null
+    jq -e '(.AttachedPolicies | type == "array") and (.NextToken? // null) == null' "$ROLE_ATTACHMENTS" >/dev/null
+}
+
+policy_set_is_safe_subset() {
+  jq -e '.PolicyNames == []' "$ROLE_POLICY_NAMES" >/dev/null &&
+    jq -e --argjson expected "$EXPECTED_POLICY_ARNS_JSON" \
+      'all(.AttachedPolicies[]?.PolicyArn; . as $arn | ($expected | index($arn)) != null)' \
+      "$ROLE_ATTACHMENTS" >/dev/null
+}
+
+read_managed_policy_inventory() {
+  local policy_key policy_info="$WORK_DIR/managed-policy-info"
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    if aws iam get-policy --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}" \
+      --output json >"$policy_info-$policy_key.json" 2>"$WORK_DIR/managed-policy-$policy_key.error"; then
+      jq -e --arg arn "${EXPECTED_POLICY_ARNS[$policy_key]}" \
+        --arg name "${EXPECTED_POLICY_NAMES[$policy_key]}" --arg path "$EXPECTED_POLICY_PATH" \
+        '.Policy | .Arn == $arn and .PolicyName == $name and .Path == $path and .DefaultVersionId != null' \
+        "$policy_info-$policy_key.json" >/dev/null ||
+        die "existing delivery managed policy identity does not match exactly: $policy_key"
+      POLICY_PRESENT["$policy_key"]=1
+    elif grep -qi 'NoSuchEntity' "$WORK_DIR/managed-policy-$policy_key.error"; then
+      POLICY_PRESENT["$policy_key"]=0
+    else
+      die "could not inventory delivery managed policy: $policy_key"
+    fi
+  done
 }
 
 policy_set_is_empty() {
@@ -944,15 +970,29 @@ policy_set_is_empty() {
 }
 
 policy_set_is_exact() {
-  jq -e --argjson expected "$EXPECTED_POLICY_NAMES_JSON" '.PolicyNames | sort == ($expected | sort)' "$ROLE_POLICY_NAMES" >/dev/null &&
-    jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null
+  jq -e '.PolicyNames == []' "$ROLE_POLICY_NAMES" >/dev/null &&
+    jq -e --argjson expected "$EXPECTED_POLICY_ARNS_JSON" '[.AttachedPolicies[]?.PolicyArn] | sort == ($expected | sort)' "$ROLE_ATTACHMENTS" >/dev/null
+}
+
+read_expected_policy() {
+  local policy_key="$1" policy_info="$WORK_DIR/actual-policy-info-$1.json"
+  local policy_version="$WORK_DIR/actual-policy-version-$1.raw" default_version
+  aws iam get-policy --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}" \
+    --output json >"$policy_info" || return 1
+  jq -e --arg arn "${EXPECTED_POLICY_ARNS[$policy_key]}" \
+    --arg name "${EXPECTED_POLICY_NAMES[$policy_key]}" --arg path "$EXPECTED_POLICY_PATH" \
+    '.Policy | .Arn == $arn and .PolicyName == $name and .Path == $path and .DefaultVersionId != null' \
+    "$policy_info" >/dev/null || return 1
+  default_version="$(jq -er '.Policy.DefaultVersionId | strings' "$policy_info")" || return 1
+  aws iam get-policy-version --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}" \
+    --version-id "$default_version" --query PolicyVersion.Document --output json >"$policy_version" || return 1
+  canonicalize_json "$policy_version" "${ACTUAL_POLICIES[$policy_key]}" || return 1
 }
 
 read_expected_policies() {
+  local policy_key
   for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" \
-      --query PolicyDocument --output json >"$WORK_DIR/actual-policy-${policy_key}.raw" || return 1
-    canonicalize_json "$WORK_DIR/actual-policy-${policy_key}.raw" "${ACTUAL_POLICIES[$policy_key]}" || return 1
+    read_expected_policy "$policy_key" || return 1
   done
 }
 
@@ -964,47 +1004,50 @@ role_documents_match() {
   done
 }
 
-snapshot_role_state() {
-  cp -- "$ROLE_INFO" "$PREVIOUS_ROLE_INFO"
-  cp -- "$ACTUAL_TRUST" "$PREVIOUS_TRUST"
-  cp -- "$ROLE_POLICY_NAMES" "$PREVIOUS_POLICY_NAMES"
-  cp -- "$ROLE_ATTACHMENTS" "$PREVIOUS_ATTACHMENTS"
+rollback_created_attachments() {
+  test "$ROLE_PRESENT" -eq 1 || test "$ROLE_CREATED" -eq 1 || return 0
+  local policy_key attachment_present created=0
   for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    if test -e "${ACTUAL_POLICIES[$policy_key]}"; then
-      cp -- "${ACTUAL_POLICIES[$policy_key]}" "${PREVIOUS_POLICIES[$policy_key]}"
-      chmod 600 -- "${PREVIOUS_POLICIES[$policy_key]}"
+    if test "${ATTACHMENT_CREATED_BY_THIS_RUN[$policy_key]:-0}" -eq 1; then
+      created=1
+      break
     fi
   done
-  chmod 600 -- "$PREVIOUS_ROLE_INFO" "$PREVIOUS_TRUST" "$PREVIOUS_POLICY_NAMES" "$PREVIOUS_ATTACHMENTS"
+  test "$created" -eq 1 || return 0
+  lock_is_current || die "refusing delivery attachment rollback after lock ownership changed"
+  read_policy_set || die "cannot safely inspect delivery role for attachment rollback"
+  policy_set_is_safe_subset || die "refusing rollback with unexpected inline policy or managed attachment"
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    test "${ATTACHMENT_CREATED_BY_THIS_RUN[$policy_key]:-0}" -eq 1 || continue
+    attachment_present="$(jq -r --arg arn "${EXPECTED_POLICY_ARNS[$policy_key]}" '[.AttachedPolicies[]? | select(.PolicyArn == $arn)] | length' "$ROLE_ATTACHMENTS")"
+    if test "$attachment_present" -eq 1; then
+      assert_dev_account
+      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam detach-role-policy --role-name $ROLE_NAME --policy-arn ${EXPECTED_POLICY_ARNS[$policy_key]} (target $ROLE_ARN)"
+      if ! aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"; then
+        MUTATION_AMBIGUOUS=1
+        printf 'delivery managed-policy detach failed; preserving exact policy for manual reconciliation: %s\n' "$policy_key" >&2
+        return 1
+      fi
+    fi
+  done
+  read_policy_set && policy_set_is_safe_subset || {
+    MUTATION_AMBIGUOUS=1
+    printf '%s\n' 'delivery attachment rollback could not be verified; preserving role and policies for manual reconciliation' >&2
+    return 1
+  }
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    test "${ATTACHMENT_CREATED_BY_THIS_RUN[$policy_key]:-0}" -eq 1 || continue
+    if jq -e --arg arn "${EXPECTED_POLICY_ARNS[$policy_key]}" '[.AttachedPolicies[]?.PolicyArn] | index($arn) != null' "$ROLE_ATTACHMENTS" >/dev/null; then
+      MUTATION_AMBIGUOUS=1
+      printf 'delivery attachment rollback could not verify absence; preserving role and policies for manual reconciliation: %s\n' "$policy_key" >&2
+      return 1
+    fi
+  done
 }
 
 rollback_created_role() {
   test "$ROLE_CREATED" -eq 1 || return 0
-  lock_is_current || die "refusing delivery role rollback after lock ownership changed"
-  read_policy_set || die "cannot safely inspect created role for rollback"
-  jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null ||
-    die "refusing rollback of created role with unexpected managed attachments"
-  jq -e --argjson expected "$EXPECTED_POLICY_NAMES_JSON" \
-    '.PolicyNames == [] or (.PolicyNames | sort == ($expected | sort))' "$ROLE_POLICY_NAMES" >/dev/null ||
-    die "refusing rollback of created role with unexpected inline policies"
-  if ! policy_set_is_empty; then
-    for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-      if jq -e --arg expected "${EXPECTED_POLICY_NAMES[$policy_key]}" '.PolicyNames | index($expected) != null' "$ROLE_POLICY_NAMES" >/dev/null; then
-        assert_dev_account
-        test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role-policy --role-name $ROLE_NAME --policy-name ${EXPECTED_POLICY_NAMES[$policy_key]} (target $ROLE_ARN)"
-        if ! aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"; then
-          MUTATION_AMBIGUOUS=1
-          printf 'delivery role policy deletion failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
-          return 1
-        fi
-      fi
-    done
-    if ! read_policy_set || ! policy_set_is_empty; then
-      MUTATION_AMBIGUOUS=1
-      printf '%s\n' 'created role policy rollback could not be verified; preserving role and policies for manual exact reconciliation' >&2
-      return 1
-    fi
-  fi
+  rollback_created_attachments || return 1
   assert_dev_account
   test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role --role-name $ROLE_NAME (target $ROLE_ARN)"
   if ! aws iam delete-role --role-name "$ROLE_NAME"; then
@@ -1024,50 +1067,6 @@ rollback_created_role() {
     return 1
   fi
   ROLE_CREATED=0
-}
-
-restore_previous_policies() {
-  test "$PREVIOUS_POLICY_PRESENT" -eq 1 || return 0
-  lock_is_current || die "refusing delivery policy restore after lock ownership changed"
-  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    assert_dev_account
-    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before restoring ${EXPECTED_POLICY_NAMES[$policy_key]} (target $ROLE_ARN)"
-    if ! aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" \
-      --policy-document "file://${PREVIOUS_POLICIES[$policy_key]}"; then
-      MUTATION_AMBIGUOUS=1
-      printf 'delivery policy restore failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
-      return 1
-    fi
-  done
-  if ! role_documents_match; then
-    MUTATION_AMBIGUOUS=1
-    printf '%s\n' 'pre-existing delivery policy restore could not be verified; preserving role and policies for manual exact reconciliation' >&2
-    return 1
-  fi
-}
-
-restore_absent_policies() {
-  test "$ROLE_CREATED" -eq 0 || return 0
-  lock_is_current || die "refusing delivery policy rollback after lock ownership changed"
-  read_policy_set || die "cannot inspect policy after failed delivery policy write"
-  if policy_set_is_empty; then
-    return 0
-  fi
-  policy_set_is_exact || die "refusing to remove an unexpected policy after failed delivery policy write"
-  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    assert_dev_account
-    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before removing ${EXPECTED_POLICY_NAMES[$policy_key]} (target $ROLE_ARN)"
-    if ! aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"; then
-      MUTATION_AMBIGUOUS=1
-      printf 'absent delivery policy deletion failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
-      return 1
-    fi
-  done
-  if ! read_policy_set || ! policy_set_is_empty; then
-    MUTATION_AMBIGUOUS=1
-    printf '%s\n' 'absent delivery policy rollback could not be verified; preserving role and policies for manual exact reconciliation' >&2
-    return 1
-  fi
 }
 
 acquire_bootstrap_lock
@@ -1090,6 +1089,14 @@ elif grep -q 'NoSuchEntity' "$WORK_DIR/delivery-role.error"; then
 else
   die "could not read delivery role"
 fi
+read_managed_policy_inventory
+for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+  if test "${POLICY_PRESENT[$policy_key]}" -eq 1; then
+    read_expected_policy "$policy_key" || die "existing delivery managed policy document is unreadable: $policy_key"
+    cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}" ||
+      die "existing delivery managed policy document does not match exactly: $policy_key"
+  fi
+done
 
 URL_PRESENT=1
 if ! aws lambda get-function-url-config --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
@@ -1122,50 +1129,50 @@ if test "$ROLE_PRESENT" -eq 0; then
     ROLE_CREATED=1
     read_role && role_identity_matches || { rollback_created_role; die "created delivery role failed exact identity/trust validation"; }
     read_policy_set && policy_set_is_empty || { rollback_created_role; die "created delivery role has unexpected effective policies"; }
-    POLICY_NEEDS_PUT=1
+    POLICY_NEEDS_ATTACH=1
   fi
 fi
 
 if test "$ROLE_PRESENT" -eq 1 && test "$ROLE_CREATED" -eq 0; then
   read_policy_set || die "delivery role policy inventory is unreadable"
-  if policy_set_is_empty; then
-    POLICY_NEEDS_PUT=1
-  elif policy_set_is_exact; then
-    if ! read_expected_policies; then
-      die "expected delivery inline policy is unreadable"
-    fi
-    POLICY_MATCH=1
-    for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-      cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}" || POLICY_MATCH=0
-    done
-    if test "$POLICY_MATCH" -eq 0; then
-      snapshot_role_state
-      PREVIOUS_POLICY_PRESENT=1
-      POLICY_NEEDS_PUT=1
-    fi
-  else
-    die "delivery role has unexpected inline policies or managed attachments"
-  fi
+  policy_set_is_safe_subset || die "delivery role has unexpected inline policies or managed attachments"
+  policy_set_is_exact || POLICY_NEEDS_ATTACH=1
 fi
 
-if test "$POLICY_NEEDS_PUT" -eq 1; then
-  if test "$ROLE_PRESENT" -eq 1 && test ! -e "$PREVIOUS_ROLE_INFO"; then
-    snapshot_role_state
-  fi
+if test "$POLICY_NEEDS_ATTACH" -eq 1; then
   for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    assert_dev_account
-    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam put-role-policy --role-name $ROLE_NAME --policy-name ${EXPECTED_POLICY_NAMES[$policy_key]} --policy-document file://${EXPECTED_POLICIES[$policy_key]} (target $ROLE_ARN)"
-    aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" \
-      --policy-document "file://${EXPECTED_POLICIES[$policy_key]}" || {
+    if test "${POLICY_PRESENT[$policy_key]}" -eq 0; then
+      assert_dev_account
+      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam create-policy --policy-name ${EXPECTED_POLICY_NAMES[$policy_key]} --path $EXPECTED_POLICY_PATH --policy-document file://${EXPECTED_POLICIES[$policy_key]} (target ${EXPECTED_POLICY_ARNS[$policy_key]})"
+      aws iam create-policy --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" --path "$EXPECTED_POLICY_PATH" \
+        --policy-document "file://${EXPECTED_POLICIES[$policy_key]}" \
+        >"$WORK_DIR/delivery-policy-${policy_key}-created.json" 2>"$WORK_DIR/delivery-policy-${policy_key}-create.error" || {
         MUTATION_AMBIGUOUS=1
-        die "delivery inline policy write failed; preserving any matching post-state for manual exact reconciliation: $policy_key"
+        die "delivery managed policy create failed; preserving any matching post-state for manual exact reconciliation: $policy_key"
       }
+      POLICY_PRESENT["$policy_key"]=1
+      read_expected_policy "$policy_key" || die "created delivery managed policy is unreadable: $policy_key"
+      cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}" ||
+        die "created delivery managed policy document does not match exactly: $policy_key"
+    fi
+  done
+  read_policy_set || die "delivery role policy inventory is unreadable before managed attachments"
+  policy_set_is_safe_subset || die "delivery role changed before managed attachments"
+  for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
+    if ! jq -e --arg arn "${EXPECTED_POLICY_ARNS[$policy_key]}" '[.AttachedPolicies[]?.PolicyArn] | index($arn) != null' "$ROLE_ATTACHMENTS" >/dev/null; then
+      assert_dev_account
+      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn ${EXPECTED_POLICY_ARNS[$policy_key]} (target $ROLE_ARN)"
+      aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}" || {
+        MUTATION_AMBIGUOUS=1
+        die "delivery managed policy attachment failed; preserving any matching post-state for manual exact reconciliation: $policy_key"
+      }
+      ATTACHMENT_CREATED_BY_THIS_RUN["$policy_key"]=1
+    fi
   done
   if ! role_documents_match; then
-    if test "$PREVIOUS_POLICY_PRESENT" -eq 1; then restore_previous_policies; fi
-    if test "$PREVIOUS_POLICY_PRESENT" -eq 0; then restore_absent_policies; fi
+    if test "$ROLE_CREATED" -eq 0; then rollback_created_attachments; fi
     if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
-    die "delivery role failed post-write exact effective-policy validation"
+    die "delivery role failed post-attachment exact effective-policy validation"
   fi
 fi
 
@@ -1197,24 +1204,31 @@ rollback_delivery_state() {
   lock_is_current || return 1
   terraform -chdir="$ROOT/infra" state list >"$state_list" || return 1
   for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    address="aws_iam_role_policy.development_delivery[\"$policy_key\"]"
-    test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
-    target="$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}"
-    if state_list_contains "$state_list" "$address"; then
-      if ! verify_foundation_state "$address" "$target" "$WORK_DIR/rollback-${address//[^A-Za-z0-9]/_}.state"; then
-        printf 'refusing rollback of %s: current state ID is not the exact target %s\n' "$address" "$target" >&2
-        failed=1
-        continue
+    for kind in attachment policy; do
+      if test "$kind" = policy; then
+        address="aws_iam_policy.development_delivery[\"$policy_key\"]"
+        target="${EXPECTED_POLICY_ARNS[$policy_key]}"
+      else
+        address="aws_iam_role_policy_attachment.development_delivery[\"$policy_key\"]"
+        target="$ROLE_NAME/${EXPECTED_POLICY_ARNS[$policy_key]}"
       fi
-      assert_dev_account
-      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra state rm $address (target $target)"
-      if ! terraform -chdir="$ROOT/infra" state rm "$address"; then
-        MUTATION_AMBIGUOUS=1
-        printf 'delivery policy state removal failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
-        return 1
+      test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+      if state_list_contains "$state_list" "$address"; then
+        if ! verify_foundation_state "$address" "$target" "$WORK_DIR/rollback-${address//[^A-Za-z0-9]/_}.state"; then
+          printf 'refusing rollback of %s: current state ID is not the exact target %s\n' "$address" "$target" >&2
+          failed=1
+          continue
+        fi
+        assert_dev_account
+        test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra state rm $address (target $target)"
+        if ! terraform -chdir="$ROOT/infra" state rm "$address"; then
+          MUTATION_AMBIGUOUS=1
+          printf 'delivery managed-policy state removal failed; preserving role and policies for manual exact reconciliation: %s\n' "$policy_key" >&2
+          return 1
+        fi
       fi
-    fi
-    STATE_IMPORTED_BY_THIS_RUN["$address"]=0
+      STATE_IMPORTED_BY_THIS_RUN["$address"]=0
+    done
   done
   address='aws_iam_role.development_delivery[0]'
   if test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1; then
@@ -1268,28 +1282,35 @@ else
     die "delivery role import state ID or ARN is not the exact target"
 fi
 for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-  address="aws_iam_role_policy.development_delivery[\"$policy_key\"]"
-  if state_list_contains "$FOUNDATION_STATE_LIST" "$address"; then
-    STATE_PREEXISTING["$address"]=1
-  else
-    role_documents_match || die "delivery role changed before policy state import: $policy_key"
-    assert_dev_account
-    target="$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}"
-    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra import -input=false -var environment=development $address $target (target $target)"
-    if ! terraform -chdir="$ROOT/infra" import -input=false \
-      -var environment=development \
-      "$address" "$target" \
-      >"$WORK_DIR/delivery-policy-${policy_key}-import.log" 2>&1; then
-      if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/delivery-policy-${policy_key}-import.log"; then
-        die "delivery policy import is already managed or concurrent; refusing state removal: $policy_key"
-      fi
-      die "delivery policy import failed; state ownership is unproven and was retained: $policy_key"
+  for kind in policy attachment; do
+    if test "$kind" = policy; then
+      address="aws_iam_policy.development_delivery[\"$policy_key\"]"
+      target="${EXPECTED_POLICY_ARNS[$policy_key]}"
+    else
+      address="aws_iam_role_policy_attachment.development_delivery[\"$policy_key\"]"
+      target="$ROLE_NAME/${EXPECTED_POLICY_ARNS[$policy_key]}"
     fi
-    STATE_IMPORTED_BY_THIS_RUN["$address"]=1
-    verify_foundation_state "$address" "$target" \
-      "$WORK_DIR/delivery-policy-${policy_key}-import.state" ||
-      die "delivery policy import state ID is not the exact target: $policy_key"
-  fi
+    if state_list_contains "$FOUNDATION_STATE_LIST" "$address"; then
+      STATE_PREEXISTING["$address"]=1
+    else
+      role_documents_match || die "delivery role changed before managed-policy state import: $policy_key"
+      assert_dev_account
+      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra import -input=false -var environment=development $address $target (target $target)"
+      if ! terraform -chdir="$ROOT/infra" import -input=false \
+        -var environment=development \
+        "$address" "$target" \
+        >"$WORK_DIR/delivery-${kind}-${policy_key}-import.log" 2>&1; then
+        if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/delivery-${kind}-${policy_key}-import.log"; then
+          die "delivery managed-policy import is already managed or concurrent; refusing state removal: $policy_key/$kind"
+        fi
+        die "delivery managed-policy import failed; state ownership is unproven and was retained: $policy_key/$kind"
+      fi
+      STATE_IMPORTED_BY_THIS_RUN["$address"]=1
+      verify_foundation_state "$address" "$target" \
+        "$WORK_DIR/delivery-${kind}-${policy_key}-import.state" ||
+        die "delivery managed-policy import state ID is not the exact target: $policy_key/$kind"
+    fi
+  done
 done
 if ! role_documents_match; then
   if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
@@ -1311,11 +1332,17 @@ verify_delivery_state() {
     grep -Fxq "    arn = \"$ROLE_ARN\"" "$WORK_DIR/delivery-role.state" ||
     return 1
   for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-    address="aws_iam_role_policy.development_delivery[\"$policy_key\"]"
+    address="aws_iam_policy.development_delivery[\"$policy_key\"]"
     terraform -chdir="$ROOT/infra" state show -no-color "$address" >"$WORK_DIR/delivery-policy-${policy_key}.state" ||
       return 1
-    grep -Fxq "    id                 = \"$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}\"" "$WORK_DIR/delivery-policy-${policy_key}.state" ||
-      grep -Fxq "    id = \"$ROLE_NAME:${EXPECTED_POLICY_NAMES[$policy_key]}\"" "$WORK_DIR/delivery-policy-${policy_key}.state" ||
+    grep -Fxq "    id                 = \"${EXPECTED_POLICY_ARNS[$policy_key]}\"" "$WORK_DIR/delivery-policy-${policy_key}.state" ||
+      grep -Fxq "    id = \"${EXPECTED_POLICY_ARNS[$policy_key]}\"" "$WORK_DIR/delivery-policy-${policy_key}.state" ||
+      return 1
+    address="aws_iam_role_policy_attachment.development_delivery[\"$policy_key\"]"
+    terraform -chdir="$ROOT/infra" state show -no-color "$address" >"$WORK_DIR/delivery-attachment-${policy_key}.state" ||
+      return 1
+    grep -Fxq "    id                 = \"$ROLE_NAME/${EXPECTED_POLICY_ARNS[$policy_key]}\"" "$WORK_DIR/delivery-attachment-${policy_key}.state" ||
+      grep -Fxq "    id = \"$ROLE_NAME/${EXPECTED_POLICY_ARNS[$policy_key]}\"" "$WORK_DIR/delivery-attachment-${policy_key}.state" ||
       return 1
   done
 }
@@ -1711,8 +1738,10 @@ printf 'aws_wafv2_web_acl.public_chat\t%s\n' "$(jq -r '.arn' <<<"$WAF_INFO")" >>
 printf 'aws_wafv2_web_acl_logging_configuration.agent_reports\t%s\n' "$(jq -r '.arn' <<<"$WAF_INFO")" >>"$ADDRESS_INVENTORY"
 printf 'aws_iam_role.development_delivery[0]\t%s\n' "$ROLE_ARN" >>"$ADDRESS_INVENTORY"
 for policy_key in "${EXPECTED_POLICY_KEYS[@]}"; do
-  printf 'aws_iam_role_policy.development_delivery["%s"]\t%s:%s\n' \
-    "$policy_key" "$ROLE_NAME" "${EXPECTED_POLICY_NAMES[$policy_key]}" >>"$ADDRESS_INVENTORY"
+  printf 'aws_iam_policy.development_delivery["%s"]\t%s\n' \
+    "$policy_key" "${EXPECTED_POLICY_ARNS[$policy_key]}" >>"$ADDRESS_INVENTORY"
+  printf 'aws_iam_role_policy_attachment.development_delivery["%s"]\t%s/%s\n' \
+    "$policy_key" "$ROLE_NAME" "${EXPECTED_POLICY_ARNS[$policy_key]}" >>"$ADDRESS_INVENTORY"
 done
 printf 'aws_kms_alias.agent_measurement\talias/tollchat-v2-agent-measurement-dev\n' >>"$ADDRESS_INVENTORY"
 printf 'aws_kms_alias.site\talias/tollchat-v2-site-dev\n' >>"$ADDRESS_INVENTORY"
@@ -4782,7 +4811,9 @@ select a target.
    `CONNECT` on `nova_toll_development` only. After the database and each
    role mutation, the postcondition requires all six production roles to
    retain `CONNECT` on `nova_toll`.
-   reviewed pricing/database-owner and `oracle_owner_development` schema
+   The database comment `environment=development` and each development role's
+   comment `environment=development` are required, along with reviewed
+   pricing/database-owner and `oracle_owner_development` schema
    owners, exactly `plpgsql` plus `postgis` (PostGIS in `oracle`), no
    subscriptions, publications, replication slots, foreign wrappers/tables,
    user mappings, event triggers, or unreviewed catalog dependencies. The
@@ -4791,6 +4822,9 @@ select a target.
    is absent and production is unchanged, then drops each exact development
    role with a dependency check and verifies the remaining exact set after
    each statement. It never wraps the database drop in a transaction.
+   The disposable `bootstrap_development_database.py` contract creates the
+   database comment and these six exact role comments before granting
+   development `CONNECT`; it is not a production retirement step.
 
    A connection loss or error after any attempted mutation is an unknown
    outcome: the script performs one read-only status query if possible, takes

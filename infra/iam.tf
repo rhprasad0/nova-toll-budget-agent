@@ -606,9 +606,9 @@ resource "aws_iam_role" "development_delivery" {
   max_session_duration = 3600
 }
 
-# IAM limits each inline policy to 10,240 characters. Keep the reviewed
-# statement order and allowlist, but store it as deterministic bounded policy
-# documents so the delivery role can be created without dropping permissions.
+# Keep the reviewed statement order and allowlist, but store it as deterministic
+# customer-managed policy documents. IAM's role-wide inline-policy quota is
+# aggregate, so inline policies cannot safely represent this allowlist.
 locals {
   development_delivery_policy_statements = jsondecode(data.aws_iam_policy_document.development_delivery.json).Statement
   development_delivery_policy_documents = {
@@ -618,20 +618,42 @@ locals {
     })
     compute = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 7, 24)
+      Statement = slice(local.development_delivery_policy_statements, 7, 13)
     })
-    application = jsonencode({
+    observability = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 24, 42)
+      Statement = slice(local.development_delivery_policy_statements, 13, 19)
+    })
+    storage = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 19, 24)
+    })
+    data = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 24, 31)
+    })
+    runtime = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 31, 35)
+    })
+    edge = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 35, 42)
     })
   }
 }
 
-resource "aws_iam_role_policy" "development_delivery" {
+resource "aws_iam_policy" "development_delivery" {
   for_each = var.environment == "development" ? local.development_delivery_policy_documents : {}
   name     = "nova-toll-v2-development-delivery-${each.key}"
-  role     = aws_iam_role.development_delivery[0].id
+  path     = "/nova-toll/v2/development/"
   policy   = each.value
+}
+
+resource "aws_iam_role_policy_attachment" "development_delivery" {
+  for_each   = var.environment == "development" ? local.development_delivery_policy_documents : {}
+  role       = aws_iam_role.development_delivery[0].name
+  policy_arn = aws_iam_policy.development_delivery[each.key].arn
 }
 
 # The DNS cutover is deliberately separate from both application delivery

@@ -170,6 +170,166 @@ def _policy_by_sid(statements: list[dict[str, object]]) -> dict[str, dict[str, o
     return {cast(str, statement["sid"]): statement for statement in statements}
 
 
+def _top_level_terraform_block(source: str, header: str, occurrence: int = 0) -> str:
+    matches = list(re.finditer(rf"(?m)^{re.escape(header)}\s*\{{", source))
+    if occurrence >= len(matches):
+        raise AssertionError(f"missing Terraform block {header!r}")
+    match = matches[occurrence]
+    opening = source.find("{", match.start(), match.end())
+    depth = 0
+    quoted = False
+    escaped = False
+    for index in range(opening, len(source)):
+        character = source[index]
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+            continue
+        if character == '"':
+            quoted = True
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return source[match.start() : index + 1]
+    raise AssertionError(f"unclosed Terraform block {header!r}")
+
+
+def _terraform_rendered_development_delivery_policies() -> tuple[
+    dict[str, dict[str, object]], list[dict[str, object]]
+]:
+    """Render the policy locals in a backend-free, credential-free Terraform root."""
+    first_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
+    policy_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 1)
+    policy_data = _top_level_terraform_block(
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "development_delivery"',
+    )
+    policy_data = policy_data.replace(
+        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+    configuration = dedent(
+        f"""
+        terraform {{
+          required_providers {{
+            aws = {{
+              source  = "hashicorp/aws"
+              version = "~> 6.47"
+            }}
+          }}
+        }}
+
+        provider "aws" {{
+          region                         = "us-east-1"
+          access_key                     = "test"
+          secret_key                     = "test"
+          skip_credentials_validation   = true
+          skip_requesting_account_id    = true
+          skip_metadata_api_check       = true
+        }}
+
+        locals {{
+          test_tfstate_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-903859731897"
+          test_tfstate_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
+        }}
+
+        {first_locals}
+        {policy_data}
+        {policy_locals}
+
+        output "development_delivery_policy_documents" {{
+          value = local.development_delivery_policy_documents
+        }}
+
+        output "development_delivery_aggregate" {{
+          value = data.aws_iam_policy_document.development_delivery.json
+        }}
+        """
+    )
+    with tempfile.TemporaryDirectory(prefix="nova-toll-iam-render-") as directory:
+        root = Path(directory)
+        (root / "main.tf").write_text(configuration, encoding="utf-8")
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("AWS_")
+        }
+        assert not any(key.startswith("AWS_") for key in environment)
+        environment["HOME"] = str(root)
+        environment["TF_DATA_DIR"] = str(root / ".terraform-data")
+        provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
+        if provider_mirror.is_dir():
+            cli_config = root / "terraform.tfrc"
+            cli_config.write_text(
+                dedent(
+                    f"""
+                    provider_installation {{
+                      filesystem_mirror {{
+                        path = {json.dumps(str(provider_mirror))}
+                      }}
+                      direct {{
+                        exclude = ["hashicorp/aws"]
+                      }}
+                    }}
+                    """
+                ),
+                encoding="utf-8",
+            )
+            environment["TF_CLI_CONFIG_FILE"] = str(cli_config)
+        init = subprocess.run(
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert init.returncode == 0, init.stdout + init.stderr
+        plan_path = root / "development-delivery.tfplan"
+        plan = subprocess.run(
+            [
+                "terraform",
+                "plan",
+                "-refresh=false",
+                "-input=false",
+                "-no-color",
+                f"-out={plan_path}",
+            ],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert plan.returncode == 0, plan.stdout + plan.stderr
+        rendered = subprocess.run(
+            ["terraform", "show", "-json", str(plan_path)],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+        values = json.loads(rendered.stdout)["planned_values"]["outputs"]
+        documents = values["development_delivery_policy_documents"]["value"]
+        aggregate = values["development_delivery_aggregate"]["value"]
+        assert isinstance(documents, dict)
+        assert isinstance(aggregate, str)
+        return (
+            {
+                key: json.loads(value)
+                for key, value in cast(dict[str, str], documents).items()
+            },
+            cast(list[dict[str, object]], json.loads(aggregate)["Statement"]),
+        )
+
+
 def test_account_contract_records_the_replacement_development_boundary():
     accounts = ACCOUNT_CONTRACT["accounts"]
     assert ACCOUNT_CONTRACT["region"] == "us-east-1"
@@ -4114,7 +4274,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "compute": (
             7,
-            24,
+            13,
             [
                 "ReadApplicationLambdaFunctions",
                 "UpdateApplicationLambdaFunctions",
@@ -4122,12 +4282,24 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "RetireApplicationLambdaVersions",
                 "ManageApplicationQueues",
                 "ResolveApplicationQueueUrls",
+            ],
+        ),
+        "observability": (
+            13,
+            19,
+            [
                 "ManageApplicationEventRules",
                 "ManageApplicationLogs",
                 "DescribeApplicationLogPolicies",
                 "DescribeApplicationLogGroups",
                 "ManageApplicationAlarms",
                 "DescribeApplicationNetworking",
+            ],
+        ),
+        "storage": (
+            19,
+            24,
+            [
                 "ManageApplicationSiteBuckets",
                 "ManageApplicationMeasurementBucket",
                 "ManageApplicationMeasurementRegistry",
@@ -4135,9 +4307,9 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ReadApplicationArtifactBucket",
             ],
         ),
-        "application": (
+        "data": (
             24,
-            42,
+            31,
             [
                 "UseApplicationKmsKeys",
                 "ReadApplicationKmsAliases",
@@ -4146,10 +4318,22 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ManageApplicationAthenaNamedQueries",
                 "ManageApplicationAthenaWorkGroup",
                 "ListApplicationAthenaWorkGroups",
+            ],
+        ),
+        "runtime": (
+            31,
+            35,
+            [
                 "ManageApplicationSchedules",
                 "ManageApplicationGuardrail",
                 "PublishApplicationGuardrailVersions",
                 "ManageApplicationAgentCore",
+            ],
+        ),
+        "edge": (
+            35,
+            42,
+            [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
                 "ManageApplicationCloudFront",
@@ -4160,26 +4344,65 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
     }
-    for _, (start, end, expected_sids) in expected_groups.items():
-        policy = {"Version": "2012-10-17", "Statement": statements[start:end]}
+    rendered_documents, rendered_aggregate = (
+        _terraform_rendered_development_delivery_policies()
+    )
+    assert len(rendered_documents) <= 10
+    assert set(rendered_documents) == set(expected_groups)
+    assert len(rendered_aggregate) == len(statements) == 42
+    rendered_statements: list[dict[str, object]] = []
+    for key, (start, end, expected_sids) in expected_groups.items():
+        policy = rendered_documents[key]
+        policy_statements = policy.get("Statement")
+        assert isinstance(policy_statements, list)
+        policy_statements = cast(list[dict[str, object]], policy_statements)
+        assert len(policy_statements) == end - start
+        rendered_statements.extend(policy_statements)
         assert [
-            statement["sid"] for statement in statements[start:end]
+            statement.get("Sid") for statement in policy_statements
         ] == expected_sids
-        assert len(json.dumps(policy, separators=(",", ":"))) < 10_240
+        rendered = json.dumps(policy, separators=(",", ":"))
+        assert len(re.sub(r"\s+", "", rendered)) <= 6_144
         assert (
             f"Statement = slice(local.development_delivery_policy_statements, {start}, {end})"
             in FOUNDATION_IAM
         )
 
-    policy_resource = FOUNDATION_IAM.split(
-        'resource "aws_iam_role_policy" "development_delivery"', maxsplit=1
-    )[1].split("# The DNS cutover", maxsplit=1)[0]
+    assert rendered_statements == rendered_aggregate
+    assert [statement["Sid"] for statement in rendered_statements] == [
+        statement["sid"] for statement in statements
+    ]
+    assert [
+        statement["sid"]
+        for _, (start, end, _) in expected_groups.items()
+        for statement in statements[start:end]
+    ] == [statement["sid"] for statement in statements]
+    policy_resource = terraform_block(
+        FOUNDATION_IAM, 'resource "aws_iam_policy" "development_delivery"'
+    )
     assert (
         'for_each = var.environment == "development" ? local.development_delivery_policy_documents : {}'
         in policy_resource
     )
     assert (
         'name     = "nova-toll-v2-development-delivery-${each.key}"' in policy_resource
+    )
+    assert 'path     = "/nova-toll/v2/development/"' in policy_resource
+    assert 'resource "aws_iam_role_policy" "development_delivery"' not in FOUNDATION_IAM
+    attachment_resource = terraform_block(
+        FOUNDATION_IAM,
+        'resource "aws_iam_role_policy_attachment" "development_delivery"',
+    )
+    assert (
+        'for_each   = var.environment == "development" ? local.development_delivery_policy_documents : {}'
+        in attachment_resource
+    )
+    assert (
+        "role       = aws_iam_role.development_delivery[0].name" in attachment_resource
+    )
+    assert (
+        "policy_arn = aws_iam_policy.development_delivery[each.key].arn"
+        in attachment_resource
     )
 
 
@@ -4311,8 +4534,16 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert "render_document" in script
     assert "data.aws_iam_policy_document.development_delivery_assume.json" in script
     assert "local.development_delivery_policy_documents.${policy_key}" in script
-    assert "EXPECTED_POLICY_KEYS=(state compute application)" in script
+    assert (
+        "EXPECTED_POLICY_KEYS=(state compute observability storage data runtime edge)"
+        in script
+    )
+    assert 'EXPECTED_POLICY_PATH="/nova-toll/v2/development/"' in script
     assert 'EXPECTED_POLICY_NAMES["$policy_key"]="$ROLE_NAME-$policy_key"' in script
+    assert (
+        'EXPECTED_POLICY_ARNS["$policy_key"]="arn:aws:iam::$EXPECTED_ACCOUNT:policy${EXPECTED_POLICY_PATH}${EXPECTED_POLICY_NAMES[$policy_key]}"'
+        in script
+    )
     assert 'ROLE_NAME="nova-toll-v2-development-delivery"' in script
     assert 'ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"' in script
     assert 'Role.Path == "/"' in script
@@ -4324,33 +4555,40 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         in script
     )
     assert (
-        'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"'
+        'aws iam create-policy --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}" --path "$EXPECTED_POLICY_PATH"'
+        in script
+    )
+    assert (
+        'aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"'
+        in script
+    )
+    assert (
+        'aws iam get-policy-version --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"'
         in script
     )
     assert 'aws iam list-role-policies --role-name "$ROLE_NAME"' in script
     assert 'aws iam list-attached-role-policies --role-name "$ROLE_NAME"' in script
-    assert "policy_set_is_exact" in script
-    assert "if policy_set_is_empty; then" in script
-    assert "PREVIOUS_POLICY_PRESENT=1" in script
-    assert "NextToken? // null) == null" in script
-    assert script.count(".PolicyNames | sort == ($expected | sort)") >= 2
-    assert script.count(".AttachedPolicies == []") >= 3
     assert (
-        script.count(
-            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"'
-        )
-        >= 2
+        'aws iam get-policy --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"'
+        in script
     )
+    assert "policy_set_is_exact" in script
+    assert "policy_set_is_safe_subset" in script
+    assert "NextToken? // null) == null" in script
+    assert script.count(".PolicyNames == []") >= 3
+    assert script.count(".AttachedPolicies == []") >= 1
+    assert "rollback_created_attachments" in script
     assert (
         script.count(
             'cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}"'
         )
-        >= 2
+        >= 3
     )
     assert "role_documents_match" in script
-    assert "delivery role failed post-write exact effective-policy validation" in script
-    assert "snapshot_role_state" in script
-    assert "restore_absent_policies" in script
+    assert (
+        "delivery role failed post-attachment exact effective-policy validation"
+        in script
+    )
     assert (
         "delivery role create failed; preserving any matching post-state for manual exact reconciliation"
         in script
@@ -4374,7 +4612,6 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         >= 4
     )
     assert "rollback_created_role" in script
-    assert "restore_previous_policies" in script
     assert "could not verify created delivery role rollback" in script
     assert "MUTATION_AMBIGUOUS=0" in script
     assert script.count("MUTATION_AMBIGUOUS=1") >= 4
@@ -4406,18 +4643,16 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert 'terraform -chdir="$ROOT/infra" import' in script
     assert script.count('terraform -chdir="$ROOT/infra" import') == 2
     assert "'aws_iam_role.development_delivery[0]' \"$ROLE_ARN\"" in script
-    assert (
-        'address="aws_iam_role_policy.development_delivery[\\"$policy_key\\"]"'
-        in script
-    )
+    assert 'address="aws_iam_policy.development_delivery[\\"$policy_key\\"]"' in script
     assert 'terraform -chdir="$ROOT/infra" state show -no-color' in script
     assert "'aws_iam_role.development_delivery[0]'" in script
+    assert 'address="aws_iam_policy.development_delivery[\\"$policy_key\\"]"' in script
     assert (
-        'address="aws_iam_role_policy.development_delivery[\\"$policy_key\\"]"'
+        'aws_iam_role_policy_attachment.development_delivery[\\"$policy_key\\"]'
         in script
     )
     assert "delivery role import state ID or ARN is not the exact target" in script
-    assert "delivery policy import state ID is not the exact target" in script
+    assert "delivery managed-policy import state ID is not the exact target" in script
     assert "state_id_matches()" in script
     assert "state_list_contains()" in script
     assert (
@@ -4629,7 +4864,7 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         assert generic_guard not in script
     for exact_guard in (
         "aws iam create-role --role-name $ROLE_NAME --path / --max-session-duration 3600",
-        'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"',
+        'aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"',
         "aws lambda create-function-url-config --function-name $FUNCTION_NAME --qualifier $QUALIFIER",
         "aws lambda add-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER",
         "terraform -chdir=$ROOT/v2/infra import -input=false $address $identifier",
@@ -4641,42 +4876,30 @@ def _assert_development_bootstrap_contract(script: str) -> None:
 
 
 def _assert_development_bootstrap_iam_rollback_contract(script: str) -> None:
-    rollback_sections: dict[str, str] = {}
-    for function_name, next_function in (
-        ("rollback_created_role", "restore_previous_policies"),
-        ("restore_previous_policies", "restore_absent_policies"),
-        ("restore_absent_policies", "acquire_bootstrap_lock"),
-    ):
-        rollback_sections[function_name] = script.split(
-            f"{function_name}() {{", maxsplit=1
-        )[1].split(f"{next_function}() {{", maxsplit=1)[0]
-
-    for function_name, command_prefixes in (
-        (
-            "rollback_created_role",
-            (
-                'if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',
-                'if ! aws iam delete-role --role-name "$ROLE_NAME"',
-            ),
-        ),
-        (
-            "restore_previous_policies",
-            ('if ! aws iam put-role-policy --role-name "$ROLE_NAME"',),
-        ),
-        (
-            "restore_absent_policies",
-            ('if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',),
-        ),
-    ):
-        section = rollback_sections[function_name]
-        for command_prefix in command_prefixes:
-            guarded = re.search(
-                re.escape(command_prefix) + r".*?\n\s*fi", section, re.DOTALL
-            )
-            assert guarded is not None
-            guarded_mutation = guarded.group(0)
-            assert "MUTATION_AMBIGUOUS=1" in guarded_mutation
-            assert "preserving" in guarded_mutation
+    attachment_rollback = script.split("rollback_created_attachments() {", maxsplit=1)[
+        1
+    ].split("rollback_created_role() {", maxsplit=1)[0]
+    guarded = re.search(
+        r'if ! aws iam detach-role-policy --role-name "\$ROLE_NAME".*?\n\s*fi',
+        attachment_rollback,
+        re.DOTALL,
+    )
+    assert guarded is not None
+    assert "MUTATION_AMBIGUOUS=1" in guarded.group(0)
+    assert "preserving" in guarded.group(0)
+    role_rollback = script.split("rollback_created_role() {", maxsplit=1)[1].split(
+        "acquire_bootstrap_lock", maxsplit=1
+    )[0]
+    guarded = re.search(
+        r'if ! aws iam delete-role --role-name "\$ROLE_NAME".*?\n\s*fi',
+        role_rollback,
+        re.DOTALL,
+    )
+    assert guarded is not None
+    assert "MUTATION_AMBIGUOUS=1" in guarded.group(0)
+    assert "preserving" in guarded.group(0)
+    assert "aws iam delete-role-policy" not in script
+    assert "aws iam put-role-policy" not in script
 
     state_rollback = script.split("rollback_delivery_state() {", maxsplit=1)[1].split(
         "verify_foundation_state() {", maxsplit=1
@@ -4701,20 +4924,12 @@ def test_development_bootstrap_iam_rollbacks_are_ambiguity_safe():
     _assert_development_bootstrap_iam_rollback_contract(script)
     for function_name, command_prefix in (
         (
-            "rollback_created_role",
-            'if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',
+            "rollback_created_attachments",
+            'if ! aws iam detach-role-policy --role-name "$ROLE_NAME"',
         ),
         (
             "rollback_created_role",
             'if ! aws iam delete-role --role-name "$ROLE_NAME"',
-        ),
-        (
-            "restore_previous_policies",
-            'if ! aws iam put-role-policy --role-name "$ROLE_NAME"',
-        ),
-        (
-            "restore_absent_policies",
-            'if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',
         ),
     ):
         function_start = script.index(f"{function_name}() {{")
@@ -4775,7 +4990,7 @@ def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mut
         ),
         ("urllib.parse.unquote(value)", "value"),
         ("sort_keys=True", "sort_keys=False"),
-        (".PolicyNames | sort == ($expected | sort)", ".PolicyNames | length >= 0"),
+        (".PolicyNames == []", ".PolicyNames | length >= 0"),
         (".AttachedPolicies == []", ".AttachedPolicies != []"),
         (
             'ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"',
@@ -4786,8 +5001,8 @@ def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mut
             'aws iam list-attached-role-policies --role-name "$UNSAFE_ROLE"',
         ),
         (
-            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"',
-            'aws iam update-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"',
+            'aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"',
+            'aws iam attach-role-policy --role-name "$UNSAFE_ROLE" --policy-arn "${EXPECTED_POLICY_ARNS[$policy_key]}"',
         ),
         (".commit_sha == $commit", '.commit_sha == "untrusted"'),
         (
@@ -4894,16 +5109,29 @@ def test_development_bootstrap_decodes_encoded_lambda_policy_response():
 def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and_attached_policies():
     script = _development_bootstrap_script()
     policy_match = re.search(
-        r'jq -e --argjson expected "\$EXPECTED_POLICY_NAMES_JSON" \'(.*?)\' "\$ROLE_POLICY_NAMES"',
+        r'jq -e \'(\.PolicyNames == \[\])\' "\$ROLE_POLICY_NAMES"',
         script,
     )
     attachment_match = re.search(
-        r'jq -e \'(\.AttachedPolicies == \[\])\' "\$ROLE_ATTACHMENTS"',
+        r'jq -e --argjson expected "\$EXPECTED_POLICY_ARNS_JSON" \'(.*?)\' "\$ROLE_ATTACHMENTS"',
         script,
     )
     assert policy_match is not None and attachment_match is not None
     policy_filter = policy_match.group(1)
     attachment_filter = attachment_match.group(1)
+    expected_arns = [
+        "arn:aws:iam::903859731897:policy/nova-toll/v2/development/"
+        f"nova-toll-v2-development-delivery-{key}"
+        for key in (
+            "state",
+            "compute",
+            "observability",
+            "storage",
+            "data",
+            "runtime",
+            "edge",
+        )
+    ]
 
     def accepts(policy_names: list[str], attached: list[dict[str, str]]) -> bool:
         with tempfile.TemporaryDirectory() as directory:
@@ -4915,9 +5143,6 @@ def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and
                 [
                     "jq",
                     "-e",
-                    "--argjson",
-                    "expected",
-                    '["nova-toll-v2-development-delivery-state", "nova-toll-v2-development-delivery-compute", "nova-toll-v2-development-delivery-application"]',
                     policy_filter,
                     str(policy_file),
                 ],
@@ -4925,35 +5150,30 @@ def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and
                 check=False,
             )
             attachment_result = subprocess.run(
-                ["jq", "-e", attachment_filter, str(attachment_file)],
+                [
+                    "jq",
+                    "-e",
+                    "--argjson",
+                    "expected",
+                    json.dumps(expected_arns),
+                    attachment_filter,
+                    str(attachment_file),
+                ],
                 capture_output=True,
                 check=False,
             )
             return policy_result.returncode == 0 and attachment_result.returncode == 0
 
     assert accepts(
-        [
-            "nova-toll-v2-development-delivery-state",
-            "nova-toll-v2-development-delivery-compute",
-            "nova-toll-v2-development-delivery-application",
-        ],
         [],
+        [{"PolicyArn": arn} for arn in expected_arns],
     )
     assert not accepts(
-        [
-            "nova-toll-v2-development-delivery-state",
-            "nova-toll-v2-development-delivery-compute",
-            "nova-toll-v2-development-delivery-application",
-            "unexpected-inline",
-        ],
-        [],
+        ["unexpected-inline"],
+        [{"PolicyArn": arn} for arn in expected_arns],
     )
     assert not accepts(
-        [
-            "nova-toll-v2-development-delivery-state",
-            "nova-toll-v2-development-delivery-compute",
-            "nova-toll-v2-development-delivery-application",
-        ],
+        [],
         [{"PolicyArn": "arn:aws:iam::aws:policy/AdministratorAccess"}],
     )
 
@@ -5045,7 +5265,7 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
           test "${FAIL_ACTION:-}" != "$1" || return 1
         }
         rollback_role() {
-          mutate delete-role-policy || return
+          mutate detach-role-policy || return
           mutate delete-role
         }
         rollback_url() {
@@ -5059,12 +5279,13 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
           mutate state-rm-url
         }
         rollback_delivery_state() {
+          mutate state-rm-attachment || return
           mutate state-rm-policy || return
           mutate state-rm-role
         }
         case "$SCENARIO" in
-          create-role) mutate create-role && mutate put-role-policy ;;
-          put-role-policy) mutate create-role && mutate put-role-policy ;;
+          create-role) mutate create-role && mutate create-policy && mutate attach-role-policy ;;
+          create-policy) mutate create-role && mutate create-policy && mutate attach-role-policy ;;
           role-import|policy-import|url-import) mutate "$SCENARIO" || { rollback_state; exit 1; } ;;
           post-import-verification) mutate role-import && mutate policy-import && { rollback_delivery_state; exit 1; } ;;
           url-create) mutate create-function-url ;;
@@ -5100,7 +5321,7 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
 
     for scenario in (
         "create-role",
-        "put-role-policy",
+        "create-policy",
         "role-import",
         "policy-import",
         "url-import",
@@ -5112,7 +5333,7 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
         result, log = run(scenario, approved=False)
         assert result.returncode != 0
         first_action = {
-            "put-role-policy": "create-role",
+            "create-policy": "create-role",
             "url-create": "create-function-url",
             "url-permission-import": "state-rm-url",
             "url-invoke-import": "state-rm-url",
@@ -5123,7 +5344,7 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
 
     for scenario in (
         "create-role",
-        "put-role-policy",
+        "create-policy",
         "role-import",
         "policy-import",
         "url-import",
@@ -5134,8 +5355,8 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
     ):
         result, log = run(scenario, approved=True)
         assert result.returncode != 0, scenario
-        if scenario == "put-role-policy":
-            assert log == ["create-role", "put-role-policy"]
+        if scenario == "create-policy":
+            assert log == ["create-role", "create-policy"]
         elif scenario == "url-create":
             assert log == ["create-function-url"]
         elif scenario in {"url-create", "url-permission-import", "url-invoke-import"}:
@@ -5148,6 +5369,7 @@ def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_or
             assert log == [
                 "role-import",
                 "policy-import",
+                "state-rm-attachment",
                 "state-rm-policy",
                 "state-rm-role",
             ]

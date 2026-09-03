@@ -373,7 +373,11 @@ def test_plan_validator_rejects_missing_or_extra_reviewed_instance(
 
 
 def _fake_psql(
-    tmp_path: Path, *, fail_on: str = "", survive_role: str = ""
+    tmp_path: Path,
+    *,
+    fail_on: str = "",
+    survive_role: str = "",
+    null_comment_target: str = "",
 ) -> tuple[Path, Path]:
     log = tmp_path / "psql.log"
     marker = tmp_path / "survived-role"
@@ -389,6 +393,8 @@ def _fake_psql(
         f"if {survive_role!r} and 'DROP ROLE {survive_role};' in sql:\n"
         "    marker.write_text('recreated', encoding='utf-8')\n"
         f"if {survive_role!r} and 'role postcondition failed' in sql and marker.exists():\n"
+        "    sys.exit(1)\n"
+        f"if {null_comment_target!r} and {null_comment_target!r} in sql and \"IS DISTINCT FROM 'environment=development'\" in sql:\n"
         "    sys.exit(1)\n"
         f"sys.exit(1 if {fail_on!r} and {fail_on!r} in sql else 0)\n",
         encoding="utf-8",
@@ -436,11 +442,17 @@ def _run_database(
     port: int = 5432,
     bad_ca: bool = False,
     survive_role: str = "",
+    null_comment_target: str = "",
     handoff_secret_arn: str = SECRET_ARN,
     ambient_profile: str | None = None,
     pin_ca_for_fixture: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    _, log = _fake_psql(tmp_path, fail_on=fail_on, survive_role=survive_role)
+    _, log = _fake_psql(
+        tmp_path,
+        fail_on=fail_on,
+        survive_role=survive_role,
+        null_comment_target=null_comment_target,
+    )
     _fake_aws(tmp_path)
     ca_file = tmp_path / "ca.pem"
     ca_file.write_text("fixture", encoding="utf-8")
@@ -581,6 +593,43 @@ def test_database_missing_connect_grant_stops_before_drop(tmp_path: Path) -> Non
     assert result.returncode != 0
     assert len(calls) == 1
     assert all("DROP " not in line for line in calls)
+
+
+def test_database_null_environment_comments_stop_before_drop(tmp_path: Path) -> None:
+    preflight = _database_module.PREFLIGHT_SQL
+    assert "IS DISTINCT FROM 'environment=development'" in preflight
+    assert "shobj_description(oid, 'pg_authid')" in preflight
+    targets = [
+        "obj_description(development_oid, 'pg_database')",
+        *[f"'{role}'" for role in _database_module.DEVELOPMENT_ROLES],
+    ]
+    for index, target in enumerate(targets):
+        case_dir = tmp_path / f"null-comment-{index}"
+        case_dir.mkdir()
+        result, calls = _run_database(
+            case_dir,
+            execute=True,
+            approval="YES",
+            null_comment_target=target,
+        )
+        assert result.returncode != 0
+        assert len(calls) == 1
+        assert all("DROP " not in line for line in calls)
+
+
+def test_database_valid_environment_comments_allow_preflight_and_drop(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_database(
+        tmp_path,
+        execute=True,
+        approval="YES",
+    )
+    assert result.returncode == 0, result.stderr
+    assert len(calls) > 1
+    assert any(
+        "DROP DATABASE nova_toll_development WITH (FORCE);" in line for line in calls
+    )
 
 
 def test_database_missing_production_connect_grant_stops_after_database_drop(

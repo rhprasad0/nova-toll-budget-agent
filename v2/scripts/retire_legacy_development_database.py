@@ -100,8 +100,8 @@ BEGIN
   IF production_oid IS NULL OR development_oid IS NULL THEN
     RAISE EXCEPTION 'exact production and development databases are required';
   END IF;
-  IF obj_description(production_oid, 'pg_database') <> 'environment=production'
-     OR obj_description(development_oid, 'pg_database') <> 'environment=development' THEN
+  IF obj_description(production_oid, 'pg_database') IS DISTINCT FROM 'environment=production'
+     OR obj_description(development_oid, 'pg_database') IS DISTINCT FROM 'environment=development' THEN
     RAISE EXCEPTION 'database environment comments are wrong';
   END IF;
   IF (SELECT datdba FROM pg_database WHERE oid = production_oid)
@@ -111,6 +111,13 @@ BEGIN
   IF (SELECT count(*) FROM pg_roles WHERE rolname IN ({_sql_list(PRODUCTION_ROLES)})) <> 6
      OR (SELECT count(*) FROM pg_roles WHERE rolname IN ({_sql_list(DEVELOPMENT_ROLES)})) <> 6 THEN
     RAISE EXCEPTION 'exact production and development roles are required';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname IN ({_sql_list(DEVELOPMENT_ROLES)})
+      AND shobj_description(oid, 'pg_authid') IS DISTINCT FROM 'environment=development'
+  ) THEN
+    RAISE EXCEPTION 'development role environment comments are wrong';
   END IF;
   IF {_missing_connect_grants(PRODUCTION_ROLES, PRODUCTION_DATABASE)}
      OR {_missing_connect_grants(DEVELOPMENT_ROLES, DEVELOPMENT_DATABASE)} THEN
@@ -236,7 +243,7 @@ END $$;
 """
 
 PRODUCTION_INVARIANTS = f"""
-  IF (SELECT obj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') <> 'environment=production'
+  IF (SELECT obj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') IS DISTINCT FROM 'environment=production'
      OR (SELECT count(*) FROM pg_roles WHERE rolname IN ({_sql_list(PRODUCTION_ROLES)})) <> 6 THEN
     RAISE EXCEPTION 'production database or role contract changed';
   END IF;
@@ -336,7 +343,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '{DEVELOPMENT_DATABASE}')
      OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ({_sql_list(DEVELOPMENT_ROLES)}))
      OR NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}')
-     OR (SELECT obj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') <> 'environment=production'
+     OR (SELECT obj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') IS DISTINCT FROM 'environment=production'
      OR (SELECT count(*) FROM pg_roles WHERE rolname IN ({_sql_list(PRODUCTION_ROLES)})) <> 6 THEN
     RAISE EXCEPTION 'final production-preservation check failed';
   END IF;
