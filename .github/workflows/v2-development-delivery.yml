@@ -233,7 +233,7 @@ jobs:
             exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"])
             and all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string" and length > 0)
             and ($foundation.private_subnet_ids | exact_keys(["a", "c"]) and all(.[]; type == "string" and length > 0))
-            and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and .identifier != "" and .resource_id != "" and .address != "" and (.port | type == "number"))
+            and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string" and length > 0) and (.port | type == "number"))
           ' <<<"$FOUNDATION_OUTPUT" >/dev/null
           jq -n --argjson foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation}' >"$FOUNDATION_VARS"
           chmod 600 -- "$FOUNDATION_VARS"

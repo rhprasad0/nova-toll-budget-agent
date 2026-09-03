@@ -9,6 +9,7 @@ import sys
 import tempfile
 import urllib.parse
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from pathlib import Path
 from textwrap import dedent
 from typing import cast
@@ -44,6 +45,22 @@ FOUNDATION_PROVIDER = (FOUNDATION_ROOT / "providers.tf").read_text()
 FOUNDATION_TAILSCALE = (FOUNDATION_ROOT / "tailscale.tf").read_text()
 FOUNDATION_BUDGET = FOUNDATION_ROOT / "budget.tf"
 APPLICATION_VARIABLES = (V2_ROOT / "infra" / "variables.tf").read_text()
+FOUNDATION_FIELDS = (
+    "vpc_id",
+    "vpc_cidr_block",
+    "private_subnet_ids",
+    "rds_security_group_id",
+    "agentcore_endpoint_security_group_id",
+    "eventbridge_endpoint_security_group_id",
+    "agentcore_vpc_endpoint_id",
+    "agentcore_vpc_endpoint_dns_name",
+    "tollchat_api_vpc_endpoint_id",
+    "raw_bucket_name",
+    "raw_kms_key_arn",
+    "agentcore_artifacts_bucket_name",
+    "db_instance",
+    "alerts_topic_arn",
+)
 DEVELOPMENT_DELIVERY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-delivery.yml"
 ).read_text()
@@ -494,29 +511,13 @@ def test_foundation_output_and_application_input_are_the_exact_non_secret_bounda
     variable = APPLICATION_VARIABLES.split('variable "foundation"', maxsplit=1)[
         1
     ].split('variable "environment"', maxsplit=1)[0]
-    fields = (
-        "vpc_id",
-        "vpc_cidr_block",
-        "private_subnet_ids",
-        "rds_security_group_id",
-        "agentcore_endpoint_security_group_id",
-        "eventbridge_endpoint_security_group_id",
-        "agentcore_vpc_endpoint_id",
-        "agentcore_vpc_endpoint_dns_name",
-        "tollchat_api_vpc_endpoint_id",
-        "raw_bucket_name",
-        "raw_kms_key_arn",
-        "agentcore_artifacts_bucket_name",
-        "db_instance",
-        "alerts_topic_arn",
-    )
     assert output.count('output "foundation"') == 1
     assert output.count("output ") == 1
     assert "sensitive   = false" in output
     assert "sensitive = true" not in output
     assert "sensitive = true" not in variable
     assert "default" not in variable
-    for field in fields:
+    for field in FOUNDATION_FIELDS:
         assert field in output
         assert field in variable
     assert re.search(
@@ -3347,6 +3348,144 @@ def _development_plan_gate_script(source: str) -> str:
     )
     assert match, "the workflow must embed the plan gate"
     return dedent(match.group(1))
+
+
+def _development_foundation_validator(source: str) -> str:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    deploy_source = _workflow_run_source(jobs["deploy"])
+    match = re.search(
+        r'''jq -e '\n(.*?)\n' <<<"\$FOUNDATION_OUTPUT"''',
+        deploy_source,
+        flags=re.DOTALL,
+    )
+    assert match, "the workflow must validate foundation output"
+    return dedent(match.group(1))
+
+
+def _development_cutover_foundation_validator(source: str) -> str:
+    matches = re.findall(
+        r"""(?m)^jq -e '(.*?)' "\$FOUNDATION_JSON" >/dev/null$""", source
+    )
+    assert len(matches) == 1, (
+        "the runbook must have one development foundation validator"
+    )
+    return matches[0]
+
+
+def _foundation_validator_keys(predicate: str) -> list[str]:
+    match = re.search(r"exact_keys\((\[[^\]]+\])\)", predicate)
+    assert match is not None
+    return cast(list[str], json.loads(match.group(1)))
+
+
+def _jq_validator_accepts(predicate: str, payload: object) -> bool:
+    result = subprocess.run(
+        ["jq", "-e", predicate],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def test_development_foundation_output_validators_fail_closed_and_match():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    workflow_jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    deploy_source = _workflow_run_source(workflow_jobs["deploy"])
+    workflow_predicate = _development_foundation_validator(
+        DEVELOPMENT_DELIVERY_WORKFLOW
+    )
+    runbook_predicate = _development_cutover_foundation_validator(DEPLOYMENT)
+
+    for predicate in (workflow_predicate, runbook_predicate):
+        assert _foundation_validator_keys(predicate) == list(FOUNDATION_FIELDS)
+    output_index = deploy_source.index("terraform -chdir=infra output -json foundation")
+    validator_index = deploy_source.index("jq -e '\n", output_index)
+    wrapper_index = deploy_source.index(
+        'jq -n --argjson foundation "$FOUNDATION_OUTPUT"'
+    )
+    assert output_index < validator_index < wrapper_index
+
+    valid: dict[str, object] = {
+        "vpc_id": "vpc-id",
+        "vpc_cidr_block": "10.0.0.0/16",
+        "private_subnet_ids": {"a": "subnet-a", "c": "subnet-c"},
+        "rds_security_group_id": "sg-rds",
+        "agentcore_endpoint_security_group_id": "sg-agentcore",
+        "eventbridge_endpoint_security_group_id": "sg-eventbridge",
+        "agentcore_vpc_endpoint_id": "vpce-agentcore",
+        "agentcore_vpc_endpoint_dns_name": "agentcore.example.com",
+        "tollchat_api_vpc_endpoint_id": "vpce-api",
+        "raw_bucket_name": "raw-bucket",
+        "raw_kms_key_arn": "arn:aws:kms:us-east-1:903859731897:key/raw",
+        "agentcore_artifacts_bucket_name": "artifacts-bucket",
+        "db_instance": {
+            "identifier": "db-instance",
+            "resource_id": "db-resource",
+            "address": "db.example.com",
+            "port": 5432,
+        },
+        "alerts_topic_arn": "arn:aws:sns:us-east-1:903859731897:alerts",
+    }
+    invalid: list[tuple[str, dict[str, object]]] = []
+
+    missing_top_level = deepcopy(valid)
+    del missing_top_level["vpc_id"]
+    invalid.append(("missing top-level key", missing_top_level))
+    obsolete_top_level = deepcopy(valid)
+    obsolete_top_level["obsolete"] = "no longer supported"
+    invalid.append(("obsolete top-level key", obsolete_top_level))
+
+    missing_subnet_key = deepcopy(valid)
+    cast(dict[str, object], missing_subnet_key["private_subnet_ids"]).pop("c")
+    invalid.append(("missing subnet key", missing_subnet_key))
+    obsolete_subnet_key = deepcopy(valid)
+    cast(dict[str, object], obsolete_subnet_key["private_subnet_ids"])["b"] = "subnet-b"
+    invalid.append(("obsolete subnet key", obsolete_subnet_key))
+    renamed_subnet_key = deepcopy(valid)
+    subnets = cast(dict[str, object], renamed_subnet_key["private_subnet_ids"])
+    subnets["primary"] = subnets.pop("a")
+    invalid.append(("renamed subnet key", renamed_subnet_key))
+    empty_subnet_value = deepcopy(valid)
+    cast(dict[str, object], empty_subnet_value["private_subnet_ids"])["a"] = ""
+    invalid.append(("empty subnet value", empty_subnet_value))
+
+    missing_db_key = deepcopy(valid)
+    cast(dict[str, object], missing_db_key["db_instance"]).pop("address")
+    invalid.append(("missing database key", missing_db_key))
+    renamed_db_key = deepcopy(valid)
+    db = cast(dict[str, object], renamed_db_key["db_instance"])
+    db["hostname"] = db.pop("address")
+    invalid.append(("renamed database key", renamed_db_key))
+    for field in ("identifier", "resource_id", "address"):
+        empty_db_field = deepcopy(valid)
+        cast(dict[str, object], empty_db_field["db_instance"])[field] = ""
+        invalid.append((f"empty database {field}", empty_db_field))
+        wrong_types: tuple[tuple[str, object], ...] = (
+            ("null", None),
+            ("number", 1),
+            ("boolean", True),
+            ("array", []),
+            ("object", {}),
+        )
+        for label, value in wrong_types:
+            wrong_type_db_field = deepcopy(valid)
+            cast(dict[str, object], wrong_type_db_field["db_instance"])[field] = value
+            invalid.append((f"{field} {label}", wrong_type_db_field))
+    nonnumeric_port = deepcopy(valid)
+    cast(dict[str, object], nonnumeric_port["db_instance"])["port"] = "5432"
+    invalid.append(("nonnumeric port", nonnumeric_port))
+
+    for label, payload, expected in [
+        ("complete", valid, True),
+        *[(name, value, False) for name, value in invalid],
+    ]:
+        workflow_result = _jq_validator_accepts(workflow_predicate, payload)
+        runbook_result = _jq_validator_accepts(runbook_predicate, payload)
+        assert workflow_result == runbook_result, label
+        assert workflow_result is expected, label
 
 
 def _run_development_plan_gate(payload: object, *, raw: bool = False) -> bool:
