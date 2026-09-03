@@ -1,0 +1,454 @@
+name: v2-development-delivery
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build v2 deployment packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.12.5"
+
+      - name: Build reviewed deployment packages
+        working-directory: v2
+        run: |
+          set -euo pipefail
+          ./scripts/build_loader_zip.sh
+          ./scripts/build_publisher_zip.sh
+          ./scripts/build_agentcore_zips.sh
+          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+            test -s "$package"
+          done
+          (cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
+
+      - name: Upload immutable deployment packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v2-development-packages
+          path: |
+            v2/infra/build/loader.zip
+            v2/infra/build/publisher.zip
+            v2/infra/build/agentcore.zip
+            v2/infra/build/chat-proxy.zip
+          if-no-files-found: error
+
+      - name: Upload deployment checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v2-development-checksums
+          path: v2/infra/build/DEPLOYMENT_SHA256SUMS
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy v2 to development
+    needs: build
+    # Repository variable: environment variables are unavailable to this pre-job gate.
+    if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: v2-development-delivery
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+          terraform_version: "1.15.8"
+
+      - name: Download immutable deployment packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: v2-development-packages
+          path: v2/infra/build
+
+      - name: Download deployment checksums
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: v2-development-checksums
+          path: v2/infra/build
+
+      - name: Verify immutable deployment packages
+        working-directory: v2/infra/build
+        run: sha256sum --check DEPLOYMENT_SHA256SUMS
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery
+          aws-region: us-east-1
+
+      - name: Confirm development account
+        run: test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
+
+      - name: Record protected-main OIDC proof
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+          printf '{"account":"903859731897","commit_sha":"%s","environment":"development","proof":"protected-main-oidc","ref":"%s","repository":"%s"}\n' \
+            "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_REPOSITORY" >"$RUNNER_TEMP/protected-main-oidc.json"
+          jq -e '
+            type == "object" and (keys_unsorted | sort) == ["account", "commit_sha", "environment", "proof", "ref", "repository"] and
+            .proof == "protected-main-oidc" and .account == "903859731897" and
+            (.commit_sha | test("^[0-9a-f]{40}$")) and
+            .environment == "development" and .ref == "refs/heads/main" and
+            .repository == "rhprasad0/nova-toll-budget-agent"
+          ' "$RUNNER_TEMP/protected-main-oidc.json" >/dev/null
+
+      - name: Plan and apply the reviewed development release
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/protected-main-oidc.json"
+          FOUNDATION_VARS="$RUNNER_TEMP/foundation.tfvars.json"
+          PLAN="$RUNNER_TEMP/development.tfplan"
+          PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"
+          cleanup() {
+            rm -f -- "$FOUNDATION_VARS" "$PLAN" "$PLAN_JSON"
+          }
+          trap cleanup EXIT
+
+          terraform -chdir=infra init -input=false -backend-config=backend.development.hcl
+          FOUNDATION_OUTPUT="$(terraform -chdir=infra output -json foundation)"
+          jq -e '
+            def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+            . as $foundation |
+            exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"])
+            and all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string" and length > 0)
+            and ($foundation.private_subnet_ids | exact_keys(["a", "c"]) and all(.[]; type == "string" and length > 0))
+            and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and .identifier != "" and .resource_id != "" and .address != "" and (.port | type == "number"))
+          ' <<<"$FOUNDATION_OUTPUT" >/dev/null
+          jq -n --argjson foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation}' >"$FOUNDATION_VARS"
+          chmod 600 -- "$FOUNDATION_VARS"
+
+          terraform -chdir=v2/infra init -input=false -backend-config=backend.development.hcl
+          terraform -chdir=v2/infra plan -input=false -out="$PLAN" \
+            -var-file=development.tfvars \
+            -var-file="$FOUNDATION_VARS" \
+            -var loader_package_path=build/loader.zip \
+            -var publisher_package_path=build/publisher.zip \
+            -var agentcore_package_path=build/agentcore.zip \
+            -var chat_proxy_package_path=build/chat-proxy.zip \
+            -var enable_development_custom_domain=false
+
+          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"
+          python3 - "$PLAN_JSON" <<'PY'
+          import json
+          import sys
+
+          # This is deliberately an address/action allowlist.  Unknown plan
+          # shapes, addresses, and action arrays fail closed before apply.
+          known_managed = set("""
+          aws_api_gateway_deployment.tollchat
+          aws_api_gateway_integration.tollchat_proxy
+          aws_api_gateway_integration.tollchat_root
+          aws_api_gateway_method.tollchat_proxy
+          aws_api_gateway_method.tollchat_root
+          aws_api_gateway_method_settings.tollchat
+          aws_api_gateway_resource.tollchat_proxy
+          aws_api_gateway_rest_api.tollchat
+          aws_api_gateway_rest_api_policy.tollchat
+          aws_api_gateway_stage.tollchat
+          aws_athena_named_query.recent_routes
+          aws_athena_named_query.top_routes
+          aws_athena_workgroup.agent_reports
+          aws_bedrock_guardrail.tollchat
+          aws_bedrock_guardrail_version.tollchat
+          aws_bedrockagentcore_agent_runtime.tollchat
+          aws_bedrockagentcore_agent_runtime_endpoint.tollchat
+          aws_bedrockagentcore_resource_policy.tollchat
+          aws_cloudfront_distribution.site
+          aws_cloudfront_function.public_chat_routes
+          aws_cloudfront_function.public_report_routes
+          aws_cloudfront_origin_access_control.public_chat
+          aws_cloudfront_origin_access_control.site
+          aws_cloudfront_response_headers_policy.development_noindex
+          aws_cloudwatch_event_rule.agent_usage_rollup
+          aws_cloudwatch_event_rule.raw_objects
+          aws_cloudwatch_event_rule.usage_publisher
+          aws_cloudwatch_event_target.agent_usage_rollup
+          aws_cloudwatch_event_target.loader
+          aws_cloudwatch_event_target.usage_publisher
+          aws_cloudwatch_log_group.agent_usage_rollup
+          aws_cloudwatch_log_group.agentcore_runtime
+          aws_cloudwatch_log_group.loader
+          aws_cloudwatch_log_group.publisher
+          aws_cloudwatch_log_group.tollchat_proxy
+          aws_cloudwatch_log_group.usage_publisher
+          aws_cloudwatch_log_metric_filter.load_success
+          aws_cloudwatch_log_metric_filter.proxy_failure
+          aws_cloudwatch_metric_alarm.agent_usage_log_coverage
+          aws_cloudwatch_metric_alarm.agent_usage_rollup_errors
+          aws_cloudwatch_metric_alarm.agent_usage_rollup_missing
+          aws_cloudwatch_metric_alarm.failure_queues
+          aws_cloudwatch_metric_alarm.freshness
+          aws_cloudwatch_metric_alarm.loader_errors
+          aws_cloudwatch_metric_alarm.publisher_errors
+          aws_cloudwatch_metric_alarm.publisher_failure_queues
+          aws_cloudwatch_metric_alarm.report_generation_freshness
+          aws_cloudwatch_metric_alarm.tollchat_proxy_errors
+          aws_cloudwatch_metric_alarm.tollchat_proxy_failures
+          aws_cloudwatch_metric_alarm.tollchat_proxy_latency
+          aws_cloudwatch_metric_alarm.tollchat_sessions
+          aws_cloudwatch_metric_alarm.usage_publisher_errors
+          aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
+          aws_dynamodb_table.tollchat_sessions
+          aws_glue_catalog_database.agent_reports
+          aws_glue_catalog_table.agent_registry
+          aws_glue_catalog_table.agent_report_generations
+          aws_glue_catalog_table.agent_report_rollup_completions
+          aws_glue_catalog_table.agent_report_rollups
+          aws_glue_catalog_table.waf_logs
+          aws_iam_role.agent_usage_rollup
+          aws_iam_role.loader
+          aws_iam_role.publisher
+          aws_iam_role.publisher_scheduler
+          aws_iam_role.timed_checks
+          aws_iam_role.tollchat_proxy
+          aws_iam_role.tollchat_runtime
+          aws_iam_role.usage_publisher
+          aws_iam_role_policy.agent_usage_rollup
+          aws_iam_role_policy.loader
+          aws_iam_role_policy.publisher
+          aws_iam_role_policy.publisher_scheduler
+          aws_iam_role_policy.timed_checks
+          aws_iam_role_policy.tollchat_proxy
+          aws_iam_role_policy.tollchat_runtime
+          aws_iam_role_policy.usage_publisher
+          aws_iam_role_policy_attachment.loader_vpc
+          aws_iam_role_policy_attachment.publisher_vpc
+          aws_iam_role_policy_attachment.tollchat_proxy_vpc
+          aws_kms_alias.agent_measurement
+          aws_kms_alias.site
+          aws_kms_key.agent_measurement
+          aws_kms_key.site
+          aws_lambda_alias.tollchat_live
+          aws_lambda_function.agent_usage_rollup
+          aws_lambda_function.loader
+          aws_lambda_function.publisher
+          aws_lambda_function.tollchat_proxy
+          aws_lambda_function.usage_publisher
+          aws_lambda_function_event_invoke_config.loader
+          aws_lambda_function_event_invoke_config.publisher
+          aws_lambda_function_url.public_chat
+          aws_lambda_permission.agent_usage_rollup
+          aws_lambda_permission.eventbridge_invoke
+          aws_lambda_permission.public_chat_invoke
+          aws_lambda_permission.public_chat_url
+          aws_lambda_permission.tollchat_api
+          aws_lambda_permission.usage_publisher
+          aws_lambda_provisioned_concurrency_config.tollchat
+          aws_s3_bucket.agent_measurement
+          aws_s3_bucket.site
+          aws_s3_bucket_lifecycle_configuration.agent_measurement
+          aws_s3_bucket_policy.agent_measurement
+          aws_s3_bucket_policy.site
+          aws_s3_bucket_public_access_block.agent_measurement
+          aws_s3_bucket_public_access_block.site
+          aws_s3_bucket_server_side_encryption_configuration.agent_measurement
+          aws_s3_bucket_server_side_encryption_configuration.site
+          aws_s3_object.agent_registry
+          aws_s3_object.agentcore
+          aws_s3_object.chat
+          aws_s3_object.faq
+          aws_s3_object.index
+          aws_s3_object.privacy
+          aws_s3_object.robots
+          aws_s3_object.site_assets
+          aws_s3_object.terms
+          aws_s3_object.tollchat_proxy
+          aws_s3_object.usage
+          aws_scheduler_schedule.publisher
+          aws_security_group.loader
+          aws_security_group.publisher
+          aws_security_group.tollchat_proxy
+          aws_security_group.tollchat_runtime
+          aws_sqs_queue.delivery_failure
+          aws_sqs_queue.invoke_failure
+          aws_sqs_queue.publisher_delivery_failure
+          aws_sqs_queue.publisher_invoke_failure
+          aws_sqs_queue_policy.delivery_failure
+          aws_vpc_security_group_egress_rule.loader_to_eventbridge
+          aws_vpc_security_group_egress_rule.loader_to_rds
+          aws_vpc_security_group_egress_rule.loader_to_s3
+          aws_vpc_security_group_egress_rule.proxy_https
+          aws_vpc_security_group_egress_rule.proxy_to_dynamodb
+          aws_vpc_security_group_egress_rule.publisher_to_rds
+          aws_vpc_security_group_egress_rule.publisher_to_s3
+          aws_vpc_security_group_egress_rule.runtime_https
+          aws_vpc_security_group_egress_rule.runtime_to_rds
+          aws_vpc_security_group_ingress_rule.agentcore_from_proxy
+          aws_vpc_security_group_ingress_rule.rds_from_loader
+          aws_vpc_security_group_ingress_rule.rds_from_publisher
+          aws_vpc_security_group_ingress_rule.rds_from_runtime
+          aws_wafv2_web_acl.public_chat
+          aws_wafv2_web_acl_logging_configuration.agent_reports
+          """.split())
+          known_data = set("""
+          data.archive_file.agent_usage_rollup
+          data.archive_file.usage_publisher
+          data.aws_caller_identity.current
+          data.aws_cloudfront_cache_policy.caching_disabled
+          data.aws_cloudfront_origin_request_policy.all_except_host
+          data.aws_iam_policy_document.agent_measurement_bucket
+          data.aws_iam_policy_document.agent_measurement_kms
+          data.aws_iam_policy_document.agent_usage_rollup
+          data.aws_iam_policy_document.agentcore_assume
+          data.aws_iam_policy_document.delivery_failure
+          data.aws_iam_policy_document.lambda_assume
+          data.aws_iam_policy_document.loader
+          data.aws_iam_policy_document.publisher
+          data.aws_iam_policy_document.publisher_scheduler
+          data.aws_iam_policy_document.publisher_scheduler_assume
+          data.aws_iam_policy_document.site_kms
+          data.aws_iam_policy_document.timed_checks
+          data.aws_iam_policy_document.timed_checks_assume
+          data.aws_iam_policy_document.tollchat_proxy
+          data.aws_iam_policy_document.tollchat_runtime
+          data.aws_iam_policy_document.usage_publisher
+          data.aws_prefix_list.dynamodb
+          data.aws_prefix_list.s3
+          data.aws_region.current
+          """.split())
+          known_data.add("data.archive_file." + "place" + "holder")
+          read_only = {
+              "aws_api_gateway_deployment.tollchat",
+              "aws_api_gateway_integration.tollchat_proxy", "aws_api_gateway_integration.tollchat_root",
+              "aws_api_gateway_method.tollchat_proxy", "aws_api_gateway_method.tollchat_root",
+              "aws_api_gateway_method_settings.tollchat", "aws_api_gateway_resource.tollchat_proxy",
+              "aws_api_gateway_rest_api.tollchat", "aws_api_gateway_rest_api_policy.tollchat",
+              "aws_api_gateway_stage.tollchat",
+              "aws_athena_named_query.recent_routes", "aws_athena_named_query.top_routes",
+              "aws_athena_workgroup.agent_reports",
+              "aws_bedrock_guardrail_version.tollchat",
+              "aws_bedrock_guardrail.tollchat",
+              "aws_bedrockagentcore_resource_policy.tollchat",
+              "aws_cloudwatch_event_rule.agent_usage_rollup", "aws_cloudwatch_event_rule.raw_objects",
+              "aws_cloudwatch_event_rule.usage_publisher",
+              "aws_cloudwatch_log_metric_filter.load_success", "aws_cloudwatch_log_metric_filter.proxy_failure",
+              "aws_cloudwatch_metric_alarm.agent_usage_log_coverage", "aws_cloudwatch_metric_alarm.agent_usage_rollup_errors",
+              "aws_cloudwatch_metric_alarm.agent_usage_rollup_missing", "aws_cloudwatch_metric_alarm.failure_queues",
+              "aws_cloudwatch_metric_alarm.freshness", "aws_cloudwatch_metric_alarm.loader_errors",
+              "aws_cloudwatch_metric_alarm.publisher_errors", "aws_cloudwatch_metric_alarm.publisher_failure_queues",
+              "aws_cloudwatch_metric_alarm.report_generation_freshness", "aws_cloudwatch_metric_alarm.tollchat_proxy_errors",
+              "aws_cloudwatch_metric_alarm.tollchat_proxy_failures", "aws_cloudwatch_metric_alarm.tollchat_proxy_latency",
+              "aws_cloudwatch_metric_alarm.tollchat_sessions", "aws_cloudwatch_metric_alarm.usage_publisher_errors",
+              "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
+              "aws_cloudwatch_log_group.agentcore_runtime",
+              "aws_wafv2_web_acl.public_chat",
+              "aws_cloudfront_distribution.site",
+              "aws_cloudfront_origin_access_control.public_chat",
+              "aws_cloudfront_origin_access_control.site",
+              "aws_cloudfront_response_headers_policy.development_noindex",
+              "aws_iam_role.agent_usage_rollup", "aws_iam_role.loader",
+              "aws_iam_role.publisher", "aws_iam_role.publisher_scheduler",
+              "aws_iam_role.timed_checks", "aws_iam_role.tollchat_proxy",
+              "aws_iam_role.tollchat_runtime", "aws_iam_role.usage_publisher",
+              "aws_iam_role_policy.agent_usage_rollup", "aws_iam_role_policy.loader",
+              "aws_iam_role_policy.publisher", "aws_iam_role_policy.publisher_scheduler",
+              "aws_iam_role_policy.timed_checks", "aws_iam_role_policy.tollchat_proxy",
+              "aws_iam_role_policy.tollchat_runtime", "aws_iam_role_policy.usage_publisher",
+              "aws_iam_role_policy_attachment.loader_vpc", "aws_iam_role_policy_attachment.publisher_vpc",
+              "aws_iam_role_policy_attachment.tollchat_proxy_vpc",
+              "aws_kms_alias.agent_measurement", "aws_kms_alias.site",
+              "aws_kms_key.agent_measurement", "aws_kms_key.site",
+              "aws_lambda_function_url.public_chat",
+              "aws_lambda_permission.agent_usage_rollup", "aws_lambda_permission.eventbridge_invoke",
+              "aws_lambda_permission.public_chat_invoke", "aws_lambda_permission.public_chat_url",
+              "aws_lambda_permission.tollchat_api", "aws_lambda_permission.usage_publisher",
+              "aws_wafv2_web_acl_logging_configuration.agent_reports",
+              "aws_s3_bucket.agent_measurement", "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+              "aws_s3_bucket_policy.agent_measurement", "aws_s3_bucket_policy.site",
+              "aws_s3_bucket_public_access_block.agent_measurement", "aws_s3_bucket_public_access_block.site",
+              "aws_s3_bucket_server_side_encryption_configuration.agent_measurement",
+              "aws_sqs_queue.delivery_failure", "aws_sqs_queue.invoke_failure",
+              "aws_sqs_queue.publisher_delivery_failure", "aws_sqs_queue.publisher_invoke_failure",
+              "aws_sqs_queue_policy.delivery_failure",
+              "aws_security_group.loader", "aws_security_group.publisher",
+              "aws_security_group.tollchat_proxy", "aws_security_group.tollchat_runtime",
+              "aws_vpc_security_group_egress_rule.loader_to_eventbridge",
+              "aws_vpc_security_group_egress_rule.loader_to_rds",
+              "aws_vpc_security_group_egress_rule.loader_to_s3",
+              "aws_vpc_security_group_egress_rule.proxy_https",
+              "aws_vpc_security_group_egress_rule.proxy_to_dynamodb",
+              "aws_vpc_security_group_egress_rule.publisher_to_rds",
+              "aws_vpc_security_group_egress_rule.publisher_to_s3",
+              "aws_vpc_security_group_egress_rule.runtime_https",
+              "aws_vpc_security_group_egress_rule.runtime_to_rds",
+              "aws_vpc_security_group_ingress_rule.agentcore_from_proxy",
+              "aws_vpc_security_group_ingress_rule.rds_from_loader",
+              "aws_vpc_security_group_ingress_rule.rds_from_publisher",
+              "aws_vpc_security_group_ingress_rule.rds_from_runtime",
+          }
+          immutable = {
+              "aws_api_gateway_deployment.tollchat": {
+                  ("create",), ("delete",), ("create", "delete"), ("delete", "create")
+              },
+              "aws_bedrock_guardrail_version.tollchat": {("create",)},
+          }
+          try:
+              with open(sys.argv[1], encoding="utf-8") as plan_file:
+                  plan = json.load(plan_file)
+              changes = plan["resource_changes"]
+              if not isinstance(changes, list):
+                  raise ValueError("missing resource_changes")
+              for change in changes:
+                  if "deposed" in change or "previous_address" in change:
+                      raise ValueError("moved/deposed change")
+                  address = change["address"]
+                  mode = change["mode"]
+                  actions = tuple(change["change"]["actions"])
+                  base = address.split("[", 1)[0]
+                  values = []
+                  pending = [change]
+                  while pending:
+                      value = pending.pop()
+                      if isinstance(value, dict):
+                          pending.extend(value.values())
+                      elif isinstance(value, list):
+                          pending.extend(value)
+                      elif isinstance(value, str):
+                          values.append(value.lower())
+                  if any(
+                      token in value
+                      for value in values
+                      for token in ("920534" + "282028", "terraform.tfstate", "backend.production", "prod" + "uction", "route53", "dev.tollchat.ai")
+                  ):
+                      raise ValueError("production or external value")
+                  if mode == "data":
+                      allowed = base in known_data and actions in {("read",), ("no-op",)}
+                  elif mode == "managed":
+                      allowed = base in known_managed and (
+                          actions in {("no-op",)}
+                          or (actions == ("update",) and base not in read_only)
+                          or actions in immutable.get(base, set())
+                      )
+                  else:
+                      allowed = False
+                  if not allowed:
+                      raise ValueError(f"rejected {mode} {address} {actions}")
+          except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+              print(f"development plan gate failed closed: {error}", file=sys.stderr)
+              raise SystemExit(1)
+          PY
+
+          terraform -chdir=v2/infra apply -input=false "$PLAN"

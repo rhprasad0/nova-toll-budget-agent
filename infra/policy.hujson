@@ -9,6 +9,11 @@
         // Ephemeral GitHub Actions CI runners (tailscale/github-action in
         // .github/workflows/ci.yml's `integration` job).
         "tag:ci": ["rhprasad0@github"],
+        // Account-local development subnet router; route activation is a
+        // separately authorized Slice 2B operation.
+        "tag:nova-toll-development-router": ["rhprasad0@github"],
+        // Ephemeral GitHub Actions development runners.
+        "tag:ci-development": ["rhprasad0@github"],
     },
 
     // Auto-approve the subnet route and exit-node use once the router is
@@ -17,6 +22,9 @@
     "autoApprovers": {
         "routes": {
             "172.31.0.0/16": ["tag:nova-toll-router"],
+            "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112": [
+                "tag:nova-toll-development-router"
+            ],
         },
         "exitNode": ["tag:nova-toll-router"],
     },
@@ -38,6 +46,13 @@
             "dst": ["172.31.0.0/16"],
             "ip":  ["tcp:5432"],
         },
+        // Development uses the site-1 4via6 route because its VPC overlaps
+        // production's IPv4 CIDR; it has no IPv4 or exit-node grant.
+        {
+            "src": ["tag:ci-development"],
+            "dst": ["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"],
+            "ip":  ["tcp:5432"],
+        },
     ],
 
     "ssh": [
@@ -55,6 +70,8 @@
     // went private). Update if RDS's underlying host ever changes it.
     "hosts": {
         "nova-toll-rds": "172.31.83.200",
+        // Current development RDS address, transported over site-1 4via6.
+        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128",
         // Representative address in the private preview subnets. The ALB IPs
         // are dynamic; this verifies the same CIDR/port policy without pinning one.
         "tollchat-preview-test": "172.31.224.10",
@@ -70,7 +87,20 @@
         {
             "src":    "tag:ci",
             "accept": ["nova-toll-rds:5432"],
-            "deny":   ["8.8.8.8:443", "tollchat-preview-test:443"],
+            "deny":   [
+                "nova-toll-rds-development:5432",
+                "8.8.8.8:443",
+                "tollchat-preview-test:443",
+            ],
+        },
+        {
+            "src":    "tag:ci-development",
+            "accept": ["nova-toll-rds-development:5432"],
+            "deny":   [
+                "nova-toll-rds:5432",
+                "nova-toll-rds-development:443",
+                "tollchat-preview-test:443",
+            ],
         },
     ],
 }

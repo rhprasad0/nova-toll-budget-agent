@@ -411,16 +411,1569 @@ later exact-plan apply, and separately authorized state migration or recovery.
 Cloudflare/DNS/CI cutover is owned by #332, and legacy cleanup remains owned by
 #333. An AWS-only identity cannot write Cloudflare DNS.
 
+### Development bootstrap/import boundary (#332)
+
+Before the first recurring GitHub `development` run, a separately authorized
+development-account administrator must inventory the live resources and create
+or import them into the existing `v2/infra` root and the existing
+`nova-toll/v2/development/terraform.tfstate` object. This is a one-time,
+bounded bootstrap operation; it is not a second Terraform root, backend, or
+state, and it never uses `-target` or `ignore_changes = all`.
+This activation is a post-merge operator gate: review and merge this change
+first, then run the procedure from a clean checkout of the protected
+`origin/main`; no live bootstrap or recurring delivery is authorized from a
+dirty feature worktree or before that merge.
+
+The administrator owns the following addresses and their dependencies:
+
+- all application `aws_iam_role.*`, `aws_iam_role_policy.*`, and
+  `aws_iam_role_policy_attachment.*` resources;
+- `aws_bedrockagentcore_agent_runtime.tollchat`,
+  `aws_bedrockagentcore_agent_runtime_endpoint.tollchat`, and every instance
+  of `aws_bedrockagentcore_resource_policy.tollchat`;
+- `aws_s3_bucket.agent_measurement`,
+  `aws_s3_bucket_public_access_block.agent_measurement`,
+  `aws_s3_bucket_policy.agent_measurement`,
+  `aws_kms_key.agent_measurement`, and `aws_kms_alias.agent_measurement`;
+- `aws_lambda_function_url.public_chat`,
+  `aws_lambda_permission.public_chat_url`, and
+  `aws_lambda_permission.public_chat_invoke`;
+- the site KMS key/alias, site bucket policy, CloudFront distribution and
+  origin controls, WAF, and other dependent exposure resources when they are
+  absent from the application state.
+
+For every item, retain only a non-secret live identifier, the normal Terraform
+address, and a development-only refresh/read result. A missing resource or
+import is a bootstrap failure. The administrator fixes it at that address and
+does not widen the OIDC role. The bootstrap administrator also applies the
+required `environment=development` and `version=v2` tags to application KMS
+keys before enabling CI; the delivery policy uses the two exact application key
+ARNs and cannot retarget an alias to a foundation or state key.
+
+The following is the executable, fail-closed inventory and repair procedure.
+Run it from this checkout as a development-account administrator. It writes
+only non-secret inventory and Terraform state; it refuses every profile other
+than `nova-toll-dev`, refuses any account other than `903859731897`, and never
+uses a Terraform target or a second state. Leave `BOOTSTRAP_APPROVED` unset while
+reviewing the inventory, rendered documents, and exact commands; set it to `YES`
+only after the listed create/import/rollback commands have been reviewed. The
+procedure fetches `origin/main`, derives the reviewed commit from that trusted
+remote, and requires a clean checkout at that exact commit before any admin
+command or package build. A feature worktree must stop at this gate.
+
+The versioned development state bucket uses SSE-KMS. The bootstrap
+administrator's exact minimum policy for this lock is
+`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, and
+`s3:DeleteObjectVersion`, all on the one lock object
+`arn:aws:s3:::nova-toll-tfstate-903859731897/nova-toll/v2/development/bootstrap-lock`.
+The only KMS permission needed is `kms:GenerateDataKey` on the exact key ARN
+returned by `aws --region us-east-1 kms describe-key --key-id
+alias/nova-toll-tfstate --query KeyMetadata.Arn --output text`, conditioned on
+`kms:EncryptionContext:aws:s3:arn` equal to that lock ARN. The procedure never
+reads lock bytes, so it needs no `kms:Decrypt`, wildcard KMS action, bucket
+listing, or object-version read permission. The recurring delivery role has no
+permission on this object.
+The lock uses the
+existing versioned development Terraform-state bucket and S3 conditional
+requests: `PutObject --if-none-match '*'` acquires it, and
+`DeleteObject --if-match` plus the returned version ID (when present) releases
+it. A crashed run leaves the object in place: a new run must stop. Manual stale
+recovery is allowed only after proving no bootstrap invocation is active,
+recording the observed ETag/version without logging the owner value, and
+obtaining explicit approval for the exact fixed-key conditional delete. There
+is no overwrite, expiry, retry, or lock stealing. The approved operator command
+must use the observed values (and never a value fetched before the no-invocation
+check), for example:
+`aws --region us-east-1 s3api delete-object --bucket nova-toll-tfstate-903859731897
+--key nova-toll/v2/development/bootstrap-lock --if-match OBSERVED_ETAG
+--version-id OBSERVED_VERSION_ID`; a versionless bucket uses only `--if-match`.
+
+```sh
+set -euo pipefail
+umask 077
+
+ROOT="$(git rev-parse --show-toplevel)"
+EXPECTED_PROFILE="nova-toll-dev"
+EXPECTED_ACCOUNT="903859731897"
+REGION="us-east-1"
+ROLE_NAME="nova-toll-v2-development-delivery"
+FUNCTION_NAME="tollchat-v2-chat-proxy-dev"
+QUALIFIER="tollchat_live"
+DISTRIBUTION_ID="E33DVF3KT7BTAC"
+DISTRIBUTION_DOMAIN="d1wqry4fbd92w5.cloudfront.net"
+: "${AWS_PROFILE:?invoke this procedure with AWS_PROFILE=nova-toll-dev}"
+
+die() { printf 'bootstrap stopped: %s\n' "$*" >&2; exit 1; }
+assert_dev_account() {
+  test "$AWS_PROFILE" = "$EXPECTED_PROFILE" || die "unexpected AWS profile before mutation"
+  test "${AWS_REGION:-}" = "$REGION" || die "unexpected AWS region before mutation"
+  test "${AWS_DEFAULT_REGION:-}" = "$REGION" || die "unexpected AWS region before mutation"
+  test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT" ||
+    die "unexpected caller account before mutation"
+}
+test "$(git -C "$ROOT" rev-parse --show-toplevel)" = "$ROOT" ||
+  die "checkout root could not be verified"
+test "$AWS_PROFILE" = "$EXPECTED_PROFILE" || die "unexpected AWS profile"
+case "$AWS_PROFILE" in *prod*|*production*) die "production profile rejected" ;; esac
+if test -n "${AWS_REGION:-}" && test "$AWS_REGION" != "$REGION"; then
+  die "AWS_REGION must be us-east-1"
+fi
+if test -n "${AWS_DEFAULT_REGION:-}" && test "$AWS_DEFAULT_REGION" != "$REGION"; then
+  die "AWS_DEFAULT_REGION must be us-east-1"
+fi
+if test -n "${AWS_REGION:-}" && test -n "${AWS_DEFAULT_REGION:-}" &&
+  test "$AWS_REGION" != "$AWS_DEFAULT_REGION"; then
+  die "AWS_REGION and AWS_DEFAULT_REGION conflict"
+fi
+export AWS_PROFILE="$EXPECTED_PROFILE"
+export AWS_REGION="$REGION" AWS_DEFAULT_REGION="$REGION"
+ORIGIN_URL="$(git -C "$ROOT" remote get-url origin 2>/dev/null)" || die "trusted origin is not configured"
+case "$ORIGIN_URL" in
+  git@github.com:rhprasad0/nova-toll-budget-agent.git|https://github.com/rhprasad0/nova-toll-budget-agent.git) ;;
+  *) die "origin URL is not the trusted repository" ;;
+esac
+git -C "$ROOT" fetch --no-tags origin main || die "could not fetch trusted origin/main"
+PROTECTED_MAIN_COMMIT="$(git -C "$ROOT" rev-parse refs/remotes/origin/main)"
+printf '%s' "$PROTECTED_MAIN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || die "origin/main is not a commit SHA"
+test "$(git -C "$ROOT" rev-parse HEAD)" = "$PROTECTED_MAIN_COMMIT" ||
+  die "checkout is not the fetched protected origin/main commit"
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all)" ||
+  die "checkout has tracked or untracked changes; run only from clean protected origin/main"
+git -C "$ROOT" diff --quiet HEAD -- || die "tracked checkout changes are not permitted"
+git -C "$ROOT" diff --cached --quiet HEAD -- || die "staged checkout changes are not permitted"
+CALLER_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+test "$CALLER_ACCOUNT" = "$EXPECTED_ACCOUNT" || die "unexpected caller account"
+: "${TF_VAR_budget_notification_email:?set a non-secret development notification address}"
+test "${TF_VAR_tailscale_advertise_routes:-false}" = false ||
+  die "development bootstrap must disable Tailscale route advertisement"
+
+EVIDENCE_DIR="${BOOTSTRAP_EVIDENCE_DIR:?set an evidence directory outside this checkout}"
+case "$EVIDENCE_DIR" in
+  /*) ;;
+  *) die "evidence directory must be an absolute path" ;;
+esac
+EVIDENCE_DIR="$(realpath -m -- "$EVIDENCE_DIR")" || die "evidence directory cannot be resolved"
+case "$EVIDENCE_DIR" in "$ROOT"|"$ROOT"/*) die "evidence must be outside checkout" ;; esac
+mkdir -p -- "$EVIDENCE_DIR"
+chmod 700 -- "$EVIDENCE_DIR"
+INVENTORY="$EVIDENCE_DIR/inventory.json"
+test ! -e "$INVENTORY" || die "refusing to overwrite inventory"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tollchat-dev-bootstrap.XXXXXX")"
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+
+FETCHER_BUILD="$ROOT/v2/scripts/build_fetcher_zip.sh"
+FETCHER_INPUT="$ROOT/v2/lambdas/fetcher/handler.py"
+FETCHER_PACKAGE="$ROOT/infra/build/fetcher.zip"
+CANONICAL_FETCHER_SHA256="9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1"
+EXPECTED_FETCHER_SHA256="${EXPECTED_FETCHER_SHA256:?set the reviewed canonical fetcher SHA-256}"
+REVIEWED_COMMIT="$PROTECTED_MAIN_COMMIT"
+git -C "$ROOT" cat-file -e "$REVIEWED_COMMIT^{commit}" || die "trusted origin/main commit is not present"
+test "$EXPECTED_FETCHER_SHA256" = "$CANONICAL_FETCHER_SHA256" ||
+  die "expected fetcher digest is not the reviewed canonical value"
+require_reviewed_file() {
+  local path="$1" relative
+  test -f "$path" && test ! -L "$path" || die "build input must be a regular non-symlink file: $path"
+  relative="${path#"$ROOT"/}"
+  test "$relative" != "$path" || die "build input must be inside the reviewed checkout"
+  test "$(git -C "$ROOT" ls-files -- "$relative")" = "$relative" ||
+    die "build input is not tracked by the reviewed commit: $relative"
+  test -z "$(git -C "$ROOT" status --porcelain -- "$relative")" ||
+    die "build input is modified or untracked: $relative"
+  test -z "$(git -C "$ROOT" ls-files --others --exclude-standard -- "$relative")" ||
+    die "build input is untracked: $relative"
+  git -C "$ROOT" diff --quiet "$REVIEWED_COMMIT" -- "$relative" ||
+    die "build input differs from reviewed protected-main: $relative"
+  git -C "$ROOT" diff --cached --quiet -- "$relative" ||
+    die "staged build input differs from reviewed protected-main: $relative"
+}
+require_reviewed_file "$FETCHER_BUILD"
+require_reviewed_file "$FETCHER_INPUT"
+test -d "$ROOT/infra/build" && test ! -L "$ROOT/infra/build" || die "fetcher output directory must be a regular directory"
+test ! -L "$FETCHER_PACKAGE" || die "fetcher output must not be a symlink"
+test ! -L "$ROOT/infra/build/fetcher" || die "fetcher staging directory must not be a symlink"
+test -x "$FETCHER_BUILD" || die "canonical fetcher build script is not executable"
+env -i PATH="/usr/bin:/bin" LC_ALL=C "$FETCHER_BUILD" >"$WORK_DIR/fetcher-build.log"
+test -f "$FETCHER_PACKAGE" && test -s "$FETCHER_PACKAGE" ||
+  die "canonical fetcher artifact is missing or empty"
+test "$(readlink -f -- "$FETCHER_PACKAGE")" = "$FETCHER_PACKAGE" ||
+  die "canonical fetcher artifact must not be a symlink"
+test "$(basename -- "$FETCHER_PACKAGE")" != placeholder.zip ||
+  die "placeholder fetcher artifact is not permitted"
+FETCHER_SHA256="$(sha256sum "$FETCHER_PACKAGE" | awk '{print $1}')"
+test "$FETCHER_SHA256" = "$CANONICAL_FETCHER_SHA256" ||
+  die "canonical fetcher digest does not match operator evidence"
+
+one() {
+  local label="$1"; shift
+  local result
+  result="$("$@")"
+  jq -e 'type == "array" and length == 1' <<<"$result" >/dev/null ||
+    die "$label is missing or ambiguous"
+  jq -c '.[0]' <<<"$result"
+}
+
+printf '%s\n' '{' >"$INVENTORY"
+printf '  "account": "%s",\n' "$CALLER_ACCOUNT" >>"$INVENTORY"
+printf '  "api": ' >>"$INVENTORY"
+one api aws apigateway get-rest-apis --query 'items[?id==`ocw8sg0wlb`].{id:id,name:name}' --output json >>"$INVENTORY"
+printf ',\n  "guardrail": ' >>"$INVENTORY"
+one guardrail aws bedrock list-guardrails --query 'guardrails[?id==`vdyqrh31xgca`].{id:id,name:name}' --output json >>"$INVENTORY"
+printf ',\n  "runtime": ' >>"$INVENTORY"
+one runtime aws bedrock-agentcore-control list-agent-runtimes --query 'agentRuntimes[?agentRuntimeId==`nova_toll_v2_development-Y69XBf88Bl`].{id:agentRuntimeId,arn:agentRuntimeArn}' --output json >>"$INVENTORY"
+printf ',\n  "endpoint": ' >>"$INVENTORY"
+one endpoint aws bedrock-agentcore-control list-agent-runtime-endpoints --agent-runtime-id nova_toll_v2_development-Y69XBf88Bl --query 'runtimeEndpoints[?id==`preview`].{id:id,arn:agentRuntimeEndpointArn}' --output json >>"$INVENTORY"
+printf ',\n  "distribution": ' >>"$INVENTORY"
+DISTRIBUTION_INFO="$(one cloudfront aws cloudfront list-distributions --query 'DistributionList.Items[?Id==`E33DVF3KT7BTAC` && DomainName==`d1wqry4fbd92w5.cloudfront.net`].{id:Id,domain:DomainName}' --output json)"
+jq -e --arg id "$DISTRIBUTION_ID" --arg domain "$DISTRIBUTION_DOMAIN" \
+  '.id == $id and .domain == $domain' <<<"$DISTRIBUTION_INFO" >/dev/null ||
+  die "unexpected CloudFront distribution identity"
+printf '%s' "$DISTRIBUTION_INFO" >>"$INVENTORY"
+SITE_OAC_INFO="$(one 'site CloudFront' aws cloudfront list-origin-access-controls --query 'OriginAccessControlList.Items[?Name==`tollchat-v2-site-dev`].{id:Id,name:Name}' --output json)"
+PUBLIC_CHAT_OAC_INFO="$(one 'public-chat CloudFront' aws cloudfront list-origin-access-controls --query 'OriginAccessControlList.Items[?Name==`tollchat-v2-public-chat-dev`].{id:Id,name:Name}' --output json)"
+RESPONSE_HEADERS_INFO="$(one "response-headers CloudFront" aws cloudfront list-response-headers-policies --type custom --query 'ResponseHeadersPolicyList.Items[?ResponseHeadersPolicy.ResponseHeadersPolicyConfig.Name==`tollchat-v2-development-noindex`].{id:ResponseHeadersPolicy.Id,name:ResponseHeadersPolicy.ResponseHeadersPolicyConfig.Name}' --output json)"
+WAF_INFO="$(one WAF aws wafv2 list-web-acls --scope CLOUDFRONT --query 'WebACLs[?Name==`tollchat-v2-public-chat-dev`].{id:Id,arn:ARN,name:Name}' --output json)"
+WAF_ARN="$(jq -r '.arn' <<<"$WAF_INFO")"
+aws wafv2 get-web-acl --scope CLOUDFRONT --id "$(jq -r '.id' <<<"$WAF_INFO")" \
+  --name tollchat-v2-public-chat-dev --query 'WebACL.{id:Id,arn:ARN,name:Name}' --output json \
+  >"$WORK_DIR/waf.json" || die "WAF ACL is unreadable"
+aws wafv2 get-logging-configuration --resource-arn "$WAF_ARN" \
+  >"$WORK_DIR/waf-logging.json" || die "WAF logging configuration is unreadable"
+
+for bucket in \
+  "tollchat-site-$EXPECTED_ACCOUNT-dev" \
+  "aws-waf-logs-tollchat-agent-reports-$EXPECTED_ACCOUNT-dev" \
+  "nova-toll-agentcore-$EXPECTED_ACCOUNT"; do
+  aws s3api head-bucket --bucket "$bucket" >/dev/null || die "missing bucket $bucket"
+done
+MEASUREMENT_BUCKET="aws-waf-logs-tollchat-agent-reports-$EXPECTED_ACCOUNT-dev"
+SITE_BUCKET="tollchat-site-$EXPECTED_ACCOUNT-dev"
+aws s3api get-public-access-block --bucket "$MEASUREMENT_BUCKET" \
+  >"$WORK_DIR/measurement-public-access-block.json" ||
+  die "missing measurement public-access block"
+aws s3api get-bucket-policy --bucket "$MEASUREMENT_BUCKET" \
+  >"$WORK_DIR/measurement-bucket-policy.json" ||
+  die "missing measurement bucket policy"
+aws s3api get-public-access-block --bucket "$SITE_BUCKET" \
+  >"$WORK_DIR/site-public-access-block.json" || die "missing site public-access block"
+aws s3api get-bucket-policy --bucket "$SITE_BUCKET" \
+  >"$WORK_DIR/site-bucket-policy.json" || die "missing site bucket policy"
+
+aws athena get-named-query \
+  --named-query-id 097b778f-c9ed-4bd9-af53-1e05770e1d53 \
+  --query 'NamedQuery.{id:NamedQueryId,name:Name,workgroup:WorkGroup}' --output json \
+  >"$WORK_DIR/named-query-top-routes.json"
+jq -e '.id == "097b778f-c9ed-4bd9-af53-1e05770e1d53" and .workgroup == "tollchat-agent-reports-dev"' \
+  "$WORK_DIR/named-query-top-routes.json" >/dev/null || die "wrong top-routes query"
+aws athena get-named-query \
+  --named-query-id 6a947ac6-b2a9-45b9-a28c-1b19bfec3e1d \
+  --query 'NamedQuery.{id:NamedQueryId,name:Name,workgroup:WorkGroup}' --output json \
+  >"$WORK_DIR/named-query-recent-routes.json"
+jq -e '.id == "6a947ac6-b2a9-45b9-a28c-1b19bfec3e1d" and .workgroup == "tollchat-agent-reports-dev"' \
+  "$WORK_DIR/named-query-recent-routes.json" >/dev/null || die "wrong recent-routes query"
+aws athena get-work-group --work-group tollchat-agent-reports-dev \
+  --query 'WorkGroup.{name:Name}' --output json >"$WORK_DIR/athena-workgroup.json" ||
+  die "missing Athena workgroup"
+
+for role in \
+  toll-v2-pricing-loader-dev toll-v2-report-publisher-dev \
+  toll-v2-report-publisher-scheduler-dev nova-toll-v2-timed-checks-dev \
+  nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev \
+  tollchat-v2-usage-publisher-dev tollchat-v2-agent-usage-rollup-dev; do
+  aws iam get-role --role-name "$role" --query 'Role.{name:RoleName,arn:Arn}' \
+    --output json >"$WORK_DIR/role-$role.json" ||
+    die "missing application role $role"
+done
+for role in \
+  toll-v2-pricing-loader-dev toll-v2-report-publisher-dev \
+  toll-v2-report-publisher-scheduler-dev nova-toll-v2-timed-checks-dev \
+  nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev \
+  tollchat-v2-usage-publisher-dev tollchat-v2-agent-usage-rollup-dev; do
+  aws iam list-role-policies --role-name "$role" --query PolicyNames --output json \
+    >"$WORK_DIR/role-policies-$role.json" || die "cannot list inline policies for $role"
+  aws iam list-attached-role-policies --role-name "$role" \
+    --query 'AttachedPolicies[].PolicyArn' --output json \
+    >"$WORK_DIR/role-attachments-$role.json" || die "cannot list attachments for $role"
+done
+
+for alias in alias/tollchat-v2-agent-measurement-dev alias/tollchat-v2-site-dev; do
+  aws kms describe-key --key-id "$alias" --query 'KeyMetadata.{arn:Arn,id:KeyId}' \
+    --output json >"$WORK_DIR/kms-${alias#alias/}.json" ||
+    die "missing application KMS alias $alias"
+done
+for runtime_arn in \
+  arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl \
+  arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview; do
+  aws bedrock-agentcore-control get-resource-policy --resource-arn "$runtime_arn" \
+    >"$WORK_DIR/resource-policy-${runtime_arn##*/}.json" ||
+    die "missing AgentCore resource policy $runtime_arn"
+done
+for endpoint_name in DEFAULT preview; do
+  one "AgentCore log group $endpoint_name" aws logs describe-log-groups \
+    --log-group-name-prefix "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-$endpoint_name" \
+    --query 'logGroups[?logGroupName==`/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT` || logGroupName==`/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview`].{name:logGroupName,arn:arn}' \
+    --output json >"$WORK_DIR/agentcore-log-group-$endpoint_name.json"
+done
+for security_group_name in \
+  nova-toll-v2-pricing-loader-dev nova-toll-v2-report-publisher-dev \
+  nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev; do
+  one "security group $security_group_name" aws ec2 describe-security-groups \
+    --filters "Name=group-name,Values=$security_group_name" \
+    --query 'SecurityGroups[].{id:GroupId,name:GroupName,vpc:VpcId}' --output json \
+    >"$WORK_DIR/security-group-$security_group_name.json"
+done
+terraform -chdir="$ROOT/infra" init -input=false -backend-config=backend.development.hcl
+
+canonicalize_json() {
+  local input="$1" output="$2"
+  python3 - "$input" "$output" <<'PY'
+import json
+import sys
+import urllib.parse
+from pathlib import Path
+
+value = json.loads(Path(sys.argv[1]).read_text())
+if isinstance(value, str):
+    value = json.loads(urllib.parse.unquote(value))
+Path(sys.argv[2]).write_text(
+    json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+)
+PY
+  chmod 600 -- "$output"
+}
+
+render_document() {
+  local expression="$1" output="$2" raw="$WORK_DIR/rendered-policy.raw"
+  printf 'jsonencode(jsondecode(%s))\n' "$expression" |
+    terraform -chdir="$ROOT/infra" console -var environment=development |
+    tail -n 1 >"$raw"
+  canonicalize_json "$raw" "$output"
+}
+
+decode_lambda_policy_response() {
+  local raw="$1" output="$2"
+  local policy_value="$WORK_DIR/lambda-policy-value.raw"
+  local policy_document="$WORK_DIR/lambda-policy-document.json"
+  jq -e '.Policy' "$raw" >"$policy_value" || return 1
+  canonicalize_json "$policy_value" "$policy_document" || return 1
+  jq -n --slurpfile document "$policy_document" '{PolicyDocument:$document[0]}' >"$output"
+}
+
+ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"
+EXPECTED_POLICY_NAME="$ROLE_NAME"
+EXPECTED_TRUST="$WORK_DIR/expected-trust.json"
+EXPECTED_POLICY="$WORK_DIR/expected-policy.json"
+ACTUAL_TRUST="$WORK_DIR/actual-trust.json"
+ACTUAL_POLICY="$WORK_DIR/actual-policy.json"
+ROLE_INFO="$WORK_DIR/delivery-role.json"
+ROLE_POLICY_NAMES="$WORK_DIR/delivery-role-policies.json"
+ROLE_ATTACHMENTS="$WORK_DIR/delivery-role-attachments.json"
+PREVIOUS_POLICY="$WORK_DIR/previous-delivery-policy.json"
+PREVIOUS_ROLE_INFO="$WORK_DIR/previous-delivery-role.json"
+PREVIOUS_TRUST="$WORK_DIR/previous-delivery-trust.json"
+PREVIOUS_POLICY_NAMES="$WORK_DIR/previous-delivery-policy-names.json"
+PREVIOUS_ATTACHMENTS="$WORK_DIR/previous-delivery-attachments.json"
+ROLE_PRESENT=0
+ROLE_CREATED=0
+POLICY_NEEDS_PUT=0
+PREVIOUS_POLICY_PRESENT=0
+MUTATION_AMBIGUOUS=0
+declare -A STATE_PREEXISTING=()
+declare -A STATE_IMPORTED_BY_THIS_RUN=()
+
+render_document 'data.aws_iam_policy_document.development_delivery_assume.json' "$EXPECTED_TRUST" ||
+  die "could not render expected delivery trust policy"
+render_document 'data.aws_iam_policy_document.development_delivery.json' "$EXPECTED_POLICY" ||
+  die "could not render expected delivery inline policy"
+TRUST_SHA256="$(sha256sum "$EXPECTED_TRUST" | awk '{print $1}')"
+POLICY_SHA256="$(sha256sum "$EXPECTED_POLICY" | awk '{print $1}')"
+
+STATE_BUCKET="nova-toll-tfstate-${EXPECTED_ACCOUNT}"
+LOCK_KEY="nova-toll/v2/development/bootstrap-lock"
+LOCK_ARN="arn:aws:s3:::${STATE_BUCKET}/${LOCK_KEY}"
+LOCK_TOKEN="$(od -An -N16 -tx1 /dev/urandom | tr -d '[:space:]')"
+LOCK_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '%s' "$LOCK_TOKEN" | grep -Eq '^[0-9a-f]{32}$' || die "could not generate a random lock token"
+LOCK_VALUE="${LOCK_TOKEN}|${LOCK_STARTED_AT}"
+LOCK_BODY="$WORK_DIR/bootstrap-lock.body"
+LOCK_PUT="$WORK_DIR/bootstrap-lock-put.json"
+LOCK_HEAD="$WORK_DIR/bootstrap-lock-head.json"
+LOCK_ETAG=""
+LOCK_VERSION_ID=""
+LOCK_ACQUIRED=0
+
+acquire_bootstrap_lock() {
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES ||
+    die "set BOOTSTRAP_APPROVED=YES before aws s3api put-object --region $REGION --bucket $STATE_BUCKET --key $LOCK_KEY --if-none-match '*' --body '<owner-token>|<utc-timestamp>' (target $LOCK_ARN)"
+  printf '%s' "$LOCK_VALUE" >"$LOCK_BODY"
+  chmod 600 -- "$LOCK_BODY"
+  if ! aws s3api put-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY" \
+    --body "$LOCK_BODY" --if-none-match '*' >"$LOCK_PUT" 2>"$WORK_DIR/bootstrap-lock-put.error"; then
+    if grep -qiE 'PreconditionFailed|ConditionalRequestConflict|412|409' "$WORK_DIR/bootstrap-lock-put.error"; then
+      die "bootstrap lock is already held at $LOCK_ARN; refusing overwrite, retry, or steal"
+    fi
+    if aws s3api head-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY" \
+      >"$WORK_DIR/bootstrap-lock-ambiguous.json" 2>/dev/null; then
+      die "bootstrap lock acquisition result is ambiguous and the lock is present"
+    fi
+    die "bootstrap lock acquisition failed; refusing protected mutation"
+  fi
+  LOCK_ETAG="$(jq -er '.ETag | strings' "$LOCK_PUT")" || die "bootstrap lock response has no ETag"
+  LOCK_VERSION_ID="$(jq -r '.VersionId // empty' "$LOCK_PUT")" || die "bootstrap lock response is malformed"
+  test -n "$LOCK_ETAG" || die "bootstrap lock response has an empty ETag"
+  lock_is_current || die "bootstrap lock owner changed during acquisition"
+  LOCK_ACQUIRED=1
+}
+
+lock_is_current() {
+  test -n "$LOCK_ETAG" || return 1
+  aws s3api head-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY" \
+    --query '{ETag:ETag,VersionId:VersionId}' --output json >"$LOCK_HEAD" 2>"$WORK_DIR/bootstrap-lock-head.error" || return 1
+  jq -e --arg etag "$LOCK_ETAG" --arg version "$LOCK_VERSION_ID" \
+    '.ETag == $etag and (.VersionId // "") == $version' "$LOCK_HEAD" >/dev/null
+}
+
+release_bootstrap_lock() {
+  local status="${1:-0}"
+  test "${LOCK_ACQUIRED:-0}" -eq 1 || return "$status"
+  if test "$AWS_PROFILE" != "$EXPECTED_PROFILE" ||
+    test "${AWS_REGION:-}" != "$REGION" ||
+    test "${AWS_DEFAULT_REGION:-}" != "$REGION" ||
+    test "$(aws sts get-caller-identity --query Account --output text 2>/dev/null)" != "$EXPECTED_ACCOUNT"; then
+    printf 'bootstrap lock release stopped: development account guard failed; lock left in place (%s)\n' "$LOCK_ARN" >&2
+    return 1
+  fi
+  if ! lock_is_current; then
+    printf 'bootstrap lock release stopped: current ETag/version does not match; lock left in place (%s)\n' "$LOCK_ARN" >&2
+    return 1
+  fi
+  if test "${BOOTSTRAP_APPROVED:-}" != YES; then
+    printf 'bootstrap lock release stopped: set BOOTSTRAP_APPROVED=YES before aws s3api delete-object --region %s --bucket %s --key %s --if-match %s (target %s)\n' \
+      "$REGION" "$STATE_BUCKET" "$LOCK_KEY" "$LOCK_ETAG" "$LOCK_ARN" >&2
+    return 1
+  fi
+  local -a delete_args=(aws s3api delete-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY" --if-match "$LOCK_ETAG")
+  test -n "$LOCK_VERSION_ID" && delete_args+=(--version-id "$LOCK_VERSION_ID")
+  "${delete_args[@]}" >"$WORK_DIR/bootstrap-lock-delete.json" 2>"$WORK_DIR/bootstrap-lock-delete.error" || {
+    printf 'bootstrap lock release failed; lock left in place (%s)\n' "$LOCK_ARN" >&2
+    return 1
+  }
+  if aws s3api head-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY" \
+    >"$WORK_DIR/bootstrap-lock-after-delete.json" 2>"$WORK_DIR/bootstrap-lock-after-delete.error"; then
+    printf 'bootstrap lock release could not verify absence; lock may remain (%s)\n' "$LOCK_ARN" >&2
+    return 1
+  fi
+  if ! grep -qiE 'Not Found|404|NoSuchKey' "$WORK_DIR/bootstrap-lock-after-delete.error"; then
+    printf 'bootstrap lock release returned an unexpected verification response (%s)\n' "$LOCK_ARN" >&2
+    return 1
+  fi
+  LOCK_ACQUIRED=0
+  return "$status"
+}
+
+bootstrap_cleanup() {
+  local status=$? release_status=0
+  trap - EXIT
+  if test "$status" -ne 0; then
+    set +e
+    if test "$MUTATION_AMBIGUOUS" -eq 0; then
+      if declare -F rollback_delivery_state >/dev/null; then rollback_delivery_state; fi
+      if declare -F rollback_created_role >/dev/null; then rollback_created_role; fi
+    else
+      printf 'bootstrap cleanup stopped: ambiguous mutation result preserved for manual reconciliation\n' >&2
+    fi
+    set -e
+  fi
+  release_bootstrap_lock "$status" || release_status=$?
+  rm -rf -- "$WORK_DIR"
+  test "$release_status" -eq 0 || status=1
+  exit "$status"
+}
+trap bootstrap_cleanup EXIT
+
+read_role() {
+  aws iam get-role --role-name "$ROLE_NAME" --output json \
+    >"$ROLE_INFO" 2>"$WORK_DIR/delivery-role.error" || return 1
+  jq -e '.Role | type == "object" and .RoleName != null and .Arn != null and .Path != null' \
+    "$ROLE_INFO" >/dev/null || return 1
+  jq -c '.Role.AssumeRolePolicyDocument' "$ROLE_INFO" >"$WORK_DIR/actual-trust.raw"
+  canonicalize_json "$WORK_DIR/actual-trust.raw" "$ACTUAL_TRUST"
+}
+
+role_identity_matches() {
+  jq -e --arg role "$ROLE_NAME" --arg arn "$ROLE_ARN" \
+    '.Role.RoleName == $role and .Role.Arn == $arn and .Role.Path == "/" and .Role.MaxSessionDuration == 3600 and (.Role.PermissionsBoundary? // null) == null' \
+    "$ROLE_INFO" >/dev/null && cmp -s "$EXPECTED_TRUST" "$ACTUAL_TRUST"
+}
+
+read_policy_set() {
+  aws iam list-role-policies --role-name "$ROLE_NAME" --output json >"$ROLE_POLICY_NAMES" || return 1
+  aws iam list-attached-role-policies --role-name "$ROLE_NAME" --output json >"$ROLE_ATTACHMENTS" || return 1
+  jq -e '(.PolicyNames | type == "array") and (.NextToken? // null) == null' "$ROLE_POLICY_NAMES" >/dev/null || return 1
+  jq -e '(.AttachedPolicies | type == "array") and (.NextToken? // null) == null' "$ROLE_ATTACHMENTS" >/dev/null
+}
+
+policy_set_is_empty() {
+  jq -e '.PolicyNames == []' "$ROLE_POLICY_NAMES" >/dev/null &&
+    jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null
+}
+
+policy_set_is_exact() {
+  jq -e --arg expected "$EXPECTED_POLICY_NAME" '.PolicyNames == [$expected]' "$ROLE_POLICY_NAMES" >/dev/null &&
+    jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null
+}
+
+read_expected_policy() {
+  aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME" \
+    --query PolicyDocument --output json >"$WORK_DIR/actual-policy.raw" || return 1
+  canonicalize_json "$WORK_DIR/actual-policy.raw" "$ACTUAL_POLICY"
+}
+
+role_documents_match() {
+  read_role && role_identity_matches && read_policy_set && policy_set_is_exact &&
+    read_expected_policy && cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"
+}
+
+snapshot_role_state() {
+  cp -- "$ROLE_INFO" "$PREVIOUS_ROLE_INFO"
+  cp -- "$ACTUAL_TRUST" "$PREVIOUS_TRUST"
+  cp -- "$ROLE_POLICY_NAMES" "$PREVIOUS_POLICY_NAMES"
+  cp -- "$ROLE_ATTACHMENTS" "$PREVIOUS_ATTACHMENTS"
+  chmod 600 -- "$PREVIOUS_ROLE_INFO" "$PREVIOUS_TRUST" "$PREVIOUS_POLICY_NAMES" "$PREVIOUS_ATTACHMENTS"
+}
+
+rollback_created_role() {
+  test "$ROLE_CREATED" -eq 1 || return 0
+  lock_is_current || die "refusing delivery role rollback after lock ownership changed"
+  read_policy_set || die "cannot safely inspect created role for rollback"
+  jq -e '.AttachedPolicies == []' "$ROLE_ATTACHMENTS" >/dev/null ||
+    die "refusing rollback of created role with unexpected managed attachments"
+  jq -e '.PolicyNames == [] or .PolicyNames == ["nova-toll-v2-development-delivery"]' \
+    "$ROLE_POLICY_NAMES" >/dev/null ||
+    die "refusing rollback of created role with unexpected inline policies"
+  if ! policy_set_is_empty; then
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME (target $ROLE_ARN)"
+    aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"
+    read_policy_set && policy_set_is_empty || die "created role policy was not removed during rollback"
+  fi
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role --role-name $ROLE_NAME (target $ROLE_ARN)"
+  aws iam delete-role --role-name "$ROLE_NAME"
+  if aws iam get-role --role-name "$ROLE_NAME" \
+    >"$WORK_DIR/rollback-role.json" 2>"$WORK_DIR/rollback-role.error"; then
+    die "created delivery role remained after rollback"
+  fi
+  grep -q 'NoSuchEntity' "$WORK_DIR/rollback-role.error" ||
+    die "could not verify created delivery role rollback"
+  ROLE_CREATED=0
+}
+
+restore_previous_policy() {
+  test "$PREVIOUS_POLICY_PRESENT" -eq 1 || return 0
+  lock_is_current || die "refusing delivery policy restore after lock ownership changed"
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam put-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME --policy-document file://$PREVIOUS_POLICY (target $ROLE_ARN)"
+  aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME" \
+    --policy-document "file://$PREVIOUS_POLICY"
+  role_documents_match || die "pre-existing delivery policy could not be restored exactly"
+}
+
+restore_absent_policy() {
+  test "$ROLE_CREATED" -eq 0 || return 0
+  lock_is_current || die "refusing delivery policy rollback after lock ownership changed"
+  read_policy_set || die "cannot inspect policy after failed delivery policy write"
+  if policy_set_is_empty; then
+    return 0
+  fi
+  policy_set_is_exact || die "refusing to remove an unexpected policy after failed delivery policy write"
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam delete-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME (target $ROLE_ARN)"
+  aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"
+  read_policy_set && policy_set_is_empty || die "absent delivery policy was not restored"
+}
+
+acquire_bootstrap_lock
+
+state_list_contains() {
+  local state_file="$1" address="$2"
+  awk -v address="$address" '$0 == address { found=1 } END { exit found ? 0 : 1 }' "$state_file"
+}
+FOUNDATION_STATE_LIST="$WORK_DIR/foundation-state.list"
+APPLICATION_STATE_LIST="$WORK_DIR/application-state.list"
+terraform -chdir="$ROOT/v2/infra" init -input=false -backend-config=backend.development.hcl
+terraform -chdir="$ROOT/infra" state list >"$FOUNDATION_STATE_LIST"
+terraform -chdir="$ROOT/v2/infra" state list >"$APPLICATION_STATE_LIST"
+
+if read_role; then
+  ROLE_PRESENT=1
+  role_identity_matches || die "pre-existing delivery role identity or trust does not match exactly"
+elif grep -q 'NoSuchEntity' "$WORK_DIR/delivery-role.error"; then
+  ROLE_PRESENT=0
+else
+  die "could not read delivery role"
+fi
+
+URL_PRESENT=1
+if ! aws lambda get-function-url-config --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+  >"$WORK_DIR/function-url.json" 2>"$WORK_DIR/function-url.error"; then
+  grep -q 'ResourceNotFoundException' "$WORK_DIR/function-url.error" || die "could not read Lambda URL config"
+  URL_PRESENT=0
+fi
+POLICY_PRESENT=1
+if ! aws lambda get-policy --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+  --output json >"$WORK_DIR/lambda-policy-raw.json" 2>"$WORK_DIR/lambda-permissions.error"; then
+  grep -q 'ResourceNotFoundException' "$WORK_DIR/lambda-permissions.error" || die "could not read Lambda URL permissions"
+  POLICY_PRESENT=0
+else
+  decode_lambda_policy_response "$WORK_DIR/lambda-policy-raw.json" "$WORK_DIR/lambda-permissions.json" ||
+    die "Lambda URL permissions are not valid JSON"
+fi
+URL_PREEXISTING="$URL_PRESENT"
+POLICY_PREEXISTING="$POLICY_PRESENT"
+
+if test "$ROLE_PRESENT" -eq 0; then
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam create-role --role-name $ROLE_NAME --path / --max-session-duration 3600 --assume-role-policy-document file://$EXPECTED_TRUST (target $ROLE_ARN)"
+  aws iam create-role --role-name "$ROLE_NAME" --path / --max-session-duration 3600 \
+    --assume-role-policy-document "file://$EXPECTED_TRUST" \
+    >"$WORK_DIR/delivery-role-created.json" 2>"$WORK_DIR/delivery-role-create.error" || {
+    MUTATION_AMBIGUOUS=1
+    die "delivery role create failed; preserving any matching post-state for manual exact reconciliation"
+  }
+  if test "$ROLE_PRESENT" -eq 0; then
+    ROLE_CREATED=1
+    read_role && role_identity_matches || { rollback_created_role; die "created delivery role failed exact identity/trust validation"; }
+    read_policy_set && policy_set_is_empty || { rollback_created_role; die "created delivery role has unexpected effective policies"; }
+    POLICY_NEEDS_PUT=1
+  fi
+fi
+
+if test "$ROLE_PRESENT" -eq 1 && test "$ROLE_CREATED" -eq 0; then
+  read_policy_set || die "delivery role policy inventory is unreadable"
+  if policy_set_is_empty; then
+    POLICY_NEEDS_PUT=1
+  elif policy_set_is_exact; then
+    if ! read_expected_policy; then
+      die "expected delivery inline policy is unreadable"
+    fi
+    if ! cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"; then
+      snapshot_role_state
+      cp -- "$ACTUAL_POLICY" "$PREVIOUS_POLICY"
+      chmod 600 -- "$PREVIOUS_POLICY"
+      PREVIOUS_POLICY_PRESENT=1
+      POLICY_NEEDS_PUT=1
+    fi
+  else
+    die "delivery role has unexpected inline policies or managed attachments"
+  fi
+fi
+
+if test "$POLICY_NEEDS_PUT" -eq 1; then
+  if test "$ROLE_PRESENT" -eq 1 && test ! -e "$PREVIOUS_ROLE_INFO"; then
+    snapshot_role_state
+  fi
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws iam put-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME --policy-document file://$EXPECTED_POLICY (target $ROLE_ARN)"
+  aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME" \
+    --policy-document "file://$EXPECTED_POLICY" || {
+      MUTATION_AMBIGUOUS=1
+      die "delivery inline policy write failed; preserving any matching post-state for manual exact reconciliation"
+    }
+  if ! role_documents_match; then
+    if test "$PREVIOUS_POLICY_PRESENT" -eq 1; then restore_previous_policy; fi
+    if test "$PREVIOUS_POLICY_PRESENT" -eq 0; then restore_absent_policy; fi
+    if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+    die "delivery role failed post-write exact effective-policy validation"
+  fi
+fi
+
+role_documents_match || {
+  if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  die "delivery role trust, identity policy, or effective policy set is not exact"
+}
+
+state_id_matches() {
+  local state_file="$1" expected="$2"
+  python3 - "$state_file" "$expected" <<'PY'
+import re
+import sys
+
+state_file, expected = sys.argv[1:]
+pattern = re.compile(r"^\s*id\s*=\s*\"" + re.escape(expected) + r"\"\s*$")
+if any(pattern.fullmatch(line.rstrip("\n")) for line in open(state_file, encoding="utf-8")):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+rollback_delivery_state() {
+  local address target failed=0 state_list="$WORK_DIR/foundation-state-rollback.list"
+  test "${LOCK_ACQUIRED:-0}" -eq 1 || return 1
+  lock_is_current || return 1
+  terraform -chdir="$ROOT/infra" state list >"$state_list" || return 1
+  for address in 'aws_iam_role_policy.development_delivery[0]' 'aws_iam_role.development_delivery[0]'; do
+    if test "$address" = 'aws_iam_role_policy.development_delivery[0]'; then
+      test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+      target="$ROLE_NAME:$EXPECTED_POLICY_NAME"
+    else
+      test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+      target="$ROLE_ARN"
+    fi
+    if state_list_contains "$state_list" "$address"; then
+      if ! verify_foundation_state "$address" "$target" "$WORK_DIR/rollback-${address//[^A-Za-z0-9]/_}.state"; then
+        printf 'refusing rollback of %s: current state ID is not the exact target %s\n' "$address" "$target" >&2
+        failed=1
+        continue
+      fi
+      assert_dev_account
+      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra state rm $address (target $target)"
+      terraform -chdir="$ROOT/infra" state rm "$address"
+    fi
+    STATE_IMPORTED_BY_THIS_RUN["$address"]=0
+  done
+  return "$failed"
+}
+verify_foundation_state() {
+  local address="$1" identifier="$2" state_file="$3"
+  terraform -chdir="$ROOT/infra" state show -no-color "$address" >"$state_file" || return 1
+  state_id_matches "$state_file" "$identifier" || return 1
+  if test "$address" = 'aws_iam_role.development_delivery[0]'; then
+    grep -Fxq "    arn                = \"$ROLE_ARN\"" "$state_file" ||
+      grep -Fxq "    arn = \"$ROLE_ARN\"" "$state_file" || return 1
+  fi
+}
+
+if state_list_contains "$FOUNDATION_STATE_LIST" 'aws_iam_role.development_delivery[0]'; then
+  STATE_PREEXISTING['aws_iam_role.development_delivery[0]']=1
+else
+  role_documents_match || die "delivery role changed before state import"
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra import -input=false -var environment=development aws_iam_role.development_delivery[0] $ROLE_ARN (target $ROLE_ARN)"
+  if ! terraform -chdir="$ROOT/infra" import -input=false \
+    -var environment=development \
+    'aws_iam_role.development_delivery[0]' "$ROLE_ARN" \
+    >"$WORK_DIR/delivery-role-import.log" 2>&1; then
+    if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/delivery-role-import.log"; then
+      die "delivery role import is already managed or concurrent; refusing state removal"
+    fi
+    die "delivery role import failed; state ownership is unproven and was retained"
+  fi
+  STATE_IMPORTED_BY_THIS_RUN['aws_iam_role.development_delivery[0]']=1
+  verify_foundation_state 'aws_iam_role.development_delivery[0]' "$ROLE_NAME" \
+    "$WORK_DIR/delivery-role-import.state" ||
+    die "delivery role import state ID or ARN is not the exact target"
+fi
+if state_list_contains "$FOUNDATION_STATE_LIST" 'aws_iam_role_policy.development_delivery[0]'; then
+  STATE_PREEXISTING['aws_iam_role_policy.development_delivery[0]']=1
+else
+  role_documents_match || die "delivery role changed before policy state import"
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/infra import -input=false -var environment=development aws_iam_role_policy.development_delivery[0] $ROLE_NAME:$ROLE_NAME (target $ROLE_NAME:$EXPECTED_POLICY_NAME)"
+  if ! terraform -chdir="$ROOT/infra" import -input=false \
+    -var environment=development \
+    'aws_iam_role_policy.development_delivery[0]' "$ROLE_NAME:$ROLE_NAME" \
+    >"$WORK_DIR/delivery-policy-import.log" 2>&1; then
+    if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/delivery-policy-import.log"; then
+      die "delivery policy import is already managed or concurrent; refusing state removal"
+    fi
+    die "delivery policy import failed; state ownership is unproven and was retained"
+  fi
+  STATE_IMPORTED_BY_THIS_RUN['aws_iam_role_policy.development_delivery[0]']=1
+  verify_foundation_state 'aws_iam_role_policy.development_delivery[0]' "$ROLE_NAME:$EXPECTED_POLICY_NAME" \
+    "$WORK_DIR/delivery-policy-import.state" ||
+    die "delivery policy import state ID is not the exact target"
+fi
+if ! role_documents_match; then
+  rollback_delivery_state
+  if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  die "delivery role changed after foundation state imports; imported state was rolled back"
+fi
+
+verify_delivery_state() {
+  terraform -chdir="$ROOT/infra" state show -no-color \
+    'aws_iam_role.development_delivery[0]' >"$WORK_DIR/delivery-role.state" ||
+    return 1
+  grep -Fxq "    id                 = \"$ROLE_NAME\"" "$WORK_DIR/delivery-role.state" ||
+    grep -Fxq "    id = \"$ROLE_NAME\"" "$WORK_DIR/delivery-role.state" ||
+    return 1
+  grep -Fxq "    arn                = \"$ROLE_ARN\"" "$WORK_DIR/delivery-role.state" ||
+    grep -Fxq "    arn = \"$ROLE_ARN\"" "$WORK_DIR/delivery-role.state" ||
+    return 1
+  terraform -chdir="$ROOT/infra" state show -no-color \
+    'aws_iam_role_policy.development_delivery[0]' >"$WORK_DIR/delivery-policy.state" ||
+    return 1
+  grep -Fxq "    id                 = \"$ROLE_NAME:$EXPECTED_POLICY_NAME\"" "$WORK_DIR/delivery-policy.state" ||
+    grep -Fxq "    id = \"$ROLE_NAME:$EXPECTED_POLICY_NAME\"" "$WORK_DIR/delivery-policy.state" ||
+    return 1
+}
+if ! verify_delivery_state; then
+  rollback_delivery_state
+  if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  die "delivery Terraform state verification failed for the imported role/policy addresses"
+fi
+
+FOUNDATION_OUTPUT="$(terraform -chdir="$ROOT/infra" output -json foundation)" || {
+  rollback_delivery_state
+  if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+  die "development foundation output verification failed; imported state was rolled back"
+}
+BOOTSTRAP_FOUNDATION_VARS="$WORK_DIR/foundation.tfvars.json"
+jq -n --argjson foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation}' >"$BOOTSTRAP_FOUNDATION_VARS"
+QUALIFIED_FUNCTION_ARN="arn:aws:lambda:${REGION}:${EXPECTED_ACCOUNT}:function:${FUNCTION_NAME}:${QUALIFIER}"
+CLOUDFRONT_SOURCE_ARN="arn:aws:cloudfront::${EXPECTED_ACCOUNT}:distribution/${DISTRIBUTION_ID}"
+PREVIOUS_FUNCTION_URL="$WORK_DIR/previous-function-url.json"
+PREVIOUS_LAMBDA_POLICY="$WORK_DIR/previous-lambda-policy.json"
+URL_CREATED=0
+URL_PERMISSION_URL_CREATED=0
+URL_PERMISSION_INVOKE_CREATED=0
+if test "$URL_PREEXISTING" -eq 1; then
+  cp -- "$WORK_DIR/function-url.json" "$PREVIOUS_FUNCTION_URL"
+fi
+if test "$POLICY_PREEXISTING" -eq 1; then
+  cp -- "$WORK_DIR/lambda-policy-raw.json" "$PREVIOUS_LAMBDA_POLICY"
+fi
+for snapshot in "$PREVIOUS_FUNCTION_URL" "$PREVIOUS_LAMBDA_POLICY"; do
+  test -e "$snapshot" && chmod 600 -- "$snapshot"
+done
+EXPECTED_URL_PERMISSION="$WORK_DIR/expected-url-permission.json"
+EXPECTED_INVOKE_PERMISSION="$WORK_DIR/expected-invoke-permission.json"
+jq -n --arg function_arn "$QUALIFIED_FUNCTION_ARN" --arg source_arn "$CLOUDFRONT_SOURCE_ARN" \
+  '{Sid:"AllowCloudFrontFunctionUrlV2",Effect:"Allow",Action:"lambda:InvokeFunctionUrl",Resource:$function_arn,Principal:{Service:"cloudfront.amazonaws.com"},Condition:{StringEquals:{"lambda:FunctionUrlAuthType":"AWS_IAM"},ArnLike:{"AWS:SourceArn":$source_arn}}}' \
+  >"$EXPECTED_URL_PERMISSION"
+jq -n --arg function_arn "$QUALIFIED_FUNCTION_ARN" --arg source_arn "$CLOUDFRONT_SOURCE_ARN" \
+  '{Sid:"AllowCloudFrontFunctionInvokeV2",Effect:"Allow",Action:"lambda:InvokeFunction",Resource:$function_arn,Principal:{Service:"cloudfront.amazonaws.com"},Condition:{Bool:{"lambda:InvokedViaFunctionUrl":"true"},ArnLike:{"AWS:SourceArn":$source_arn}}}' \
+  >"$EXPECTED_INVOKE_PERMISSION"
+canonicalize_json "$EXPECTED_URL_PERMISSION" "$EXPECTED_URL_PERMISSION.canonical"
+canonicalize_json "$EXPECTED_INVOKE_PERMISSION" "$EXPECTED_INVOKE_PERMISSION.canonical"
+mv -- "$EXPECTED_URL_PERMISSION.canonical" "$EXPECTED_URL_PERMISSION"
+mv -- "$EXPECTED_INVOKE_PERMISSION.canonical" "$EXPECTED_INVOKE_PERMISSION"
+PERMISSION_POLICY_SNAPSHOT="$WORK_DIR/lambda-policy-before-all.json"
+if test "$POLICY_PREEXISTING" -eq 1; then
+  canonicalize_json "$WORK_DIR/lambda-permissions.json" "$PERMISSION_POLICY_SNAPSHOT"
+fi
+
+read_lambda_policy() {
+  local output="$1" revision_output="$2" raw="$WORK_DIR/lambda-policy-read.raw"
+  if aws lambda get-policy --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+    --output json >"$raw" 2>"$WORK_DIR/lambda-policy-read.error"; then
+    decode_lambda_policy_response "$raw" "$output" || return 1
+    jq -e '(.RevisionId? // "") | type == "string"' "$raw" >/dev/null || return 1
+    jq -r '.RevisionId // empty' "$raw" >"$revision_output"
+  else
+    grep -q 'ResourceNotFoundException' "$WORK_DIR/lambda-policy-read.error" || return 1
+    printf '%s\n' '{"PolicyDocument":{"Statement":[]}}' >"$output"
+    : >"$revision_output"
+  fi
+}
+
+extract_lambda_statement() {
+  local policy="$1" sid="$2" output="$3" raw="$WORK_DIR/lambda-statement.raw" count
+  count="$(jq -r --arg sid "$sid" '[.PolicyDocument.Statement[]? | select(.Sid == $sid)] | length' "$policy")" || return 1
+  test "$count" -le 1 || return 1
+  if test "$count" -eq 1; then
+    jq -c --arg sid "$sid" '.PolicyDocument.Statement[] | select(.Sid == $sid)' "$policy" >"$raw" || return 1
+    canonicalize_json "$raw" "$output"
+  else
+    printf '%s\n' null >"$output"
+  fi
+}
+
+validate_existing_lambda_policy() {
+  jq -e --slurpfile url "$EXPECTED_URL_PERMISSION" --slurpfile invoke "$EXPECTED_INVOKE_PERMISSION" '
+    .PolicyDocument.Statement as $statements |
+    ($statements | type == "array" and length <= 2) and
+    ([$statements[] | select(.Sid == "AllowCloudFrontFunctionUrlV2")] | length <= 1) and
+    ([$statements[] | select(.Sid == "AllowCloudFrontFunctionInvokeV2")] | length <= 1) and
+    all($statements[]; . == $url[0] or . == $invoke[0])
+  ' "$WORK_DIR/lambda-permissions.json" >/dev/null
+}
+
+snapshot_lambda_permission() {
+  local sid="$1" stem="$2" policy="$WORK_DIR/lambda-policy-before-$stem.json"
+  local revision="$WORK_DIR/lambda-revision-before-$stem.txt"
+  local statement="$WORK_DIR/lambda-statement-before-$stem.json" present=0
+  read_lambda_policy "$policy" "$revision" || die "could not snapshot Lambda permission policy before $sid"
+  extract_lambda_statement "$policy" "$sid" "$statement" || die "Lambda permission SID snapshot is ambiguous: $sid"
+  jq -e 'type == "object"' "$statement" >/dev/null && present=1
+  printf -v "${stem}_PRE_PRESENT" '%s' "$present"
+  printf -v "${stem}_PRE_REVISION" '%s' "$(<"$revision")"
+  printf -v "${stem}_PRE_STATEMENT" '%s' "$statement"
+}
+
+reconcile_lambda_permission() {
+  local sid="$1" stem="$2" expected="$3"
+  local policy="$WORK_DIR/lambda-policy-after-$stem.json"
+  local revision="$WORK_DIR/lambda-revision-after-$stem.txt"
+  local statement="$WORK_DIR/lambda-statement-after-$stem.json"
+  local pre_present_var="${stem}_PRE_PRESENT" pre_revision_var="${stem}_PRE_REVISION"
+  local pre_present="${!pre_present_var}" pre_revision="${!pre_revision_var}" post_revision
+  test "${LOCK_ACQUIRED:-0}" -eq 1 || return 1
+  lock_is_current || return 1
+  read_lambda_policy "$policy" "$revision" || return 1
+  extract_lambda_statement "$policy" "$sid" "$statement" || return 1
+  cmp -s "$expected" "$statement" || return 1
+  test "$pre_present" -eq 0 || return 2
+  post_revision="$(<"$revision")"
+  if test -n "$pre_revision"; then
+    test -n "$post_revision" || return 3
+    test "$post_revision" != "$pre_revision" || return 3
+  fi
+  printf -v "${stem}_CREATED" '%s' 1
+  return 0
+}
+
+validate_function_url() {
+  local document="${1:-$WORK_DIR/function-url.json}"
+  jq -e --arg function_arn "$QUALIFIED_FUNCTION_ARN" \
+    '.AuthType == "AWS_IAM" and .InvokeMode == "RESPONSE_STREAM" and .FunctionArn == $function_arn' \
+    "$document" >/dev/null
+}
+validate_lambda_policy() {
+  jq -e --arg function_arn "$QUALIFIED_FUNCTION_ARN" --arg source_arn "$CLOUDFRONT_SOURCE_ARN" '
+    .PolicyDocument as $policy |
+    ($policy.Statement | (type == "array" and length == 2)) and
+    any($policy.Statement[];
+      .Sid == "AllowCloudFrontFunctionUrlV2" and
+      .Effect == "Allow" and
+      .Action == "lambda:InvokeFunctionUrl" and
+      .Resource == $function_arn and
+      .Principal == {Service: "cloudfront.amazonaws.com"} and
+      .Condition.StringEquals."lambda:FunctionUrlAuthType" == "AWS_IAM" and
+      ((.Condition.ArnLike."AWS:SourceArn" // .Condition.StringEquals."AWS:SourceArn") == $source_arn)) and
+    any($policy.Statement[];
+      .Sid == "AllowCloudFrontFunctionInvokeV2" and
+      .Effect == "Allow" and
+      .Action == "lambda:InvokeFunction" and
+      .Resource == $function_arn and
+      .Principal == {Service: "cloudfront.amazonaws.com"} and
+      .Condition.Bool."lambda:InvokedViaFunctionUrl" == "true" and
+      ((.Condition.ArnLike."AWS:SourceArn" // .Condition.StringEquals."AWS:SourceArn") == $source_arn))
+  ' "$WORK_DIR/lambda-permissions.json" >/dev/null
+}
+verify_owned_lambda_permission() {
+  local sid="$1" expected="$2"
+  local current_policy="$WORK_DIR/lambda-permission-owned-check.json"
+  local current_revision="$WORK_DIR/lambda-permission-owned-revision.txt"
+  local current_statement="$WORK_DIR/lambda-permission-owned-statement.json"
+  test "${LOCK_ACQUIRED:-0}" -eq 1 || return 1
+  lock_is_current || return 1
+  read_lambda_policy "$current_policy" "$current_revision" || return 1
+  extract_lambda_statement "$current_policy" "$sid" "$current_statement" || return 1
+  cmp -s "$expected" "$current_statement"
+}
+rollback_created_url() {
+  local removed=0 current_policy="$WORK_DIR/lambda-policy-rollback.json" current_revision="$WORK_DIR/lambda-revision-rollback.txt"
+  test "$URL_PERMISSION_INVOKE_CREATED" -eq 1 && {
+    verify_owned_lambda_permission AllowCloudFrontFunctionInvokeV2 "$EXPECTED_INVOKE_PERMISSION" ||
+      die "refusing Lambda invoke permission rollback after ownership changed"
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws lambda remove-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER --statement-id AllowCloudFrontFunctionInvokeV2 (target $QUALIFIED_FUNCTION_ARN)"
+    aws lambda remove-permission --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+      --statement-id AllowCloudFrontFunctionInvokeV2
+    URL_PERMISSION_INVOKE_CREATED=0
+    removed=1
+  }
+  test "$URL_PERMISSION_URL_CREATED" -eq 1 && {
+    verify_owned_lambda_permission AllowCloudFrontFunctionUrlV2 "$EXPECTED_URL_PERMISSION" ||
+      die "refusing Lambda URL permission rollback after ownership changed"
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws lambda remove-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER --statement-id AllowCloudFrontFunctionUrlV2 (target $QUALIFIED_FUNCTION_ARN)"
+    aws lambda remove-permission --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+      --statement-id AllowCloudFrontFunctionUrlV2
+    URL_PERMISSION_URL_CREATED=0
+    removed=1
+  }
+  if test "$removed" -eq 1; then
+    if test "$POLICY_PREEXISTING" -eq 1; then
+      read_lambda_policy "$current_policy" "$current_revision" || die "cannot verify Lambda permission rollback"
+      canonicalize_json "$current_policy" "$current_policy.canonical"
+      cmp -s "$PERMISSION_POLICY_SNAPSHOT" "$current_policy.canonical" ||
+        die "Lambda rollback changed a pre-existing or concurrent permission statement"
+    elif aws lambda get-policy --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+      --output json >"$WORK_DIR/rollback-lambda-policy-raw.json" 2>"$WORK_DIR/rollback-lambda-policy.error"; then
+      die "rollback found an unexpected Lambda permission policy"
+    else
+      grep -q 'ResourceNotFoundException' "$WORK_DIR/rollback-lambda-policy.error" ||
+        die "cannot verify absent Lambda permission policy after rollback"
+    fi
+  fi
+  test "$URL_CREATED" -eq 1 && {
+    lock_is_current || die "refusing Lambda URL rollback after lock ownership changed"
+    aws lambda get-function-url-config --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+      >"$WORK_DIR/rollback-function-url-current.json" 2>"$WORK_DIR/rollback-function-url-current.error" ||
+      die "cannot verify Lambda URL before rollback"
+    validate_function_url "$WORK_DIR/rollback-function-url-current.json" ||
+      die "refusing Lambda URL rollback after its auth, invoke mode, or function identity changed"
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws lambda delete-function-url-config --function-name $FUNCTION_NAME --qualifier $QUALIFIER (target $QUALIFIED_FUNCTION_ARN)"
+    aws lambda delete-function-url-config --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER"
+    URL_CREATED=0
+    if aws lambda get-function-url-config --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+      >"$WORK_DIR/rollback-function-url.json" 2>"$WORK_DIR/rollback-function-url.error"; then
+      die "new Lambda URL remained after rollback"
+    fi
+    grep -q 'ResourceNotFoundException' "$WORK_DIR/rollback-function-url.error" ||
+      die "cannot verify Lambda URL rollback"
+  }
+}
+BOOTSTRAP_COMPLETE=0
+cleanup_on_failure() {
+  local status=$?
+  trap - EXIT
+  if test "$status" -ne 0 && test "$BOOTSTRAP_COMPLETE" -eq 0; then
+    set +e
+    if test "$MUTATION_AMBIGUOUS" -eq 0; then
+      if declare -F rollback_url_state >/dev/null; then rollback_url_state; fi
+      rollback_created_url
+      rollback_delivery_state
+      if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi
+    else
+      printf 'bootstrap cleanup stopped: ambiguous mutation result preserved for manual reconciliation\n' >&2
+    fi
+    set -e
+  fi
+  if ! release_bootstrap_lock "$status"; then status=1; fi
+  rm -rf -- "$WORK_DIR"
+  exit "$status"
+}
+trap cleanup_on_failure EXIT
+if test "$POLICY_PRESENT" -eq 1; then
+  validate_existing_lambda_policy || die "Lambda URL permissions contain an unexpected or duplicate statement"
+fi
+if test "$URL_PRESENT" -eq 0; then
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES ||
+    die "set BOOTSTRAP_APPROVED=YES before aws lambda create-function-url-config --function-name $FUNCTION_NAME --qualifier $QUALIFIER --auth-type AWS_IAM --invoke-mode RESPONSE_STREAM (target $QUALIFIED_FUNCTION_ARN)"
+  if ! aws lambda create-function-url-config --function-name "$FUNCTION_NAME" \
+    --qualifier "$QUALIFIER" --auth-type AWS_IAM --invoke-mode RESPONSE_STREAM \
+    >"$WORK_DIR/function-url-created.json" 2>"$WORK_DIR/function-url-create.error"; then
+    MUTATION_AMBIGUOUS=1
+    die "Lambda URL create failed; preserving any matching post-state for manual exact reconciliation"
+  fi
+  URL_CREATED=1
+  URL_PRESENT=1
+fi
+aws lambda get-function-url-config --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+  >"$WORK_DIR/function-url.json" || { rollback_created_url; die "Lambda URL config is unreadable after bootstrap"; }
+validate_function_url || { rollback_created_url; die "Lambda URL auth, invoke mode, or function identity is not the reviewed value"; }
+snapshot_lambda_permission AllowCloudFrontFunctionUrlV2 URL_PERMISSION_URL
+if test "$URL_PERMISSION_URL_PRE_PRESENT" -eq 0; then
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws lambda add-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER --statement-id AllowCloudFrontFunctionUrlV2 --action lambda:InvokeFunctionUrl --principal cloudfront.amazonaws.com --source-arn $CLOUDFRONT_SOURCE_ARN (target $QUALIFIED_FUNCTION_ARN)"
+  URL_PERMISSION_ADD=(aws lambda add-permission --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+    --statement-id AllowCloudFrontFunctionUrlV2 --action lambda:InvokeFunctionUrl \
+    --principal cloudfront.amazonaws.com \
+    --source-arn "$CLOUDFRONT_SOURCE_ARN" \
+    --function-url-auth-type AWS_IAM)
+  test -n "$URL_PERMISSION_URL_PRE_REVISION" && URL_PERMISSION_ADD+=(--revision-id "$URL_PERMISSION_URL_PRE_REVISION")
+  if "${URL_PERMISSION_ADD[@]}" >"$WORK_DIR/url-permission-add.json" 2>"$WORK_DIR/url-permission-add.error"; then
+    reconcile_lambda_permission AllowCloudFrontFunctionUrlV2 URL_PERMISSION_URL "$EXPECTED_URL_PERMISSION" || {
+      rollback_created_url
+      die "Lambda URL permission response was not the exact newly-owned statement"
+    }
+  else
+    MUTATION_AMBIGUOUS=1
+    die "ambiguous Lambda URL permission result; preserving any matching post-state for manual exact reconciliation"
+  fi
+fi
+snapshot_lambda_permission AllowCloudFrontFunctionInvokeV2 URL_PERMISSION_INVOKE
+if test "$URL_PERMISSION_INVOKE_PRE_PRESENT" -eq 0; then
+  assert_dev_account
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before aws lambda add-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER --statement-id AllowCloudFrontFunctionInvokeV2 --action lambda:InvokeFunction --principal cloudfront.amazonaws.com --source-arn $CLOUDFRONT_SOURCE_ARN (target $QUALIFIED_FUNCTION_ARN)"
+  INVOKE_PERMISSION_ADD=(aws lambda add-permission --function-name "$FUNCTION_NAME" --qualifier "$QUALIFIER" \
+    --statement-id AllowCloudFrontFunctionInvokeV2 --action lambda:InvokeFunction \
+    --principal cloudfront.amazonaws.com \
+    --source-arn "$CLOUDFRONT_SOURCE_ARN" \
+    --invoked-via-function-url)
+  test -n "$URL_PERMISSION_INVOKE_PRE_REVISION" && INVOKE_PERMISSION_ADD+=(--revision-id "$URL_PERMISSION_INVOKE_PRE_REVISION")
+  if "${INVOKE_PERMISSION_ADD[@]}" >"$WORK_DIR/invoke-permission-add.json" 2>"$WORK_DIR/invoke-permission-add.error"; then
+    reconcile_lambda_permission AllowCloudFrontFunctionInvokeV2 URL_PERMISSION_INVOKE "$EXPECTED_INVOKE_PERMISSION" || {
+      rollback_created_url
+      die "Lambda invoke permission response was not the exact newly-owned statement"
+    }
+  else
+    MUTATION_AMBIGUOUS=1
+    die "ambiguous Lambda invoke permission result; preserving any matching post-state for manual exact reconciliation"
+  fi
+fi
+read_lambda_policy "$WORK_DIR/lambda-permissions.json" "$WORK_DIR/lambda-policy-revision.txt" ||
+  { rollback_created_url; die "Lambda URL permissions are unreadable after bootstrap"; }
+validate_lambda_policy || { rollback_created_url; die "Lambda URL permissions are not the two reviewed CloudFront statements"; }
+POLICY_PRESENT=1
+rollback_url_state() {
+  local address target failed=0 state_file state_list="$WORK_DIR/application-state-rollback.list"
+  test "${LOCK_ACQUIRED:-0}" -eq 1 || return 1
+  lock_is_current || return 1
+  terraform -chdir="$ROOT/v2/infra" state list >"$state_list" || return 1
+  for address in \
+    'aws_lambda_permission.public_chat_invoke' \
+    'aws_lambda_permission.public_chat_url' \
+    'aws_lambda_function_url.public_chat'; do
+    case "$address" in
+      aws_lambda_permission.public_chat_invoke)
+        test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+        target="$FUNCTION_NAME,$QUALIFIER,AllowCloudFrontFunctionInvokeV2"
+        ;;
+      aws_lambda_permission.public_chat_url)
+        test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+        target="$FUNCTION_NAME,$QUALIFIER,AllowCloudFrontFunctionUrlV2"
+        ;;
+      aws_lambda_function_url.public_chat)
+        test "${STATE_IMPORTED_BY_THIS_RUN["$address"]:-0}" -eq 1 || continue
+        target="$FUNCTION_NAME,$QUALIFIER"
+        ;;
+    esac
+    if state_list_contains "$state_list" "$address"; then
+      state_file="$WORK_DIR/rollback-${address//[^A-Za-z0-9]/_}.state"
+      if ! terraform -chdir="$ROOT/v2/infra" state show -no-color "$address" >"$state_file" ||
+        ! state_id_matches "$state_file" "$target"; then
+        printf 'refusing rollback of %s: current state ID is not the exact target %s\n' "$address" "$target" >&2
+        failed=1
+        continue
+      fi
+      assert_dev_account
+      test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/v2/infra state rm $address (target $target)"
+      terraform -chdir="$ROOT/v2/infra" state rm "$address"
+    fi
+    STATE_IMPORTED_BY_THIS_RUN["$address"]=0
+  done
+  return "$failed"
+}
+import_url_state() {
+  local address="$1" identifier="$2" label="$3"
+  if ! state_list_contains "$APPLICATION_STATE_LIST" "$address"; then
+    assert_dev_account
+    test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before terraform -chdir=$ROOT/v2/infra import -input=false $address $identifier (target $identifier)"
+    if ! terraform -chdir="$ROOT/v2/infra" import -input=false \
+      -var-file=development.tfvars -var-file="$BOOTSTRAP_FOUNDATION_VARS" \
+      "$address" "$identifier" >"$WORK_DIR/${label// /-}-import.log" 2>&1; then
+      if grep -qiE 'already managed|already exists|state.*managed' "$WORK_DIR/${label// /-}-import.log"; then
+        die "$label import is already managed or concurrent; refusing state removal"
+      fi
+      die "$label import failed; state ownership is unproven and was retained"
+    fi
+    STATE_IMPORTED_BY_THIS_RUN["$address"]=1
+  else
+    STATE_PREEXISTING["$address"]=1
+  fi
+  if ! terraform -chdir="$ROOT/v2/infra" state show -no-color "$address" >"$WORK_DIR/${label// /-}.state"; then
+    die "$label state verification failed"
+  fi
+  state_id_matches "$WORK_DIR/${label// /-}.state" "$identifier" ||
+    die "$label Terraform state ID does not match exact target $identifier"
+}
+import_url_state 'aws_lambda_function_url.public_chat' "$FUNCTION_NAME,$QUALIFIER" \
+  'Lambda URL'
+import_url_state 'aws_lambda_permission.public_chat_url' "$FUNCTION_NAME,$QUALIFIER,AllowCloudFrontFunctionUrlV2" \
+  'Lambda URL permission'
+import_url_state 'aws_lambda_permission.public_chat_invoke' "$FUNCTION_NAME,$QUALIFIER,AllowCloudFrontFunctionInvokeV2" \
+  'Lambda invoke permission'
+
+ADDRESS_INVENTORY="$EVIDENCE_DIR/terraform-addresses.tsv"
+printf 'terraform_address\tlive_identifier\n' >"$ADDRESS_INVENTORY"
+printf 'aws_api_gateway_rest_api.tollchat\tocw8sg0wlb\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_bedrock_guardrail.tollchat\tvdyqrh31xgca\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_bedrockagentcore_agent_runtime.tollchat\tnova_toll_v2_development-Y69XBf88Bl\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_bedrockagentcore_agent_runtime_endpoint.tollchat\tpreview\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_bedrockagentcore_resource_policy.tollchat["runtime"]\t%s\n' "$(jq -r '.runtime.arn' "$INVENTORY")" >>"$ADDRESS_INVENTORY"
+printf 'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]\t%s\n' "$(jq -r '.endpoint.arn' "$INVENTORY")" >>"$ADDRESS_INVENTORY"
+printf 'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]\t%s\n' "$(jq -r '.arn' "$WORK_DIR/agentcore-log-group-DEFAULT.json")" >>"$ADDRESS_INVENTORY"
+printf 'aws_cloudwatch_log_group.agentcore_runtime["preview"]\t%s\n' "$(jq -r '.arn' "$WORK_DIR/agentcore-log-group-preview.json")" >>"$ADDRESS_INVENTORY"
+printf 'aws_lambda_function_url.public_chat\t%s,%s\n' "$FUNCTION_NAME" "$QUALIFIER" >>"$ADDRESS_INVENTORY"
+printf 'aws_lambda_permission.public_chat_url\t%s,%s,AllowCloudFrontFunctionUrlV2\n' "$FUNCTION_NAME" "$QUALIFIER" >>"$ADDRESS_INVENTORY"
+printf 'aws_lambda_permission.public_chat_invoke\t%s,%s,AllowCloudFrontFunctionInvokeV2\n' "$FUNCTION_NAME" "$QUALIFIER" >>"$ADDRESS_INVENTORY"
+printf 'aws_cloudfront_distribution.site\t%s\n' "$(jq -r '.distribution.id' "$INVENTORY")" >>"$ADDRESS_INVENTORY"
+printf 'aws_cloudfront_origin_access_control.site\t%s\n' "$(jq -r '.id' <<<"$SITE_OAC_INFO")" >>"$ADDRESS_INVENTORY"
+printf 'aws_cloudfront_origin_access_control.public_chat\t%s\n' "$(jq -r '.id' <<<"$PUBLIC_CHAT_OAC_INFO")" >>"$ADDRESS_INVENTORY"
+printf 'aws_cloudfront_response_headers_policy.development_noindex\t%s\n' "$(jq -r '.id' <<<"$RESPONSE_HEADERS_INFO")" >>"$ADDRESS_INVENTORY"
+printf 'aws_wafv2_web_acl.public_chat\t%s\n' "$(jq -r '.arn' <<<"$WAF_INFO")" >>"$ADDRESS_INVENTORY"
+printf 'aws_wafv2_web_acl_logging_configuration.agent_reports\t%s\n' "$(jq -r '.arn' <<<"$WAF_INFO")" >>"$ADDRESS_INVENTORY"
+printf 'aws_iam_role.development_delivery[0]\t%s\n' "$ROLE_ARN" >>"$ADDRESS_INVENTORY"
+printf 'aws_iam_role_policy.development_delivery[0]\t%s:%s\n' "$ROLE_NAME" "$EXPECTED_POLICY_NAME" >>"$ADDRESS_INVENTORY"
+printf 'aws_kms_alias.agent_measurement\talias/tollchat-v2-agent-measurement-dev\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_kms_alias.site\talias/tollchat-v2-site-dev\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_s3_bucket.agent_measurement\taws-waf-logs-tollchat-agent-reports-%s-dev\n' "$EXPECTED_ACCOUNT" >>"$ADDRESS_INVENTORY"
+printf 'aws_s3_bucket.site\ttollchat-site-%s-dev\n' "$EXPECTED_ACCOUNT" >>"$ADDRESS_INVENTORY"
+for role_mapping in \
+  'loader toll-v2-pricing-loader-dev' \
+  'publisher toll-v2-report-publisher-dev' \
+  'publisher_scheduler toll-v2-report-publisher-scheduler-dev' \
+  'timed_checks nova-toll-v2-timed-checks-dev' \
+  'tollchat_runtime nova-toll-v2-agentcore-runtime-dev' \
+  'tollchat_proxy nova-toll-v2-chat-proxy-dev' \
+  'usage_publisher tollchat-v2-usage-publisher-dev' \
+  'agent_usage_rollup tollchat-v2-agent-usage-rollup-dev'; do
+  IFS=' ' read -r address role_name <<<"$role_mapping"
+  printf 'aws_iam_role.%s\tarn:aws:iam::%s:role/%s\n' "$address" "$EXPECTED_ACCOUNT" "$role_name" >>"$ADDRESS_INVENTORY"
+done
+for policy_mapping in \
+  'loader toll-v2-pricing-loader-dev toll-v2-pricing-loader-dev' \
+  'publisher toll-v2-report-publisher-dev toll-v2-report-publisher-dev' \
+  'publisher_scheduler toll-v2-report-publisher-scheduler-dev toll-v2-report-publisher-scheduler-dev' \
+  'timed_checks nova-toll-v2-timed-checks-dev nova-toll-v2-route-live-checks-dev' \
+  'tollchat_runtime nova-toll-v2-agentcore-runtime-dev nova-toll-v2-agentcore-runtime-dev' \
+  'tollchat_proxy nova-toll-v2-chat-proxy-dev nova-toll-v2-chat-proxy-dev' \
+  'usage_publisher tollchat-v2-usage-publisher-dev tollchat-v2-usage-publisher-dev' \
+  'agent_usage_rollup tollchat-v2-agent-usage-rollup-dev tollchat-v2-agent-usage-rollup-dev'; do
+  IFS=' ' read -r address role_name policy_name <<<"$policy_mapping"
+  printf 'aws_iam_role_policy.%s\t%s:%s\n' "$address" "$role_name" "$policy_name" >>"$ADDRESS_INVENTORY"
+done
+for attachment_mapping in \
+  'loader_vpc toll-v2-pricing-loader-dev' \
+  'publisher_vpc toll-v2-report-publisher-dev' \
+  'tollchat_proxy_vpc nova-toll-v2-chat-proxy-dev'; do
+  IFS=' ' read -r address role_name <<<"$attachment_mapping"
+  printf 'aws_iam_role_policy_attachment.%s\t%s/arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole\n' "$address" "$role_name" >>"$ADDRESS_INVENTORY"
+done
+printf 'aws_athena_named_query.top_routes\t097b778f-c9ed-4bd9-af53-1e05770e1d53\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_athena_named_query.recent_routes\t6a947ac6-b2a9-45b9-a28c-1b19bfec3e1d\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_athena_workgroup.agent_reports\ttollchat-agent-reports-dev\n' >>"$ADDRESS_INVENTORY"
+printf 'aws_s3_bucket_public_access_block.agent_measurement\t%s\n' "$MEASUREMENT_BUCKET" >>"$ADDRESS_INVENTORY"
+printf 'aws_s3_bucket_policy.agent_measurement\t%s\n' "$MEASUREMENT_BUCKET" >>"$ADDRESS_INVENTORY"
+printf 'aws_s3_bucket_public_access_block.site\t%s\n' "$SITE_BUCKET" >>"$ADDRESS_INVENTORY"
+printf 'aws_s3_bucket_policy.site\t%s\n' "$SITE_BUCKET" >>"$ADDRESS_INVENTORY"
+printf 'aws_kms_key.agent_measurement\t%s\n' "$(jq -r '.arn' "$WORK_DIR/kms-tollchat-v2-agent-measurement-dev.json")" >>"$ADDRESS_INVENTORY"
+printf 'aws_kms_key.site\t%s\n' "$(jq -r '.arn' "$WORK_DIR/kms-tollchat-v2-site-dev.json")" >>"$ADDRESS_INVENTORY"
+
+printf ',\n  "site_oac": %s,\n  "public_chat_oac": %s,\n  "response_headers_policy": %s,\n  "waf": %s,\n  "delivery_role_present": %s,\n  "function_url_present": %s,\n  "permission_policy_present": %s\n' \
+  "$SITE_OAC_INFO" "$PUBLIC_CHAT_OAC_INFO" "$RESPONSE_HEADERS_INFO" "$WAF_INFO" \
+  "$ROLE_PRESENT" "$URL_PRESENT" "$POLICY_PRESENT" >>"$INVENTORY"
+printf ',\n  "reviewed_commit": "%s",\n  "fetcher_sha256": "%s",\n  "delivery_trust_sha256": "%s",\n  "delivery_policy_sha256": "%s"\n' \
+  "$REVIEWED_COMMIT" "$FETCHER_SHA256" "$TRUST_SHA256" "$POLICY_SHA256" >>"$INVENTORY"
+printf '%s\n' '}' >>"$INVENTORY"
+jq -e '.account == "903859731897"' "$INVENTORY" >/dev/null
+
+require_external_file() {
+  local path="$1"
+  case "$path" in
+    /*) ;;
+    *) die "evidence input must be an absolute path" ;;
+  esac
+  test -f "$path" && test ! -L "$path" || die "evidence input must be a regular non-symlink file"
+  case "$(realpath -m -- "$path")" in "$ROOT"|"$ROOT"/*) die "evidence input must be outside checkout" ;; esac
+}
+
+run_iam_simulation() {
+  local label="$1" action="$2" resource="$3" expected="$4" raw decision
+  local -a context_args=()
+  case "$label" in
+    kms-*) context_args=(
+      --context-entries
+      ContextKeyName=aws:ResourceTag/environment,ContextKeyValues=development,ContextKeyType=string
+      ContextKeyName=aws:ResourceTag/version,ContextKeyValues=v2,ContextKeyType=string
+    ) ;;
+  esac
+  raw="$WORK_DIR/iam-simulation-$label.json"
+  assert_dev_account
+  aws iam simulate-principal-policy --policy-source-arn "$ROLE_ARN" \
+    --action-names "$action" --resource-arns "$resource" "${context_args[@]}" --output json >"$raw" ||
+    die "IAM simulation failed: $label"
+  jq -e '.EvaluationResults | type == "array" and length == 1' "$raw" >/dev/null ||
+    die "IAM simulation result is missing or ambiguous: $label"
+  decision="$(jq -r '.EvaluationResults[0].EvalDecision' "$raw")"
+  if test "$expected" = allowed; then
+    test "$decision" = allowed || die "expected IAM allow was not returned: $label"
+  else
+    case "$decision" in explicitDeny|implicitDeny) ;; *) die "expected IAM deny was not returned: $label" ;; esac
+  fi
+  jq -cn --arg label "$label" --arg action "$action" --arg resource "$resource" \
+    --arg expected "$expected" --arg decision "$decision" \
+    '{label:$label,action:$action,resource:$resource,expected:$expected,decision:$decision}' >>"$IAM_SIMULATION_LINES"
+}
+
+run_post_bootstrap_gates() {
+  test "${BOOTSTRAP_APPROVED:-}" = YES || die "set BOOTSTRAP_APPROVED=YES before post-bootstrap gates"
+  IAM_SIMULATION_LINES="$WORK_DIR/iam-simulation-lines.jsonl"
+  IAM_SIMULATION_EVIDENCE="$EVIDENCE_DIR/iam-simulations.json"
+  test ! -e "$IAM_SIMULATION_EVIDENCE" || die "refusing to overwrite IAM simulation evidence"
+  : >"$IAM_SIMULATION_LINES"
+  SIMULATION_EXPECTED_COUNT=92
+  SIMULATION_MATRIX="$WORK_DIR/iam-simulation-matrix.tsv"
+  cat >"$SIMULATION_MATRIX" <<EOF
+state-foundation-read|s3:GetObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/development/terraform.tfstate|allowed
+state-application-read|s3:GetObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/v2/development/terraform.tfstate|allowed
+state-application-write|s3:PutObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/v2/development/terraform.tfstate|allowed
+state-lock-read|s3:GetObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/v2/development/terraform.tfstate.tflock|allowed
+state-lock-write|s3:PutObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/v2/development/terraform.tfstate.tflock|allowed
+state-lock-delete|s3:DeleteObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/v2/development/terraform.tfstate.tflock|allowed
+lambda-code|lambda:UpdateFunctionCode|$QUALIFIED_FUNCTION_ARN|allowed
+lambda-version|lambda:PublishVersion|arn:aws:lambda:${REGION}:${EXPECTED_ACCOUNT}:function:${FUNCTION_NAME}|allowed
+lambda-alias|lambda:UpdateAlias|$QUALIFIED_FUNCTION_ARN|allowed
+lambda-retire|lambda:DeleteFunction|$QUALIFIED_FUNCTION_ARN|allowed
+site-upload|s3:PutObject|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|allowed
+site-delete|s3:DeleteObject|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|allowed
+artifact-upload|s3:PutObject|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
+artifact-delete|s3:DeleteObject|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
+cloudfront-update|cloudfront:UpdateFunction|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
+cloudfront-publish|cloudfront:PublishFunction|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
+guardrail-version|bedrock:CreateGuardrailVersion|arn:aws:bedrock:${REGION}:${EXPECTED_ACCOUNT}:guardrail/vdyqrh31xgca|allowed
+api-deployment-create|apigateway:POST|arn:aws:apigateway:${REGION}::/restapis/ocw8sg0wlb/deployments|allowed
+api-deployment-delete|apigateway:DELETE|arn:aws:apigateway:${REGION}::/restapis/ocw8sg0wlb/deployments/reviewed|allowed
+agentcore-runtime-update|bedrock-agentcore:UpdateAgentRuntime|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl|allowed
+agentcore-endpoint-update|bedrock-agentcore:UpdateAgentRuntimeEndpoint|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview|allowed
+events-targets|events:PutTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+logs-retention|logs:PutRetentionPolicy|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
+alarm-tags|cloudwatch:TagResource|arn:aws:cloudwatch:${REGION}:${EXPECTED_ACCOUNT}:alarm/tollchat-v2-chat-proxy-errors-dev|allowed
+queue-read|sqs:GetQueueAttributes|arn:aws:sqs:${REGION}:${EXPECTED_ACCOUNT}:toll-v2-pricing-loader-invoke-failure-dev|allowed
+athena-read|athena:GetNamedQuery|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:namedquery/097b778f-c9ed-4bd9-af53-1e05770e1d53|allowed
+workgroup-update|athena:UpdateWorkGroup|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
+sessions-update|dynamodb:UpdateTable|arn:aws:dynamodb:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev|allowed
+catalog-update|glue:UpdateTable|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat_agent_reports_development/*|allowed
+schedule-update|scheduler:UpdateSchedule|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule/default/toll-v2-report-publisher-dev|allowed
+kms-use|kms:Encrypt|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:key/076e8341-894b-405c-96e9-2b037f96e2a6|allowed
+site-ownership|s3:PutBucketOwnershipControls|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-tags|s3:PutBucketTagging|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-versioning|s3:PutBucketVersioning|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-encryption|s3:PutEncryptionConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-lifecycle|s3:PutLifecycleConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+registry-upload|s3:PutObject|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev/registry/agent_registry.ndjson|allowed
+registry-delete|s3:DeleteObject|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev/registry/agent_registry.ndjson|allowed
+artifact-abort|s3:AbortMultipartUpload|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
+lambda-tag|lambda:TagResource|$QUALIFIED_FUNCTION_ARN|allowed
+lambda-untag|lambda:UntagResource|$QUALIFIED_FUNCTION_ARN|allowed
+events-disable|events:DisableRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+events-enable|events:EnableRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+events-remove-targets|events:RemoveTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+events-tag|events:TagResource|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+events-untag|events:UntagResource|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+logs-tag|logs:TagResource|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
+logs-untag|logs:UntagResource|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
+alarm-untag|cloudwatch:UntagResource|arn:aws:cloudwatch:${REGION}:${EXPECTED_ACCOUNT}:alarm/tollchat-v2-chat-proxy-errors-dev|allowed
+sessions-tag|dynamodb:TagResource|arn:aws:dynamodb:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev|allowed
+sessions-untag|dynamodb:UntagResource|arn:aws:dynamodb:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev|allowed
+sessions-backups|dynamodb:UpdateContinuousBackups|arn:aws:dynamodb:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev|allowed
+sessions-ttl|dynamodb:UpdateTimeToLive|arn:aws:dynamodb:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev|allowed
+catalog-tag|glue:TagResource|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat_agent_reports_development/agent_registry|allowed
+catalog-untag|glue:UntagResource|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat_agent_reports_development/agent_registry|allowed
+catalog-database|glue:UpdateDatabase|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:database/tollchat_agent_reports_development|allowed
+athena-tag|athena:TagResource|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
+athena-untag|athena:UntagResource|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
+schedule-tag|scheduler:TagResource|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule/default/toll-v2-report-publisher-dev|allowed
+schedule-untag|scheduler:UntagResource|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule/default/toll-v2-report-publisher-dev|allowed
+agentcore-tag|bedrock-agentcore:TagResource|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl|allowed
+agentcore-untag|bedrock-agentcore:UntagResource|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl|allowed
+cloudfront-tag|cloudfront:TagResource|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
+cloudfront-test|cloudfront:TestFunction|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
+cloudfront-untag|cloudfront:UntagResource|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
+kms-decrypt|kms:Decrypt|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:key/076e8341-894b-405c-96e9-2b037f96e2a6|allowed
+kms-generate-data-key|kms:GenerateDataKey|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:key/076e8341-894b-405c-96e9-2b037f96e2a6|allowed
+foundation-state-write|s3:PutObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/development/terraform.tfstate|denied
+production-state-read|s3:GetObject|arn:aws:s3:::nova-toll-tfstate-920534282028/nova-toll/terraform.tfstate|denied
+unrelated-site-write|s3:PutObject|arn:aws:s3:::unrelated-development-site/index.html|denied
+unrelated-artifact-write|s3:PutObject|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v1/release.zip|denied
+role-create|iam:CreateRole|$ROLE_ARN|denied
+role-policy-write|iam:PutRolePolicy|$ROLE_ARN|denied
+role-pass|iam:PassRole|$ROLE_ARN|denied
+url-admin|lambda:AddPermission|$QUALIFIED_FUNCTION_ARN|denied
+lambda-config-admin|lambda:UpdateFunctionConfiguration|$QUALIFIED_FUNCTION_ARN|denied
+agentcore-create|bedrock-agentcore:CreateAgentRuntime|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/unrelated|denied
+agentcore-policy-write|bedrock-agentcore:PutResourcePolicy|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/unrelated|denied
+events-rule-write|events:PutRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|denied
+logs-filter-write|logs:PutMetricFilter|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|denied
+alarm-write|cloudwatch:PutMetricAlarm|arn:aws:cloudwatch:${REGION}:${EXPECTED_ACCOUNT}:alarm/tollchat-v2-chat-proxy-errors-dev|denied
+waf-logging-write|wafv2:PutLoggingConfiguration|arn:aws:wafv2:${REGION}:${EXPECTED_ACCOUNT}:global/webacl/tollchat-v2-public-chat-dev/unrelated|denied
+kms-alias-write|kms:CreateAlias|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:alias/tollchat-v2-site-dev|denied
+sg-write|ec2:AuthorizeSecurityGroupIngress|arn:aws:ec2:${REGION}:${EXPECTED_ACCOUNT}:security-group/sg-unrelated|denied
+sqs-policy-write|sqs:SetQueueAttributes|arn:aws:sqs:${REGION}:${EXPECTED_ACCOUNT}:toll-v2-pricing-loader-invoke-failure-dev|denied
+sqs-policy-add|sqs:AddPermission|arn:aws:sqs:${REGION}:${EXPECTED_ACCOUNT}:toll-v2-pricing-loader-invoke-failure-dev|denied
+sqs-policy-remove|sqs:RemovePermission|arn:aws:sqs:${REGION}:${EXPECTED_ACCOUNT}:toll-v2-pricing-loader-invoke-failure-dev|denied
+athena-query-write|athena:CreateNamedQuery|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|denied
+measurement-policy-write|s3:PutBucketPolicy|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|denied
+measurement-exposure-write|s3:PutBucketPublicAccessBlock|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|denied
+iam-attachment-write|iam:AttachRolePolicy|$ROLE_ARN|denied
+kms-alias-update|kms:UpdateAlias|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:alias/tollchat-v2-site-dev|denied
+EOF
+  SIMULATION_COUNT=0
+  while IFS='|' read -r label action resource expected; do
+    test -n "$label" || continue
+    run_iam_simulation "$label" "$action" "$resource" "$expected"
+    SIMULATION_COUNT=$((SIMULATION_COUNT + 1))
+  done <"$SIMULATION_MATRIX"
+  test "$SIMULATION_COUNT" -eq "$SIMULATION_EXPECTED_COUNT" || die "IAM simulation matrix is incomplete"
+
+  REVIEWED_V2_PACKAGE_DIR="${REVIEWED_V2_PACKAGE_DIR:?set the absolute path to trusted v2 release packages}"
+  REVIEWED_V2_PACKAGE_MANIFEST="${REVIEWED_V2_PACKAGE_MANIFEST:?set the absolute path to the reviewed package digest manifest}"
+  case "$REVIEWED_V2_PACKAGE_DIR" in /*) ;; *) die "package directory must be absolute" ;; esac
+  case "$(realpath -m -- "$REVIEWED_V2_PACKAGE_DIR")" in "$ROOT"|"$ROOT"/*) die "packages must be trusted artifacts outside checkout" ;; esac
+  test -d "$REVIEWED_V2_PACKAGE_DIR" && test ! -L "$REVIEWED_V2_PACKAGE_DIR" || die "package directory must be a regular directory"
+  require_external_file "$REVIEWED_V2_PACKAGE_MANIFEST"
+  test "$(realpath -m -- "$REVIEWED_V2_PACKAGE_MANIFEST")" != "$INVENTORY" || die "package manifest cannot be inventory"
+  for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip; do
+    require_external_file "$REVIEWED_V2_PACKAGE_DIR/$package"
+  done
+  PACKAGE_DIGESTS="$WORK_DIR/package-digests.tsv"
+  : >"$PACKAGE_DIGESTS"
+  for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip; do
+    sha256sum "$REVIEWED_V2_PACKAGE_DIR/$package" | awk -v name="$package" '{print $1 "\t" name}' >>"$PACKAGE_DIGESTS"
+  done
+  PACKAGE_DIGESTS_JSON="$(jq -Rn '[inputs | split("\t") | {sha256: .[0], name: .[1]}]' <"$PACKAGE_DIGESTS")"
+  python3 - "$REVIEWED_V2_PACKAGE_MANIFEST" "$REVIEWED_V2_PACKAGE_DIR" <<'PY'
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+expected = {"loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip"}
+manifest = Path(sys.argv[1])
+directory = Path(sys.argv[2])
+entries = {}
+for line in manifest.read_text().splitlines():
+    fields = line.split()
+    if len(fields) != 2 or not re.fullmatch(r"[0-9a-f]{64}", fields[0]):
+        raise SystemExit("invalid package digest manifest")
+    if fields[1] not in expected or fields[1] in entries:
+        raise SystemExit("unexpected or duplicate package in manifest")
+    entries[fields[1]] = fields[0]
+if set(entries) != expected:
+    raise SystemExit("package digest manifest is incomplete")
+for name, digest in entries.items():
+    actual = hashlib.sha256((directory / name).read_bytes()).hexdigest()
+    if actual != digest:
+        raise SystemExit(f"package digest mismatch: {name}")
+PY
+
+  REPRESENTATIVE_PLAN="$WORK_DIR/representative-development.tfplan"
+  REPRESENTATIVE_PLAN_JSON="$WORK_DIR/representative-development.tfplan.json"
+  REPRESENTATIVE_PLAN_EVIDENCE="$EVIDENCE_DIR/representative-plan.tsv"
+  test ! -e "$REPRESENTATIVE_PLAN_EVIDENCE" || die "refusing to overwrite representative plan evidence"
+  terraform -chdir="$ROOT/v2/infra" plan -input=false -out="$REPRESENTATIVE_PLAN" \
+    -var-file=development.tfvars -var-file="$BOOTSTRAP_FOUNDATION_VARS" \
+    -var "loader_package_path=$REVIEWED_V2_PACKAGE_DIR/loader.zip" \
+    -var "publisher_package_path=$REVIEWED_V2_PACKAGE_DIR/publisher.zip" \
+    -var "agentcore_package_path=$REVIEWED_V2_PACKAGE_DIR/agentcore.zip" \
+    -var "chat_proxy_package_path=$REVIEWED_V2_PACKAGE_DIR/chat-proxy.zip"
+  terraform -chdir="$ROOT/v2/infra" show -json "$REPRESENTATIVE_PLAN" >"$REPRESENTATIVE_PLAN_JSON"
+  PLAN_GATE_SOURCE="$ROOT/.github/workflows/v2-development-delivery.yml"
+  require_reviewed_file "$PLAN_GATE_SOURCE"
+  PLAN_GATE="$WORK_DIR/development-plan-gate.py"
+  sed -n '/python3 - "\$PLAN_JSON" <<'"'"'PY'"'"'/,/^          PY$/p' "$PLAN_GATE_SOURCE" |
+    sed '1d;$d;s/^          //' >"$PLAN_GATE"
+  test -s "$PLAN_GATE" || die "saved-plan gate source is missing"
+  python3 "$PLAN_GATE" "$REPRESENTATIVE_PLAN_JSON"
+  REPRESENTATIVE_PLAN_BODY="$WORK_DIR/representative-plan-body.tsv"
+  python3 - "$REPRESENTATIVE_PLAN_JSON" "$REPRESENTATIVE_PLAN_BODY" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+plan = json.loads(Path(sys.argv[1]).read_text())
+changes = plan.get("resource_changes")
+if not isinstance(changes, list):
+    raise SystemExit("saved plan has no resource_changes array")
+allowed = {"no-op", "create", "update", "delete", "read"}
+rows = []
+for change in changes:
+    if not isinstance(change, dict) or not isinstance(change.get("address"), str):
+        raise SystemExit("saved plan has an invalid resource address")
+    actions = change.get("change", {}).get("actions")
+    if not isinstance(actions, list) or not actions or any(action not in allowed for action in actions):
+        raise SystemExit("saved plan has an invalid action array")
+    rows.append((change["address"], ",".join(actions)))
+Path(sys.argv[2]).write_text("terraform_address\tactions\n" + "".join(f"{a}\t{b}\n" for a, b in sorted(rows)))
+PY
+  PLAN_SHA256="$(sha256sum "$REPRESENTATIVE_PLAN" | awk '{print $1}')"
+  EVIDENCE_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  EVIDENCE_BINDING="$EVIDENCE_DIR/evidence-binding.json"
+  test ! -e "$EVIDENCE_BINDING" || die "refusing to overwrite evidence binding"
+  jq -n --arg commit_sha "$REVIEWED_COMMIT" --arg account_id "$EXPECTED_ACCOUNT" \
+    --arg role_arn "$ROLE_ARN" --arg trust_sha256 "$TRUST_SHA256" \
+    --arg policy_sha256 "$POLICY_SHA256" --arg plan_sha256 "$PLAN_SHA256" \
+    --arg fetcher_sha256 "$FETCHER_SHA256" --arg timestamp "$EVIDENCE_TIMESTAMP" \
+    --argjson package_digests "$PACKAGE_DIGESTS_JSON" \
+    '{commit_sha:$commit_sha,account_id:$account_id,role_arn:$role_arn,trust_sha256:$trust_sha256,policy_sha256:$policy_sha256,fetcher_sha256:$fetcher_sha256,plan_sha256:$plan_sha256,timestamp:$timestamp,package_digests:$package_digests}' \
+    >"$EVIDENCE_BINDING" || die "could not generate evidence binding"
+  chmod 600 -- "$EVIDENCE_BINDING"
+  BINDING_SHA256="$(sha256sum "$EVIDENCE_BINDING" | awk '{print $1}')"
+  jq --arg commit_sha "$REVIEWED_COMMIT" --arg account_id "$EXPECTED_ACCOUNT" \
+    --arg role_arn "$ROLE_ARN" --arg policy_sha256 "$POLICY_SHA256" \
+    --arg plan_sha256 "$PLAN_SHA256" --arg timestamp "$EVIDENCE_TIMESTAMP" \
+    --arg binding_sha256 "$BINDING_SHA256" \
+    '. + {commit_sha:$commit_sha,account_id:$account_id,role_arn:$role_arn,policy_sha256:$policy_sha256,plan_sha256:$plan_sha256,timestamp:$timestamp,binding_sha256:$binding_sha256}' \
+    "$INVENTORY" >"$WORK_DIR/inventory-bound.json" || die "could not bind inventory evidence"
+  mv -- "$WORK_DIR/inventory-bound.json" "$INVENTORY"
+  ADDRESS_INVENTORY_BODY="$WORK_DIR/terraform-addresses-body.tsv"
+  mv -- "$ADDRESS_INVENTORY" "$ADDRESS_INVENTORY_BODY"
+  {
+    printf 'evidence_binding_sha256\t%s\ncommit_sha\t%s\naccount_id\t%s\nrole_arn\t%s\npolicy_sha256\t%s\nplan_sha256\t%s\ntimestamp\t%s\n' \
+      "$BINDING_SHA256" "$REVIEWED_COMMIT" "$EXPECTED_ACCOUNT" "$ROLE_ARN" "$POLICY_SHA256" "$PLAN_SHA256" "$EVIDENCE_TIMESTAMP"
+    cat -- "$ADDRESS_INVENTORY_BODY"
+  } >"$ADDRESS_INVENTORY"
+  chmod 600 -- "$ADDRESS_INVENTORY"
+  {
+    printf 'evidence_binding_sha256\t%s\n' "$BINDING_SHA256"
+    printf 'commit_sha\t%s\naccount_id\t%s\nrole_arn\t%s\npolicy_sha256\t%s\nplan_sha256\t%s\ntimestamp\t%s\n' \
+      "$REVIEWED_COMMIT" "$EXPECTED_ACCOUNT" "$ROLE_ARN" "$POLICY_SHA256" "$PLAN_SHA256" "$EVIDENCE_TIMESTAMP"
+    cat -- "$REPRESENTATIVE_PLAN_BODY"
+  } >"$REPRESENTATIVE_PLAN_EVIDENCE"
+  chmod 600 -- "$REPRESENTATIVE_PLAN_EVIDENCE"
+  jq -n --slurpfile simulations "$IAM_SIMULATION_LINES" \
+    --arg binding_sha256 "$BINDING_SHA256" --arg commit_sha "$REVIEWED_COMMIT" \
+    --arg account_id "$EXPECTED_ACCOUNT" --arg role_arn "$ROLE_ARN" \
+    --arg policy_sha256 "$POLICY_SHA256" --arg plan_sha256 "$PLAN_SHA256" \
+    --arg timestamp "$EVIDENCE_TIMESTAMP" --argjson count "$SIMULATION_COUNT" \
+    '{binding_sha256:$binding_sha256,context:{commit_sha:$commit_sha,account_id:$account_id,role_arn:$role_arn,policy_sha256:$policy_sha256,plan_sha256:$plan_sha256,timestamp:$timestamp},simulation_count:$count,simulations:$simulations}' \
+    >"$IAM_SIMULATION_EVIDENCE" || die "could not bind IAM simulation evidence"
+  chmod 600 -- "$IAM_SIMULATION_EVIDENCE"
+
+  PROTECTED_MAIN_OIDC_EVIDENCE="${PROTECTED_MAIN_OIDC_EVIDENCE:?set the sanitized protected-main OIDC proof path}"
+  require_external_file "$PROTECTED_MAIN_OIDC_EVIDENCE"
+  OIDC_PROOF="$EVIDENCE_DIR/protected-main-oidc.json"
+  test ! -e "$OIDC_PROOF" || die "refusing to overwrite protected-main OIDC evidence"
+  jq -e --arg commit "$REVIEWED_COMMIT" '
+    type == "object" and (keys_unsorted | sort) == ["account", "commit_sha", "environment", "proof", "ref", "repository"] and
+    .proof == "protected-main-oidc" and .account == "903859731897" and
+    .commit_sha == $commit and
+    .environment == "development" and .ref == "refs/heads/main" and
+    .repository == "rhprasad0/nova-toll-budget-agent"
+  ' "$PROTECTED_MAIN_OIDC_EVIDENCE" >/dev/null ||
+    die "protected-main OIDC proof is not the exact development account proof"
+  jq -n --slurpfile proof "$PROTECTED_MAIN_OIDC_EVIDENCE" \
+    --arg binding_sha256 "$BINDING_SHA256" --arg commit_sha "$REVIEWED_COMMIT" \
+    --arg account_id "$EXPECTED_ACCOUNT" --arg role_arn "$ROLE_ARN" \
+    --arg policy_sha256 "$POLICY_SHA256" --arg plan_sha256 "$PLAN_SHA256" \
+    --arg timestamp "$EVIDENCE_TIMESTAMP" \
+    '{binding_sha256:$binding_sha256,context:{commit_sha:$commit_sha,account_id:$account_id,role_arn:$role_arn,policy_sha256:$policy_sha256,plan_sha256:$plan_sha256,timestamp:$timestamp},proof:$proof[0]}' \
+    >"$OIDC_PROOF" || die "could not bind protected-main OIDC evidence"
+  chmod 600 -- "$OIDC_PROOF"
+}
+
+run_post_bootstrap_gates
+BOOTSTRAP_COMPLETE=1
+printf 'non-secret inventory: %s\naddress map: %s\n' "$INVENTORY" "$ADDRESS_INVENTORY"
+```
+
+After bootstrap/import, the recurring OIDC role may refresh the same state,
+perform explicitly allowed updates, upload reviewed release artifacts, and
+perform only the four named immutable release families: the development API
+Gateway deployment, published/retired versions of the five named development
+Lambda functions, the two named development CloudFront functions, and the
+named development Bedrock guardrail version (publication only; its Terraform
+resource uses `skip_destroy`). It cannot create, replace, or administer the
+bootstrap addresses above. The workflow's rendered-plan gate
+must pass before the exact saved plan is applied. A missing import, unknown
+address/action, or failed gate stops for an administrator.
+
+The protected `main` branch plus the protected GitHub `development` environment
+is the reviewed release source for this identity. Publishing arbitrary code to
+the named development Lambda/site objects and the two named development
+CloudFront functions is therefore an intentional delivery capability; the
+AWS policy bounds those calls to exact development resources, while the saved
+Terraform-plan gate bounds only Terraform changes. The identity still cannot
+switch roles, access production or foundation-write paths, create bootstrap
+resources, change public URL permissions, or alter measurement exposure
+controls.
+
 ### Development application release and database validation (#331)
 
 This is the only operative #331 release procedure. It uses only the development
 account and the two development state backends. The typed, non-secret foundation
 output is consumed ephemerally from the #330 development foundation state. The
-first plan creates a CloudFront distribution with no aliases and the CloudFront
-default certificate. After that apply returns its d*.cloudfront.net hostname, the
-second plan supplies that hostname to the proxy allowlist and preview output. No
-custom-domain certificate, Cloudflare lookup/resource, Route 53 record, or change
-to dev.tollchat.ai is part of either plan.
+manual bootstrap/import creates or inventories the CloudFront distribution with
+no aliases and the CloudFront default certificate. Recurring plans consume that
+existing distribution and its d*.cloudfront.net hostname; they never create or
+delete the distribution. Slice 3 custom-domain staging is an administrator-owned
+development apply plus the separately trusted production-foundation DNS gate
+below; recurring delivery remains explicitly disabled for that input.
 
 When direct workstation access to the private RDS endpoint is unavailable, an
 already-authorized development private path may forward the endpoint to a local
@@ -438,6 +1991,673 @@ Keep the terminal non-traced. The development RDS-managed Secrets Manager JSON a
 its extracted username/password exist only in process memory and are never
 printed, placed in an argument, written to a file, put in Terraform input/state/
 plan, or recorded in evidence.
+
+#### Slice 2A development 4via6 policy handoff and allocation gate
+
+The overlapping development VPC input is `172.31.0.0/16`. Tailscale site ID `1`
+derives the stable development route
+`fd7a:115c:a1e0:b1a:0:1:ac1f:0/112`. The current development RDS endpoint
+`nova-toll-db.cc3usg2wmx63.us-east-1.rds.amazonaws.com` resolved to
+`172.31.4.167`, whose site-1 transport host is
+`fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128`. Re-resolve the endpoint and regenerate
+that host immediately before Slice 2B activation; this address is a current
+policy-test fixture, not a permanent DNS record. The later TLS connection keeps
+the RDS DNS name in `PGHOST` for hostname verification and uses the 4via6 host
+only as `PGHOSTADDR`. Confirm both derivations with
+`tailscale debug via 1 172.31.0.0/16` and
+`tailscale debug via 1 172.31.4.167/32` before handoff.
+
+Before any Slice 2B router route activation, set a read-only Tailscale API token
+with device and route read scopes, `TAILSCALE_TAILNET=rhprasad0.github`, and the
+explicitly reviewed intended development router device ID. Any empty or other
+tailnet name is rejected before an API query. The check below enumerates every device,
+fetches routes for every returned device, and stops without an availability result
+on any API, response, schema, route, duplicate, or ownership error. It has no
+route-enable or other mutation path; the token is supplied only in the process
+environment and is never printed.
+
+```sh
+set +x
+: "${TAILSCALE_API_TOKEN:?set a read-only Tailscale API token in the environment}"
+: "${TAILSCALE_TAILNET:?set the Tailscale tailnet name in the environment}"
+: "${TAILSCALE_INTENDED_DEVICE_ID:?set the reviewed intended development router device ID in the environment}"
+python3 - <<'PY'
+# BEGIN SLICE_2A_TAILSCALE_ALLOCATION_CHECK
+import ipaddress
+import json
+import os
+import urllib.parse
+import urllib.request
+
+API_ROOT = "https://api.tailscale.com/api/v2"
+EXPECTED_TAILNET = "rhprasad0.github"
+SITE_ID = 1
+EXPECTED_TAG = "tag:nova-toll-development-router"
+EXPECTED_ROUTE = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+EXPECTED_HOST_ROUTE = "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"
+VIA6_SPACE = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
+
+
+def _devices(document):
+    if not isinstance(document, dict) or not isinstance(document.get("devices"), list):
+        raise ValueError("invalid device inventory")
+    if document.get("nextPageToken") not in (None, ""):
+        raise ValueError("incomplete device inventory")
+    devices = document["devices"]
+    ids = []
+    for device in devices:
+        if not isinstance(device, dict) or not isinstance(device.get("id"), str) or not device["id"]:
+            raise ValueError("invalid device id")
+        if device["id"] in ids:
+            raise ValueError("duplicate device id")
+        ids.append(device["id"])
+    return devices, ids
+
+
+def _site_one_route(route):
+    if not isinstance(route, str) or not route:
+        raise ValueError("invalid route")
+    try:
+        network = ipaddress.ip_network(route, strict=False)
+    except ValueError as error:
+        raise ValueError("invalid route") from error
+    if str(network) != route:
+        raise ValueError("non-canonical route")
+    if network.version == 4 or not network.overlaps(VIA6_SPACE):
+        return False
+    if network.prefixlen < 96:
+        raise ValueError("ambiguous 4via6 route")
+    translator_identifier = (int(network.network_address) >> 32) & 0xFFFFFFFF
+    if (translator_identifier >> 16) != 0:
+        raise ValueError("unsupported 4via6 translator identifier")
+    return (translator_identifier & 0xFFFF) == SITE_ID
+
+
+def check_allocation(
+    device_document,
+    routes_by_device,
+    intended_device_id,
+    *,
+    require_advertised_route=False,
+    require_host_route=False,
+    require_no_advertised_route=False,
+):
+    devices, device_ids = _devices(device_document)
+    if not isinstance(intended_device_id, str) or not intended_device_id:
+        raise ValueError("missing intended device")
+    if intended_device_id not in device_ids:
+        raise ValueError("intended device is absent")
+    if not isinstance(routes_by_device, dict) or set(routes_by_device) != set(device_ids):
+        raise ValueError("incomplete route inventory")
+
+    intended = next(device for device in devices if device["id"] == intended_device_id)
+    if intended.get("tags") != [EXPECTED_TAG]:
+        raise ValueError("intended device does not have exactly the development router tag")
+    allowed_routes = None
+    if require_advertised_route:
+        allowed_routes = {EXPECTED_ROUTE}
+        if require_host_route:
+            allowed_routes.add(EXPECTED_HOST_ROUTE)
+    elif require_host_route:
+        raise ValueError("host-route verification requires post-advertisement mode")
+    owners = {}
+    advertised_owners = {}
+    enabled_owners = {}
+    for device in devices:
+        device_id = device["id"]
+        tags = device.get("tags")
+        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+            raise ValueError("invalid device tags")
+        if device_id != intended_device_id and EXPECTED_TAG in tags:
+            raise ValueError("development router tag has multiple owners")
+        route_document = routes_by_device[device_id]
+        if not isinstance(route_document, dict):
+            raise ValueError("invalid route response")
+        for field in ("advertisedRoutes", "enabledRoutes"):
+            routes = route_document.get(field)
+            if not isinstance(routes, list) or any(not isinstance(route, str) for route in routes):
+                raise ValueError("invalid route response")
+            if len(routes) != len(set(routes)):
+                raise ValueError("duplicate route")
+            for route in routes:
+                if _site_one_route(route):
+                    if allowed_routes is not None and route not in allowed_routes:
+                        raise ValueError("unexpected site-1 route")
+                    owners.setdefault(route, set()).add(device_id)
+                    if field == "advertisedRoutes":
+                        advertised_owners.setdefault(route, set()).add(device_id)
+                    else:
+                        enabled_owners.setdefault(route, set()).add(device_id)
+    if any(route_owners != {intended_device_id} for route_owners in owners.values()):
+        raise ValueError("site-1 route has unknown owner")
+    if require_advertised_route and advertised_owners.get(EXPECTED_ROUTE) != {
+        intended_device_id
+    }:
+        raise ValueError("exact site-1 route is not advertised by intended device")
+    if require_advertised_route and enabled_owners.get(EXPECTED_ROUTE) != {
+        intended_device_id
+    }:
+        raise ValueError("exact site-1 route is not enabled on intended device")
+    if require_host_route and advertised_owners.get(EXPECTED_HOST_ROUTE) != {
+        intended_device_id
+    }:
+        raise ValueError("exact host route is not advertised by intended device")
+    if require_host_route and enabled_owners.get(EXPECTED_HOST_ROUTE) != {
+        intended_device_id
+    }:
+        raise ValueError("exact host route is not enabled on intended device")
+    if require_no_advertised_route and advertised_owners:
+        raise ValueError("site-1 route remains advertised")
+    if owners:
+        return "site-1 4via6 allocation check passed: route is owned only by intended device"
+    return "site-1 4via6 allocation check passed: no route is allocated"
+
+
+def _fetch_json(path, token):
+    request = urllib.request.Request(
+        f"{API_ROOT}{path}",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            if getattr(response, "status", None) != 200:
+                raise ValueError("unexpected API status")
+            return json.load(response)
+    except Exception as error:
+        raise ValueError("Tailscale API request failed") from error
+
+
+def run_check(
+    fetch_json,
+    tailnet,
+    intended_device_id,
+    token,
+    *,
+    post_advertisement=False,
+    require_host_route=False,
+    require_no_advertised_route=False,
+):
+    if tailnet != EXPECTED_TAILNET or not isinstance(token, str) or not token:
+        raise ValueError("missing API inputs")
+    devices_path = f"/tailnet/{urllib.parse.quote(tailnet, safe='')}/devices?fields=all"
+    device_document = fetch_json(devices_path, token)
+    _, device_ids = _devices(device_document)
+    routes = {
+        device_id: fetch_json(
+            f"/device/{urllib.parse.quote(device_id, safe='')}/routes", token
+        )
+        for device_id in device_ids
+    }
+    return check_allocation(
+        device_document,
+        routes,
+        intended_device_id,
+        require_advertised_route=post_advertisement,
+        require_host_route=require_host_route,
+        require_no_advertised_route=require_no_advertised_route,
+    )
+
+
+def main():
+    token = os.environ.get("TAILSCALE_API_TOKEN", "")
+    tailnet = os.environ.get("TAILSCALE_TAILNET", "")
+    intended_device_id = os.environ.get("TAILSCALE_INTENDED_DEVICE_ID", "")
+    post_advertisement = os.environ.get("TAILSCALE_POST_ADVERTISEMENT", "")
+    require_host_route = os.environ.get("TAILSCALE_VERIFY_HOST_ROUTE", "")
+    no_advertised_route = os.environ.get("TAILSCALE_NO_ADVERTISED_ROUTE", "")
+    if (
+        post_advertisement not in ("", "1")
+        or require_host_route not in ("", "1")
+        or no_advertised_route not in ("", "1")
+    ):
+        raise ValueError("invalid verification mode")
+    if require_host_route == "1" and post_advertisement != "1":
+        raise ValueError("host-route verification requires post-advertisement mode")
+    if no_advertised_route == "1" and post_advertisement == "1":
+        raise ValueError("no-advertised-route verification cannot be post-advertisement mode")
+    result = run_check(
+        _fetch_json,
+        tailnet,
+        intended_device_id,
+        token,
+        post_advertisement=post_advertisement == "1",
+        require_host_route=require_host_route == "1",
+        require_no_advertised_route=no_advertised_route == "1",
+    )
+    if post_advertisement == "1":
+        result = result.replace("allocation check", "post-advertisement verification")
+    print(result)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        raise SystemExit("site-1 4via6 allocation check failed")
+# END SLICE_2A_TAILSCALE_ALLOCATION_CHECK
+PY
+```
+
+The pre-advertisement result is a point-in-time allocation check and is not a
+durable reservation. Slice 2B must run the same check immediately after the
+router advertises its route, with `TAILSCALE_POST_ADVERTISEMENT=1`; that mode
+requires the exact `EXPECTED_ROUTE` in both `advertisedRoutes` and
+`enabledRoutes` on the explicitly supplied intended device ID and nowhere else.
+If Slice 2B intentionally advertises the current RDS host route too, it must
+also set `TAILSCALE_VERIFY_HOST_ROUTE=1`, which permits only the exact
+`EXPECTED_HOST_ROUTE` in both route sets on that same device. A wrong, multiple,
+missing, advertised-only, enabled-only, or malformed route is an immediate
+failure: use the approved router control path to disable the development advertised route immediately, abort, and leave CI unbound. It must then confirm
+through the same read-only API check that no site-1 route remains advertised
+before any retry. CI identity binding may begin only after this
+post-advertisement check passes; a successful 2A precheck can never substitute
+for it. The successful precheck can never substitute for it. Slice 2A documents
+this failure path only and does not execute it.
+
+#### Slice 2B development router and protected connectivity handoff
+
+This section is a post-merge operator procedure. The builder and deterministic
+tests do not create credentials, enroll the existing instance, advertise a
+route, apply the policy, change GitHub settings, or connect to PostgreSQL.
+The only live router target is development account `903859731897`, instance
+`i-0d33b9a9c15db93fc`, in `us-east-1`; never substitute a name, public address,
+or a production instance. The development route is exactly
+`fd7a:115c:a1e0:b1a:0:1:ac1f:0/112`. No VPC route, IPv4 route, exit node, SG,
+peering, public RDS setting, or production route is part of this handoff.
+
+##### Policy and one-off router key
+
+1. In **Tailscale Admin Console → Access controls → Policy file**, confirm the
+   merged protected-main GitOps policy is applied. Do not edit the policy in
+   the console after that confirmation.
+2. In **Keys → Generate auth key**, create one key with a description such as
+   `nova-toll development router`, **one-off**, **non-ephemeral**,
+   **pre-approved** when device approval is enabled, a short expiry of at most
+   90 days, and **only** the tag
+   `tag:nova-toll-development-router`. Generate it and copy it once into a
+   secure prompt. Do not create a reusable key, add a second tag, or retain the
+   plaintext.
+3. In the development AWS account, keep the terminal non-traced (`set +x`),
+   set `AWS_REGION=us-east-1` and `AWS_DEFAULT_REGION=us-east-1`, and verify
+   `aws sts get-caller-identity` reports `903859731897`. Read the copied key
+   only into process memory and pipe the request body to AWS CLI stdin; the key
+   is never a command argument, output, file, Terraform input/state, GitHub
+   secret, log, or evidence field:
+
+   ```sh
+   set +x
+   umask 077
+   export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+   test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
+   read -r -s ROUTER_KEY
+   printf '{"Name":"/nova-toll/tailscale-authkey","Type":"SecureString","Value":"%s","Overwrite":true}\n' "$ROUTER_KEY" |
+     aws --region us-east-1 ssm put-parameter --cli-input-json file:///dev/stdin >/dev/null
+   unset ROUTER_KEY
+   aws --region us-east-1 ssm describe-parameters \
+     --parameter-filters 'Key=Name,Option=Equals,Values=/nova-toll/tailscale-authkey' \
+     --query 'Parameters[0].{Name:Name,Type:Type,Version:Version}' --output json
+   ```
+
+   The metadata check must show only the expected name, `SecureString`, and a
+   version. Never use `get-parameter --with-decryption` on the operator host.
+
+##### Existing-instance enrollment and route allocation
+
+Use only SSM Run Command against `i-0d33b9a9c15db93fc`; do not open SSH or
+enroll a replacement. This command decrypts the temporary key in the remote
+process, disables tracing before the key is read, joins with Tailscale SSH, and
+advertises no route:
+
+```sh
+set +x
+INSTANCE_ID=i-0d33b9a9c15db93fc
+test "$INSTANCE_ID" = i-0d33b9a9c15db93fc
+test "$(aws sts get-caller-identity --query Account --output text)" = 903859731897
+COMMAND_ID="$(aws --region us-east-1 ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["set +x","set -eu","KEY=$(aws --region us-east-1 ssm get-parameter --name /nova-toll/tailscale-authkey --with-decryption --query Parameter.Value --output text)","tailscale up --authkey=\"$KEY\" --ssh","unset KEY"]' \
+  --query Command.CommandId --output text)"
+aws --region us-east-1 ssm wait command_executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query Status --output text)" = Success
+```
+
+Confirm the resulting Tailscale device by its explicit device ID and require
+exactly `tag:nova-toll-development-router`; do not select by hostname, IP, or
+partial inventory. Then immediately consume the one-off key and leave only a
+harmless placeholder in the existing development SecureString. The placeholder
+is not an auth key and is never used for enrollment:
+
+```sh
+set +x
+printf '{"Name":"/nova-toll/tailscale-authkey","Type":"SecureString","Value":"REVOKED_AFTER_DEV_ROUTER_ENROLLMENT","Overwrite":true}\n' |
+  aws --region us-east-1 ssm put-parameter --cli-input-json file:///dev/stdin >/dev/null
+unset COMMAND_ID INSTANCE_ID
+aws --region us-east-1 ssm describe-parameters \
+  --parameter-filters 'Key=Name,Option=Equals,Values=/nova-toll/tailscale-authkey' \
+  --query 'Parameters[0].{Name:Name,Type:Type,Version:Version}' --output json
+```
+
+In **Tailscale Admin Console → Keys**, verify that the one-off key is consumed,
+expired, or revoked. If it remains usable, revoke that key manually; do not
+revoke the enrolled node. A future router replacement always uses a freshly
+generated one-off key and repeats this SSM write, enrollment, exact device/tag
+confirmation, placeholder cleanup, and key-revocation sequence.
+
+Before any route change, set the read-only API token and explicit device ID,
+then run the complete Slice 2A inventory check. It must enumerate every device,
+fetch every device route, and pass with no site-1 route allocated. The token is
+used only in process memory and is never printed. Only after that precheck may
+the same target receive the reviewed route through SSM:
+
+```sh
+set +x
+INSTANCE_ID=i-0d33b9a9c15db93fc
+test "$INSTANCE_ID" = i-0d33b9a9c15db93fc
+COMMAND_ID="$(aws --region us-east-1 ssm send-command \
+  --instance-ids i-0d33b9a9c15db93fc \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["set +x","set -eu","tailscale set --advertise-routes=fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"]' \
+  --query Command.CommandId --output text)"
+aws --region us-east-1 ssm wait command_executed --command-id "$COMMAND_ID" --instance-id i-0d33b9a9c15db93fc
+test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id i-0d33b9a9c15db93fc --query Status --output text)" = Success
+```
+
+Immediately rerun the inventory with `TAILSCALE_POST_ADVERTISEMENT=1`. It is a
+pass only when the exact `/112` is in both `advertisedRoutes` and
+`enabledRoutes`, owned only by the explicit device with exactly the router tag.
+An API error, incomplete/paginated response, unexpected site-1 route, wrong or
+multiple owner, missing enabled route, advertised-only route, or enabled-only
+route is a hard failure. CI identity binding and the database check remain
+unstarted until this postcheck passes.
+
+On any postcheck failure, disable only the development advertisement
+immediately, wait for the SSM command, and abort before retry or CI binding. The
+remote command is exactly `tailscale set --advertise-routes=""`:
+
+```sh
+set +x
+test "$INSTANCE_ID" = i-0d33b9a9c15db93fc
+DISABLE_COMMAND_ID="$(aws --region us-east-1 ssm send-command \
+  --instance-ids i-0d33b9a9c15db93fc \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["set +x","set -eu","tailscale set --advertise-routes=\"\""]' \
+  --query Command.CommandId --output text)"
+aws --region us-east-1 ssm wait command_executed --command-id "$DISABLE_COMMAND_ID" --instance-id i-0d33b9a9c15db93fc
+test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$DISABLE_COMMAND_ID" --instance-id i-0d33b9a9c15db93fc --query Status --output text)" = Success
+export TAILSCALE_POST_ADVERTISEMENT= TAILSCALE_VERIFY_HOST_ROUTE= TAILSCALE_NO_ADVERTISED_ROUTE=1
+# Re-run the embedded Slice 2A `python3 - <<'PY'` allocation-check block above.
+exit 1
+```
+
+The final read-only check must prove that no site-1 route remains in
+`advertisedRoutes` before any retry. Treat an uncertain SSM status or API
+response as failure and leave CI unbound. No failure or rollback path changes
+production.
+
+##### Manual development TLS/query verification
+
+The separate
+`.github/workflows/v2-development-connectivity-verification.yml` is the sole
+pre-enable CI proof. It is `workflow_dispatch` only, must be dispatched from
+`refs/heads/main` while `DEVELOPMENT_DELIVERY_ENABLED` is absent or `false`,
+uses the protected `development` environment, and has only
+`contents: read`/`id-token: write`. Its Tailscale OAuth client has only the
+`auth_keys` scope and only `tag:ci-development`; its only AWS role is
+`arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev`. It has no
+delivery, Terraform, apply, package, write-capable AWS, production secret,
+production route, or production SQL path.
+
+Before dispatch, an AWS development-account administrator must confirm that
+the timed-check role trust retains audience `sts.amazonaws.com`, retains the
+protected-main subject, and includes exactly:
+`repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development`.
+The IaC trust in `v2/infra/main.tf` is the source of truth. The role policy is
+limited to development `rds:DescribeDBInstances`, development
+`rds-db:connect` as `pricing_caller_development`, and its pre-existing
+OpenAI-parameter read; it has no deployment, Terraform, SSM write, Secrets
+Manager, or production resource permission.
+
+The verifier resolves the development RDS endpoint with
+`aws rds describe-db-instances` and native `getent ahostsv4`, immediately
+derives the site-1 `/128` with `tailscale debug via 1 <ipv4>/32` and Python's
+standard-library `ipaddress`, and rejects a stale or non-site-1 result. It
+keeps the refreshed RDS DNS name in `PGHOST` and for IAM-token generation,
+puts only the derived IPv6 address in `PGHOSTADDR`, uses the pinned RDS CA with
+`PGSSLMODE=verify-full`, and runs one bounded query only:
+`SELECT current_database(), current_user`. The expected result is exactly
+`nova_toll_development` and `pricing_caller_development`; no query rows,
+password, IAM token, OAuth value, or raw command output is evidence.
+
+For the production boundary, the verifier proves the caller is account
+`903859731897` and role `nova-toll-v2-timed-checks-dev`, resolves only the
+documented production endpoint as needed for a route check, and uses the Linux
+JSON route decision to assert that the production address is not selected
+through `tailscale0`. (`tailscale debug via` only derives 4via6 addresses; it is
+not a route probe.) It then makes one short TCP/5432 socket attempt with no
+production credentials and no SQL. A successful connection or unexpected local
+error fails the run; bounded refusal, timeout, host/network-unreachable, or
+permission-denied results prove socket denial. It never calls a production RDS
+API. The existing development database contract remains the source for both
+development-to-production and production-to-development cross-database denial;
+no deployed schema or role change is allowed.
+
+The verifier writes one sanitized commit/run-bound summary containing only
+`commit_sha`, `run_id`, `run_attempt`, `ref`, development account/role,
+expected route, transport-validation boolean, query identity/database, and
+explicit production-route/socket denial booleans. Record that summary with the
+policy success, exact route ownership and enablement, development TLS/query,
+both production-boundary denials, and the delivery-role bootstrap/simulated
+GitHub-main OIDC proof before enabling delivery.
+
+##### Protected activation and rollback
+
+In **GitHub repository Settings → Environments → development**, retain the
+branch-policy protection rule and add a required owner/admin reviewer before
+adding any environment secret. In **Tailscale Admin Console →
+Settings → OAuth clients → Generate OAuth client**, create a client described
+as `nova-toll development CI` with scope `auth_keys` only and tag only
+`tag:ci-development`; do not grant device/route-write or ACL-policy scopes.
+Copy the client ID and secret once into the protected environment as exactly
+`TS_DEVELOPMENT_OAUTH_CLIENT_ID` and `TS_DEVELOPMENT_OAUTH_SECRET`. Do not
+replace repository production `TS_OAUTH_*` or policy `TS_ACL_OAUTH_*` secrets.
+
+The delivery workflow's build job remains harmless without AWS OIDC. Its
+development deploy job has the job-level false-closed condition
+`vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'`, evaluated before the job declares
+its protected environment or requests OIDC. GitHub environment variables are
+not available at that point, so this must be a **repository variable**. Keep it
+absent (or literal `false`) through policy, key, router, route, role, OAuth, and
+manual-verification setup. After every evidence item passes and the manual
+workflow succeeds on `main`, an authorized operator may set it in **Settings →
+Secrets and variables → Actions → Variables → New repository variable** with
+name `DEVELOPMENT_DELIVERY_ENABLED` and value `true`, save it, and obtain the
+required `development` environment reviewer approval when the deploy job starts.
+The equivalent operator-only CLI activation is:
+
+```sh
+gh variable set DEVELOPMENT_DELIVERY_ENABLED --body true \
+  --repo rhprasad0/nova-toll-budget-agent
+```
+
+Rollback is ordered and false-first: delete that exact repository variable or
+set it to literal `false`, confirm a later delivery run is skipped without an
+OIDC request, then disable and recheck the development route. Only after that
+may the operator revoke the development CI OAuth client if needed and close the
+router-key lifecycle. The equivalent rollback CLI call is
+`gh variable delete DEVELOPMENT_DELIVERY_ENABLED --repo rhprasad0/nova-toll-budget-agent`.
+No rollback action mutates production.
+
+#### Slice 3 development custom-domain and DNS handoff
+
+This is a bounded, post-merge operator procedure. The application state remains
+in development account `903859731897`, region `us-east-1`, backend
+`v2/infra/backend.development.hcl`, and distribution `E33DVF3KT7BTAC` with
+hostname `d1wqry4fbd92w5.cloudfront.net` (all are re-read and checked immediately
+before use). The foundation DNS workflow runs in production account
+`920534282028` only to read the exact SSM parameter
+`arn:aws:ssm:us-east-1:920534282028:parameter/nova-toll/cloudflare-development-dns-api-token`.
+It has no application, state, CloudFront, ACM, or cross-account AWS access.
+The token is read into the workflow process only, never printed, passed to
+development, put in Terraform input/state, or retained in an artifact.
+
+The Terraform switch `enable_development_custom_domain` defaults to `false` and
+is explicitly false in recurring `development.tfvars` and the development
+delivery workflow. With it false, the development distribution has no aliases,
+uses the CloudFront default certificate and `TLSv1`, and has no development ACM
+resource. Production keeps its existing certificate, aliases, validation records,
+resource addresses, and Cloudflare provider path. Do not set the switch in the
+recurring delivery job. The switch is enabled only for the administrator-owned
+staging/apply described here; the development delivery role remains unable to
+request ACM certificates or update CloudFront aliases/certificates.
+
+##### Protected environment and preflight
+
+1. Start from a clean, protected `origin/main` checkout. Confirm the existing
+   `DEVELOPMENT_DELIVERY_ENABLED` false/absent gate, the development health and
+   connectivity workflows, and the Slice 2 route/TLS/query evidence. Do not
+   enable delivery as part of this procedure. The DNS workflow must be dispatched
+   only from `refs/heads/main` with the protected GitHub environment named exactly
+   `production-foundation-dns`; its required reviewer must approve the run.
+2. In the production foundation state, apply the reviewed role only after the
+   plan shows `nova-toll-production-foundation-dns` and exactly one policy action:
+   `ssm:GetParameter` on the exact parameter ARN above. Confirm its trust uses
+   only the GitHub OIDC provider, `aud=sts.amazonaws.com`, and the immutable
+   subject
+   `repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production-foundation-dns`.
+   There is no branch wildcard, pull-request subject, development role, state
+   bucket, KMS, Secrets Manager, or application permission.
+3. In **Settings → Environments**, create the protected environment
+   `production-foundation-dns` with a required owner/admin reviewer and a `main`
+   branch policy. Do not add a Cloudflare secret to GitHub. The workflow obtains
+   the token only through the production role's SSM read. Check the action SHAs
+   and the exact `role-to-assume` before dispatch.
+4. Read current state without mutating it. Record sanitized evidence for the
+   `dev.tollchat.ai`, apex `tollchat.ai`, and `www.tollchat.ai` records, including
+   IDs, names, types, values, TTLs, and proxy flags. Record production CloudFront
+   and ACM health as read-only evidence. The known rollback baseline is exactly
+   one unproxied CNAME `dev.tollchat.ai` →
+   `dmsiz11apblcv.cloudfront.net`; treat that value as a checked live input, not
+   permission to touch any other record. Apex and `www` IDs/content are immutable
+   checksums for the remainder of the handoff.
+
+##### Certificate staging in the development account
+
+1. From the development account, first confirm the caller is
+   `903859731897`, the backend is `v2/infra/backend.development.hcl`, and the
+   distribution is the exact `E33DVF3KT7BTAC`. Resolve the foundation output
+   ephemerally as the existing delivery workflow does; never read production
+   state. Keep the terminal non-traced (`set +x`) and use a private temporary
+   directory for plans.
+2. Run a targeted administrator apply with
+   `enable_development_custom_domain=true` to request only the ACM certificate
+   first. The certificate must be exactly `dev.tollchat.ai`, DNS validated, and
+   in `us-east-1`; do not attach an alias before validation. A representative
+   command is:
+
+   ```sh
+   set -euo pipefail
+   set +x
+   terraform -chdir=v2/infra init -input=false -backend-config=backend.development.hcl
+   terraform -chdir=v2/infra apply -input=false \
+     -var-file=development.tfvars \
+     -var enable_development_custom_domain=true \
+     -target=aws_acm_certificate.site[0] \
+     -var-file=/private/reviewed/development-foundation.tfvars.json
+   ```
+
+   The target is a staging convenience only; review the complete follow-up
+   plan. Do not apply if it proposes a production backend/account, Cloudflare
+   data/resource, Route 53 object, or any production address. Capture only the
+   non-secret outputs:
+
+   ```sh
+   set +x
+   terraform -chdir=v2/infra output -json development_acm_certificate_arn
+   terraform -chdir=v2/infra output -json development_acm_validation_records
+   ```
+
+   The output must contain exactly one certificate ARN for account
+   `903859731897` in `us-east-1`, and exactly the current ACM DVO name/value for
+   `dev.tollchat.ai`. Pass those records to the protected DNS workflow as JSON;
+   do not copy a token or a plan/state object across accounts.
+3. The certificate output is not an issuance proof. In the development account,
+   poll the certificate with a bounded 10-minute wait (for example, 30 checks
+   at 20-second intervals) and stop on any status other than `ISSUED`. The DNS
+   workflow must first create/verify only the exact unproxied CNAME DVO records
+   with type `CNAME` and TTL `60`. It resolves exactly one active `tollchat.ai`
+   zone through the authenticated API, derives its account and zone IDs in
+   memory, calls `GET /accounts/{derived_account_id}/tokens/verify`, and
+   requires a successful active account-owned token. Zero, multiple, paginated,
+   inactive, wrong-account, malformed, or API-error results stop before a write.
+
+##### Exact DNS workflow operations and ordering
+
+Dispatch `.github/workflows/v2-production-foundation-dns.yml` from protected
+`main` with `operation=stage-validation`, the non-secret certificate ARN, the
+JSON `development_acm_validation_records` value, distribution ID
+`E33DVF3KT7BTAC`, deployed hostname `d1wqry4fbd92w5.cloudfront.net`, and the
+captured old target/snapshot. The workflow rejects any record except exactly
+one ACM-looking `_...dev.tollchat.ai` CNAME with the expected ACM
+`_...acm-validations.aws` value, TTL `60`, and `proxied=false`. It refuses
+duplicates, wrong type/content/TTL/proxy, arbitrary underscore names, wildcard,
+apex, `www`, production names, and any broad reconciliation. Existing matching
+records are left unchanged; a missing record is the only validation create.
+All inputs and all current records are checked before the first write, and each
+write re-verifies the token. The workflow uses only GET/POST/PUT; it has no
+record deletion or proxy-mode path, and all API failures are sanitized.
+
+After validation records are verified, wait for ACM `ISSUED` in the development
+account. Then, as the development administrator, enable the switch for a normal
+application plan and apply only after the issued certificate is confirmed. The
+enabled plan must set the sole alias to `dev.tollchat.ai`, use that issued
+certificate ARN with `sni-only` and `TLSv1.2_2021`, and make
+`local.public_site_url`, `PUBLIC_ORIGINS`, and `PUBLIC_BASE_URL` exactly
+`https://dev.tollchat.ai`. `public_preview_hostname` cannot override this URL.
+Wait for the exact distribution to report `Deployed` with a bounded 30-minute
+wait (30 checks at 60 seconds), and independently verify the alias is attached.
+Do not dispatch the DNS cutover while the certificate is pending, the alias is
+missing, the distribution is not deployed, or any value is uncertain.
+
+Before `operation=cutover`, immediately re-read the dev record and compare it
+to the supplied snapshot: one record ID, exact name/type, old content
+`dmsiz11apblcv.cloudfront.net`, TTL `1`, and `proxied=false`. The workflow also
+rechecks every validation record and requires operator evidence
+`certificate_status=ISSUED`, `cloudfront_status=Deployed`, and
+`alias_attached=true`. It then updates only the captured dev record ID to the
+validated development hostname and verifies the same ID/content after the
+write. It never touches apex, `www`, production CloudFront/ACM, the old
+distribution `E1JXKQYNAN39E4`, or validation records. Allow up to 15 minutes
+for DNS propagation before declaring the cutover healthy.
+
+Run read-only smoke checks after propagation: HTTPS must present a certificate
+for `dev.tollchat.ai`, the page and `/api/config` must return successfully, the
+`X-Robots-Tag: noindex` header must remain, and the response/API identity must
+be the development account/origin. Re-read apex and `www` and assert their
+record IDs/content are byte-for-byte unchanged. Recheck production CloudFront
+and ACM health and retain the sanitized before/after evidence with the commit,
+workflow run, and operator identities.
+
+##### Failed-cutover recovery and cleanup gate
+
+Keep the old distribution, old certificate, and validation records throughout
+the rollback window; #333 cleanup is not authorized by this procedure. If any
+post-cutover smoke, certificate, deployment, or DNS check fails, dispatch the
+same workflow with `operation=rollback` and the exact captured snapshot. It
+must fail closed unless the current dev record still has the captured ID and
+currently points to the staged development hostname. It then PUTs only that ID
+back to the captured old content and verifies the old HTTPS endpoint is healthy.
+Do not remove a validation record, alter apex/`www`, or use a generic record
+delete. If alias removal is needed, a development administrator performs it
+only after DNS rollback and health confirmation, using the development state.
+
+Before authorizing #333 cleanup, prove a successful rollback against the
+captured record in a disposable/reviewed gate, retain production no-change
+evidence, and confirm that no workflow output, summary, artifact, cache, plan,
+state, or log contains the Cloudflare token or Authorization header. A stale,
+missing, ambiguous, or concurrently changed snapshot is a hard stop requiring
+fresh read-only evidence; never guess at a replacement record.
 
 ~~~sh
 (
@@ -583,20 +2803,16 @@ plan_policy() {
     PLAN_JSON="$PHASE_ONE_PLAN_JSON"
   fi
   tf_dev -chdir="$ROOT/v2/infra" show -json "$plan" >"$PLAN_JSON"
-  if ! jq -e '(.resource_changes | type == "array") and all(.resource_changes[]; (.change.actions | type == "array" and length > 0 and all(.[]; . != "delete")) and (.address | test("cloudflare|route53|aws_acm_certificate|aws_acm_certificate_validation"; "i") | not) and (.mode == "managed" or .mode == "data"))' "$PLAN_JSON" >/dev/null; then exit 1; fi
-  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" '
-    ($allowlist | split("\n") | map(select(length > 0))) as $allowed |
-    all(.resource_changes[] | select(.mode == "managed");
-      (.address as $address |
-        any($allowed[]; . as $base | ($address == $base or ($address | startswith($base + "["))))
-        and (.change.actions | type == "array" and length > 0 and all(.[]; . == "create" or . == "update" or . == "no-op"))))
-  ' "$PLAN_JSON" >/dev/null; then exit 1; fi
-  if ! jq -e --arg allowlist "$DEVELOPMENT_DATA_ALLOWLIST" '
-    ($allowlist | split("\n") | map(select(length > 0))) as $allowed |
-    all(.resource_changes[] | select(.mode == "data");
-      (.address as $address |
-        any($allowed[]; . as $base | ($address == $base or ($address | startswith($base + "["))))
-        and (.change.actions | type == "array" and length > 0 and all(.[]; . == "read" or . == "no-op"))))
+  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" --arg data_allowlist "$DEVELOPMENT_DATA_ALLOWLIST" --arg readonly "$DEVELOPMENT_READ_ONLY_ALLOWLIST" '
+    def base: .address | split("[")[0];
+    def listed($items): .address as $address | any(($items | split("\n") | map(select(length > 0)))[]; . as $item | $address == $item or ($address | startswith($item + "[")));
+    def immutable: ((base == "aws_api_gateway_deployment.tollchat" and (.change.actions == ["create"] or .change.actions == ["delete"] or .change.actions == ["create", "delete"] or .change.actions == ["delete", "create"])) or (base == "aws_bedrock_guardrail_version.tollchat" and .change.actions == ["create"]));
+    (.resource_changes | type == "array") and all(.resource_changes[];
+      (.address | type == "string") and (.change.actions | type == "array" and length > 0) and (.deposed? == null) and (.previous_address? == null) and
+      (.mode == "data" and listed($data_allowlist) and (.change.actions == ["read"] or .change.actions == ["no-op"]) or
+       .mode == "managed" and listed($allowlist) and
+       ((.change.actions == ["no-op"]) or
+        (.change.actions == ["update"] and (listed($readonly) | not)) or immutable)))
   ' "$PLAN_JSON" >/dev/null; then exit 1; fi
   if jq -r '.resource_changes[]? | [.address, (.change.after // {} | tostring)] | @json' "$PLAN_JSON" | rg --quiet '920534282028|dev.tollchat.ai' || jq -r '.resource_changes[]?.address' "$PLAN_JSON" | rg --ignore-case --quiet 'cloudflare|route53|terraform_remote_state'; then exit 1; fi
   if ! jq -e '
@@ -847,6 +3063,52 @@ data.aws_iam_policy_document.usage_publisher
 data.aws_prefix_list.dynamodb
 data.aws_prefix_list.s3
 data.aws_region.current
+EOF
+read -r -d '' DEVELOPMENT_READ_ONLY_ALLOWLIST <<'EOF' || true
+aws_api_gateway_deployment.tollchat
+aws_bedrock_guardrail_version.tollchat
+aws_bedrock_guardrail.tollchat
+aws_bedrockagentcore_resource_policy.tollchat
+aws_cloudfront_distribution.site
+aws_cloudfront_origin_access_control.public_chat
+aws_cloudfront_origin_access_control.site
+aws_cloudfront_response_headers_policy.development_noindex
+aws_iam_role.agent_usage_rollup
+aws_iam_role.loader
+aws_iam_role.publisher
+aws_iam_role.publisher_scheduler
+aws_iam_role.timed_checks
+aws_iam_role.tollchat_proxy
+aws_iam_role.tollchat_runtime
+aws_iam_role.usage_publisher
+aws_iam_role_policy.agent_usage_rollup
+aws_iam_role_policy.loader
+aws_iam_role_policy.publisher
+aws_iam_role_policy.publisher_scheduler
+aws_iam_role_policy.timed_checks
+aws_iam_role_policy.tollchat_proxy
+aws_iam_role_policy.tollchat_runtime
+aws_iam_role_policy.usage_publisher
+aws_iam_role_policy_attachment.loader_vpc
+aws_iam_role_policy_attachment.publisher_vpc
+aws_iam_role_policy_attachment.tollchat_proxy_vpc
+aws_kms_alias.agent_measurement
+aws_kms_alias.site
+aws_kms_key.agent_measurement
+aws_kms_key.site
+aws_lambda_function_url.public_chat
+aws_lambda_permission.agent_usage_rollup
+aws_lambda_permission.eventbridge_invoke
+aws_lambda_permission.public_chat_invoke
+aws_lambda_permission.public_chat_url
+aws_lambda_permission.tollchat_api
+aws_lambda_permission.usage_publisher
+aws_s3_bucket.agent_measurement
+aws_s3_bucket_lifecycle_configuration.agent_measurement
+aws_s3_bucket_policy.agent_measurement
+aws_s3_bucket_policy.site
+aws_s3_bucket_public_access_block.agent_measurement
+aws_s3_bucket_server_side_encryption_configuration.agent_measurement
 EOF
 source_tree_digest() {
   git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do

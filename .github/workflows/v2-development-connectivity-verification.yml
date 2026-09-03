@@ -1,0 +1,227 @@
+name: v2 development connectivity verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify development RDS connectivity
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch pinned RDS CA bundle
+        run: |
+          set -euo pipefail
+          set +x
+          mkdir -p infra/build/ca
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+            -o infra/build/ca/rds-ca-bundle.pem
+          echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+
+      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}
+          tags: tag:ci-development
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev
+          aws-region: us-east-1
+
+      - name: Verify development route, identity, and production denial
+        env:
+          EXPECTED_ROUTE: fd7a:115c:a1e0:b1a:0:1:ac1f:0/112
+          DEVELOPMENT_DB_IDENTIFIER: nova-toll-db
+          DEVELOPMENT_DB_NAME: nova_toll_development
+          DEVELOPMENT_DB_USER: pricing_caller_development
+          PRODUCTION_DB_HOST: nova-toll-db.co9qkm4eqi2h.us-east-1.rds.amazonaws.com
+          RDS_CA_BUNDLE: infra/build/ca/rds-ca-bundle.pem
+        run: |
+          set -euo pipefail
+          set +x
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+
+          CALLER_JSON="$(aws sts get-caller-identity --output json)"
+          CALLER_ACCOUNT="$(jq -er '.Account' <<<"$CALLER_JSON")"
+          CALLER_ARN="$(jq -er '.Arn' <<<"$CALLER_JSON")"
+          test "$CALLER_ACCOUNT" = "903859731897"
+          case "$CALLER_ARN" in
+            arn:aws:sts::903859731897:assumed-role/nova-toll-v2-timed-checks-dev/*) ;;
+            *) exit 1 ;;
+          esac
+
+          DB_JSON="$(aws rds describe-db-instances \
+            --db-instance-identifier "$DEVELOPMENT_DB_IDENTIFIER" --output json)"
+          DB_HOST="$(jq -er 'if (.DBInstances | length == 1 and .[0].DBInstanceStatus == "available" and .[0].PubliclyAccessible == false and .[0].Engine == "postgres") then .DBInstances[0].Endpoint.Address else empty end' <<<"$DB_JSON")"
+          case "$DB_HOST" in
+            nova-toll-db.*.us-east-1.rds.amazonaws.com) ;;
+            *) exit 1 ;;
+          esac
+          DB_IPV4="$(getent ahostsv4 "$DB_HOST" | awk '{print $1}' | sort -u)"
+          test "$(wc -l <<<"$DB_IPV4")" -eq 1
+          DB_IPV4="${DB_IPV4%$'\n'}"
+
+          VIA_OUTPUT="$(tailscale debug via 1 "$DB_IPV4/32")"
+          TRANSPORT_IPV6="$(DB_IPV4="$DB_IPV4" VIA_OUTPUT="$VIA_OUTPUT" python3 - <<'PY'
+          import ipaddress
+          import os
+          import re
+
+          site_id = 1
+          via6_space = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
+          ipv4 = ipaddress.ip_address(os.environ["DB_IPV4"])
+          expected = ipaddress.ip_address(
+              int(via6_space.network_address) | (site_id << 32) | int(ipv4)
+          )
+          expected_host_route = ipaddress.ip_network(f"{expected}/128", strict=True)
+          candidates = set()
+          for token in re.findall(r"[0-9A-Fa-f:]{2,}", os.environ["VIA_OUTPUT"]):
+              try:
+                  address = ipaddress.ip_address(token)
+              except ValueError:
+                  continue
+              if address.version == 6 and address in via6_space:
+                  candidates.add(address)
+          if (site_id >> 16) or candidates != {expected_host_route.network_address}:
+              raise SystemExit(1)
+          print(expected_host_route.network_address)
+          PY
+          )"
+          test "$(python3 - "$TRANSPORT_IPV6" <<'PY'
+          import ipaddress
+          import sys
+
+          address = ipaddress.ip_address(sys.argv[1])
+          expected_prefix = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
+          if address.version != 6 or address not in expected_prefix:
+              raise SystemExit(1)
+          print(address)
+          PY
+          )" = "$TRANSPORT_IPV6"
+
+          export PGHOST="$DB_HOST"
+          export PGHOSTADDR="$TRANSPORT_IPV6"
+          export PGPORT=5432
+          export PGDATABASE="$DEVELOPMENT_DB_NAME"
+          export PGUSER="$DEVELOPMENT_DB_USER"
+          export PGSSLMODE=verify-full
+          export PGSSLROOTCERT="$RDS_CA_BUNDLE"
+          DB_TOKEN="$(aws rds generate-db-auth-token --hostname "$PGHOST" --port "$PGPORT" --region us-east-1 --username "$PGUSER")"
+          QUERY_RESULT="$(PGPASSWORD="$DB_TOKEN" timeout 15s psql \
+            --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align \
+            --command='SELECT current_database(), current_user')"
+          unset DB_TOKEN PGPASSWORD
+          test "$(wc -l <<<"$QUERY_RESULT")" -eq 1
+          IFS='|' read -r QUERY_DATABASE QUERY_USER <<<"$QUERY_RESULT"
+          test "$QUERY_DATABASE" = "$DEVELOPMENT_DB_NAME"
+          test "$QUERY_USER" = "$DEVELOPMENT_DB_USER"
+
+          PROD_IPV4="$(getent ahostsv4 "$PRODUCTION_DB_HOST" | awk '{print $1}' | sort -u)"
+          test "$(wc -l <<<"$PROD_IPV4")" -eq 1
+          PROD_IPV4="${PROD_IPV4%$'\n'}"
+          verify_production_denial() {
+            local prod_ipv4="$1" prod_route_json route_state socket_state
+            if ! prod_route_json="$(ip -json route get "$prod_ipv4")"; then
+              return 1
+            fi
+            if ! test -n "$prod_route_json"; then
+              return 1
+            fi
+            if ! route_state="$(PROD_IPV4="$prod_ipv4" ROUTE_JSON="$prod_route_json" python3 - <<'PY'
+          import json
+          import os
+
+          try:
+              routes = json.loads(os.environ["ROUTE_JSON"])
+          except (json.JSONDecodeError, TypeError):
+              raise SystemExit(1)
+          if not isinstance(routes, list) or len(routes) != 1:
+              raise SystemExit(1)
+          route = routes[0]
+          if not isinstance(route, dict) or route.get("dst") != os.environ["PROD_IPV4"]:
+              raise SystemExit(1)
+          device = route.get("dev")
+          if not isinstance(device, str) or not device or device == "tailscale0":
+              raise SystemExit(1)
+          print("expected-denial")
+          PY
+            )"; then
+              return 1
+            fi
+            if ! test "$route_state" = expected-denial; then
+              return 1
+            fi
+
+            if ! socket_state="$(timeout 3s python3 - "$prod_ipv4" <<'PY'
+          import errno
+          import socket
+          import sys
+
+          try:
+              with socket.create_connection((sys.argv[1], 5432), timeout=2):
+                  raise SystemExit(1)
+          except TimeoutError:
+              print("expected-denial")
+          except OSError as error:
+              if error.errno not in {
+                  errno.EACCES,
+                  errno.ECONNREFUSED,
+                  errno.EHOSTUNREACH,
+                  errno.ENETUNREACH,
+                  errno.EPERM,
+              }:
+                  raise
+              print("expected-denial")
+          PY
+            )"; then
+              return 1
+            fi
+            if ! test "$socket_state" = expected-denial; then
+              return 1
+            fi
+            printf 'route=expected-denial\nsocket=expected-denial'
+          }
+          if ! PROD_DENIAL_STATE="$(verify_production_denial "$PROD_IPV4")"; then
+            exit 1
+          fi
+          if ! test "$PROD_DENIAL_STATE" = $'route=expected-denial\nsocket=expected-denial'; then
+            exit 1
+          fi
+          PROD_ROUTE_STATE=expected-denial
+          if ! test "$PROD_ROUTE_STATE" = expected-denial; then
+            exit 1
+          fi
+          PROD_SOCKET_DENIED=true
+
+          SUMMARY="$(jq -cn \
+            --arg commit_sha "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg ref "$GITHUB_REF" \
+            --arg account "$CALLER_ACCOUNT" \
+            --arg role "nova-toll-v2-timed-checks-dev" \
+            --arg route "$EXPECTED_ROUTE" \
+            --arg database "$QUERY_DATABASE" \
+            --arg user "$QUERY_USER" \
+            --argjson production_route_denied true \
+            --argjson production_socket_denied true \
+            '{commit_sha:$commit_sha,run_id:$run_id,run_attempt:$run_attempt,ref:$ref,development_account:$account,role:$role,expected_route:$route,site_one_4via6_transport_valid:true,query_database:$database,query_user:$user,production_route_denied:$production_route_denied,production_socket_denied:$production_socket_denied}')"
+          printf '## Development connectivity verification\n\n```json\n%s\n```\n' "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"

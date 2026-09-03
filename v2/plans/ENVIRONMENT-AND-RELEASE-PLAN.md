@@ -77,6 +77,7 @@ expensive shared foundations or adding tools that TollChat does not need.
 flowchart TB
   GH[GitHub Actions] -->|OIDC: development role| DEV[Development application stack]
   GH -->|OIDC after approval: production role| PROD[Production application stack]
+  GH -->|OIDC after approval: production-foundation-dns role| DNS[Exact Cloudflare DNS gate]
 
   DEV --> DEVDNS[dev.tollchat.ai]
   PROD --> PRODDNS[tollchat.ai and www.tollchat.ai]
@@ -95,6 +96,7 @@ flowchart TB
 
   DEV --> DEVFOUNDATION[Development account-local foundation]
   PROD --> PRODFOUNDATION[Production account-local foundation]
+  DNS --> DEVDNS
 
   GH --> ARTIFACTS[(Encrypted versioned S3 artifacts)]
   ARTIFACTS --> DEV
@@ -310,10 +312,14 @@ Development foundation bootstrap is owned by #330. Application and database
 bootstrap, including `nova_toll_development`, its runtime role and grants, its
 environment comment, and the current canonical schemas, is owned by #331.
 Cloudflare DNS/CI cutover and any DNS-provider credential is owned by #332;
-legacy production-account development cleanup is owned by #333. This issue
-does not apply any of those changes or provide an operative development
-application release procedure. The development handoff remains non-operative
-until #330, #331, and #332 complete their separately approved boundaries.
+legacy production-account development cleanup is owned by #333. Slice 3 stages
+the development ACM certificate and CloudFront alias, then uses a separately
+protected production-foundation DNS role/workflow for only the exact validation
+and `dev.tollchat.ai` records. It never gives development CI the Cloudflare
+token or changes production records. This issue does not apply any production
+resource or provide an unreviewed development application release procedure.
+The handoff remains non-operative until #330, #331, and #332 complete their
+separately approved boundaries.
 
 Until the follow-on migration phase is complete, do not deploy changes that
 require a deployed schema change. Production keeps its existing database and
@@ -750,6 +756,37 @@ account-local foundation handoff once #330 and #331 are complete.
 
 **Demo:** Load the development site, stream a development chat response, and
 show that its session data and database are separate from production.
+
+#### Slice 3 custom-domain handoff
+
+The development application root has one disabled-by-default
+`enable_development_custom_domain` switch. The false path retains the current
+CloudFront default certificate, no alias, and `TLSv1`; the production path keeps
+the current ACM/Cloudflare resource addresses and semantics. An administrator
+may enable it only in the development account to request the us-east-1 DNS
+certificate for exactly `dev.tollchat.ai`, pass its non-secret DVO output to the
+protected production-foundation DNS workflow, wait for ACM `ISSUED`, and then
+attach the certificate and exact alias to the development distribution.
+
+The DNS workflow derives the active `tollchat.ai` zone/account from an
+authenticated exact-name lookup, verifies the account-owned token at the
+account endpoint, and allows only exact unproxied validation CNAMEs and the
+captured `dev.tollchat.ai` CNAME. It has no record deletion or broad
+reconciliation path, and no access to application state or production
+resources. The workflow records the old dev record before cutover and changes
+it only after the development CloudFront distribution is deployed and
+alias-attached. Rollback restores that captured record by ID; the old
+distribution/certificate and validation records remain until #333 closes the
+rollback window.
+
+The delivery role/workflow remains Cloudflare-free and explicitly passes the
+custom-domain switch as false. Post-merge gates begin from protected `main`,
+run the development health/connectivity checks, validate HTTPS/API/no-index and
+development-origin identity, and compare apex/`www` plus production ACM/CloudFront
+health before and after. No certificate, CloudFront alias, or DNS write is
+performed from pull-request CI or ordinary development delivery. This plan does
+not provide an operative development release procedure without that protected
+handoff.
 
 Completing this step completes the environment split milestone. Later steps do
 not block that milestone.
