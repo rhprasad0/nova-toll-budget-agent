@@ -102,7 +102,12 @@ data "aws_iam_policy_document" "timed_checks_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"]
+      values = var.environment == "development" ? [
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+        ] : [
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
+      ]
     }
   }
 }

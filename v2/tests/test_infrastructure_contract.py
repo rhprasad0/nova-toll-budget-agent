@@ -1,12 +1,17 @@
+import hashlib
 import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
-from collections.abc import Mapping
+import urllib.parse
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from textwrap import dedent
 from typing import cast
 
+import pytest
 import yaml
 
 V2_ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +19,8 @@ REPO_ROOT = V2_ROOT.parent
 MAIN_TF = (V2_ROOT / "infra" / "main.tf").read_text()
 PUBLISHER_HANDLER = (V2_ROOT / "lambdas" / "publisher" / "handler.py").read_text()
 ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
+SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
+DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 TIMED_CHECKS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
@@ -35,6 +42,15 @@ FOUNDATION_PROVIDER = (FOUNDATION_ROOT / "providers.tf").read_text()
 FOUNDATION_TAILSCALE = (FOUNDATION_ROOT / "tailscale.tf").read_text()
 FOUNDATION_BUDGET = FOUNDATION_ROOT / "budget.tf"
 APPLICATION_VARIABLES = (V2_ROOT / "infra" / "variables.tf").read_text()
+DEVELOPMENT_DELIVERY_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-development-delivery.yml"
+).read_text()
+DEVELOPMENT_CONNECTIVITY_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-development-connectivity-verification.yml"
+).read_text()
+FOUNDATION_DNS_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-production-foundation-dns.yml"
+).read_text()
 DEPLOYMENT = (V2_ROOT / "RUNBOOK.md").read_text()
 AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 ACCOUNT_CONTRACT = json.loads(
@@ -54,6 +70,104 @@ def terraform_block(source: str, header: str) -> str:
 
 def assert_assignment(block: str, name: str, value: str) -> None:
     assert re.search(rf"(?m)^\s*{re.escape(name)}\s*=\s*{re.escape(value)}\s*$", block)
+
+
+def _balanced_text(source: str, start: int, opening: str, closing: str) -> str:
+    depth = 0
+    quoted = False
+    escaped = False
+    for index in range(start, len(source)):
+        character = source[index]
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+            continue
+        if character == '"':
+            quoted = True
+        elif character == opening:
+            depth += 1
+        elif character == closing:
+            depth -= 1
+            if depth == 0:
+                return source[start + 1 : index]
+    raise AssertionError(f"unclosed HCL delimiter {opening!r}")
+
+
+def _hcl_named_blocks(source: str, name: str) -> list[str]:
+    pattern = re.compile(rf"(?m)^\s*{re.escape(name)}\s*\{{")
+    blocks: list[str] = []
+    for match in pattern.finditer(source):
+        opening = source.find("{", match.start(), match.end())
+        blocks.append(_balanced_text(source, opening, "{", "}"))
+    return blocks
+
+
+def _hcl_attribute(source: str, name: str) -> str:
+    match = re.search(rf"(?m)^\s*{re.escape(name)}\s*=\s*", source)
+    if not match:
+        return ""
+    start = match.end()
+    while start < len(source) and source[start].isspace():
+        start += 1
+    if start < len(source) and source[start] == "[":
+        return _balanced_text(source, start, "[", "]")
+    quoted = re.match(r'"(?:\\.|[^"\\])*"', source[start:])
+    if quoted:
+        return quoted.group(0)
+    return source[start:].splitlines()[0].strip()
+
+
+def _hcl_strings(expression: str) -> list[str]:
+    return [json.loads(value) for value in re.findall(r'"(?:\\.|[^"\\])*"', expression)]
+
+
+def _hcl_values(expression: str) -> list[str]:
+    if expression.startswith("concat("):
+        return []
+    values: list[str] = []
+    for value in expression.split(","):
+        value = value.strip()
+        if not value:
+            continue
+        values.append(json.loads(value) if value.startswith('"') else value)
+    return values
+
+
+def _hcl_scalar(source: str, name: str) -> str:
+    values = _hcl_strings(_hcl_attribute(source, name))
+    return values[0] if values else ""
+
+
+def _parsed_policy_document(source: str, name: str) -> list[dict[str, object]]:
+    document = terraform_block(source, f'data "aws_iam_policy_document" "{name}"')
+    statements: list[dict[str, object]] = []
+    for statement in _hcl_named_blocks(document, "statement"):
+        conditions: list[dict[str, object]] = []
+        for condition in _hcl_named_blocks(statement, "condition"):
+            conditions.append(
+                {
+                    "test": _hcl_scalar(condition, "test"),
+                    "variable": _hcl_scalar(condition, "variable"),
+                    "values": _hcl_strings(_hcl_attribute(condition, "values")),
+                }
+            )
+        statements.append(
+            {
+                "sid": _hcl_scalar(statement, "sid"),
+                "actions": _hcl_strings(_hcl_attribute(statement, "actions")),
+                "resources": _hcl_values(_hcl_attribute(statement, "resources")),
+                "conditions": conditions,
+            }
+        )
+    return statements
+
+
+def _policy_by_sid(statements: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    return {cast(str, statement["sid"]): statement for statement in statements}
 
 
 def test_account_contract_records_the_replacement_development_boundary():
@@ -206,9 +320,11 @@ def test_foundation_names_and_budget_use_the_caller_account():
     ):
         assert name in source
     assert "account_id        = local.account_id" in budget
-    assert "920534282028" not in "".join(
+    foundation_terraform = "".join(
         path.read_text() for path in FOUNDATION_ROOT.glob("*.tf")
     )
+    assert foundation_terraform.count("920534282028") == 1
+    assert "cloudflare-development-dns-api-token" in foundation_terraform
 
 
 def test_foundation_output_and_application_input_are_the_exact_non_secret_boundary():
@@ -268,19 +384,46 @@ def test_development_foundation_cannot_advertise_the_shared_vpc_route():
     assert 'default     = "production"' in variables
     assert 'variable "tailscale_advertise_routes"' in variables
     assert "default     = true" in variables
+    assert 'development_tailscale_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"' in router
+    assert 'var.environment == "development"' in router
     assert (
-        'condition     = (data.aws_caller_identity.current.account_id == local.production_account_id && var.environment == "production") || !var.tailscale_advertise_routes'
+        "data.aws_caller_identity.current.account_id == local.development_account_id"
         in router
     )
-    advertisement = router.split("%{if var.tailscale_advertise_routes~}", maxsplit=1)[
-        1
-    ].split("%{endif~}", maxsplit=1)[0]
+    assert 'var.environment == "production"' in router
+    assert (
+        "data.aws_caller_identity.current.account_id == local.production_account_id"
+        in router
+    )
+    production_advertisement = router.split(
+        '%{if var.tailscale_advertise_routes && var.environment == "production"~}',
+        maxsplit=1,
+    )[1].split("%{endif~}", maxsplit=1)[0]
     for option in (
-        "--advertise-routes=",
+        "--advertise-routes=${data.aws_vpc.default.cidr_block}",
         "--advertise-exit-node",
         "--advertise-tags=tag:nova-toll-router",
     ):
-        assert option in advertisement
+        assert option in production_advertisement
+    development_advertisement = router.split(
+        '%{if var.tailscale_advertise_routes && var.environment == "development"~}',
+        maxsplit=1,
+    )[1].split("%{endif~}", maxsplit=1)[0]
+    assert (
+        "--advertise-routes=${local.development_tailscale_route}"
+        in development_advertisement
+    )
+    assert "--advertise-exit-node" not in development_advertisement
+    assert "--advertise-tags=tag:nova-toll-router" not in development_advertisement
+    assert "${data.aws_vpc.default.cidr_block}" not in development_advertisement
+    assert (
+        '%{if var.tailscale_advertise_routes && var.environment == "production"~}'
+        in router
+    )
+    assert (
+        '%{if var.tailscale_advertise_routes && var.environment == "development"~}'
+        in router
+    )
     assert "-var environment=development" in development_handoff
     assert "-var tailscale_advertise_routes=false" in development_handoff
     assert "non-overlapping" in DEPLOYMENT
@@ -1433,10 +1576,12 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert 'origin_access_control_origin_type = "s3"' in site
     assert 'path_pattern             = "/api/*"' in site
     assert 'code    = file("${path.module}/../agent/public-api-gate.js")' in site
-    assert "aliases             = local.is_production ? local.domains : []" in site
-    assert "cloudfront_default_certificate = !local.is_production" in site
     assert (
-        'minimum_protocol_version       = local.is_production ? "TLSv1.2_2021" : "TLSv1"'
+        "aliases             = local.custom_domain_enabled ? local.domains : []" in site
+    )
+    assert "cloudfront_default_certificate = !local.custom_domain_enabled" in site
+    assert (
+        'minimum_protocol_version       = local.custom_domain_enabled ? "TLSv1.2_2021" : "TLSv1"'
         in site
     )
     development_release = DEPLOYMENT.split(
@@ -1647,8 +1792,8 @@ def test_development_site_has_no_cloudflare_reads_or_writes():
     assert "to   = aws_acm_certificate_validation.site[0]" in site
     assert "count   = local.is_production && var.enable_public_dns ? 1 : 0" in apex
     assert "count   = local.is_production ? 1 : 0" in www
-    assert 'environment       = "development"' in development_tfvars
-    assert "enable_public_dns = false" in development_tfvars
+    assert re.search(r'(?m)^environment\s*=\s*"development"$', development_tfvars)
+    assert re.search(r"(?m)^enable_public_dns\s*=\s*false$", development_tfvars)
     assert "development path has no Cloudflare data or resource instances" in DEPLOYMENT
     assert "development DNS/certificate validation" in DEPLOYMENT
 
@@ -2357,10 +2502,13 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
 
 
 def test_usage_rollout_has_no_retired_foundation_step():
+    pre_bootstrap_runbook = DEPLOYMENT.split(
+        "### Development bootstrap/import boundary", maxsplit=1
+    )[0]
     assert "usage-permissions.tfplan" not in DEPLOYMENT
     assert "usage-prerequisites.tfplan" not in DEPLOYMENT
     assert "Do not use Terraform resource targets" in DEPLOYMENT
-    assert "iam get-role-policy" not in DEPLOYMENT
+    assert "iam get-role-policy" not in pre_bootstrap_runbook
     assert "dynamodb:TransactWriteItems" not in DEPLOYMENT
     assert "tollchat_usage_optout=1" in DEPLOYMENT
     assert "--consistent-read" in DEPLOYMENT
@@ -2777,7 +2925,9 @@ def test_timed_ci_uses_the_internal_pricing_caller():
         1
     ].split('resource "aws_iam_role_policy" "timed_checks"', maxsplit=1)[0]
 
-    assert 'name               = "nova-toll-v2-timed-checks${local.suffix}"' in MAIN_TF
+    assert re.search(
+        r'name\s*=\s*"nova-toll-v2-timed-checks\$\{local\.suffix\}"', MAIN_TF
+    )
     assert 'actions   = ["rds:DescribeDBInstances"]' in policy
     assert 'actions   = ["rds-db:connect"]' in policy
     assert "/${local.database_roles.pricing_caller}" in policy
@@ -3010,3 +3160,3890 @@ def test_issue330_repairs_preserve_roles_and_migration_gate():
     assert development.index("state_object_absent") < development.index(
         'cp -- "$ROOT/versions.tf.with-backend" "$ROOT/versions.tf"'
     )
+
+
+def _workflow_trigger(workflow: dict[str, object]) -> object:
+    # PyYAML 1.1 treats the YAML 1.2 `on` key as boolean True.
+    return workflow.get("on", cast(Mapping[object, object], workflow).get(True))
+
+
+def _workflow_run_source(job: dict[str, object]) -> str:
+    return "\n".join(
+        cast(str, step.get("run", ""))
+        for step in cast(list[dict[str, object]], job["steps"])
+    )
+
+
+def _development_plan_gate_script(source: str) -> str:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    deploy_source = _workflow_run_source(jobs["deploy"])
+    match = re.search(
+        r"python3 - \"\$PLAN_JSON\" <<'PY'\n(.*?)\nPY",
+        deploy_source,
+        flags=re.DOTALL,
+    )
+    assert match, "the workflow must embed the plan gate"
+    return dedent(match.group(1))
+
+
+def _run_development_plan_gate(payload: object, *, raw: bool = False) -> bool:
+    script = _development_plan_gate_script(DEVELOPMENT_DELIVERY_WORKFLOW)
+    with tempfile.TemporaryDirectory() as directory:
+        plan = Path(directory) / "plan.json"
+        if raw:
+            plan.write_text(cast(str, payload), encoding="utf-8")
+        else:
+            plan.write_text(json.dumps(payload), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-", str(plan)],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    return result.returncode == 0
+
+
+def _synthetic_change(
+    mode: str, address: str, actions: list[str], **after: object
+) -> dict[str, object]:
+    change: dict[str, object] = {"actions": actions}
+    if after:
+        change["after"] = after
+    return {"address": address, "mode": mode, "change": change}
+
+
+def _assert_development_delivery_workflow(source: str) -> None:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
+    assert workflow["permissions"] == {"contents": "read"}
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    assert set(jobs) == {"build", "deploy"}
+
+    build = jobs["build"]
+    assert build["permissions"] == {"contents": "read"}
+    assert "id-token" not in cast(dict[str, str], build["permissions"])
+    build_steps = cast(list[dict[str, object]], build["steps"])
+    build_source = _workflow_run_source(build)
+    assert all(
+        not cast(str, step.get("uses", "")).startswith(
+            "aws-actions/configure-aws-credentials@"
+        )
+        for step in build_steps
+    )
+    for script in (
+        "./scripts/build_loader_zip.sh",
+        "./scripts/build_publisher_zip.sh",
+        "./scripts/build_agentcore_zips.sh",
+    ):
+        assert script in build_source
+    for package in (
+        "infra/build/loader.zip",
+        "infra/build/publisher.zip",
+        "infra/build/agentcore.zip",
+        "infra/build/chat-proxy.zip",
+    ):
+        assert package in build_source
+    assert "DEPLOYMENT_SHA256SUMS" in build_source
+    uploads = [
+        step
+        for step in build_steps
+        if cast(str, step.get("uses", "")).startswith("actions/upload-artifact@")
+    ]
+    assert {cast(dict[str, str], step["with"])["name"] for step in uploads} == {
+        "v2-development-packages",
+        "v2-development-checksums",
+    }
+
+    deploy = jobs["deploy"]
+    assert deploy["needs"] == "build"
+    assert deploy["if"] == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'"
+    assert deploy["environment"] == "development"
+    assert deploy["permissions"] == {"contents": "read", "id-token": "write"}
+    deploy_steps = cast(list[dict[str, object]], deploy["steps"])
+    deploy_source = _workflow_run_source(deploy)
+    downloads = [
+        step
+        for step in deploy_steps
+        if cast(str, step.get("uses", "")).startswith("actions/download-artifact@")
+    ]
+    assert {cast(dict[str, str], step["with"])["name"] for step in downloads} == {
+        "v2-development-packages",
+        "v2-development-checksums",
+    }
+    assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in deploy_source
+    assert "aws-actions/configure-aws-credentials@" in "\n".join(
+        cast(str, step.get("uses", "")) for step in deploy_steps
+    )
+    assert "./scripts/build_" not in deploy_source
+    assert "arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery" in source
+    assert "role-to-assume: arn:aws:iam::903859731897:role/" in source
+    assert "aws-region: us-east-1" in source
+    assert 'version: "0.12.5"' in source
+    assert 'terraform_version: "1.15.8"' in source
+
+    for job in jobs.values():
+        for step in cast(list[dict[str, object]], job["steps"]):
+            if "uses" in step:
+                assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", cast(str, step["uses"]))
+            if cast(str, step.get("uses", "")).startswith("actions/checkout@"):
+                assert (
+                    cast(dict[str, object], step["with"])["persist-credentials"]
+                    is False
+                )
+
+    configure_index = next(
+        index
+        for index, step in enumerate(deploy_steps)
+        if cast(str, step.get("uses", "")).startswith(
+            "aws-actions/configure-aws-credentials@"
+        )
+    )
+    identity_step = deploy_steps[configure_index + 1]
+    assert identity_step["name"] == "Confirm development account"
+    assert "aws sts get-caller-identity --query Account --output text" in cast(
+        str, identity_step["run"]
+    )
+    assert '= "903859731897"' in cast(str, identity_step["run"])
+    assert "Record protected-main OIDC proof" in source
+    assert 'test "$GITHUB_REF" = "refs/heads/main"' in deploy_source
+    assert (
+        'test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"'
+        in deploy_source
+    )
+    assert (
+        "rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+        not in deploy_source
+    )
+    assert "protected-main-oidc.json" in deploy_source
+    assert '"commit_sha":"%s"' in deploy_source
+    assert '(.commit_sha | test("^[0-9a-f]{40}$"))' in deploy_source
+    assert (
+        "terraform -chdir=infra init -input=false -backend-config=backend.development.hcl"
+        in deploy_source
+    )
+    assert "terraform -chdir=infra output -json foundation" in deploy_source
+    assert (
+        "foundation.tfvars.json" in deploy_source
+        and "trap cleanup EXIT" in deploy_source
+    )
+    assert (
+        "terraform -chdir=v2/infra init -input=false -backend-config=backend.development.hcl"
+        in deploy_source
+    )
+    assert "-var-file=development.tfvars" in deploy_source
+    assert 'terraform -chdir=v2/infra plan -input=false -out="$PLAN"' in deploy_source
+    assert 'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"' in deploy_source
+    assert "python3 - \"$PLAN_JSON\" <<'PY'" in deploy_source
+    assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in deploy_source
+    assert deploy_source.index(
+        'terraform -chdir=v2/infra show -json "$PLAN"'
+    ) < deploy_source.index('terraform -chdir=v2/infra apply -input=false "$PLAN"')
+    assert "known_managed" in deploy_source and "known_data" in deploy_source
+    assert "immutable" in deploy_source and "read_only" in deploy_source
+    assert "moved/deposed change" in deploy_source
+    for manual_address in (
+        "aws_api_gateway_rest_api.tollchat",
+        "aws_api_gateway_method.tollchat_root",
+        "aws_athena_named_query.top_routes",
+        "aws_security_group.tollchat_runtime",
+        "aws_vpc_security_group_ingress_rule.rds_from_runtime",
+        "aws_sqs_queue.delivery_failure",
+        "aws_sqs_queue.invoke_failure",
+        "aws_sqs_queue.publisher_delivery_failure",
+        "aws_sqs_queue.publisher_invoke_failure",
+        "aws_sqs_queue_policy.delivery_failure",
+    ):
+        assert manual_address in deploy_source
+    for package in (
+        "build/loader.zip",
+        "build/publisher.zip",
+        "build/agentcore.zip",
+        "build/chat-proxy.zip",
+    ):
+        assert package in deploy_source
+    for forbidden in (
+        "-target",
+        "-lock=false",
+        "backend.production.hcl",
+        "terraform_remote_state",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "pull_request",
+        "cloudflare",
+        "placeholder",
+        "920534282028",
+    ):
+        assert forbidden not in source
+
+
+def _assert_development_delivery_trust(source: str) -> None:
+    trust = _parsed_policy_document(source, "development_delivery_assume")
+    assert len(trust) == 1
+    statement = trust[0]
+    assert statement["actions"] == ["sts:AssumeRoleWithWebIdentity"]
+    principal_blocks = _hcl_named_blocks(
+        terraform_block(
+            source, 'data "aws_iam_policy_document" "development_delivery_assume"'
+        ),
+        "principals",
+    )
+    assert len(principal_blocks) == 1
+    assert _hcl_scalar(principal_blocks[0], "type") == "Federated"
+    assert _hcl_attribute(principal_blocks[0], "identifiers") == (
+        "aws_iam_openid_connect_provider.github.arn"
+    )
+    assert statement["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "token.actions.githubusercontent.com:aud",
+            "values": ["sts.amazonaws.com"],
+        },
+        {
+            "test": "StringEquals",
+            "variable": "token.actions.githubusercontent.com:sub",
+            "values": [
+                "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+            ],
+        },
+    ]
+
+
+def _assert_development_delivery_state_and_application_policy(source: str) -> None:
+    delivery_role = terraform_block(
+        source, 'resource "aws_iam_role" "development_delivery"'
+    )
+    assert re.search(r"(?m)^\s*max_session_duration\s*=\s*3600\s*$", delivery_role)
+    statements = _parsed_policy_document(source, "development_delivery")
+    by_sid = _policy_by_sid(statements)
+    assert {
+        "ListDevelopmentState",
+        "ReadDevelopmentFoundationState",
+        "ManageDevelopmentApplicationState",
+        "ManageDevelopmentApplicationLock",
+        "DecryptDevelopmentState",
+        "WriteDevelopmentStateDataKeys",
+    } <= by_sid.keys()
+    assert by_sid["ListDevelopmentState"]["actions"] == ["s3:ListBucket"]
+    assert by_sid["ListDevelopmentState"]["resources"] == ["aws_s3_bucket.tfstate.arn"]
+    assert by_sid["ListDevelopmentState"]["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "s3:prefix",
+            "values": [
+                "nova-toll/development/terraform.tfstate",
+                "nova-toll/v2/development/terraform.tfstate",
+            ],
+        }
+    ]
+    assert by_sid["ReadDevelopmentFoundationState"]["actions"] == ["s3:GetObject"]
+    assert by_sid["ReadDevelopmentFoundationState"]["resources"] == [
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/development/terraform.tfstate"
+    ]
+    assert by_sid["ManageDevelopmentApplicationState"]["actions"] == [
+        "s3:GetObject",
+        "s3:PutObject",
+    ]
+    assert by_sid["ManageDevelopmentApplicationState"]["resources"] == [
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate"
+    ]
+    assert by_sid["ManageDevelopmentApplicationLock"]["actions"] == [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+    ]
+    assert by_sid["ManageDevelopmentApplicationLock"]["resources"] == [
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate.tflock"
+    ]
+    assert by_sid["DecryptDevelopmentState"]["actions"] == ["kms:Decrypt"]
+    assert by_sid["WriteDevelopmentStateDataKeys"]["actions"] == ["kms:GenerateDataKey"]
+    for sid in ("DecryptDevelopmentState", "WriteDevelopmentStateDataKeys"):
+        assert by_sid[sid]["resources"] == ["aws_kms_key.tfstate.arn"]
+        conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
+        assert conditions[0]["variable"] == "kms:EncryptionContext:aws:s3:arn"
+    write_state_conditions = cast(
+        list[dict[str, object]], by_sid["WriteDevelopmentStateDataKeys"]["conditions"]
+    )
+    assert write_state_conditions[0]["values"] == [
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate",
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate.tflock",
+    ]
+
+    all_actions = [
+        action
+        for statement in statements
+        for action in cast(list[str], statement["actions"])
+    ]
+    assert all("*" not in action for action in all_actions)
+    assert not any(
+        action.startswith(("sts:", "organizations:")) for action in all_actions
+    )
+    assert not any(
+        action.startswith("iam:") and action.endswith(":*") for action in all_actions
+    )
+    assert not {
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:UpdateAssumeRolePolicy",
+    } & set(all_actions)
+    assert by_sid["ReadPreprovisionedApplicationRoles"]["actions"] == [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:ListRoleTags",
+    ]
+    assert by_sid["ReadPreprovisionedApplicationRoles"]["resources"] == [
+        "local.development_delivery_role_arns"
+    ]
+    assert by_sid["ManageApplicationQueues"]["actions"] == [
+        "sqs:GetQueueAttributes",
+        "sqs:ListQueueTags",
+    ]
+    assert not {
+        "sqs:SetQueueAttributes",
+        "sqs:AddPermission",
+        "sqs:RemovePermission",
+        "sqs:TagQueue",
+        "sqs:UntagQueue",
+    } & set(all_actions)
+    assert "ManageApplicationIamRoles" not in by_sid
+    assert "CreateBoundedApplicationRoles" not in by_sid
+    assert "bedrock:ListTagsForResource" in cast(
+        list[str], by_sid["ManageApplicationGuardrail"]["actions"]
+    )
+    assert "AttachOnlyLambdaVpcPolicy" not in by_sid
+    assert not {"iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PassRole"} & set(
+        all_actions
+    )
+    assert by_sid["UpdateApplicationLambdaFunctions"]["actions"] == [
+        "lambda:TagResource",
+        "lambda:UntagResource",
+        "lambda:UpdateAlias",
+        "lambda:UpdateFunctionCode",
+    ]
+    assert by_sid["UpdateApplicationLambdaFunctions"]["resources"] == [
+        "local.development_delivery_lambda_resources"
+    ]
+    assert not {
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:PutFunctionConcurrency",
+        "lambda:PutFunctionEventInvokeConfig",
+        "lambda:PutProvisionedConcurrencyConfig",
+        "lambda:UpdateFunctionEventInvokeConfig",
+    } & set(all_actions)
+    for statement in statements:
+        for resource in cast(list[str], statement["resources"]):
+            assert "920534282028" not in resource
+            assert "production" not in resource.lower()
+    assert re.search(
+        r'(?m)^\s*development_delivery_account_id\s*=\s*"903859731897"\s*$', source
+    )
+    assert re.search(
+        r'(?m)^\s*development_delivery_region\s*=\s*"us-east-1"\s*$', source
+    )
+    parsed_policy = json.dumps(statements).lower()
+    assert "920534282028" not in parsed_policy
+    assert "production" not in parsed_policy
+    assert "ssm:" not in parsed_policy
+    assert "secretsmanager" not in parsed_policy
+
+    wildcard_statements = {
+        cast(str, statement["sid"])
+        for statement in statements
+        if cast(list[str], statement["resources"]) == ["*"]
+    }
+    assert wildcard_statements <= {
+        "DescribeApplicationLogPolicies",
+        "DescribeApplicationLogGroups",
+        "DescribeApplicationNetworking",
+        "ListApplicationAthenaWorkGroups",
+        "ReadManagedCloudFrontPolicies",
+    }
+    for sid in wildcard_statements:
+        conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
+        assert any(
+            condition["variable"] == "aws:RequestedRegion" for condition in conditions
+        )
+
+    assert "events:ListTagsForResource" in cast(
+        list[str], by_sid["ManageApplicationEventRules"]["actions"]
+    )
+    assert by_sid["ManageApplicationMeasurementBucket"]["actions"] == [
+        "s3:GetBucketAcl",
+        "s3:GetBucketLocation",
+        "s3:GetBucketOwnershipControls",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketTagging",
+        "s3:GetBucketVersioning",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:ListBucket",
+        "s3:ListBucketMultipartUploads",
+        "s3:ListBucketVersions",
+    ]
+    assert by_sid["ManageApplicationAthenaNamedQueries"]["actions"] == [
+        "athena:GetNamedQuery",
+        "athena:ListTagsForResource",
+    ]
+    assert by_sid["ManageApplicationAthenaNamedQueries"]["resources"] == [
+        "local.development_delivery_athena_named_query_arns"
+    ]
+    assert by_sid["ManageApplicationAthenaWorkGroup"]["actions"] == [
+        "athena:GetWorkGroup",
+        "athena:ListNamedQueries",
+        "athena:TagResource",
+        "athena:UntagResource",
+        "athena:UpdateWorkGroup",
+    ]
+    assert by_sid["ManageApplicationAthenaWorkGroup"]["resources"] == [
+        "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
+    ]
+
+    assert by_sid["UseApplicationKmsKeys"]["actions"] == [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:Encrypt",
+        "kms:GenerateDataKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
+    ]
+    kms_conditions = cast(
+        list[dict[str, object]], by_sid["UseApplicationKmsKeys"]["conditions"]
+    )
+    assert {
+        (condition["variable"], tuple(cast(list[str], condition["values"])))
+        for condition in kms_conditions
+    } == {
+        ("aws:ResourceTag/environment", ("development",)),
+        ("aws:ResourceTag/version", ("v2",)),
+    }
+    assert "ManageApplicationKmsAliases" not in by_sid
+    assert "CreateApplicationKmsKeys" not in by_sid
+    assert "ManageNewApplicationKmsKeys" not in by_sid
+    assert by_sid["ReadApplicationKmsAliases"]["actions"] == [
+        "kms:DescribeKey",
+        "kms:ListResourceTags",
+    ]
+    assert by_sid["ReadApplicationKmsAliases"]["resources"] == [
+        "local.development_delivery_site_kms_alias_arn",
+        "local.development_delivery_measurement_kms_alias_arn",
+    ]
+    assert by_sid["PublishApplicationApiGatewayDeployments"]["resources"] == [
+        "local.development_delivery_api_deployment_arns"
+    ]
+    assert "UpdateApplicationApiGateway" not in by_sid
+    assert by_sid["ReadApplicationApiGateway"]["resources"] == [
+        "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}",
+        "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/*",
+    ]
+    assert by_sid["PublishApplicationLambdaVersions"]["actions"] == [
+        "lambda:PublishVersion"
+    ]
+    assert by_sid["RetireApplicationLambdaVersions"]["actions"] == [
+        "lambda:DeleteFunction"
+    ]
+    assert by_sid["PublishApplicationLambdaVersions"]["resources"] == [
+        "local.development_delivery_lambda_arns"
+    ]
+    assert by_sid["RetireApplicationLambdaVersions"]["resources"] == [
+        'for function_arn in local.development_delivery_lambda_arns : "${function_arn}:*"'
+    ]
+    assert by_sid["PublishApplicationGuardrailVersions"]["actions"] == [
+        "bedrock:CreateGuardrailVersion",
+    ]
+    assert by_sid["PublishApplicationGuardrailVersions"]["resources"] == [
+        "local.development_delivery_guardrail_arn"
+    ]
+    assert by_sid["ReadApplicationCloudFront"]["actions"] == [
+        "cloudfront:GetDistribution",
+        "cloudfront:GetDistributionConfig",
+        "cloudfront:GetOriginAccessControl",
+        "cloudfront:GetResponseHeadersPolicy",
+        "cloudfront:ListTagsForResource",
+    ]
+    assert by_sid["ReadApplicationCloudFront"]["resources"] == [
+        "local.development_delivery_distribution_arn",
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-access-control/*",
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:response-headers-policy/*",
+    ]
+    assert by_sid["ManageApplicationAgentCore"]["actions"] == [
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore:GetAgentRuntimeEndpoint",
+        "bedrock-agentcore:GetResourcePolicy",
+        "bedrock-agentcore:ListTagsForResource",
+        "bedrock-agentcore:TagResource",
+        "bedrock-agentcore:UntagResource",
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+    ]
+    assert by_sid["ManageApplicationAgentCore"]["resources"] == [
+        "local.development_delivery_agentcore_runtime_arn",
+        "local.development_delivery_agentcore_endpoint_arn",
+    ]
+    assert by_sid["ManageApplicationCloudFront"]["resources"] == [
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-chat-routes-dev",
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-report-routes-dev",
+    ]
+    assert by_sid["ManageApplicationWaf"]["actions"] == [
+        "wafv2:GetLoggingConfiguration",
+        "wafv2:GetWebACL",
+        "wafv2:ListTagsForResource",
+    ]
+    assert "ManageApplicationNetworking" not in by_sid
+    assert "CreateNamedQuery" not in all_actions
+    assert "DeleteNamedQuery" not in all_actions
+    assert "UpdateNamedQuery" not in all_actions
+    assert re.search(r'development_delivery_api_id\s*=\s*"ocw8sg0wlb"', source)
+    assert re.search(r"guardrail/vdyqrh31xgca", source)
+    assert re.search(r"runtime/nova_toll_v2_development-Y69XBf88Bl", source)
+    assert "local.development_delivery_application_key_arns" in source
+    assert re.search(
+        r"development_delivery_athena_named_query_arns\s*=\s*\[\s*"
+        r'"arn:aws:athena:.*:namedquery/097b778f-c9ed-4bd9-af53-1e05770e1d53",\s*'
+        r'"arn:aws:athena:.*:namedquery/6a947ac6-b2a9-45b9-a28c-1b19bfec3e1d",',
+        source,
+        re.DOTALL,
+    )
+    assert "security-group/*" not in source
+    assert "security-group-rule/*" not in source
+    assert "vpc/*" not in source
+    forbidden_mutations = {
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:UpdateAssumeRolePolicy",
+        "bedrock-agentcore:CreateAgentRuntime",
+        "bedrock-agentcore:CreateAgentRuntimeEndpoint",
+        "bedrock-agentcore:DeleteAgentRuntime",
+        "bedrock-agentcore:DeleteAgentRuntimeEndpoint",
+        "bedrock-agentcore:PutResourcePolicy",
+        "bedrock-agentcore:DeleteResourcePolicy",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig",
+        "lambda:DeleteFunctionUrlConfig",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketPublicAccessBlock",
+        "wafv2:UpdateWebACL",
+        "kms:CreateAlias",
+        "kms:UpdateAlias",
+        "kms:DeleteAlias",
+        "kms:CreateKey",
+        "kms:PutKeyPolicy",
+        "events:PutRule",
+        "logs:PutMetricFilter",
+        "cloudwatch:PutMetricAlarm",
+        "wafv2:PutLoggingConfiguration",
+    }
+    assert not forbidden_mutations & set(all_actions)
+
+
+def _assert_application_roles_are_bootstrap_owned() -> None:
+    role_sources = {
+        "main.tf": MAIN_TF,
+        "agentcore.tf": (V2_ROOT / "infra" / "agentcore.tf").read_text(),
+        "site.tf": (V2_ROOT / "infra" / "site.tf").read_text(),
+        "agent_measurement.tf": (
+            V2_ROOT / "infra" / "agent_measurement.tf"
+        ).read_text(),
+    }
+    role_names = {
+        "main.tf": ("loader", "timed_checks", "publisher", "publisher_scheduler"),
+        "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
+        "site.tf": ("usage_publisher",),
+        "agent_measurement.tf": ("agent_usage_rollup",),
+    }
+    for filename, names in role_names.items():
+        for name in names:
+            role = terraform_block(
+                role_sources[filename], f'resource "aws_iam_role" "{name}"'
+            )
+            assert _hcl_scalar(role, "permissions_boundary") in (None, "")
+
+
+def test_development_agentcore_execution_trust_is_exact_and_confused_deputy_bound():
+    source = (V2_ROOT / "infra" / "agentcore.tf").read_text()
+    policy = terraform_block(
+        source, 'data "aws_iam_policy_document" "agentcore_assume"'
+    )
+    conditions = _hcl_named_blocks(policy, "condition")
+    assert any(
+        _hcl_scalar(condition, "test") == "StringEquals"
+        and _hcl_scalar(condition, "variable") == "aws:SourceAccount"
+        and _hcl_attribute(condition, "values")
+        == "data.aws_caller_identity.current.account_id"
+        for condition in conditions
+    )
+    assert any(
+        _hcl_scalar(condition, "test") == "ArnEquals"
+        and _hcl_scalar(condition, "variable") == "aws:SourceArn"
+        and _hcl_attribute(condition, "values") == "local.agentcore_runtime_source_arns"
+        for condition in conditions
+    )
+    assert re.search(
+        r'agentcore_runtime_source_arns\s*=\s*local\.is_production\s*\?\s*\[.*runtime/\*"\]\s*:\s*\[local\.development_agentcore_runtime_arn\]',
+        source,
+        re.DOTALL,
+    )
+    assert (
+        'development_agentcore_runtime_arn = "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl"'
+        in source
+    )
+
+
+def _must_reject(
+    assertion: Callable[[str], None], source: str, original: str, replacement: str
+) -> None:
+    mutated = source.replace(original, replacement, 1)
+    assert mutated != source
+    with pytest.raises(AssertionError):
+        assertion(mutated)
+
+
+def _must_reject_after_marker(
+    assertion: Callable[[str], None],
+    source: str,
+    marker: str,
+    original: str,
+    replacement: str,
+) -> None:
+    marker_index = source.index(marker)
+    mutated = source[:marker_index] + source[marker_index:].replace(
+        original, replacement, 1
+    )
+    assert mutated != source
+    with pytest.raises(AssertionError):
+        assertion(mutated)
+
+
+def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
+    _assert_development_delivery_workflow(DEVELOPMENT_DELIVERY_WORKFLOW)
+    for original, replacement in (
+        ("push:\n    branches:", "pull_request:\n    branches:"),
+        ("- main", "- release"),
+        ("environment: development", "environment: production"),
+        ("903859731897", "920534282028"),
+        (
+            'test "$GITHUB_REF" = "refs/heads/main"',
+            'test "$GITHUB_REF" = "refs/heads/release"',
+        ),
+        (
+            'test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"',
+            'test "$GITHUB_REPOSITORY" = "evil/fork"',
+        ),
+        (
+            'test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"',
+            'test "$GITHUB_REPOSITORY" = "rhprasad0@91573985/nova-toll-budget-agent"',
+        ),
+        ("backend.development.hcl", "backend.production.hcl"),
+        ("build/loader.zip", "build/placeholder.zip"),
+        ('version: "0.12.5"', "version: latest"),
+        ('terraform_version: "1.15.8"', "terraform_version: latest"),
+    ):
+        _must_reject(
+            _assert_development_delivery_workflow,
+            DEVELOPMENT_DELIVERY_WORKFLOW,
+            original,
+            replacement,
+        )
+
+
+def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
+    _assert_development_delivery_trust(FOUNDATION_IAM)
+    _assert_development_delivery_state_and_application_policy(FOUNDATION_IAM)
+    _assert_application_roles_are_bootstrap_owned()
+
+    for original, replacement in (
+        (
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production",
+        ),
+        (
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
+        ),
+        (
+            "token.actions.githubusercontent.com:aud",
+            "token.actions.githubusercontent.com:evil",
+        ),
+        (
+            "aws_iam_openid_connect_provider.github.arn",
+            '"arn:aws:iam::903859731897:oidc-provider/evil.example"',
+        ),
+        ("903859731897", "920534282028"),
+        (
+            "nova-toll/v2/development/terraform.tfstate",
+            "nova-toll/v2/production/terraform.tfstate",
+        ),
+        ("bedrock:ListTagsForResource", "bedrock:ListResources"),
+        ("events:ListTagsForResource", "events:ListRules"),
+        ("iam:GetRole", "iam:DeleteRole"),
+        ("iam:GetRolePolicy", "iam:PutRolePolicy"),
+        ("lambda:GetFunctionConfiguration", "lambda:UpdateFunctionConfiguration"),
+        (
+            'variable = "aws:ResourceTag/version"\n      values   = ["v2"]',
+            'variable = "aws:ResourceTag/version"\n      values   = ["production"]',
+        ),
+        ("sts:AssumeRoleWithWebIdentity", "sts:AssumeRole"),
+    ):
+        assertion = (
+            _assert_development_delivery_trust
+            if (
+                "repo:" in original
+                or original.startswith("sts:")
+                or "token.actions" in original
+                or "openid_connect_provider" in original
+            )
+            else _assert_development_delivery_state_and_application_policy
+        )
+        _must_reject(assertion, FOUNDATION_IAM, original, replacement)
+    _must_reject_after_marker(
+        _assert_development_delivery_state_and_application_policy,
+        FOUNDATION_IAM,
+        'sid       = "ManageApplicationMeasurementBucket"',
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy",
+    )
+    _must_reject_after_marker(
+        _assert_development_delivery_state_and_application_policy,
+        FOUNDATION_IAM,
+        'sid       = "UseApplicationKmsKeys"',
+        'variable = "aws:ResourceTag/environment"',
+        'variable = "kms:ResourceAliases"',
+    )
+    _must_reject_after_marker(
+        _assert_development_delivery_state_and_application_policy,
+        FOUNDATION_IAM,
+        'sid     = "ManageApplicationAgentCore"',
+        "local.development_delivery_agentcore_runtime_arn",
+        '"arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/*"',
+    )
+    _must_reject_after_marker(
+        _assert_development_delivery_state_and_application_policy,
+        FOUNDATION_IAM,
+        'sid       = "PublishApplicationGuardrailVersions"',
+        "local.development_delivery_guardrail_arn",
+        '"arn:aws:bedrock:us-east-1:903859731897:guardrail/*"',
+    )
+    _must_reject_after_marker(
+        _assert_development_delivery_state_and_application_policy,
+        FOUNDATION_IAM,
+        'sid       = "PublishApplicationApiGatewayDeployments"',
+        "local.development_delivery_api_deployment_arns",
+        '["arn:aws:apigateway:${local.development_delivery_region}::/restapis/*/deployments"]',
+    )
+    for marker, original, replacement in (
+        (
+            'sid       = "ManageApplicationEventRules"',
+            "events:DescribeRule",
+            "events:PutRule",
+        ),
+        (
+            'sid       = "ManageApplicationLogs"',
+            "logs:DescribeMetricFilters",
+            "logs:PutMetricFilter",
+        ),
+        (
+            'sid       = "ManageApplicationAlarms"',
+            "cloudwatch:DescribeAlarms",
+            "cloudwatch:PutMetricAlarm",
+        ),
+        (
+            'sid       = "ManageApplicationWaf"',
+            "wafv2:GetLoggingConfiguration",
+            "wafv2:PutLoggingConfiguration",
+        ),
+        (
+            'sid = "ManageApplicationAthenaNamedQueries"',
+            "local.development_delivery_athena_named_query_arns",
+            '"arn:aws:athena:us-east-1:903859731897:namedquery/*"',
+        ),
+    ):
+        _must_reject_after_marker(
+            _assert_development_delivery_state_and_application_policy,
+            FOUNDATION_IAM,
+            marker,
+            original,
+            replacement,
+        )
+
+
+def _statement_allows(statement: dict[str, object], action: str, resource: str) -> bool:
+    return action in cast(list[str], statement["actions"]) and resource in cast(
+        list[str], statement["resources"]
+    )
+
+
+def test_development_delivery_direct_api_denials_are_resource_scoped():
+    by_sid = _policy_by_sid(
+        _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
+    )
+    assert _statement_allows(
+        by_sid["ManageApplicationAgentCore"],
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "local.development_delivery_agentcore_runtime_arn",
+    )
+    assert not _statement_allows(
+        by_sid["ManageApplicationAgentCore"],
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/unrelated",
+    )
+    assert _statement_allows(
+        by_sid["PublishApplicationGuardrailVersions"],
+        "bedrock:CreateGuardrailVersion",
+        "local.development_delivery_guardrail_arn",
+    )
+    assert not _statement_allows(
+        by_sid["PublishApplicationGuardrailVersions"],
+        "bedrock:CreateGuardrailVersion",
+        "arn:aws:bedrock:us-east-1:903859731897:guardrail/unrelated",
+    )
+    all_actions = {
+        action
+        for statement in by_sid.values()
+        for action in cast(list[str], statement["actions"])
+    }
+    assert "iam:PassRole" not in all_actions
+    assert "lambda:UpdateFunctionConfiguration" not in all_actions
+    assert (
+        not {
+            "athena:CreateNamedQuery",
+            "athena:DeleteNamedQuery",
+            "athena:UpdateNamedQuery",
+        }
+        & all_actions
+    )
+    assert (
+        not {
+            "sqs:SetQueueAttributes",
+            "sqs:AddPermission",
+            "sqs:RemovePermission",
+            "sqs:TagQueue",
+            "sqs:UntagQueue",
+        }
+        & all_actions
+    )
+    assert (
+        not {
+            "ec2:AuthorizeSecurityGroupIngress",
+            "ec2:AuthorizeSecurityGroupEgress",
+            "ec2:RevokeSecurityGroupIngress",
+            "ec2:RevokeSecurityGroupEgress",
+        }
+        & all_actions
+    )
+    assert (
+        not {
+            "events:PutRule",
+            "logs:PutMetricFilter",
+            "cloudwatch:PutMetricAlarm",
+            "wafv2:PutLoggingConfiguration",
+        }
+        & all_actions
+    )
+    assert _statement_allows(
+        by_sid["UpdateApplicationLambdaFunctions"],
+        "lambda:UpdateFunctionCode",
+        "local.development_delivery_lambda_resources",
+    )
+    assert not _statement_allows(
+        by_sid["UpdateApplicationLambdaFunctions"],
+        "lambda:UpdateFunctionCode",
+        "arn:aws:lambda:us-east-1:903859731897:function:unrelated-dev",
+    )
+    assert _statement_allows(
+        by_sid["ManageApplicationCloudFront"],
+        "cloudfront:UpdateFunction",
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-chat-routes-dev",
+    )
+    assert not _statement_allows(
+        by_sid["ManageApplicationCloudFront"],
+        "cloudfront:UpdateFunction",
+        "arn:aws:cloudfront::903859731897:function/unrelated-dev",
+    )
+    assert _statement_allows(
+        by_sid["ManageApplicationSiteBuckets"],
+        "s3:PutObject",
+        "${local.development_delivery_site_bucket_arn}/*",
+    )
+    assert not _statement_allows(
+        by_sid["ManageApplicationSiteBuckets"],
+        "s3:PutObject",
+        "arn:aws:s3:::unrelated-development-site/*",
+    )
+    assert not any(
+        resource.endswith("/key/*")
+        for statement in by_sid.values()
+        for resource in cast(list[str], statement["resources"])
+    )
+
+
+def _development_bootstrap_script() -> str:
+    bootstrap = DEPLOYMENT.split(
+        "The following is the executable, fail-closed inventory and repair procedure.",
+        maxsplit=1,
+    )[1].split("After bootstrap/import", maxsplit=1)[0]
+    match = re.search(r"```sh\n(.*?)\n```", bootstrap, re.DOTALL)
+    assert match
+    return match.group(1)
+
+
+def _assert_development_bootstrap_contract(script: str) -> None:
+    assert 'EXPECTED_PROFILE="nova-toll-dev"' in script
+    assert 'EXPECTED_ACCOUNT="903859731897"' in script
+    assert 'REGION="us-east-1"' in script
+    assert (
+        ': "${AWS_PROFILE:?invoke this procedure with AWS_PROFILE=nova-toll-dev}"'
+        in script
+    )
+    assert 'test "$AWS_PROFILE" = "$EXPECTED_PROFILE"' in script
+    assert 'test "${AWS_DEFAULT_REGION:-}" = "$REGION"' in script
+    assert "AWS_REGION and AWS_DEFAULT_REGION conflict" in script
+    assert 'export AWS_REGION="$REGION" AWS_DEFAULT_REGION="$REGION"' in script
+    assert 'STATE_BUCKET="nova-toll-tfstate-${EXPECTED_ACCOUNT}"' in script
+    assert 'LOCK_KEY="nova-toll/v2/development/bootstrap-lock"' in script
+    assert 'LOCK_ARN="arn:aws:s3:::${STATE_BUCKET}/${LOCK_KEY}"' in script
+    assert "LOCK_PATH=" not in script
+    assert "aws ssm put-parameter" not in script
+    assert "aws ssm delete-parameter" not in script
+    assert (
+        'aws s3api put-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY"'
+        in script
+    )
+    assert "--if-none-match '*'" in script
+    assert "PreconditionFailed" in script
+    assert "ConditionalRequestConflict" in script
+    assert "LOCK_TOKEN=" in script and "/dev/urandom" in script
+    assert 'LOCK_STARTED_AT="$(date -u' in script
+    assert 'LOCK_VALUE="${LOCK_TOKEN}|${LOCK_STARTED_AT}"' in script
+    assert "LOCK_ETAG=" in script and "LOCK_VERSION_ID=" in script
+    assert "lock_is_current()" in script
+    assert "acquire_bootstrap_lock" in script
+    assert "trap bootstrap_cleanup EXIT" in script
+    assert script.index("declare -A STATE_PREEXISTING=()") < script.index(
+        "trap bootstrap_cleanup EXIT"
+    )
+    assert script.index("declare -A STATE_IMPORTED_BY_THIS_RUN=()") < script.index(
+        "trap bootstrap_cleanup EXIT"
+    )
+    assert "release_bootstrap_lock" in script
+    assert (
+        'aws s3api delete-object --region "$REGION" --bucket "$STATE_BUCKET" --key "$LOCK_KEY" --if-match "$LOCK_ETAG"'
+        in script
+    )
+    assert '--version-id "$LOCK_VERSION_ID"' in script
+    assert "There\nis no overwrite, expiry, retry, or lock stealing." in DEPLOYMENT
+    lock_permissions = DEPLOYMENT.split(
+        "The versioned development state bucket uses SSE-KMS.", 1
+    )[1].split("The lock uses the", 1)[0]
+    assert all(
+        action in lock_permissions
+        for action in (
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject",
+            "s3:DeleteObjectVersion",
+        )
+    )
+    assert (
+        "arn:aws:s3:::nova-toll-tfstate-903859731897/nova-toll/v2/development/bootstrap-lock"
+        in lock_permissions
+    )
+    assert "kms:GenerateDataKey" in lock_permissions
+    assert "kms:EncryptionContext:aws:s3:arn" in lock_permissions
+    assert "no `kms:Decrypt`" in lock_permissions
+    assert "s3:ListBucket" not in lock_permissions
+    assert "s3:GetObjectVersion" not in lock_permissions
+    assert (
+        "bootstrap lock release stopped: current ETag/version does not match" in script
+    )
+    assert "BOOTSTRAP_EVIDENCE_DIR" in script
+    assert "evidence directory must be an absolute path" in script
+    assert "evidence must be outside checkout" in script
+    assert "aws sts get-caller-identity" in script
+    assert 'aws iam get-role --role-name "$ROLE_NAME"' in script
+    assert "grep -q 'NoSuchEntity'" in script
+    assert 'test "$CALLER_ACCOUNT" = "$EXPECTED_ACCOUNT"' in script
+    assert 'FETCHER_BUILD="$ROOT/v2/scripts/build_fetcher_zip.sh"' in script
+    assert 'FETCHER_PACKAGE="$ROOT/infra/build/fetcher.zip"' in script
+    assert 'FETCHER_INPUT="$ROOT/v2/lambdas/fetcher/handler.py"' in script
+    assert (
+        'EXPECTED_FETCHER_SHA256="${EXPECTED_FETCHER_SHA256:?set the reviewed canonical fetcher SHA-256}"'
+        in script
+    )
+    assert 'git -C "$ROOT" fetch --no-tags origin main' in script
+    assert 'ORIGIN_URL="$(git -C "$ROOT" remote get-url origin 2>/dev/null)"' in script
+    assert "git@github.com:rhprasad0/nova-toll-budget-agent.git" in script
+    assert (
+        'PROTECTED_MAIN_COMMIT="$(git -C "$ROOT" rev-parse refs/remotes/origin/main)"'
+        in script
+    )
+    assert (
+        'test "$(git -C "$ROOT" rev-parse HEAD)" = "$PROTECTED_MAIN_COMMIT"' in script
+    )
+    assert 'git -C "$ROOT" status --porcelain --untracked-files=all' in script
+    assert 'REVIEWED_COMMIT="$PROTECTED_MAIN_COMMIT"' in script
+    assert 'git -C "$ROOT" cat-file -e "$REVIEWED_COMMIT^{commit}"' in script
+    assert 'git -C "$ROOT" diff --quiet "$REVIEWED_COMMIT" -- "$relative"' in script
+    assert 'test ! -L "$path"' in script
+    assert "ls-files --others --exclude-standard" in script
+    assert 'test -d "$ROOT/infra/build" && test ! -L "$ROOT/infra/build"' in script
+    assert 'test ! -L "$FETCHER_PACKAGE"' in script
+    assert 'test ! -L "$ROOT/infra/build/fetcher"' in script
+    assert 'env -i PATH="/usr/bin:/bin" LC_ALL=C "$FETCHER_BUILD"' in script
+    assert (
+        'CANONICAL_FETCHER_SHA256="9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1"'
+        in script
+    )
+    assert 'test -s "$FETCHER_PACKAGE"' in script
+    assert "placeholder fetcher artifact is not permitted" in script
+    assert 'test "$EXPECTED_FETCHER_SHA256" = "$CANONICAL_FETCHER_SHA256"' in script
+    assert 'test "$FETCHER_SHA256" = "$CANONICAL_FETCHER_SHA256"' in script
+    assert "TF_VAR_tailscale_advertise_routes:-false" in script
+    assert "canonicalize_json()" in script
+    assert "urllib.parse.unquote" in script
+    assert "sort_keys=True" in script
+    assert "render_document" in script
+    assert "data.aws_iam_policy_document.development_delivery_assume.json" in script
+    assert "data.aws_iam_policy_document.development_delivery.json" in script
+    assert 'ROLE_NAME="nova-toll-v2-development-delivery"' in script
+    assert 'ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"' in script
+    assert 'Role.Path == "/"' in script
+    assert ".Role.MaxSessionDuration == 3600" in script
+    assert "PermissionsBoundary? // null) == null" in script
+    assert 'cmp -s "$EXPECTED_TRUST" "$ACTUAL_TRUST"' in script
+    assert (
+        'aws iam create-role --role-name "$ROLE_NAME" --path / --max-session-duration 3600'
+        in script
+    )
+    assert (
+        'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"'
+        in script
+    )
+    assert 'aws iam list-role-policies --role-name "$ROLE_NAME"' in script
+    assert 'aws iam list-attached-role-policies --role-name "$ROLE_NAME"' in script
+    assert "policy_set_is_exact" in script
+    assert "if policy_set_is_empty; then" in script
+    assert "PREVIOUS_POLICY_PRESENT=1" in script
+    assert "NextToken? // null) == null" in script
+    assert ".PolicyNames == [$expected]" in script
+    assert script.count(".AttachedPolicies == []") >= 3
+    assert (
+        script.count(
+            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"'
+        )
+        >= 2
+    )
+    assert script.count('cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"') >= 2
+    assert "role_documents_match" in script
+    assert "delivery role failed post-write exact effective-policy validation" in script
+    assert "snapshot_role_state" in script
+    assert "restore_absent_policy" in script
+    assert (
+        "delivery role create failed; preserving any matching post-state for manual exact reconciliation"
+        in script
+    )
+    assert "assert_dev_account" in script
+    assert 'terraform -chdir="$ROOT/infra" state rm' in script
+    assert 'terraform -chdir="$ROOT/v2/infra" state rm' in script
+    assert "rollback_delivery_state()" in script
+    assert "declare -A STATE_PREEXISTING=()" in script
+    assert "declare -A STATE_IMPORTED_BY_THIS_RUN=()" in script
+    assert (
+        "STATE_IMPORTED_BY_THIS_RUN['aws_iam_role.development_delivery[0]']=1" in script
+    )
+    assert (
+        "STATE_IMPORTED_BY_THIS_RUN['aws_iam_role_policy.development_delivery[0]']=1"
+        in script
+    )
+    assert 'STATE_PREEXISTING["$address"]=1' in script
+    assert "already managed or concurrent; refusing state removal" in script
+    assert "state ownership is unproven and was retained" in script
+    assert "IMPORT_IN_PROGRESS" not in script
+    assert (
+        script.count('if test "$ROLE_CREATED" -eq 1; then rollback_created_role; fi')
+        >= 4
+    )
+    assert "rollback_created_role" in script
+    assert "restore_previous_policy" in script
+    assert "could not verify created delivery role rollback" in script
+    assert "MUTATION_AMBIGUOUS=0" in script
+    assert script.count("MUTATION_AMBIGUOUS=1") >= 4
+    assert "ambiguous mutation result preserved for manual reconciliation" in script
+    assert "rollback_created_url()" in script
+    assert "rollback_url_state()" in script
+    assert "cleanup_on_failure()" in script
+    assert "trap cleanup_on_failure EXIT" in script
+    assert "BOOTSTRAP_COMPLETE=1" in script
+    assert "import_url_state()" in script
+    assert "printf -v \"${stem}_CREATED\" '%s' 1" in script
+    assert "aws lambda remove-permission" in script
+    assert "reconcile_function_url()" not in script
+    assert "exact absent-before/present-after reconciliation" not in script
+    assert (
+        "Lambda URL create failed; preserving any matching post-state for manual exact reconciliation"
+        in script
+    )
+    assert (
+        "ambiguous Lambda URL permission result; preserving any matching post-state for manual exact reconciliation"
+        in script
+    )
+    assert (
+        "ambiguous Lambda invoke permission result; preserving any matching post-state for manual exact reconciliation"
+        in script
+    )
+    assert "verify_owned_lambda_permission()" in script
+    assert "aws lambda delete-function-url-config" in script
+    assert 'terraform -chdir="$ROOT/infra" import' in script
+    assert script.count('terraform -chdir="$ROOT/infra" import') == 2
+    assert "'aws_iam_role.development_delivery[0]' \"$ROLE_ARN\"" in script
+    assert (
+        "'aws_iam_role_policy.development_delivery[0]' \"$ROLE_NAME:$ROLE_NAME\""
+        in script
+    )
+    assert 'terraform -chdir="$ROOT/infra" state show -no-color' in script
+    assert "'aws_iam_role.development_delivery[0]'" in script
+    assert "'aws_iam_role_policy.development_delivery[0]'" in script
+    assert "delivery role import state ID or ARN is not the exact target" in script
+    assert "delivery policy import state ID is not the exact target" in script
+    assert "state_id_matches()" in script
+    assert "state_list_contains()" in script
+    assert (
+        "awk -v address=\"$address\" '$0 == address { found=1 } END { exit found ? 0 : 1 }'"
+        in script
+    )
+    assert (
+        'terraform -chdir="$ROOT/infra" state list >"$FOUNDATION_STATE_LIST"' in script
+    )
+    assert (
+        'terraform -chdir="$ROOT/v2/infra" state list >"$APPLICATION_STATE_LIST"'
+        in script
+    )
+    assert "state list | grep -Fxq" not in script
+    assert 'state_id_matches "$WORK_DIR/${label// /-}.state" "$identifier"' in script
+    assert "Terraform state ID does not match exact target $identifier" in script
+    assert (
+        "import_url_state 'aws_lambda_function_url.public_chat' \"$FUNCTION_NAME,$QUALIFIER\""
+        in script
+    )
+    assert (
+        "import_url_state 'aws_lambda_permission.public_chat_url' \"$FUNCTION_NAME,$QUALIFIER,AllowCloudFrontFunctionUrlV2\""
+        in script
+    )
+    assert (
+        "import_url_state 'aws_lambda_permission.public_chat_invoke' \"$FUNCTION_NAME,$QUALIFIER,AllowCloudFrontFunctionInvokeV2\""
+        in script
+    )
+    assert "aws_lambda_function_url.public_chat" in script
+    assert 'DISTRIBUTION_ID="E33DVF3KT7BTAC"' in script
+    assert 'DISTRIBUTION_DOMAIN="d1wqry4fbd92w5.cloudfront.net"' in script
+    assert (
+        "DistributionList.Items[?Id==`E33DVF3KT7BTAC` && DomainName==`d1wqry4fbd92w5.cloudfront.net`]"
+        in script
+    )
+    assert "validate_function_url" in script
+    assert '.AuthType == "AWS_IAM" and .InvokeMode == "RESPONSE_STREAM"' in script
+    assert "validate_lambda_policy" in script
+    assert "validate_existing_lambda_policy" in script
+    assert "snapshot_lambda_permission" in script
+    assert "reconcile_lambda_permission" in script
+    assert "lambda-policy-before-" in script and "lambda-policy-after-" in script
+    assert "lambda-statement-before-" in script and "lambda-statement-after-" in script
+    assert "RevisionId" in script and "--revision-id" in script
+    assert (
+        "ambiguous Lambda URL permission result; preserving any matching post-state for manual exact reconciliation"
+        in script
+    )
+    assert (
+        "ambiguous Lambda invoke permission result; preserving any matching post-state for manual exact reconciliation"
+        in script
+    )
+    assert (
+        "Lambda rollback changed a pre-existing or concurrent permission statement"
+        in script
+    )
+    assert 'cmp -s "$expected" "$statement"' in script
+    assert "lambda:InvokeFunctionUrl" in script and "lambda:InvokeFunction" in script
+    assert "cloudfront.amazonaws.com" in script
+    assert "AWS:SourceArn" in script
+    assert "run_post_bootstrap_gates" in script
+    assert "aws iam simulate-principal-policy" in script
+    assert "IAM_SIMULATION_EVIDENCE" in script
+    assert "SIMULATION_EXPECTED_COUNT=92" in script
+    assert "while IFS='|' read -r label action resource expected; do" in script
+    assert "--context-entries" in script
+    assert "SIMULATION_COUNT" in script
+    assert (
+        "s3:GetObject|arn:aws:s3:::nova-toll-tfstate-920534282028/nova-toll/terraform.tfstate|denied"
+        in script
+    )
+    assert "nova-toll-state-920534282028" not in script
+    for required_simulation in (
+        "lambda:UpdateFunctionCode",
+        "lambda:PublishVersion",
+        "lambda:UpdateAlias",
+        "lambda:DeleteFunction",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "cloudfront:UpdateFunction",
+        "cloudfront:PublishFunction",
+        "bedrock:CreateGuardrailVersion",
+        "apigateway:POST",
+        "apigateway:DELETE",
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:PassRole",
+        "iam:AttachRolePolicy",
+        "lambda:AddPermission",
+        "lambda:UpdateFunctionConfiguration",
+        "bedrock-agentcore:CreateAgentRuntime",
+        "bedrock-agentcore:PutResourcePolicy",
+        "events:PutRule",
+        "logs:PutMetricFilter",
+        "cloudwatch:PutMetricAlarm",
+        "wafv2:PutLoggingConfiguration",
+        "kms:CreateAlias",
+        "kms:UpdateAlias",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "sqs:SetQueueAttributes",
+        "sqs:AddPermission",
+        "sqs:RemovePermission",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketPublicAccessBlock",
+        "athena:CreateNamedQuery",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:AbortMultipartUpload",
+        "events:DisableRule",
+        "events:EnableRule",
+        "events:RemoveTargets",
+        "events:TagResource",
+        "events:UntagResource",
+        "logs:TagResource",
+        "logs:UntagResource",
+        "dynamodb:UpdateContinuousBackups",
+        "dynamodb:UpdateTimeToLive",
+        "glue:UpdateDatabase",
+        "athena:TagResource",
+        "athena:UntagResource",
+        "scheduler:TagResource",
+        "scheduler:UntagResource",
+        "bedrock-agentcore:TagResource",
+        "bedrock-agentcore:UntagResource",
+        "cloudfront:TestFunction",
+        "cloudfront:TagResource",
+        "cloudfront:UntagResource",
+        "kms:GenerateDataKey",
+    ):
+        assert required_simulation in script
+    assert 'PACKAGE_DIGESTS="$WORK_DIR/package-digests.tsv"' in script
+    assert "PACKAGE_DIGESTS_JSON=" in script
+    assert 'EVIDENCE_BINDING="$EVIDENCE_DIR/evidence-binding.json"' in script
+    for evidence_field in (
+        "commit_sha",
+        "account_id",
+        "role_arn",
+        "policy_sha256",
+        "fetcher_sha256",
+        "plan_sha256",
+        "timestamp",
+        "binding_sha256",
+    ):
+        assert evidence_field in script
+    assert "REPRESENTATIVE_V2_PACKAGE_DIR" not in script
+    assert "REVIEWED_V2_PACKAGE_DIR" in script
+    assert "REPRESENTATIVE_PLAN_EVIDENCE" in script
+    assert (
+        'terraform -chdir="$ROOT/v2/infra" show -json "$REPRESENTATIVE_PLAN"' in script
+    )
+    assert (
+        'PLAN_GATE_SOURCE="$ROOT/.github/workflows/v2-development-delivery.yml"'
+        in script
+    )
+    assert 'python3 "$PLAN_GATE" "$REPRESENTATIVE_PLAN_JSON"' in script
+    assert "PROTECTED_MAIN_OIDC_EVIDENCE" in script
+    assert "protected-main-oidc" in script
+    assert 'jq -e --arg commit "$REVIEWED_COMMIT"' in script
+    assert ".commit_sha == $commit" in script
+    assert "console -var environment=development" in script
+    assert "for policy_mapping in" in script
+    assert "for attachment_mapping in" in script
+    for mapping in (
+        "loader toll-v2-pricing-loader-dev toll-v2-pricing-loader-dev",
+        "publisher toll-v2-report-publisher-dev toll-v2-report-publisher-dev",
+        "publisher_scheduler toll-v2-report-publisher-scheduler-dev toll-v2-report-publisher-scheduler-dev",
+        "timed_checks nova-toll-v2-timed-checks-dev nova-toll-v2-route-live-checks-dev",
+        "tollchat_runtime nova-toll-v2-agentcore-runtime-dev nova-toll-v2-agentcore-runtime-dev",
+        "tollchat_proxy nova-toll-v2-chat-proxy-dev nova-toll-v2-chat-proxy-dev",
+        "usage_publisher tollchat-v2-usage-publisher-dev tollchat-v2-usage-publisher-dev",
+        "agent_usage_rollup tollchat-v2-agent-usage-rollup-dev tollchat-v2-agent-usage-rollup-dev",
+    ):
+        assert mapping in script
+    for mapping in (
+        "loader_vpc toll-v2-pricing-loader-dev",
+        "publisher_vpc toll-v2-report-publisher-dev",
+        "tollchat_proxy_vpc nova-toll-v2-chat-proxy-dev",
+    ):
+        assert mapping in script
+    assert 'get-public-access-block --bucket "$MEASUREMENT_BUCKET"' in script
+    assert 'get-public-access-block --bucket "$SITE_BUCKET"' in script
+    assert 'one "response-headers CloudFront" aws cloudfront' in script
+    assert "one response-headers CloudFront aws cloudfront" not in script
+    assert "get-bucket-public-access-block" not in script
+    assert 'terraform -chdir="$ROOT/infra" apply' not in script
+    assert "FOUNDATION_PLAN" not in script
+    assert "terraform -target" not in script
+    assert "terraform_remote_state" not in script
+    assert "nova-toll-prod" not in script
+    assert "nova-toll-tfstate-920534282028/nova-toll/terraform.tfstate" in script
+    for generic_guard in (
+        "review URL create command",
+        "review URL permission, then set",
+        "review URL invoke permission, then set",
+        "review $label import, then set",
+    ):
+        assert generic_guard not in script
+    for exact_guard in (
+        "aws iam create-role --role-name $ROLE_NAME --path / --max-session-duration 3600",
+        "aws iam put-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME",
+        "aws lambda create-function-url-config --function-name $FUNCTION_NAME --qualifier $QUALIFIER",
+        "aws lambda add-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER",
+        "terraform -chdir=$ROOT/v2/infra import -input=false $address $identifier",
+        "terraform -chdir=$ROOT/v2/infra state rm $address",
+    ):
+        assert exact_guard in script
+    assert script.count('test "${BOOTSTRAP_APPROVED:-}" = YES') >= 14
+    assert script.count("assert_dev_account") >= 14
+
+
+def test_development_bootstrap_runbook_is_executable_and_fail_closed():
+    script = _development_bootstrap_script()
+    result = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mutations():
+    script = _development_bootstrap_script()
+    _assert_development_bootstrap_contract(script)
+    for original, replacement in (
+        ('EXPECTED_PROFILE="nova-toll-dev"', 'EXPECTED_PROFILE="nova-toll-prod"'),
+        ('EXPECTED_ACCOUNT="903859731897"', 'EXPECTED_ACCOUNT="920534282028"'),
+        ('REGION="us-east-1"', 'REGION="us-west-2"'),
+        (
+            'CANONICAL_FETCHER_SHA256="9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1"',
+            'CANONICAL_FETCHER_SHA256="0000000000000000000000000000000000000000000000000000000000000000"',
+        ),
+        ('git -C "$ROOT" fetch --no-tags origin main', "true"),
+        (
+            "git@github.com:rhprasad0/nova-toll-budget-agent.git",
+            "git@github.com:evil/fork.git",
+        ),
+        ('test "$(git -C "$ROOT" rev-parse HEAD)" = "$PROTECTED_MAIN_COMMIT"', "true"),
+        ('git -C "$ROOT" status --porcelain --untracked-files=all', "true"),
+        (
+            'PROTECTED_MAIN_COMMIT="$(git -C "$ROOT" rev-parse refs/remotes/origin/main)"',
+            'PROTECTED_MAIN_COMMIT="$(git -C "$ROOT" rev-parse HEAD)"',
+        ),
+        ('git -C "$ROOT" diff --quiet "$REVIEWED_COMMIT" -- "$relative"', "true"),
+        ('env -i PATH="/usr/bin:/bin" LC_ALL=C "$FETCHER_BUILD"', '"$FETCHER_BUILD"'),
+        ('Role.Path == "/"', 'Role.Path == "/unexpected"'),
+        (".Role.MaxSessionDuration == 3600", ".Role.MaxSessionDuration == 86400"),
+        (
+            "PermissionsBoundary? // null) == null",
+            "PermissionsBoundary? // null) == true",
+        ),
+        ('cmp -s "$EXPECTED_TRUST" "$ACTUAL_TRUST"', "true"),
+        ('cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"', "true"),
+        ("urllib.parse.unquote(value)", "value"),
+        ("sort_keys=True", "sort_keys=False"),
+        (".PolicyNames == [$expected]", ".PolicyNames | length >= 0"),
+        (".AttachedPolicies == []", ".AttachedPolicies != []"),
+        (
+            'ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"',
+            'ROLE_ARN="arn:aws:iam::920534282028:role/other"',
+        ),
+        (
+            'aws iam list-attached-role-policies --role-name "$ROLE_NAME"',
+            'aws iam list-attached-role-policies --role-name "$UNSAFE_ROLE"',
+        ),
+        (
+            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"',
+            'aws iam update-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"',
+        ),
+        (".commit_sha == $commit", '.commit_sha == "untrusted"'),
+        (
+            'state_id_matches "$WORK_DIR/${label// /-}.state" "$identifier"',
+            'state_id_matches "$WORK_DIR/${label// /-}.state" "$UNSAFE_IDENTIFIER"',
+        ),
+        ("SIMULATION_EXPECTED_COUNT=92", "SIMULATION_EXPECTED_COUNT=1"),
+        ("evidence-binding.json", "spoofed-evidence.json"),
+    ):
+        _must_reject(
+            _assert_development_bootstrap_contract, script, original, replacement
+        )
+
+    mixed_plan = (
+        script + '\nterraform -chdir="$ROOT/infra" apply "$WORK_DIR/mixed.tfplan"\n'
+    )
+    with pytest.raises(AssertionError):
+        _assert_development_bootstrap_contract(mixed_plan)
+
+    without_approval = script.replace('test "${BOOTSTRAP_APPROVED:-}" = YES', "true")
+    with pytest.raises(AssertionError):
+        _assert_development_bootstrap_contract(without_approval)
+
+
+def test_development_bootstrap_canonicalizes_encoded_policy_documents_and_rejects_malformed_input():
+    script = _development_bootstrap_script()
+    match = re.search(
+        r"canonicalize_json\(\) \{.*?python3 - \"\$input\" \"\$output\" <<'PY'\n(.*?)\nPY",
+        script,
+        re.DOTALL,
+    )
+    assert match is not None
+    canonicalizer = match.group(1)
+    with tempfile.TemporaryDirectory() as directory:
+        raw = Path(directory) / "raw.json"
+        output = Path(directory) / "canonical.json"
+        raw.write_text(json.dumps("%7B%22b%22%3A2%2C%22a%22%3A1%7D"))
+        result = subprocess.run(
+            [sys.executable, "-c", canonicalizer, str(raw), str(output)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert output.read_text() == '{"a":1,"b":2}\n'
+
+        raw.write_text(json.dumps("%7Bmalformed"))
+        result = subprocess.run(
+            [sys.executable, "-c", canonicalizer, str(raw), str(output)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+
+
+def test_development_bootstrap_decodes_encoded_lambda_policy_response():
+    script = _development_bootstrap_script()
+    canonicalizer_match = re.search(
+        r"(canonicalize_json\(\) \{.*?\n\})\n\ndecode_lambda_policy_response",
+        script,
+        re.DOTALL,
+    )
+    decoder_match = re.search(
+        r"(decode_lambda_policy_response\(\) \{.*?\n\})\n\nROLE_ARN=",
+        script,
+        re.DOTALL,
+    )
+    assert canonicalizer_match is not None and decoder_match is not None
+    helpers = canonicalizer_match.group(1) + "\n\n" + decoder_match.group(1)
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [{"Sid": "encoded", "Effect": "Allow"}],
+    }
+    for encoded in (
+        json.dumps(policy),
+        urllib.parse.quote(json.dumps(policy), safe=""),
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / "response.json"
+            output = root / "decoded.json"
+            raw.write_text(json.dumps({"Policy": encoded, "RevisionId": "r1"}))
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    helpers
+                    + "\n"
+                    + 'WORK_DIR="$1"; decode_lambda_policy_response "$2" "$3"; '
+                    + 'jq -e \' .PolicyDocument.Statement[0].Sid == "encoded" \' "$3" >/dev/null',
+                    "bootstrap-policy-reader",
+                    str(root),
+                    str(raw),
+                    str(output),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+
+
+def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and_attached_policies():
+    script = _development_bootstrap_script()
+    policy_match = re.search(
+        r'jq -e --arg expected "\$EXPECTED_POLICY_NAME" \'(.*?)\' "\$ROLE_POLICY_NAMES"',
+        script,
+    )
+    attachment_match = re.search(
+        r'jq -e \'(\.AttachedPolicies == \[\])\' "\$ROLE_ATTACHMENTS"',
+        script,
+    )
+    assert policy_match is not None and attachment_match is not None
+    policy_filter = policy_match.group(1)
+    attachment_filter = attachment_match.group(1)
+
+    def accepts(policy_names: list[str], attached: list[dict[str, str]]) -> bool:
+        with tempfile.TemporaryDirectory() as directory:
+            policy_file = Path(directory) / "policies.json"
+            attachment_file = Path(directory) / "attachments.json"
+            policy_file.write_text(json.dumps({"PolicyNames": policy_names}))
+            attachment_file.write_text(json.dumps({"AttachedPolicies": attached}))
+            policy_result = subprocess.run(
+                [
+                    "jq",
+                    "-e",
+                    "--arg",
+                    "expected",
+                    "nova-toll-v2-development-delivery",
+                    policy_filter,
+                    str(policy_file),
+                ],
+                capture_output=True,
+                check=False,
+            )
+            attachment_result = subprocess.run(
+                ["jq", "-e", attachment_filter, str(attachment_file)],
+                capture_output=True,
+                check=False,
+            )
+            return policy_result.returncode == 0 and attachment_result.returncode == 0
+
+    assert accepts(["nova-toll-v2-development-delivery"], [])
+    assert not accepts(["nova-toll-v2-development-delivery", "unexpected-inline"], [])
+    assert not accepts(
+        ["nova-toll-v2-development-delivery"],
+        [{"PolicyArn": "arn:aws:iam::aws:policy/AdministratorAccess"}],
+    )
+
+
+def test_development_bootstrap_rejects_stale_packages_and_wrong_state_ids():
+    script = _development_bootstrap_script()
+    manifest_match = re.search(
+        r"""python3 - "\$REVIEWED_V2_PACKAGE_MANIFEST" "\$REVIEWED_V2_PACKAGE_DIR" <<'PY'\n(.*?)\nPY""",
+        script,
+        re.DOTALL,
+    )
+    state_match = re.search(
+        r"""state_id_matches\(\) \{\n  local state_file="\$1" expected="\$2"\n  python3 - "\$state_file" "\$expected" <<'PY'\n(.*?)\nPY""",
+        script,
+        re.DOTALL,
+    )
+    assert manifest_match is not None and state_match is not None
+    validator = manifest_match.group(1)
+    state_validator = state_match.group(1)
+    with tempfile.TemporaryDirectory() as directory:
+        package_dir = Path(directory) / "packages"
+        package_dir.mkdir()
+        files = {
+            name: f"reviewed-{name}".encode()
+            for name in (
+                "loader.zip",
+                "publisher.zip",
+                "agentcore.zip",
+                "chat-proxy.zip",
+            )
+        }
+        for name, contents in files.items():
+            (package_dir / name).write_bytes(contents)
+        manifest = Path(directory) / "DEPLOYMENT_SHA256SUMS"
+        manifest.write_text(
+            "".join(
+                f"{hashlib.sha256(contents).hexdigest()}  {name}\n"
+                for name, contents in files.items()
+            )
+        )
+        valid = subprocess.run(
+            [sys.executable, "-c", validator, str(manifest), str(package_dir)],
+            capture_output=True,
+            check=False,
+        )
+        assert valid.returncode == 0, valid.stderr.decode()
+        (package_dir / "loader.zip").write_bytes(b"spoofed")
+        stale = subprocess.run(
+            [sys.executable, "-c", validator, str(manifest), str(package_dir)],
+            capture_output=True,
+            check=False,
+        )
+        assert stale.returncode != 0
+
+        state = Path(directory) / "state.txt"
+        state.write_text('    id = "function,qualifier"\n')
+        assert (
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    state_validator,
+                    str(state),
+                    "function,qualifier",
+                ],
+                check=False,
+            ).returncode
+            == 0
+        )
+        assert (
+            subprocess.run(
+                [sys.executable, "-c", state_validator, str(state), "wrong,qualifier"],
+                check=False,
+            ).returncode
+            != 0
+        )
+
+
+def test_development_bootstrap_mocked_failures_are_approval_gated_and_reverse_ordered():
+    """Exercise the bounded mutation/compensation protocol without AWS access."""
+    harness = dedent(
+        r"""
+        set -euo pipefail
+        : "${SCENARIO:?}"
+        : "${LOG:?}"
+        mutate() {
+          test "${BOOTSTRAP_APPROVED:-}" = YES || { printf 'approval-required:%s\n' "$1" >>"$LOG"; return 77; }
+          printf '%s\n' "$1" >>"$LOG"
+          test "${FAIL_ACTION:-}" != "$1" || return 1
+        }
+        rollback_role() {
+          mutate delete-role-policy || return
+          mutate delete-role
+        }
+        rollback_url() {
+          mutate remove-permission-invoke || return
+          mutate remove-permission-url || return
+          mutate delete-function-url
+        }
+        rollback_state() {
+          mutate state-rm-invoke || return
+          mutate state-rm-url-permission || return
+          mutate state-rm-url
+        }
+        rollback_delivery_state() {
+          mutate state-rm-policy || return
+          mutate state-rm-role
+        }
+        case "$SCENARIO" in
+          create-role) mutate create-role && mutate put-role-policy ;;
+          put-role-policy) mutate create-role && mutate put-role-policy ;;
+          role-import|policy-import|url-import) mutate "$SCENARIO" || { rollback_state; exit 1; } ;;
+          post-import-verification) mutate role-import && mutate policy-import && { rollback_delivery_state; exit 1; } ;;
+          url-create) mutate create-function-url ;;
+          url-permission-import|url-invoke-import)
+            mutate state-rm-url || { rollback_url; exit 1; }
+            mutate "$SCENARIO" || { rollback_state; rollback_url; exit 1; }
+            ;;
+          *) exit 2 ;;
+        esac
+        """
+    )
+
+    def run(
+        scenario: str, *, approved: bool
+    ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "mutations.log"
+            env = os.environ.copy()
+            fail_action = {"url-create": "create-function-url"}.get(scenario, scenario)
+            env.update(
+                {"SCENARIO": scenario, "LOG": str(log), "FAIL_ACTION": fail_action}
+            )
+            if approved:
+                env["BOOTSTRAP_APPROVED"] = "YES"
+            result = subprocess.run(
+                ["bash", "-c", harness],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return result, log.read_text().splitlines() if log.exists() else []
+
+    for scenario in (
+        "create-role",
+        "put-role-policy",
+        "role-import",
+        "policy-import",
+        "url-import",
+        "url-create",
+        "url-permission-import",
+        "url-invoke-import",
+        "post-import-verification",
+    ):
+        result, log = run(scenario, approved=False)
+        assert result.returncode != 0
+        first_action = {
+            "put-role-policy": "create-role",
+            "url-create": "create-function-url",
+            "url-permission-import": "state-rm-url",
+            "url-invoke-import": "state-rm-url",
+            "post-import-verification": "role-import",
+        }.get(scenario, scenario)
+        assert log[0] == f"approval-required:{first_action}"
+        assert all(entry.startswith("approval-required:") for entry in log)
+
+    for scenario in (
+        "create-role",
+        "put-role-policy",
+        "role-import",
+        "policy-import",
+        "url-import",
+        "url-create",
+        "url-permission-import",
+        "url-invoke-import",
+        "post-import-verification",
+    ):
+        result, log = run(scenario, approved=True)
+        assert result.returncode != 0, scenario
+        if scenario == "put-role-policy":
+            assert log == ["create-role", "put-role-policy"]
+        elif scenario == "url-create":
+            assert log == ["create-function-url"]
+        elif scenario in {"url-create", "url-permission-import", "url-invoke-import"}:
+            assert log[-3:] == [
+                "remove-permission-invoke",
+                "remove-permission-url",
+                "delete-function-url",
+            ]
+        elif scenario == "post-import-verification":
+            assert log == [
+                "role-import",
+                "policy-import",
+                "state-rm-policy",
+                "state-rm-role",
+            ]
+        else:
+            assert log[0] == scenario
+
+
+def test_development_bootstrap_mocked_lock_and_import_ownership_races():
+    harness = dedent(
+        r"""
+        set -euo pipefail
+        : "${ACTION:?}" "${ROOT:?}" "${LOG:?}"
+        LOCK="$ROOT/bootstrap-lock"
+        LOCK_BODY="$LOCK.body"
+        LOCK_ETAG="$LOCK.etag"
+        LOCK_VERSION="$LOCK.version"
+        log() { printf '%s\n' "$1" >>"$LOG"; }
+        acquire() {
+          local owner="${1:-${OWNER:-owner-a}}"
+          if ! mkdir -- "$LOCK" 2>/dev/null; then
+            log lock-already-held
+            return 77
+          fi
+          printf '%s|2026-09-02T00:00:00Z' "$owner" >"$LOCK_BODY"
+          printf '%s-etag' "$owner" >"$LOCK_ETAG"
+          printf '%s-version' "$owner" >"$LOCK_VERSION"
+          log lock-acquired
+          if test "${AMBIGUOUS:-0}" -eq 1; then
+            log lock-ambiguous
+            return 1
+          fi
+        }
+        release_observed() {
+          local observed_etag="$1" observed_version="$2" current_etag current_version
+          current_etag="$(<"$LOCK_ETAG")" || { log lock-read-failed; return 1; }
+          current_version="$(<"$LOCK_VERSION")" || { log lock-read-failed; return 1; }
+          test "$current_etag" = "$observed_etag" &&
+            test "$current_version" = "$observed_version" || {
+              log stale-etag-preserved
+              return 1
+            }
+          rmdir -- "$LOCK"
+          rm -- "$LOCK_BODY" "$LOCK_ETAG" "$LOCK_VERSION"
+          test ! -e "$LOCK"
+          log lock-released
+        }
+        import_state() {
+          if test -e "$ROOT/state"; then
+            log state-preexisting
+            return 0
+          fi
+          case "${IMPORT_RESULT:-success}" in
+            already-managed|failed)
+              printf '%s' target >"$ROOT/state"
+              log "import-${IMPORT_RESULT}-retained"
+              return 1
+              ;;
+            success)
+              printf '%s' target >"$ROOT/state"
+              OWNED=1
+              log import-success-owned
+              ;;
+          esac
+        }
+        rollback_state() {
+          test "${OWNED:-0}" -eq 1 || return 0
+          test "$(<"$ROOT/state")" = target || { log state-id-mismatch-preserved; return 1; }
+          rm -- "$ROOT/state"
+          log state-rm-owned
+        }
+        case "$ACTION" in
+          acquire) acquire ;;
+          acquire-ambiguous) AMBIGUOUS=1 acquire || true; test -d "$LOCK"; log ambiguous-lock-retained ;;
+          release) acquire; release_observed "${OWNER:-owner-a}-etag" "${OWNER:-owner-a}-version" ;;
+          wrong-owner) acquire owner-a; release_observed owner-b-etag owner-b-version ;;
+          stale-reacquire)
+            acquire owner-a
+            OLD_ETAG=owner-a-etag
+            OLD_VERSION=owner-a-version
+            rmdir -- "$LOCK"
+            rm -- "$LOCK_BODY" "$LOCK_ETAG" "$LOCK_VERSION"
+            acquire owner-b
+            release_observed "$OLD_ETAG" "$OLD_VERSION" || true
+            test -d "$LOCK"
+            log stale-owner-cannot-delete-new-lock
+            release_observed owner-b-etag owner-b-version
+            ;;
+          stale) test -e "$LOCK"; log stale-lock-stop ;;
+          import) import_state ;;
+          import-and-verify-fail) import_state; rollback_state ;;
+          *) exit 2 ;;
+        esac
+        """
+    )
+
+    def run_lock(
+        action: str, directory: Path, owner: str = "owner-a"
+    ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+        log = directory / f"{action}-{owner}.log"
+        env = os.environ.copy()
+        env.update(
+            {"ACTION": action, "ROOT": str(directory), "LOG": str(log), "OWNER": owner}
+        )
+        result = subprocess.run(
+            ["bash", "-c", harness],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return result, log.read_text().splitlines() if log.exists() else []
+
+    with tempfile.TemporaryDirectory() as directory_name:
+        directory = Path(directory_name)
+        first = subprocess.Popen(
+            ["bash", "-c", harness],
+            env={
+                **os.environ,
+                "ACTION": "acquire",
+                "ROOT": str(directory),
+                "LOG": str(directory / "a.log"),
+                "OWNER": "owner-a",
+            },
+            text=True,
+        )
+        second = subprocess.Popen(
+            ["bash", "-c", harness],
+            env={
+                **os.environ,
+                "ACTION": "acquire",
+                "ROOT": str(directory),
+                "LOG": str(directory / "b.log"),
+                "OWNER": "owner-b",
+            },
+            text=True,
+        )
+        assert sorted((first.wait(), second.wait())) == [0, 77]
+        logs = (directory / "a.log").read_text() + (directory / "b.log").read_text()
+        assert logs.count("lock-acquired") == 1
+        assert logs.count("lock-already-held") == 1
+        (directory / "a.log").unlink(missing_ok=True)
+        (directory / "b.log").unlink(missing_ok=True)
+
+        result, log = run_lock("acquire-ambiguous", directory)
+        assert result.returncode == 0 and "ambiguous-lock-retained" in log
+        result, log = run_lock("stale", directory, owner="owner-b")
+        assert result.returncode == 0 and log == ["stale-lock-stop"]
+        (directory / "bootstrap-lock").rmdir()
+        for suffix in ("body", "etag", "version"):
+            (directory / f"bootstrap-lock.{suffix}").unlink()
+
+        result, log = run_lock("release", directory)
+        assert result.returncode == 0 and log == ["lock-acquired", "lock-released"]
+        result, log = run_lock("wrong-owner", directory, owner="owner-b")
+        assert result.returncode != 0 and log == [
+            "lock-acquired",
+            "stale-etag-preserved",
+        ]
+        (directory / "bootstrap-lock").rmdir()
+        for suffix in ("body", "etag", "version"):
+            (directory / f"bootstrap-lock.{suffix}").unlink()
+
+        result, log = run_lock("stale-reacquire", directory)
+        assert result.returncode == 0
+        assert log == [
+            "lock-acquired",
+            "lock-acquired",
+            "stale-etag-preserved",
+            "stale-owner-cannot-delete-new-lock",
+            "lock-released",
+        ]
+        assert not (directory / "bootstrap-lock").exists()
+
+        for import_result, expected in (
+            ("already-managed", ["import-already-managed-retained"]),
+            (
+                "failed",
+                ["import-failed-retained"],
+            ),
+        ):
+            (directory / "import.log").unlink(missing_ok=True)
+            env = {
+                **os.environ,
+                "ACTION": "import",
+                "ROOT": str(directory),
+                "LOG": str(directory / "import.log"),
+                "IMPORT_RESULT": import_result,
+            }
+            result = subprocess.run(
+                ["bash", "-c", harness],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert result.returncode != 0
+            assert (directory / "import.log").read_text().splitlines() == expected
+            assert not (directory / "import.log").read_text().count("state-rm")
+            (directory / "state").unlink()
+
+        env = {
+            **os.environ,
+            "ACTION": "import-and-verify-fail",
+            "ROOT": str(directory),
+            "LOG": str(directory / "import-own.log"),
+        }
+        result = subprocess.run(
+            ["bash", "-c", harness],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0
+        assert (directory / "import-own.log").read_text().splitlines() == [
+            "import-success-owned",
+            "state-rm-owned",
+        ]
+        assert not (directory / "state").exists()
+
+
+def test_development_bootstrap_state_membership_is_pipefail_safe_for_large_lists():
+    harness = dedent(
+        r"""
+        set -euo pipefail
+        : "${ROOT:?}" "${LOG:?}"
+        STATE_LIST="$ROOT/state.list"
+        emit_state_list() {
+          printf '%s\n' aws_preexisting.resource
+          for index in $(seq 1 2048); do
+            printf 'aws_padding.resource[%s]\n' "$index"
+          done
+          printf '%s\n' aws_owned.resource
+        }
+        state_list_contains() {
+          local state_file="$1" address="$2"
+          awk -v address="$address" '$0 == address { found=1 } END { exit found ? 0 : 1 }' "$state_file"
+        }
+        emit_state_list >"$STATE_LIST"
+        state_list_contains "$STATE_LIST" aws_preexisting.resource
+        state_list_contains "$STATE_LIST" aws_owned.resource
+        if state_list_contains "$STATE_LIST" aws_missing.resource; then exit 1; fi
+        rollback() {
+          local address
+          for address in aws_preexisting.resource aws_owned.resource aws_missing.resource; do
+            state_list_contains "$STATE_LIST" "$address" || continue
+            case "$address" in
+              aws_preexisting.resource) printf '%s\n' preexisting-preserved >>"$LOG" ;;
+              aws_owned.resource) printf '%s\n' owned-rollback >>"$LOG" ;;
+            esac
+          done
+        }
+        rollback
+        test "$(wc -l <"$STATE_LIST")" -eq 2050
+        """
+    )
+    with tempfile.TemporaryDirectory() as directory_name:
+        directory = Path(directory_name)
+        log = directory / "events.log"
+        result = subprocess.run(
+            ["bash", "-c", harness],
+            env={**os.environ, "ROOT": str(directory), "LOG": str(log)},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert log.read_text().splitlines() == [
+            "preexisting-preserved",
+            "owned-rollback",
+        ]
+
+
+def test_development_bootstrap_mocked_lambda_permission_ownership_races():
+    harness = dedent(
+        r"""
+        set -euo pipefail
+        : "${SCENARIO:?}" "${ROOT:?}" "${LOG:?}"
+        SID="${SID:-AllowCloudFrontFunctionUrlV2}"
+        EXPECTED="reviewed:$SID"
+        POLICY="$ROOT/policy"
+        log() { printf '%s\n' "$1" >>"$LOG"; }
+        snapshot() {
+          if test -e "$POLICY"; then PRE_PRESENT=1; PRE_CONTENT="$(<"$POLICY")"; else PRE_PRESENT=0; PRE_CONTENT=; fi
+          PRE_REVISION="${REVISION:-rev-1}"
+          log snapshot
+        }
+        add_permission() {
+          case "$SCENARIO" in
+            success) printf '%s' "$EXPECTED" >"$POLICY"; REVISION=rev-2; return 0 ;;
+            ambiguous-applied) printf '%s' "$EXPECTED" >"$POLICY"; REVISION=rev-2; return 1 ;;
+            ambiguous-mismatch) printf '%s' foreign >"$POLICY"; REVISION=rev-2; return 1 ;;
+            ambiguous-stale-revision) printf '%s' "$EXPECTED" >"$POLICY"; REVISION=rev-1; return 1 ;;
+            ambiguous-not-applied) return 1 ;;
+            preexisting) return 1 ;;
+          esac
+        }
+        reconcile() {
+          test "${PRE_PRESENT:-0}" -eq 0 || return 1
+          test -e "$POLICY" && test "$(<"$POLICY")" = "$EXPECTED" || return 1
+          test "${PRE_REVISION:-}" = "${REVISION:-}" && return 1
+          OWNED=1
+          log permission-owned
+        }
+        rollback() {
+          test "${OWNED:-0}" -eq 1 || return 0
+          test "$(<"$POLICY")" = "$EXPECTED" || { log foreign-preserved; return 1; }
+          rm -- "$POLICY"
+          test "${PRE_PRESENT:-0}" -eq 0
+          log permission-removed-owned
+        }
+        snapshot
+        if test "${SCENARIO}" = preexisting; then
+          log preexisting-preserved
+          exit 0
+        fi
+        if add_permission; then
+          reconcile
+          rollback
+        else
+          log ambiguous-preserved
+        fi
+        """
+    )
+
+    for sid in ("AllowCloudFrontFunctionUrlV2", "AllowCloudFrontFunctionInvokeV2"):
+        for scenario in (
+            "success",
+            "ambiguous-applied",
+            "ambiguous-not-applied",
+            "preexisting",
+            "ambiguous-mismatch",
+            "ambiguous-stale-revision",
+        ):
+            with tempfile.TemporaryDirectory() as directory_name:
+                directory = Path(directory_name)
+                if scenario == "preexisting":
+                    (directory / "policy").write_text(f"reviewed:{sid}")
+                log_path = directory / "events.log"
+                env = {
+                    **os.environ,
+                    "SCENARIO": scenario,
+                    "SID": sid,
+                    "ROOT": str(directory),
+                    "LOG": str(log_path),
+                }
+                result = subprocess.run(
+                    ["bash", "-c", harness],
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                assert result.returncode == 0, result.stderr
+                events = log_path.read_text().splitlines()
+                if scenario == "success":
+                    assert events == [
+                        "snapshot",
+                        "permission-owned",
+                        "permission-removed-owned",
+                    ]
+                    assert not (directory / "policy").exists()
+                elif scenario == "ambiguous-applied":
+                    assert events == ["snapshot", "ambiguous-preserved"]
+                    assert (directory / "policy").read_text() == f"reviewed:{sid}"
+                elif scenario == "ambiguous-not-applied":
+                    assert events == ["snapshot", "ambiguous-preserved"]
+                    assert not (directory / "policy").exists()
+                elif scenario == "preexisting":
+                    assert events == ["snapshot", "preexisting-preserved"]
+                    assert (directory / "policy").read_text() == f"reviewed:{sid}"
+                else:
+                    assert events == ["snapshot", "ambiguous-preserved"]
+                    assert (directory / "policy").read_text() in {
+                        "foreign",
+                        f"reviewed:{sid}",
+                    }
+
+
+def test_development_bootstrap_stale_prelock_snapshot_never_deletes_prior_run_resources():
+    harness = dedent(
+        r"""
+        set -euo pipefail
+        : "${ACTION:?}" "${ROOT:?}" "${LOG:?}" "${OWNER:?}"
+        LOCK="$ROOT/bootstrap-lock"
+        VALUE="$OWNER|2026-09-02T00:00:00Z"
+        log() { printf '%s\n' "$1" >>"$LOG"; }
+        acquire() {
+          if ! (set -o noclobber; printf '%s' "$VALUE" >"$LOCK") 2>/dev/null; then
+            log lock-held
+            return 77
+          fi
+          log lock-acquired
+        }
+        case "$ACTION" in
+          run-a)
+            acquire
+            printf '%s\n' reviewed-url >"$ROOT/url"
+            printf '%s\n' reviewed-permissions >"$ROOT/permissions"
+            log run-a-created-url-and-permissions
+            exit 42
+            ;;
+          run-b)
+            # These are deliberately stale observations made before B can own the lock.
+            PRE_URL=0
+            PRE_PERMISSIONS=0
+            log run-b-prelock-snapshot-absent
+            if acquire; then exit 9; fi
+            test "$PRE_URL" -eq 0
+            test "$PRE_PERMISSIONS" -eq 0
+            test "$(<"$ROOT/url")" = reviewed-url
+            test "$(<"$ROOT/permissions")" = reviewed-permissions
+            log run-b-stopped-before-postlock-mutation
+            ;;
+          *) exit 2 ;;
+        esac
+        """
+    )
+    with tempfile.TemporaryDirectory() as directory_name:
+        directory = Path(directory_name)
+        first_log = directory / "run-a.log"
+        first = subprocess.run(
+            ["bash", "-c", harness],
+            env={
+                **os.environ,
+                "ACTION": "run-a",
+                "ROOT": str(directory),
+                "LOG": str(first_log),
+                "OWNER": "owner-a",
+            },
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert first.returncode == 42
+        second_log = directory / "run-b.log"
+        second = subprocess.run(
+            ["bash", "-c", harness],
+            env={
+                **os.environ,
+                "ACTION": "run-b",
+                "ROOT": str(directory),
+                "LOG": str(second_log),
+                "OWNER": "owner-b",
+            },
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert second.returncode == 0, second.stderr
+        assert second_log.read_text().splitlines() == [
+            "run-b-prelock-snapshot-absent",
+            "lock-held",
+            "run-b-stopped-before-postlock-mutation",
+        ]
+        assert (directory / "url").read_text().strip() == "reviewed-url"
+        assert (directory / "permissions").read_text().strip() == "reviewed-permissions"
+
+
+def test_development_bootstrap_mocked_region_lock_and_rollback_guards():
+    harness = dedent(
+        r"""
+        set -euo pipefail
+        : "${SCENARIO:?}" "${ROOT:?}" "${LOG:?}"
+        REGION=us-east-1
+        LOCK_ETAG=owner-etag
+        CURRENT_ETAG="$ROOT/lock.etag"
+        URL="$ROOT/url"
+        log() { printf '%s\n' "$1" >>"$LOG"; }
+        region_guard() {
+          if test -n "${AWS_REGION:-}" && test -n "${AWS_DEFAULT_REGION:-}" &&
+            test "$AWS_REGION" != "$AWS_DEFAULT_REGION"; then
+            log region-conflict
+            return 1
+          fi
+          if test -n "${AWS_REGION:-}" && test "$AWS_REGION" != "$REGION"; then
+            log region-rejected
+            return 1
+          fi
+          if test -n "${AWS_DEFAULT_REGION:-}" && test "$AWS_DEFAULT_REGION" != "$REGION"; then
+            log region-rejected
+            return 1
+          fi
+          export AWS_REGION="$REGION" AWS_DEFAULT_REGION="$REGION"
+        }
+        lock_is_current() { test "$(<"$CURRENT_ETAG")" = "$LOCK_ETAG"; }
+        validate_function_url() { test "$(<"$URL")" = reviewed-url; }
+        rollback_url() {
+          lock_is_current || { log lock-lost-preserved; return 1; }
+          validate_function_url || { log url-changed-preserved; return 1; }
+          rm -- "$URL"
+          log url-removed
+        }
+        rollback_imports() {
+          if test "${ROLE_IMPORTED:-0}" -eq 1; then rm -- "$ROOT/role-state"; log role-state-rm; fi
+          if test "${POLICY_IMPORTED:-0}" -eq 1; then rm -- "$ROOT/policy-state"; log policy-state-rm; fi
+        }
+        release_observed() {
+          local observed="$1"
+          test "$(<"$CURRENT_ETAG")" = "$observed" || { log stale-etag-preserved; return 1; }
+          rm -- "$CURRENT_ETAG"
+          log lock-released
+        }
+        printf '%s\n' owner-etag >"$CURRENT_ETAG"
+        printf '%s\n' reviewed-url >"$URL"
+        case "$SCENARIO" in
+          region-conflict) region_guard || true ;;
+          lost-lock)
+            region_guard
+            printf '%s\n' replacement-etag >"$CURRENT_ETAG"
+            rollback_url || true
+            test -e "$URL"
+            ;;
+          url-changed)
+            region_guard
+            printf '%s\n' changed-url >"$URL"
+            rollback_url || true
+            test -e "$URL"
+            ;;
+          early-import-verification)
+            region_guard
+            printf '%s\n' role >"$ROOT/role-state"
+            ROLE_IMPORTED=1
+            printf '%s\n' wrong-id >"$ROOT/role-verification"
+            if test "$(<"$ROOT/role-verification")" = expected-id; then exit 9; fi
+            rollback_imports
+            test ! -e "$ROOT/role-state"
+            test ! -e "$ROOT/policy-state"
+            ;;
+          stale-etag)
+            region_guard
+            release_observed old-etag || true
+            test -e "$CURRENT_ETAG"
+            ;;
+          early-post-lock)
+            region_guard
+            MUTATION_AMBIGUOUS=0
+            LOCK_ACQUIRED=1
+            bootstrap_cleanup() {
+              local status=$?
+              trap - EXIT
+              if test "$status" -ne 0 && test "$MUTATION_AMBIGUOUS" -eq 0; then
+                declare -F rollback_delivery_state >/dev/null && rollback_delivery_state || true
+              fi
+              log lock-released
+              exit "$status"
+            }
+            trap bootstrap_cleanup EXIT
+            exit 1
+            ;;
+          *) exit 2 ;;
+        esac
+        """
+    )
+    scenarios = {
+        "region-conflict": (
+            {"AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-west-2"},
+            ["region-conflict"],
+            0,
+        ),
+        "lost-lock": (
+            {"AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1"},
+            ["lock-lost-preserved"],
+            0,
+        ),
+        "url-changed": (
+            {"AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1"},
+            ["url-changed-preserved"],
+            0,
+        ),
+        "early-import-verification": (
+            {"AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1"},
+            ["role-state-rm"],
+            0,
+        ),
+        "stale-etag": (
+            {"AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1"},
+            ["stale-etag-preserved"],
+            0,
+        ),
+        "early-post-lock": (
+            {"AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1"},
+            ["lock-released"],
+            1,
+        ),
+    }
+    for scenario, (
+        region_environment,
+        expected_events,
+        expected_returncode,
+    ) in scenarios.items():
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            log_path = directory / "events.log"
+            environment = {
+                **os.environ,
+                "SCENARIO": scenario,
+                "ROOT": str(directory),
+                "LOG": str(log_path),
+                **region_environment,
+            }
+            result = subprocess.run(
+                ["bash", "-c", harness],
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert result.returncode == expected_returncode, result.stderr
+            assert log_path.read_text().splitlines() == expected_events
+
+
+def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_actions():
+    assert _run_development_plan_gate({"resource_changes": []})
+    assert _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change("managed", "aws_lambda_function.loader", ["update"])
+            ]
+        }
+    )
+    assert _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change(
+                    "managed", "aws_lambda_function_url.public_chat", ["no-op"]
+                )
+            ]
+        }
+    )
+    assert _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change(
+                    "managed", "aws_cloudfront_function.public_chat_routes", ["update"]
+                )
+            ]
+        }
+    )
+    for actions in (["create"], ["delete"], ["create", "delete"], ["delete", "create"]):
+        assert _run_development_plan_gate(
+            {
+                "resource_changes": [
+                    _synthetic_change(
+                        "managed", "aws_api_gateway_deployment.tollchat", list(actions)
+                    )
+                ]
+            }
+        )
+    assert _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change(
+                    "managed", "aws_bedrock_guardrail_version.tollchat", ["create"]
+                )
+            ]
+        }
+    )
+    for actions in (["update"], ["delete"], ["create", "delete"], ["delete", "create"]):
+        assert not _run_development_plan_gate(
+            {
+                "resource_changes": [
+                    _synthetic_change(
+                        "managed",
+                        "aws_bedrock_guardrail_version.tollchat",
+                        list(actions),
+                    )
+                ]
+            }
+        )
+    assert _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change("data", "data.aws_region.current", ["read"])
+            ]
+        }
+    )
+
+    assert not _run_development_plan_gate({}, raw=False)
+    assert not _run_development_plan_gate("not-json", raw=True)
+    assert not _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change("managed", "aws_unknown_resource.x", ["update"])
+            ]
+        }
+    )
+    for actions in (
+        ["read"],
+        ["replace"],
+        ["update", "delete"],
+        ["delete", "update"],
+        ["create", "update"],
+    ):
+        assert not _run_development_plan_gate(
+            {
+                "resource_changes": [
+                    _synthetic_change(
+                        "managed", "aws_lambda_function.loader", list(actions)
+                    )
+                ]
+            }
+        )
+    manual_mutations = (
+        "aws_iam_role.loader",
+        "aws_iam_role.publisher",
+        "aws_iam_role.publisher_scheduler",
+        "aws_iam_role.timed_checks",
+        "aws_iam_role.tollchat_proxy",
+        "aws_iam_role.tollchat_runtime",
+        "aws_iam_role.usage_publisher",
+        "aws_iam_role.agent_usage_rollup",
+        "aws_iam_role_policy.loader",
+        "aws_iam_role_policy.publisher",
+        "aws_iam_role_policy.publisher_scheduler",
+        "aws_iam_role_policy.timed_checks",
+        "aws_iam_role_policy.tollchat_proxy",
+        "aws_iam_role_policy.tollchat_runtime",
+        "aws_iam_role_policy.usage_publisher",
+        "aws_iam_role_policy.agent_usage_rollup",
+        "aws_iam_role_policy_attachment.loader_vpc",
+        "aws_iam_role_policy_attachment.publisher_vpc",
+        "aws_iam_role_policy_attachment.tollchat_proxy_vpc",
+        "aws_api_gateway_rest_api.tollchat",
+        "aws_api_gateway_rest_api_policy.tollchat",
+        "aws_api_gateway_resource.tollchat_proxy",
+        "aws_api_gateway_method.tollchat_root",
+        "aws_api_gateway_method.tollchat_proxy",
+        "aws_api_gateway_integration.tollchat_root",
+        "aws_api_gateway_integration.tollchat_proxy",
+        "aws_api_gateway_stage.tollchat",
+        "aws_api_gateway_method_settings.tollchat",
+        "aws_athena_named_query.recent_routes",
+        "aws_athena_named_query.top_routes",
+        "aws_athena_workgroup.agent_reports",
+        'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+        "aws_s3_bucket.agent_measurement",
+        "aws_s3_bucket_public_access_block.agent_measurement",
+        "aws_s3_bucket_public_access_block.site",
+        "aws_s3_bucket_policy.agent_measurement",
+        "aws_kms_key.agent_measurement",
+        "aws_kms_key.site",
+        "aws_kms_alias.agent_measurement",
+        "aws_kms_alias.site",
+        "aws_s3_bucket_lifecycle_configuration.agent_measurement",
+        "aws_s3_bucket_server_side_encryption_configuration.agent_measurement",
+        "aws_s3_bucket_policy.site",
+        "aws_lambda_function_url.public_chat",
+        "aws_lambda_permission.public_chat_url",
+        "aws_lambda_permission.public_chat_invoke",
+        "aws_sqs_queue.delivery_failure",
+        "aws_sqs_queue.invoke_failure",
+        "aws_sqs_queue.publisher_delivery_failure",
+        "aws_sqs_queue.publisher_invoke_failure",
+        "aws_sqs_queue_policy.delivery_failure",
+        "aws_lambda_permission.agent_usage_rollup",
+        "aws_lambda_permission.eventbridge_invoke",
+        "aws_lambda_permission.tollchat_api",
+        "aws_lambda_permission.usage_publisher",
+        "aws_cloudfront_distribution.site",
+        "aws_cloudfront_origin_access_control.site",
+        "aws_cloudfront_origin_access_control.public_chat",
+        "aws_cloudfront_response_headers_policy.development_noindex",
+        "aws_bedrock_guardrail.tollchat",
+        "aws_cloudwatch_event_rule.agent_usage_rollup",
+        "aws_cloudwatch_event_rule.raw_objects",
+        "aws_cloudwatch_event_rule.usage_publisher",
+        "aws_cloudwatch_log_metric_filter.load_success",
+        "aws_cloudwatch_log_metric_filter.proxy_failure",
+        "aws_cloudwatch_metric_alarm.agent_usage_log_coverage",
+        "aws_cloudwatch_metric_alarm.agent_usage_rollup_errors",
+        "aws_cloudwatch_metric_alarm.agent_usage_rollup_missing",
+        "aws_cloudwatch_metric_alarm.failure_queues",
+        "aws_cloudwatch_metric_alarm.freshness",
+        "aws_cloudwatch_metric_alarm.loader_errors",
+        "aws_cloudwatch_metric_alarm.publisher_errors",
+        "aws_cloudwatch_metric_alarm.publisher_failure_queues",
+        "aws_cloudwatch_metric_alarm.report_generation_freshness",
+        "aws_cloudwatch_metric_alarm.tollchat_proxy_errors",
+        "aws_cloudwatch_metric_alarm.tollchat_proxy_failures",
+        "aws_cloudwatch_metric_alarm.tollchat_proxy_latency",
+        "aws_cloudwatch_metric_alarm.tollchat_sessions",
+        "aws_cloudwatch_metric_alarm.usage_publisher_errors",
+        "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
+        "aws_cloudwatch_log_group.agentcore_runtime",
+        "aws_wafv2_web_acl.public_chat",
+        "aws_wafv2_web_acl_logging_configuration.agent_reports",
+        "aws_security_group.loader",
+        "aws_security_group.publisher",
+        "aws_security_group.tollchat_proxy",
+        "aws_security_group.tollchat_runtime",
+        "aws_vpc_security_group_egress_rule.loader_to_eventbridge",
+        "aws_vpc_security_group_egress_rule.loader_to_rds",
+        "aws_vpc_security_group_egress_rule.loader_to_s3",
+        "aws_vpc_security_group_egress_rule.proxy_https",
+        "aws_vpc_security_group_egress_rule.proxy_to_dynamodb",
+        "aws_vpc_security_group_egress_rule.publisher_to_rds",
+        "aws_vpc_security_group_egress_rule.publisher_to_s3",
+        "aws_vpc_security_group_egress_rule.runtime_https",
+        "aws_vpc_security_group_egress_rule.runtime_to_rds",
+        "aws_vpc_security_group_ingress_rule.agentcore_from_proxy",
+        "aws_vpc_security_group_ingress_rule.rds_from_loader",
+        "aws_vpc_security_group_ingress_rule.rds_from_publisher",
+        "aws_vpc_security_group_ingress_rule.rds_from_runtime",
+    )
+    for address in manual_mutations:
+        for actions in (
+            ["create"],
+            ["delete"],
+            ["update"],
+            ["create", "delete"],
+            ["delete", "create"],
+        ):
+            assert not _run_development_plan_gate(
+                {
+                    "resource_changes": [
+                        _synthetic_change("managed", address, list(actions))
+                    ]
+                }
+            ), (address, actions)
+    assert not _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change("data", "data.aws_unknown.current", ["read"])
+            ]
+        }
+    )
+    for address in (
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+    ):
+        assert _run_development_plan_gate(
+            {"resource_changes": [_synthetic_change("managed", address, ["update"])]}
+        )
+        for actions in (
+            ["create"],
+            ["delete"],
+            ["create", "delete"],
+            ["delete", "create"],
+        ):
+            assert not _run_development_plan_gate(
+                {
+                    "resource_changes": [
+                        _synthetic_change("managed", address, list(actions))
+                    ]
+                }
+            )
+    assert not _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change(
+                    "managed",
+                    "aws_lambda_function.loader",
+                    ["update"],
+                    account="920534282028",
+                )
+            ]
+        }
+    )
+    assert not _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change(
+                    "managed",
+                    "aws_lambda_function.loader",
+                    ["update"],
+                    environment="production",
+                )
+            ]
+        }
+    )
+    assert not _run_development_plan_gate(
+        {
+            "resource_changes": [
+                {
+                    **_synthetic_change(
+                        "managed", "aws_lambda_function.loader", ["no-op"]
+                    ),
+                    "deposed": "old",
+                }
+            ]
+        }
+    )
+
+
+SLICE_2A_POLICY = (REPO_ROOT / "infra" / "policy.hujson").read_text()
+
+
+def _slice_2a_policy_sections(source: str) -> tuple[str, str, str]:
+    tag_owners = re.search(r'"tagOwners"\s*:\s*\{(.*?)\n\s*\},', source, re.DOTALL)
+    auto_approvers = re.search(
+        r'"autoApprovers"\s*:\s*\{(.*?)\n\s*\},', source, re.DOTALL
+    )
+    grants = re.search(r'"grants"\s*:\s*\[(.*?)\n\s*\],', source, re.DOTALL)
+    assert tag_owners and auto_approvers and grants
+    return tag_owners.group(1), auto_approvers.group(1), grants.group(1)
+
+
+def _assert_slice_2a_policy(source: str) -> None:
+    tag_owners, auto_approvers, grants = _slice_2a_policy_sections(source)
+    assert tag_owners.count('"tag:nova-toll-development-router"') == 1
+    assert tag_owners.count('"tag:ci-development"') == 1
+    assert '"tag:nova-toll-development-router": ["rhprasad0@github"]' in tag_owners
+    assert '"tag:ci-development": ["rhprasad0@github"]' in tag_owners
+    assert '"tag:nova-toll-router": ["rhprasad0@github"]' in tag_owners
+    assert '"tag:ci": ["rhprasad0@github"]' in tag_owners
+
+    assert (
+        '"fd7a:115c:a1e0:b1a:0:1:ac1f:0/112": [\n'
+        '                "tag:nova-toll-development-router"\n'
+        "            ]" in auto_approvers
+    )
+    assert auto_approvers.count('"fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"') == 1
+    assert '"172.31.0.0/16": ["tag:nova-toll-router"]' in auto_approvers
+    assert '"exitNode": ["tag:nova-toll-router"]' in source
+    assert '"exitNode": ["tag:nova-toll-development-router"]' not in source
+
+    dev_grant = re.search(
+        r'\{\s*"src": \["tag:ci-development"\],\s*'
+        r'"dst": \["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"\],\s*'
+        r'"ip":  \["tcp:5432"\],\s*\}',
+        grants,
+        re.DOTALL,
+    )
+    assert dev_grant is not None
+    dev_grant_text = dev_grant.group(0)
+    assert "172.31.0.0/16" not in dev_grant_text
+    assert "exitNode" not in dev_grant_text
+    assert '"src": ["tag:ci"]' in grants
+    assert '"dst": ["172.31.0.0/16"]' in grants
+    assert '"dst": ["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"]' in grants
+    assert '"ip":  ["tcp:5432"]' in grants
+    assert (
+        '"nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"' in source
+    )
+    assert '"nova-toll-rds": "172.31.83.200"' in source
+
+
+def test_slice_2a_policy_is_scoped_and_preserves_production_entries():
+    _assert_slice_2a_policy(SLICE_2A_POLICY)
+    baseline = subprocess.run(
+        ["git", "show", "HEAD:infra/policy.hujson"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    for production_entry in (
+        '"tag:nova-toll-router": ["rhprasad0@github"]',
+        '"tag:ci": ["rhprasad0@github"]',
+        '"172.31.0.0/16": ["tag:nova-toll-router"]',
+        '"exitNode": ["tag:nova-toll-router"]',
+        '"src": ["tag:ci"]',
+        '"dst": ["172.31.0.0/16"]',
+        '"ip":  ["tcp:5432"]',
+    ):
+        assert production_entry in baseline
+        assert production_entry in SLICE_2A_POLICY
+    for original, replacement in (
+        (
+            '"tag:nova-toll-development-router": ["rhprasad0@github"]',
+            '"tag:nova-toll-development-router": ["tag:ci-development"]',
+        ),
+        (
+            '"fd7a:115c:a1e0:b1a:0:1:ac1f:0/112": [\n'
+            '                "tag:nova-toll-development-router"\n'
+            "            ]",
+            '"172.31.0.0/16": ["tag:nova-toll-development-router"]',
+        ),
+        (
+            '"src": ["tag:ci-development"]',
+            '"src": ["tag:ci"]',
+        ),
+    ):
+        _must_reject(_assert_slice_2a_policy, SLICE_2A_POLICY, original, replacement)
+
+
+def _slice_2a_allocation_namespace() -> dict[str, object]:
+    match = re.search(
+        r"# BEGIN SLICE_2A_TAILSCALE_ALLOCATION_CHECK\n(.*?)\n"
+        r"# END SLICE_2A_TAILSCALE_ALLOCATION_CHECK",
+        DEPLOYMENT,
+        re.DOTALL,
+    )
+    assert match is not None
+    namespace: dict[str, object] = {"__name__": "slice_2a_test"}
+    exec(compile(match.group(1), "<slice-2a-allocation-check>", "exec"), namespace)
+    return namespace
+
+
+def _slice_2a_device(
+    device_id: str, *, tags: list[str] | None = None
+) -> dict[str, object]:
+    return {"id": device_id, "tags": ["tag:other"] if tags is None else tags}
+
+
+def _slice_2a_routes(
+    *, advertised: list[str] | None = None, enabled: list[str] | None = None
+) -> dict[str, object]:
+    return {
+        "advertisedRoutes": [] if advertised is None else advertised,
+        "enabledRoutes": [] if enabled is None else enabled,
+    }
+
+
+def test_slice_2a_allocation_gate_passes_only_safe_complete_inventories():
+    namespace = _slice_2a_allocation_namespace()
+    check_allocation = cast(Callable[..., object], namespace["check_allocation"])
+    run_check = cast(Callable[..., object], namespace["run_check"])
+    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
+    other = _slice_2a_device("other-device")
+    devices = {"devices": [intended, other]}
+    empty_routes = {
+        "dev-router": _slice_2a_routes(),
+        "other-device": _slice_2a_routes(advertised=["172.31.0.0/16"]),
+    }
+    assert check_allocation(devices, empty_routes, "dev-router")
+    intended_routes = {
+        **empty_routes,
+        "dev-router": _slice_2a_routes(
+            advertised=["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"],
+            enabled=["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"],
+        ),
+    }
+    assert check_allocation(devices, intended_routes, "dev-router")
+    alternate_site_one_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:800/120"
+    alternate_intended_routes = {
+        **empty_routes,
+        "dev-router": _slice_2a_routes(
+            advertised=[alternate_site_one_route],
+            enabled=[alternate_site_one_route],
+        ),
+    }
+    assert check_allocation(devices, alternate_intended_routes, "dev-router")
+    with pytest.raises(ValueError):
+        check_allocation(
+            devices,
+            alternate_intended_routes,
+            "dev-router",
+            require_advertised_route=True,
+        )
+
+    calls: list[tuple[str, str]] = []
+    documents = {
+        "/tailnet/rhprasad0.github/devices?fields=all": devices,
+        "/device/dev-router/routes": intended_routes["dev-router"],
+        "/device/other-device/routes": intended_routes["other-device"],
+    }
+
+    def fetch(path: str, token: str) -> object:
+        calls.append((path, token))
+        return documents[path]
+
+    assert run_check(fetch, "rhprasad0.github", "dev-router", "runtime-token")
+    assert [path for path, _ in calls] == list(documents)
+    assert all(token == "runtime-token" for _, token in calls)
+
+
+def test_slice_2a_allocation_gate_rejects_collisions_uncertainty_and_api_failures():
+    namespace = _slice_2a_allocation_namespace()
+    check_allocation = cast(Callable[..., object], namespace["check_allocation"])
+    run_check = cast(Callable[..., object], namespace["run_check"])
+    route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
+    other = _slice_2a_device("other-device")
+    devices = {"devices": [intended, other]}
+    empty = {"dev-router": _slice_2a_routes(), "other-device": _slice_2a_routes()}
+
+    def rejects(
+        document: object, routes: object, device_id: str = "dev-router"
+    ) -> None:
+        with pytest.raises(ValueError):
+            check_allocation(document, routes, device_id)
+
+    rejects(
+        devices,
+        {
+            **empty,
+            "other-device": _slice_2a_routes(advertised=[route]),
+        },
+    )
+    alternate_site_one_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:800/120"
+    rejects(
+        devices,
+        {
+            **empty,
+            "other-device": _slice_2a_routes(advertised=[alternate_site_one_route]),
+        },
+    )
+    rejects(
+        devices,
+        {
+            **empty,
+            "dev-router": _slice_2a_routes(
+                advertised=["fd7a:115c:a1e0:b1a:1:1:ac1f:0/112"]
+            ),
+        },
+    )
+    assert check_allocation(
+        devices,
+        {
+            **empty,
+            "dev-router": _slice_2a_routes(
+                advertised=["fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"]
+            ),
+        },
+        "dev-router",
+    )
+    rejects({"devices": [{"id": "dev-router"}, other]}, empty)
+    rejects(
+        devices,
+        {
+            "dev-router": {"advertisedRoutes": [], "enabledRoutes": "bad"},
+            "other-device": empty["other-device"],
+        },
+    )
+    rejects({"devices": [{"id": ""}, other]}, empty)
+    rejects(
+        {"devices": [intended, intended.copy()]}, {"dev-router": _slice_2a_routes()}
+    )
+    rejects(devices, {"dev-router": _slice_2a_routes(), "unknown": _slice_2a_routes()})
+    rejects(devices, empty, "missing-device")
+    rejects({"devices": "bad"}, empty)
+    rejects(
+        devices,
+        {
+            **empty,
+            "dev-router": _slice_2a_routes(advertised=[route, route]),
+        },
+    )
+    rejects(
+        devices,
+        {
+            **empty,
+            "dev-router": _slice_2a_routes(
+                advertised=["FD7A:115C:A1E0:B1A:0:1:AC1F:0/112"]
+            ),
+        },
+    )
+
+    def api_failure(path: str, token: str) -> object:
+        raise RuntimeError("network failure")
+
+    with pytest.raises(RuntimeError):
+        run_check(api_failure, "rhprasad0.github", "dev-router", "runtime-token")
+
+    def per_device_failure(path: str, token: str) -> object:
+        if path.endswith("devices?fields=all"):
+            return devices
+        raise RuntimeError("route fetch failure")
+
+    with pytest.raises(RuntimeError):
+        run_check(per_device_failure, "rhprasad0.github", "dev-router", "runtime-token")
+
+    api_calls: list[str] = []
+
+    def must_not_query(path: str, token: str) -> object:
+        api_calls.append(path)
+        raise AssertionError("tailnet validation must precede API query")
+
+    for invalid_tailnet in ("", "other.example"):
+        with pytest.raises(ValueError):
+            run_check(must_not_query, invalid_tailnet, "dev-router", "runtime-token")
+    assert api_calls == []
+
+
+def test_slice_2a_post_advertisement_check_catches_toctou_and_multi_owner_routes():
+    namespace = _slice_2a_allocation_namespace()
+    run_check = cast(Callable[..., object], namespace["run_check"])
+    route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+    host_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"
+    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
+    other = _slice_2a_device("other-device")
+    devices = {"devices": [intended, other]}
+    empty = {"dev-router": _slice_2a_routes(), "other-device": _slice_2a_routes()}
+    current_routes: dict[str, dict[str, object]] = empty
+
+    def fetch(path: str, token: str) -> object:
+        if path.endswith("devices?fields=all"):
+            return devices
+        return current_routes[path.split("/")[-2]]
+
+    # A clean precheck can pass, then become unsafe before advertisement.
+    assert run_check(fetch, "rhprasad0.github", "dev-router", "runtime-token")
+    current_routes = {
+        "dev-router": _slice_2a_routes(),
+        "other-device": _slice_2a_routes(advertised=[route]),
+    }
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            post_advertisement=True,
+        )
+
+    current_routes = {
+        "dev-router": _slice_2a_routes(advertised=[route]),
+        "other-device": _slice_2a_routes(advertised=[route]),
+    }
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            post_advertisement=True,
+        )
+
+    current_routes = {
+        "dev-router": _slice_2a_routes(enabled=[route]),
+        "other-device": _slice_2a_routes(),
+    }
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            post_advertisement=True,
+        )
+
+    current_routes = {
+        "dev-router": _slice_2a_routes(
+            advertised=[route, host_route], enabled=[route, host_route]
+        ),
+        "other-device": _slice_2a_routes(),
+    }
+    assert run_check(
+        fetch,
+        "rhprasad0.github",
+        "dev-router",
+        "runtime-token",
+        post_advertisement=True,
+        require_host_route=True,
+    )
+
+    current_routes = {
+        "dev-router": _slice_2a_routes(advertised=[route]),
+        "other-device": _slice_2a_routes(advertised=[host_route]),
+    }
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            post_advertisement=True,
+            require_host_route=True,
+        )
+
+
+def test_slice_2a_allocation_gate_uses_read_only_authenticated_api_and_no_fallback():
+    namespace = _slice_2a_allocation_namespace()
+    source = DEPLOYMENT[
+        DEPLOYMENT.index(
+            "# BEGIN SLICE_2A_TAILSCALE_ALLOCATION_CHECK"
+        ) : DEPLOYMENT.index("# END SLICE_2A_TAILSCALE_ALLOCATION_CHECK")
+    ]
+    assert namespace["EXPECTED_ROUTE"] == "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+    assert namespace["EXPECTED_TAILNET"] == "rhprasad0.github"
+    assert namespace["SITE_ID"] == 1
+    assert "/tailnet/" in source and "devices?fields=all" in source
+    assert "/routes" in source
+    assert '"Authorization": f"Bearer {token}"' in source
+    assert 'method="GET"' in source
+    assert "ipaddress.ip_network" in source
+    assert "translator_identifier" in source
+    assert "translator_identifier >> 16" in source
+    assert "enabled_owners" in source
+    assert "exact site-1 route is not enabled on intended device" in source
+    assert "172.31.0.0/16" not in source
+    assert 'method="POST"' not in source and 'method="PATCH"' not in source
+    assert "tailscale up" not in source
+    assert "TAILSCALE_POST_ADVERTISEMENT" in DEPLOYMENT
+    assert "TAILSCALE_VERIFY_HOST_ROUTE" in DEPLOYMENT
+    assert "TAILSCALE_NO_ADVERTISED_ROUTE" in DEPLOYMENT
+    assert "site-1 route remains advertised" in source
+    assert "disable the development advertised route immediately" in DEPLOYMENT
+    assert "never substitute for it" in DEPLOYMENT
+
+
+def test_slice_2b_postcheck_requires_exact_tag_and_advertised_plus_enabled_route():
+    namespace = _slice_2a_allocation_namespace()
+    run_check = cast(Callable[..., object], namespace["run_check"])
+    route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
+    other = _slice_2a_device("other-device")
+    devices = {"devices": [intended, other]}
+    routes = {
+        "dev-router": _slice_2a_routes(advertised=[route], enabled=[route]),
+        "other-device": _slice_2a_routes(),
+    }
+
+    def fetch(path: str, token: str) -> object:
+        if path.endswith("devices?fields=all"):
+            return devices
+        return routes[path.split("/")[-2]]
+
+    assert run_check(
+        fetch,
+        "rhprasad0.github",
+        "dev-router",
+        "runtime-token",
+        post_advertisement=True,
+    )
+    for advertised, enabled in (([route], []), ([], [route])):
+        routes["dev-router"] = _slice_2a_routes(advertised=advertised, enabled=enabled)
+        with pytest.raises(ValueError):
+            run_check(
+                fetch,
+                "rhprasad0.github",
+                "dev-router",
+                "runtime-token",
+                post_advertisement=True,
+            )
+
+    routes["dev-router"] = _slice_2a_routes(advertised=[route], enabled=[route])
+    devices["devices"][0]["tags"] = ["tag:nova-toll-development-router", "tag:other"]
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            post_advertisement=True,
+        )
+
+    devices["devices"][0]["tags"] = ["tag:nova-toll-development-router"]
+    devices["devices"][1]["tags"] = ["tag:nova-toll-development-router"]
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            post_advertisement=True,
+        )
+
+    devices["devices"][1]["tags"] = ["tag:other"]
+    routes["dev-router"] = _slice_2a_routes()
+    assert run_check(
+        fetch,
+        "rhprasad0.github",
+        "dev-router",
+        "runtime-token",
+        require_no_advertised_route=True,
+    )
+    routes["dev-router"] = _slice_2a_routes(advertised=[route])
+    with pytest.raises(ValueError):
+        run_check(
+            fetch,
+            "rhprasad0.github",
+            "dev-router",
+            "runtime-token",
+            require_no_advertised_route=True,
+        )
+
+
+def _assert_slice_2b_connectivity_workflow(source: str) -> None:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    assert _workflow_trigger(workflow) == {"workflow_dispatch": None}
+    assert workflow["permissions"] == {"contents": "read"}
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    assert set(jobs) == {"verify"}
+    job = jobs["verify"]
+    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["environment"] == "development"
+    assert job["permissions"] == {"contents": "read", "id-token": "write"}
+    steps = cast(list[dict[str, object]], job["steps"])
+    assert {
+        *re.findall(r"secrets\.([A-Z0-9_]+)", source),
+    } == {"TS_DEVELOPMENT_OAUTH_CLIENT_ID", "TS_DEVELOPMENT_OAUTH_SECRET"}
+    assert "tags: tag:ci-development" in source
+    assert "arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev" in source
+    assert "DEVELOPMENT_DELIVERY_ENABLED" not in source
+    assert "refs/heads/main" in source
+    assert "aws rds describe-db-instances" in source
+    assert "getent ahostsv4" in source
+    assert "tailscale debug via 1" in source
+    assert "ipaddress.ip_address" in source
+    assert 'ipaddress.ip_network(f"{expected}/128"' in source
+    assert 'PGHOST="$DB_HOST"' in source
+    assert 'PGHOSTADDR="$TRANSPORT_IPV6"' in source
+    assert "PGSSLMODE=verify-full" in source
+    assert 'PGSSLROOTCERT="$RDS_CA_BUNDLE"' in source
+    assert "generate-db-auth-token" in source
+    assert "SELECT current_database(), current_user" in source
+    assert "nova_toll_development" in source
+    assert "pricing_caller_development" in source
+    assert "PRODUCTION_DB_HOST" in source
+    assert (
+        "PRODUCTION_DB_HOST: nova-toll-db.co9qkm4eqi2h.us-east-1.rds.amazonaws.com"
+        in source
+    )
+    assert "PROD_ROUTE_STATE" in source
+    assert 'test "$PROD_ROUTE_STATE" = expected-denial' in source
+    assert (
+        "test \"$PROD_DENIAL_STATE\" = $'route=expected-denial\\nsocket=expected-denial'"
+        in source
+    )
+    assert (
+        'if ! prod_via_output="$(tailscale debug via 1 "$prod_ipv4/32")"; then'
+        in source
+    )
+    assert 'if ! test -n "$prod_via_output"; then' in source
+    assert (
+        'if ! route_state="$(VIA_OUTPUT="$prod_via_output" python3 - <<\'PY\'' in source
+    )
+    assert 'if ! test "$route_state" = expected-denial; then' in source
+    assert 'if ! socket_state="$(timeout 3s python3 - "$prod_ipv4"' in source
+    assert "except ConnectionRefusedError:" in source
+    assert 'if ! test "$socket_state" = expected-denial; then' in source
+    assert (
+        'if ! PROD_DENIAL_STATE="$(verify_production_denial "$PROD_IPV4")"; then'
+        in source
+    )
+    assert (
+        "if ! test \"$PROD_DENIAL_STATE\" = $'route=expected-denial\\nsocket=expected-denial'; then"
+        in source
+    )
+    assert "|| true" not in source
+    assert "timeout 3s" in source
+    assert "socket.create_connection" in source
+    assert "production_socket_denied" in source
+    assert "GITHUB_STEP_SUMMARY" in source
+    assert "set +x" in source
+    assert "unset DB_TOKEN PGPASSWORD" in source
+    assert "DB_JSON" in source and 'echo "$DB_JSON"' not in source
+    assert 'echo "$VIA_OUTPUT"' not in source
+    assert "tee" not in source
+    assert "--with-decryption" not in source
+    for forbidden in (
+        "TS_OAUTH_",
+        "TS_ACL_OAUTH_",
+        "tags: tag:ci\n",
+        "nova-toll-v2-development-delivery",
+        "terraform",
+        "aws iam",
+        "aws cloudformation",
+        "production SQL",
+    ):
+        assert forbidden not in source
+    for step in steps:
+        if "uses" in step:
+            assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", cast(str, step["uses"]))
+
+
+def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
+    _assert_slice_2b_connectivity_workflow(DEVELOPMENT_CONNECTIVITY_WORKFLOW)
+    for original, replacement in (
+        ("workflow_dispatch:", "push:"),
+        ("github.ref == 'refs/heads/main'", "github.ref == 'refs/heads/release'"),
+        ("environment: development", "environment: production"),
+        ("TS_DEVELOPMENT_OAUTH_CLIENT_ID", "TS_OAUTH_CLIENT_ID"),
+        ("tag:ci-development", "tag:ci"),
+        ("903859731897", "920534282028"),
+        ("PGSSLMODE=verify-full", "PGSSLMODE=disable"),
+        (
+            "PRODUCTION_DB_HOST: nova-toll-db.co9qkm4eqi2h.us-east-1.rds.amazonaws.com",
+            "PRODUCTION_DB_HOST: evil.example",
+        ),
+    ):
+        _must_reject(
+            _assert_slice_2b_connectivity_workflow,
+            DEVELOPMENT_CONNECTIVITY_WORKFLOW,
+            original,
+            replacement,
+        )
+
+
+def test_slice_2b_production_denial_requires_explicit_route_and_socket_refusals():
+    function = re.search(
+        r"(?ms)^          verify_production_denial\(\) \{\n(.*?)^          \}\n          if ! PROD_DENIAL_STATE=",
+        DEVELOPMENT_CONNECTIVITY_WORKFLOW,
+    )
+    assert function is not None
+    shell_function = (
+        dedent("verify_production_denial() {\n") + dedent(function.group(1)) + "}\n"
+    )
+    harness = dedent(
+        f"""
+        set -euo pipefail
+        ROUTE_MODE=${{ROUTE_MODE:?}}
+        SOCKET_MODE=${{SOCKET_MODE:?}}
+        tailscale() {{
+          case "$ROUTE_MODE" in
+            expected) printf 'no route' ;;
+            empty) return 0 ;;
+            malformed) printf 'diagnostic unavailable' ;;
+            failure) return 1 ;;
+            *) return 2 ;;
+          esac
+        }}
+        timeout() {{
+          cat >/dev/null
+          case "$SOCKET_MODE" in
+            refused) printf 'expected-denial' ;;
+            generic) return 1 ;;
+            *) return 2 ;;
+          esac
+        }}
+        {shell_function}
+        if ! PROD_DENIAL_STATE="$(verify_production_denial 192.0.2.10)"; then
+          exit 1
+        fi
+        if ! test "$PROD_DENIAL_STATE" = $'route=expected-denial\\nsocket=expected-denial'; then
+          exit 1
+        fi
+        printf '%s\\n' "$PROD_DENIAL_STATE"
+        """
+    )
+
+    def run(route_mode: str, socket_mode: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "-c", harness],
+            env={**os.environ, "ROUTE_MODE": route_mode, "SOCKET_MODE": socket_mode},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    positive = run("expected", "refused")
+    assert positive.returncode == 0, positive.stderr
+    assert positive.stdout == "route=expected-denial\nsocket=expected-denial\n"
+
+    for route_mode, socket_mode in (
+        ("failure", "generic"),
+        ("failure", "refused"),
+        ("expected", "generic"),
+        ("empty", "refused"),
+        ("malformed", "refused"),
+    ):
+        result = run(route_mode, socket_mode)
+        assert result.returncode != 0, (
+            route_mode,
+            socket_mode,
+            result.stdout,
+            result.stderr,
+        )
+
+
+def test_slice_2b_timed_role_trust_adds_only_the_development_environment_subject():
+    trust = MAIN_TF.split(
+        'data "aws_iam_policy_document" "timed_checks_assume"', maxsplit=1
+    )[1].split('resource "aws_iam_role" "timed_checks"', maxsplit=1)[0]
+    assert 'variable = "token.actions.githubusercontent.com:aud"' in trust
+    assert 'values   = ["sts.amazonaws.com"]' in trust
+    assert 'var.environment == "development"' in trust
+    assert (
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"
+        in trust
+    )
+    assert (
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+        in trust
+    )
+    assert "environment:production" not in trust
+    assert 'sts:AssumeRole"' not in trust
+
+
+def test_slice_2b_runbook_documents_bounded_secret_route_and_activation_gates():
+    for required in (
+        "one-off",
+        "non-ephemeral",
+        "pre-approved",
+        "90 days",
+        "tag:nova-toll-development-router",
+        "/nova-toll/tailscale-authkey",
+        "i-0d33b9a9c15db93fc",
+        "AWS-RunShellScript",
+        "tailscale up --authkey",
+        'tailscale set --advertise-routes=""',
+        'tailscale set --advertise-routes=\\"\\"',
+        "advertisedRoutes",
+        "enabledRoutes",
+        "TS_DEVELOPMENT_OAUTH_CLIENT_ID",
+        "TS_DEVELOPMENT_OAUTH_SECRET",
+        "auth_keys",
+        "DEVELOPMENT_DELIVERY_ENABLED",
+        "DEVELOPMENT_DELIVERY_ENABLED == 'true'",
+        "workflow_dispatch",
+        "PUT /repos/rhprasad0/nova-toll-budget-agent/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED",
+        '{"value":"true"}',
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGSSLMODE=verify-full",
+        "current_database(), current_user",
+        "DELETE /repos/rhprasad0/nova-toll-budget-agent/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED",
+        "No rollback action mutates production.",
+    ):
+        assert required in DEPLOYMENT
+    assert (
+        "--advertise-exit-node"
+        not in DEPLOYMENT.split(
+            "#### Slice 2B development router and protected connectivity handoff", 1
+        )[1]
+    )
+
+
+def test_slice_3_development_custom_domain_is_explicit_and_production_preserving():
+    assert 'variable "enable_development_custom_domain"' in APPLICATION_VARIABLES
+    variable = terraform_block(
+        APPLICATION_VARIABLES, 'variable "enable_development_custom_domain"'
+    )
+    assert "default     = false" in variable
+    assert 'environment == "development"' in variable
+    assert "enable_development_custom_domain = false" in DEVELOPMENT_TFVARS
+    assert "development_custom_domain_enabled" in ENVIRONMENT_TF
+    assert "https://${local.domains[0]}" in ENVIRONMENT_TF
+    assert "enable_development_custom_domain=false" in DEVELOPMENT_DELIVERY_WORKFLOW
+
+    distribution = terraform_block(
+        SITE_TF, 'resource "aws_cloudfront_distribution" "site"'
+    )
+    assert (
+        "aliases             = local.custom_domain_enabled ? local.domains : []"
+        in distribution
+    )
+    assert (
+        "cloudfront_default_certificate = !local.custom_domain_enabled" in distribution
+    )
+    assert (
+        'minimum_protocol_version       = local.custom_domain_enabled ? "TLSv1.2_2021" : "TLSv1"'
+        in distribution
+    )
+    assert (
+        "local.development_custom_domain_enabled ? aws_acm_certificate.site[0].arn"
+        in distribution
+    )
+    certificate = terraform_block(SITE_TF, 'resource "aws_acm_certificate" "site"')
+    assert (
+        "count                     = local.custom_domain_enabled ? 1 : 0" in certificate
+    )
+    assert "domain_name               = local.domains[0]" in certificate
+    assert 'validation_method         = "DNS"' in certificate
+    assert 'data "cloudflare_zone" "tollchat"' in SITE_TF
+    assert "count  = local.is_production ? 1 : 0" in SITE_TF
+    assert 'output "development_acm_certificate_arn"' in SITE_TF
+    assert 'output "development_acm_validation_records"' in SITE_TF
+
+
+def test_slice_3_development_delivery_cannot_administer_custom_domain():
+    policy = terraform_block(
+        FOUNDATION_IAM, 'data "aws_iam_policy_document" "development_delivery"'
+    )
+    assert "cloudfront:UpdateDistribution" not in policy
+    assert "acm:RequestCertificate" not in policy
+    assert "acm:DescribeCertificate" not in policy
+    assert "cloudflare" not in policy.lower()
+
+
+def test_slice_3_foundation_dns_role_has_exact_oidc_and_ssm_boundary():
+    trust = terraform_block(
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "production_foundation_dns_assume"',
+    )
+    assert 'actions = ["sts:AssumeRoleWithWebIdentity"]' in trust
+    assert 'variable = "token.actions.githubusercontent.com:aud"' in trust
+    assert 'values   = ["sts.amazonaws.com"]' in trust
+    assert (
+        'values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production-foundation-dns"]'
+        in trust
+    )
+    assert 'sts:AssumeRole"' not in trust
+
+    policy = terraform_block(
+        FOUNDATION_IAM, 'data "aws_iam_policy_document" "production_foundation_dns"'
+    )
+    assert 'count = var.environment == "production" ? 1 : 0' in policy
+    assert (
+        len(_parsed_policy_document(FOUNDATION_IAM, "production_foundation_dns")) == 1
+    )
+    assert 'actions   = ["ssm:GetParameter"]' in policy
+    assert "resources = [local.production_foundation_dns_parameter_arn]" in policy
+    assert (
+        "arn:aws:ssm:us-east-1:920534282028:parameter/nova-toll/cloudflare-development-dns-api-token"
+        in FOUNDATION_IAM
+    )
+    assert 'resource "aws_iam_role" "production_foundation_dns"' in FOUNDATION_IAM
+    role = terraform_block(
+        FOUNDATION_IAM, 'resource "aws_iam_role" "production_foundation_dns"'
+    )
+    assert 'count                = var.environment == "production" ? 1 : 0' in role
+    assert (
+        'name                 = "nova-toll-production-foundation-dns"' in FOUNDATION_IAM
+    )
+    assert "kms:Decrypt" not in policy
+    assert "secretsmanager:" not in policy
+
+
+def test_slice_3_dns_workflow_is_manual_protected_and_secret_safe():
+    workflow = cast(dict[str, object], yaml.safe_load(FOUNDATION_DNS_WORKFLOW))
+    assert "workflow_dispatch:" in FOUNDATION_DNS_WORKFLOW
+    assert "push:" not in FOUNDATION_DNS_WORKFLOW
+    assert "pull_request" not in FOUNDATION_DNS_WORKFLOW
+    assert "refs/heads/main" in FOUNDATION_DNS_WORKFLOW
+    assert (
+        "github.repository == 'rhprasad0/nova-toll-budget-agent'"
+        in FOUNDATION_DNS_WORKFLOW
+    )
+    assert "environment: production-foundation-dns" in FOUNDATION_DNS_WORKFLOW
+    assert (
+        "role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-foundation-dns"
+        in FOUNDATION_DNS_WORKFLOW
+    )
+    assert "id-token: write" in FOUNDATION_DNS_WORKFLOW
+    assert "contents: read" in FOUNDATION_DNS_WORKFLOW
+    assert "--with-decryption" in FOUNDATION_DNS_WORKFLOW
+    assert "/nova-toll/cloudflare-development-dns-api-token" in FOUNDATION_DNS_WORKFLOW
+    assert "accounts/{account_id}/tokens/verify" in FOUNDATION_DNS_WORKFLOW
+    assert "tokens/verify" in FOUNDATION_DNS_WORKFLOW
+    assert 'EXPECTED_ZONE = "tollchat.ai"' in FOUNDATION_DNS_WORKFLOW
+    assert 'EXPECTED_DEV_NAME = "dev.tollchat.ai"' in FOUNDATION_DNS_WORKFLOW
+    assert 'EXPECTED_DISTRIBUTION = "E33DVF3KT7BTAC"' in FOUNDATION_DNS_WORKFLOW
+    assert (
+        'EXPECTED_CLOUDFRONT_HOSTNAME = "d1wqry4fbd92w5.cloudfront.net"'
+        in FOUNDATION_DNS_WORKFLOW
+    )
+    assert (
+        'EXPECTED_LEGACY_TARGET = "dmsiz11apblcv.cloudfront.net"'
+        in FOUNDATION_DNS_WORKFLOW
+    )
+    assert '"stage-validation", "cutover", "rollback"' in FOUNDATION_DNS_WORKFLOW
+    assert '"POST"' in FOUNDATION_DNS_WORKFLOW and '"PUT"' in FOUNDATION_DNS_WORKFLOW
+    assert "DELETE" not in FOUNDATION_DNS_WORKFLOW
+    assert "GITHUB_STEP_SUMMARY" not in FOUNDATION_DNS_WORKFLOW
+    assert "upload-artifact" not in FOUNDATION_DNS_WORKFLOW
+    assert "secrets." not in FOUNDATION_DNS_WORKFLOW
+    assert "Authorization" in FOUNDATION_DNS_WORKFLOW
+    assert "set +x" in FOUNDATION_DNS_WORKFLOW
+    assert workflow
+    for action in re.findall(r"uses:\s*([^\s#]+)", FOUNDATION_DNS_WORKFLOW):
+        assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", action)
+
+
+def test_slice_3_dns_allowlist_contract_covers_adversarial_records_and_order():
+    for required in (
+        "result_info",
+        "total_count != count",
+        "total_pages != 1",
+        'zone.get("name") != EXPECTED_ZONE',
+        'zone.get("status") != "active"',
+        "returned_account != account_id",
+        'status") != "active"',
+        "len(dev_records) != 1",
+        "len(found) > 1",
+        "EXPECTED_VALIDATION_TTL = 60",
+        "EXPECTED_DEV_TTL = 1",
+        'proxied"] is not False',
+        "\\.dev\\.tollchat\\.ai",
+        "acm-validations\\.aws",
+        'CERTIFICATE_STATUS") != "ISSUED"',
+        'CLOUDFRONT_STATUS") != "Deployed"',
+        'ALIAS_ATTACHED") != "true"',
+        'method not in {"POST", "PUT"}',
+        "ROLLBACK_SNAPSHOT",
+        'old_snapshot["id"]',
+        "cloudflare DNS gate failed closed",
+        "rollback_legacy_https_health",
+        "--proto '=https' --tlsv1.2",
+        "https://dmsiz11apblcv.cloudfront.net/",
+    ):
+        assert required in FOUNDATION_DNS_WORKFLOW
+    assert FOUNDATION_DNS_WORKFLOW.index(
+        '"stage-validation"'
+    ) < FOUNDATION_DNS_WORKFLOW.index('"cutover"')
+    assert FOUNDATION_DNS_WORKFLOW.index(
+        '"CERTIFICATE_STATUS"'
+    ) < FOUNDATION_DNS_WORKFLOW.index('mutate(zone_id, account_id, "PUT"')
+
+
+def _slice3_dns_python_source() -> str:
+    embedded = FOUNDATION_DNS_WORKFLOW.split(
+        "CLOUDFLARE_TOKEN=\"$TOKEN\" python3 - <<'PY'\n", maxsplit=1
+    )[1].split("\n          PY", maxsplit=1)[0]
+    source = dedent(embedded)
+    assert "\ntry:\n    main()\n" in source
+    return source.split("\ntry:\n    main()\n", maxsplit=1)[0] + "\n"
+
+
+def _dns_zone(zone_id: str = "a" * 32, account_id: str = "b" * 32) -> dict[str, object]:
+    return {
+        "id": zone_id,
+        "name": "tollchat.ai",
+        "status": "active",
+        "account": {"id": account_id},
+    }
+
+
+def _dns_record(
+    record_id: str,
+    record_name: str,
+    content: str,
+    *,
+    ttl: int = 1,
+    proxied: bool = False,
+) -> dict[str, object]:
+    return {
+        "id": record_id,
+        "zone_id": "a" * 32,
+        "name": record_name,
+        "type": "CNAME",
+        "content": content,
+        "ttl": ttl,
+        "proxied": proxied,
+    }
+
+
+class _DnsApiMock:
+    def __init__(
+        self,
+        *,
+        zones: list[dict[str, object]],
+        token_account: str = "b" * 32,
+        dev_records: list[dict[str, object]] | None = None,
+        validation_records: list[dict[str, object]] | None = None,
+    ) -> None:
+        validation: list[dict[str, object]] = validation_records or [
+            _dns_record(
+                "d" * 32,
+                "_validation.dev.tollchat.ai",
+                "_token.acm-validations.aws",
+                ttl=60,
+            )
+        ]
+        self.zones = zones
+        self.token_account = token_account
+        self.records: dict[str, list[dict[str, object]]] = {
+            cast(str, record["name"]): [record] for record in validation
+        }
+        self.records["dev.tollchat.ai"] = dev_records or [
+            _dns_record(
+                "c" * 32,
+                "dev.tollchat.ai",
+                "dmsiz11apblcv.cloudfront.net",
+            )
+        ]
+        self.calls: list[
+            tuple[str, str, dict[str, str] | None, dict[str, object] | None]
+        ] = []
+
+    @property
+    def mutations(self) -> list[tuple[str, str, dict[str, object] | None]]:
+        return [
+            (method, path, payload)
+            for method, path, _, payload in self.calls
+            if method in {"POST", "PUT"}
+        ]
+
+    @staticmethod
+    def _page(result: list[dict[str, object]]) -> dict[str, object]:
+        return {
+            "success": True,
+            "result": result,
+            "result_info": {
+                "page": 1,
+                "count": len(result),
+                "per_page": max(1, len(result)),
+                "total_count": len(result),
+                "total_pages": 1,
+            },
+        }
+
+    def __call__(
+        self,
+        method: str,
+        path: str,
+        query: dict[str, str] | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        self.calls.append((method, path, query, payload))
+        if method == "GET" and path == "zones":
+            return self._page(self.zones)
+        if method == "GET" and path.endswith("/tokens/verify"):
+            return {
+                "success": True,
+                "result": {"status": "active", "account_id": self.token_account},
+            }
+        if method == "GET" and path.endswith("/dns_records"):
+            record_name = (query or {}).get("name", "")
+            return self._page(self.records.get(record_name, []))
+        if method == "POST" and path.endswith("/dns_records") and payload is not None:
+            record = {**payload, "id": "e" * 32, "zone_id": "a" * 32}
+            self.records.setdefault(str(record["name"]), []).append(record)
+            return {"success": True, "result": record}
+        if method == "PUT" and "/dns_records/" in path and payload is not None:
+            record_id = path.rsplit("/", maxsplit=1)[1]
+            for record_name, records in self.records.items():
+                for index, record in enumerate(records):
+                    if record["id"] == record_id:
+                        updated = {**payload, "id": record_id, "zone_id": "a" * 32}
+                        records[index] = updated
+                        if updated["name"] != record_name:
+                            del records[index]
+                            self.records.setdefault(str(updated["name"]), []).append(
+                                updated
+                            )
+                        return {"success": True, "result": updated}
+        raise AssertionError(f"unexpected mock call: {method} {path}")
+
+
+def _set_dns_inputs(
+    monkeypatch: pytest.MonkeyPatch, *, operation: str = "stage-validation"
+) -> None:
+    monkeypatch.setenv("OPERATION", operation)
+    monkeypatch.setenv(
+        "ACM_CERTIFICATE_ARN",
+        "arn:aws:acm:us-east-1:903859731897:certificate/" + "0" * 36,
+    )
+    monkeypatch.setenv(
+        "VALIDATION_RECORDS",
+        json.dumps(
+            [
+                {
+                    "name": "_validation.dev.tollchat.ai",
+                    "type": "CNAME",
+                    "value": "_token.acm-validations.aws",
+                    "ttl": 60,
+                    "proxied": False,
+                }
+            ]
+        ),
+    )
+    monkeypatch.setenv("DISTRIBUTION_ID", "E33DVF3KT7BTAC")
+    monkeypatch.setenv("CLOUDFRONT_HOSTNAME", "d1wqry4fbd92w5.cloudfront.net")
+    monkeypatch.setenv("CERTIFICATE_STATUS", "ISSUED")
+    monkeypatch.setenv("CLOUDFRONT_STATUS", "Deployed")
+    monkeypatch.setenv("ALIAS_ATTACHED", "true")
+    monkeypatch.setenv("OLD_DEV_TARGET", "dmsiz11apblcv.cloudfront.net")
+    monkeypatch.setenv(
+        "ROLLBACK_SNAPSHOT",
+        json.dumps(
+            {
+                "id": "c" * 32,
+                "name": "dev.tollchat.ai",
+                "type": "CNAME",
+                "content": "dmsiz11apblcv.cloudfront.net",
+                "ttl": 1,
+                "proxied": False,
+            }
+        ),
+    )
+
+
+def _dns_namespace(mock: _DnsApiMock) -> dict[str, object]:
+    namespace: dict[str, object] = {}
+    exec(_slice3_dns_python_source(), namespace)
+    namespace["TOKEN"] = "fixture-token"
+    namespace["api"] = mock
+    return namespace
+
+
+def test_slice3_dns_gate_rejects_adversarial_inputs_before_any_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zone = _dns_zone()
+    cases: list[tuple[str, dict[str, str], _DnsApiMock]] = []
+    for zones in ([], [zone, _dns_zone("f" * 32, "b" * 32)]):
+        cases.append(("zone cardinality", {}, _DnsApiMock(zones=zones)))
+
+    cases.append(
+        ("wrong token account", {}, _DnsApiMock(zones=[zone], token_account="f" * 32))
+    )
+
+    cases.append(
+        (
+            "malformed validation record",
+            {
+                "VALIDATION_RECORDS": json.dumps(
+                    [
+                        {
+                            "name": "_validation.dev.tollchat.ai",
+                            "type": "A",
+                            "value": "bad",
+                            "ttl": 60,
+                            "proxied": False,
+                        }
+                    ]
+                )
+            },
+            _DnsApiMock(zones=[zone]),
+        )
+    )
+
+    cases.append(
+        (
+            "unrelated CloudFront host",
+            {"CLOUDFRONT_HOSTNAME": "dattacker.cloudfront.net"},
+            _DnsApiMock(zones=[zone]),
+        )
+    )
+
+    cases.append(
+        (
+            "unreviewed rollback target",
+            {"OLD_DEV_TARGET": "dother.cloudfront.net"},
+            _DnsApiMock(zones=[zone]),
+        )
+    )
+
+    cases.append(
+        (
+            "stale snapshot",
+            {},
+            _DnsApiMock(
+                zones=[zone],
+                dev_records=[
+                    _dns_record(
+                        "f" * 32, "dev.tollchat.ai", "dmsiz11apblcv.cloudfront.net"
+                    )
+                ],
+            ),
+        )
+    )
+
+    for label, overrides, mock in cases:
+        _set_dns_inputs(monkeypatch)
+        for key, value in overrides.items():
+            monkeypatch.setenv(key, value)
+        namespace = _dns_namespace(mock)
+        gate_error = cast(type[Exception], namespace["GateError"])
+        main = cast(Callable[[], object], namespace["main"])
+        with pytest.raises(gate_error):
+            main()
+        assert not mock.mutations, label
+
+
+def test_slice3_dns_gate_rollback_puts_only_the_captured_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_dns_inputs(monkeypatch, operation="rollback")
+    mock = _DnsApiMock(
+        zones=[_dns_zone()],
+        dev_records=[
+            _dns_record("c" * 32, "dev.tollchat.ai", "d1wqry4fbd92w5.cloudfront.net")
+        ],
+    )
+    namespace = _dns_namespace(mock)
+    cast(Callable[[], object], namespace["main"])()
+    assert len(mock.mutations) == 1
+    method, path, payload = mock.mutations[0]
+    assert method == "PUT"
+    assert path.endswith("/dns_records/" + "c" * 32)
+    assert payload is not None
+    assert payload["content"] == "dmsiz11apblcv.cloudfront.net"
+    assert (
+        mock.records["dev.tollchat.ai"][0]["content"] == "dmsiz11apblcv.cloudfront.net"
+    )
+
+
+def test_slice3_rollback_legacy_https_health_fails_closed(
+    tmp_path: Path,
+) -> None:
+    function = re.search(
+        r"(?ms)^          rollback_legacy_https_health\(\) \{\n(.*?)^          \}\n          if test",
+        FOUNDATION_DNS_WORKFLOW,
+    )
+    assert function is not None
+    shell_function = dedent(
+        "rollback_legacy_https_health() {\n" + function.group(1) + "}\n"
+    )
+    for status, expected in (("200", 0), ("500", 1)):
+        script = dedent(
+            f"""
+            set -euo pipefail
+            RUNNER_TEMP={tmp_path}
+            FAKE_CURL_STATUS={status}
+            curl() {{
+              if test "$FAKE_CURL_STATUS" = "200"; then
+                printf '200'
+                return 0
+              fi
+              printf '500'
+              return 22
+            }}
+            {shell_function}
+            rollback_legacy_https_health
+            """
+        )
+        result = subprocess.run(
+            ["bash", "-c", script], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == expected, result.stderr
+
+
+def test_slice_3_runbook_and_plan_document_the_staged_order_and_rollback():
+    for required in (
+        "Slice 3 development custom-domain and DNS handoff",
+        "enable_development_custom_domain",
+        "production-foundation-dns",
+        "GET /accounts/{derived_account_id}/tokens/verify",
+        "stage-validation",
+        "certificate_status=ISSUED",
+        "cloudfront_status=Deployed",
+        "alias_attached=true",
+        "dmsiz11apblcv.cloudfront.net",
+        "E1JXKQYNAN39E4",
+        "X-Robots-Tag: noindex",
+        "operation=rollback",
+        "captured snapshot",
+        "#333 cleanup",
+    ):
+        assert required in DEPLOYMENT
+    for required in (
+        "Slice 3 custom-domain handoff",
+        "enable_development_custom_domain",
+        "production-foundation-dns",
+        "account-owned token",
+        "captured `dev.tollchat.ai` CNAME",
+        "Rollback restores that captured record by ID",
+        "No certificate, CloudFront alias, or DNS write",
+    ):
+        assert (
+            required
+            in (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
+        )

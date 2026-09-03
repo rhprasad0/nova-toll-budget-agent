@@ -689,7 +689,7 @@ resource "aws_cloudfront_distribution" "site" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
-  aliases             = local.is_production ? local.domains : []
+  aliases             = local.custom_domain_enabled ? local.domains : []
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
@@ -752,10 +752,12 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = local.is_production ? aws_acm_certificate_validation.site[0].certificate_arn : null
-    cloudfront_default_certificate = !local.is_production
-    ssl_support_method             = local.is_production ? "sni-only" : null
-    minimum_protocol_version       = local.is_production ? "TLSv1.2_2021" : "TLSv1"
+    acm_certificate_arn = local.is_production ? aws_acm_certificate_validation.site[0].certificate_arn : (
+      local.development_custom_domain_enabled ? aws_acm_certificate.site[0].arn : null
+    )
+    cloudfront_default_certificate = !local.custom_domain_enabled
+    ssl_support_method             = local.custom_domain_enabled ? "sni-only" : null
+    minimum_protocol_version       = local.custom_domain_enabled ? "TLSv1.2_2021" : "TLSv1"
   }
 }
 
@@ -805,7 +807,7 @@ moved {
 }
 
 resource "aws_acm_certificate" "site" {
-  count                     = local.is_production ? 1 : 0
+  count                     = local.custom_domain_enabled ? 1 : 0
   domain_name               = local.domains[0]
   subject_alternative_names = slice(local.domains, 1, length(local.domains))
   validation_method         = "DNS"
@@ -816,6 +818,26 @@ resource "aws_acm_certificate" "site" {
 moved {
   from = aws_acm_certificate.site
   to   = aws_acm_certificate.site[0]
+}
+
+output "development_acm_certificate_arn" {
+  description = "Non-secret us-east-1 ACM certificate ARN for the staged development custom domain."
+  value       = local.development_custom_domain_enabled ? aws_acm_certificate.site[0].arn : ""
+  sensitive   = false
+}
+
+output "development_acm_validation_records" {
+  description = "Non-secret ACM DNS validation handoff for dev.tollchat.ai."
+  value = local.development_custom_domain_enabled ? [
+    for dvo in aws_acm_certificate.site[0].domain_validation_options : {
+      name    = trimsuffix(dvo.resource_record_name, ".")
+      type    = dvo.resource_record_type
+      value   = trimsuffix(dvo.resource_record_value, ".")
+      ttl     = 60
+      proxied = false
+    }
+  ] : []
+  sensitive = false
 }
 
 resource "cloudflare_dns_record" "site_cert_validation" {

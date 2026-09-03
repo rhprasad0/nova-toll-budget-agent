@@ -1,0 +1,383 @@
+name: v2 production-foundation development DNS gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Bounded operation to perform"
+        required: true
+        type: choice
+        options:
+          - stage-validation
+          - cutover
+          - rollback
+      certificate_arn:
+        description: "Staged development us-east-1 ACM certificate ARN"
+        required: true
+        type: string
+      validation_records:
+        description: "JSON array from development_acm_validation_records"
+        required: true
+        type: string
+      distribution_id:
+        description: "Expected deployed development CloudFront distribution"
+        required: true
+        type: string
+      cloudfront_hostname:
+        description: "Expected deployed development CloudFront hostname"
+        required: true
+        type: string
+      certificate_status:
+        description: "Fresh operator evidence from development ACM"
+        required: false
+        default: ""
+        type: string
+      cloudfront_status:
+        description: "Fresh operator evidence from development CloudFront"
+        required: false
+        default: ""
+        type: string
+      alias_attached:
+        description: "Fresh operator evidence that the exact alias is attached"
+        required: false
+        default: "false"
+        type: string
+      old_dev_target:
+        description: "Captured current dev.tollchat.ai CNAME target"
+        required: true
+        type: string
+      rollback_snapshot:
+        description: "Captured JSON record {id,name,type,content,ttl,proxied}"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  dns:
+    name: Validate exact development DNS handoff
+    if: github.ref == 'refs/heads/main' && github.repository == 'rhprasad0/nova-toll-budget-agent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-foundation-dns
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Assume the dedicated production-foundation DNS role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-foundation-dns
+          aws-region: us-east-1
+
+      - name: Verify token and apply the exact record allowlist
+        env:
+          OPERATION: ${{ inputs.operation }}
+          ACM_CERTIFICATE_ARN: ${{ inputs.certificate_arn }}
+          VALIDATION_RECORDS: ${{ inputs.validation_records }}
+          DISTRIBUTION_ID: ${{ inputs.distribution_id }}
+          CLOUDFRONT_HOSTNAME: ${{ inputs.cloudfront_hostname }}
+          CERTIFICATE_STATUS: ${{ inputs.certificate_status }}
+          CLOUDFRONT_STATUS: ${{ inputs.cloudfront_status }}
+          ALIAS_ATTACHED: ${{ inputs.alias_attached }}
+          OLD_DEV_TARGET: ${{ inputs.old_dev_target }}
+          ROLLBACK_SNAPSHOT: ${{ inputs.rollback_snapshot }}
+        run: |
+          set -euo pipefail
+          set +x
+          test "$(aws sts get-caller-identity --query Account --output text)" = "920534282028"
+          SSM_ERROR="$RUNNER_TEMP/cloudflare-token-read.error"
+          TOKEN=""
+          trap 'unset TOKEN; rm -f -- "$SSM_ERROR"' EXIT
+          TOKEN="$(aws ssm get-parameter \
+            --name /nova-toll/cloudflare-development-dns-api-token \
+            --with-decryption --query Parameter.Value --output text \
+            2>"$SSM_ERROR")" || { rm -f -- "$SSM_ERROR"; exit 1; }
+          rm -f -- "$SSM_ERROR"
+          test -n "$TOKEN" && test "$TOKEN" != "None"
+          CLOUDFLARE_TOKEN="$TOKEN" python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          API_ROOT = "https://api.cloudflare.com/client/v4"
+          EXPECTED_ZONE = "tollchat.ai"
+          EXPECTED_DEV_NAME = "dev.tollchat.ai"
+          EXPECTED_DEV_TTL = 1
+          EXPECTED_VALIDATION_TTL = 60
+          EXPECTED_DISTRIBUTION = "E33DVF3KT7BTAC"
+          EXPECTED_CLOUDFRONT_HOSTNAME = "d1wqry4fbd92w5.cloudfront.net"
+          EXPECTED_LEGACY_TARGET = "dmsiz11apblcv.cloudfront.net"
+          TOKEN = os.environ.get("CLOUDFLARE_TOKEN", "")
+
+
+          class GateError(Exception):
+              pass
+
+
+          def fail():
+              raise GateError
+
+
+          def api(method, path, query=None, payload=None):
+              query_string = urllib.parse.urlencode(query or {})
+              url = f"{API_ROOT}/{path}" + (f"?{query_string}" if query_string else "")
+              body = json.dumps(payload, separators=(",", ":")).encode() if payload is not None else None
+              request = urllib.request.Request(
+                  url,
+                  data=body,
+                  headers={
+                      "Authorization": f"Bearer {TOKEN}",
+                      "Content-Type": "application/json",
+                  },
+                  method=method,
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      document = json.load(response)
+              except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError):
+                  fail()
+              if not isinstance(document, dict) or document.get("success") is not True:
+                  fail()
+              return document
+
+
+          def page_result(document):
+              result = document.get("result")
+              info = document.get("result_info")
+              if not isinstance(result, list) or not isinstance(info, dict):
+                  fail()
+              try:
+                  page = int(info["page"])
+                  count = int(info["count"])
+                  per_page = int(info["per_page"])
+                  total_count = int(info["total_count"])
+                  total_pages = int(info["total_pages"])
+              except (KeyError, TypeError, ValueError):
+                  fail()
+              if page != 1 or per_page < 1 or count != len(result) or total_count != count or total_pages != 1:
+                  fail()
+              return result
+
+
+          def resolve_zone():
+              zones = page_result(api("GET", "zones", {"name": EXPECTED_ZONE, "status": "active", "page": 1, "per_page": 2}))
+              if len(zones) != 1:
+                  fail()
+              zone = zones[0]
+              if not isinstance(zone, dict) or zone.get("name") != EXPECTED_ZONE or zone.get("status") != "active":
+                  fail()
+              zone_id = zone.get("id")
+              account = zone.get("account")
+              account_id = account.get("id") if isinstance(account, dict) else None
+              if not isinstance(zone_id, str) or not re.fullmatch(r"[0-9a-f]{32}", zone_id):
+                  fail()
+              if not isinstance(account_id, str) or not re.fullmatch(r"[0-9a-f]{32}", account_id):
+                  fail()
+              return zone_id, account_id
+
+
+          def verify_token(account_id):
+              document = api("GET", f"accounts/{account_id}/tokens/verify")
+              result = document.get("result")
+              if not isinstance(result, dict) or result.get("status") != "active":
+                  fail()
+              returned_account = result.get("account_id")
+              if returned_account is not None and returned_account != account_id:
+                  fail()
+
+
+          def name(value):
+              if not isinstance(value, str) or not value:
+                  fail()
+              value = value.rstrip(".")
+              if not value or ".." in value:
+                  fail()
+              return value
+
+
+          def load_validation_records():
+              try:
+                  records = json.loads(os.environ["VALIDATION_RECORDS"])
+              except (KeyError, TypeError, ValueError):
+                  fail()
+              if not isinstance(records, list) or len(records) != 1:
+                  fail()
+              expected = []
+              for record in records:
+                  if not isinstance(record, dict) or set(record) != {"name", "type", "value", "ttl", "proxied"}:
+                      fail()
+                  record_name = name(record["name"])
+                  record_value = name(record["value"])
+                  if not re.fullmatch(r"_[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.dev\.tollchat\.ai", record_name):
+                      fail()
+                  if record_name in {EXPECTED_ZONE, "www.tollchat.ai"} or "*" in record_name:
+                      fail()
+                  if not re.fullmatch(r"_[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.acm-validations\.aws", record_value):
+                      fail()
+                  if record["type"] != "CNAME" or record["ttl"] != EXPECTED_VALIDATION_TTL or record["proxied"] is not False:
+                      fail()
+                  expected.append({"name": record_name, "type": "CNAME", "content": record_value, "ttl": EXPECTED_VALIDATION_TTL, "proxied": False})
+              if len({record["name"] for record in expected}) != len(expected):
+                  fail()
+              return expected
+
+
+          def inputs():
+              if os.environ.get("OPERATION") not in {"stage-validation", "cutover", "rollback"}:
+                  fail()
+              if os.environ.get("DISTRIBUTION_ID") != EXPECTED_DISTRIBUTION:
+                  fail()
+              certificate_arn = os.environ.get("ACM_CERTIFICATE_ARN", "")
+              if not re.fullmatch(r"arn:aws:acm:us-east-1:903859731897:certificate/[0-9a-f-]+", certificate_arn):
+                  fail()
+              hostname = os.environ.get("CLOUDFRONT_HOSTNAME", "")
+              old_target = os.environ.get("OLD_DEV_TARGET", "")
+              if hostname != EXPECTED_CLOUDFRONT_HOSTNAME or old_target != EXPECTED_LEGACY_TARGET:
+                  fail()
+              return certificate_arn, hostname, old_target
+
+
+          def records_for(zone_id, record_name):
+              records = page_result(api("GET", f"zones/{zone_id}/dns_records", {"name": record_name, "page": 1, "per_page": 100}))
+              for record in records:
+                  if not isinstance(record, dict) or name(record.get("name")) != record_name or record.get("zone_id") != zone_id:
+                      fail()
+                  if not isinstance(record.get("id"), str) or not re.fullmatch(r"[0-9a-f]{32}", record["id"]):
+                      fail()
+              return records
+
+
+          def exact(record, expected):
+              return (
+                  record.get("name") == expected["name"]
+                  and record.get("type") == expected["type"]
+                  and record.get("content") == expected["content"]
+                  and record.get("ttl") == expected["ttl"]
+                  and record.get("proxied") is expected["proxied"]
+              )
+
+
+          def mutate(zone_id, account_id, method, record_id, expected):
+              if method not in {"POST", "PUT"}:
+                  fail()
+              verify_token(account_id)
+              payload = {key: expected[key] for key in ("type", "name", "content", "ttl", "proxied")}
+              path = f"zones/{zone_id}/dns_records" + (f"/{record_id}" if record_id else "")
+              response = api(method, path, payload=payload)
+              result = response.get("result")
+              if not isinstance(result, dict) or not exact(result, expected):
+                  fail()
+
+
+          def snapshot():
+              try:
+                  value = json.loads(os.environ["ROLLBACK_SNAPSHOT"])
+              except (KeyError, TypeError, ValueError):
+                  fail()
+              if not isinstance(value, dict) or set(value) != {"id", "name", "type", "content", "ttl", "proxied"}:
+                  fail()
+              if (
+                  not re.fullmatch(r"[0-9a-f]{32}", value["id"])
+                  or value["name"] != EXPECTED_DEV_NAME
+                  or value["type"] != "CNAME"
+                  or value["content"] != EXPECTED_LEGACY_TARGET
+                  or value["ttl"] != EXPECTED_DEV_TTL
+                  or value["proxied"] is not False
+              ):
+                  fail()
+              return value
+
+
+          def main():
+              if not TOKEN:
+                  fail()
+              _, hostname, _ = inputs()
+              expected_validation = load_validation_records()
+              zone_id, account_id = resolve_zone()
+              verify_token(account_id)
+              dev_records = records_for(zone_id, EXPECTED_DEV_NAME)
+              if len(dev_records) != 1:
+                  fail()
+              old_snapshot = snapshot()
+              if dev_records[0]["id"] != old_snapshot["id"]:
+                  fail()
+              if os.environ["OPERATION"] == "rollback":
+                  if (
+                      dev_records[0].get("name") != EXPECTED_DEV_NAME
+                      or dev_records[0].get("type") != "CNAME"
+                      or dev_records[0].get("content") != EXPECTED_CLOUDFRONT_HOSTNAME
+                      or dev_records[0].get("ttl") != EXPECTED_DEV_TTL
+                      or dev_records[0].get("proxied") is not False
+                  ):
+                      fail()
+              elif not exact(dev_records[0], old_snapshot):
+                  fail()
+              if os.environ["OPERATION"] == "stage-validation":
+                  actions = []
+                  for expected in expected_validation:
+                      found = records_for(zone_id, expected["name"])
+                      if len(found) > 1:
+                          fail()
+                      if found and not exact(found[0], expected):
+                          fail()
+                      if not found:
+                          actions.append(("POST", "", expected))
+                  for method, record_id, expected in actions:
+                      mutate(zone_id, account_id, method, record_id, expected)
+                  for expected in expected_validation:
+                      current = records_for(zone_id, expected["name"])
+                      if len(current) != 1 or not exact(current[0], expected):
+                          fail()
+                  return
+              for expected in expected_validation:
+                  found = records_for(zone_id, expected["name"])
+                  if len(found) != 1 or not exact(found[0], expected):
+                      fail()
+              if os.environ["OPERATION"] == "cutover":
+                  if os.environ.get("CERTIFICATE_STATUS") != "ISSUED" or os.environ.get("CLOUDFRONT_STATUS") != "Deployed" or os.environ.get("ALIAS_ATTACHED") != "true":
+                      fail()
+                  target = {"name": EXPECTED_DEV_NAME, "type": "CNAME", "content": EXPECTED_CLOUDFRONT_HOSTNAME, "ttl": EXPECTED_DEV_TTL, "proxied": False}
+                  mutate(zone_id, account_id, "PUT", old_snapshot["id"], target)
+                  current = records_for(zone_id, EXPECTED_DEV_NAME)
+                  if len(current) != 1 or not exact(current[0], target) or current[0]["id"] != old_snapshot["id"]:
+                      fail()
+              else:
+                  if dev_records[0]["content"] != EXPECTED_CLOUDFRONT_HOSTNAME or dev_records[0]["id"] != old_snapshot["id"]:
+                      fail()
+                  target = {"name": EXPECTED_DEV_NAME, "type": "CNAME", "content": EXPECTED_LEGACY_TARGET, "ttl": EXPECTED_DEV_TTL, "proxied": False}
+                  mutate(zone_id, account_id, "PUT", old_snapshot["id"], target)
+                  current = records_for(zone_id, EXPECTED_DEV_NAME)
+                  if len(current) != 1 or not exact(current[0], target) or current[0]["id"] != old_snapshot["id"]:
+                      fail()
+
+
+          try:
+              main()
+          except Exception:
+              print("cloudflare DNS gate failed closed", file=sys.stderr)
+              raise SystemExit(1)
+          print(f"cloudflare DNS gate passed: {os.environ['OPERATION']}")
+          PY
+          unset TOKEN
+          rollback_legacy_https_health() {
+            local error_file="$RUNNER_TEMP/legacy-https-health.error"
+            local status
+            if ! status="$(curl --fail --silent --show-error --location \
+              --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 15 \
+              --output /dev/null --write-out '%{http_code}' \
+              https://dmsiz11apblcv.cloudfront.net/ 2>"$error_file")"; then
+              rm -f -- "$error_file"
+              return 1
+            fi
+            rm -f -- "$error_file"
+            test "$status" = "200"
+          }
+          if test "$OPERATION" = "rollback"; then
+            rollback_legacy_https_health
+          fi

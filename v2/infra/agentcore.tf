@@ -3,6 +3,10 @@ locals {
   proxy_zip_path     = var.chat_proxy_package_path != "" ? var.chat_proxy_package_path : data.archive_file.placeholder.output_path
   proxy_zip_hash     = var.chat_proxy_package_path != "" ? filebase64sha256(var.chat_proxy_package_path) : data.archive_file.placeholder.output_base64sha256
   private_subnets    = [var.foundation.private_subnet_ids.a, var.foundation.private_subnet_ids.c]
+  # The development runtime is pre-provisioned. Keep its trust exact; the
+  # production branch retains its existing account-local runtime pattern.
+  development_agentcore_runtime_arn = "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl"
+  agentcore_runtime_source_arns     = local.is_production ? ["arn:aws:bedrock-agentcore:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:runtime/*"] : [local.development_agentcore_runtime_arn]
   private_api_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -167,9 +171,9 @@ data "aws_iam_policy_document" "agentcore_assume" {
       values   = [data.aws_caller_identity.current.account_id]
     }
     condition {
-      test     = "ArnLike"
+      test     = "ArnEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:bedrock-agentcore:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:runtime/*"]
+      values   = local.agentcore_runtime_source_arns
     }
   }
 }

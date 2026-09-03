@@ -64,6 +64,17 @@ variable "enable_public_dns" {
   default     = true
 }
 
+variable "enable_development_custom_domain" {
+  description = "Enable the administrator-staged ACM certificate and dev.tollchat.ai CloudFront alias in development."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = var.environment == "development" || !var.enable_development_custom_domain
+    error_message = "enable_development_custom_domain is only valid for the development application."
+  }
+}
+
 variable "public_preview_hostname" {
   description = "The generated CloudFront hostname used by the development preview."
   type        = string
