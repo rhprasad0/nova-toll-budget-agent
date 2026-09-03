@@ -606,11 +606,32 @@ resource "aws_iam_role" "development_delivery" {
   max_session_duration = 3600
 }
 
+# IAM limits each inline policy to 10,240 characters. Keep the reviewed
+# statement order and allowlist, but store it as deterministic bounded policy
+# documents so the delivery role can be created without dropping permissions.
+locals {
+  development_delivery_policy_statements = jsondecode(data.aws_iam_policy_document.development_delivery.json).Statement
+  development_delivery_policy_documents = {
+    state = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 0, 7)
+    })
+    compute = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 7, 24)
+    })
+    application = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 24, 42)
+    })
+  }
+}
+
 resource "aws_iam_role_policy" "development_delivery" {
-  count  = var.environment == "development" ? 1 : 0
-  name   = "nova-toll-v2-development-delivery"
-  role   = aws_iam_role.development_delivery[0].id
-  policy = data.aws_iam_policy_document.development_delivery.json
+  for_each = var.environment == "development" ? local.development_delivery_policy_documents : {}
+  name     = "nova-toll-v2-development-delivery-${each.key}"
+  role     = aws_iam_role.development_delivery[0].id
+  policy   = each.value
 }
 
 # The DNS cutover is deliberately separate from both application delivery

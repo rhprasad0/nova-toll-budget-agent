@@ -4095,6 +4095,94 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
     )
 
 
+def test_development_delivery_policy_set_is_deterministic_and_bounded():
+    statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
+    assert len(statements) == 42
+    expected_groups = {
+        "state": (
+            0,
+            7,
+            [
+                "ListDevelopmentState",
+                "ReadDevelopmentFoundationState",
+                "ManageDevelopmentApplicationState",
+                "ManageDevelopmentApplicationLock",
+                "DecryptDevelopmentState",
+                "WriteDevelopmentStateDataKeys",
+                "ReadPreprovisionedApplicationRoles",
+            ],
+        ),
+        "compute": (
+            7,
+            24,
+            [
+                "ReadApplicationLambdaFunctions",
+                "UpdateApplicationLambdaFunctions",
+                "PublishApplicationLambdaVersions",
+                "RetireApplicationLambdaVersions",
+                "ManageApplicationQueues",
+                "ResolveApplicationQueueUrls",
+                "ManageApplicationEventRules",
+                "ManageApplicationLogs",
+                "DescribeApplicationLogPolicies",
+                "DescribeApplicationLogGroups",
+                "ManageApplicationAlarms",
+                "DescribeApplicationNetworking",
+                "ManageApplicationSiteBuckets",
+                "ManageApplicationMeasurementBucket",
+                "ManageApplicationMeasurementRegistry",
+                "PublishApplicationArtifacts",
+                "ReadApplicationArtifactBucket",
+            ],
+        ),
+        "application": (
+            24,
+            42,
+            [
+                "UseApplicationKmsKeys",
+                "ReadApplicationKmsAliases",
+                "ManageApplicationSessions",
+                "ManageApplicationCatalog",
+                "ManageApplicationAthenaNamedQueries",
+                "ManageApplicationAthenaWorkGroup",
+                "ListApplicationAthenaWorkGroups",
+                "ManageApplicationSchedules",
+                "ManageApplicationGuardrail",
+                "PublishApplicationGuardrailVersions",
+                "ManageApplicationAgentCore",
+                "ReadApplicationApiGateway",
+                "PublishApplicationApiGatewayDeployments",
+                "ManageApplicationCloudFront",
+                "ReadApplicationCloudFront",
+                "ReadManagedCloudFrontPolicies",
+                "ReadManagedCloudFrontPolicy",
+                "ManageApplicationWaf",
+            ],
+        ),
+    }
+    for _, (start, end, expected_sids) in expected_groups.items():
+        policy = {"Version": "2012-10-17", "Statement": statements[start:end]}
+        assert [
+            statement["sid"] for statement in statements[start:end]
+        ] == expected_sids
+        assert len(json.dumps(policy, separators=(",", ":"))) < 10_240
+        assert (
+            f"Statement = slice(local.development_delivery_policy_statements, {start}, {end})"
+            in FOUNDATION_IAM
+        )
+
+    policy_resource = FOUNDATION_IAM.split(
+        'resource "aws_iam_role_policy" "development_delivery"', maxsplit=1
+    )[1].split("# The DNS cutover", maxsplit=1)[0]
+    assert (
+        'for_each = var.environment == "development" ? local.development_delivery_policy_documents : {}'
+        in policy_resource
+    )
+    assert (
+        'name     = "nova-toll-v2-development-delivery-${each.key}"' in policy_resource
+    )
+
+
 def _development_bootstrap_script() -> str:
     bootstrap = DEPLOYMENT.split(
         "The following is the executable, fail-closed inventory and repair procedure.",
@@ -4222,7 +4310,9 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert "sort_keys=True" in script
     assert "render_document" in script
     assert "data.aws_iam_policy_document.development_delivery_assume.json" in script
-    assert "data.aws_iam_policy_document.development_delivery.json" in script
+    assert "local.development_delivery_policy_documents.${policy_key}" in script
+    assert "EXPECTED_POLICY_KEYS=(state compute application)" in script
+    assert 'EXPECTED_POLICY_NAMES["$policy_key"]="$ROLE_NAME-$policy_key"' in script
     assert 'ROLE_NAME="nova-toll-v2-development-delivery"' in script
     assert 'ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"' in script
     assert 'Role.Path == "/"' in script
@@ -4234,7 +4324,7 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         in script
     )
     assert (
-        'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"'
+        'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"'
         in script
     )
     assert 'aws iam list-role-policies --role-name "$ROLE_NAME"' in script
@@ -4243,19 +4333,24 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert "if policy_set_is_empty; then" in script
     assert "PREVIOUS_POLICY_PRESENT=1" in script
     assert "NextToken? // null) == null" in script
-    assert ".PolicyNames == [$expected]" in script
+    assert script.count(".PolicyNames | sort == ($expected | sort)") >= 2
     assert script.count(".AttachedPolicies == []") >= 3
     assert (
         script.count(
-            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"'
+            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"'
         )
         >= 2
     )
-    assert script.count('cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"') >= 2
+    assert (
+        script.count(
+            'cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}"'
+        )
+        >= 2
+    )
     assert "role_documents_match" in script
     assert "delivery role failed post-write exact effective-policy validation" in script
     assert "snapshot_role_state" in script
-    assert "restore_absent_policy" in script
+    assert "restore_absent_policies" in script
     assert (
         "delivery role create failed; preserving any matching post-state for manual exact reconciliation"
         in script
@@ -4269,10 +4364,7 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert (
         "STATE_IMPORTED_BY_THIS_RUN['aws_iam_role.development_delivery[0]']=1" in script
     )
-    assert (
-        "STATE_IMPORTED_BY_THIS_RUN['aws_iam_role_policy.development_delivery[0]']=1"
-        in script
-    )
+    assert 'STATE_IMPORTED_BY_THIS_RUN["$address"]=1' in script
     assert 'STATE_PREEXISTING["$address"]=1' in script
     assert "already managed or concurrent; refusing state removal" in script
     assert "state ownership is unproven and was retained" in script
@@ -4282,7 +4374,7 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         >= 4
     )
     assert "rollback_created_role" in script
-    assert "restore_previous_policy" in script
+    assert "restore_previous_policies" in script
     assert "could not verify created delivery role rollback" in script
     assert "MUTATION_AMBIGUOUS=0" in script
     assert script.count("MUTATION_AMBIGUOUS=1") >= 4
@@ -4315,12 +4407,15 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert script.count('terraform -chdir="$ROOT/infra" import') == 2
     assert "'aws_iam_role.development_delivery[0]' \"$ROLE_ARN\"" in script
     assert (
-        "'aws_iam_role_policy.development_delivery[0]' \"$ROLE_NAME:$ROLE_NAME\""
+        'address="aws_iam_role_policy.development_delivery[\\"$policy_key\\"]"'
         in script
     )
     assert 'terraform -chdir="$ROOT/infra" state show -no-color' in script
     assert "'aws_iam_role.development_delivery[0]'" in script
-    assert "'aws_iam_role_policy.development_delivery[0]'" in script
+    assert (
+        'address="aws_iam_role_policy.development_delivery[\\"$policy_key\\"]"'
+        in script
+    )
     assert "delivery role import state ID or ARN is not the exact target" in script
     assert "delivery policy import state ID is not the exact target" in script
     assert "state_id_matches()" in script
@@ -4534,7 +4629,7 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         assert generic_guard not in script
     for exact_guard in (
         "aws iam create-role --role-name $ROLE_NAME --path / --max-session-duration 3600",
-        "aws iam put-role-policy --role-name $ROLE_NAME --policy-name $EXPECTED_POLICY_NAME",
+        'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"',
         "aws lambda create-function-url-config --function-name $FUNCTION_NAME --qualifier $QUALIFIER",
         "aws lambda add-permission --function-name $FUNCTION_NAME --qualifier $QUALIFIER",
         "terraform -chdir=$ROOT/v2/infra import -input=false $address $identifier",
@@ -4543,6 +4638,96 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         assert exact_guard in script
     assert script.count('test "${BOOTSTRAP_APPROVED:-}" = YES') >= 14
     assert script.count("assert_dev_account") >= 14
+
+
+def _assert_development_bootstrap_iam_rollback_contract(script: str) -> None:
+    rollback_sections: dict[str, str] = {}
+    for function_name, next_function in (
+        ("rollback_created_role", "restore_previous_policies"),
+        ("restore_previous_policies", "restore_absent_policies"),
+        ("restore_absent_policies", "acquire_bootstrap_lock"),
+    ):
+        rollback_sections[function_name] = script.split(
+            f"{function_name}() {{", maxsplit=1
+        )[1].split(f"{next_function}() {{", maxsplit=1)[0]
+
+    for function_name, command_prefixes in (
+        (
+            "rollback_created_role",
+            (
+                'if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',
+                'if ! aws iam delete-role --role-name "$ROLE_NAME"',
+            ),
+        ),
+        (
+            "restore_previous_policies",
+            ('if ! aws iam put-role-policy --role-name "$ROLE_NAME"',),
+        ),
+        (
+            "restore_absent_policies",
+            ('if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',),
+        ),
+    ):
+        section = rollback_sections[function_name]
+        for command_prefix in command_prefixes:
+            guarded = re.search(
+                re.escape(command_prefix) + r".*?\n\s*fi", section, re.DOTALL
+            )
+            assert guarded is not None
+            guarded_mutation = guarded.group(0)
+            assert "MUTATION_AMBIGUOUS=1" in guarded_mutation
+            assert "preserving" in guarded_mutation
+
+    state_rollback = script.split("rollback_delivery_state() {", maxsplit=1)[1].split(
+        "verify_foundation_state() {", maxsplit=1
+    )[0]
+    assert 'if test "${MUTATION_AMBIGUOUS:-0}" -ne 0; then' in state_rollback
+    assert "state rollback stopped: ambiguous IAM mutation result" in state_rollback
+
+    cleanup = script.split("bootstrap_cleanup() {", maxsplit=1)[1].split(
+        "\n}\n", maxsplit=1
+    )[0]
+    assert cleanup.index("rollback_created_role") < cleanup.index(
+        "rollback_delivery_state"
+    )
+    assert (
+        'test "$MUTATION_AMBIGUOUS" -eq 0 && declare -F rollback_delivery_state'
+        in cleanup
+    )
+
+
+def test_development_bootstrap_iam_rollbacks_are_ambiguity_safe():
+    script = _development_bootstrap_script()
+    _assert_development_bootstrap_iam_rollback_contract(script)
+    for function_name, command_prefix in (
+        (
+            "rollback_created_role",
+            'if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',
+        ),
+        (
+            "rollback_created_role",
+            'if ! aws iam delete-role --role-name "$ROLE_NAME"',
+        ),
+        (
+            "restore_previous_policies",
+            'if ! aws iam put-role-policy --role-name "$ROLE_NAME"',
+        ),
+        (
+            "restore_absent_policies",
+            'if ! aws iam delete-role-policy --role-name "$ROLE_NAME"',
+        ),
+    ):
+        function_start = script.index(f"{function_name}() {{")
+        function_end = script.index("\n}\n", function_start) + 3
+        function = script[function_start:function_end]
+        assignment = function.index(
+            "MUTATION_AMBIGUOUS=1", function.index(command_prefix)
+        )
+        mutated = script[: function_start + assignment] + script[
+            function_start + assignment :
+        ].replace("MUTATION_AMBIGUOUS=1", "MUTATION_AMBIGUOUS=0", 1)
+        with pytest.raises(AssertionError):
+            _assert_development_bootstrap_iam_rollback_contract(mutated)
 
 
 def test_development_bootstrap_runbook_is_executable_and_fail_closed():
@@ -4584,10 +4769,13 @@ def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mut
             "PermissionsBoundary? // null) == true",
         ),
         ('cmp -s "$EXPECTED_TRUST" "$ACTUAL_TRUST"', "true"),
-        ('cmp -s "$EXPECTED_POLICY" "$ACTUAL_POLICY"', "true"),
+        (
+            'cmp -s "${EXPECTED_POLICIES[$policy_key]}" "${ACTUAL_POLICIES[$policy_key]}"',
+            "true",
+        ),
         ("urllib.parse.unquote(value)", "value"),
         ("sort_keys=True", "sort_keys=False"),
-        (".PolicyNames == [$expected]", ".PolicyNames | length >= 0"),
+        (".PolicyNames | sort == ($expected | sort)", ".PolicyNames | length >= 0"),
         (".AttachedPolicies == []", ".AttachedPolicies != []"),
         (
             'ROLE_ARN="arn:aws:iam::$EXPECTED_ACCOUNT:role/$ROLE_NAME"',
@@ -4598,8 +4786,8 @@ def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mut
             'aws iam list-attached-role-policies --role-name "$UNSAFE_ROLE"',
         ),
         (
-            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"',
-            'aws iam update-role-policy --role-name "$ROLE_NAME" --policy-name "$EXPECTED_POLICY_NAME"',
+            'aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"',
+            'aws iam update-role-policy --role-name "$ROLE_NAME" --policy-name "${EXPECTED_POLICY_NAMES[$policy_key]}"',
         ),
         (".commit_sha == $commit", '.commit_sha == "untrusted"'),
         (
@@ -4706,7 +4894,7 @@ def test_development_bootstrap_decodes_encoded_lambda_policy_response():
 def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and_attached_policies():
     script = _development_bootstrap_script()
     policy_match = re.search(
-        r'jq -e --arg expected "\$EXPECTED_POLICY_NAME" \'(.*?)\' "\$ROLE_POLICY_NAMES"',
+        r'jq -e --argjson expected "\$EXPECTED_POLICY_NAMES_JSON" \'(.*?)\' "\$ROLE_POLICY_NAMES"',
         script,
     )
     attachment_match = re.search(
@@ -4727,9 +4915,9 @@ def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and
                 [
                     "jq",
                     "-e",
-                    "--arg",
+                    "--argjson",
                     "expected",
-                    "nova-toll-v2-development-delivery",
+                    '["nova-toll-v2-development-delivery-state", "nova-toll-v2-development-delivery-compute", "nova-toll-v2-development-delivery-application"]',
                     policy_filter,
                     str(policy_file),
                 ],
@@ -4743,10 +4931,29 @@ def test_development_bootstrap_effective_policy_fixtures_reject_extra_inline_and
             )
             return policy_result.returncode == 0 and attachment_result.returncode == 0
 
-    assert accepts(["nova-toll-v2-development-delivery"], [])
-    assert not accepts(["nova-toll-v2-development-delivery", "unexpected-inline"], [])
+    assert accepts(
+        [
+            "nova-toll-v2-development-delivery-state",
+            "nova-toll-v2-development-delivery-compute",
+            "nova-toll-v2-development-delivery-application",
+        ],
+        [],
+    )
     assert not accepts(
-        ["nova-toll-v2-development-delivery"],
+        [
+            "nova-toll-v2-development-delivery-state",
+            "nova-toll-v2-development-delivery-compute",
+            "nova-toll-v2-development-delivery-application",
+            "unexpected-inline",
+        ],
+        [],
+    )
+    assert not accepts(
+        [
+            "nova-toll-v2-development-delivery-state",
+            "nova-toll-v2-development-delivery-compute",
+            "nova-toll-v2-development-delivery-application",
+        ],
         [{"PolicyArn": "arn:aws:iam::aws:policy/AdministratorAccess"}],
     )
 
@@ -6494,6 +6701,50 @@ def test_slice_2b_production_denial_uses_os_route_and_bounded_socket_failures():
             socket_mode,
             result.stdout,
             result.stderr,
+        )
+
+
+def _assert_timed_role_trust_is_environment_conditional(source: str) -> None:
+    trust = source.split(
+        'data "aws_iam_policy_document" "timed_checks_assume"', maxsplit=1
+    )[1].split('resource "aws_iam_role" "timed_checks"', maxsplit=1)[0]
+    assert 'variable = "token.actions.githubusercontent.com:aud"' in trust
+    assert 'values   = ["sts.amazonaws.com"]' in trust
+    assert 'values = var.environment == "development" ? [' in trust
+    development_values, production_values = trust.split(
+        'values = var.environment == "development" ? [', maxsplit=1
+    )[1].split("] : [", maxsplit=1)
+    development_subject = "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+    production_subject = (
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"
+    )
+    assert development_values.count(development_subject) == 1
+    assert production_subject not in development_values
+    assert production_values.count(production_subject) == 1
+    assert development_subject not in production_values
+    assert "environment:production" not in trust
+    assert 'sts:AssumeRole"' not in trust
+
+
+def test_slice_2b_timed_role_trust_is_environment_conditional_and_adversarial_safe():
+    _assert_timed_role_trust_is_environment_conditional(MAIN_TF)
+    for original, replacement in (
+        ('values = var.environment == "development" ? [', "values = ["),
+        (
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
+        ),
+        (
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main",
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production",
+        ),
+        ('var.environment == "development"', "true"),
+    ):
+        _must_reject(
+            _assert_timed_role_trust_is_environment_conditional,
+            MAIN_TF,
+            original,
+            replacement,
         )
 
 
