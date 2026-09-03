@@ -226,9 +226,10 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
 
         provider "aws" {{
           region                         = "us-east-1"
+          access_key                     = "test"
+          secret_key                     = "test"
           skip_credentials_validation   = true
           skip_requesting_account_id    = true
-          skip_region_validation        = true
           skip_metadata_api_check       = true
         }}
 
@@ -258,6 +259,8 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
             for key, value in os.environ.items()
             if not key.startswith("AWS_")
         }
+        assert not any(key.startswith("AWS_") for key in environment)
+        environment["HOME"] = str(root)
         environment["TF_DATA_DIR"] = str(root / ".terraform-data")
         provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
         if provider_mirror.is_dir():
