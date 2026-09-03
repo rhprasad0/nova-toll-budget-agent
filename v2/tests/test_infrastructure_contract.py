@@ -4377,7 +4377,14 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     )
     assert 'cmp -s "$expected" "$statement"' in script
     assert "lambda:InvokeFunctionUrl" in script and "lambda:InvokeFunction" in script
-    assert "cloudfront.amazonaws.com" in script
+    assert [
+        line.strip()
+        for line in script.splitlines()
+        if line.strip().startswith(".Principal == {Service:")
+    ] == [
+        '.Principal == {Service: "cloudfront.amazonaws.com"} and',
+        '.Principal == {Service: "cloudfront.amazonaws.com"} and',
+    ]
     assert "AWS:SourceArn" in script
     assert "run_post_bootstrap_gates" in script
     assert "aws iam simulate-principal-policy" in script
