@@ -3259,6 +3259,10 @@ def _assert_development_delivery_workflow(source: str) -> None:
     deploy = jobs["deploy"]
     assert deploy["needs"] == "build"
     assert deploy["if"] == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'"
+    assert (
+        "Repository variable: environment variables are unavailable to this pre-job gate."
+        in source
+    )
     assert deploy["environment"] == "development"
     assert deploy["permissions"] == {"contents": "read", "id-token": "write"}
     deploy_steps = cast(list[dict[str, object]], deploy["steps"])
@@ -6333,22 +6337,30 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
         in source
     )
     assert "PROD_ROUTE_STATE" in source
+    assert 'ip -json route get "$prod_ipv4"' in source
+    assert 'device == "tailscale0"' in source
     assert 'test "$PROD_ROUTE_STATE" = expected-denial' in source
     assert (
         "test \"$PROD_DENIAL_STATE\" = $'route=expected-denial\\nsocket=expected-denial'"
         in source
     )
+    assert 'if ! prod_route_json="$(ip -json route get "$prod_ipv4")"; then' in source
+    assert 'if ! test -n "$prod_route_json"; then' in source
     assert (
-        'if ! prod_via_output="$(tailscale debug via 1 "$prod_ipv4/32")"; then'
+        'if ! route_state="$(PROD_IPV4="$prod_ipv4" ROUTE_JSON="$prod_route_json" python3 - <<\'PY\''
         in source
-    )
-    assert 'if ! test -n "$prod_via_output"; then' in source
-    assert (
-        'if ! route_state="$(VIA_OUTPUT="$prod_via_output" python3 - <<\'PY\'' in source
     )
     assert 'if ! test "$route_state" = expected-denial; then' in source
     assert 'if ! socket_state="$(timeout 3s python3 - "$prod_ipv4"' in source
-    assert "except ConnectionRefusedError:" in source
+    assert "except TimeoutError:" in source
+    for expected_errno in (
+        "errno.EACCES",
+        "errno.ECONNREFUSED",
+        "errno.EHOSTUNREACH",
+        "errno.ENETUNREACH",
+        "errno.EPERM",
+    ):
+        assert expected_errno in source
     assert 'if ! test "$socket_state" = expected-denial; then' in source
     assert (
         'if ! PROD_DENIAL_STATE="$(verify_production_denial "$PROD_IPV4")"; then'
@@ -6408,7 +6420,7 @@ def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
         )
 
 
-def test_slice_2b_production_denial_requires_explicit_route_and_socket_refusals():
+def test_slice_2b_production_denial_uses_os_route_and_bounded_socket_failures():
     function = re.search(
         r"(?ms)^          verify_production_denial\(\) \{\n(.*?)^          \}\n          if ! PROD_DENIAL_STATE=",
         DEVELOPMENT_CONNECTIVITY_WORKFLOW,
@@ -6422,9 +6434,11 @@ def test_slice_2b_production_denial_requires_explicit_route_and_socket_refusals(
         set -euo pipefail
         ROUTE_MODE=${{ROUTE_MODE:?}}
         SOCKET_MODE=${{SOCKET_MODE:?}}
-        tailscale() {{
+        ip() {{
           case "$ROUTE_MODE" in
-            expected) printf 'no route' ;;
+            expected) printf '[{{"dst":"192.0.2.10","gateway":"192.0.2.1","dev":"eth0"}}]' ;;
+            tailscale) printf '[{{"dst":"192.0.2.10","dev":"tailscale0"}}]' ;;
+            multiple) printf '[{{"dst":"192.0.2.10","dev":"eth0"}},{{"dst":"192.0.2.10","dev":"eth1"}}]' ;;
             empty) return 0 ;;
             malformed) printf 'diagnostic unavailable' ;;
             failure) return 1 ;;
@@ -6434,8 +6448,8 @@ def test_slice_2b_production_denial_requires_explicit_route_and_socket_refusals(
         timeout() {{
           cat >/dev/null
           case "$SOCKET_MODE" in
-            refused) printf 'expected-denial' ;;
-            generic) return 1 ;;
+            refused|timed-out|unreachable|denied) printf 'expected-denial' ;;
+            connected|generic) return 1 ;;
             *) return 2 ;;
           esac
         }}
@@ -6459,14 +6473,18 @@ def test_slice_2b_production_denial_requires_explicit_route_and_socket_refusals(
             check=False,
         )
 
-    positive = run("expected", "refused")
-    assert positive.returncode == 0, positive.stderr
-    assert positive.stdout == "route=expected-denial\nsocket=expected-denial\n"
+    for socket_mode in ("refused", "timed-out", "unreachable", "denied"):
+        positive = run("expected", socket_mode)
+        assert positive.returncode == 0, (socket_mode, positive.stderr)
+        assert positive.stdout == "route=expected-denial\nsocket=expected-denial\n"
 
     for route_mode, socket_mode in (
         ("failure", "generic"),
         ("failure", "refused"),
+        ("tailscale", "refused"),
+        ("multiple", "refused"),
         ("expected", "generic"),
+        ("expected", "connected"),
         ("empty", "refused"),
         ("malformed", "refused"),
     ):
@@ -6519,16 +6537,20 @@ def test_slice_2b_runbook_documents_bounded_secret_route_and_activation_gates():
         "DEVELOPMENT_DELIVERY_ENABLED",
         "DEVELOPMENT_DELIVERY_ENABLED == 'true'",
         "workflow_dispatch",
-        "PUT /repos/rhprasad0/nova-toll-budget-agent/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED",
-        '{"value":"true"}',
+        "repository variable",
+        "gh variable set DEVELOPMENT_DELIVERY_ENABLED --body true",
         "PGHOST",
         "PGHOSTADDR",
         "PGSSLMODE=verify-full",
         "current_database(), current_user",
-        "DELETE /repos/rhprasad0/nova-toll-budget-agent/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED",
+        "gh variable delete DEVELOPMENT_DELIVERY_ENABLED",
         "No rollback action mutates production.",
     ):
         assert required in DEPLOYMENT
+    assert (
+        "/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED"
+        not in DEPLOYMENT
+    )
     assert (
         "--advertise-exit-node"
         not in DEPLOYMENT.split(

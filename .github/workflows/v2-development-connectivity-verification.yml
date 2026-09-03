@@ -138,17 +138,28 @@ jobs:
           test "$(wc -l <<<"$PROD_IPV4")" -eq 1
           PROD_IPV4="${PROD_IPV4%$'\n'}"
           verify_production_denial() {
-            local prod_ipv4="$1" prod_via_output route_state socket_state
-            if ! prod_via_output="$(tailscale debug via 1 "$prod_ipv4/32")"; then
+            local prod_ipv4="$1" prod_route_json route_state socket_state
+            if ! prod_route_json="$(ip -json route get "$prod_ipv4")"; then
               return 1
             fi
-            if ! test -n "$prod_via_output"; then
+            if ! test -n "$prod_route_json"; then
               return 1
             fi
-            if ! route_state="$(VIA_OUTPUT="$prod_via_output" python3 - <<'PY'
+            if ! route_state="$(PROD_IPV4="$prod_ipv4" ROUTE_JSON="$prod_route_json" python3 - <<'PY'
+          import json
           import os
 
-          if os.environ["VIA_OUTPUT"].strip() != "no route":
+          try:
+              routes = json.loads(os.environ["ROUTE_JSON"])
+          except (json.JSONDecodeError, TypeError):
+              raise SystemExit(1)
+          if not isinstance(routes, list) or len(routes) != 1:
+              raise SystemExit(1)
+          route = routes[0]
+          if not isinstance(route, dict) or route.get("dst") != os.environ["PROD_IPV4"]:
+              raise SystemExit(1)
+          device = route.get("dev")
+          if not isinstance(device, str) or not device or device == "tailscale0":
               raise SystemExit(1)
           print("expected-denial")
           PY
@@ -160,13 +171,24 @@ jobs:
             fi
 
             if ! socket_state="$(timeout 3s python3 - "$prod_ipv4" <<'PY'
+          import errno
           import socket
           import sys
 
           try:
               with socket.create_connection((sys.argv[1], 5432), timeout=2):
                   raise SystemExit(1)
-          except ConnectionRefusedError:
+          except TimeoutError:
+              print("expected-denial")
+          except OSError as error:
+              if error.errno not in {
+                  errno.EACCES,
+                  errno.ECONNREFUSED,
+                  errno.EHOSTUNREACH,
+                  errno.ENETUNREACH,
+                  errno.EPERM,
+              }:
+                  raise
               print("expected-denial")
           PY
             )"; then

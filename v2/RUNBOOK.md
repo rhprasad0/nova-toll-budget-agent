@@ -2432,13 +2432,16 @@ password, IAM token, OAuth value, or raw command output is evidence.
 
 For the production boundary, the verifier proves the caller is account
 `903859731897` and role `nova-toll-v2-timed-checks-dev`, resolves only the
-documented production endpoint as needed for a route check, and asserts that
-`tailscale debug via` has no translated site-1 route. It may make one short
-timeout TCP/5432 socket attempt with no production credentials and no SQL; a
-translated route or successful socket fails the run. It never calls a
-production RDS API. The existing development database contract remains the
-source for both development-to-production and production-to-development
-cross-database denial; no deployed schema or role change is allowed.
+documented production endpoint as needed for a route check, and uses the Linux
+JSON route decision to assert that the production address is not selected
+through `tailscale0`. (`tailscale debug via` only derives 4via6 addresses; it is
+not a route probe.) It then makes one short TCP/5432 socket attempt with no
+production credentials and no SQL. A successful connection or unexpected local
+error fails the run; bounded refusal, timeout, host/network-unreachable, or
+permission-denied results prove socket denial. It never calls a production RDS
+API. The existing development database contract remains the source for both
+development-to-production and production-to-development cross-database denial;
+no deployed schema or role change is allowed.
 
 The verifier writes one sanitized commit/run-bound summary containing only
 `commit_sha`, `run_id`, `run_attempt`, `ref`, development account/role,
@@ -2452,7 +2455,7 @@ GitHub-main OIDC proof before enabling delivery.
 
 In **GitHub repository Settings → Environments → development**, retain the
 branch-policy protection rule and add a required owner/admin reviewer before
-adding any environment secret or variable. In **Tailscale Admin Console →
+adding any environment secret. In **Tailscale Admin Console →
 Settings → OAuth clients → Generate OAuth client**, create a client described
 as `nova-toll development CI` with scope `auth_keys` only and tag only
 `tag:ci-development`; do not grant device/route-write or ACL-policy scopes.
@@ -2462,26 +2465,28 @@ replace repository production `TS_OAUTH_*` or policy `TS_ACL_OAUTH_*` secrets.
 
 The delivery workflow's build job remains harmless without AWS OIDC. Its
 development deploy job has the job-level false-closed condition
-`vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'`, evaluated before OIDC. Keep
-the protected environment variable absent (or literal `false`) through policy,
-key, router, route, role, OAuth, and manual-verification setup. After every
-evidence item passes and the manual workflow succeeds on `main`, an authorized
-operator may set it in **Settings → Environments → development → Environment
-variables → New variable** with name `DEVELOPMENT_DELIVERY_ENABLED` and value
-`true`, save it, and obtain the required reviewer approval. The equivalent
-operator-only REST activation is:
+`vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'`, evaluated before the job declares
+its protected environment or requests OIDC. GitHub environment variables are
+not available at that point, so this must be a **repository variable**. Keep it
+absent (or literal `false`) through policy, key, router, route, role, OAuth, and
+manual-verification setup. After every evidence item passes and the manual
+workflow succeeds on `main`, an authorized operator may set it in **Settings →
+Secrets and variables → Actions → Variables → New repository variable** with
+name `DEVELOPMENT_DELIVERY_ENABLED` and value `true`, save it, and obtain the
+required `development` environment reviewer approval when the deploy job starts.
+The equivalent operator-only CLI activation is:
 
-```text
-PUT /repos/rhprasad0/nova-toll-budget-agent/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED
-{"value":"true"}
+```sh
+gh variable set DEVELOPMENT_DELIVERY_ENABLED --body true \
+  --repo rhprasad0/nova-toll-budget-agent
 ```
 
-Rollback is ordered and false-first: delete that exact environment variable or
-`PUT` `{"value":"false"}`, confirm a later delivery run is skipped without
-an OIDC request, then disable and recheck the development route. Only after
-that may the operator revoke the development CI OAuth client if needed and
-close the router-key lifecycle. The equivalent rollback REST call is
-`DELETE /repos/rhprasad0/nova-toll-budget-agent/environments/development/variables/DEVELOPMENT_DELIVERY_ENABLED`.
+Rollback is ordered and false-first: delete that exact repository variable or
+set it to literal `false`, confirm a later delivery run is skipped without an
+OIDC request, then disable and recheck the development route. Only after that
+may the operator revoke the development CI OAuth client if needed and close the
+router-key lifecycle. The equivalent rollback CLI call is
+`gh variable delete DEVELOPMENT_DELIVERY_ENABLED --repo rhprasad0/nova-toll-budget-agent`.
 No rollback action mutates production.
 
 #### Slice 3 development custom-domain and DNS handoff
