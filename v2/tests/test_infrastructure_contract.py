@@ -1,3 +1,4 @@
+import ast
 import base64
 import hashlib
 import json
@@ -3434,8 +3435,41 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" in proof_source
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" in proof_source
-    assert "sts.amazonaws.com" in proof_source
-    assert "https://token.actions.githubusercontent.com" in proof_source
+    assert re.findall(r'oidc_url="([^"]+)"', proof_source) == [
+        "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com",
+        "${ACTIONS_ID_TOKEN_REQUEST_URL}?audience=sts.amazonaws.com",
+    ]
+    validator_match = re.search(
+        r'python3 - "\$GITHUB_SHA" <<\x27PY\x27\n(.*?)\nPY',
+        proof_source,
+        flags=re.DOTALL,
+    )
+    assert validator_match is not None
+    validator_tree = ast.parse(dedent(validator_match.group(1)))
+    expected_assignment = next(
+        node
+        for node in ast.walk(validator_tree)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "expected"
+            for target in node.targets
+        )
+    )
+    expected_values = dict(
+        zip(
+            (
+                cast(ast.Constant, key).value
+                for key in cast(ast.Dict, expected_assignment.value).keys
+            ),
+            cast(ast.Dict, expected_assignment.value).values,
+            strict=True,
+        )
+    )
+    assert cast(ast.Constant, expected_values["aud"]).value == "sts.amazonaws.com"
+    assert (
+        cast(ast.Constant, expected_values["iss"]).value
+        == "https://token.actions.githubusercontent.com"
+    )
     assert "base64.urlsafe_b64decode" in proof_source
     assert (
         "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
