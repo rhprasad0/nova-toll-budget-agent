@@ -15,11 +15,22 @@ DECLARE
 BEGIN
   IF (SELECT description FROM pg_shdescription
       WHERE objoid = (SELECT oid FROM pg_database WHERE datname = 'nova_toll'))
-       <> 'environment=production'
+       IS DISTINCT FROM 'environment=production'
      OR (SELECT description FROM pg_shdescription
          WHERE objoid = (SELECT oid FROM pg_database WHERE datname = 'nova_toll_development'))
-       <> 'environment=development' THEN
+       IS DISTINCT FROM 'environment=development' THEN
     RAISE EXCEPTION 'database environment comments are wrong';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname IN (
+      'pricing_loader_writer_development', 'pricing_reader_development',
+      'oracle_owner_development', 'tollchat_agent_development',
+      'pricing_caller_development', 'report_publisher_development'
+    )
+    AND shobj_description(oid, 'pg_authid') IS DISTINCT FROM 'environment=development'
+  ) THEN
+    RAISE EXCEPTION 'development role environment comments are wrong';
   END IF;
   IF (SELECT version FROM pricing.schema_version WHERE singleton) <> '1.3.0'
      OR (SELECT version FROM oracle.schema_version WHERE singleton) <> '1.14.0'
