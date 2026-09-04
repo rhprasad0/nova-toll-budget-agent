@@ -183,44 +183,51 @@ resource "aws_iam_role" "tollchat_runtime" {
   assume_role_policy = data.aws_iam_policy_document.agentcore_assume.json
 }
 
-data "aws_iam_policy_document" "tollchat_runtime" {
-  statement {
-    sid       = "ReadArtifact"
-    actions   = ["s3:GetObjectVersion"]
-    resources = [aws_s3_object.agentcore.arn]
-  }
-  statement {
-    sid       = "ReadOpenAiApiKey"
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"]
-  }
-  statement {
-    sid     = "ConnectRdsIam"
-    actions = ["rds-db:connect"]
-    resources = [
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}",
-      "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}",
-    ]
-  }
-  statement {
-    sid       = "ApplyGuardrail"
-    actions   = ["bedrock:ApplyGuardrail"]
-    resources = [aws_bedrock_guardrail.tollchat.guardrail_arn]
-  }
-  statement {
-    sid     = "WriteRuntimeLogs"
-    actions = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"]
-    resources = [
-      "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
-      "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
-    ]
-  }
-}
-
 resource "aws_iam_role_policy" "tollchat_runtime" {
-  name   = "nova-toll-v2-agentcore-runtime${local.suffix}"
-  role   = aws_iam_role.tollchat_runtime.id
-  policy = data.aws_iam_policy_document.tollchat_runtime.json
+  name = "nova-toll-v2-agentcore-runtime${local.suffix}"
+  role = aws_iam_role.tollchat_runtime.id
+  # Native JSON stays plan-known when only the artifact contents change.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ReadArtifact"
+        Effect   = "Allow"
+        Action   = "s3:GetObjectVersion"
+        Resource = aws_s3_object.agentcore.arn
+      },
+      {
+        Sid      = "ReadOpenAiApiKey"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/nova-toll/openai_api_key"
+      },
+      {
+        Sid    = "ConnectRdsIam"
+        Effect = "Allow"
+        Action = "rds-db:connect"
+        Resource = [
+          "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.pricing_caller}",
+          "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.foundation.db_instance.resource_id}/${local.database_roles.agent}",
+        ]
+      },
+      {
+        Sid      = "ApplyGuardrail"
+        Effect   = "Allow"
+        Action   = "bedrock:ApplyGuardrail"
+        Resource = aws_bedrock_guardrail.tollchat.guardrail_arn
+      },
+      {
+        Sid    = "WriteRuntimeLogs"
+        Effect = "Allow"
+        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"]
+        Resource = [
+          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
+          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
+        ]
+      },
+    ]
+  })
 }
 
 resource "aws_bedrock_guardrail" "tollchat" {
@@ -412,31 +419,35 @@ resource "aws_iam_role_policy_attachment" "tollchat_proxy_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-data "aws_iam_policy_document" "tollchat_proxy" {
-  statement {
-    actions = ["bedrock-agentcore:InvokeAgentRuntime"]
-    resources = [
-      aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
-      aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
-    ]
-  }
-  statement {
-    actions = ["bedrock-agentcore:StopRuntimeSession"]
-    resources = [
-      aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
-      aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
-    ]
-  }
-  statement {
-    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
-    resources = [aws_dynamodb_table.tollchat_sessions.arn]
-  }
-}
-
 resource "aws_iam_role_policy" "tollchat_proxy" {
-  name   = "nova-toll-v2-chat-proxy${local.suffix}"
-  role   = aws_iam_role.tollchat_proxy.id
-  policy = data.aws_iam_policy_document.tollchat_proxy.json
+  name = "nova-toll-v2-chat-proxy${local.suffix}"
+  role = aws_iam_role.tollchat_proxy.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "bedrock-agentcore:InvokeAgentRuntime"
+        Resource = [
+          aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
+          aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = "bedrock-agentcore:StopRuntimeSession"
+        Resource = [
+          aws_bedrockagentcore_agent_runtime.tollchat.agent_runtime_arn,
+          aws_bedrockagentcore_agent_runtime_endpoint.tollchat.agent_runtime_endpoint_arn,
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
+        Resource = aws_dynamodb_table.tollchat_sessions.arn
+      },
+    ]
+  })
 }
 
 resource "aws_cloudwatch_log_group" "tollchat_proxy" {
