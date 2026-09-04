@@ -35,9 +35,7 @@ ROUTE_CONTROL_DATA_ADDRESSES = frozenset(
         "data.aws_iam_policy_document.route_control[0]",
     }
 )
-EXPECTED_NON_NOOP = frozenset(
-    {RDS_ADDRESS} | ROUTE_CONTROL_ADDRESSES | ROUTE_CONTROL_DATA_ADDRESSES
-)
+EXPECTED_MANAGED_NON_NOOP = {RDS_ADDRESS} | set(ROUTE_CONTROL_ADDRESSES)
 PRODUCTION_ACCOUNT = "920534282028"
 SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
 ROUTE_CONTROL_NAME = "nova-toll-v2-route-control-dev"
@@ -292,10 +290,9 @@ def _validate_route_policy(change: dict[str, Any]) -> None:
         raise ValidationError("route-control send policy is broad")
     if _strings(send.get("Action"), "route-control send action") != [
         "ssm:SendCommand"
-    ] or _strings(send.get("Resource"), "route-control send resources") != [
-        ROUTE_CONTROL_INSTANCE_ARN,
-        ROUTE_CONTROL_DOCUMENT_ARN,
-    ]:
+    ] or sorted(
+        _strings(send.get("Resource"), "route-control send resources")
+    ) != sorted([ROUTE_CONTROL_INSTANCE_ARN, ROUTE_CONTROL_DOCUMENT_ARN]):
         raise ValidationError("route-control send policy resources are wrong")
     read = by_sid["ReadRouterStatusCommand"]
     if (
@@ -442,7 +439,12 @@ def validate_plan(document: object) -> dict[str, int]:
             continue
         raise ValidationError("plan contains an unauthorized managed action")
 
-    if frozenset(non_noop) != EXPECTED_NON_NOOP:
+    managed_non_noop = non_noop - ROUTE_CONTROL_DATA_ADDRESSES
+    data_non_noop = non_noop & ROUTE_CONTROL_DATA_ADDRESSES
+    if managed_non_noop != EXPECTED_MANAGED_NON_NOOP or data_non_noop not in (
+        set(),
+        set(ROUTE_CONTROL_DATA_ADDRESSES),
+    ):
         raise ValidationError("plan does not contain exactly the authorized actions")
     return counts
 

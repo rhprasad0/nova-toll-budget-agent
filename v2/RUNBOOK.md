@@ -3878,7 +3878,7 @@ or deployed migration.
    TF_VAR_budget_notification_email="$DEVELOPMENT_BUDGET_EMAIL" \
      terraform -chdir="$PLAN_ROOT" plan -input=false -lock=false \
        -var environment=development -var tailscale_advertise_routes=false \
-       -var fetcher_package_path="$PLAN_ROOT/build/fetcher.zip" \
+       -var fetcher_package_path=build/fetcher.zip \
        -out="$PLAN_ROOT/development-foundation.tfplan" >/dev/null
    chmod 600 -- "$PLAN_ROOT/development-foundation.tfplan"
    terraform -chdir="$PLAN_ROOT" show -json \
@@ -3896,8 +3896,10 @@ or deployed migration.
    The validator accepts exactly the development RDS delete,create
    replacement with replace_paths == [["db_name"]], creates for
    aws_ssm_document.route_control[0], aws_iam_role.route_control[0],
-   and aws_iam_role_policy.route_control[0], and reads for the two route-control
-   policy documents. Every other managed resource must be no-op; no other data
+   and aws_iam_role_policy.route_control[0], and permits reads for the two
+   route-control policy documents when Terraform emits them (fully known policy
+   documents may be resolved during planning and omitted from
+   `resource_changes`). Every other managed resource must be no-op; no other data
    action, unknown, moved, deposed, replacement, delete-only, update, budget,
    Lambda, production-account, or backend action is accepted. A rejected plan
    stops before apply. Keep the plan and root private for independent review.
