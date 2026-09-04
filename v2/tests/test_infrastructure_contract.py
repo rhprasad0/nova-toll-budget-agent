@@ -6517,6 +6517,7 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         "publicly_accessible": False,
         "db_name": "nova_toll",
         "deletion_protection": False,
+        "final_snapshot_identifier": snapshot_identifier,
     }
     rds_after = {
         "identifier": "nova-toll-db",
@@ -6647,6 +6648,10 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
     del missing_snapshot_plan["resource_changes"][0]["change"]["after"][
         "final_snapshot_identifier"
     ]
+    unseeded_snapshot_plan = deepcopy(plan)
+    unseeded_snapshot_plan["resource_changes"][0]["change"]["before"][
+        "final_snapshot_identifier"
+    ] = None
     route_create_plan = deepcopy(plan)
     route_create_plan["resource_changes"][1]["change"]["actions"] = ["create"]
     route_drift_plan = deepcopy(plan)
@@ -6667,6 +6672,7 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
     for invalid in (
         mismatched_snapshot_plan,
         missing_snapshot_plan,
+        unseeded_snapshot_plan,
         route_create_plan,
         route_drift_plan,
         substituted_noop_plan,
@@ -6963,17 +6969,96 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
     assert ".[0].deletion_protection == true" in seed_plan
     assert "--no-deletion-protection" not in seed_plan
     assert "terraform apply" not in seed_plan
-    seed_validator = seed_apply.index("validate_development_foundation_plan.py")
+    toolchain_digests = (
+        "8b6cb96cd46080ee1287baf646c70078715a99123b9b3a6ce2a7fe3892ec703a",
+        "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8",
+        "b785b4ee3b3274867b54a336889aab8a3477f6d20cc3cc45105c940b4436b012",
+        "276b0d0b0fd0dbc3aab02006224b09c8edec889685167b1017fb05567c9e9318",
+    )
+    for shell in (seed_plan, seed_apply):
+        for digest in toolchain_digests:
+            assert digest in shell
+        assert 'terraform_version\')" = "1.15.8"' in shell
+        assert 'cmp -s -- "$ROOT/infra/.terraform.lock.hcl"' in shell
+    seed_plan_command = seed_plan.index(
+        'terraform -chdir="$STATE_SEED_ROOT" plan -input=false'
+    )
+    assert seed_plan.index("terraform-provider-aws_v6.58.0_x5") < seed_plan_command
+    assert seed_plan.index("terraform-provider-archive_v2.8.0_x5") < seed_plan_command
+    assert ".prior_state.values" in seed_plan
+    assert "STATE_BEFORE_NORMALIZED_SHA256=" in seed_plan
+    assert "STATE_SEED_PLAN_JSON_SHA256=" in seed_plan
+
+    seed_binary_hash = seed_apply.index(
+        'sha256sum "$STATE_SEED_ROOT/development-state-seed.tfplan"'
+    )
+    apply_json_show = seed_apply.index('terraform -chdir="$STATE_SEED_ROOT" show -json')
+    apply_json_hash = seed_apply.index(
+        'sha256sum "$STATE_SEED_APPLY_JSON"', apply_json_show
+    )
+    seed_validator = seed_apply.index(
+        "validate_development_foundation_plan.py", apply_json_hash
+    )
+    immediate_identity = seed_apply.index('RDS_IMMEDIATE_PRE_SEED="$(aws')
+    trap_install = seed_apply.index(
+        "trap verify_state_seed_preboundary EXIT HUP INT TERM"
+    )
     seed_boundary = seed_apply.index("STATE_SEED_APPLY_STARTED=1")
     seed_apply_command = seed_apply.index(
         'terraform -chdir="$STATE_SEED_ROOT" apply -input=false'
     )
-    assert seed_validator < seed_boundary < seed_apply_command
+    assert (
+        seed_binary_hash
+        < trap_install
+        < apply_json_show
+        < apply_json_hash
+        < seed_validator
+        < immediate_identity
+        < seed_boundary
+        < seed_apply_command
+        < seed_apply.rindex("trap - EXIT HUP INT TERM")
+    )
+    assert '"$STATE_SEED_APPLY_JSON"' in seed_apply[seed_validator:immediate_identity]
+    for binding in (
+        "DBInstanceArn",
+        "DbiResourceId",
+        "PendingModifiedValues",
+        '.[0].identifier == "nova-toll-db"',
+        '.[0].status == "available"',
+        '.[0].db_name == "nova_toll"',
+        ".[0].private == false",
+        ".[0].deletion_protection == true",
+        ".[0].arn == $arn",
+        ".[0].resource_id == $resource_id",
+        '.[0].pending | type == "object" and length == 0',
+    ):
+        assert binding in seed_apply[immediate_identity:seed_boundary]
+    assert (
+        seed_apply.rindex("sts get-caller-identity", immediate_identity, seed_boundary)
+        > immediate_identity
+    )
     assert "--mode state-seed" in seed_apply
     assert ".[0].final_snapshot_identifier == $snapshot" in seed_apply
+    assert "STATE_AFTER_NORMALIZED_SHA256=" in seed_apply
+    assert (
+        'test "$STATE_AFTER_NORMALIZED_SHA256" = '
+        '"$STATE_BEFORE_NORMALIZED_SHA256"' in seed_apply
+    )
+    assert seed_apply.index(
+        'terraform -chdir="$STATE_SEED_ROOT" state pull'
+    ) < seed_apply.index('test "$STATE_AFTER_NORMALIZED_SHA256"')
     assert "--no-deletion-protection" not in seed_apply
     assert 'mv -- "$STATE_SEED_ROOT/development-state-seed_override.tf"' in seed_apply
     assert "new private plan root copied from the clean merged source" in handoff
+    snapshot_assignment = (
+        'DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER="nova-toll-db-development-cutover-'
+    )
+    assert handoff.count(snapshot_assignment) == 1
+    assert (
+        ': "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the exact phase-1 snapshot identifier}"'
+        in step1
+    )
+    assert snapshot_assignment not in step1
     assert step1.index('ROOT="$(git rev-parse --show-toplevel)"') < step1.index(
         'git -C "$ROOT"'
     )

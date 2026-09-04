@@ -288,6 +288,8 @@ def _validate_rds(change: dict[str, Any], final_snapshot_identifier: str) -> Non
         raise ValidationError(
             "RDS deletion protection was not disabled before replacement"
         )
+    if before.get("final_snapshot_identifier") != final_snapshot_identifier:
+        raise ValidationError("RDS prior state does not hold the snapshot identifier")
     if after.get("db_name") != "nova_toll_development":
         raise ValidationError("RDS after database name is not development")
     for field in (
