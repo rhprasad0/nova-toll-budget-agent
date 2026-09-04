@@ -6916,9 +6916,31 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
     assert "--snapshot-type manual" in step1
     assert "8416e465447d00eb730ee0aa215dcd7f97d182b0357db04948f58a29b08786c7" in handoff
     assert "permanently unusable" in handoff
-    assert step4.index(': "${PLAN_ROOT:?') < step4.index(
-        'sha256sum "$PLAN_ROOT/development-foundation.tfplan"'
+    trap_install = step4.index("trap restore_deletion_protection EXIT HUP INT TERM")
+    plan_root_binding = step4.index(': "${PLAN_ROOT:?')
+    tf_data_export = step4.index('export TF_DATA_DIR="$PLAN_ROOT/.terraform-data"')
+    plan_root_guard = step4.index('test "$(stat -c \'%a\' -- "$PLAN_ROOT")" = "700"')
+    tf_data_guard = step4.index('test -d "$TF_DATA_DIR"')
+    provider_guard = step4.index('test -d "$TF_DATA_DIR/providers"')
+    pre_apply_gates = (
+        ': "${REVIEWED_PLAN_SHA256:?',
+        'sha256sum "$PLAN_ROOT/development-foundation.tfplan"',
+        "sts get-caller-identity",
+        "describe-db-snapshots",
+        "validate_development_foundation_plan.py",
+        'RDS_PRE_APPLY_METADATA="$(aws',
+        "APPLY_STARTED=1",
+        'terraform -chdir="$PLAN_ROOT" apply',
     )
+    assert (
+        trap_install
+        < plan_root_binding
+        < tf_data_export
+        < plan_root_guard
+        < tf_data_guard
+        < provider_guard
+    )
+    assert all(provider_guard < step4.index(gate) for gate in pre_apply_gates)
     assert "describe-db-snapshots" in step4
     assert (
         '--final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"' in step4

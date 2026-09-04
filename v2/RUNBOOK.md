@@ -3947,7 +3947,6 @@ the later reviewed recovery merge may render a new plan.
    ~~~sh
    set -euo pipefail
    set +x
-   : "${PLAN_ROOT:?set PLAN_ROOT to the retained plan root from step 3}"
    APPLY_STARTED=0
    DELETION_PROTECTION_DISABLED=1
    restore_deletion_protection() {
@@ -3962,6 +3961,11 @@ the later reviewed recovery merge may render a new plan.
      exit "$status"
    }
    trap restore_deletion_protection EXIT HUP INT TERM
+   : "${PLAN_ROOT:?set PLAN_ROOT to the retained plan root from step 3}"
+   export TF_DATA_DIR="$PLAN_ROOT/.terraform-data"
+   test "$(stat -c '%a' -- "$PLAN_ROOT")" = "700"
+   test -d "$TF_DATA_DIR"
+   test -d "$TF_DATA_DIR/providers"
    : "${REVIEWED_PLAN_SHA256:?set the independently reviewed plan digest}"
    : "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the collision-checked identifier from step 1}"
    printf '%s\n' "$REVIEWED_PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$'
