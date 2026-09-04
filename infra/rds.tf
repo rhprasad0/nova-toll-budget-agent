@@ -4,7 +4,7 @@ resource "aws_db_instance" "main" {
   engine_version = "17"
   instance_class = "db.t4g.small"
 
-  db_name  = "nova_toll"
+  db_name  = var.environment == "development" ? "nova_toll_development" : "nova_toll"
   username = "nova_toll_admin"
 
   allocated_storage     = 20
