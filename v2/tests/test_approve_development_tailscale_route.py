@@ -313,6 +313,12 @@ def test_inventory_binding_and_route_validation() -> None:
         },
         {
             "devices": [
+                device(advertised=["::/1"]),
+                device("other-node"),
+            ]
+        },
+        {
+            "devices": [
                 device(advertised=["fd7a:115c:a1e0:b1a:0:2::/112"]),
                 device("other-node"),
             ]
@@ -344,6 +350,79 @@ def test_inventory_binding_and_route_validation() -> None:
     ):
         with pytest.raises(route.ApprovalError):
             route.validate_inventory(broken, "self-node")
+
+
+@pytest.mark.parametrize(
+    ("advertised", "enabled"),
+    [
+        ([route.EXIT_NODE_DEFAULT], []),
+        ([], [route.EXIT_NODE_DEFAULT]),
+        ([route.EXIT_NODE_DEFAULT], [route.EXIT_NODE_DEFAULT]),
+    ],
+)
+def test_unrelated_exit_default_is_accepted_in_each_route_field(
+    advertised: list[str], enabled: list[str]
+) -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    devices[1]["advertisedRoutes"] = advertised
+    devices[1]["enabledRoutes"] = enabled
+
+    checked = route.validate_inventory(document, "self-node")
+
+    assert checked.selected.node_id == "self-node"
+
+
+@pytest.mark.parametrize("field", ["advertisedRoutes", "enabledRoutes"])
+def test_selected_exit_default_is_rejected_in_each_route_field(field: str) -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    devices[0][field] = (
+        [route.EXPECTED_ROUTE, route.EXIT_NODE_DEFAULT]
+        if field == "advertisedRoutes"
+        else [route.EXIT_NODE_DEFAULT]
+    )
+
+    with pytest.raises(route.ApprovalError):
+        route.validate_inventory(document, "self-node")
+
+
+@pytest.mark.parametrize(
+    "bad_routes",
+    [
+        ["0:0:0:0:0:0:0:0/0"],
+        ["::/0/"],
+        ["not-a-route"],
+        [route.EXIT_NODE_DEFAULT, route.EXIT_NODE_DEFAULT],
+    ],
+)
+def test_unrelated_default_requires_canonical_unique_well_formed_route(
+    bad_routes: list[str],
+) -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    devices[1]["advertisedRoutes"] = bad_routes
+
+    with pytest.raises(route.ApprovalError):
+        route.validate_inventory(document, "self-node")
+
+
+@pytest.mark.parametrize(
+    "bad_route",
+    [
+        "fd7a:115c:a1e0:b1a::/95",
+        "fd7a:115c:a1e0:b1a:0:1:ac1f:800/120",
+    ],
+)
+def test_unrelated_overlapping_routes_other_than_default_are_rejected(
+    bad_route: str,
+) -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    devices[1]["advertisedRoutes"] = [bad_route]
+
+    with pytest.raises(route.ApprovalError):
+        route.validate_inventory(document, "self-node")
 
 
 def test_fetch_inventory_enriches_every_device_from_canonical_route_reads() -> None:
