@@ -3775,6 +3775,242 @@ then re-query and require the same properties with deletion protection `true`.
 This safety restoration is not a replacement retry. Only a clean worktree at
 the later reviewed recovery merge may render a new plan.
 
+##### Phase 1: seed the destroy-time final snapshot identifier
+
+The AWS provider reads `final_snapshot_identifier` from the prior RDS state
+when it destroys a replacement. Before another replacement plan, seed that
+attribute with a separate saved plan that cannot replace or rename the live
+database. Run this only from the reviewed merge that adds the `state-seed`
+validator mode. Keep deletion protection enabled throughout this phase.
+
+Render the private phase-1 plan with a Terraform-native override that changes
+only the development database name back to its current literal value. The
+override is confined to the private plan root; ordinary development source
+continues to select `nova_toll_development`, and production remains
+`nova_toll`:
+
+~~~sh
+set -euo pipefail
+set +x
+umask 077
+ROOT="$(git rev-parse --show-toplevel)"
+export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+TERRAFORM_BIN="$(command -v terraform)"
+test -x "$TERRAFORM_BIN"
+test "$(sha256sum "$TERRAFORM_BIN" | awk '{print $1}')" = "8b6cb96cd46080ee1287baf646c70078715a99123b9b3a6ce2a7fe3892ec703a"
+test "$(terraform version -json | jq -r '.terraform_version')" = "1.15.8"
+test "$(sha256sum "$ROOT/infra/.terraform.lock.hcl" | awk '{print $1}')" = "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8"
+: "${REVIEWED_SOURCE_REVISION:?set the reviewed state-seed merge revision}"
+test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+RDS_INSTANCE_ARN="arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"
+RDS_RESOURCE_ID="db-DMHPVKTM5V5HN3QJG2UKFDEGTI"
+RDS_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+  --db-instance-identifier nova-toll-db \
+  --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,endpoint:Endpoint.Address,pending:PendingModifiedValues}' \
+  --output json)"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+  'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true and .[0].arn == $arn and .[0].resource_id == $resource_id and (.[0].endpoint | type == "string" and length > 0) and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_METADATA" >/dev/null
+RDS_ENDPOINT="$(jq -er '.[0].endpoint' <<<"$RDS_METADATA")"
+DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER="nova-toll-db-development-cutover-$(date -u +%Y%m%dt%H%M%Sz)"
+printf '%s\n' "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" | grep -Eq '^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$'
+test "${#DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER}" -le 255
+case "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" in *--*) exit 1 ;; esac
+MANUAL_SNAPSHOTS="$(aws --region us-east-1 rds describe-db-snapshots \
+  --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output json)"
+jq -e --arg identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  '[.[] | select(. == $identifier)] | length == 0' <<<"$MANUAL_SNAPSHOTS" >/dev/null
+"$ROOT/v2/scripts/build_fetcher_zip.sh" >/dev/null
+test "$(sha256sum "$ROOT/infra/build/fetcher.zip" | awk '{print $1}')" = "9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1"
+STATE_SEED_ROOT="$(mktemp -d)"
+chmod 700 -- "$STATE_SEED_ROOT"
+cp -a "$ROOT/infra/." "$STATE_SEED_ROOT/"
+chmod 700 -- "$STATE_SEED_ROOT"
+cmp -s -- "$ROOT/infra/.terraform.lock.hcl" "$STATE_SEED_ROOT/.terraform.lock.hcl"
+STATE_SEED_OVERRIDE="$STATE_SEED_ROOT/development-state-seed_override.tf"
+printf '%s\n' 'resource "aws_db_instance" "main" {' '  db_name = "nova_toll"' '}' >"$STATE_SEED_OVERRIDE"
+chmod 600 -- "$STATE_SEED_OVERRIDE"
+test "$(sha256sum "$STATE_SEED_OVERRIDE" | awk '{print $1}')" = "83b2e8a3380f4a8063248207cf0a41f43b3a8ccb64076bc7852c25d30118bb84"
+export TF_DATA_DIR="$STATE_SEED_ROOT/.terraform-data"
+mkdir -p "$TF_DATA_DIR"
+test "${DEVELOPMENT_BUDGET_EMAIL:?set the approved single budget recipient in process memory only}"
+terraform -chdir="$STATE_SEED_ROOT" init -input=false \
+  -backend-config="$ROOT/infra/backend.development.hcl" >/dev/null
+cmp -s -- "$ROOT/infra/.terraform.lock.hcl" "$STATE_SEED_ROOT/.terraform.lock.hcl"
+AWS_PROVIDER="$TF_DATA_DIR/providers/registry.terraform.io/hashicorp/aws/6.58.0/linux_amd64/terraform-provider-aws_v6.58.0_x5"
+ARCHIVE_PROVIDER="$TF_DATA_DIR/providers/registry.terraform.io/hashicorp/archive/2.8.0/linux_amd64/terraform-provider-archive_v2.8.0_x5"
+test -x "$AWS_PROVIDER" && test -x "$ARCHIVE_PROVIDER"
+test "$(sha256sum "$AWS_PROVIDER" | awk '{print $1}')" = "b785b4ee3b3274867b54a336889aab8a3477f6d20cc3cc45105c940b4436b012"
+test "$(sha256sum "$ARCHIVE_PROVIDER" | awk '{print $1}')" = "276b0d0b0fd0dbc3aab02006224b09c8edec889685167b1017fb05567c9e9318"
+TF_VAR_budget_notification_email="$DEVELOPMENT_BUDGET_EMAIL" \
+  terraform -chdir="$STATE_SEED_ROOT" plan -input=false -lock=false \
+    -var environment=development -var tailscale_advertise_routes=false \
+    -var development_final_snapshot_identifier="$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+    -var fetcher_package_path=build/fetcher.zip \
+    -out="$STATE_SEED_ROOT/development-state-seed.tfplan" >/dev/null
+chmod 600 -- "$STATE_SEED_ROOT/development-state-seed.tfplan"
+terraform -chdir="$STATE_SEED_ROOT" show -json \
+  "$STATE_SEED_ROOT/development-state-seed.tfplan" >"$STATE_SEED_ROOT/development-state-seed.tfplan.json"
+chmod 600 -- "$STATE_SEED_ROOT/development-state-seed.tfplan.json"
+STATE_SEED_PLAN_JSON_SHA256="$(sha256sum "$STATE_SEED_ROOT/development-state-seed.tfplan.json" | awk '{print $1}')"
+python3 "$ROOT/v2/scripts/validate_development_foundation_plan.py" \
+  "$STATE_SEED_ROOT/development-state-seed.tfplan.json" \
+  --account 903859731897 --region us-east-1 \
+  --backend "$ROOT/infra/backend.development.hcl" \
+  --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT" \
+  --final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  --mode state-seed --rds-instance-arn "$RDS_INSTANCE_ARN" \
+  --rds-resource-id "$RDS_RESOURCE_ID"
+STATE_BEFORE_VALUES="$(jq -ceS '.prior_state.values' "$STATE_SEED_ROOT/development-state-seed.tfplan.json")"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+  '[.root_module.resources[] | select(.address == "aws_db_instance.main") | .values] | length == 1 and .[0].identifier == "nova-toll-db" and .[0].arn == $arn and .[0].resource_id == $resource_id and .[0].db_name == "nova_toll" and .[0].deletion_protection == true and .[0].publicly_accessible == false and .[0].final_snapshot_identifier == null and .[0].skip_final_snapshot == false' <<<"$STATE_BEFORE_VALUES" >/dev/null
+STATE_BEFORE_NORMALIZED="$(jq -ceS '(.root_module.resources[] | select(.address == "aws_db_instance.main") | .values.final_snapshot_identifier) = null' <<<"$STATE_BEFORE_VALUES")"
+STATE_BEFORE_NORMALIZED_SHA256="$(printf '%s' "$STATE_BEFORE_NORMALIZED" | sha256sum | awk '{print $1}')"
+unset STATE_BEFORE_VALUES STATE_BEFORE_NORMALIZED
+STATE_SEED_PLAN_SHA256="$(sha256sum "$STATE_SEED_ROOT/development-state-seed.tfplan" | awk '{print $1}')"
+unset TF_VAR_budget_notification_email DEVELOPMENT_BUDGET_EMAIL
+printf 'development state-seed root: %s\n' "$STATE_SEED_ROOT"
+printf 'development state-seed plan SHA-256: %s\n' "$STATE_SEED_PLAN_SHA256"
+printf 'development state-seed plan JSON SHA-256: %s\n' "$STATE_SEED_PLAN_JSON_SHA256"
+printf 'development normalized pre-seed values SHA-256: %s\n' "$STATE_BEFORE_NORMALIZED_SHA256"
+printf 'development final snapshot identifier: %s\n' "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"
+~~~
+
+The validator accepts exactly 112 reviewed managed no-ops, the three exact
+route-control payloads among those no-ops, zero or both reviewed policy-document
+reads, and one `aws_db_instance.main` update. That update must have no
+replacement path, keep the exact ARN/resource ID, remain private and protected,
+keep `db_name=nova_toll`, and change only
+`final_snapshot_identifier: null -> <the collision-checked identifier>`.
+
+After independent review, apply only that phase-1 binary. Re-run every context,
+identity, collision, digest, provider-directory, and validator guard first:
+
+~~~sh
+set -euo pipefail
+set +x
+: "${STATE_SEED_ROOT:?retain the reviewed private phase-1 root}"
+: "${STATE_SEED_PLAN_SHA256:?retain the reviewed phase-1 plan digest}"
+: "${STATE_SEED_PLAN_JSON_SHA256:?retain the reviewed phase-1 JSON digest}"
+: "${STATE_BEFORE_NORMALIZED_SHA256:?retain the normalized pre-seed values digest}"
+: "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the phase-1 snapshot identifier}"
+: "${REVIEWED_SOURCE_REVISION:?retain the reviewed state-seed merge revision}"
+ROOT="$(git rev-parse --show-toplevel)"
+export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+export TF_DATA_DIR="$STATE_SEED_ROOT/.terraform-data"
+test "$(stat -c '%a' -- "$STATE_SEED_ROOT")" = "700"
+test -d "$TF_DATA_DIR/providers"
+TERRAFORM_BIN="$(command -v terraform)"
+test -x "$TERRAFORM_BIN"
+test "$(sha256sum "$TERRAFORM_BIN" | awk '{print $1}')" = "8b6cb96cd46080ee1287baf646c70078715a99123b9b3a6ce2a7fe3892ec703a"
+test "$(terraform version -json | jq -r '.terraform_version')" = "1.15.8"
+test "$(sha256sum "$ROOT/infra/.terraform.lock.hcl" | awk '{print $1}')" = "798415e2b72a761023f0ee096521a29223173428c99de7e4c50103e726eef4d8"
+cmp -s -- "$ROOT/infra/.terraform.lock.hcl" "$STATE_SEED_ROOT/.terraform.lock.hcl"
+AWS_PROVIDER="$TF_DATA_DIR/providers/registry.terraform.io/hashicorp/aws/6.58.0/linux_amd64/terraform-provider-aws_v6.58.0_x5"
+ARCHIVE_PROVIDER="$TF_DATA_DIR/providers/registry.terraform.io/hashicorp/archive/2.8.0/linux_amd64/terraform-provider-archive_v2.8.0_x5"
+test -x "$AWS_PROVIDER" && test -x "$ARCHIVE_PROVIDER"
+test "$(sha256sum "$AWS_PROVIDER" | awk '{print $1}')" = "b785b4ee3b3274867b54a336889aab8a3477f6d20cc3cc45105c940b4436b012"
+test "$(sha256sum "$ARCHIVE_PROVIDER" | awk '{print $1}')" = "276b0d0b0fd0dbc3aab02006224b09c8edec889685167b1017fb05567c9e9318"
+test "$(stat -c '%a' -- "$STATE_SEED_ROOT/development-state-seed.tfplan")" = "600"
+test "$(sha256sum "$STATE_SEED_ROOT/development-state-seed.tfplan" | awk '{print $1}')" = "$STATE_SEED_PLAN_SHA256"
+test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
+test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+RDS_INSTANCE_ARN="arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"
+RDS_RESOURCE_ID="db-DMHPVKTM5V5HN3QJG2UKFDEGTI"
+STATE_SEED_APPLY_STARTED=0
+verify_state_seed_preboundary() {
+  local status=$? protected
+  trap - EXIT HUP INT TERM
+  if test "$STATE_SEED_APPLY_STARTED" -eq 0; then
+    protected="$(aws --region us-east-1 rds describe-db-instances \
+      --db-instance-identifier nova-toll-db \
+      --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,pending:PendingModifiedValues}' \
+      --output json)" || status=1
+    jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+      'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true and .[0].arn == $arn and .[0].resource_id == $resource_id and (.[0].pending | type == "object" and length == 0)' <<<"$protected" >/dev/null || status=1
+  fi
+  exit "$status"
+}
+trap verify_state_seed_preboundary EXIT HUP INT TERM
+test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+MANUAL_SNAPSHOTS="$(aws --region us-east-1 rds describe-db-snapshots \
+  --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output json)"
+jq -e --arg identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  '[.[] | select(. == $identifier)] | length == 0' <<<"$MANUAL_SNAPSHOTS" >/dev/null
+RDS_PRE_SEED="$(aws --region us-east-1 rds describe-db-instances \
+  --db-instance-identifier nova-toll-db \
+  --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,endpoint:Endpoint.Address,pending:PendingModifiedValues}' \
+  --output json)"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+  'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true and .[0].arn == $arn and .[0].resource_id == $resource_id and (.[0].endpoint | type == "string" and length > 0) and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_PRE_SEED" >/dev/null
+RDS_ENDPOINT="$(jq -er '.[0].endpoint' <<<"$RDS_PRE_SEED")"
+STATE_SEED_APPLY_JSON="$(mktemp "$STATE_SEED_ROOT/development-state-seed.apply.XXXXXX.json")"
+terraform -chdir="$STATE_SEED_ROOT" show -json \
+  "$STATE_SEED_ROOT/development-state-seed.tfplan" >"$STATE_SEED_APPLY_JSON"
+chmod 600 -- "$STATE_SEED_APPLY_JSON"
+test "$(sha256sum "$STATE_SEED_APPLY_JSON" | awk '{print $1}')" = "$STATE_SEED_PLAN_JSON_SHA256"
+python3 "$ROOT/v2/scripts/validate_development_foundation_plan.py" \
+  "$STATE_SEED_APPLY_JSON" \
+  --account 903859731897 --region us-east-1 \
+  --backend "$ROOT/infra/backend.development.hcl" \
+  --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT" \
+  --final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  --mode state-seed --rds-instance-arn "$RDS_INSTANCE_ARN" \
+  --rds-resource-id "$RDS_RESOURCE_ID"
+MANUAL_SNAPSHOTS="$(aws --region us-east-1 rds describe-db-snapshots \
+  --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output json)"
+jq -e --arg identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  '[.[] | select(. == $identifier)] | length == 0' <<<"$MANUAL_SNAPSHOTS" >/dev/null
+RDS_IMMEDIATE_PRE_SEED="$(aws --region us-east-1 rds describe-db-instances \
+  --db-instance-identifier nova-toll-db \
+  --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,pending:PendingModifiedValues}' \
+  --output json)"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+  'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true and .[0].arn == $arn and .[0].resource_id == $resource_id and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_IMMEDIATE_PRE_SEED" >/dev/null
+test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+STATE_SEED_APPLY_STARTED=1
+terraform -chdir="$STATE_SEED_ROOT" apply -input=false \
+  "$STATE_SEED_ROOT/development-state-seed.tfplan" >/dev/null
+aws --region us-east-1 rds wait db-instance-available --db-instance-identifier nova-toll-db
+RDS_POST_SEED="$(aws --region us-east-1 rds describe-db-instances \
+  --db-instance-identifier nova-toll-db \
+  --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,endpoint:Endpoint.Address,pending:PendingModifiedValues}' \
+  --output json)"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" --arg endpoint "$RDS_ENDPOINT" \
+  'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true and .[0].arn == $arn and .[0].resource_id == $resource_id and .[0].endpoint == $endpoint and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_POST_SEED" >/dev/null
+MANUAL_SNAPSHOTS="$(aws --region us-east-1 rds describe-db-snapshots \
+  --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output json)"
+jq -e --arg identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  '[.[] | select(. == $identifier)] | length == 0' <<<"$MANUAL_SNAPSHOTS" >/dev/null
+STATE_AFTER="$(terraform -chdir="$STATE_SEED_ROOT" state pull)"
+STATE_AFTER_SHA256="$(printf '%s' "$STATE_AFTER" | sha256sum | awk '{print $1}')"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" --arg snapshot "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  '[.resources[] | select(.module == null and .type == "aws_db_instance" and .name == "main") | .instances[].attributes] | length == 1 and .[0].identifier == "nova-toll-db" and .[0].arn == $arn and .[0].resource_id == $resource_id and .[0].db_name == "nova_toll" and .[0].deletion_protection == true and .[0].publicly_accessible == false and .[0].skip_final_snapshot == false and .[0].final_snapshot_identifier == $snapshot' <<<"$STATE_AFTER" >/dev/null
+unset STATE_AFTER
+STATE_AFTER_VALUES="$(terraform -chdir="$STATE_SEED_ROOT" show -json | jq -ceS '.values')"
+jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" --arg snapshot "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+  '[.root_module.resources[] | select(.address == "aws_db_instance.main") | .values] | length == 1 and .[0].identifier == "nova-toll-db" and .[0].arn == $arn and .[0].resource_id == $resource_id and .[0].db_name == "nova_toll" and .[0].deletion_protection == true and .[0].publicly_accessible == false and .[0].skip_final_snapshot == false and .[0].final_snapshot_identifier == $snapshot' <<<"$STATE_AFTER_VALUES" >/dev/null
+STATE_AFTER_NORMALIZED="$(jq -ceS '(.root_module.resources[] | select(.address == "aws_db_instance.main") | .values.final_snapshot_identifier) = null' <<<"$STATE_AFTER_VALUES")"
+STATE_AFTER_NORMALIZED_SHA256="$(printf '%s' "$STATE_AFTER_NORMALIZED" | sha256sum | awk '{print $1}')"
+test "$STATE_AFTER_NORMALIZED_SHA256" = "$STATE_BEFORE_NORMALIZED_SHA256"
+unset STATE_AFTER_VALUES STATE_AFTER_NORMALIZED
+mv -- "$STATE_SEED_ROOT/development-state-seed_override.tf" \
+  "$STATE_SEED_ROOT/development-state-seed_override.tf.applied"
+trap - EXIT HUP INT TERM
+printf 'development post-seed state SHA-256: %s\n' "$STATE_AFTER_SHA256"
+printf 'development normalized post-seed values SHA-256: %s\n' "$STATE_AFTER_NORMALIZED_SHA256"
+~~~
+
+A phase-1 failure is a hard stop with deletion protection still enabled. Do
+not retry, edit state, create a fallback snapshot, or start the replacement.
+Phase 2 must use a new private plan root copied from the clean merged source;
+the `.applied` override evidence must not be copied or renamed back to `.tf`.
+Recheck snapshot absence and render the ordinary `nova_toll_development`
+replacement with the same identifier using the steps below.
+The replacement validator rejects a plan unless its prior RDS state already
+holds that same identifier.
+
 1. Set the exact development identity and verify the exact target before any
    destructive operation:
 
@@ -3795,7 +4031,7 @@ the later reviewed recovery merge may render a new plan.
    jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true' <<<"$RDS_METADATA" >/dev/null
    grep -Eq '^[[:space:]]*deletion_protection[[:space:]]*=[[:space:]]*true[[:space:]]*$' infra/rds.tf
    grep -Eq '^[[:space:]]*skip_final_snapshot[[:space:]]*=[[:space:]]*false[[:space:]]*$' infra/rds.tf
-   DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER="nova-toll-db-development-cutover-$(date -u +%Y%m%dt%H%M%Sz)"
+   : "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the exact phase-1 snapshot identifier}"
    printf '%s\n' "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" | grep -Eq '^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$'
    test "${#DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER}" -le 255
    case "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" in *--*) exit 1 ;; esac

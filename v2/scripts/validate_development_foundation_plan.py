@@ -169,6 +169,8 @@ ROUTE_CONTROL_OIDC_ARN = (
 ROUTE_CONTROL_OIDC_SUBJECT = (
     "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
 )
+STATE_SEED_RDS_ARN = "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"
+STATE_SEED_RDS_RESOURCE_ID = "db-DMHPVKTM5V5HN3QJG2UKFDEGTI"
 ROUTE_CONTROL_DOCUMENT_CONTENT = """schemaVersion: '2.2'
 description: Read the enrolled router's local Tailscale identity.
 mainSteps:
@@ -286,6 +288,8 @@ def _validate_rds(change: dict[str, Any], final_snapshot_identifier: str) -> Non
         raise ValidationError(
             "RDS deletion protection was not disabled before replacement"
         )
+    if before.get("final_snapshot_identifier") != final_snapshot_identifier:
+        raise ValidationError("RDS prior state does not hold the snapshot identifier")
     if after.get("db_name") != "nova_toll_development":
         raise ValidationError("RDS after database name is not development")
     for field in (
@@ -309,6 +313,56 @@ def _validate_rds(change: dict[str, Any], final_snapshot_identifier: str) -> Non
         isinstance(group, str) and group for group in groups_list
     ):
         raise ValidationError("RDS has no private security-group binding")
+
+
+def _validate_state_seed_rds(
+    change: dict[str, Any],
+    final_snapshot_identifier: str,
+    rds_instance_arn: str | None,
+    rds_resource_id: str | None,
+) -> None:
+    if (
+        rds_instance_arn != STATE_SEED_RDS_ARN
+        or rds_resource_id != STATE_SEED_RDS_RESOURCE_ID
+    ):
+        raise ValidationError("state-seed RDS identity is not exact")
+    if change.get("replace_paths") not in (None, []):
+        raise ValidationError("state-seed RDS unexpectedly replaces the instance")
+    before = change.get("before")
+    after = _after(change, RDS_ADDRESS)
+    if not isinstance(before, dict):
+        raise ValidationError("state-seed RDS has no concrete before value")
+    before = cast(dict[str, Any], before)
+    if change.get("after_unknown") not in (None, {}):
+        raise ValidationError("state-seed RDS contains an unknown after value")
+    expected_after = dict(before)
+    expected_after["final_snapshot_identifier"] = final_snapshot_identifier
+    if after != expected_after:
+        raise ValidationError(
+            "state-seed RDS changes more than the snapshot identifier"
+        )
+    if before.get("final_snapshot_identifier") is not None:
+        raise ValidationError("state-seed RDS snapshot identifier is already set")
+    for values in (before, after):
+        if (
+            values.get("identifier") != "nova-toll-db"
+            or values.get("arn") != rds_instance_arn
+            or values.get("resource_id") != rds_resource_id
+            or values.get("engine") != "postgres"
+            or values.get("db_name") != "nova_toll"
+            or values.get("publicly_accessible") is not False
+            or values.get("deletion_protection") is not True
+            or values.get("skip_final_snapshot") is not False
+        ):
+            raise ValidationError("state-seed RDS payload is not exact")
+    groups = after.get("vpc_security_group_ids")
+    if not isinstance(groups, list):
+        raise ValidationError("state-seed RDS has no private security-group binding")
+    groups_list = cast(list[object], groups)
+    if not groups_list or not all(
+        isinstance(group, str) and group for group in groups_list
+    ):
+        raise ValidationError("state-seed RDS has no private security-group binding")
 
 
 def _validate_route_document(change: dict[str, Any]) -> None:
@@ -492,8 +546,17 @@ def _validate_security_rule(address: str, after: dict[str, Any]) -> None:
                         )
 
 
-def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str, int]:
+def validate_plan(
+    document: object,
+    final_snapshot_identifier: str,
+    *,
+    mode: str = "replacement",
+    rds_instance_arn: str | None = None,
+    rds_resource_id: str | None = None,
+) -> dict[str, int]:
     _validate_final_snapshot_identifier(final_snapshot_identifier)
+    if mode not in ("replacement", "state-seed"):
+        raise ValidationError("plan mode is invalid")
     document = _object(document)
     raw_changes: object = document.get("resource_changes")
     if not isinstance(raw_changes, list):
@@ -506,7 +569,7 @@ def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str,
     route_control_noops: set[str] = set()
     counts = {
         "managed_noop": 0,
-        "rds_replacement": 0,
+        "rds_replacement" if mode == "replacement" else "rds_state_seed": 0,
         "route_control_noop": 0,
         "data_read": 0,
     }
@@ -515,12 +578,12 @@ def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str,
         if "deposed" in item or "moved" in item:
             raise ValidationError("plan contains a deposed or moved resource")
         address = item.get("address")
-        mode = item.get("mode")
+        resource_mode = item.get("mode")
         change = item.get("change")
         if (
             not isinstance(address, str)
             or not address
-            or mode not in ("managed", "data")
+            or resource_mode not in ("managed", "data")
         ):
             raise ValidationError("resource change has an invalid mode or address")
         if "production" in address.lower() or re.search(
@@ -536,7 +599,7 @@ def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str,
             raise ValidationError("plan contains the production account")
         change = _object(change)
         actions = _actions(change)
-        if mode == "data":
+        if resource_mode == "data":
             if address not in ROUTE_CONTROL_DATA_ADDRESSES or actions != ["read"]:
                 raise ValidationError("plan contains an unexpected data action")
             counts["data_read"] += 1
@@ -563,8 +626,22 @@ def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str,
             counts["managed_noop"] += 1
             continue
         if address == RDS_ADDRESS and actions == ["delete", "create"]:
+            if mode != "replacement":
+                raise ValidationError("state-seed plan replaces the RDS instance")
             _validate_rds(change, final_snapshot_identifier)
             counts["rds_replacement"] += 1
+            non_noop.add(address)
+            continue
+        if address == RDS_ADDRESS and actions == ["update"]:
+            if mode != "state-seed":
+                raise ValidationError("replacement plan updates the RDS instance")
+            _validate_state_seed_rds(
+                change,
+                final_snapshot_identifier,
+                rds_instance_arn,
+                rds_resource_id,
+            )
+            counts["rds_state_seed"] += 1
             non_noop.add(address)
             continue
         raise ValidationError("plan contains an unauthorized managed action")
@@ -624,6 +701,11 @@ def main() -> int:
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--final-snapshot-identifier", required=True)
+    parser.add_argument(
+        "--mode", choices=("replacement", "state-seed"), default="replacement"
+    )
+    parser.add_argument("--rds-instance-arn")
+    parser.add_argument("--rds-resource-id")
     args = parser.parse_args()
     try:
         validate_context(
@@ -634,7 +716,13 @@ def main() -> int:
             args.source_root,
         )
         document = json.loads(args.plan.read_text(encoding="utf-8"))
-        counts = validate_plan(document, args.final_snapshot_identifier)
+        counts = validate_plan(
+            document,
+            args.final_snapshot_identifier,
+            mode=args.mode,
+            rds_instance_arn=args.rds_instance_arn,
+            rds_resource_id=args.rds_resource_id,
+        )
     except (OSError, UnicodeError, json.JSONDecodeError, ValidationError):
         print("development foundation plan rejected", file=sys.stderr)
         return 1
