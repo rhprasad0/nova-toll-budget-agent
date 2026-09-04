@@ -470,22 +470,24 @@ resource "aws_iam_role" "publisher_scheduler" {
   assume_role_policy = data.aws_iam_policy_document.publisher_scheduler_assume.json
 }
 
-data "aws_iam_policy_document" "publisher_scheduler" {
-  statement {
-    actions   = ["lambda:InvokeFunction"]
-    resources = [aws_lambda_function.publisher.arn]
-  }
-
-  statement {
-    actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.publisher_delivery_failure.arn]
-  }
-}
-
 resource "aws_iam_role_policy" "publisher_scheduler" {
-  name   = "toll-v2-report-publisher-scheduler${local.suffix}"
-  role   = aws_iam_role.publisher_scheduler.id
-  policy = data.aws_iam_policy_document.publisher_scheduler.json
+  name = "toll-v2-report-publisher-scheduler${local.suffix}"
+  role = aws_iam_role.publisher_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = aws_lambda_function.publisher.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.publisher_delivery_failure.arn
+      },
+    ]
+  })
 }
 
 resource "aws_security_group" "publisher" {

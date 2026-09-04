@@ -2745,9 +2745,9 @@ def test_usage_publisher_is_daily_static_and_least_privilege():
     assert "dynamodb:Scan" not in policy
     assert "s3:*" not in policy
 
-    proxy_policy = agentcore.split(
-        'data "aws_iam_policy_document" "tollchat_proxy"', maxsplit=1
-    )[1].split('resource "aws_iam_role_policy" "tollchat_proxy"', maxsplit=1)[0]
+    proxy_policy = terraform_block(
+        agentcore, 'resource "aws_iam_role_policy" "tollchat_proxy"'
+    )
     assert '"dynamodb:TransactWriteItems"' in proxy_policy
 
 
@@ -3118,9 +3118,6 @@ def test_report_publisher_scheduler_and_environment_contract():
     assume = MAIN_TF.split(
         'data "aws_iam_policy_document" "publisher_scheduler_assume"', maxsplit=1
     )[1].split('resource "aws_iam_role" "publisher_scheduler"', 1)[0]
-    scheduler_policy = MAIN_TF.split(
-        'data "aws_iam_policy_document" "publisher_scheduler"', maxsplit=1
-    )[1].split('resource "aws_iam_role_policy" "publisher_scheduler"', 1)[0]
     scheduler_role = terraform_block(
         MAIN_TF, 'resource "aws_iam_role" "publisher_scheduler"'
     )
@@ -3140,17 +3137,16 @@ def test_report_publisher_scheduler_and_environment_contract():
     assert_assignment(
         scheduler_role_policy, "role", "aws_iam_role.publisher_scheduler.id"
     )
-    assert_assignment(
-        scheduler_role_policy,
-        "policy",
-        "data.aws_iam_policy_document.publisher_scheduler.json",
+    assert "policy = jsonencode({" in scheduler_role_policy
+    assert 'data "aws_iam_policy_document" "publisher_scheduler"' not in MAIN_TF
+    statements = re.findall(
+        r"(?s)\{\n\s+Effect\s*=\s*\"Allow\"(.*?)\n\s+\},", scheduler_role_policy
     )
-    statements = re.findall(r"(?s)statement \{(.*?)\n  \}", scheduler_policy)
     assert len(statements) == 2
     assert [
         (
-            re.findall(r'actions\s+=\s+\["([^"]+)"\]', statement),
-            re.findall(r"resources\s+=\s+\[([^\]]+)\]", statement),
+            re.findall(r'Action\s+=\s+"([^"]+)"', statement),
+            re.findall(r"Resource\s+=\s+([^\n]+)", statement),
         )
         for statement in statements
     ] == [
