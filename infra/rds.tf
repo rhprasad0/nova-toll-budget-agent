@@ -21,7 +21,8 @@ resource "aws_db_instance" "main" {
   manage_master_user_password         = true
   iam_database_authentication_enabled = true
 
-  backup_retention_period = 7
-  deletion_protection     = true
-  skip_final_snapshot     = false
+  backup_retention_period   = 7
+  deletion_protection       = true
+  skip_final_snapshot       = false
+  final_snapshot_identifier = var.environment == "development" ? var.development_final_snapshot_identifier : null
 }

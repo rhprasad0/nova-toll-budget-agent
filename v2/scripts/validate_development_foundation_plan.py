@@ -35,9 +35,10 @@ ROUTE_CONTROL_DATA_ADDRESSES = frozenset(
         "data.aws_iam_policy_document.route_control[0]",
     }
 )
-EXPECTED_MANAGED_NON_NOOP = {RDS_ADDRESS} | set(ROUTE_CONTROL_ADDRESSES)
+EXPECTED_MANAGED_NON_NOOP = {RDS_ADDRESS}
 PRODUCTION_ACCOUNT = "920534282028"
 SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
+FINAL_SNAPSHOT_IDENTIFIER = re.compile(r"[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?")
 ROUTE_CONTROL_NAME = "nova-toll-v2-route-control-dev"
 ROUTE_CONTROL_DOCUMENT_NAME = "nova-toll-v2-route-control-status-dev"
 ROUTE_CONTROL_INSTANCE_ARN = (
@@ -137,7 +138,16 @@ def _strings(value: object, name: str) -> list[str]:
     raise ValidationError(f"{name} is not a string list")
 
 
-def _validate_rds(change: dict[str, Any]) -> None:
+def _validate_final_snapshot_identifier(value: str) -> None:
+    if (
+        len(value) > 255
+        or not FINAL_SNAPSHOT_IDENTIFIER.fullmatch(value)
+        or "--" in value
+    ):
+        raise ValidationError("development final snapshot identifier is invalid")
+
+
+def _validate_rds(change: dict[str, Any], final_snapshot_identifier: str) -> None:
     _replacement(change)
     before = change.get("before")
     after = _after(change, RDS_ADDRESS)
@@ -173,6 +183,8 @@ def _validate_rds(change: dict[str, Any]) -> None:
         raise ValidationError("RDS deletion protection is not retained")
     if after.get("skip_final_snapshot") is not False:
         raise ValidationError("RDS final snapshot protection is not retained")
+    if after.get("final_snapshot_identifier") != final_snapshot_identifier:
+        raise ValidationError("RDS final snapshot identifier is missing or mismatched")
     groups = after.get("vpc_security_group_ids")
     if not isinstance(groups, list):
         raise ValidationError("RDS has no private security-group binding")
@@ -364,7 +376,8 @@ def _validate_security_rule(address: str, after: dict[str, Any]) -> None:
                         )
 
 
-def validate_plan(document: object) -> dict[str, int]:
+def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str, int]:
+    _validate_final_snapshot_identifier(final_snapshot_identifier)
     document = _object(document)
     raw_changes: object = document.get("resource_changes")
     if not isinstance(raw_changes, list):
@@ -373,10 +386,11 @@ def validate_plan(document: object) -> dict[str, int]:
 
     seen: set[str] = set()
     non_noop: set[str] = set()
+    route_control_noops: set[str] = set()
     counts = {
         "managed_noop": 0,
         "rds_replacement": 0,
-        "route_control_create": 0,
+        "route_control_noop": 0,
         "data_read": 0,
     }
     for raw_item in changes:
@@ -414,36 +428,36 @@ def validate_plan(document: object) -> dict[str, int]:
         if actions == ["no-op"]:
             if change.get("replace_paths") not in (None, []):
                 raise ValidationError("no-op resource unexpectedly replaces a resource")
-            if "security_group" in address:
+            if address == "aws_ssm_document.route_control[0]":
+                _validate_route_document(change)
+                route_control_noops.add(address)
+                counts["route_control_noop"] += 1
+            elif address == "aws_iam_role.route_control[0]":
+                _validate_route_trust(change)
+                route_control_noops.add(address)
+                counts["route_control_noop"] += 1
+            elif address == "aws_iam_role_policy.route_control[0]":
+                _validate_route_policy(change)
+                route_control_noops.add(address)
+                counts["route_control_noop"] += 1
+            elif "security_group" in address:
                 _validate_security_rule(address, _after(change, address))
             counts["managed_noop"] += 1
             continue
         if address == RDS_ADDRESS and actions == ["delete", "create"]:
-            _validate_rds(change)
+            _validate_rds(change, final_snapshot_identifier)
             counts["rds_replacement"] += 1
-            non_noop.add(address)
-            continue
-        if address in ROUTE_CONTROL_ADDRESSES and actions == ["create"]:
-            if change.get("replace_paths") not in (None, []):
-                raise ValidationError(
-                    "route-control create unexpectedly replaces a resource"
-                )
-            if address == "aws_ssm_document.route_control[0]":
-                _validate_route_document(change)
-            elif address == "aws_iam_role.route_control[0]":
-                _validate_route_trust(change)
-            else:
-                _validate_route_policy(change)
-            counts["route_control_create"] += 1
             non_noop.add(address)
             continue
         raise ValidationError("plan contains an unauthorized managed action")
 
     managed_non_noop = non_noop - ROUTE_CONTROL_DATA_ADDRESSES
     data_non_noop = non_noop & ROUTE_CONTROL_DATA_ADDRESSES
-    if managed_non_noop != EXPECTED_MANAGED_NON_NOOP or data_non_noop not in (
-        set(),
-        set(ROUTE_CONTROL_DATA_ADDRESSES),
+    if (
+        managed_non_noop != EXPECTED_MANAGED_NON_NOOP
+        or data_non_noop not in (set(), set(ROUTE_CONTROL_DATA_ADDRESSES))
+        or route_control_noops != set(ROUTE_CONTROL_ADDRESSES)
+        or counts["managed_noop"] != 112
     ):
         raise ValidationError("plan does not contain exactly the authorized actions")
     return counts
@@ -491,6 +505,7 @@ def main() -> int:
     parser.add_argument("--backend", type=Path, required=True)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--source-root", type=Path, required=True)
+    parser.add_argument("--final-snapshot-identifier", required=True)
     args = parser.parse_args()
     try:
         validate_context(
@@ -501,7 +516,7 @@ def main() -> int:
             args.source_root,
         )
         document = json.loads(args.plan.read_text(encoding="utf-8"))
-        counts = validate_plan(document)
+        counts = validate_plan(document, args.final_snapshot_identifier)
     except (OSError, UnicodeError, json.JSONDecodeError, ValidationError):
         print("development foundation plan rejected", file=sys.stderr)
         return 1

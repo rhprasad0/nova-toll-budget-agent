@@ -39,6 +39,22 @@ variable "fetcher_package_path" {
   default     = ""
 }
 
+variable "development_final_snapshot_identifier" {
+  description = "Unique final snapshot name supplied only for the reviewed development RDS replacement."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = var.development_final_snapshot_identifier == null ? true : (
+      length(var.development_final_snapshot_identifier) <= 255 &&
+      can(regex("^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$", var.development_final_snapshot_identifier)) &&
+      !strcontains(var.development_final_snapshot_identifier, "--")
+    )
+    error_message = "development_final_snapshot_identifier must be 1-255 letters, digits, or hyphens; start with a letter; and have no trailing or consecutive hyphen."
+  }
+}
+
 variable "budget_notification_email" {
   description = "Existing AWS Budget email recipient supplied only at runtime."
   type        = string
