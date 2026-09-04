@@ -6909,7 +6909,7 @@ def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
         text=True,
     ).stdout
     old_host = (
-        '        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128",'
+        '        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:e1a2/128",'
     )
     new_host = (
         '        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:5aa/128",'
@@ -7522,7 +7522,7 @@ def _assert_slice_2a_policy(source: str) -> None:
     assert '"dst": ["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"]' in grants
     assert '"ip":  ["tcp:5432"]' in grants
     assert (
-        '"nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"' in source
+        '"nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:e1a2/128"' in source
     )
     assert '"nova-toll-rds": "172.31.83.200"' in source
 

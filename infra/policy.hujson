@@ -71,7 +71,7 @@
     "hosts": {
         "nova-toll-rds": "172.31.83.200",
         // Current development RDS address, transported over site-1 4via6.
-        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128",
+        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:e1a2/128",
         // Representative address in the private preview subnets. The ALB IPs
         // are dynamic; this verifies the same CIDR/port policy without pinning one.
         "tollchat-preview-test": "172.31.224.10",
