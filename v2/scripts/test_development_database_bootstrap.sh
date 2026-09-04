@@ -37,6 +37,7 @@ if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
   exit 1
 fi
 
+NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
 NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full&sslrootcert=%2Ftmp%2Fca%20bundle.pem" \
   PGSSLMODE=disable PGSSLROOTCERT=ambient python3 - <<'PY'
 import importlib.util
@@ -56,6 +57,7 @@ assert captured["env"]["PGSSLMODE"] == "verify-full"
 assert captured["env"]["PGSSLROOTCERT"] == "/tmp/ca bundle.pem"
 PY
 
+NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
 NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full&sslrootcert=system" \
   python3 - <<'PY'
 import importlib.util

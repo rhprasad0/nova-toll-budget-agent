@@ -44,7 +44,7 @@ require_disposable_cluster() {
 }
 
 require_disposable_cluster
-export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="127.0.0.1"
+export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="${PGHOST:-localhost}"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   # New tags have no base; migration 026's parent is its declared 1.2.0 source.
   base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
