@@ -27,7 +27,11 @@ SSM_COMMANDS = ("set -eu", "tailscale status --json")
 EXPECTED_TAG = "tag:nova-toll-development-router"
 EXPECTED_ROUTE = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
 VIA6_SPACE = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
-REQUIRED_SCOPES = ("devices:core:read", "devices:routes")
+REQUIRED_SCOPES = (
+    "devices:core:read",
+    "devices:routes:read",
+    "devices:routes",
+)
 OAUTH_SCOPE = " ".join(REQUIRED_SCOPES)
 AWS_TIMEOUT = 30.0
 # The native waiter polls 20 times at 5 seconds; leave a small process margin.
@@ -476,7 +480,59 @@ def _fetch_inventory(
             opener=opener,
             stage=stage,
         )
-        return validate_inventory(document, self_id)
+        if not isinstance(document, dict):
+            raise _fail("device inventory is not complete all-at-once data")
+        document = cast(dict[str, object], document)
+        if set(document) != {"devices"}:
+            raise _fail("device inventory is not complete all-at-once data")
+        devices_value = document.get("devices")
+        if not isinstance(devices_value, list):
+            raise _fail("device inventory is malformed")
+        devices_value = cast(list[object], devices_value)
+
+        devices: list[dict[str, object]] = []
+        node_ids: set[str] = set()
+        for raw_device in devices_value:
+            if not isinstance(raw_device, dict):
+                raise _fail("device inventory contains a malformed device")
+            raw_device = cast(dict[str, object], raw_device)
+            node_id = raw_device.get("nodeId")
+            if not isinstance(node_id, str) or not node_id:
+                raise _fail("device inventory contains a missing nodeId")
+            if node_id in node_ids:
+                raise _fail("device inventory contains duplicate nodeId")
+            node_ids.add(node_id)
+            devices.append(raw_device)
+
+        enriched_devices: list[dict[str, object]] = []
+        for raw_device in devices:
+            node_id = cast(str, raw_device["nodeId"])
+            routes = _request_json(
+                "GET",
+                f"/device/{urllib.parse.quote(node_id, safe='')}/routes",
+                token=token,
+                opener=opener,
+                stage=stage,
+            )
+            if not isinstance(routes, dict):
+                raise _fail("device route response is malformed")
+            routes = cast(dict[str, object], routes)
+            advertised_routes = routes.get("advertisedRoutes")
+            enabled_routes = routes.get("enabledRoutes")
+            if not isinstance(advertised_routes, list) or not isinstance(
+                enabled_routes, list
+            ):
+                raise _fail("device route response is malformed")
+            enriched_devices.append(
+                {
+                    "nodeId": node_id,
+                    "tags": raw_device.get("tags"),
+                    "connectedToControl": raw_device.get("connectedToControl"),
+                    "advertisedRoutes": advertised_routes,
+                    "enabledRoutes": enabled_routes,
+                }
+            )
+        return validate_inventory({"devices": enriched_devices}, self_id)
     except ApprovalError as error:
         raise _stage(error, stage) from error
 

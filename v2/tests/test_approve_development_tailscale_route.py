@@ -6,7 +6,7 @@ import urllib.parse
 from collections import deque
 from email.message import Message
 from io import BytesIO
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import pytest
 
@@ -128,6 +128,37 @@ def inventory(
     }
 
 
+def core_inventory(document: dict[str, object]) -> dict[str, object]:
+    devices = document["devices"]
+    assert isinstance(devices, list)
+    devices = cast(list[dict[str, object]], devices)
+    return {
+        "devices": [
+            {key: raw_device[key] for key in ("nodeId", "tags", "connectedToControl")}
+            for raw_device in devices
+        ]
+    }
+
+
+def inventory_responses(document: dict[str, object] | None = None) -> list[Response]:
+    document = inventory() if document is None else document
+    devices = document["devices"]
+    assert isinstance(devices, list)
+    devices = cast(list[dict[str, object]], devices)
+    return [
+        Response(core_inventory(document)),
+        *[
+            Response(
+                {
+                    "advertisedRoutes": raw_device["advertisedRoutes"],
+                    "enabledRoutes": raw_device["enabledRoutes"],
+                }
+            )
+            for raw_device in devices
+        ],
+    ]
+
+
 def oauth_response(scope: str | None = route.OAUTH_SCOPE) -> Response:
     document: dict[str, object] = {"access_token": "opaque", "token_type": "Bearer"}
     if scope is not None:
@@ -245,8 +276,9 @@ def test_oauth_requests_exact_required_scope() -> None:
         None,
         "",
         "devices:core:read",
-        "devices:core:read devices:routes devices:admin",
-        "devices:core:read devices:routes devices:routes",
+        "devices:core:read devices:routes",
+        "devices:core:read devices:routes:read devices:routes devices:admin",
+        "devices:core:read devices:routes:read devices:routes devices:routes",
     ],
 )
 def test_oauth_rejects_missing_insufficient_or_overbroad_scope(
@@ -314,9 +346,122 @@ def test_inventory_binding_and_route_validation() -> None:
             route.validate_inventory(broken, "self-node")
 
 
+def test_fetch_inventory_enriches_every_device_from_canonical_route_reads() -> None:
+    document = {
+        "devices": [
+            {
+                **device(
+                    advertised=[],
+                    enabled=[route.EXPECTED_ROUTE],
+                ),
+            },
+            {
+                **device(
+                    "other/node",
+                    advertised=[route.EXPECTED_ROUTE],
+                    enabled=[route.EXPECTED_ROUTE],
+                ),
+            },
+        ]
+    }
+    fake_url = UrlFake(
+        [
+            oauth_response(),
+            Response(document),
+            Response({"advertisedRoutes": [route.EXPECTED_ROUTE], "enabledRoutes": []}),
+            Response({"advertisedRoutes": [], "enabledRoutes": []}),
+        ]
+    )
+
+    summary = json.loads(
+        route.diagnose_route("client", "secret", runner=AwsFake(), opener=fake_url)
+    )
+
+    assert summary["enabled"] is False
+    assert [request.full_url for request in fake_url.requests[1:]] == [
+        f"{route.API_ROOT}/tailnet/{urllib.parse.quote(route.TAILNET, safe='')}/devices",
+        f"{route.API_ROOT}/device/self-node/routes",
+        f"{route.API_ROOT}/device/other%2Fnode/routes",
+    ]
+
+
+@pytest.mark.parametrize(
+    "bad_devices",
+    [
+        [device(node_id="")],
+        [device(node_id=cast(str, None))],
+        [device(), device()],
+    ],
+)
+def test_invalid_list_node_ids_fail_before_route_requests(
+    bad_devices: list[dict[str, object]],
+) -> None:
+    fake_url = UrlFake([oauth_response(), Response({"devices": bad_devices})])
+
+    with pytest.raises(route.ApprovalError):
+        route.diagnose_route("client", "secret", runner=AwsFake(), opener=fake_url)
+
+    assert len(fake_url.requests) == 2
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        Response(None),
+        Response({"advertisedRoutes": []}),
+        Response({"enabledRoutes": []}),
+        Response({"advertisedRoutes": "invalid", "enabledRoutes": []}),
+    ],
+)
+def test_malformed_route_response_fails_closed_without_post(response: Response) -> None:
+    fake_url = UrlFake(
+        [oauth_response(), Response(core_inventory(inventory())), response]
+    )
+
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.diagnose_route("client", "secret", runner=AwsFake(), opener=fake_url)
+
+    assert error_info.value.stage == "device-get"
+    assert not [
+        request
+        for request in fake_url.requests
+        if request.method == "POST" and request.full_url.endswith("/routes")
+    ]
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 500, 504])
+@pytest.mark.parametrize("failure", ["response", "http-error"])
+def test_route_get_status_is_numeric_and_sanitized(status: int, failure: str) -> None:
+    response: Response | BaseException = Response({}, status=status)
+    if failure == "http-error":
+        response = http_error(status)
+    fake_url = UrlFake(
+        [oauth_response(), Response(core_inventory(inventory())), response]
+    )
+
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.diagnose_route(
+            "client-id-sentinel",
+            "client-secret-sentinel",
+            runner=AwsFake(),
+            opener=fake_url,
+        )
+
+    assert str(error_info.value) == f"device-get: Tailscale API returned HTTP {status}"
+    for sentinel in (
+        "response-body-sentinel",
+        "response-message-sentinel",
+        "header-secret-sentinel",
+        "request-secret",
+        "client-secret-sentinel",
+        "opaque",
+    ):
+        assert sentinel not in str(error_info.value)
+
+
 def test_diagnostic_is_read_only_and_sanitized() -> None:
     fake_aws = AwsFake()
-    fake_url = UrlFake([oauth_response(), Response(inventory())])
+    fake_url = UrlFake([oauth_response(), *inventory_responses()])
 
     summary = json.loads(
         route.diagnose_route(
@@ -336,10 +481,14 @@ def test_diagnostic_is_read_only_and_sanitized() -> None:
     assert (
         len([call for call in fake_aws.calls if "get-command-invocation" in call]) == 1
     )
-    assert len(fake_url.requests) == 2
+    assert len(fake_url.requests) == 4
     assert fake_url.requests[1].full_url == (
         f"{route.API_ROOT}/tailnet/{urllib.parse.quote(route.TAILNET, safe='')}/devices"
     )
+    assert [request.full_url for request in fake_url.requests[2:]] == [
+        f"{route.API_ROOT}/device/self-node/routes",
+        f"{route.API_ROOT}/device/other-node/routes",
+    ]
     assert not [
         request
         for request in fake_url.requests
@@ -444,14 +593,7 @@ def test_read_only_cli_reports_sanitized_numeric_http_status(
 @pytest.mark.parametrize("diagnostic", [True, False])
 def test_production_ipv4_route_is_rejected_before_any_write(diagnostic: bool) -> None:
     document = inventory(advertised=[route.EXPECTED_ROUTE, "172.31.0.0/16"])
-    fake_url = UrlFake(
-        [
-            oauth_response(),
-            Response(document),
-            Response(document),
-            Response({"ok": True}),
-        ]
-    )
+    fake_url = UrlFake([oauth_response(), *inventory_responses(document)])
     with pytest.raises(route.ApprovalError):
         if diagnostic:
             route.diagnose_route("client", "secret", runner=AwsFake(), opener=fake_url)
@@ -503,7 +645,7 @@ def test_diagnostic_stage_errors_are_sanitized() -> None:
 
 def test_normal_approval_failure_stages_remain_distinct() -> None:
     re_get = UrlFake(
-        [oauth_response(), Response(inventory()), Response({}, status=500)]
+        [oauth_response(), *inventory_responses(), Response({}, status=500)]
     )
     with pytest.raises(route.ApprovalError) as error_info:
         route.approve_route("client", "secret", runner=AwsFake(), opener=re_get)
@@ -513,10 +655,10 @@ def test_normal_approval_failure_stages_remain_distinct() -> None:
     post = UrlFake(
         [
             oauth_response(),
-            Response(inventory()),
-            Response(inventory()),
+            *inventory_responses(),
+            *inventory_responses(),
             TimeoutError(),
-            Response(inventory()),
+            *inventory_responses(),
         ]
     )
     with pytest.raises(route.ApprovalError) as error_info:
@@ -526,8 +668,8 @@ def test_normal_approval_failure_stages_remain_distinct() -> None:
     verification = UrlFake(
         [
             oauth_response(),
-            Response(inventory()),
-            Response(inventory()),
+            *inventory_responses(),
+            *inventory_responses(),
             Response({"ok": True}),
         ]
     )
@@ -553,10 +695,10 @@ def test_approval_is_idempotent_and_preserves_enabled_routes() -> None:
     fake_url = UrlFake(
         [
             oauth_response(),
-            Response(inventory(enabled=[existing])),
-            Response(inventory(enabled=[existing])),
+            *inventory_responses(inventory(enabled=[existing])),
+            *inventory_responses(inventory(enabled=[existing])),
             post,
-            Response(inventory(enabled=[existing, route.EXPECTED_ROUTE])),
+            *inventory_responses(inventory(enabled=[existing, route.EXPECTED_ROUTE])),
         ]
     )
     summary = route.approve_route("client", "secret", runner=fake_aws, opener=fake_url)
@@ -573,7 +715,7 @@ def test_approval_is_idempotent_and_preserves_enabled_routes() -> None:
     already = UrlFake(
         [
             oauth_response(),
-            Response(inventory(enabled=[route.EXPECTED_ROUTE])),
+            *inventory_responses(inventory(enabled=[route.EXPECTED_ROUTE])),
         ]
     )
     route.approve_route("client", "secret", runner=AwsFake(), opener=already)
@@ -588,10 +730,10 @@ def test_uncertain_post_is_read_once_and_never_retried() -> None:
     fake_url = UrlFake(
         [
             oauth_response(),
-            Response(inventory()),
-            Response(inventory()),
+            *inventory_responses(),
+            *inventory_responses(),
             TimeoutError(),
-            Response(inventory()),
+            *inventory_responses(),
         ]
     )
     with pytest.raises(route.ApprovalError, match="uncertain"):
@@ -608,8 +750,8 @@ def test_selected_route_state_drift_aborts_before_post() -> None:
     fake_url = UrlFake(
         [
             oauth_response(),
-            Response(inventory()),
-            Response(inventory(enabled=["2001:db8::/64"])),
+            *inventory_responses(),
+            *inventory_responses(inventory(enabled=["2001:db8::/64"])),
         ]
     )
     with pytest.raises(route.ApprovalError, match="changed"):
@@ -635,10 +777,10 @@ def test_post_readback_proof_is_required() -> None:
     fake_url = UrlFake(
         [
             oauth_response(),
-            Response(inventory()),
-            Response(inventory()),
+            *inventory_responses(),
+            *inventory_responses(),
             Response({"accepted": True}),
-            Response(inventory()),
+            *inventory_responses(),
         ]
     )
     with pytest.raises(route.ApprovalError, match="post-write"):
@@ -650,10 +792,10 @@ def test_post_readback_rejects_dropped_unrelated_enabled_route() -> None:
     fake_url = UrlFake(
         [
             oauth_response(),
-            Response(inventory(enabled=[existing])),
-            Response(inventory(enabled=[existing])),
+            *inventory_responses(inventory(enabled=[existing])),
+            *inventory_responses(inventory(enabled=[existing])),
             Response({"accepted": True}),
-            Response(inventory(enabled=[route.EXPECTED_ROUTE])),
+            *inventory_responses(inventory(enabled=[route.EXPECTED_ROUTE])),
         ]
     )
     with pytest.raises(route.ApprovalError, match="preservation"):
@@ -664,8 +806,8 @@ def test_post_readback_rejects_ssm_identity_drift() -> None:
     fake_url = UrlFake(
         [
             oauth_response(),
-            Response(inventory()),
-            Response(inventory()),
+            *inventory_responses(),
+            *inventory_responses(),
             Response({"accepted": True}),
         ]
     )
