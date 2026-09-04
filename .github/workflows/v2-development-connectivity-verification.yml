@@ -2,6 +2,15 @@ name: v2 development connectivity verification
 
 on:
   workflow_dispatch:
+    inputs:
+      phase:
+        description: pre-bootstrap route/transport proof or post-bootstrap full proof
+        required: false
+        default: full
+        type: choice
+        options:
+          - pre-bootstrap
+          - full
 
 permissions:
   contents: read
@@ -69,11 +78,13 @@ jobs:
           DEVELOPMENT_DB_USER: pricing_caller_development
           PRODUCTION_DB_HOST: nova-toll-db.co9qkm4eqi2h.us-east-1.rds.amazonaws.com
           RDS_CA_BUNDLE: infra/build/ca/rds-ca-bundle.pem
+          VERIFICATION_PHASE: ${{ inputs.phase || 'full' }}
         run: |
           set -euo pipefail
           set +x
           test "$GITHUB_REF" = "refs/heads/main"
           test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+          test "$VERIFICATION_PHASE" = full || test "$VERIFICATION_PHASE" = pre-bootstrap
 
           CALLER_JSON="$(aws sts get-caller-identity --output json)"
           CALLER_ACCOUNT="$(jq -er '.Account' <<<"$CALLER_JSON")"
@@ -132,6 +143,53 @@ jobs:
           print(address)
           PY
           )" = "$TRANSPORT_IPV6"
+
+          if test "$VERIFICATION_PHASE" = pre-bootstrap; then
+            TRANSPORT_ROUTE_JSON="$(ip -json route get "$TRANSPORT_IPV6")"
+            TRANSPORT_ROUTE_STATE="$(TRANSPORT_IPV6="$TRANSPORT_IPV6" TRANSPORT_ROUTE_JSON="$TRANSPORT_ROUTE_JSON" python3 - <<'PY'
+          import json
+          import os
+
+          try:
+              routes = json.loads(os.environ["TRANSPORT_ROUTE_JSON"])
+          except (json.JSONDecodeError, TypeError):
+              raise SystemExit(1)
+          if not isinstance(routes, list) or len(routes) != 1:
+              raise SystemExit(1)
+          route = routes[0]
+          if (
+              not isinstance(route, dict)
+              or route.get("dst") != os.environ["TRANSPORT_IPV6"]
+              or route.get("dev") != "tailscale0"
+          ):
+              raise SystemExit(1)
+          print("expected-transport")
+          PY
+            )"
+            test "$TRANSPORT_ROUTE_STATE" = expected-transport
+            if ! TRANSPORT_SOCKET_STATE="$(timeout 3s python3 - "$TRANSPORT_IPV6" <<'PY'
+          import socket
+          import sys
+
+          with socket.create_connection((sys.argv[1], 5432), timeout=2):
+              print("expected-transport")
+          PY
+            )"; then
+              exit 1
+            fi
+            test "$TRANSPORT_SOCKET_STATE" = expected-transport
+            SUMMARY="$(jq -cn \
+              --arg commit_sha "$GITHUB_SHA" \
+              --arg run_id "$GITHUB_RUN_ID" \
+              --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+              --arg ref "$GITHUB_REF" \
+              --arg account "$CALLER_ACCOUNT" \
+              --arg role "nova-toll-v2-timed-checks-dev" \
+              --arg route "$EXPECTED_ROUTE" \
+              '{commit_sha:$commit_sha,run_id:$run_id,run_attempt:$run_attempt,ref:$ref,phase:"pre-bootstrap",development_account:$account,role:$role,expected_route:$route,site_one_4via6_transport_valid:true,pre_bootstrap_route_transport_valid:true}')"
+            printf '## Development pre-bootstrap route/transport proof\n\n```json\n%s\n```\n' "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           export PGHOST="$DB_HOST"
           export PGHOSTADDR="$TRANSPORT_IPV6"
