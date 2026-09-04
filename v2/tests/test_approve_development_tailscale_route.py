@@ -1,4 +1,5 @@
 import json
+import runpy
 import subprocess
 import urllib.error
 import urllib.parse
@@ -416,6 +417,28 @@ def test_read_only_cli_flag_cannot_fall_through_to_approval(
     route.main()
 
     assert capsys.readouterr().out == '{"diagnostic":true}\n'
+
+
+def test_read_only_cli_reports_sanitized_numeric_http_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(route.subprocess, "run", AwsFake())
+    monkeypatch.setattr(
+        route.urllib.request,
+        "urlopen",
+        UrlFake([oauth_response(), Response({}, status=403)]),
+    )
+    monkeypatch.setenv("TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID", "client")
+    monkeypatch.setenv("TS_DEVELOPMENT_ROUTE_OAUTH_SECRET", "secret")
+    monkeypatch.setattr(route.sys, "argv", [str(route.__file__), "--read-only"])
+
+    with pytest.raises(SystemExit) as error_info:
+        runpy.run_path(str(route.__file__), run_name="__main__")
+
+    assert str(error_info.value) == (
+        "development Tailscale route diagnostic failed "
+        "(device-get: Tailscale API returned HTTP 403)"
+    )
 
 
 @pytest.mark.parametrize("diagnostic", [True, False])
