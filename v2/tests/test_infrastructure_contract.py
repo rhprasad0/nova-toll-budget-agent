@@ -6577,10 +6577,37 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         )
     ]
     foundation_changes += [
-        _foundation_change("managed", f"aws_test.noop[{index}]", ["no-op"])
-        for index in range(109)
+        _foundation_change(
+            "managed",
+            address,
+            ["no-op"],
+            after=(
+                {
+                    "from_port": 5432,
+                    "to_port": 5432,
+                    "ip_protocol": "tcp",
+                    "referenced_security_group_id": "sg-router",
+                    "cidr_ipv4": None,
+                    "cidr_ipv6": None,
+                }
+                if address == "aws_vpc_security_group_ingress_rule.rds_from_tailscale"
+                else {
+                    "cidr_ipv4": "0.0.0.0/0",
+                    "ip_protocol": "-1",
+                    "security_group_id": "sg-router",
+                }
+                if address
+                == "aws_vpc_security_group_egress_rule.tailscale_router_egress"
+                else {}
+            ),
+        )
+        for address in sorted(
+            validator.EXPECTED_MANAGED_NOOP_ADDRESSES
+            - validator.ROUTE_CONTROL_ADDRESSES
+        )
     ]
     plan = {"resource_changes": foundation_changes}
+    assert len(validator.EXPECTED_MANAGED_NOOP_ADDRESSES) == 112
     assert validator.validate_plan(plan, snapshot_identifier) == {
         "managed_noop": 112,
         "rds_replacement": 1,
@@ -6630,12 +6657,20 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
     route_drift_plan["resource_changes"][3]["change"]["after"]["policy"] = json.dumps(
         route_drift_policy, separators=(",", ":")
     )
+    substituted_noop_plan = deepcopy(plan)
+    substituted_noop_plan["resource_changes"][-1]["address"] = "aws_test.substituted"
+    duplicate_noop_plan = deepcopy(plan)
+    duplicate_noop_plan["resource_changes"][-1]["address"] = duplicate_noop_plan[
+        "resource_changes"
+    ][-2]["address"]
 
     for invalid in (
         mismatched_snapshot_plan,
         missing_snapshot_plan,
         route_create_plan,
         route_drift_plan,
+        substituted_noop_plan,
+        duplicate_noop_plan,
         {**plan, "resource_changes": plan["resource_changes"][:-1]},
         {
             **plan,
@@ -6846,6 +6881,23 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
         )
         == 4
     )
+    assert (
+        step2.index("aws --region us-east-1 rds wait db-instance-available")
+        < step2.index(
+            'RDS_DISABLED_METADATA="$(aws --region us-east-1 rds describe-db-instances'
+        )
+        < step2.rindex("trap - EXIT HUP INT TERM")
+    )
+    for binding in (
+        "DBInstanceArn",
+        "DbiResourceId",
+        "PendingModifiedValues",
+        'RDS_INSTANCE_ARN="$(jq -er',
+        'RDS_RESOURCE_ID="$(jq -er',
+        '.[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"',
+        ".[0].deletion_protection == false",
+    ):
+        assert binding in step2
     assert step3.index('ROOT="$(git rev-parse --show-toplevel)"') < step3.index(
         'git -C "$ROOT"'
     )
@@ -6871,6 +6923,20 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
     assert (
         '--final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"' in step4
     )
+    pre_apply_identity = step4.index('RDS_PRE_APPLY_METADATA="$(aws')
+    apply_boundary = step4.index("APPLY_STARTED=1")
+    assert pre_apply_identity < apply_boundary
+    for binding in (
+        ".[0].arn == $arn",
+        ".[0].resource_id == $resource_id",
+        '.[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"',
+        ".[0].deletion_protection == false",
+        '.[0].pending | type == "object" and length == 0',
+    ):
+        assert binding in step4[pre_apply_identity:apply_boundary]
+    assert step4.rindex(
+        "sts get-caller-identity", pre_apply_identity, apply_boundary
+    ) > (pre_apply_identity)
     assert step5.index('RDS_ENDPOINT="$(aws') < step5.index(
         'getent ahostsv4 "$RDS_ENDPOINT"'
     )

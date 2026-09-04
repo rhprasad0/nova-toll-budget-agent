@@ -3845,6 +3845,13 @@ the later reviewed recovery merge may render a new plan.
      --db-instance-identifier nova-toll-db --no-deletion-protection --apply-immediately >/dev/null
    AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws --region us-east-1 rds wait db-instance-available \
      --db-instance-identifier nova-toll-db
+   RDS_DISABLED_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,pending:PendingModifiedValues}' \
+     --output json)"
+   jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == false and .[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db" and (.[0].resource_id | type == "string" and length > 0) and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_DISABLED_METADATA" >/dev/null
+   RDS_INSTANCE_ARN="$(jq -er '.[0].arn' <<<"$RDS_DISABLED_METADATA")"
+   RDS_RESOURCE_ID="$(jq -er '.[0].resource_id' <<<"$RDS_DISABLED_METADATA")"
    trap - EXIT HUP INT TERM
    ~~~
 
@@ -3877,6 +3884,8 @@ the later reviewed recovery merge may render a new plan.
    export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
    test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
    : "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the collision-checked identifier from step 1}"
+   : "${RDS_INSTANCE_ARN:?retain the exact disabled-instance ARN from step 2}"
+   : "${RDS_RESOURCE_ID:?retain the immutable disabled-instance resource ID from step 2}"
    : "${REVIEWED_SOURCE_REVISION:?set the reviewed source revision}"
    printf '%s\n' "$REVIEWED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
    test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
@@ -3921,9 +3930,10 @@ the later reviewed recovery merge may render a new plan.
    snapshot identifier. The already state-managed
    aws_ssm_document.route_control[0], aws_iam_role.route_control[0],
    and aws_iam_role_policy.route_control[0] must be concrete, payload-validated
-   no-ops. The plan must contain exactly 112 managed no-ops and permits reads
-   for the two route-control policy documents when Terraform emits them (fully
-   known policy documents may be resolved during planning and omitted from
+   no-ops. The plan must contain the validator's exact reviewed set of 112
+   managed no-op addresses; count-preserving substitutions are rejected. It
+   permits reads for the two route-control policy documents when Terraform
+   emits them (fully known policy documents may be resolved during planning and omitted from
    `resource_changes`). Every other managed resource must be no-op; no other data
    action, unknown, moved, deposed, replacement, delete-only, update, budget,
    Lambda, production-account, or backend action is accepted. A rejected plan
@@ -3969,6 +3979,15 @@ the later reviewed recovery merge may render a new plan.
      --region us-east-1 --backend "$ROOT/infra/backend.development.hcl" \
      --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT" \
      --final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"
+   : "${RDS_INSTANCE_ARN:?retain the exact disabled-instance ARN from step 2}"
+   : "${RDS_RESOURCE_ID:?retain the immutable disabled-instance resource ID from step 2}"
+   RDS_PRE_APPLY_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,pending:PendingModifiedValues}' \
+     --output json)"
+   jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+     'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == false and .[0].arn == $arn and .[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db" and .[0].resource_id == $resource_id and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_PRE_APPLY_METADATA" >/dev/null
+   test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
    APPLY_STARTED=1
    terraform -chdir="$PLAN_ROOT" apply -input=false \
      "$PLAN_ROOT/development-foundation.tfplan" >/dev/null
