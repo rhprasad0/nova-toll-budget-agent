@@ -111,7 +111,7 @@ def device(
         "tags": [route.EXPECTED_TAG]
         if tags is None and node_id == "self-node"
         else (tags or []),
-        "online": online,
+        "connectedToControl": online,
         "advertisedRoutes": [] if advertised is None else advertised,
         "enabledRoutes": [] if enabled is None else enabled,
     }
