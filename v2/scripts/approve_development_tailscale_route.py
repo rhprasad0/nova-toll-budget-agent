@@ -431,7 +431,7 @@ def validate_inventory(document: object, self_id: str) -> Inventory:
         tags = tuple(cast(str, tag) for tag in tag_values)
         if len(tags) != len(set(tags)):
             raise _fail("device tags contain duplicates")
-        online = raw_device.get("online")
+        online = raw_device.get("connectedToControl")
         if not isinstance(online, bool):
             raise _fail("device online state is malformed")
         advertised = _route_list(raw_device, "advertisedRoutes", node_id, self_id)
