@@ -4111,6 +4111,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRolePolicies",
             "iam:ListRoleTags",
         ],
+        "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
     }
     assert by_sid["ReadPreprovisionedApplicationRoles"]["actions"] == [
         "iam:GetRole",
@@ -4139,9 +4140,17 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         list[str], by_sid["ManageApplicationGuardrail"]["actions"]
     )
     assert "AttachOnlyLambdaVpcPolicy" not in by_sid
-    assert not {"iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PassRole"} & set(
-        all_actions
-    )
+    assert not {"iam:AttachRolePolicy", "iam:DetachRolePolicy"} & set(all_actions)
+    assert by_sid["PassExistingAgentCoreRuntimeRole"]["resources"] == [
+        "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"
+    ]
+    assert by_sid["PassExistingAgentCoreRuntimeRole"]["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "iam:PassedToService",
+            "values": ["bedrock-agentcore.amazonaws.com"],
+        }
+    ]
     assert by_sid["UpdateApplicationLambdaFunctions"]["actions"] == [
         "lambda:TagResource",
         "lambda:UntagResource",
@@ -4185,6 +4194,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "DescribeApplicationNetworking",
         "ListApplicationAthenaWorkGroups",
         "ReadManagedCloudFrontPolicies",
+        "ReadApplicationKmsAliases",
     }
     for sid in wildcard_statements:
         conditions = cast(list[dict[str, object]], by_sid[sid]["conditions"])
@@ -4196,15 +4206,22 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         list[str], by_sid["ManageApplicationEventRules"]["actions"]
     )
     assert by_sid["ManageApplicationMeasurementBucket"]["actions"] == [
+        "s3:GetAccelerateConfiguration",
         "s3:GetBucketAcl",
+        "s3:GetBucketCORS",
         "s3:GetBucketLocation",
+        "s3:GetBucketLogging",
+        "s3:GetBucketObjectLockConfiguration",
         "s3:GetBucketOwnershipControls",
         "s3:GetBucketPolicy",
         "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketRequestPayment",
         "s3:GetBucketTagging",
         "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
         "s3:GetEncryptionConfiguration",
         "s3:GetLifecycleConfiguration",
+        "s3:GetReplicationConfiguration",
         "s3:ListBucket",
         "s3:ListBucketMultipartUploads",
         "s3:ListBucketVersions",
@@ -4214,7 +4231,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "athena:ListTagsForResource",
     ]
     assert by_sid["ManageApplicationAthenaNamedQueries"]["resources"] == [
-        "local.development_delivery_athena_named_query_arns"
+        "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
     ]
     assert by_sid["ManageApplicationAthenaWorkGroup"]["actions"] == [
         "athena:GetWorkGroup",
@@ -4249,13 +4266,50 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "ManageApplicationKmsAliases" not in by_sid
     assert "CreateApplicationKmsKeys" not in by_sid
     assert "ManageNewApplicationKmsKeys" not in by_sid
-    assert by_sid["ReadApplicationKmsAliases"]["actions"] == [
-        "kms:DescribeKey",
-        "kms:ListResourceTags",
-    ]
-    assert by_sid["ReadApplicationKmsAliases"]["resources"] == [
-        "local.development_delivery_site_kms_alias_arn",
-        "local.development_delivery_measurement_kms_alias_arn",
+    assert by_sid["ReadApplicationKmsAliases"]["actions"] == ["kms:ListAliases"]
+    assert by_sid["ReadApplicationKmsAliases"]["resources"] == ["*"]
+    assert re.search(
+        r'sid\s*=\s*"ReadApplicationKmsAliases".*?test\s*=\s*"StringEquals"'
+        r'.*?variable\s*=\s*"aws:RequestedRegion"'
+        r".*?values\s*=\s*\[local\.development_delivery_region\]",
+        source,
+        re.DOTALL,
+    )
+    bucket_reads = {
+        "s3:GetAccelerateConfiguration",
+        "s3:GetBucketCORS",
+        "s3:GetBucketLogging",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketRequestPayment",
+        "s3:GetBucketWebsite",
+        "s3:GetReplicationConfiguration",
+    }
+    for sid in ("ManageApplicationSiteBuckets", "ManageApplicationMeasurementBucket"):
+        assert bucket_reads <= set(cast(list[str], by_sid[sid]["actions"]))
+    object_scopes = {
+        "ManageApplicationSiteBuckets": [
+            "local.development_delivery_site_bucket_arn",
+            "${local.development_delivery_site_bucket_arn}/*",
+        ],
+        "ManageApplicationMeasurementRegistry": [
+            "${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson",
+        ],
+        "PublishApplicationArtifacts": [
+            "${local.development_delivery_artifact_bucket_arn}/runtime/v2/*",
+            "${local.development_delivery_artifact_bucket_arn}/lambda/v2/*",
+        ],
+    }
+    for sid, resources in object_scopes.items():
+        assert {"s3:GetObjectTagging", "s3:PutObjectTagging"} <= set(
+            cast(list[str], by_sid[sid]["actions"])
+        )
+        assert by_sid[sid]["resources"] == resources
+    assert "lambda:GetFunctionCodeSigningConfig" in cast(
+        list[str], by_sid["ReadApplicationLambdaFunctions"]["actions"]
+    )
+    assert by_sid["ReadManagedCloudFrontPolicy"]["resources"] == [
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:cache-policy/4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-request-policy/b689b0a8-53d0-40ab-baf2-68738e2966ac",
     ]
     assert by_sid["PublishApplicationApiGatewayDeployments"]["resources"] == [
         "local.development_delivery_api_deployment_arns"
@@ -4326,13 +4380,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert re.search(r"guardrail/vdyqrh31xgca", source)
     assert re.search(r"runtime/nova_toll_v2_development-Y69XBf88Bl", source)
     assert "local.development_delivery_application_key_arns" in source
-    assert re.search(
-        r"development_delivery_athena_named_query_arns\s*=\s*\[\s*"
-        r'"arn:aws:athena:.*:namedquery/097b778f-c9ed-4bd9-af53-1e05770e1d53",\s*'
-        r'"arn:aws:athena:.*:namedquery/6a947ac6-b2a9-45b9-a28c-1b19bfec3e1d",',
-        source,
-        re.DOTALL,
-    )
+    assert "development_delivery_athena_named_query_arns" not in source
     assert "security-group/*" not in source
     assert "security-group-rule/*" not in source
     assert "vpc/*" not in source
@@ -4490,6 +4538,22 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
     _assert_development_delivery_trust(FOUNDATION_IAM)
     _assert_development_delivery_state_and_application_policy(FOUNDATION_IAM)
     _assert_application_roles_are_bootstrap_owned()
+    for original, replacement in (
+        (
+            "role/nova-toll-v2-agentcore-runtime-dev",
+            "role/nova-toll-v2-development-delivery",
+        ),
+        ("role/nova-toll-v2-agentcore-runtime-dev", "role/unrelated-runtime-dev"),
+        ("bedrock-agentcore.amazonaws.com", "lambda.amazonaws.com"),
+        ("iam:PassedToService", "aws:RequestedRegion"),
+    ):
+        _must_reject_after_marker(
+            _assert_development_delivery_state_and_application_policy,
+            FOUNDATION_IAM,
+            'sid = "PassExistingAgentCoreRuntimeRole"',
+            original,
+            replacement,
+        )
 
     for original, replacement in (
         (
@@ -4592,8 +4656,8 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
         ),
         (
             'sid = "ManageApplicationAthenaNamedQueries"',
-            "local.development_delivery_athena_named_query_arns",
-            '"arn:aws:athena:us-east-1:903859731897:namedquery/*"',
+            "workgroup/tollchat-agent-reports-dev",
+            "workgroup/*",
         ),
     ):
         _must_reject_after_marker(
@@ -4640,7 +4704,11 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
         for statement in by_sid.values()
         for action in cast(list[str], statement["actions"])
     }
-    assert "iam:PassRole" not in all_actions
+    pass_role = by_sid["PassExistingAgentCoreRuntimeRole"]
+    assert pass_role["actions"] == ["iam:PassRole"]
+    assert pass_role["resources"] == [
+        "arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"
+    ]
     assert "lambda:UpdateFunctionConfiguration" not in all_actions
     assert (
         not {
@@ -4717,7 +4785,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 42
+    assert len(statements) == 43
     expected_groups = {
         "state": (
             0,
@@ -4782,17 +4850,18 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "runtime": (
             31,
-            35,
+            36,
             [
                 "ManageApplicationSchedules",
                 "ManageApplicationGuardrail",
                 "PublishApplicationGuardrailVersions",
                 "ManageApplicationAgentCore",
+                "PassExistingAgentCoreRuntimeRole",
             ],
         ),
         "edge": (
-            35,
-            42,
+            36,
+            43,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -4809,7 +4878,14 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 42
+    assert len(rendered_aggregate) == len(statements) == 43
+    rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
+    assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
+        "StringEquals": {"aws:RequestedRegion": "us-east-1"}
+    }
+    assert rendered_by_sid["PassExistingAgentCoreRuntimeRole"]["Condition"] == {
+        "StringEquals": {"iam:PassedToService": "bedrock-agentcore.amazonaws.com"}
+    }
     rendered_statements: list[dict[str, object]] = []
     for key, (start, end, expected_sids) in expected_groups.items():
         policy = rendered_documents[key]
@@ -5183,7 +5259,17 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert "run_post_bootstrap_gates" in script
     assert "aws iam simulate-principal-policy" in script
     assert "IAM_SIMULATION_EVIDENCE" in script
-    assert "SIMULATION_EXPECTED_COUNT=92" in script
+    assert "SIMULATION_EXPECTED_COUNT=126" in script
+    matrix = script.split('cat >"$SIMULATION_MATRIX" <<EOF\n', 1)[1].split("\nEOF", 1)[
+        0
+    ]
+    assert len(matrix.splitlines()) == 126
+    assert "runtime-role-wrong-service|iam:PassRole|" in matrix
+    assert "unrelated-runtime-role-pass|iam:PassRole|" in matrix
+    assert (
+        "ContextKeyName=iam:PassedToService,ContextKeyValues=bedrock-agentcore.amazonaws.com"
+        in script
+    )
     assert "while IFS='|' read -r label action resource expected; do" in script
     assert "--context-entries" in script
     assert "SIMULATION_COUNT" in script
@@ -5469,7 +5555,7 @@ def test_development_bootstrap_rejects_unsafe_role_comparison_and_mixed_plan_mut
             'state_id_matches "$WORK_DIR/${label// /-}.state" "$identifier"',
             'state_id_matches "$WORK_DIR/${label// /-}.state" "$UNSAFE_IDENTIFIER"',
         ),
-        ("SIMULATION_EXPECTED_COUNT=92", "SIMULATION_EXPECTED_COUNT=1"),
+        ("SIMULATION_EXPECTED_COUNT=126", "SIMULATION_EXPECTED_COUNT=1"),
         ("evidence-binding.json", "spoofed-evidence.json"),
     ):
         _must_reject(

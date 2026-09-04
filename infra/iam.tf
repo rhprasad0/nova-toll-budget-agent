@@ -206,15 +206,9 @@ locals {
     "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:key/076e8341-894b-405c-96e9-2b037f96e2a6",
     "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:key/3bc78b60-9cbe-4abd-9744-8772c78d8379",
   ]
-  development_delivery_site_bucket_arn           = "arn:aws:s3:::tollchat-site-${local.development_delivery_account_id}-dev"
-  development_delivery_measurement_bucket_arn    = "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${local.development_delivery_account_id}-dev"
-  development_delivery_artifact_bucket_arn       = "arn:aws:s3:::nova-toll-agentcore-${local.development_delivery_account_id}"
-  development_delivery_site_kms_alias_arn        = "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:alias/tollchat-v2-site-dev"
-  development_delivery_measurement_kms_alias_arn = "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:alias/tollchat-v2-agent-measurement-dev"
-  development_delivery_athena_named_query_arns = [
-    "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:namedquery/097b778f-c9ed-4bd9-af53-1e05770e1d53",
-    "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:namedquery/6a947ac6-b2a9-45b9-a28c-1b19bfec3e1d",
-  ]
+  development_delivery_site_bucket_arn        = "arn:aws:s3:::tollchat-site-${local.development_delivery_account_id}-dev"
+  development_delivery_measurement_bucket_arn = "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${local.development_delivery_account_id}-dev"
+  development_delivery_artifact_bucket_arn    = "arn:aws:s3:::nova-toll-agentcore-${local.development_delivery_account_id}"
 }
 
 data "aws_iam_policy_document" "development_delivery_assume" {
@@ -315,7 +309,7 @@ data "aws_iam_policy_document" "development_delivery" {
   statement {
     sid = "ReadApplicationLambdaFunctions"
     actions = [
-      "lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetFunctionEventInvokeConfig",
+      "lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:GetFunctionConfiguration", "lambda:GetFunctionEventInvokeConfig",
       "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:GetProvisionedConcurrencyConfig", "lambda:ListAliases",
       "lambda:ListProvisionedConcurrencyConfigs", "lambda:ListTags", "lambda:ListVersionsByFunction",
     ]
@@ -410,25 +404,25 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ManageApplicationSiteBuckets"
-    actions   = ["s3:DeleteObject", "s3:GetBucketAcl", "s3:GetBucketLocation", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectVersion", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions", "s3:PutBucketOwnershipControls", "s3:PutBucketTagging", "s3:PutBucketVersioning", "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration", "s3:PutObject"]
+    actions   = ["s3:DeleteObject", "s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions", "s3:PutBucketOwnershipControls", "s3:PutBucketTagging", "s3:PutBucketVersioning", "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration", "s3:PutObject", "s3:PutObjectTagging"]
     resources = [local.development_delivery_site_bucket_arn, "${local.development_delivery_site_bucket_arn}/*"]
   }
 
   statement {
     sid       = "ManageApplicationMeasurementBucket"
-    actions   = ["s3:GetBucketAcl", "s3:GetBucketLocation", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions"]
+    actions   = ["s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions"]
     resources = [local.development_delivery_measurement_bucket_arn]
   }
 
   statement {
     sid       = "ManageApplicationMeasurementRegistry"
-    actions   = ["s3:DeleteObject", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectVersion", "s3:PutObject"]
+    actions   = ["s3:DeleteObject", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:PutObject", "s3:PutObjectTagging"]
     resources = ["${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson"]
   }
 
   statement {
     sid     = "PublishApplicationArtifacts"
-    actions = ["s3:AbortMultipartUpload", "s3:DeleteObject", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectVersion", "s3:ListBucketMultipartUploads", "s3:ListMultipartUploadParts", "s3:PutObject"]
+    actions = ["s3:AbortMultipartUpload", "s3:DeleteObject", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:ListBucketMultipartUploads", "s3:ListMultipartUploadParts", "s3:PutObject", "s3:PutObjectTagging"]
     resources = [
       "${local.development_delivery_artifact_bucket_arn}/runtime/v2/*",
       "${local.development_delivery_artifact_bucket_arn}/lambda/v2/*",
@@ -458,9 +452,15 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid       = "ReadApplicationKmsAliases"
-    actions   = ["kms:DescribeKey", "kms:ListResourceTags"]
-    resources = [local.development_delivery_site_kms_alias_arn, local.development_delivery_measurement_kms_alias_arn]
+    sid = "ReadApplicationKmsAliases"
+    # The provider resolves aliases by listing regional account metadata.
+    actions   = ["kms:ListAliases"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
   }
 
   statement {
@@ -481,9 +481,9 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid = "ManageApplicationAthenaNamedQueries"
-    # Named queries are manually owned; refresh/read access is enough for CI.
+    # Named-query reads authorize against their workgroup, not a query ARN.
     actions   = ["athena:GetNamedQuery", "athena:ListTagsForResource"]
-    resources = local.development_delivery_athena_named_query_arns
+    resources = ["arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"]
   }
 
   statement {
@@ -533,6 +533,18 @@ data "aws_iam_policy_document" "development_delivery" {
       local.development_delivery_agentcore_runtime_arn,
       local.development_delivery_agentcore_endpoint_arn,
     ]
+  }
+
+  statement {
+    sid = "PassExistingAgentCoreRuntimeRole"
+    # UpdateAgentRuntime requires its existing roleArn even for code-only updates.
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.development_delivery_account_id}:role/nova-toll-v2-agentcore-runtime-dev"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["bedrock-agentcore.amazonaws.com"]
+    }
   }
 
   statement {
@@ -587,8 +599,8 @@ data "aws_iam_policy_document" "development_delivery" {
       "cloudfront:GetOriginRequestPolicy",
     ]
     resources = [
-      "arn:aws:cloudfront::aws:cache-policy/*",
-      "arn:aws:cloudfront::aws:origin-request-policy/*",
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:cache-policy/4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-request-policy/b689b0a8-53d0-40ab-baf2-68738e2966ac",
     ]
   }
 
@@ -634,11 +646,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 31, 35)
+      Statement = slice(local.development_delivery_policy_statements, 31, 36)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 42)
+      Statement = slice(local.development_delivery_policy_statements, 36, 43)
     })
   }
 }
