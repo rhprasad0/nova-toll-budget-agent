@@ -44,6 +44,7 @@ require_disposable_cluster() {
 }
 
 require_disposable_cluster
+export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="127.0.0.1"
 if [[ "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
   # New tags have no base; migration 026's parent is its declared 1.2.0 source.
   base_ref="$(git log --diff-filter=A --format='%H^' -1 -- \
@@ -100,6 +101,100 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 SQL
+
+createdb --template template0 "$development_db"
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 \
+  --command 'CREATE SCHEMA fresh_preflight_sentinel'
+if python3 v2/scripts/bootstrap_development_database.py --fresh-development; then
+  echo "fresh bootstrap accepted a non-empty initial database" >&2
+  exit 1
+fi
+dropdb "$development_db"
+
+createdb --template template0 "$development_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command 'CREATE ROLE pricing_reader_development'
+if python3 v2/scripts/bootstrap_development_database.py --fresh-development; then
+  echo "fresh bootstrap accepted a pre-existing development role" >&2
+  exit 1
+fi
+dropdb "$development_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 \
+  --command 'DROP ROLE pricing_reader_development'
+
+createdb --template template0 "$development_db"
+createdb --template template0 "$production_db"
+if python3 v2/scripts/bootstrap_development_database.py --fresh-development; then
+  echo "fresh bootstrap accepted an existing split-environment cluster" >&2
+  exit 1
+fi
+if psql --dbname "$development_db" --tuples-only --no-align --command \
+  "SELECT count(*) FROM pg_namespace WHERE nspname IN ('pricing', 'oracle')" | grep -qx 0; then
+  :
+else
+  echo "fresh ambiguity preflight ran DDL" >&2
+  exit 1
+fi
+dropdb "$development_db"
+dropdb "$production_db"
+
+createdb --template template0 "$development_db"
+if BOOTSTRAP_FAILURE_MODE=fresh python3 - <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+assert spec and spec.loader
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+real_psql = bootstrap.psql
+
+def fail_after_finalization(database, *, sql=None, file=None, variables=None):
+    if os.environ["BOOTSTRAP_FAILURE_MODE"] == "fresh" and sql and "COMMENT ON DATABASE nova_toll_development" in sql and "COMMIT;" in sql:
+        sql = sql.replace("COMMIT;", "DO $$ BEGIN RAISE EXCEPTION 'injected fresh failure'; END $$;\nCOMMIT;", 1)
+    return real_psql(database, sql=sql, file=file, variables=variables)
+
+bootstrap.psql = fail_after_finalization
+try:
+    bootstrap.main()
+except (RuntimeError, bootstrap.subprocess.CalledProcessError):
+    raise SystemExit(0)
+raise SystemExit("fresh bootstrap accepted injected failure")
+PY
+then
+  if psql --dbname postgres --tuples-only --no-align --command \
+    "SELECT count(*) FROM pg_roles WHERE rolname LIKE '%\\_development' ESCAPE '\\'" | grep -qx 0 &&
+    psql --dbname "$development_db" --tuples-only --no-align --command \
+    "SELECT count(*) FROM pg_namespace WHERE nspname IN ('pricing', 'oracle')" | grep -qx 0; then
+    :
+  else
+    echo "fresh bootstrap cleanup left development artifacts" >&2
+    exit 1
+  fi
+else
+  echo "fresh bootstrap did not fail during injected finalization failure" >&2
+  exit 1
+fi
+dropdb "$development_db"
+
+createdb --template template0 "$development_db"
+python3 v2/scripts/bootstrap_development_database.py --fresh-development
+psql --dbname "$development_db" --variable fresh_development=1 \
+  --file v2/tests/development_bootstrap_contract.sql
+if psql --dbname postgres --tuples-only --no-align --command \
+  "SELECT count(*) FROM pg_database WHERE datname = '$production_db'" | grep -qx 0 &&
+  psql --dbname postgres --tuples-only --no-align --command \
+  "SELECT count(*) FROM pg_roles WHERE rolname IN ('pricing_loader_writer', 'pricing_reader', 'oracle_owner', 'tollchat_agent', 'pricing_caller', 'report_publisher')" | grep -qx 0; then
+  :
+else
+  echo "fresh bootstrap touched production state" >&2
+  exit 1
+fi
+dropdb "$development_db"
+psql --dbname postgres --set ON_ERROR_STOP=1 --command \
+  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development'
 
 createdb --template template0 "$production_db"
 psql --dbname "$production_db" --file v2/db/schema.sql

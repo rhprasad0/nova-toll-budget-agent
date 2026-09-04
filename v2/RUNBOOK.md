@@ -402,8 +402,9 @@ unset SITE_BUCKET SITE_KMS_ARN
 
 The bounded #331 application release and database validation below is the operative
 development release path. Deployed database bootstrap remains non-operative until
-approved deployment automation exists; this procedure only validates the already
-present development schema and isolation. Public report publication also remains
+approved deployment automation exists, except for the expressly authorized
+#327/#333 development RDS replacement handoff below; the #331 procedure only
+validates the already present development schema and isolation. Public report publication also remains
 non-operative: the existing publisher and scheduler are deployed unchanged, but no
 publication is manually invoked and no report data is copied. The #330 foundation
 handoff remains the documented sequence of local-backend plan generation and review,
@@ -2137,11 +2138,12 @@ port. Set `NOVA_TOLL_RDS_LOCAL_PORT` to that port before this procedure; the
 procedure keeps `PGHOST` set to the RDS endpoint so TLS hostname verification
 still applies and uses only `127.0.0.1` as the transport address.
 
-This procedure must not create or migrate a deployed database. If the development
-database is absent or invalid, stop; do not run
-`bootstrap_development_database.py` against it. That bootstrap remains limited to
-the disposable PostgreSQL contract harness until approved deployment automation
-exists.
+The authorized replacement may initialize only the Terraform-created
+`nova_toll_development` database after the protected route and saved-plan steps
+complete. If that exact database is absent, non-empty, ambiguous, or already
+bootstrapped, stop; do not run the fresh mode and do not use a versioned
+migration. The bounded procedure is documented in the development foundation
+replacement handoff below.
 
 Keep the terminal non-traced. The development RDS-managed Secrets Manager JSON and
 its extracted username/password exist only in process memory and are never
@@ -3198,7 +3200,7 @@ DNS/certificate and CI cutover. Pull-request validation remains
 credential-free, and account-local backend/configuration isolation remains
 covered by the contract tests.
 
-### Development foundation handoff (#330; no application release)
+### Development foundation handoff (#330; no application release) [historical, superseded]
 
 Issue #330 is a two-stage handoff. This stage only generates a complete
 development-account foundation plan, retains the exact copied root and binary
@@ -3683,6 +3685,268 @@ stop as well; only bounded read-only readiness retries in the success path are
 permitted. The operator records only the fixed stage category, never an AWS or
 Terraform error stream.
 
+### Development foundation replacement handoff (#327/#333; source prerequisites)
+
+The historical #330 foundation bootstrap text above is retained only for audit
+context; use this authorized #327/#333 replacement handoff. Do not run the
+historical procedure.
+
+This is the source-only handoff for the authorized development RDS replacement.
+It does not mutate AWS, Terraform state, Tailscale, GitHub, DNS, or PostgreSQL.
+The later protected operator sequence below uses the exact development account,
+backend, RDS identifier, canonical fetcher archive, and saved plan described here.
+Production foundation protection and the existing route-control declarations remain
+unchanged.
+
+#### Fresh development database bootstrap
+
+Terraform creates nova_toll_development as the initial database when the
+development RDS instance is replaced. After the private path is proven and the
+instance is available, run the following as a separate protected step:
+
+~~~sh
+set -euo pipefail
+set +x
+test "${AWS_PROFILE:-}" = "nova-toll-dev"
+test "${AWS_REGION:-}" = "us-east-1"
+test "${AWS_DEFAULT_REGION:-}" = "us-east-1"
+test "$(AWS_PROFILE=nova-toll-dev aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+RDS_METADATA="$(AWS_PROFILE=nova-toll-dev aws --region us-east-1 rds describe-db-instances \
+  --db-instance-identifier nova-toll-db \
+  --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,endpoint:Endpoint.Address}' \
+  --output json)"
+jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll_development" and .[0].private == false and .[0].deletion_protection == true and (.[0].endpoint | type == "string" and length > 0)' <<<"$RDS_METADATA" >/dev/null
+RDS_ENDPOINT="$(jq -er '.[0].endpoint' <<<"$RDS_METADATA")"
+: "${NOVA_TOLL_ADMIN_URL:?set the reviewed TLS administrator URL in process memory only}"
+export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="$RDS_ENDPOINT"
+python3 v2/scripts/bootstrap_development_database.py --fresh-development
+unset NOVA_TOLL_ADMIN_URL NOVA_TOLL_EXPECTED_RDS_ENDPOINT RDS_ENDPOINT RDS_METADATA
+~~~
+
+--fresh-development refuses a missing, wrong-name, commented, non-empty, or
+ambiguous target before DDL. It loads only the rendered canonical
+v2/db/schema.sql, v2/db/analysis.sql, v2/db/roles.sql,
+v2/db/oracle/schema.sql, and v2/db/oracle/data.sql; it never connects to
+or changes nova_toll, production roles, or v2/db/migrations/. Its
+postcondition runs v2/tests/development_bootstrap_contract.sql in fresh mode,
+proving versions, canonical row counts, development ownership/grants, no PUBLIC
+CONNECT, and no foreign or integration objects. A failure removes only schemas,
+roles, grants, and comments created by that invocation and stops if cleanup is
+not proven.
+
+#### Protected development replacement and foundation plan
+
+Run this sequence only after this source change has been reviewed and merged to
+protected main. It is a future live procedure; the builder does not run it.
+Use no broad resource selector, -target, -auto-approve, secret retrieval,
+or deployed migration.
+
+1. Set the exact development identity and verify the exact target before any
+   destructive operation:
+
+   ~~~sh
+   set -euo pipefail
+   set +x
+   ROOT="$(git rev-parse --show-toplevel)"
+   export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+   test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   : "${REVIEWED_SOURCE_REVISION:?set the reviewed source revision}"
+   printf '%s\n' "$REVIEWED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
+   test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
+   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+   RDS_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible}' \
+     --output json)"
+   jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true' <<<"$RDS_METADATA" >/dev/null
+   grep -Eq '^[[:space:]]*deletion_protection[[:space:]]*=[[:space:]]*true[[:space:]]*$' infra/rds.tf
+   grep -Eq '^[[:space:]]*skip_final_snapshot[[:space:]]*=[[:space:]]*false[[:space:]]*$' infra/rds.tf
+   ~~~
+
+   This guard names only nova-toll-db in account 903859731897 and region
+   us-east-1. A missing, duplicated, unavailable, public, or unprotected
+   result is a hard stop. Production protection is not changed.
+
+2. Disable deletion protection only on that exact development instance, then
+   wait for it to become available again. Each later pre-apply shell keeps a
+   matching trap: a plan, review, digest, identity, or context failure restores
+   protection before it exits. Once the saved-plan apply begins, the trap is
+   intentionally inert; there is no rollback rehearsal after that boundary.
+
+   ~~~sh
+   set -euo pipefail
+   set +x
+   export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+   test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   RDS_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible}' \
+     --output json)"
+   jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true' <<<"$RDS_METADATA" >/dev/null
+   APPLY_STARTED=0
+   DELETION_PROTECTION_DISABLED=1
+   restore_deletion_protection() {
+     local status=$?
+     trap - EXIT HUP INT TERM
+     if test "$APPLY_STARTED" -eq 0 && test "$DELETION_PROTECTION_DISABLED" -eq 1; then
+       AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws --region us-east-1 rds modify-db-instance \
+         --db-instance-identifier nova-toll-db --deletion-protection --apply-immediately >/dev/null || status=1
+       AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws --region us-east-1 rds wait db-instance-available \
+         --db-instance-identifier nova-toll-db || status=1
+     fi
+     exit "$status"
+   }
+   trap restore_deletion_protection EXIT HUP INT TERM
+   AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws --region us-east-1 rds modify-db-instance \
+     --db-instance-identifier nova-toll-db --no-deletion-protection --apply-immediately >/dev/null
+   AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws --region us-east-1 rds wait db-instance-available \
+     --db-instance-identifier nova-toll-db
+   trap - EXIT HUP INT TERM
+   ~~~
+
+3. Render the private saved foundation plan from the retained root. Build the
+   canonical archive at the reviewed relative path, assert its digest, and
+   provide the approved single budget recipient only through process memory:
+
+   ~~~sh
+   set -euo pipefail
+   set +x
+   umask 077
+   APPLY_STARTED=0
+   DELETION_PROTECTION_DISABLED=1
+   restore_deletion_protection() {
+     local status=$?
+     trap - EXIT HUP INT TERM
+     if test "$APPLY_STARTED" -eq 0 && test "$DELETION_PROTECTION_DISABLED" -eq 1; then
+       aws --region us-east-1 rds modify-db-instance \
+         --db-instance-identifier nova-toll-db --deletion-protection --apply-immediately >/dev/null || status=1
+       aws --region us-east-1 rds wait db-instance-available \
+         --db-instance-identifier nova-toll-db || status=1
+     fi
+     unset TF_VAR_budget_notification_email DEVELOPMENT_BUDGET_EMAIL
+     exit "$status"
+   }
+   trap restore_deletion_protection EXIT HUP INT TERM
+   ROOT="$(git rev-parse --show-toplevel)"
+   PLAN_ROOT="$(mktemp -d)"
+   chmod 700 -- "$PLAN_ROOT"
+   export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+   test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   : "${REVIEWED_SOURCE_REVISION:?set the reviewed source revision}"
+   printf '%s\n' "$REVIEWED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
+   test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
+   test -z "$(git -C "$ROOT" status --porcelain --untracked-files=all -- . ':(exclude).graph')"
+   grep -Fx 'bucket       = "nova-toll-tfstate-903859731897"' "$ROOT/infra/backend.development.hcl"
+   grep -Fx 'key          = "nova-toll/development/terraform.tfstate"' "$ROOT/infra/backend.development.hcl"
+   grep -Fx 'region       = "us-east-1"' "$ROOT/infra/backend.development.hcl"
+   grep -Fx 'kms_key_id   = "alias/nova-toll-tfstate"' "$ROOT/infra/backend.development.hcl"
+   "$ROOT/v2/scripts/build_fetcher_zip.sh" >/dev/null
+   test "$(sha256sum "$ROOT/infra/build/fetcher.zip" | awk '{print $1}')" = "9a2e09f1c46a4ee53a6b17c09687663f41ee66de097342ad572b3c943fb704d1"
+   cp -a "$ROOT/infra/." "$PLAN_ROOT/"
+   chmod 700 -- "$PLAN_ROOT"
+   test -s "$PLAN_ROOT/build/fetcher.zip"
+   chmod 600 -- "$PLAN_ROOT/build/fetcher.zip"
+   export TF_DATA_DIR="$PLAN_ROOT/.terraform-data"
+   mkdir -p "$TF_DATA_DIR"
+   test "${DEVELOPMENT_BUDGET_EMAIL:?set the approved single budget recipient in process memory only}"
+   terraform -chdir="$PLAN_ROOT" init -input=false \
+     -backend-config="$ROOT/infra/backend.development.hcl" >/dev/null
+   TF_VAR_budget_notification_email="$DEVELOPMENT_BUDGET_EMAIL" \
+     terraform -chdir="$PLAN_ROOT" plan -input=false -lock=false \
+       -var environment=development -var tailscale_advertise_routes=false \
+       -var fetcher_package_path="$PLAN_ROOT/build/fetcher.zip" \
+       -out="$PLAN_ROOT/development-foundation.tfplan" >/dev/null
+   chmod 600 -- "$PLAN_ROOT/development-foundation.tfplan"
+   terraform -chdir="$PLAN_ROOT" show -json \
+     "$PLAN_ROOT/development-foundation.tfplan" >"$PLAN_ROOT/development-foundation.tfplan.json"
+   chmod 600 -- "$PLAN_ROOT/development-foundation.tfplan.json"
+   python3 "$ROOT/v2/scripts/validate_development_foundation_plan.py" \
+     "$PLAN_ROOT/development-foundation.tfplan.json" --account 903859731897 \
+     --region us-east-1 --backend "$ROOT/infra/backend.development.hcl" \
+     --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT"
+   trap - EXIT HUP INT TERM
+   unset TF_VAR_budget_notification_email DEVELOPMENT_BUDGET_EMAIL
+   printf 'development foundation plan retained at %s\n' "$PLAN_ROOT"
+   ~~~
+
+   The validator accepts exactly the development RDS delete,create
+   replacement with replace_paths == [["db_name"]], creates for
+   aws_ssm_document.route_control[0], aws_iam_role.route_control[0],
+   and aws_iam_role_policy.route_control[0], and reads for the two route-control
+   policy documents. Every other managed resource must be no-op; no other data
+   action, unknown, moved, deposed, replacement, delete-only, update, budget,
+   Lambda, production-account, or backend action is accepted. A rejected plan
+   stops before apply. Keep the plan and root private for independent review.
+
+4. Independently review the saved plan and apply only that exact binary plan.
+   Restore deletion protection if any pre-apply review or identity check fails;
+   once `APPLY_STARTED=1` is set, an apply failure is preserved without
+   rollback or protection restoration.
+
+   ~~~sh
+   set -euo pipefail
+   set +x
+   : "${PLAN_ROOT:?set PLAN_ROOT to the retained plan root from step 3}"
+   APPLY_STARTED=0
+   DELETION_PROTECTION_DISABLED=1
+   restore_deletion_protection() {
+     local status=$?
+     trap - EXIT HUP INT TERM
+     if test "$APPLY_STARTED" -eq 0 && test "$DELETION_PROTECTION_DISABLED" -eq 1; then
+       aws --region us-east-1 rds modify-db-instance \
+         --db-instance-identifier nova-toll-db --deletion-protection --apply-immediately >/dev/null || status=1
+       aws --region us-east-1 rds wait db-instance-available \
+         --db-instance-identifier nova-toll-db || status=1
+     fi
+     exit "$status"
+   }
+   trap restore_deletion_protection EXIT HUP INT TERM
+   : "${REVIEWED_PLAN_SHA256:?set the independently reviewed plan digest}"
+   printf '%s\n' "$REVIEWED_PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$'
+   test "$(sha256sum "$PLAN_ROOT/development-foundation.tfplan" | awk '{print $1}')" = "$REVIEWED_PLAN_SHA256"
+   export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+   test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   APPLY_STARTED=1
+   terraform -chdir="$PLAN_ROOT" apply -input=false \
+     "$PLAN_ROOT/development-foundation.tfplan" >/dev/null
+   aws --region us-east-1 rds wait db-instance-available --db-instance-identifier nova-toll-db
+   trap - EXIT HUP INT TERM
+   ~~~
+
+5. After the replacement is available, resolve its private IPv4 again and
+   derive the site-1 transport host. Do not use the saved pre-replacement
+   address:
+
+   ~~~sh
+   RDS_ENDPOINT="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].Endpoint.Address' \
+     --output text)"
+   test -n "$RDS_ENDPOINT" && test "$RDS_ENDPOINT" != "None"
+   DEV_IPV4="$(getent ahostsv4 "$RDS_ENDPOINT" | awk 'NR == 1 {print $1}')"
+   test -n "$DEV_IPV4"
+   tailscale debug via 1 "$DEV_IPV4/32"
+   ~~~
+
+   Use the resulting exact site-1 /128 to change only the value of
+   hosts.nova-toll-rds-development in infra/policy.hujson. Review
+   git diff -- infra/policy.hujson: the only semantic change must be that
+   one host value; all development accept/deny tests, grants, tags, routes,
+   production hosts, and production entries must be byte-for-byte unchanged.
+   Merge this reviewed fixture update through the unchanged protected
+   main-only .github/workflows/tailscale-acl.yml workflow. Do not edit ACL
+   grants, tag ownership, routes, production hosts, DNS, router enrollment,
+   VPC routes, security groups, or delivery settings.
+
+6. Use the fixed-instance SSM route-control and protected connectivity workflow
+   to establish the private path, then run the fresh bootstrap in its own
+   protected step. Keep DEVELOPMENT_DELIVERY_ENABLED absent or false until
+   the connectivity/bootstrap evidence is complete. The final sanitized
+   evidence contains only the approved account/region, exact route ownership,
+   development query identity, and both production denial booleans; it contains
+   no secret, endpoint credential, raw command output, plan JSON, or state.
+
+No rollback rehearsal or production migration is part of this handoff.
 ### Guarded production release
 
 The production block independently creates and reviews its production-account
