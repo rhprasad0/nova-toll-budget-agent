@@ -2346,8 +2346,10 @@ test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND
 Immediately dispatch the protected connectivity workflow from the reviewed
 `main` SHA with `phase=pre-bootstrap`. Its route-control step passes only when
 the complete canonical list plus every per-device route read has the exact route in both
-`advertisedRoutes` and `enabledRoutes`, owned only by the exact SSM/API-bound
-device. Its pre-bootstrap phase then proves that the derived site-1 host uses
+`advertisedRoutes` and `enabledRoutes`; canonical unrelated-device `::/0` is
+the sole broad-route exception, while the exact site-1 route remains owned only
+by the exact SSM/API-bound device. Its pre-bootstrap phase then proves that the
+derived site-1 host uses
 `tailscale0` and accepts a bounded TCP/5432 connection, without assuming the
 database role that fresh bootstrap has not created yet. It rejects partial or
 marked inventories, duplicate or malformed data, IPv4 on the bound device,

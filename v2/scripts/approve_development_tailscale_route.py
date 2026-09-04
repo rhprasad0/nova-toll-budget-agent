@@ -26,6 +26,7 @@ SSM_DOCUMENT = "nova-toll-v2-route-control-status-dev"
 SSM_COMMANDS = ("set -eu", "tailscale status --json")
 EXPECTED_TAG = "tag:nova-toll-development-router"
 EXPECTED_ROUTE = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
+EXIT_NODE_DEFAULT = "::/0"
 VIA6_SPACE = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
 REQUIRED_SCOPES = (
     "devices:core:read",
@@ -389,6 +390,8 @@ def _route_list(
         if not network.overlaps(VIA6_SPACE):
             continue
         if network.prefixlen < 96:
+            if node_id != selected_node_id and route == EXIT_NODE_DEFAULT:
+                continue
             raise _fail("ambiguous 4via6 route")
         translator_identifier = (int(network.network_address) >> 32) & 0xFFFFFFFF
         if translator_identifier > 0xFFFF or (translator_identifier & 0xFFFF) != 1:
@@ -446,7 +449,11 @@ def validate_inventory(document: object, self_id: str) -> Inventory:
             tagged.append(device)
         for route in (*advertised, *enabled):
             network = ipaddress.ip_network(route, strict=True)
-            if network.version == 6 and network.overlaps(VIA6_SPACE):
+            if (
+                network.version == 6
+                and route != EXIT_NODE_DEFAULT
+                and network.overlaps(VIA6_SPACE)
+            ):
                 route_owners.setdefault(route, set()).add(node_id)
     selected_matches = [device for device in devices if device.node_id == self_id]
     if len(selected_matches) != 1:
