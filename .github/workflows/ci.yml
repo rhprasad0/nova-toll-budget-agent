@@ -37,6 +37,9 @@ jobs:
           terraform_wrapper: false
           terraform_version: "1.15.8"
       - run: uv sync --locked
+      - run: uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest.json --base-ref "$GOLDEN_CORPUS_BASE_REF"
+        env:
+          GOLDEN_CORPUS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright

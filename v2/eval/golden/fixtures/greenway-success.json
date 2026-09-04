@@ -1,0 +1,47 @@
+{
+  "fixture_id": "greenway-success",
+  "capability": "annual_affordability",
+  "result_kind": "success",
+  "request": {
+    "outbound": {"origin_point_id": "greenway:1:entry:EB", "destination_point_id": "greenway:28:exit:EB", "departure_time": "08:00:00"},
+    "return": {"origin_point_id": "greenway:28:entry:WB", "destination_point_id": "greenway:1:exit:WB", "departure_time": "17:30:00"},
+    "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "120000.00"
+  },
+  "route": {"outbound": ["greenway:1:entry:EB", "greenway:28:exit:EB"], "return": ["greenway:28:entry:WB", "greenway:1:exit:WB"]},
+  "source": {"evidence_type": "retained_production_capture", "captured_at": "2026-08-22T16:40:59.392081-04:00", "tool_contract_version": "3.0.0"},
+  "payload": {
+    "method": "recent_complete_same_date_round_trips",
+    "evaluated_at": "2026-08-22T16:40:59.392081-04:00",
+    "timezone": "America/New_York",
+    "target_window": {"start_date": "2026-05-30", "end_date": "2026-08-21", "date_count": 84},
+    "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "planned_annual_commute_days": 240,
+    "coverage": {"eligible_date_count": 60, "complete_pair_count": 60, "coverage_percent": "100.0", "by_weekday": [
+      {"weekday": "monday", "eligible_date_count": 12, "complete_pair_count": 12, "coverage_percent": "100.0"},
+      {"weekday": "tuesday", "eligible_date_count": 12, "complete_pair_count": 12, "coverage_percent": "100.0"},
+      {"weekday": "wednesday", "eligible_date_count": 12, "complete_pair_count": 12, "coverage_percent": "100.0"},
+      {"weekday": "thursday", "eligible_date_count": 12, "complete_pair_count": 12, "coverage_percent": "100.0"},
+      {"weekday": "friday", "eligible_date_count": 12, "complete_pair_count": 12, "coverage_percent": "100.0"}
+    ]},
+    "uses_modeled": false,
+    "uses_current_fixed_rates": true,
+    "facilities": [{"facility": "greenway", "sample_count": 60, "uses_modeled": false, "uses_current_fixed_rates": true, "scenarios": {
+      "p25": {"daily_toll_usd": "11.60", "annual_toll_usd": "2784.00"},
+      "p50": {"daily_toll_usd": "11.60", "annual_toll_usd": "2784.00"},
+      "p90": {"daily_toll_usd": "11.60", "annual_toll_usd": "2784.00"}
+    }}],
+    "assumptions": {"estimated_tax_fraction": "1/3", "vehicle_cost_per_mile_usd": "0.685", "distance_method": "straight_line_priced_facility_legs", "scope": "tolled_portions_only"},
+    "income": {"gross_annual_usd": "120000.00", "estimated_tax_usd": "40000.00", "estimated_after_tax_usd": "80000.00"},
+    "tolled_distance": {"daily_round_trip_miles": "23.83", "annual_miles": "5720.21"},
+    "vehicle_cost": {"daily_usd": "16.33", "annual_usd": "3918.34"},
+    "sample_status": "complete",
+    "available_date_range": {"start_date": "2026-06-01", "end_date": "2026-08-21"},
+    "scenarios": {
+      "p25": {"daily_toll_usd": "11.60", "annual_toll_usd": "2784.00", "daily_total_tolled_commute_cost_usd": "27.93", "average_monthly_tolled_commute_cost_usd": "558.53", "annual_total_tolled_commute_cost_usd": "6702.34", "estimated_annual_income_after_tax_and_tolled_commute_usd": "73297.66", "tolled_commute_share_of_after_tax_income_percent": "8.4", "additional_gross_income_to_offset_usd": "10053.51"},
+      "p50": {"daily_toll_usd": "11.60", "annual_toll_usd": "2784.00", "daily_total_tolled_commute_cost_usd": "27.93", "average_monthly_tolled_commute_cost_usd": "558.53", "annual_total_tolled_commute_cost_usd": "6702.34", "estimated_annual_income_after_tax_and_tolled_commute_usd": "73297.66", "tolled_commute_share_of_after_tax_income_percent": "8.4", "additional_gross_income_to_offset_usd": "10053.51"},
+      "p90": {"daily_toll_usd": "11.60", "annual_toll_usd": "2784.00", "daily_total_tolled_commute_cost_usd": "27.93", "average_monthly_tolled_commute_cost_usd": "558.53", "annual_total_tolled_commute_cost_usd": "6702.34", "estimated_annual_income_after_tax_and_tolled_commute_usd": "73297.66", "tolled_commute_share_of_after_tax_income_percent": "8.4", "additional_gross_income_to_offset_usd": "10053.51"}
+    }
+  }
+}
