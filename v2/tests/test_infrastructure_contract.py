@@ -7668,11 +7668,11 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     dispatch = cast(dict[str, object], trigger["workflow_dispatch"])
     phase = cast(dict[str, object], dispatch["inputs"])["phase"]
     assert phase == {
-        "description": "pre-bootstrap route/transport proof or post-bootstrap full proof",
+        "description": "read-only route diagnostic, pre-bootstrap route/transport proof, or post-bootstrap full proof",
         "required": False,
         "default": "full",
         "type": "choice",
-        "options": ["pre-bootstrap", "full"],
+        "options": ["route-diagnostic", "pre-bootstrap", "full"],
     }
     assert workflow["permissions"] == {"contents": "read"}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
@@ -7780,6 +7780,32 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     for step in steps:
         if "uses" in step:
             assert re.fullmatch(r"[^@]+@[0-9a-f]{40}", cast(str, step["uses"]))
+
+    diagnostic_step = source.split(
+        "- name: Diagnose development Tailscale route", maxsplit=1
+    )[1].split("- uses: aws-actions/configure-aws-credentials", maxsplit=1)[0]
+    assert "if: inputs.phase == 'route-diagnostic'" in diagnostic_step
+    assert "--read-only" in diagnostic_step
+    assert "TS_DEVELOPMENT_ROUTE_OAUTH_" in diagnostic_step
+    assert "TS_DEVELOPMENT_OAUTH_" not in diagnostic_step
+    assert "GITHUB_STEP_SUMMARY" in diagnostic_step
+    for forbidden in (
+        "tailscale/github-action",
+        "Approve development Tailscale route",
+        "POST /device/",
+        "timed-checks",
+        "tailscale debug via",
+        "psql",
+        "socket.create_connection",
+    ):
+        assert forbidden not in diagnostic_step
+    assert (
+        source.count(
+            "if: inputs.phase == 'pre-bootstrap' || inputs.phase == 'full' || inputs.phase == ''"
+        )
+        == 4
+    )
+    assert "inputs.phase != 'route-diagnostic'" not in source
 
 
 def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
@@ -7965,6 +7991,7 @@ def test_slice_2b_runbook_documents_bounded_secret_route_and_activation_gates():
         "DEVELOPMENT_DELIVERY_ENABLED",
         "DEVELOPMENT_DELIVERY_ENABLED == 'true'",
         "workflow_dispatch",
+        "route-diagnostic",
         "repository variable",
         "gh variable set DEVELOPMENT_DELIVERY_ENABLED --body true",
         "PGHOST",

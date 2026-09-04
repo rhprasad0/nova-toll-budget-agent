@@ -3,7 +3,7 @@ import subprocess
 import urllib.parse
 from collections import deque
 from io import BytesIO
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
@@ -97,6 +97,7 @@ def device(
     node_id: str = "self-node",
     *,
     tags: list[str] | None = None,
+    online: bool = True,
     advertised: list[str] | None = None,
     enabled: list[str] | None = None,
 ) -> dict[str, object]:
@@ -105,6 +106,7 @@ def device(
         "tags": [route.EXPECTED_TAG]
         if tags is None and node_id == "self-node"
         else (tags or []),
+        "online": online,
         "advertisedRoutes": [] if advertised is None else advertised,
         "enabledRoutes": [] if enabled is None else enabled,
     }
@@ -244,6 +246,12 @@ def test_inventory_binding_and_route_validation() -> None:
         },
         {
             "devices": [
+                device(online=False),
+                device("other-node"),
+            ]
+        },
+        {
+            "devices": [
                 device(advertised=[route.EXPECTED_ROUTE]),
                 device("other-node", advertised=[route.EXPECTED_ROUTE]),
             ]
@@ -251,6 +259,157 @@ def test_inventory_binding_and_route_validation() -> None:
     ):
         with pytest.raises(route.ApprovalError):
             route.validate_inventory(broken, "self-node")
+
+
+def test_diagnostic_is_read_only_and_sanitized() -> None:
+    fake_aws = AwsFake()
+    fake_url = UrlFake([oauth_response(), Response(inventory())])
+
+    summary = json.loads(
+        route.diagnose_route(
+            "client-id", "client-secret", runner=fake_aws, opener=fake_url
+        )
+    )
+
+    assert summary["node_id"] == "self-node"
+    assert summary["tag"] == route.EXPECTED_TAG
+    assert summary["online"] is True
+    assert summary["advertised"] is True
+    assert summary["enabled"] is False
+    assert summary["advertised_route_count"] == 1
+    assert summary["enabled_route_count"] == 0
+    assert len(summary["advertised_route_hash"]) == 64
+    assert len(summary["enabled_route_hash"]) == 64
+    assert (
+        len([call for call in fake_aws.calls if "get-command-invocation" in call]) == 1
+    )
+    assert len(fake_url.requests) == 2
+    assert not [
+        request
+        for request in fake_url.requests
+        if request.method == "POST" and request.full_url.endswith("/routes")
+    ]
+    output = json.dumps(summary)
+    assert "client-secret" not in output
+    assert "access_token" not in output
+    assert "enabledRoutes" not in output
+
+
+def test_read_only_cli_flag_cannot_fall_through_to_approval(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def diagnostic_stub(*_args: object, **_kwargs: object) -> str:
+        return '{"diagnostic":true}'
+
+    def approval_stub(*_args: object, **_kwargs: object) -> NoReturn:
+        pytest.fail("diagnostic fell through to approval")
+
+    monkeypatch.setattr(route.sys, "argv", ["route.py", "--read-only"])
+    monkeypatch.setattr(route, "diagnose_route", diagnostic_stub)
+    monkeypatch.setattr(route, "approve_route", approval_stub)
+
+    route.main()
+
+    assert capsys.readouterr().out == '{"diagnostic":true}\n'
+
+
+@pytest.mark.parametrize("diagnostic", [True, False])
+def test_production_ipv4_route_is_rejected_before_any_write(diagnostic: bool) -> None:
+    document = inventory(advertised=[route.EXPECTED_ROUTE, "172.31.0.0/16"])
+    fake_url = UrlFake(
+        [
+            oauth_response(),
+            Response(document),
+            Response(document),
+            Response({"ok": True}),
+        ]
+    )
+    with pytest.raises(route.ApprovalError):
+        if diagnostic:
+            route.diagnose_route("client", "secret", runner=AwsFake(), opener=fake_url)
+        else:
+            route.approve_route("client", "secret", runner=AwsFake(), opener=fake_url)
+    assert not [
+        request
+        for request in fake_url.requests
+        if request.method == "POST" and request.full_url.endswith("/routes")
+    ]
+
+
+def test_diagnostic_stage_errors_are_sanitized() -> None:
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.diagnose_route(
+            "client",
+            "secret",
+            runner=AwsExploding(RuntimeError("secret-response-payload")),
+            opener=UrlFake([]),
+        )
+    assert error_info.value.stage == "precondition"
+    assert str(error_info.value).startswith("precondition:")
+    assert "secret-response-payload" not in str(error_info.value)
+
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.diagnose_route(
+            "client",
+            "secret",
+            runner=AwsFake(),
+            opener=UrlFake([Response({}, status=403)]),
+        )
+    assert error_info.value.stage == "oauth-token"
+    assert str(error_info.value).startswith("oauth-token:")
+    assert "secret-response-payload" not in str(error_info.value)
+
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.diagnose_route(
+            "client",
+            "secret",
+            runner=AwsFake(),
+            opener=UrlFake(
+                [oauth_response(), Response({"devices": "secret-response-payload"})]
+            ),
+        )
+    assert error_info.value.stage == "device-get"
+    assert str(error_info.value).startswith("device-get:")
+    assert "secret-response-payload" not in str(error_info.value)
+
+
+def test_normal_approval_failure_stages_remain_distinct() -> None:
+    re_get = UrlFake(
+        [oauth_response(), Response(inventory()), Response({}, status=500)]
+    )
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.approve_route("client", "secret", runner=AwsFake(), opener=re_get)
+    assert error_info.value.stage == "re-get"
+
+    post = UrlFake(
+        [
+            oauth_response(),
+            Response(inventory()),
+            Response(inventory()),
+            TimeoutError(),
+            Response(inventory()),
+        ]
+    )
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.approve_route("client", "secret", runner=AwsFake(), opener=post)
+    assert error_info.value.stage == "post"
+
+    verification = UrlFake(
+        [
+            oauth_response(),
+            Response(inventory()),
+            Response(inventory()),
+            Response({"ok": True}),
+        ]
+    )
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.approve_route(
+            "client",
+            "secret",
+            runner=AwsIdentitySequence(["self-node", "drift-node"]),
+            opener=verification,
+        )
+    assert error_info.value.stage == "verification"
 
 
 def test_approval_is_idempotent_and_preserves_enabled_routes() -> None:

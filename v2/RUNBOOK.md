@@ -2228,6 +2228,22 @@ Any SSM, OAuth, inventory, identity, ownership, route, POST, or post-read
 failure stops before the DB role is assumed. Do not guess a device, accept a
 partial list, use an alternate credential, or continue to TLS/SQL checks.
 
+After the diagnostic source change is merged, inspect the unknown route state
+with the protected workflow's manual `route-diagnostic` phase before any
+approval attempt:
+
+```sh
+gh workflow run v2-development-connectivity-verification.yml \
+  --ref main --field phase=route-diagnostic
+```
+
+Approve the `development` environment as usual. This phase skips the
+Tailscale auth-key action, timed-checks role, route approval, transport, and
+SQL steps; it assumes only the fixed route-control role and records only the
+sanitized JSON summary. Keep the reviewer and delivery gate unchanged. A
+non-success stage, missing/foreign route state, or any indication that the
+earlier run reached a POST remains a hard stop for human review.
+
 #### Slice 2B development router and protected connectivity handoff
 
 This section is a post-merge operator procedure. The builder and deterministic
