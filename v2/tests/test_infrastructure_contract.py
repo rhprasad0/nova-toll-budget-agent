@@ -6565,6 +6565,22 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         _foundation_change("managed", "aws_budgets_budget.nova_toll_monthly", ["no-op"])
     )
     assert validator.validate_plan(plan)["route_control_create"] == 3
+    provider_order_plan = deepcopy(plan)
+    provider_policy = json.loads(
+        provider_order_plan["resource_changes"][3]["change"]["after"]["policy"]
+    )
+    provider_policy["Statement"][0]["Resource"].reverse()
+    provider_order_plan["resource_changes"][3]["change"]["after"]["policy"] = (
+        json.dumps(provider_policy, separators=(",", ":"))
+    )
+    assert validator.validate_plan(provider_order_plan)["route_control_create"] == 3
+    resolved_data_plan = deepcopy(provider_order_plan)
+    resolved_data_plan["resource_changes"] = [
+        change
+        for change in resolved_data_plan["resource_changes"]
+        if change["mode"] != "data"
+    ]
+    assert validator.validate_plan(resolved_data_plan)["data_read"] == 0
 
     for invalid in (
         {
@@ -6595,6 +6611,15 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
             "resource_changes": [
                 *plan["resource_changes"],
                 _foundation_change("data", "data.aws_region.current", ["read"]),
+            ],
+        },
+        {
+            **plan,
+            "resource_changes": [
+                change
+                for change in plan["resource_changes"]
+                if change["address"]
+                != "data.aws_iam_policy_document.route_control_assume[0]"
             ],
         },
         {
@@ -6752,6 +6777,7 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
     assert step3.index('PLAN_ROOT="$(mktemp -d)"') < step3.index(
         'chmod 700 -- "$PLAN_ROOT"'
     )
+    assert "-var fetcher_package_path=build/fetcher.zip" in step3
     assert step4.index(': "${PLAN_ROOT:?') < step4.index(
         'sha256sum "$PLAN_ROOT/development-foundation.tfplan"'
     )
