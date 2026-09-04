@@ -4205,6 +4205,21 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "events:ListTagsForResource" in cast(
         list[str], by_sid["ManageApplicationEventRules"]["actions"]
     )
+    assert _hcl_strings(
+        _hcl_attribute(source, "development_delivery_log_group_arns")
+    ) == [
+        "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:"
+        + name
+        for name in (
+            "/aws/lambda/toll-v2-pricing-loader-dev",
+            "/aws/lambda/toll-v2-report-publisher-dev",
+            "/aws/lambda/tollchat-v2-chat-proxy-dev",
+            "/aws/lambda/tollchat-v2-usage-publisher-dev",
+            "/aws/lambda/tollchat-v2-agent-usage-rollup-dev",
+            "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
+            "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
+        )
+    ]
     assert by_sid["ManageApplicationMeasurementBucket"]["actions"] == [
         "s3:GetAccelerateConfiguration",
         "s3:GetBucketAcl",
