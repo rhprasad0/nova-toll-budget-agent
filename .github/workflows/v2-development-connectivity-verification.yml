@@ -42,6 +42,22 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-route-control-dev
+          aws-region: us-east-1
+
+      - name: Approve development Tailscale route
+        env:
+          TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID: ${{ secrets.TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID }}
+          TS_DEVELOPMENT_ROUTE_OAUTH_SECRET: ${{ secrets.TS_DEVELOPMENT_ROUTE_OAUTH_SECRET }}
+        run: |
+          set -euo pipefail
+          set +x
+          test "$GITHUB_REF" = "refs/heads/main"
+          ROUTE_SUMMARY="$(python3 scripts/approve_development_tailscale_route.py)"
+          printf '## Development Tailscale route approval\n\n```json\n%s\n```\n' "$ROUTE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev
           aws-region: us-east-1
 

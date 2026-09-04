@@ -154,3 +154,93 @@ resource "aws_instance" "tailscale_router" {
     shared_with = "development"
   }
 }
+
+# Route approval is foundation-owned: application delivery cannot change the
+# role trust, command document, or command permissions used to inspect the router.
+data "aws_iam_policy_document" "route_control_assume" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-connectivity-verification.yml@refs/heads/main"]
+    }
+  }
+}
+
+resource "aws_ssm_document" "route_control" {
+  count           = var.environment == "development" ? 1 : 0
+  name            = "nova-toll-v2-route-control-status-dev"
+  document_type   = "Command"
+  document_format = "YAML"
+  content         = <<-DOC
+    schemaVersion: '2.2'
+    description: Read the enrolled router's local Tailscale identity.
+    mainSteps:
+      - action: aws:runShellScript
+        name: readTailscaleStatus
+        inputs:
+          timeoutSeconds: '20'
+          runCommand:
+            - set -eu
+            - tailscale status --json
+    DOC
+}
+
+resource "aws_iam_role" "route_control" {
+  count              = var.environment == "development" ? 1 : 0
+  name               = "nova-toll-v2-route-control-dev"
+  assume_role_policy = data.aws_iam_policy_document.route_control_assume[0].json
+}
+
+data "aws_iam_policy_document" "route_control" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    sid     = "SendRouterStatusCommand"
+    actions = ["ssm:SendCommand"]
+    resources = [
+      "arn:aws:ec2:us-east-1:903859731897:instance/i-0d33b9a9c15db93fc",
+      "arn:aws:ssm:us-east-1:903859731897:document/nova-toll-v2-route-control-status-dev",
+    ]
+  }
+
+  statement {
+    sid       = "ReadRouterStatusCommand"
+    actions   = ["ssm:GetCommandInvocation"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = ["us-east-1"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "route_control" {
+  count  = var.environment == "development" ? 1 : 0
+  name   = "nova-toll-v2-route-control-dev"
+  role   = aws_iam_role.route_control[0].id
+  policy = data.aws_iam_policy_document.route_control[0].json
+}

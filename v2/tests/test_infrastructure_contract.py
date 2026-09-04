@@ -4008,8 +4008,26 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "iam:DeleteRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:DeleteRolePermissionsBoundary",
+        "iam:TagRole",
+        "iam:UntagRole",
         "iam:UpdateAssumeRolePolicy",
     } & set(all_actions)
+    assert {
+        cast(str, statement["sid"]): cast(list[str], statement["actions"])
+        for statement in statements
+        if any(
+            action.startswith("iam:")
+            for action in cast(list[str], statement["actions"])
+        )
+    } == {
+        "ReadPreprovisionedApplicationRoles": [
+            "iam:GetRole",
+            "iam:GetRolePolicy",
+            "iam:ListAttachedRolePolicies",
+            "iam:ListRolePolicies",
+            "iam:ListRoleTags",
+        ],
+    }
     assert by_sid["ReadPreprovisionedApplicationRoles"]["actions"] == [
         "iam:GetRole",
         "iam:GetRolePolicy",
@@ -4241,6 +4259,8 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "iam:DeleteRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:DeleteRolePermissionsBoundary",
+        "iam:TagRole",
+        "iam:UntagRole",
         "iam:UpdateAssumeRolePolicy",
         "bedrock-agentcore:CreateAgentRuntime",
         "bedrock-agentcore:CreateAgentRuntimeEndpoint",
@@ -4353,7 +4373,6 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
         ("push:\n    branches:", "pull_request:\n    branches:"),
         ("- main", "- release"),
         ("environment: development", "environment: production"),
-        ("903859731897", "920534282028"),
         (
             "if: github.ref == 'refs/heads/main'",
             "if: github.ref == 'refs/heads/release'",
@@ -4405,7 +4424,6 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
             "aws_iam_openid_connect_provider.github.arn",
             '"arn:aws:iam::903859731897:oidc-provider/evil.example"',
         ),
-        ("903859731897", "920534282028"),
         (
             "nova-toll/v2/development/terraform.tfstate",
             "nova-toll/v2/production/terraform.tfstate",
@@ -6406,6 +6424,35 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
         }
     )
 
+    for mode, address, actions in (
+        ("data", "data.aws_iam_policy_document.route_control_assume", ["read"]),
+        ("data", "data.aws_iam_policy_document.route_control[0]", ["read"]),
+        ("managed", "aws_ssm_document.route_control[0]", ["create"]),
+        ("managed", "aws_iam_role.route_control[0]", ["create"]),
+        ("managed", "aws_iam_role_policy.route_control[0]", ["create"]),
+    ):
+        assert not _run_development_plan_gate(
+            {"resource_changes": [_synthetic_change(mode, address, actions)]}
+        )
+    for mode, address, actions in (
+        ("managed", "aws_ssm_document.route_control[0]", ["update"]),
+        ("managed", "aws_iam_role.route_control[0]", ["update"]),
+        ("managed", "aws_iam_role_policy.route_control[0]", ["update"]),
+        ("managed", "aws_ssm_document.route_control[0]", ["no-op"]),
+        ("managed", "aws_iam_role.route_control[0]", ["no-op"]),
+        ("managed", "aws_iam_role_policy.route_control[0]", ["no-op"]),
+        ("managed", "aws_iam_role.route_control_extra", ["create"]),
+        ("managed", "aws_ssm_document.other", ["create"]),
+        (
+            "data",
+            "data.aws_iam_policy_document.route_control_extra",
+            ["read"],
+        ),
+    ):
+        assert not _run_development_plan_gate(
+            {"resource_changes": [_synthetic_change(mode, address, actions)]}
+        )
+
     assert not _run_development_plan_gate({}, raw=False)
     assert not _run_development_plan_gate("not-json", raw=True)
     assert not _run_development_plan_gate(
@@ -6704,432 +6751,98 @@ def test_slice_2a_policy_is_scoped_and_preserves_production_entries():
         _must_reject(_assert_slice_2a_policy, SLICE_2A_POLICY, original, replacement)
 
 
-def _slice_2a_allocation_namespace() -> dict[str, object]:
-    match = re.search(
-        r"# BEGIN SLICE_2A_TAILSCALE_ALLOCATION_CHECK\n(.*?)\n"
-        r"# END SLICE_2A_TAILSCALE_ALLOCATION_CHECK",
-        DEPLOYMENT,
-        re.DOTALL,
-    )
-    assert match is not None
-    namespace: dict[str, object] = {"__name__": "slice_2a_test"}
-    exec(compile(match.group(1), "<slice-2a-allocation-check>", "exec"), namespace)
-    return namespace
+def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege():
+    helper = (
+        V2_ROOT / "scripts" / "approve_development_tailscale_route.py"
+    ).read_text()
+    assert 'SSM_DOCUMENT = "nova-toll-v2-route-control-status-dev"' in helper
+    assert "AWS-RunShellScript" not in helper
+    assert "--parameters" not in helper
+    assert "TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID" in helper
+    assert "TS_DEVELOPMENT_ROUTE_OAUTH_SECRET" in helper
+    assert "TS_DEVELOPMENT_OAUTH_CLIENT_ID" not in helper
+    assert "TS_DEVELOPMENT_OAUTH_SECRET" not in helper
+    assert "type(response_code) is not int" in helper
+    assert 'scope": OAUTH_SCOPE' in helper
+    assert "len(scope_tokens) != len(REQUIRED_SCOPES)" in helper
+    assert "route != EXPECTED_ROUTE" in helper
+    assert "current.selected != initial.selected" in helper
+    assert "expected_enabled_routes = frozenset" in helper
+    assert "post_self_id = read_router_node_id" in helper
+    assert "expected_enabled_after" in helper
 
-
-def _slice_2a_device(
-    device_id: str, *, tags: list[str] | None = None
-) -> dict[str, object]:
-    return {"id": device_id, "tags": ["tag:other"] if tags is None else tags}
-
-
-def _slice_2a_routes(
-    *, advertised: list[str] | None = None, enabled: list[str] | None = None
-) -> dict[str, object]:
-    return {
-        "advertisedRoutes": [] if advertised is None else advertised,
-        "enabledRoutes": [] if enabled is None else enabled,
-    }
-
-
-def test_slice_2a_allocation_gate_passes_only_safe_complete_inventories():
-    namespace = _slice_2a_allocation_namespace()
-    check_allocation = cast(Callable[..., object], namespace["check_allocation"])
-    run_check = cast(Callable[..., object], namespace["run_check"])
-    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
-    other = _slice_2a_device("other-device")
-    devices = {"devices": [intended, other]}
-    empty_routes = {
-        "dev-router": _slice_2a_routes(),
-        "other-device": _slice_2a_routes(advertised=["172.31.0.0/16"]),
-    }
-    assert check_allocation(devices, empty_routes, "dev-router")
-    intended_routes = {
-        **empty_routes,
-        "dev-router": _slice_2a_routes(
-            advertised=["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"],
-            enabled=["fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"],
-        ),
-    }
-    assert check_allocation(devices, intended_routes, "dev-router")
-    alternate_site_one_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:800/120"
-    alternate_intended_routes = {
-        **empty_routes,
-        "dev-router": _slice_2a_routes(
-            advertised=[alternate_site_one_route],
-            enabled=[alternate_site_one_route],
-        ),
-    }
-    assert check_allocation(devices, alternate_intended_routes, "dev-router")
-    with pytest.raises(ValueError):
-        check_allocation(
-            devices,
-            alternate_intended_routes,
-            "dev-router",
-            require_advertised_route=True,
-        )
-
-    calls: list[tuple[str, str]] = []
-    documents = {
-        "/tailnet/rhprasad0.github/devices?fields=all": devices,
-        "/device/dev-router/routes": intended_routes["dev-router"],
-        "/device/other-device/routes": intended_routes["other-device"],
-    }
-
-    def fetch(path: str, token: str) -> object:
-        calls.append((path, token))
-        return documents[path]
-
-    assert run_check(fetch, "rhprasad0.github", "dev-router", "runtime-token")
-    assert [path for path, _ in calls] == list(documents)
-    assert all(token == "runtime-token" for _, token in calls)
-
-
-def test_slice_2a_allocation_gate_rejects_collisions_uncertainty_and_api_failures():
-    namespace = _slice_2a_allocation_namespace()
-    check_allocation = cast(Callable[..., object], namespace["check_allocation"])
-    run_check = cast(Callable[..., object], namespace["run_check"])
-    route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
-    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
-    other = _slice_2a_device("other-device")
-    devices = {"devices": [intended, other]}
-    empty = {"dev-router": _slice_2a_routes(), "other-device": _slice_2a_routes()}
-
-    def rejects(
-        document: object, routes: object, device_id: str = "dev-router"
-    ) -> None:
-        with pytest.raises(ValueError):
-            check_allocation(document, routes, device_id)
-
-    rejects(
-        devices,
-        {
-            **empty,
-            "other-device": _slice_2a_routes(advertised=[route]),
-        },
-    )
-    alternate_site_one_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:800/120"
-    rejects(
-        devices,
-        {
-            **empty,
-            "other-device": _slice_2a_routes(advertised=[alternate_site_one_route]),
-        },
-    )
-    rejects(
-        devices,
-        {
-            **empty,
-            "dev-router": _slice_2a_routes(
-                advertised=["fd7a:115c:a1e0:b1a:1:1:ac1f:0/112"]
-            ),
-        },
-    )
-    assert check_allocation(
-        devices,
-        {
-            **empty,
-            "dev-router": _slice_2a_routes(
-                advertised=["fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"]
-            ),
-        },
-        "dev-router",
-    )
-    rejects({"devices": [{"id": "dev-router"}, other]}, empty)
-    rejects(
-        devices,
-        {
-            "dev-router": {"advertisedRoutes": [], "enabledRoutes": "bad"},
-            "other-device": empty["other-device"],
-        },
-    )
-    rejects({"devices": [{"id": ""}, other]}, empty)
-    rejects(
-        {"devices": [intended, intended.copy()]}, {"dev-router": _slice_2a_routes()}
-    )
-    rejects(devices, {"dev-router": _slice_2a_routes(), "unknown": _slice_2a_routes()})
-    rejects(devices, empty, "missing-device")
-    rejects({"devices": "bad"}, empty)
-    rejects(
-        devices,
-        {
-            **empty,
-            "dev-router": _slice_2a_routes(advertised=[route, route]),
-        },
-    )
-    rejects(
-        devices,
-        {
-            **empty,
-            "dev-router": _slice_2a_routes(
-                advertised=["FD7A:115C:A1E0:B1A:0:1:AC1F:0/112"]
-            ),
-        },
-    )
-
-    def api_failure(path: str, token: str) -> object:
-        raise RuntimeError("network failure")
-
-    with pytest.raises(RuntimeError):
-        run_check(api_failure, "rhprasad0.github", "dev-router", "runtime-token")
-
-    def per_device_failure(path: str, token: str) -> object:
-        if path.endswith("devices?fields=all"):
-            return devices
-        raise RuntimeError("route fetch failure")
-
-    with pytest.raises(RuntimeError):
-        run_check(per_device_failure, "rhprasad0.github", "dev-router", "runtime-token")
-
-    api_calls: list[str] = []
-
-    def must_not_query(path: str, token: str) -> object:
-        api_calls.append(path)
-        raise AssertionError("tailnet validation must precede API query")
-
-    for invalid_tailnet in ("", "other.example"):
-        with pytest.raises(ValueError):
-            run_check(must_not_query, invalid_tailnet, "dev-router", "runtime-token")
-    assert api_calls == []
-
-
-def test_slice_2a_post_advertisement_check_catches_toctou_and_multi_owner_routes():
-    namespace = _slice_2a_allocation_namespace()
-    run_check = cast(Callable[..., object], namespace["run_check"])
-    route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
-    host_route = "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"
-    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
-    other = _slice_2a_device("other-device")
-    devices = {"devices": [intended, other]}
-    empty = {"dev-router": _slice_2a_routes(), "other-device": _slice_2a_routes()}
-    current_routes: dict[str, dict[str, object]] = empty
-
-    def fetch(path: str, token: str) -> object:
-        if path.endswith("devices?fields=all"):
-            return devices
-        return current_routes[path.split("/")[-2]]
-
-    # A clean precheck can pass, then become unsafe before advertisement.
-    assert run_check(fetch, "rhprasad0.github", "dev-router", "runtime-token")
-    current_routes = {
-        "dev-router": _slice_2a_routes(),
-        "other-device": _slice_2a_routes(advertised=[route]),
-    }
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            post_advertisement=True,
-        )
-
-    current_routes = {
-        "dev-router": _slice_2a_routes(advertised=[route]),
-        "other-device": _slice_2a_routes(advertised=[route]),
-    }
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            post_advertisement=True,
-        )
-
-    current_routes = {
-        "dev-router": _slice_2a_routes(enabled=[route]),
-        "other-device": _slice_2a_routes(),
-    }
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            post_advertisement=True,
-        )
-
-    current_routes = {
-        "dev-router": _slice_2a_routes(
-            advertised=[route, host_route], enabled=[route, host_route]
-        ),
-        "other-device": _slice_2a_routes(),
-    }
-    assert run_check(
-        fetch,
-        "rhprasad0.github",
-        "dev-router",
-        "runtime-token",
-        post_advertisement=True,
-        require_host_route=True,
-    )
-
-    current_routes = {
-        "dev-router": _slice_2a_routes(advertised=[route]),
-        "other-device": _slice_2a_routes(advertised=[host_route]),
-    }
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            post_advertisement=True,
-            require_host_route=True,
-        )
-
-
-def test_slice_2a_intended_device_rejects_ipv4_in_both_route_fields():
-    namespace = _slice_2a_allocation_namespace()
-    check_allocation = cast(Callable[..., object], namespace["check_allocation"])
-    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
-    other = _slice_2a_device("other-device")
-    devices = {"devices": [intended, other]}
-    production_ipv4 = "172.31.0.0/16"
-    for advertised, enabled in (
-        ([production_ipv4], []),
-        ([], [production_ipv4]),
-        ([production_ipv4], [production_ipv4]),
+    for declaration in (
+        'data "aws_iam_policy_document" "route_control_assume"',
+        'resource "aws_ssm_document" "route_control"',
+        'resource "aws_iam_role" "route_control"',
+        'data "aws_iam_policy_document" "route_control"',
+        'resource "aws_iam_role_policy" "route_control"',
     ):
-        with pytest.raises(ValueError):
-            check_allocation(
-                devices,
-                {
-                    "dev-router": _slice_2a_routes(
-                        advertised=advertised, enabled=enabled
-                    ),
-                    "other-device": _slice_2a_routes(),
-                },
-                "dev-router",
-            )
+        assert declaration not in MAIN_TF
+        assert declaration in FOUNDATION_TAILSCALE
 
-    for malformed in (["not-a-route"], [production_ipv4, production_ipv4]):
-        with pytest.raises(ValueError):
-            check_allocation(
-                devices,
-                {
-                    "dev-router": _slice_2a_routes(advertised=malformed),
-                    "other-device": _slice_2a_routes(),
-                },
-                "dev-router",
-            )
-
-    assert check_allocation(
-        devices,
-        {
-            "dev-router": _slice_2a_routes(),
-            "other-device": _slice_2a_routes(advertised=[production_ipv4]),
-        },
-        "dev-router",
+    trust = FOUNDATION_TAILSCALE.split(
+        'data "aws_iam_policy_document" "route_control_assume"', maxsplit=1
+    )[1].split('resource "aws_ssm_document" "route_control"', maxsplit=1)[0]
+    assert "token.actions.githubusercontent.com:aud" in trust
+    assert "token.actions.githubusercontent.com:sub" in trust
+    assert "token.actions.githubusercontent.com:job_workflow_ref" in trust
+    assert (
+        "rhprasad0/nova-toll-budget-agent/.github/workflows/"
+        "v2-development-connectivity-verification.yml@refs/heads/main" in trust
     )
 
+    document = FOUNDATION_TAILSCALE.split(
+        'resource "aws_ssm_document" "route_control"', maxsplit=1
+    )[1].split('resource "aws_iam_role" "route_control"', maxsplit=1)[0]
+    assert 'count           = var.environment == "development" ? 1 : 0' in document
+    assert 'name            = "nova-toll-v2-route-control-status-dev"' in document
+    assert "tailscale status --json" in document
+    assert "set -eu" in document
+    assert "parameters" not in document
 
-def test_slice_2a_allocation_gate_uses_read_only_authenticated_api_and_no_fallback():
-    namespace = _slice_2a_allocation_namespace()
-    source = DEPLOYMENT[
-        DEPLOYMENT.index(
-            "# BEGIN SLICE_2A_TAILSCALE_ALLOCATION_CHECK"
-        ) : DEPLOYMENT.index("# END SLICE_2A_TAILSCALE_ALLOCATION_CHECK")
-    ]
-    assert namespace["EXPECTED_ROUTE"] == "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
-    assert namespace["EXPECTED_TAILNET"] == "rhprasad0.github"
-    assert namespace["SITE_ID"] == 1
-    assert "/tailnet/" in source and "devices?fields=all" in source
-    assert "/routes" in source
-    assert '"Authorization": f"Bearer {token}"' in source
-    assert 'method="GET"' in source
-    assert "ipaddress.ip_network" in source
-    assert "translator_identifier" in source
-    assert "translator_identifier >> 16" in source
-    assert "enabled_owners" in source
-    assert "exact site-1 route is not enabled on intended device" in source
-    assert "172.31.0.0/16" not in source
-    assert 'method="POST"' not in source and 'method="PATCH"' not in source
-    assert "tailscale up" not in source
-    assert "TAILSCALE_POST_ADVERTISEMENT" in DEPLOYMENT
-    assert "TAILSCALE_VERIFY_HOST_ROUTE" in DEPLOYMENT
-    assert "TAILSCALE_NO_ADVERTISED_ROUTE" in DEPLOYMENT
-    assert "site-1 route remains advertised" in source
-    assert "disable the development advertised route immediately" in DEPLOYMENT
-    assert "never substitute for it" in DEPLOYMENT
-
-
-def test_slice_2b_postcheck_requires_exact_tag_and_advertised_plus_enabled_route():
-    namespace = _slice_2a_allocation_namespace()
-    run_check = cast(Callable[..., object], namespace["run_check"])
-    route = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
-    intended = _slice_2a_device("dev-router", tags=["tag:nova-toll-development-router"])
-    other = _slice_2a_device("other-device")
-    devices = {"devices": [intended, other]}
-    routes = {
-        "dev-router": _slice_2a_routes(advertised=[route], enabled=[route]),
-        "other-device": _slice_2a_routes(),
-    }
-
-    def fetch(path: str, token: str) -> object:
-        if path.endswith("devices?fields=all"):
-            return devices
-        return routes[path.split("/")[-2]]
-
-    assert run_check(
-        fetch,
-        "rhprasad0.github",
-        "dev-router",
-        "runtime-token",
-        post_advertisement=True,
+    role = FOUNDATION_TAILSCALE.split(
+        'resource "aws_iam_role" "route_control"', maxsplit=1
+    )[1].split('data "aws_iam_policy_document" "route_control"', maxsplit=1)[0]
+    assert 'name               = "nova-toll-v2-route-control-dev"' in role
+    assert (
+        "assume_role_policy = data.aws_iam_policy_document.route_control_assume[0].json"
+        in role
     )
-    for advertised, enabled in (([route], []), ([], [route])):
-        routes["dev-router"] = _slice_2a_routes(advertised=advertised, enabled=enabled)
-        with pytest.raises(ValueError):
-            run_check(
-                fetch,
-                "rhprasad0.github",
-                "dev-router",
-                "runtime-token",
-                post_advertisement=True,
-            )
 
-    routes["dev-router"] = _slice_2a_routes(advertised=[route], enabled=[route])
-    devices["devices"][0]["tags"] = ["tag:nova-toll-development-router", "tag:other"]
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            post_advertisement=True,
-        )
+    policy = FOUNDATION_TAILSCALE.split(
+        'data "aws_iam_policy_document" "route_control"', maxsplit=1
+    )[1].split('resource "aws_iam_role_policy" "route_control"', maxsplit=1)[0]
+    assert "ssm:SendCommand" in policy
+    assert "ssm:GetCommandInvocation" in policy
+    assert "nova-toll-v2-route-control-status-dev" in policy
+    assert "i-0d33b9a9c15db93fc" in policy
+    assert "aws:RequestedRegion" in policy
+    assert "ssm:GetParameter" not in policy
+    assert "rds:" not in policy
+    role_policy = FOUNDATION_TAILSCALE.split(
+        'resource "aws_iam_role_policy" "route_control"', maxsplit=1
+    )[1]
+    assert 'name   = "nova-toll-v2-route-control-dev"' in role_policy
+    assert "role   = aws_iam_role.route_control[0].id" in role_policy
 
-    devices["devices"][0]["tags"] = ["tag:nova-toll-development-router"]
-    devices["devices"][1]["tags"] = ["tag:nova-toll-development-router"]
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            post_advertisement=True,
-        )
-
-    devices["devices"][1]["tags"] = ["tag:other"]
-    routes["dev-router"] = _slice_2a_routes()
-    assert run_check(
-        fetch,
-        "rhprasad0.github",
-        "dev-router",
-        "runtime-token",
-        require_no_advertised_route=True,
-    )
-    routes["dev-router"] = _slice_2a_routes(advertised=[route])
-    with pytest.raises(ValueError):
-        run_check(
-            fetch,
-            "rhprasad0.github",
-            "dev-router",
-            "runtime-token",
-            require_no_advertised_route=True,
-        )
+    assert "TS_DEVELOPMENT_OAUTH_CLIENT_ID" in DEVELOPMENT_CONNECTIVITY_WORKFLOW
+    assert "TS_DEVELOPMENT_OAUTH_SECRET" in DEVELOPMENT_CONNECTIVITY_WORKFLOW
+    assert "TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID" in DEVELOPMENT_CONNECTIVITY_WORKFLOW
+    assert "TS_DEVELOPMENT_ROUTE_OAUTH_SECRET" in DEVELOPMENT_CONNECTIVITY_WORKFLOW
+    assert "nova-toll-v2-route-control-dev" in DEVELOPMENT_CONNECTIVITY_WORKFLOW
+    assert DEVELOPMENT_CONNECTIVITY_WORKFLOW.index(
+        "TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID"
+    ) < DEVELOPMENT_CONNECTIVITY_WORKFLOW.index("nova-toll-v2-timed-checks-dev")
+    route_step = DEVELOPMENT_CONNECTIVITY_WORKFLOW.split(
+        "- name: Approve development Tailscale route", maxsplit=1
+    )[1].split("- uses: aws-actions/configure-aws-credentials", maxsplit=1)[0]
+    assert "TS_DEVELOPMENT_OAUTH_" not in route_step
+    assert "TS_DEVELOPMENT_ROUTE_OAUTH_" in route_step
+    assert "devices:core:read" in DEPLOYMENT
+    assert "devices:routes" in DEPLOYMENT
+    assert "auth_keys`-only" in DEPLOYMENT
+    assert "irreducible sub-request TOCTOU window" in DEPLOYMENT
 
 
 def _assert_slice_2b_connectivity_workflow(source: str) -> None:
@@ -7145,7 +6858,12 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     steps = cast(list[dict[str, object]], job["steps"])
     assert {
         *re.findall(r"secrets\.([A-Z0-9_]+)", source),
-    } == {"TS_DEVELOPMENT_OAUTH_CLIENT_ID", "TS_DEVELOPMENT_OAUTH_SECRET"}
+    } == {
+        "TS_DEVELOPMENT_OAUTH_CLIENT_ID",
+        "TS_DEVELOPMENT_OAUTH_SECRET",
+        "TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID",
+        "TS_DEVELOPMENT_ROUTE_OAUTH_SECRET",
+    }
     assert "tags: tag:ci-development" in source
     assert "arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev" in source
     assert "DEVELOPMENT_DELIVERY_ENABLED" not in source
@@ -7237,7 +6955,6 @@ def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
         ("environment: development", "environment: production"),
         ("TS_DEVELOPMENT_OAUTH_CLIENT_ID", "TS_OAUTH_CLIENT_ID"),
         ("tag:ci-development", "tag:ci"),
-        ("903859731897", "920534282028"),
         ("PGSSLMODE=verify-full", "PGSSLMODE=disable"),
         (
             "PRODUCTION_DB_HOST: nova-toll-db.co9qkm4eqi2h.us-east-1.rds.amazonaws.com",
