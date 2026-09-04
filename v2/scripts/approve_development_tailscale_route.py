@@ -30,7 +30,8 @@ VIA6_SPACE = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
 REQUIRED_SCOPES = ("devices:core:read", "devices:routes")
 OAUTH_SCOPE = " ".join(REQUIRED_SCOPES)
 AWS_TIMEOUT = 30.0
-SSM_TIMEOUT = 90.0
+# The native waiter polls 20 times at 5 seconds; leave a small process margin.
+SSM_TIMEOUT = 110.0
 HTTP_TIMEOUT = 15.0
 
 AwsRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -189,7 +190,7 @@ def read_router_node_id(
             REGION,
             "ssm",
             "wait",
-            "command_executed",
+            "command-executed",
             "--command-id",
             command_id,
             "--instance-id",

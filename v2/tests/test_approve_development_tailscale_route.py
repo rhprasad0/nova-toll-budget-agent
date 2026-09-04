@@ -41,6 +41,7 @@ class UrlFake:
 class AwsFake:
     def __init__(self, invocation: dict[str, object] | None = None):
         self.calls: list[list[str]] = []
+        self.call_kwargs: list[dict[str, object]] = []
         self.invocation: dict[str, object] = invocation or {
             "Status": "Success",
             "ResponseCode": 0,
@@ -52,6 +53,7 @@ class AwsFake:
         self, args: list[str], **kwargs: object
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(args)
+        self.call_kwargs.append(kwargs)
         if "send-command" in args:
             return subprocess.CompletedProcess(args, 0, "command-1\n", "")
         if "get-command-invocation" in args:
@@ -158,11 +160,58 @@ def test_parse_ssm_success_and_fail_closed_cases() -> None:
 def test_ssm_uses_only_fixed_target_and_command() -> None:
     fake = AwsFake()
     assert route.read_router_node_id(runner=fake) == "self-node"
-    assert "i-0d33b9a9c15db93fc" in fake.calls[0]
-    assert route.SSM_DOCUMENT in fake.calls[0]
-    assert "--parameters" not in fake.calls[0]
+    send_calls = [call for call in fake.calls if "send-command" in call]
+    wait_calls = [call for call in fake.calls if "wait" in call]
+    get_calls = [call for call in fake.calls if "get-command-invocation" in call]
+    assert len(send_calls) == 1
+    assert len(wait_calls) == 1
+    assert len(get_calls) == 1
+    assert "i-0d33b9a9c15db93fc" in send_calls[0]
+    assert route.SSM_DOCUMENT in send_calls[0]
+    assert "--parameters" not in send_calls[0]
+    assert wait_calls[0][wait_calls[0].index("wait") + 1] == "command-executed"
+    assert "command_executed" not in wait_calls[0]
+    for call in (wait_calls[0], get_calls[0]):
+        assert call[1:3] == ["--region", route.REGION]
+        assert route.INSTANCE_ID in call
+        assert call[call.index("--command-id") + 1] == "command-1"
+    wait_index = fake.calls.index(wait_calls[0])
+    assert fake.call_kwargs[wait_index]["timeout"] == route.SSM_TIMEOUT
+    assert 100.0 < route.SSM_TIMEOUT < 600.0
+    get_index = fake.calls.index(get_calls[0])
+    assert fake.call_kwargs[get_index]["timeout"] == route.AWS_TIMEOUT
+    assert 0.0 < route.AWS_TIMEOUT < route.SSM_TIMEOUT
     assert route.SSM_COMMANDS == ("set -eu", "tailscale status --json")
     assert all("tailscale set" not in " ".join(call) for call in fake.calls)
+
+
+class AwsWaitFailure:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(
+        self, args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append(args)
+        if "send-command" in args:
+            return subprocess.CompletedProcess(args, 0, "command-1\n", "")
+        if "wait" in args:
+            return subprocess.CompletedProcess(
+                args, 1, "", "sensitive waiter failure details"
+            )
+        pytest.fail("final invocation read must not run after waiter failure")
+
+
+def test_ssm_waiter_failure_stops_once_without_route_post() -> None:
+    fake_aws = AwsWaitFailure()
+    fake_url = UrlFake([])
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.approve_route("client", "secret", runner=fake_aws, opener=fake_url)
+    assert error_info.value.stage == "precondition"
+    assert "sensitive waiter failure details" not in str(error_info.value)
+    assert len([call for call in fake_aws.calls if "send-command" in call]) == 1
+    assert len([call for call in fake_aws.calls if "wait" in call]) == 1
+    assert not fake_url.requests
 
 
 @pytest.mark.parametrize(
