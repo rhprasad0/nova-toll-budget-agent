@@ -1,7 +1,9 @@
 import json
 import subprocess
+import urllib.error
 import urllib.parse
 from collections import deque
+from email.message import Message
 from io import BytesIO
 from typing import Any, NoReturn
 
@@ -261,6 +263,7 @@ def test_inventory_binding_and_route_validation() -> None:
     assert checked.selected.node_id == "self-node"
     for broken in (
         {**valid, "nextPageToken": ""},
+        {"devices": [device("other-node")]},
         {"devices": [device(), device()]},
         {
             "devices": [
@@ -333,6 +336,9 @@ def test_diagnostic_is_read_only_and_sanitized() -> None:
         len([call for call in fake_aws.calls if "get-command-invocation" in call]) == 1
     )
     assert len(fake_url.requests) == 2
+    assert fake_url.requests[1].full_url == (
+        f"{route.API_ROOT}/tailnet/{urllib.parse.quote(route.TAILNET, safe='')}/devices"
+    )
     assert not [
         request
         for request in fake_url.requests
@@ -342,6 +348,56 @@ def test_diagnostic_is_read_only_and_sanitized() -> None:
     assert "client-secret" not in output
     assert "access_token" not in output
     assert "enabledRoutes" not in output
+
+
+def http_error(status: int) -> urllib.error.HTTPError:
+    headers = Message()
+    headers["X-Response-Header"] = "header-secret-sentinel"
+    return urllib.error.HTTPError(
+        "https://api.tailscale.com/secret-url?request-secret=sentinel",
+        status,
+        "response-message-sentinel",
+        headers,
+        BytesIO(b"response-body-sentinel"),
+    )
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 500, 504])
+@pytest.mark.parametrize("failure", ["response", "http-error"])
+def test_inventory_get_status_is_numeric_and_sanitized(
+    status: int, failure: str
+) -> None:
+    response: Response | BaseException
+    response = Response(
+        {"response-body-sentinel": "response-body-sentinel"}, status=status
+    )
+    if failure == "http-error":
+        response = http_error(status)
+    fake_url = UrlFake([oauth_response(), response])
+
+    with pytest.raises(route.ApprovalError) as error_info:
+        route.diagnose_route(
+            "client-id-sentinel",
+            "client-secret-sentinel",
+            runner=AwsFake(),
+            opener=fake_url,
+        )
+
+    assert str(error_info.value) == f"device-get: Tailscale API returned HTTP {status}"
+    for sentinel in (
+        "response-body-sentinel",
+        "response-message-sentinel",
+        "header-secret-sentinel",
+        "request-secret",
+        "client-secret-sentinel",
+        "opaque",
+    ):
+        assert sentinel not in str(error_info.value)
+    assert not [
+        request
+        for request in fake_url.requests
+        if request.method == "POST" and request.full_url.endswith("/routes")
+    ]
 
 
 def test_read_only_cli_flag_cannot_fall_through_to_approval(
@@ -429,6 +485,7 @@ def test_normal_approval_failure_stages_remain_distinct() -> None:
     with pytest.raises(route.ApprovalError) as error_info:
         route.approve_route("client", "secret", runner=AwsFake(), opener=re_get)
     assert error_info.value.stage == "re-get"
+    assert str(error_info.value) == "re-get: Tailscale API returned HTTP 500"
 
     post = UrlFake(
         [
