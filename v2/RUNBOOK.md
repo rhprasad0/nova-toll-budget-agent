@@ -1811,6 +1811,18 @@ run_iam_simulation() {
   local label="$1" action="$2" resource="$3" expected="$4" raw decision
   local -a context_args=()
   case "$label" in
+    runtime-role-pass|unrelated-runtime-role-pass|role-pass) context_args=(
+      --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=bedrock-agentcore.amazonaws.com,ContextKeyType=string
+    ) ;;
+    runtime-role-wrong-service) context_args=(
+      --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=lambda.amazonaws.com,ContextKeyType=string
+    ) ;;
+    alias-list|managed-cache-read|managed-origin-read) context_args=(
+      --context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues=us-east-1,ContextKeyType=string
+    ) ;;
+    alias-list-wrong-region) context_args=(
+      --context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues=us-west-2,ContextKeyType=string
+    ) ;;
     kms-*) context_args=(
       --context-entries
       ContextKeyName=aws:ResourceTag/environment,ContextKeyValues=development,ContextKeyType=string
@@ -1841,7 +1853,9 @@ run_post_bootstrap_gates() {
   IAM_SIMULATION_EVIDENCE="$EVIDENCE_DIR/iam-simulations.json"
   test ! -e "$IAM_SIMULATION_EVIDENCE" || die "refusing to overwrite IAM simulation evidence"
   : >"$IAM_SIMULATION_LINES"
-  SIMULATION_EXPECTED_COUNT=92
+  # API deployment DELETE and Glue catalog tag simulations have unresolved
+  # resource-pair denials. Keep this gate fail-closed; do not widen IAM for them.
+  SIMULATION_EXPECTED_COUNT=126
   SIMULATION_MATRIX="$WORK_DIR/iam-simulation-matrix.tsv"
   cat >"$SIMULATION_MATRIX" <<EOF
 state-foundation-read|s3:GetObject|arn:aws:s3:::nova-toll-tfstate-${EXPECTED_ACCOUNT}/nova-toll/development/terraform.tfstate|allowed
@@ -1869,7 +1883,7 @@ events-targets|events:PutTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:ru
 logs-retention|logs:PutRetentionPolicy|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
 alarm-tags|cloudwatch:TagResource|arn:aws:cloudwatch:${REGION}:${EXPECTED_ACCOUNT}:alarm/tollchat-v2-chat-proxy-errors-dev|allowed
 queue-read|sqs:GetQueueAttributes|arn:aws:sqs:${REGION}:${EXPECTED_ACCOUNT}:toll-v2-pricing-loader-invoke-failure-dev|allowed
-athena-read|athena:GetNamedQuery|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:namedquery/097b778f-c9ed-4bd9-af53-1e05770e1d53|allowed
+athena-read|athena:GetNamedQuery|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
 workgroup-update|athena:UpdateWorkGroup|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
 sessions-update|dynamodb:UpdateTable|arn:aws:dynamodb:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat-v2-anonymous-sessions-dev|allowed
 catalog-update|glue:UpdateTable|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:table/tollchat_agent_reports_development/*|allowed
@@ -1902,8 +1916,8 @@ catalog-untag|glue:UntagResource|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:tabl
 catalog-database|glue:UpdateDatabase|arn:aws:glue:${REGION}:${EXPECTED_ACCOUNT}:database/tollchat_agent_reports_development|allowed
 athena-tag|athena:TagResource|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
 athena-untag|athena:UntagResource|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
-schedule-tag|scheduler:TagResource|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule/default/toll-v2-report-publisher-dev|allowed
-schedule-untag|scheduler:UntagResource|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule/default/toll-v2-report-publisher-dev|allowed
+schedule-tag|scheduler:TagResource|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule-group/default|allowed
+schedule-untag|scheduler:UntagResource|arn:aws:scheduler:${REGION}:${EXPECTED_ACCOUNT}:schedule-group/default|allowed
 agentcore-tag|bedrock-agentcore:TagResource|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl|allowed
 agentcore-untag|bedrock-agentcore:UntagResource|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl|allowed
 cloudfront-tag|cloudfront:TagResource|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
@@ -1936,6 +1950,40 @@ measurement-policy-write|s3:PutBucketPolicy|arn:aws:s3:::aws-waf-logs-tollchat-a
 measurement-exposure-write|s3:PutBucketPublicAccessBlock|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|denied
 iam-attachment-write|iam:AttachRolePolicy|$ROLE_ARN|denied
 kms-alias-update|kms:UpdateAlias|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:alias/tollchat-v2-site-dev|denied
+site-cors-read|s3:GetBucketCORS|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-website-read|s3:GetBucketWebsite|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-accelerate-read|s3:GetAccelerateConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-payment-read|s3:GetBucketRequestPayment|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-logging-read|s3:GetBucketLogging|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-replication-read|s3:GetReplicationConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-object-lock-read|s3:GetBucketObjectLockConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-cors-read|s3:GetBucketCORS|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-website-read|s3:GetBucketWebsite|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-accelerate-read|s3:GetAccelerateConfiguration|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-payment-read|s3:GetBucketRequestPayment|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-logging-read|s3:GetBucketLogging|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-replication-read|s3:GetReplicationConfiguration|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+measurement-object-lock-read|s3:GetBucketObjectLockConfiguration|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev|allowed
+site-object-tags-read|s3:GetObjectTagging|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|allowed
+site-object-tags-write|s3:PutObjectTagging|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|allowed
+registry-tags-read|s3:GetObjectTagging|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev/registry/agent_registry.ndjson|allowed
+registry-tags-write|s3:PutObjectTagging|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev/registry/agent_registry.ndjson|allowed
+runtime-artifact-tags-read|s3:GetObjectTagging|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
+runtime-artifact-tags-write|s3:PutObjectTagging|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
+lambda-artifact-tags-read|s3:GetObjectTagging|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/lambda/v2/release.zip|allowed
+lambda-artifact-tags-write|s3:PutObjectTagging|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/lambda/v2/release.zip|allowed
+lambda-code-signing-read|lambda:GetFunctionCodeSigningConfig|arn:aws:lambda:${REGION}:${EXPECTED_ACCOUNT}:function:${FUNCTION_NAME}|allowed
+alias-list|kms:ListAliases|*|allowed
+managed-cache-read|cloudfront:GetCachePolicy|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:cache-policy/4135ea2d-6df8-44a3-9df3-4b5a84be39ad|allowed
+managed-origin-read|cloudfront:GetOriginRequestPolicy|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:origin-request-policy/b689b0a8-53d0-40ab-baf2-68738e2966ac|allowed
+runtime-role-pass|iam:PassRole|arn:aws:iam::${EXPECTED_ACCOUNT}:role/nova-toll-v2-agentcore-runtime-dev|allowed
+runtime-role-wrong-service|iam:PassRole|arn:aws:iam::${EXPECTED_ACCOUNT}:role/nova-toll-v2-agentcore-runtime-dev|denied
+unrelated-runtime-role-pass|iam:PassRole|arn:aws:iam::${EXPECTED_ACCOUNT}:role/unrelated-runtime-dev|denied
+unrelated-object-tags|s3:PutObjectTagging|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v1/release.zip|denied
+production-object-tags|s3:GetObjectTagging|arn:aws:s3:::tollchat-site-920534282028/index.html|denied
+alias-list-wrong-region|kms:ListAliases|*|denied
+unrelated-athena-read|athena:GetNamedQuery|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/unrelated|denied
+athena-workgroup-tags-read|athena:ListTagsForResource|arn:aws:athena:${REGION}:${EXPECTED_ACCOUNT}:workgroup/tollchat-agent-reports-dev|allowed
 EOF
   SIMULATION_COUNT=0
   while IFS='|' read -r label action resource expected; do
