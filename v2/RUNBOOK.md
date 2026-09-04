@@ -3765,6 +3765,16 @@ protected main. It is a future live procedure; the builder does not run it.
 Use no broad resource selector, -target, -auto-approve, secret retrieval,
 or deployed migration.
 
+The failed pre-replacement plan `8416e465447d00eb730ee0aa215dcd7f97d182b0357db04948f58a29b08786c7`
+is permanently unusable. Before recovery source work, pin the development
+profile/account/region, require the exact intact `nova-toll-db` to be available,
+private, named `nova_toll`, and unprotected with no pending modification; run
+`aws rds modify-db-instance --db-instance-identifier nova-toll-db --deletion-protection --apply-immediately`,
+wait with `aws rds wait db-instance-available --db-instance-identifier nova-toll-db`,
+then re-query and require the same properties with deletion protection `true`.
+This safety restoration is not a replacement retry. Only a clean worktree at
+the later reviewed recovery merge may render a new plan.
+
 1. Set the exact development identity and verify the exact target before any
    destructive operation:
 
@@ -3785,6 +3795,15 @@ or deployed migration.
    jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == true' <<<"$RDS_METADATA" >/dev/null
    grep -Eq '^[[:space:]]*deletion_protection[[:space:]]*=[[:space:]]*true[[:space:]]*$' infra/rds.tf
    grep -Eq '^[[:space:]]*skip_final_snapshot[[:space:]]*=[[:space:]]*false[[:space:]]*$' infra/rds.tf
+   DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER="nova-toll-db-development-cutover-$(date -u +%Y%m%dt%H%M%Sz)"
+   printf '%s\n' "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" | grep -Eq '^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$'
+   test "${#DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER}" -le 255
+   case "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" in *--*) exit 1 ;; esac
+   MANUAL_SNAPSHOTS="$(aws --region us-east-1 rds describe-db-snapshots \
+     --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output json)"
+   jq -e --arg identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+     '[.[] | select(. == $identifier)] | length == 0' <<<"$MANUAL_SNAPSHOTS" >/dev/null
+   printf 'development final snapshot identifier: %s\n' "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"
    ~~~
 
    This guard names only nova-toll-db in account 903859731897 and region
@@ -3802,6 +3821,7 @@ or deployed migration.
    set +x
    export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
    test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   : "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the collision-checked identifier from step 1}"
    RDS_METADATA="$(aws --region us-east-1 rds describe-db-instances \
      --db-instance-identifier nova-toll-db \
      --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible}' \
@@ -3825,6 +3845,13 @@ or deployed migration.
      --db-instance-identifier nova-toll-db --no-deletion-protection --apply-immediately >/dev/null
    AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws --region us-east-1 rds wait db-instance-available \
      --db-instance-identifier nova-toll-db
+   RDS_DISABLED_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,pending:PendingModifiedValues}' \
+     --output json)"
+   jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == false and .[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db" and (.[0].resource_id | type == "string" and length > 0) and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_DISABLED_METADATA" >/dev/null
+   RDS_INSTANCE_ARN="$(jq -er '.[0].arn' <<<"$RDS_DISABLED_METADATA")"
+   RDS_RESOURCE_ID="$(jq -er '.[0].resource_id' <<<"$RDS_DISABLED_METADATA")"
    trap - EXIT HUP INT TERM
    ~~~
 
@@ -3856,6 +3883,9 @@ or deployed migration.
    chmod 700 -- "$PLAN_ROOT"
    export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
    test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   : "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the collision-checked identifier from step 1}"
+   : "${RDS_INSTANCE_ARN:?retain the exact disabled-instance ARN from step 2}"
+   : "${RDS_RESOURCE_ID:?retain the immutable disabled-instance resource ID from step 2}"
    : "${REVIEWED_SOURCE_REVISION:?set the reviewed source revision}"
    printf '%s\n' "$REVIEWED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
    test "$(git -C "$ROOT" rev-parse --verify HEAD)" = "$REVIEWED_SOURCE_REVISION"
@@ -3878,6 +3908,7 @@ or deployed migration.
    TF_VAR_budget_notification_email="$DEVELOPMENT_BUDGET_EMAIL" \
      terraform -chdir="$PLAN_ROOT" plan -input=false -lock=false \
        -var environment=development -var tailscale_advertise_routes=false \
+       -var development_final_snapshot_identifier="$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
        -var fetcher_package_path=build/fetcher.zip \
        -out="$PLAN_ROOT/development-foundation.tfplan" >/dev/null
    chmod 600 -- "$PLAN_ROOT/development-foundation.tfplan"
@@ -3887,18 +3918,22 @@ or deployed migration.
    python3 "$ROOT/v2/scripts/validate_development_foundation_plan.py" \
      "$PLAN_ROOT/development-foundation.tfplan.json" --account 903859731897 \
      --region us-east-1 --backend "$ROOT/infra/backend.development.hcl" \
-     --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT"
+     --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT" \
+     --final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"
    trap - EXIT HUP INT TERM
    unset TF_VAR_budget_notification_email DEVELOPMENT_BUDGET_EMAIL
    printf 'development foundation plan retained at %s\n' "$PLAN_ROOT"
    ~~~
 
    The validator accepts exactly the development RDS delete,create
-   replacement with replace_paths == [["db_name"]], creates for
+   replacement with replace_paths == [["db_name"]] and the exact runtime final
+   snapshot identifier. The already state-managed
    aws_ssm_document.route_control[0], aws_iam_role.route_control[0],
-   and aws_iam_role_policy.route_control[0], and permits reads for the two
-   route-control policy documents when Terraform emits them (fully known policy
-   documents may be resolved during planning and omitted from
+   and aws_iam_role_policy.route_control[0] must be concrete, payload-validated
+   no-ops. The plan must contain the validator's exact reviewed set of 112
+   managed no-op addresses; count-preserving substitutions are rejected. It
+   permits reads for the two route-control policy documents when Terraform
+   emits them (fully known policy documents may be resolved during planning and omitted from
    `resource_changes`). Every other managed resource must be no-op; no other data
    action, unknown, moved, deposed, replacement, delete-only, update, budget,
    Lambda, production-account, or backend action is accepted. A rejected plan
@@ -3928,9 +3963,30 @@ or deployed migration.
    }
    trap restore_deletion_protection EXIT HUP INT TERM
    : "${REVIEWED_PLAN_SHA256:?set the independently reviewed plan digest}"
+   : "${DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER:?retain the collision-checked identifier from step 1}"
    printf '%s\n' "$REVIEWED_PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$'
    test "$(sha256sum "$PLAN_ROOT/development-foundation.tfplan" | awk '{print $1}')" = "$REVIEWED_PLAN_SHA256"
    export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+   test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
+   MANUAL_SNAPSHOTS="$(aws --region us-east-1 rds describe-db-snapshots \
+     --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output json)"
+   jq -e --arg identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER" \
+     '[.[] | select(. == $identifier)] | length == 0' <<<"$MANUAL_SNAPSHOTS" >/dev/null
+   ROOT="$(git rev-parse --show-toplevel)"
+   : "${REVIEWED_SOURCE_REVISION:?retain the reviewed recovery source revision}"
+   python3 "$ROOT/v2/scripts/validate_development_foundation_plan.py" \
+     "$PLAN_ROOT/development-foundation.tfplan.json" --account 903859731897 \
+     --region us-east-1 --backend "$ROOT/infra/backend.development.hcl" \
+     --source-revision "$REVIEWED_SOURCE_REVISION" --source-root "$ROOT" \
+     --final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"
+   : "${RDS_INSTANCE_ARN:?retain the exact disabled-instance ARN from step 2}"
+   : "${RDS_RESOURCE_ID:?retain the immutable disabled-instance resource ID from step 2}"
+   RDS_PRE_APPLY_METADATA="$(aws --region us-east-1 rds describe-db-instances \
+     --db-instance-identifier nova-toll-db \
+     --query 'DBInstances[?DBInstanceIdentifier==`nova-toll-db`].{identifier:DBInstanceIdentifier,status:DBInstanceStatus,db_name:DBName,deletion_protection:DeletionProtection,private:PubliclyAccessible,arn:DBInstanceArn,resource_id:DbiResourceId,pending:PendingModifiedValues}' \
+     --output json)"
+   jq -e --arg arn "$RDS_INSTANCE_ARN" --arg resource_id "$RDS_RESOURCE_ID" \
+     'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll" and .[0].private == false and .[0].deletion_protection == false and .[0].arn == $arn and .[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db" and .[0].resource_id == $resource_id and (.[0].pending | type == "object" and length == 0)' <<<"$RDS_PRE_APPLY_METADATA" >/dev/null
    test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"
    APPLY_STARTED=1
    terraform -chdir="$PLAN_ROOT" apply -input=false \

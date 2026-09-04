@@ -35,9 +35,126 @@ ROUTE_CONTROL_DATA_ADDRESSES = frozenset(
         "data.aws_iam_policy_document.route_control[0]",
     }
 )
-EXPECTED_MANAGED_NON_NOOP = {RDS_ADDRESS} | set(ROUTE_CONTROL_ADDRESSES)
+EXPECTED_MANAGED_NON_NOOP = {RDS_ADDRESS}
+EXPECTED_MANAGED_NOOP_ADDRESSES = frozenset(
+    {
+        "aws_budgets_budget.nova_toll_monthly",
+        "aws_cloudtrail.audit",
+        "aws_cloudwatch_event_rule.poll_tick",
+        "aws_cloudwatch_event_rule.poll_tick_i66",
+        "aws_cloudwatch_event_target.fetcher",
+        "aws_cloudwatch_event_target.fetcher_i66",
+        "aws_cloudwatch_log_group.fetcher",
+        'aws_cloudwatch_metric_alarm.bucket_storage["raw"]',
+        'aws_cloudwatch_metric_alarm.bucket_storage["tfstate"]',
+        "aws_cloudwatch_metric_alarm.fetcher_errors",
+        "aws_cloudwatch_metric_alarm.rds_connections",
+        "aws_cloudwatch_metric_alarm.rds_cpu",
+        "aws_cloudwatch_metric_alarm.rds_cpu_credits",
+        "aws_cloudwatch_metric_alarm.rds_free_memory",
+        "aws_cloudwatch_metric_alarm.rds_free_storage",
+        "aws_db_subnet_group.main",
+        "aws_eip.tollchat_nat",
+        "aws_iam_instance_profile.tailscale_router",
+        "aws_iam_openid_connect_provider.github",
+        'aws_iam_policy.development_delivery["compute"]',
+        'aws_iam_policy.development_delivery["data"]',
+        'aws_iam_policy.development_delivery["edge"]',
+        'aws_iam_policy.development_delivery["observability"]',
+        'aws_iam_policy.development_delivery["runtime"]',
+        'aws_iam_policy.development_delivery["state"]',
+        'aws_iam_policy.development_delivery["storage"]',
+        "aws_iam_role.development_delivery[0]",
+        "aws_iam_role.fetcher",
+        "aws_iam_role.replay",
+        "aws_iam_role.route_control[0]",
+        "aws_iam_role.tailscale_router",
+        "aws_iam_role_policy.fetcher",
+        "aws_iam_role_policy.replay",
+        "aws_iam_role_policy.route_control[0]",
+        "aws_iam_role_policy.tailscale_router",
+        'aws_iam_role_policy_attachment.development_delivery["compute"]',
+        'aws_iam_role_policy_attachment.development_delivery["data"]',
+        'aws_iam_role_policy_attachment.development_delivery["edge"]',
+        'aws_iam_role_policy_attachment.development_delivery["observability"]',
+        'aws_iam_role_policy_attachment.development_delivery["runtime"]',
+        'aws_iam_role_policy_attachment.development_delivery["state"]',
+        'aws_iam_role_policy_attachment.development_delivery["storage"]',
+        "aws_iam_role_policy_attachment.fetcher_basic",
+        "aws_iam_role_policy_attachment.tailscale_router_ssm",
+        "aws_instance.tailscale_router",
+        "aws_kms_alias.alerts",
+        "aws_kms_alias.audit",
+        "aws_kms_alias.raw",
+        "aws_kms_alias.tfstate",
+        "aws_kms_key.alerts",
+        "aws_kms_key.audit",
+        "aws_kms_key.raw",
+        "aws_kms_key.tfstate",
+        "aws_lambda_function.fetcher",
+        "aws_lambda_function_event_invoke_config.fetcher",
+        "aws_lambda_permission.eventbridge_invoke_fetcher",
+        "aws_lambda_permission.eventbridge_invoke_fetcher_i66",
+        "aws_nat_gateway.tollchat",
+        "aws_route_table.tollchat_private",
+        'aws_route_table_association.tollchat_private["us_east_1a"]',
+        'aws_route_table_association.tollchat_private["us_east_1c"]',
+        "aws_s3_bucket.agentcore_artifacts",
+        "aws_s3_bucket.audit",
+        "aws_s3_bucket.raw",
+        "aws_s3_bucket.tfstate",
+        "aws_s3_bucket_lifecycle_configuration.agentcore_artifacts",
+        'aws_s3_bucket_lifecycle_configuration.hardened["audit"]',
+        'aws_s3_bucket_lifecycle_configuration.hardened["raw"]',
+        'aws_s3_bucket_lifecycle_configuration.hardened["tfstate"]',
+        "aws_s3_bucket_notification.raw",
+        'aws_s3_bucket_ownership_controls.hardened["audit"]',
+        'aws_s3_bucket_ownership_controls.hardened["raw"]',
+        'aws_s3_bucket_ownership_controls.hardened["tfstate"]',
+        "aws_s3_bucket_policy.agentcore_artifacts",
+        "aws_s3_bucket_policy.audit",
+        "aws_s3_bucket_policy.raw",
+        "aws_s3_bucket_policy.tfstate",
+        "aws_s3_bucket_public_access_block.agentcore_artifacts",
+        'aws_s3_bucket_public_access_block.hardened["audit"]',
+        'aws_s3_bucket_public_access_block.hardened["raw"]',
+        'aws_s3_bucket_public_access_block.hardened["tfstate"]',
+        "aws_s3_bucket_server_side_encryption_configuration.agentcore_artifacts",
+        'aws_s3_bucket_server_side_encryption_configuration.hardened["audit"]',
+        'aws_s3_bucket_server_side_encryption_configuration.hardened["raw"]',
+        'aws_s3_bucket_server_side_encryption_configuration.hardened["tfstate"]',
+        "aws_s3_bucket_versioning.agentcore_artifacts",
+        'aws_s3_bucket_versioning.hardened["audit"]',
+        'aws_s3_bucket_versioning.hardened["raw"]',
+        'aws_s3_bucket_versioning.hardened["tfstate"]',
+        "aws_security_group.agentcore_endpoint",
+        "aws_security_group.eventbridge_endpoint",
+        "aws_security_group.rds",
+        "aws_security_group.tailscale_router",
+        "aws_security_group.tollchat_api_endpoint",
+        "aws_sns_topic.alerts",
+        "aws_sns_topic_subscription.alerts_email",
+        "aws_ssm_document.route_control[0]",
+        "aws_ssm_parameter.i66_token",
+        "aws_ssm_parameter.i95_token",
+        "aws_ssm_parameter.tailscale_authkey",
+        "aws_subnet.tollchat_private_a",
+        "aws_subnet.tollchat_private_c",
+        "aws_vpc_endpoint.agentcore",
+        "aws_vpc_endpoint.dynamodb",
+        "aws_vpc_endpoint.eventbridge",
+        "aws_vpc_endpoint.s3",
+        "aws_vpc_endpoint.tollchat_api",
+        "aws_vpc_security_group_egress_rule.tailscale_router_egress",
+        'aws_vpc_security_group_ingress_rule.eventbridge_from_private["172.31.224.0/24"]',
+        'aws_vpc_security_group_ingress_rule.eventbridge_from_private["172.31.225.0/24"]',
+        "aws_vpc_security_group_ingress_rule.rds_from_tailscale",
+        "aws_vpc_security_group_ingress_rule.tollchat_api_from_tailscale",
+    }
+)
 PRODUCTION_ACCOUNT = "920534282028"
 SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
+FINAL_SNAPSHOT_IDENTIFIER = re.compile(r"[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?")
 ROUTE_CONTROL_NAME = "nova-toll-v2-route-control-dev"
 ROUTE_CONTROL_DOCUMENT_NAME = "nova-toll-v2-route-control-status-dev"
 ROUTE_CONTROL_INSTANCE_ARN = (
@@ -137,7 +254,16 @@ def _strings(value: object, name: str) -> list[str]:
     raise ValidationError(f"{name} is not a string list")
 
 
-def _validate_rds(change: dict[str, Any]) -> None:
+def _validate_final_snapshot_identifier(value: str) -> None:
+    if (
+        len(value) > 255
+        or not FINAL_SNAPSHOT_IDENTIFIER.fullmatch(value)
+        or "--" in value
+    ):
+        raise ValidationError("development final snapshot identifier is invalid")
+
+
+def _validate_rds(change: dict[str, Any], final_snapshot_identifier: str) -> None:
     _replacement(change)
     before = change.get("before")
     after = _after(change, RDS_ADDRESS)
@@ -173,6 +299,8 @@ def _validate_rds(change: dict[str, Any]) -> None:
         raise ValidationError("RDS deletion protection is not retained")
     if after.get("skip_final_snapshot") is not False:
         raise ValidationError("RDS final snapshot protection is not retained")
+    if after.get("final_snapshot_identifier") != final_snapshot_identifier:
+        raise ValidationError("RDS final snapshot identifier is missing or mismatched")
     groups = after.get("vpc_security_group_ids")
     if not isinstance(groups, list):
         raise ValidationError("RDS has no private security-group binding")
@@ -364,7 +492,8 @@ def _validate_security_rule(address: str, after: dict[str, Any]) -> None:
                         )
 
 
-def validate_plan(document: object) -> dict[str, int]:
+def validate_plan(document: object, final_snapshot_identifier: str) -> dict[str, int]:
+    _validate_final_snapshot_identifier(final_snapshot_identifier)
     document = _object(document)
     raw_changes: object = document.get("resource_changes")
     if not isinstance(raw_changes, list):
@@ -373,10 +502,12 @@ def validate_plan(document: object) -> dict[str, int]:
 
     seen: set[str] = set()
     non_noop: set[str] = set()
+    managed_noops: set[str] = set()
+    route_control_noops: set[str] = set()
     counts = {
         "managed_noop": 0,
         "rds_replacement": 0,
-        "route_control_create": 0,
+        "route_control_noop": 0,
         "data_read": 0,
     }
     for raw_item in changes:
@@ -414,36 +545,37 @@ def validate_plan(document: object) -> dict[str, int]:
         if actions == ["no-op"]:
             if change.get("replace_paths") not in (None, []):
                 raise ValidationError("no-op resource unexpectedly replaces a resource")
-            if "security_group" in address:
+            if address == "aws_ssm_document.route_control[0]":
+                _validate_route_document(change)
+                route_control_noops.add(address)
+                counts["route_control_noop"] += 1
+            elif address == "aws_iam_role.route_control[0]":
+                _validate_route_trust(change)
+                route_control_noops.add(address)
+                counts["route_control_noop"] += 1
+            elif address == "aws_iam_role_policy.route_control[0]":
+                _validate_route_policy(change)
+                route_control_noops.add(address)
+                counts["route_control_noop"] += 1
+            elif "security_group" in address:
                 _validate_security_rule(address, _after(change, address))
+            managed_noops.add(address)
             counts["managed_noop"] += 1
             continue
         if address == RDS_ADDRESS and actions == ["delete", "create"]:
-            _validate_rds(change)
+            _validate_rds(change, final_snapshot_identifier)
             counts["rds_replacement"] += 1
-            non_noop.add(address)
-            continue
-        if address in ROUTE_CONTROL_ADDRESSES and actions == ["create"]:
-            if change.get("replace_paths") not in (None, []):
-                raise ValidationError(
-                    "route-control create unexpectedly replaces a resource"
-                )
-            if address == "aws_ssm_document.route_control[0]":
-                _validate_route_document(change)
-            elif address == "aws_iam_role.route_control[0]":
-                _validate_route_trust(change)
-            else:
-                _validate_route_policy(change)
-            counts["route_control_create"] += 1
             non_noop.add(address)
             continue
         raise ValidationError("plan contains an unauthorized managed action")
 
     managed_non_noop = non_noop - ROUTE_CONTROL_DATA_ADDRESSES
     data_non_noop = non_noop & ROUTE_CONTROL_DATA_ADDRESSES
-    if managed_non_noop != EXPECTED_MANAGED_NON_NOOP or data_non_noop not in (
-        set(),
-        set(ROUTE_CONTROL_DATA_ADDRESSES),
+    if (
+        managed_non_noop != EXPECTED_MANAGED_NON_NOOP
+        or data_non_noop not in (set(), set(ROUTE_CONTROL_DATA_ADDRESSES))
+        or managed_noops != set(EXPECTED_MANAGED_NOOP_ADDRESSES)
+        or route_control_noops != set(ROUTE_CONTROL_ADDRESSES)
     ):
         raise ValidationError("plan does not contain exactly the authorized actions")
     return counts
@@ -491,6 +623,7 @@ def main() -> int:
     parser.add_argument("--backend", type=Path, required=True)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--source-root", type=Path, required=True)
+    parser.add_argument("--final-snapshot-identifier", required=True)
     args = parser.parse_args()
     try:
         validate_context(
@@ -501,7 +634,7 @@ def main() -> int:
             args.source_root,
         )
         document = json.loads(args.plan.read_text(encoding="utf-8"))
-        counts = validate_plan(document)
+        counts = validate_plan(document, args.final_snapshot_identifier)
     except (OSError, UnicodeError, json.JSONDecodeError, ValidationError):
         print("development foundation plan rejected", file=sys.stderr)
         return 1

@@ -642,6 +642,22 @@ def test_foundation_rds_database_name_tracks_environment_contract():
     assert _hcl_attribute(instance, "db_name") == (
         'var.environment == "development" ? "nova_toll_development" : "nova_toll"'
     )
+    assert _hcl_attribute(instance, "final_snapshot_identifier") == (
+        'var.environment == "development" ? var.development_final_snapshot_identifier : null'
+    )
+    snapshot_variable = (
+        (FOUNDATION_ROOT / "variables.tf")
+        .read_text()
+        .split('variable "development_final_snapshot_identifier"', maxsplit=1)[1]
+        .split('variable "budget_notification_email"', maxsplit=1)[0]
+    )
+    assert "default     = null" in snapshot_variable
+    assert "nullable    = true" in snapshot_variable
+    assert "^[A-Za-z]([A-Za-z0-9-]*[A-Za-z0-9])?$" in snapshot_variable
+    assert (
+        '!strcontains(var.development_final_snapshot_identifier, "--")'
+        in snapshot_variable
+    )
     assert (
         'database_name  = local.is_production ? "nova_toll" : "nova_toll_development"'
         in ENVIRONMENT_TF
@@ -6451,6 +6467,7 @@ def _foundation_change(
 
 def test_development_foundation_plan_validator_accepts_only_exact_replacement():
     validator = _foundation_plan_validator()
+    snapshot_identifier = "nova-toll-db-development-cutover-20260904t150735z"
     route_trust = json.dumps(
         {
             "Version": "2012-10-17",
@@ -6511,6 +6528,7 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         "manage_master_user_password": True,
         "deletion_protection": True,
         "skip_final_snapshot": False,
+        "final_snapshot_identifier": snapshot_identifier,
         "vpc_security_group_ids": ["sg-reviewed"],
     }
     foundation_changes = [
@@ -6527,7 +6545,7 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         _foundation_change(
             "managed",
             "aws_ssm_document.route_control[0]",
-            ["create"],
+            ["no-op"],
             after={
                 "name": validator.ROUTE_CONTROL_DOCUMENT_NAME,
                 "document_type": "Command",
@@ -6538,7 +6556,7 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         _foundation_change(
             "managed",
             "aws_iam_role.route_control[0]",
-            ["create"],
+            ["no-op"],
             after={
                 "name": validator.ROUTE_CONTROL_NAME,
                 "assume_role_policy": route_trust,
@@ -6547,7 +6565,7 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         _foundation_change(
             "managed",
             "aws_iam_role_policy.route_control[0]",
-            ["create"],
+            ["no-op"],
             after={"name": validator.ROUTE_CONTROL_NAME, "policy": route_policy},
         ),
     ]
@@ -6558,13 +6576,44 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
             "data.aws_iam_policy_document.route_control[0]",
         )
     ]
-    plan = {
-        "resource_changes": foundation_changes,
+    foundation_changes += [
+        _foundation_change(
+            "managed",
+            address,
+            ["no-op"],
+            after=(
+                {
+                    "from_port": 5432,
+                    "to_port": 5432,
+                    "ip_protocol": "tcp",
+                    "referenced_security_group_id": "sg-router",
+                    "cidr_ipv4": None,
+                    "cidr_ipv6": None,
+                }
+                if address == "aws_vpc_security_group_ingress_rule.rds_from_tailscale"
+                else {
+                    "cidr_ipv4": "0.0.0.0/0",
+                    "ip_protocol": "-1",
+                    "security_group_id": "sg-router",
+                }
+                if address
+                == "aws_vpc_security_group_egress_rule.tailscale_router_egress"
+                else {}
+            ),
+        )
+        for address in sorted(
+            validator.EXPECTED_MANAGED_NOOP_ADDRESSES
+            - validator.ROUTE_CONTROL_ADDRESSES
+        )
+    ]
+    plan = {"resource_changes": foundation_changes}
+    assert len(validator.EXPECTED_MANAGED_NOOP_ADDRESSES) == 112
+    assert validator.validate_plan(plan, snapshot_identifier) == {
+        "managed_noop": 112,
+        "rds_replacement": 1,
+        "route_control_noop": 3,
+        "data_read": 2,
     }
-    plan["resource_changes"].append(
-        _foundation_change("managed", "aws_budgets_budget.nova_toll_monthly", ["no-op"])
-    )
-    assert validator.validate_plan(plan)["route_control_create"] == 3
     provider_order_plan = deepcopy(plan)
     provider_policy = json.loads(
         provider_order_plan["resource_changes"][3]["change"]["after"]["policy"]
@@ -6573,16 +6622,63 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
     provider_order_plan["resource_changes"][3]["change"]["after"]["policy"] = (
         json.dumps(provider_policy, separators=(",", ":"))
     )
-    assert validator.validate_plan(provider_order_plan)["route_control_create"] == 3
+    assert (
+        validator.validate_plan(provider_order_plan, snapshot_identifier)[
+            "route_control_noop"
+        ]
+        == 3
+    )
     resolved_data_plan = deepcopy(provider_order_plan)
     resolved_data_plan["resource_changes"] = [
         change
         for change in resolved_data_plan["resource_changes"]
         if change["mode"] != "data"
     ]
-    assert validator.validate_plan(resolved_data_plan)["data_read"] == 0
+    assert (
+        validator.validate_plan(resolved_data_plan, snapshot_identifier)["data_read"]
+        == 0
+    )
+
+    mismatched_snapshot_plan = deepcopy(plan)
+    mismatched_snapshot_plan["resource_changes"][0]["change"]["after"][
+        "final_snapshot_identifier"
+    ] = "nova-toll-db-other"
+    missing_snapshot_plan = deepcopy(plan)
+    del missing_snapshot_plan["resource_changes"][0]["change"]["after"][
+        "final_snapshot_identifier"
+    ]
+    route_create_plan = deepcopy(plan)
+    route_create_plan["resource_changes"][1]["change"]["actions"] = ["create"]
+    route_drift_plan = deepcopy(plan)
+    route_drift_policy = json.loads(
+        route_drift_plan["resource_changes"][3]["change"]["after"]["policy"]
+    )
+    route_drift_policy["Statement"][0]["Action"] = "ssm:*"
+    route_drift_plan["resource_changes"][3]["change"]["after"]["policy"] = json.dumps(
+        route_drift_policy, separators=(",", ":")
+    )
+    substituted_noop_plan = deepcopy(plan)
+    substituted_noop_plan["resource_changes"][-1]["address"] = "aws_test.substituted"
+    duplicate_noop_plan = deepcopy(plan)
+    duplicate_noop_plan["resource_changes"][-1]["address"] = duplicate_noop_plan[
+        "resource_changes"
+    ][-2]["address"]
 
     for invalid in (
+        mismatched_snapshot_plan,
+        missing_snapshot_plan,
+        route_create_plan,
+        route_drift_plan,
+        substituted_noop_plan,
+        duplicate_noop_plan,
+        {**plan, "resource_changes": plan["resource_changes"][:-1]},
+        {
+            **plan,
+            "resource_changes": [
+                *plan["resource_changes"],
+                _foundation_change("managed", "aws_test.extra", ["no-op"]),
+            ],
+        },
         {
             **plan,
             "resource_changes": [
@@ -6631,7 +6727,18 @@ def test_development_foundation_plan_validator_accepts_only_exact_replacement():
         },
     ):
         with pytest.raises(validator.ValidationError):
-            validator.validate_plan(invalid)
+            validator.validate_plan(invalid, snapshot_identifier)
+
+    for invalid_identifier in (
+        "",
+        "1starts-with-digit",
+        "ends-with-",
+        "has--consecutive",
+        "has_underscore",
+        "a" * 256,
+    ):
+        with pytest.raises(validator.ValidationError):
+            validator.validate_plan(plan, invalid_identifier)
 
 
 def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
@@ -6682,6 +6789,8 @@ def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
         source_revision,
         "--source-root",
         str(REPO_ROOT),
+        "--final-snapshot-identifier",
+        "nova-toll-db-development-cutover-20260904t150735z",
     ]
     assert (
         subprocess.run(cli, check=False, capture_output=True, text=True).returncode == 1
@@ -6692,6 +6801,7 @@ def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
         "--backend",
         "--source-revision",
         "--source-root",
+        "--final-snapshot-identifier",
     ):
         missing = cli.copy()
         index = missing.index(option)
@@ -6771,6 +6881,23 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
         )
         == 4
     )
+    assert (
+        step2.index("aws --region us-east-1 rds wait db-instance-available")
+        < step2.index(
+            'RDS_DISABLED_METADATA="$(aws --region us-east-1 rds describe-db-instances'
+        )
+        < step2.rindex("trap - EXIT HUP INT TERM")
+    )
+    for binding in (
+        "DBInstanceArn",
+        "DbiResourceId",
+        "PendingModifiedValues",
+        'RDS_INSTANCE_ARN="$(jq -er',
+        'RDS_RESOURCE_ID="$(jq -er',
+        '.[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"',
+        ".[0].deletion_protection == false",
+    ):
+        assert binding in step2
     assert step3.index('ROOT="$(git rev-parse --show-toplevel)"') < step3.index(
         'git -C "$ROOT"'
     )
@@ -6778,9 +6905,38 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
         'chmod 700 -- "$PLAN_ROOT"'
     )
     assert "-var fetcher_package_path=build/fetcher.zip" in step3
+    assert (
+        '-var development_final_snapshot_identifier="$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"'
+        in step3
+    )
+    assert (
+        '--final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"' in step3
+    )
+    assert "describe-db-snapshots" in step1
+    assert "--snapshot-type manual" in step1
+    assert "8416e465447d00eb730ee0aa215dcd7f97d182b0357db04948f58a29b08786c7" in handoff
+    assert "permanently unusable" in handoff
     assert step4.index(': "${PLAN_ROOT:?') < step4.index(
         'sha256sum "$PLAN_ROOT/development-foundation.tfplan"'
     )
+    assert "describe-db-snapshots" in step4
+    assert (
+        '--final-snapshot-identifier "$DEVELOPMENT_FINAL_SNAPSHOT_IDENTIFIER"' in step4
+    )
+    pre_apply_identity = step4.index('RDS_PRE_APPLY_METADATA="$(aws')
+    apply_boundary = step4.index("APPLY_STARTED=1")
+    assert pre_apply_identity < apply_boundary
+    for binding in (
+        ".[0].arn == $arn",
+        ".[0].resource_id == $resource_id",
+        '.[0].arn == "arn:aws:rds:us-east-1:903859731897:db:nova-toll-db"',
+        ".[0].deletion_protection == false",
+        '.[0].pending | type == "object" and length == 0',
+    ):
+        assert binding in step4[pre_apply_identity:apply_boundary]
+    assert step4.rindex(
+        "sts get-caller-identity", pre_apply_identity, apply_boundary
+    ) > (pre_apply_identity)
     assert step5.index('RDS_ENDPOINT="$(aws') < step5.index(
         'getent ahostsv4 "$RDS_ENDPOINT"'
     )
