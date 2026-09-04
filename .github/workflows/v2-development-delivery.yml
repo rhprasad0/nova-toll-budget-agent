@@ -246,8 +246,7 @@ jobs:
             -var loader_package_path=build/loader.zip \
             -var publisher_package_path=build/publisher.zip \
             -var agentcore_package_path=build/agentcore.zip \
-            -var chat_proxy_package_path=build/chat-proxy.zip \
-            -var enable_development_custom_domain=false
+            -var chat_proxy_package_path=build/chat-proxy.zip
 
           terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"
           python3 - "$PLAN_JSON" <<'PY'
@@ -257,6 +256,7 @@ jobs:
           # This is deliberately an address/action allowlist.  Unknown plan
           # shapes, addresses, and action arrays fail closed before apply.
           known_managed = set("""
+          aws_acm_certificate.site
           aws_api_gateway_deployment.tollchat
           aws_api_gateway_integration.tollchat_proxy
           aws_api_gateway_integration.tollchat_root
@@ -430,6 +430,7 @@ jobs:
           """.split())
           known_data.add("data.archive_file." + "place" + "holder")
           read_only = {
+              "aws_acm_certificate.site",
               "aws_api_gateway_deployment.tollchat",
               "aws_api_gateway_integration.tollchat_proxy", "aws_api_gateway_integration.tollchat_root",
               "aws_api_gateway_method.tollchat_proxy", "aws_api_gateway_method.tollchat_root",
@@ -530,7 +531,7 @@ jobs:
                   if any(
                       token in value
                       for value in values
-                      for token in ("920534" + "282028", "terraform.tfstate", "backend.production", "prod" + "uction", "route53", "dev.tollchat.ai")
+                      for token in ("920534" + "282028", "terraform.tfstate", "backend.production", "prod" + "uction", "route53")
                   ):
                       raise ValueError("production or external value")
                   if mode == "data":

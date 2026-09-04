@@ -4800,7 +4800,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 43
+    assert len(statements) == 44
     expected_groups = {
         "state": (
             0,
@@ -4876,7 +4876,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "edge": (
             36,
-            43,
+            44,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -4885,6 +4885,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
                 "ReadManagedCloudFrontPolicies",
                 "ReadManagedCloudFrontPolicy",
                 "ManageApplicationWaf",
+                "ReadDevelopmentCertificate",
             ],
         ),
     }
@@ -4893,7 +4894,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 43
+    assert len(rendered_aggregate) == len(statements) == 44
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
@@ -7572,6 +7573,55 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
     )
 
 
+def test_development_delivery_preserves_read_only_custom_domain_resources():
+    certificate = "aws_acm_certificate.site[0]"
+    distribution = "aws_cloudfront_distribution.site"
+    for address in (certificate, distribution):
+        for actions in (
+            ["no-op"],
+            ["create"],
+            ["update"],
+            ["delete"],
+            ["create", "delete"],
+            ["delete", "create"],
+        ):
+            assert _run_development_plan_gate(
+                {
+                    "resource_changes": [
+                        _synthetic_change(
+                            "managed", address, actions, domain_name="dev.tollchat.ai"
+                        )
+                    ]
+                }
+            ) is (actions == ["no-op"])
+    for value in (
+        "920534282028",
+        "production",
+        "backend.production.hcl",
+        "terraform.tfstate",
+        "route53",
+    ):
+        assert not _run_development_plan_gate(
+            {
+                "resource_changes": [
+                    _synthetic_change(
+                        "managed", certificate, ["no-op"], domain_name=value
+                    )
+                ]
+            }
+        )
+    for address in ("cloudflare_dns_record.apex[0]", "aws_route53_record.site"):
+        assert not _run_development_plan_gate(
+            {
+                "resource_changes": [
+                    _synthetic_change(
+                        "managed", address, ["no-op"], name="dev.tollchat.ai"
+                    )
+                ]
+            }
+        )
+
+
 SLICE_2A_POLICY = (REPO_ROOT / "infra" / "policy.hujson").read_text()
 
 
@@ -8126,10 +8176,10 @@ def test_slice_3_development_custom_domain_is_explicit_and_production_preserving
     )
     assert "default     = false" in variable
     assert 'environment == "development"' in variable
-    assert "enable_development_custom_domain = false" in DEVELOPMENT_TFVARS
+    assert "enable_development_custom_domain = true" in DEVELOPMENT_TFVARS
     assert "development_custom_domain_enabled" in ENVIRONMENT_TF
     assert "https://${local.domains[0]}" in ENVIRONMENT_TF
-    assert "enable_development_custom_domain=false" in DEVELOPMENT_DELIVERY_WORKFLOW
+    assert "-var enable_development_custom_domain=" not in DEVELOPMENT_DELIVERY_WORKFLOW
 
     distribution = terraform_block(
         SITE_TF, 'resource "aws_cloudfront_distribution" "site"'
@@ -8167,8 +8217,22 @@ def test_slice_3_development_delivery_cannot_administer_custom_domain():
     )
     assert "cloudfront:UpdateDistribution" not in policy
     assert "acm:RequestCertificate" not in policy
-    assert "acm:DescribeCertificate" not in policy
     assert "cloudflare" not in policy.lower()
+    statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
+    certificate = _policy_by_sid(statements)["ReadDevelopmentCertificate"]
+    assert certificate["actions"] == [
+        "acm:DescribeCertificate",
+        "acm:ListTagsForCertificate",
+    ]
+    assert certificate["resources"] == [
+        "arn:aws:acm:us-east-1:903859731897:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"
+    ]
+    assert [
+        action
+        for statement in statements
+        for action in cast(list[str], statement["actions"])
+        if action.startswith("acm:")
+    ] == certificate["actions"]
 
 
 def test_slice_3_foundation_dns_role_has_exact_oidc_and_ssm_boundary():
@@ -8568,6 +8632,72 @@ def test_slice3_dns_gate_rollback_puts_only_the_captured_record(
     assert (
         mock.records["dev.tollchat.ai"][0]["content"] == "dmsiz11apblcv.cloudfront.net"
     )
+
+
+@pytest.mark.parametrize(
+    ("zone_id", "accepted"),
+    [("absent", True), ("a" * 32, True), ("f" * 32, False), (None, False)],
+)
+def test_slice3_dns_zone_scoped_response_allows_only_absent_or_matching_zone_id(
+    monkeypatch: pytest.MonkeyPatch, zone_id: str | None, accepted: bool
+) -> None:
+    _set_dns_inputs(monkeypatch, operation="cutover")
+    mock = _DnsApiMock(zones=[_dns_zone()])
+    for records in mock.records.values():
+        for record in records:
+            if zone_id == "absent":
+                record.pop("zone_id")
+            else:
+                record["zone_id"] = zone_id
+    namespace = _dns_namespace(mock)
+    main = cast(Callable[[], object], namespace["main"])
+    if accepted:
+        main()
+        assert len(mock.mutations) == 1
+        assert mock.mutations[0][:2] == (
+            "PUT",
+            "zones/" + "a" * 32 + "/dns_records/" + "c" * 32,
+        )
+    else:
+        with pytest.raises(cast(type[Exception], namespace["GateError"])):
+            main()
+        assert not mock.mutations
+
+
+@pytest.mark.parametrize(
+    ("value", "accepted"),
+    [
+        ("_token.acm-validations.aws", True),
+        ("_token.jkddzztszm.acm-validations.aws", True),
+        ("_token.extra.route.acm-validations.aws", False),
+        ("_token.-route.acm-validations.aws", False),
+        ("_token.route-.acm-validations.aws", False),
+        ("_token.route..acm-validations.aws", False),
+        ("_token.route.acm-validations.aws.evil.test", False),
+        ("_token.route.attacker.aws", False),
+    ],
+)
+def test_slice3_dns_accepts_only_bounded_acm_validation_values(
+    monkeypatch: pytest.MonkeyPatch, value: str, accepted: bool
+) -> None:
+    _set_dns_inputs(monkeypatch)
+    records = json.loads(os.environ["VALIDATION_RECORDS"])
+    records[0]["value"] = value
+    monkeypatch.setenv("VALIDATION_RECORDS", json.dumps(records))
+    mock = _DnsApiMock(
+        zones=[_dns_zone()],
+        validation_records=[
+            _dns_record("d" * 32, "_validation.dev.tollchat.ai", value, ttl=60)
+        ],
+    )
+    namespace = _dns_namespace(mock)
+    main = cast(Callable[[], object], namespace["main"])
+    if accepted:
+        main()
+    else:
+        with pytest.raises(cast(type[Exception], namespace["GateError"])):
+            main()
+    assert not mock.mutations
 
 
 def test_slice3_rollback_legacy_https_health_fails_closed(

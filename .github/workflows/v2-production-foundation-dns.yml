@@ -218,7 +218,7 @@ jobs:
                       fail()
                   if record_name in {EXPECTED_ZONE, "www.tollchat.ai"} or "*" in record_name:
                       fail()
-                  if not re.fullmatch(r"_[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.acm-validations\.aws", record_value):
+                  if not re.fullmatch(r"_[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)?acm-validations\.aws", record_value):
                       fail()
                   if record["type"] != "CNAME" or record["ttl"] != EXPECTED_VALIDATION_TTL or record["proxied"] is not False:
                       fail()
@@ -246,7 +246,7 @@ jobs:
           def records_for(zone_id, record_name):
               records = page_result(api("GET", f"zones/{zone_id}/dns_records", {"name": record_name, "page": 1, "per_page": 100}))
               for record in records:
-                  if not isinstance(record, dict) or name(record.get("name")) != record_name or record.get("zone_id") != zone_id:
+                  if not isinstance(record, dict) or name(record.get("name")) != record_name or record.get("zone_id", zone_id) != zone_id:
                       fail()
                   if not isinstance(record.get("id"), str) or not re.fullmatch(r"[0-9a-f]{32}", record["id"]):
                       fail()
