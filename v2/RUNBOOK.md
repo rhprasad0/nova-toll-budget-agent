@@ -2172,7 +2172,8 @@ only as `PGHOSTADDR`. Confirm both derivations with
 
 Before any protected connectivity verification, create a separate protected
 route-control OAuth client with only the documented device-inventory read scope
-`devices:core:read` and route-management scope `devices:routes`. The existing
+`devices:core:read`, route-read scope `devices:routes:read`, and route-management
+scope `devices:routes`. The existing
 `TS_DEVELOPMENT_OAUTH_CLIENT_ID` and `TS_DEVELOPMENT_OAUTH_SECRET` client remains
 `auth_keys`-only for the third-party `tailscale/github-action`; its values stay
 opaque to operators, logs, arguments, artifacts, and summaries. The route
@@ -2180,8 +2181,8 @@ helper uses only `TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID` and
 `TS_DEVELOPMENT_ROUTE_OAUTH_SECRET`. Do not use a personal API token, an ACL
 OAuth client, or a legacy device identifier.
 The helper requests exactly the space-delimited scope string
-`devices:core:read devices:routes` and rejects a token response with missing,
-duplicated, insufficient, or additional scope tokens.
+`devices:core:read devices:routes:read devices:routes` and rejects a token
+response with missing, duplicated, insufficient, or additional scope tokens.
 
 The protected `workflow_dispatch` run is the sole route-control boundary. It
 must run from `refs/heads/main`, retain the `development` environment reviewer,
@@ -2199,30 +2200,38 @@ JSON document with a nonempty `Self.ID`. The helper
 `v2/scripts/approve_development_tailscale_route.py` never prints that private
 output or the OAuth bearer.
 
-The helper exchanges the route-control secrets in memory, requests the complete
-all-at-once `GET /api/v2/tailnet/rhprasad0.github/devices?fields=all`
-inventory, and rejects any pagination/continuation marker, malformed field,
-duplicate `nodeId`, duplicate route, noncanonical route, IPv4 on the bound
-device, foreign or ambiguous site-1 4via6 route, collision, or tag ambiguity.
-It selects exactly the API `nodeId` equal to SSM `Self.ID`; that device must
-have exactly `tag:nova-toll-development-router`, and the exact
+The helper exchanges the route-control secrets in memory, requests the canonical
+`GET /api/v2/tailnet/rhprasad0.github/devices` device list, and rejects any
+pagination/continuation marker, malformed field, or duplicate `nodeId`. For
+every listed device, it then requests exactly one
+`GET /api/v2/device/<nodeId>/routes` using that device's preferred, quoted
+`nodeId`. It merges only the list-owned identity, tags, and
+`connectedToControl` fields with the two route arrays returned by that matching
+route read; list-supplied route fields are not trusted. Only after every device
+has been enriched does it reject duplicate route, noncanonical route, IPv4 on
+the bound device, foreign or ambiguous site-1 4via6 route, collision, or tag
+ambiguity. It selects exactly the API `nodeId` equal to SSM `Self.ID`; that
+device must have exactly `tag:nova-toll-development-router`, and the exact
 `fd7a:115c:a1e0:b1a:0:1:ac1f:0/112` must already be advertised there. If the
 route is not yet advertised, stop and use the reviewed exact-instance SSM
 advertisement procedure below.
 
-Immediately before a write, the helper re-fetches and revalidates the complete
-inventory. If the exact route is already enabled, it succeeds without a POST.
-Otherwise it sends exactly one
+Immediately before a write, the helper re-fetches the canonical list and every
+device's route response, then revalidates the complete enriched inventory. If
+the exact route is already enabled, it succeeds without a POST. Otherwise it
+sends exactly one
 `POST /api/v2/device/<nodeId>/routes` containing the complete current
 `enabledRoutes` list plus the exact route, preserving every unrelated entry.
-The API scope must include `devices:routes`; a 401/403, timeout, invalid
+The API scope must include `devices:routes:read` for route GETs and
+`devices:routes` for the replacement POST; a 401/403, timeout, invalid
 response, or uncertain write is a hard failure and is never retried. A
-successful write is followed by a complete inventory read proving the same
+successful write is followed by a complete enriched inventory read proving the same
 SSM/API node binding, sole tag ownership, no intended-device IPv4, and both
 advertised/enabled exact-route state. The API has no conditional version, so the
-pre-write re-fetch still has an irreducible sub-request TOCTOU window; drift is
-rejected before POST and the exact post-write readback is mandatory. Only the
-sanitized identity/route booleans are recorded as evidence.
+list-plus-per-device route reads are not an atomic snapshot and retain an
+irreducible multi-GET sub-request TOCTOU window; drift is rejected before POST
+and the exact post-write readback is mandatory. Only the sanitized
+identity/route booleans are recorded as evidence.
 
 Any SSM, OAuth, inventory, identity, ownership, route, POST, or post-read
 failure stops before the DB role is assumed. Do not guess a device, accept a
@@ -2336,7 +2345,7 @@ test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND
 
 Immediately dispatch the protected connectivity workflow from the reviewed
 `main` SHA with `phase=pre-bootstrap`. Its route-control step passes only when
-the complete all-at-once inventory has the exact route in both
+the complete canonical list plus every per-device route read has the exact route in both
 `advertisedRoutes` and `enabledRoutes`, owned only by the exact SSM/API-bound
 device. Its pre-bootstrap phase then proves that the derived site-1 host uses
 `tailscale0` and accepts a bounded TCP/5432 connection, without assuming the
@@ -2377,9 +2386,9 @@ aws --region us-east-1 ssm wait command_executed --command-id "$DISABLE_COMMAND_
 test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$DISABLE_COMMAND_ID" --instance-id i-0d33b9a9c15db93fc --query Status --output text)" = Success
 ```
 
-The final inventory proof must be complete, all-at-once, and show no site-1
-route in `advertisedRoutes`; an uncertain SSM/API response remains a hard
-stop. No failure or rollback path changes production.
+The final enriched inventory proof must complete all list and per-device route
+reads and show no site-1 route in `advertisedRoutes`; an uncertain SSM/API
+response remains a hard stop. No failure or rollback path changes production.
 ##### Manual development TLS/query verification
 
 The separate
@@ -2454,8 +2463,8 @@ clients → Generate OAuth client**, retain the existing client described as
 `tag:ci-development`. Copy it once into the protected environment as exactly
 `TS_DEVELOPMENT_OAUTH_CLIENT_ID` and `TS_DEVELOPMENT_OAUTH_SECRET`; these names
 remain exclusively for the third-party action. Create a second client for the
-route helper with only `devices:core:read` and `devices:routes` (no `all`, ACL,
-or other scopes), and copy it as exactly
+route helper with only `devices:core:read`, `devices:routes:read`, and
+`devices:routes` (no `all`, ACL, or other scopes), and copy it as exactly
 `TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID` and
 `TS_DEVELOPMENT_ROUTE_OAUTH_SECRET`. Keep both values opaque. Do not replace
 repository production `TS_OAUTH_*` or policy `TS_ACL_OAUTH_*` secrets.

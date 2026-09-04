@@ -7584,6 +7584,7 @@ def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege():
     assert "expected_enabled_routes = frozenset" in helper
     assert "post_self_id = read_router_node_id" in helper
     assert "expected_enabled_after" in helper
+    assert '"devices:routes:read"' in helper
 
     for declaration in (
         'data "aws_iam_policy_document" "route_control_assume"',
@@ -7654,9 +7655,15 @@ def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege():
     assert "TS_DEVELOPMENT_OAUTH_" not in route_step
     assert "TS_DEVELOPMENT_ROUTE_OAUTH_" in route_step
     assert "devices:core:read" in DEPLOYMENT
+    assert "devices:routes:read" in DEPLOYMENT
     assert "devices:routes" in DEPLOYMENT
+    assert "GET /api/v2/tailnet/rhprasad0.github/devices" in DEPLOYMENT
+    assert "GET /api/v2/device/<nodeId>/routes" in DEPLOYMENT
+    assert "list-supplied route fields are not trusted" in DEPLOYMENT
+    assert "irreducible multi-GET sub-request TOCTOU window" in DEPLOYMENT
+    assert "devices?fields=all" not in DEPLOYMENT
     assert "auth_keys`-only" in DEPLOYMENT
-    assert "irreducible sub-request TOCTOU window" in DEPLOYMENT
+    assert "list-plus-per-device route reads are not an atomic snapshot" in DEPLOYMENT
 
 
 def _assert_slice_2b_connectivity_workflow(source: str) -> None:
