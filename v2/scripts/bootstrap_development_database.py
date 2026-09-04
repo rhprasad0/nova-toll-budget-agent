@@ -37,6 +37,7 @@ ROLES = {
     ),
 }
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_]*\Z")
+RDS_ENDPOINT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\Z")
 
 
 def run(
@@ -76,8 +77,25 @@ def tls_environment(query: str) -> dict[str, str]:
     }
 
 
-def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> None:
+def expected_rds_endpoint() -> str | None:
+    value = os.environ.get("NOVA_TOLL_EXPECTED_RDS_ENDPOINT")
+    if value is None:
+        return None
+    value = value.strip().strip("[]")
+    if not value or not RDS_ENDPOINT.fullmatch(value):
+        raise RuntimeError("NOVA_TOLL_EXPECTED_RDS_ENDPOINT is invalid")
+    return value.lower()
+
+
+def psql(
+    database: str,
+    *,
+    sql: str | None = None,
+    file: Path | None = None,
+    variables: dict[str, str] | None = None,
+) -> None:
     admin_url = os.environ.get("NOVA_TOLL_ADMIN_URL")
+    expected_endpoint = expected_rds_endpoint()
     command = ["psql", "-X", "--set", "ON_ERROR_STOP=1"]
     if admin_url is not None:
         if not admin_url:
@@ -99,6 +117,13 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
         ):
             raise RuntimeError(
                 "NOVA_TOLL_ADMIN_URL must be a PostgreSQL connection URL"
+            )
+        if (
+            expected_endpoint is not None
+            and parsed.hostname.lower() != expected_endpoint
+        ):
+            raise RuntimeError(
+                "NOVA_TOLL_ADMIN_URL is not bound to the verified RDS endpoint"
             )
         try:
             port = parsed.port
@@ -125,9 +150,20 @@ def psql(database: str, *, sql: str | None = None, file: Path | None = None) -> 
         environment = os.environ.copy()
         if not environment.get("PGHOST") or not environment.get("PGUSER"):
             raise RuntimeError("set NOVA_TOLL_ADMIN_URL or both PGHOST and PGUSER")
+        if (
+            expected_endpoint is not None
+            and environment["PGHOST"].strip("[]").lower() != expected_endpoint
+        ):
+            raise RuntimeError("PGHOST is not bound to the verified RDS endpoint")
         command.extend(("--dbname", database))
     if file is not None:
         command.extend(("--file", str(file)))
+    if variables:
+        command.extend(
+            item
+            for key, value in variables.items()
+            for item in ("--variable", f"{key}={value}")
+        )
     run(*command, input=sql, env=environment)
 
 
@@ -149,17 +185,187 @@ DROP ROLE IF EXISTS {", ".join(ROLES["development"])};
     )
 
 
+def fresh_development_preflight() -> None:
+    """Prove the Terraform-created database is still an empty fresh target."""
+
+    if expected_rds_endpoint() is None:
+        raise RuntimeError("fresh bootstrap requires the freshly verified RDS endpoint")
+    development = DATABASES["development"]
+    production_roles = ", ".join(repr(role) for role in ROLES["production"])
+    psql(
+        "postgres",
+        sql=f"""
+DO $$
+BEGIN
+  IF current_database() <> 'postgres' THEN
+    RAISE EXCEPTION 'fresh bootstrap requires the postgres database';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '{development}') THEN
+    RAISE EXCEPTION 'fresh development database is missing';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '{DATABASES["production"]}')
+     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ({production_roles})) THEN
+    RAISE EXCEPTION 'fresh development target is an existing split environment';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname LIKE '%\\_development' ESCAPE '\\') THEN
+    RAISE EXCEPTION 'development role already exists';
+  END IF;
+  IF to_regrole('rds_iam') IS NULL THEN
+    RAISE EXCEPTION 'required rds_iam role is missing';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_database database, LATERAL aclexplode(database.datacl) privilege
+    WHERE database.datname = '{development}'
+      AND privilege.grantee NOT IN (0, database.datdba)
+  ) THEN
+    RAISE EXCEPTION 'fresh development database has unexpected CONNECT grants';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_shdescription
+    WHERE objoid = (SELECT oid FROM pg_database WHERE datname = '{development}')
+  ) THEN
+    RAISE EXCEPTION 'fresh development database has an environment comment';
+  END IF;
+END $$;
+""",
+    )
+    psql(
+        development,
+        sql=f"""
+DO $$
+BEGIN
+  IF current_database() <> '{development}' THEN
+    RAISE EXCEPTION 'fresh bootstrap connected to the wrong database';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_namespace
+    WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'public')
+      AND nspname NOT LIKE 'pg_temp_%'
+      AND nspname NOT LIKE 'pg_toast_temp_%'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_class relation
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    WHERE namespace.nspname = 'public'
+  ) OR EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname <> 'plpgsql'
+  ) THEN
+    RAISE EXCEPTION 'fresh development database is not empty';
+  END IF;
+END $$;
+""",
+    )
+
+
+def cleanup_fresh_development() -> None:
+    """Remove only objects the fresh invocation could have created."""
+
+    errors: list[Exception] = []
+    for database, sql in (
+        (
+            DATABASES["development"],
+            "DROP SCHEMA IF EXISTS oracle CASCADE; DROP SCHEMA IF EXISTS pricing CASCADE;",
+        ),
+        (
+            "postgres",
+            f"""
+REVOKE CONNECT ON DATABASE {DATABASES["development"]} FROM {", ".join(ROLES["development"])};
+DROP ROLE IF EXISTS {", ".join(ROLES["development"])};
+""",
+        ),
+        (
+            "postgres",
+            f"""
+COMMENT ON DATABASE {DATABASES["development"]} IS NULL;
+GRANT CONNECT ON DATABASE {DATABASES["development"]} TO PUBLIC;
+""",
+        ),
+    ):
+        try:
+            psql(database, sql=sql)
+        except Exception as error:  # pragma: no cover - exercised by live failures
+            errors.append(error)
+    if errors:
+        raise RuntimeError("fresh development cleanup could not be proven") from errors[
+            0
+        ]
+
+
+def fresh_development() -> int:
+    fresh_development_preflight()
+    with tempfile.TemporaryDirectory(
+        prefix="nova-toll-fresh-development-"
+    ) as directory:
+        rendered = Path(directory)
+        for relative in (
+            "v2/db/schema.sql",
+            "v2/db/analysis.sql",
+            "v2/db/roles.sql",
+            "v2/db/oracle/schema.sql",
+            "v2/db/oracle/data.sql",
+        ):
+            source = ROOT / relative
+            destination = rendered / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            render(source, destination)
+
+        started = False
+        try:
+            started = True
+            for relative in (
+                "v2/db/schema.sql",
+                "v2/db/roles.sql",
+                "v2/db/oracle/schema.sql",
+            ):
+                psql(DATABASES["development"], file=rendered / relative)
+            development_roles = ", ".join(ROLES["development"])
+            role_comments = "\n".join(
+                f"COMMENT ON ROLE {role} IS 'environment=development';"
+                for role in ROLES["development"]
+            )
+            psql(
+                "postgres",
+                sql=f"""
+BEGIN;
+COMMENT ON DATABASE {DATABASES["development"]} IS 'environment=development';
+{role_comments}
+REVOKE CONNECT ON DATABASE {DATABASES["development"]} FROM PUBLIC;
+GRANT CONNECT ON DATABASE {DATABASES["development"]} TO {development_roles};
+COMMIT;
+""",
+            )
+            psql(
+                DATABASES["development"],
+                file=ROOT / "v2/tests/development_bootstrap_contract.sql",
+                variables={"fresh_development": "1"},
+            )
+        except Exception:
+            if started:
+                cleanup_fresh_development()
+            raise
+    return 0
+
+
 def main() -> int:
-    if len(sys.argv) != 1:
-        print("usage: bootstrap_development_database.py", file=sys.stderr)
-        return 2
     if any(
         not IDENTIFIER.fullmatch(name) for names in ROLES.values() for name in names
     ):
         raise RuntimeError("bootstrap role map contains an unsafe identifier")
     if len(set(ROLES["production"] + ROLES["development"])) != 12:
         raise RuntimeError("bootstrap role map contains duplicate identifiers")
-
+    if len(sys.argv) == 2 and sys.argv[1] == "--fresh-development":
+        return fresh_development()
+    if sys.argv[1:]:
+        print(
+            "usage: bootstrap_development_database.py [--fresh-development]",
+            file=sys.stderr,
+        )
+        return 2
     dev_roles = ", ".join(repr(role) for role in ROLES["development"])
     psql(
         "postgres",

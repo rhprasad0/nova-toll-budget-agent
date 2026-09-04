@@ -1,6 +1,8 @@
 import ast
 import base64
+import difflib
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -12,7 +14,7 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from textwrap import dedent
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -67,6 +69,9 @@ DEVELOPMENT_DELIVERY_WORKFLOW = (
 DEVELOPMENT_CONNECTIVITY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-connectivity-verification.yml"
 ).read_text()
+DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR = (
+    V2_ROOT / "scripts" / "validate_development_foundation_plan.py"
+)
 FOUNDATION_DNS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-foundation-dns.yml"
 ).read_text()
@@ -6422,6 +6427,337 @@ def test_development_bootstrap_mocked_region_lock_and_rollback_guards():
             )
             assert result.returncode == expected_returncode, result.stderr
             assert log_path.read_text().splitlines() == expected_events
+
+
+def _foundation_plan_validator():
+    spec = importlib.util.spec_from_file_location(
+        "development_foundation_plan_validator", DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _foundation_change(
+    mode: str, address: str, actions: list[str], **change: Any
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "address": address,
+        "change": {"actions": actions, **change},
+    }
+
+
+def test_development_foundation_plan_validator_accepts_only_exact_replacement():
+    validator = _foundation_plan_validator()
+    route_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": "sts:AssumeRoleWithWebIdentity",
+                    "Effect": "Allow",
+                    "Principal": {"Federated": validator.ROUTE_CONTROL_OIDC_ARN},
+                    "Condition": {
+                        "StringEquals": {
+                            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                            "token.actions.githubusercontent.com:sub": validator.ROUTE_CONTROL_OIDC_SUBJECT,
+                        }
+                    },
+                }
+            ],
+        },
+        separators=(",", ":"),
+    )
+    route_policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "SendRouterStatusCommand",
+                    "Effect": "Allow",
+                    "Action": "ssm:SendCommand",
+                    "Resource": [
+                        validator.ROUTE_CONTROL_INSTANCE_ARN,
+                        validator.ROUTE_CONTROL_DOCUMENT_ARN,
+                    ],
+                },
+                {
+                    "Sid": "ReadRouterStatusCommand",
+                    "Effect": "Allow",
+                    "Action": "ssm:GetCommandInvocation",
+                    "Resource": "*",
+                    "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}},
+                },
+            ],
+        },
+        separators=(",", ":"),
+    )
+    rds_before = {
+        "identifier": "nova-toll-db",
+        "engine": "postgres",
+        "publicly_accessible": False,
+        "db_name": "nova_toll",
+        "deletion_protection": False,
+    }
+    rds_after = {
+        "identifier": "nova-toll-db",
+        "engine": "postgres",
+        "publicly_accessible": False,
+        "db_name": "nova_toll_development",
+        "storage_encrypted": True,
+        "iam_database_authentication_enabled": True,
+        "manage_master_user_password": True,
+        "deletion_protection": True,
+        "skip_final_snapshot": False,
+        "vpc_security_group_ids": ["sg-reviewed"],
+    }
+    foundation_changes = [
+        _foundation_change(
+            "managed",
+            "aws_db_instance.main",
+            ["delete", "create"],
+            replace_paths=[["db_name"]],
+            before=rds_before,
+            after=rds_after,
+        )
+    ]
+    foundation_changes += [
+        _foundation_change(
+            "managed",
+            "aws_ssm_document.route_control[0]",
+            ["create"],
+            after={
+                "name": validator.ROUTE_CONTROL_DOCUMENT_NAME,
+                "document_type": "Command",
+                "document_format": "YAML",
+                "content": validator.ROUTE_CONTROL_DOCUMENT_CONTENT,
+            },
+        ),
+        _foundation_change(
+            "managed",
+            "aws_iam_role.route_control[0]",
+            ["create"],
+            after={
+                "name": validator.ROUTE_CONTROL_NAME,
+                "assume_role_policy": route_trust,
+            },
+        ),
+        _foundation_change(
+            "managed",
+            "aws_iam_role_policy.route_control[0]",
+            ["create"],
+            after={"name": validator.ROUTE_CONTROL_NAME, "policy": route_policy},
+        ),
+    ]
+    foundation_changes += [
+        _foundation_change("data", address, ["read"])
+        for address in (
+            "data.aws_iam_policy_document.route_control_assume[0]",
+            "data.aws_iam_policy_document.route_control[0]",
+        )
+    ]
+    plan = {
+        "resource_changes": foundation_changes,
+    }
+    plan["resource_changes"].append(
+        _foundation_change("managed", "aws_budgets_budget.nova_toll_monthly", ["no-op"])
+    )
+    assert validator.validate_plan(plan)["route_control_create"] == 3
+
+    for invalid in (
+        {
+            **plan,
+            "resource_changes": [
+                *plan["resource_changes"][:-1],
+                _foundation_change(
+                    "managed", "aws_budgets_budget.nova_toll_monthly", ["update"]
+                ),
+            ],
+        },
+        {
+            **plan,
+            "resource_changes": [
+                _foundation_change(
+                    "managed",
+                    "aws_db_instance.main",
+                    ["delete", "create"],
+                    replace_paths=[["identifier"]],
+                    before={"db_name": "nova_toll"},
+                    after={"db_name": "nova_toll_development"},
+                ),
+                *plan["resource_changes"][1:],
+            ],
+        },
+        {
+            **plan,
+            "resource_changes": [
+                *plan["resource_changes"],
+                _foundation_change("data", "data.aws_region.current", ["read"]),
+            ],
+        },
+        {
+            **plan,
+            "resource_changes": [
+                *plan["resource_changes"],
+                _foundation_change("managed", "aws_db_instance.production", ["no-op"]),
+            ],
+        },
+    ):
+        with pytest.raises(validator.ValidationError):
+            validator.validate_plan(invalid)
+
+
+def test_development_foundation_plan_context_and_acl_fixture_are_bounded(
+    tmp_path: Path,
+):
+    validator = _foundation_plan_validator()
+    backend = tmp_path / "backend.hcl"
+    backend.write_text(validator.EXPECTED_BACKEND)
+    source_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    validator.validate_context(
+        "903859731897", "us-east-1", backend, source_revision, REPO_ROOT
+    )
+    for account, region in (
+        ("920534282028", "us-east-1"),
+        ("903859731897", "us-west-2"),
+    ):
+        with pytest.raises(validator.ValidationError):
+            validator.validate_context(
+                account, region, backend, source_revision, REPO_ROOT
+            )
+    backend.write_text(validator.EXPECTED_BACKEND + "extra = true\n")
+    with pytest.raises(validator.ValidationError):
+        validator.validate_context(
+            "903859731897", "us-east-1", backend, source_revision, REPO_ROOT
+        )
+
+    backend.write_text(validator.EXPECTED_BACKEND)
+    plan_file = tmp_path / "foundation.json"
+    plan_file.write_text(json.dumps({"resource_changes": []}))
+    # The CLI must not invent a context when any required binding is absent.
+    cli = [
+        sys.executable,
+        str(DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR),
+        str(plan_file),
+        "--account",
+        "903859731897",
+        "--region",
+        "us-east-1",
+        "--backend",
+        str(backend),
+        "--source-revision",
+        source_revision,
+        "--source-root",
+        str(REPO_ROOT),
+    ]
+    assert (
+        subprocess.run(cli, check=False, capture_output=True, text=True).returncode == 1
+    )
+    for option in (
+        "--account",
+        "--region",
+        "--backend",
+        "--source-revision",
+        "--source-root",
+    ):
+        missing = cli.copy()
+        index = missing.index(option)
+        del missing[index : index + 2]
+        result = subprocess.run(missing, check=False, capture_output=True, text=True)
+        assert result.returncode != 0
+
+    baseline = subprocess.run(
+        ["git", "show", "HEAD:infra/policy.hujson"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    old_host = (
+        '        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128",'
+    )
+    new_host = (
+        '        "nova-toll-rds-development": "fd7a:115c:a1e0:b1a:0:1:ac1f:5aa/128",'
+    )
+    refreshed = baseline.replace(old_host, new_host)
+    changes = [
+        line
+        for line in difflib.unified_diff(
+            baseline.splitlines(), refreshed.splitlines(), lineterm=""
+        )
+        if (line.startswith("+") or line.startswith("-"))
+        and not line.startswith(("+++", "---"))
+    ]
+    assert changes == [f"-{old_host}", f"+{new_host}"]
+    assert '"tag:ci-development"' in refreshed
+    assert '"tag:nova-toll-router"' in refreshed
+
+
+def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
+    handoff = DEPLOYMENT.split("### Development foundation replacement handoff", 1)[
+        1
+    ].split("### Guarded production release", 1)[0]
+    shells = re.findall(r"(?m)^[ \t]*~~~sh\n(.*?)\n[ \t]*~~~", handoff, re.DOTALL)
+    assert len(shells) == 6
+    for shell in shells:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as script:
+            script.write(shell)
+            script.flush()
+            assert (
+                subprocess.run(["bash", "-n", script.name], check=False).returncode == 0
+            )
+
+    fresh, step1, step2, step3, step4, step5 = shells
+    assert fresh.index('RDS_METADATA="') < fresh.index("$RDS_METADATA")
+    assert step1.index('ROOT="$(git rev-parse --show-toplevel)"') < step1.index(
+        'git -C "$ROOT"'
+    )
+    assert step1.index(': "${REVIEWED_SOURCE_REVISION:?') < step1.index(
+        "printf '%s\\n' \"$REVIEWED_SOURCE_REVISION\""
+    )
+    assert step2.index("APPLY_STARTED=0") < step2.index('test "$APPLY_STARTED"')
+    step2_binding = step2.index(
+        "export AWS_PROFILE=nova-toll-dev AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1"
+    )
+    assert step2_binding < step2.index("trap restore_deletion_protection")
+    assert step2.index(
+        'test "$(aws --region us-east-1 sts get-caller-identity --query Account --output text)" = "903859731897"'
+    ) < step2.index("trap restore_deletion_protection")
+    assert step2.index('RDS_METADATA="$(aws --region us-east-1 rds') < step2.index(
+        "--no-deletion-protection"
+    )
+    assert (
+        '.[0].identifier == "nova-toll-db"'
+        ' and .[0].status == "available"'
+        ' and .[0].db_name == "nova_toll"'
+        " and .[0].private == false"
+        " and .[0].deletion_protection == true"
+    ) in step2
+    assert (
+        step2.count(
+            'AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" aws'
+        )
+        == 4
+    )
+    assert step3.index('ROOT="$(git rev-parse --show-toplevel)"') < step3.index(
+        'git -C "$ROOT"'
+    )
+    assert step3.index('PLAN_ROOT="$(mktemp -d)"') < step3.index(
+        'chmod 700 -- "$PLAN_ROOT"'
+    )
+    assert step4.index(': "${PLAN_ROOT:?') < step4.index(
+        'sha256sum "$PLAN_ROOT/development-foundation.tfplan"'
+    )
+    assert step5.index('RDS_ENDPOINT="$(aws') < step5.index(
+        'getent ahostsv4 "$RDS_ENDPOINT"'
+    )
 
 
 def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_actions():
