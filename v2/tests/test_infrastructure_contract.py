@@ -7249,7 +7249,19 @@ def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege():
 
 def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
-    assert _workflow_trigger(workflow) == {"workflow_dispatch": None}
+    trigger = _workflow_trigger(workflow)
+    assert isinstance(trigger, dict)
+    trigger = cast(dict[str, object], trigger)
+    assert set(trigger) == {"workflow_dispatch"}
+    dispatch = cast(dict[str, object], trigger["workflow_dispatch"])
+    phase = cast(dict[str, object], dispatch["inputs"])["phase"]
+    assert phase == {
+        "description": "pre-bootstrap route/transport proof or post-bootstrap full proof",
+        "required": False,
+        "default": "full",
+        "type": "choice",
+        "options": ["pre-bootstrap", "full"],
+    }
     assert workflow["permissions"] == {"contents": "read"}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     assert set(jobs) == {"verify"}
@@ -7281,6 +7293,15 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     assert 'PGSSLROOTCERT="$RDS_CA_BUNDLE"' in source
     assert "generate-db-auth-token" in source
     assert "SELECT current_database(), current_user" in source
+    assert "VERIFICATION_PHASE" in source
+    assert "pre-bootstrap" in source
+    assert "TRANSPORT_ROUTE_JSON" in source
+    assert "pre_bootstrap_route_transport_valid" in source
+    assert "socket.create_connection" in source
+    assert 'route.get("dev") != "tailscale0"' in source
+    assert source.index(
+        'if test "$VERIFICATION_PHASE" = pre-bootstrap; then'
+    ) < source.index("export PGHOST=")
     assert "nova_toll_development" in source
     assert "pricing_caller_development" in source
     assert "PRODUCTION_DB_HOST" in source

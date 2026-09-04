@@ -2136,7 +2136,12 @@ When direct workstation access to the private RDS endpoint is unavailable, an
 already-authorized development private path may forward the endpoint to a local
 port. Set `NOVA_TOLL_RDS_LOCAL_PORT` to that port before this procedure; the
 procedure keeps `PGHOST` set to the RDS endpoint so TLS hostname verification
-still applies and uses only `127.0.0.1` as the transport address.
+still applies and uses only `127.0.0.1` as the transport address. Local
+forwarding requires `NOVA_TOLL_EXPECTED_RDS_ENDPOINT` to match the real RDS
+hostname and `NOVA_TOLL_ADMIN_URL` to carry explicit nonempty
+`sslmode=verify-full` and `sslrootcert` settings. Ambient `PG*` values never
+rescue a missing, mismatched, or downgraded URL setting; any such input stops
+before `psql`.
 
 The authorized replacement may initialize only the Terraform-created
 `nova_toll_development` database after the protected route and saved-plan steps
@@ -2314,13 +2319,24 @@ test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND
 ```
 
 Immediately dispatch the protected connectivity workflow from the reviewed
-`main` SHA. Its route-control step passes only when the complete all-at-once
-inventory has the exact route in both `advertisedRoutes` and `enabledRoutes`,
-owned only by the exact SSM/API-bound device. It rejects partial or marked
-inventories, duplicate or malformed data, IPv4 on the bound device, foreign
-or ambiguous site-1 routes, collisions, tag drift, scope failure, and any
-uncertain API result before the DB role is assumed. The workflow records only
-its sanitized identity/route summary.
+`main` SHA with `phase=pre-bootstrap`. Its route-control step passes only when
+the complete all-at-once inventory has the exact route in both
+`advertisedRoutes` and `enabledRoutes`, owned only by the exact SSM/API-bound
+device. Its pre-bootstrap phase then proves that the derived site-1 host uses
+`tailscale0` and accepts a bounded TCP/5432 connection, without assuming the
+database role that fresh bootstrap has not created yet. It rejects partial or
+marked inventories, duplicate or malformed data, IPv4 on the bound device,
+foreign or ambiguous site-1 routes, collisions, tag drift, scope failure, and
+any uncertain API result before the transport check. The workflow records only
+its sanitized route/transport summary; this phase is not the full SQL proof.
+
+Dispatch it only from protected `main`, and keep
+`DEVELOPMENT_DELIVERY_ENABLED` absent or false:
+
+```sh
+gh workflow run v2-development-connectivity-verification.yml \
+  --repo rhprasad0/nova-toll-budget-agent --ref main -f phase=pre-bootstrap
+```
 
 If route approval or post-write proof fails, stop before TLS or SQL. Never
 retry an uncertain POST. With the still-proven exact node binding, restore
@@ -2354,7 +2370,9 @@ The separate
 `.github/workflows/v2-development-connectivity-verification.yml` is the sole
 pre-enable CI proof. It is `workflow_dispatch` only, must be dispatched from
 `refs/heads/main` while `DEVELOPMENT_DELIVERY_ENABLED` is absent or `false`,
-uses the protected `development` environment, and has only
+and accepts `phase=pre-bootstrap` for the route/transport proof above or
+`phase=full` for the post-bootstrap SQL and production-denial proof. The
+workflow uses the protected `development` environment and has only
 `contents: read`/`id-token: write`. Its Tailscale OAuth client has only the
 `auth_keys` scope and only `tag:ci-development`; its only AWS role is
 `arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev`. It has no
@@ -2378,8 +2396,11 @@ Manager, or production resource permission.
 The verifier resolves the development RDS endpoint with
 `aws rds describe-db-instances` and native `getent ahostsv4`, immediately
 derives the site-1 `/128` with `tailscale debug via 1 <ipv4>/32` and Python's
-standard-library `ipaddress`, and rejects a stale or non-site-1 result. It
-keeps the refreshed RDS DNS name in `PGHOST` and for IAM-token generation,
+standard-library `ipaddress`, and rejects a stale or non-site-1 result. The
+`pre-bootstrap` phase stops after validating the `tailscale0` route and a
+bounded TCP/5432 connection to the derived host, so it does not require
+`pricing_caller_development`. Run the `full` phase only after fresh bootstrap;
+it keeps the refreshed RDS DNS name in `PGHOST` and for IAM-token generation,
 puts only the derived IPv6 address in `PGHOSTADDR`, uses the pinned RDS CA with
 `PGSSLMODE=verify-full`, and runs one bounded query only:
 `SELECT current_database(), current_user`. The expected result is exactly
@@ -3701,8 +3722,11 @@ unchanged.
 #### Fresh development database bootstrap
 
 Terraform creates nova_toll_development as the initial database when the
-development RDS instance is replaced. After the private path is proven and the
-instance is available, run the following as a separate protected step:
+development RDS instance is replaced. After the protected `pre-bootstrap`
+route/transport phase passes and the instance is available, run the following
+as a separate protected step. Set `NOVA_TOLL_RDS_LOCAL_PORT` only when using
+an already-authorized local port forward; the bootstrap keeps the verified RDS
+hostname in `PGHOST` and uses only `127.0.0.1` for transport in that mode:
 
 ~~~sh
 set -euo pipefail
@@ -3717,10 +3741,10 @@ RDS_METADATA="$(AWS_PROFILE=nova-toll-dev aws --region us-east-1 rds describe-db
   --output json)"
 jq -e 'type == "array" and length == 1 and .[0].identifier == "nova-toll-db" and .[0].status == "available" and .[0].db_name == "nova_toll_development" and .[0].private == false and .[0].deletion_protection == true and (.[0].endpoint | type == "string" and length > 0)' <<<"$RDS_METADATA" >/dev/null
 RDS_ENDPOINT="$(jq -er '.[0].endpoint' <<<"$RDS_METADATA")"
-: "${NOVA_TOLL_ADMIN_URL:?set the reviewed TLS administrator URL in process memory only}"
+: "${NOVA_TOLL_ADMIN_URL:?set the reviewed TLS administrator URL with explicit sslmode=verify-full and sslrootcert query settings in process memory only}"
 export NOVA_TOLL_EXPECTED_RDS_ENDPOINT="$RDS_ENDPOINT"
 python3 v2/scripts/bootstrap_development_database.py --fresh-development
-unset NOVA_TOLL_ADMIN_URL NOVA_TOLL_EXPECTED_RDS_ENDPOINT RDS_ENDPOINT RDS_METADATA
+unset NOVA_TOLL_ADMIN_URL NOVA_TOLL_EXPECTED_RDS_ENDPOINT NOVA_TOLL_RDS_LOCAL_PORT RDS_ENDPOINT RDS_METADATA
 ~~~
 
 --fresh-development refuses a missing, wrong-name, commented, non-empty, or
@@ -3939,10 +3963,13 @@ or deployed migration.
    VPC routes, security groups, or delivery settings.
 
 6. Use the fixed-instance SSM route-control and protected connectivity workflow
-   to establish the private path, then run the fresh bootstrap in its own
-   protected step. Keep DEVELOPMENT_DELIVERY_ENABLED absent or false until
-   the connectivity/bootstrap evidence is complete. The final sanitized
-   evidence contains only the approved account/region, exact route ownership,
+   with `phase=pre-bootstrap` to establish and prove the private transport,
+   then run the fresh bootstrap in its own protected step. Only after that
+   bootstrap succeeds, dispatch the same workflow with `phase=full` and retain
+   its development SQL identity and production-denial evidence. Keep
+   `DEVELOPMENT_DELIVERY_ENABLED` absent or false until the full
+   connectivity/bootstrap evidence is complete. The final sanitized evidence
+   contains only the approved account/region, exact route ownership,
    development query identity, and both production denial booleans; it contains
    no secret, endpoint credential, raw command output, plan JSON, or state.
 

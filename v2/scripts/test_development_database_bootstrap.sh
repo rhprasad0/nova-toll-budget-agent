@@ -57,6 +57,100 @@ assert captured["env"]["PGSSLMODE"] == "verify-full"
 assert captured["env"]["PGSSLROOTCERT"] == "/tmp/ca bundle.pem"
 PY
 
+NOVA_TOLL_EXPECTED_RDS_ENDPOINT=nova-toll-db.example \
+NOVA_TOLL_RDS_LOCAL_PORT=15432 \
+NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@nova-toll-db.example/postgres?sslmode=verify-full&sslrootcert=system" \
+  PGHOSTADDR=ambient PGPORT=ambient PGSSLMODE=disable PGSSLROOTCERT=ambient python3 - <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+
+def invoke(**values):
+    previous = os.environ.copy()
+    try:
+        os.environ.clear()
+        os.environ.update(values)
+        captured = {}
+        bootstrap.run = lambda *args, **kwargs: captured.update(env=kwargs["env"])
+        bootstrap.psql("postgres", sql="SELECT 1")
+        return captured["env"]
+    finally:
+        os.environ.clear()
+        os.environ.update(previous)
+
+environment = invoke(
+    NOVA_TOLL_EXPECTED_RDS_ENDPOINT="nova-toll-db.example",
+    NOVA_TOLL_RDS_LOCAL_PORT="15432",
+    NOVA_TOLL_ADMIN_URL=(
+        "postgresql://review_user:sentinel@nova-toll-db.example/postgres?"
+        "sslmode=verify-full&sslrootcert=system"
+    ),
+    PGHOSTADDR="ambient",
+    PGPORT="ambient",
+    PGSSLMODE="disable",
+    PGSSLROOTCERT="ambient",
+)
+assert environment["PGHOST"] == "nova-toll-db.example"
+assert environment["PGHOSTADDR"] == "127.0.0.1"
+assert environment["PGPORT"] == "15432"
+assert environment["PGSSLMODE"] == "verify-full"
+assert environment["PGSSLROOTCERT"] == "system"
+
+invalid = {
+    "NOVA_TOLL_RDS_LOCAL_PORT": "15432",
+    "NOVA_TOLL_ADMIN_URL": (
+        "postgresql://review_user:sentinel@nova-toll-db.example/postgres?"
+        "sslmode=verify-full&sslrootcert=system"
+    ),
+    "PGSSLMODE": "disable",
+    "PGSSLROOTCERT": "ambient",
+}
+for name, values in (
+    ("absent endpoint", invalid),
+    ("mismatched endpoint", {**invalid, "NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "other.example"}),
+    ("missing admin URL", {"NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "nova-toll-db.example", "NOVA_TOLL_RDS_LOCAL_PORT": "15432", "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/ambient/ca.pem"}),
+    ("queryless URL", {**invalid, "NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "nova-toll-db.example", "NOVA_TOLL_ADMIN_URL": "postgresql://review_user:sentinel@nova-toll-db.example/postgres", "PGSSLROOTCERT": "/ambient/ca.pem"}),
+    ("missing sslmode", {**invalid, "NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "nova-toll-db.example", "NOVA_TOLL_ADMIN_URL": "postgresql://review_user:sentinel@nova-toll-db.example/postgres?sslrootcert=system"}),
+    ("wrong sslmode", {**invalid, "NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "nova-toll-db.example", "NOVA_TOLL_ADMIN_URL": "postgresql://review_user:sentinel@nova-toll-db.example/postgres?sslmode=disable&sslrootcert=system"}),
+    ("missing sslrootcert", {**invalid, "NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "nova-toll-db.example", "NOVA_TOLL_ADMIN_URL": "postgresql://review_user:sentinel@nova-toll-db.example/postgres?sslmode=verify-full", "PGSSLROOTCERT": "/ambient/ca.pem"}),
+    ("blank sslrootcert", {**invalid, "NOVA_TOLL_EXPECTED_RDS_ENDPOINT": "nova-toll-db.example", "NOVA_TOLL_ADMIN_URL": "postgresql://review_user:sentinel@nova-toll-db.example/postgres?sslmode=verify-full&sslrootcert=%20"}),
+):
+    try:
+        invoke(**values)
+    except RuntimeError:
+        continue
+    raise AssertionError(f"accepted invalid local trust input: {name}")
+PY
+
+for invalid_port in 0 65536 15432x; do
+  if NOVA_TOLL_RDS_LOCAL_PORT="$invalid_port" \
+    NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
+    NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full" \
+    python3 - <<'PY' >"$sentinel_output" 2>&1
+import importlib.util
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+bootstrap.psql("postgres", sql="SELECT 1")
+PY
+  then
+    echo 'bootstrap accepted an invalid local forwarding port' >&2
+    exit 1
+  fi
+  if rg --fixed-strings --quiet "$sentinel" "$sentinel_output"; then
+    echo 'bootstrap leaked an invalid local forwarding URL secret' >&2
+    exit 1
+  fi
+done
+
 NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
 NOVA_TOLL_ADMIN_URL="postgresql://review_user:${sentinel}@127.0.0.1:1/postgres?sslmode=verify-full&sslrootcert=system" \
   python3 - <<'PY'
@@ -84,7 +178,10 @@ for invalid_url in \
   "postgresql://review_user:${sentinel}@127.0.0.1/postgres?" \
   "postgresql://review_user:${sentinel}@127.0.0.1/postgres#" \
   "postgresql://review_user:${sentinel}@127.0.0.1/postgres?sslmode=verify-full#fragment"; do
-  if NOVA_TOLL_ADMIN_URL="$invalid_url" python3 - <<'PY' >"$sentinel_output" 2>&1
+  if NOVA_TOLL_EXPECTED_RDS_ENDPOINT=127.0.0.1 \
+    NOVA_TOLL_RDS_LOCAL_PORT=15432 NOVA_TOLL_ADMIN_URL="$invalid_url" \
+    PGSSLMODE=disable PGSSLROOTCERT=ambient \
+    python3 - <<'PY' >"$sentinel_output" 2>&1
 import importlib.util
 from pathlib import Path
 

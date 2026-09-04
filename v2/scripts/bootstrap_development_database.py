@@ -3,6 +3,10 @@
 
 The caller supplies an administrator PostgreSQL connection through PG* or
 NOVA_TOLL_ADMIN_URL. This program deliberately has no AWS or credential logic.
+For a local port forward, NOVA_TOLL_RDS_LOCAL_PORT changes only the transport
+address; PGHOST remains the verified RDS endpoint for TLS hostname validation.
+Every local-forward subprocess uses an explicit admin URL with verify-full and
+a nonempty reviewed CA bundle.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ ROLES = {
 }
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_]*\Z")
 RDS_ENDPOINT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\Z")
+LOCAL_PORT = re.compile(r"[1-9][0-9]{0,4}\Z")
 
 
 def run(
@@ -46,10 +51,14 @@ def run(
     subprocess.run(args, input=input, text=True, check=True, env=env)
 
 
-def tls_environment(query: str) -> dict[str, str]:
-    if not query:
-        return {}
+def tls_environment(
+    query: str, *, require_explicit: bool, fallback_rootcert: str | None = None
+) -> dict[str, str]:
     values: dict[str, str] = {}
+    if not query:
+        if require_explicit:
+            raise RuntimeError("NOVA_TOLL_ADMIN_URL requires explicit TLS settings")
+        return {}
     try:
         for pair in query.split("&"):
             if not pair or "=" not in pair:
@@ -71,9 +80,16 @@ def tls_environment(query: str) -> dict[str, str]:
         raise RuntimeError("NOVA_TOLL_ADMIN_URL has invalid TLS settings") from None
     if values.get("sslmode") != "verify-full":
         raise RuntimeError("NOVA_TOLL_ADMIN_URL has invalid TLS settings")
+    if require_explicit and "sslrootcert" not in values:
+        raise RuntimeError("NOVA_TOLL_ADMIN_URL has invalid TLS settings")
+    rootcert = values.get("sslrootcert", fallback_rootcert)
+    if rootcert is None or not rootcert.strip():
+        if require_explicit:
+            raise RuntimeError("NOVA_TOLL_ADMIN_URL has invalid TLS settings")
+        return {"PGSSLMODE": "verify-full"}
     return {
-        "PGSSLMODE": values["sslmode"],
-        **({"PGSSLROOTCERT": values["sslrootcert"]} if "sslrootcert" in values else {}),
+        "PGSSLMODE": "verify-full",
+        "PGSSLROOTCERT": rootcert.strip(),
     }
 
 
@@ -87,6 +103,15 @@ def expected_rds_endpoint() -> str | None:
     return value.lower()
 
 
+def local_transport_port() -> str | None:
+    value = os.environ.get("NOVA_TOLL_RDS_LOCAL_PORT")
+    if value is None:
+        return None
+    if not LOCAL_PORT.fullmatch(value) or int(value) > 65535:
+        raise RuntimeError("NOVA_TOLL_RDS_LOCAL_PORT is invalid")
+    return value
+
+
 def psql(
     database: str,
     *,
@@ -96,6 +121,13 @@ def psql(
 ) -> None:
     admin_url = os.environ.get("NOVA_TOLL_ADMIN_URL")
     expected_endpoint = expected_rds_endpoint()
+    local_port = local_transport_port()
+    if local_port is not None and expected_endpoint is None:
+        raise RuntimeError(
+            "NOVA_TOLL_RDS_LOCAL_PORT requires the verified RDS endpoint"
+        )
+    if local_port is not None and admin_url is None:
+        raise RuntimeError("NOVA_TOLL_RDS_LOCAL_PORT requires NOVA_TOLL_ADMIN_URL")
     command = ["psql", "-X", "--set", "ON_ERROR_STOP=1"]
     if admin_url is not None:
         if not admin_url:
@@ -145,7 +177,16 @@ def psql(
             environment["PGPASSWORD"] = unquote(parsed.password)
         if port is not None:
             environment["PGPORT"] = str(port)
-        environment.update(tls_environment(parsed.query))
+        if local_port is not None:
+            environment["PGHOSTADDR"] = "127.0.0.1"
+            environment["PGPORT"] = local_port
+        environment.update(
+            tls_environment(
+                parsed.query,
+                require_explicit=local_port is not None,
+                fallback_rootcert=os.environ.get("PGSSLROOTCERT"),
+            )
+        )
     else:
         environment = os.environ.copy()
         if not environment.get("PGHOST") or not environment.get("PGUSER"):
