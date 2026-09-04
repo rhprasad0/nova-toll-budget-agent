@@ -2104,7 +2104,10 @@ named development Bedrock guardrail version (publication only; its Terraform
 resource uses `skip_destroy`). It cannot create, replace, or administer the
 bootstrap addresses above. The workflow's rendered-plan gate
 must pass before the exact saved plan is applied. A missing import, unknown
-address/action, or failed gate stops for an administrator.
+address/action, or failed gate stops for an administrator. The foundation
+Terraform root owns the route-control role, fixed SSM document, and their
+trust/policy resources; they are intentionally absent from v2 application
+Terraform and the recurring delivery plan.
 
 The protected `main` branch plus the protected GitHub `development` environment
 is the reviewed release source for this identity. Publishing arbitrary code to
@@ -2160,261 +2163,63 @@ only as `PGHOSTADDR`. Confirm both derivations with
 `tailscale debug via 1 172.31.0.0/16` and
 `tailscale debug via 1 172.31.4.167/32` before handoff.
 
-Before any Slice 2B router route activation, set a read-only Tailscale API token
-with device and route read scopes, `TAILSCALE_TAILNET=rhprasad0.github`, and the
-explicitly reviewed intended development router device ID. Any empty or other
-tailnet name is rejected before an API query. The check below enumerates every device,
-fetches routes for every returned device, and stops without an availability result
-on any API, response, schema, route, duplicate, or ownership error. It has no
-route-enable or other mutation path; the token is supplied only in the process
-environment and is never printed.
+Before any protected connectivity verification, create a separate protected
+route-control OAuth client with only the documented device-inventory read scope
+`devices:core:read` and route-management scope `devices:routes`. The existing
+`TS_DEVELOPMENT_OAUTH_CLIENT_ID` and `TS_DEVELOPMENT_OAUTH_SECRET` client remains
+`auth_keys`-only for the third-party `tailscale/github-action`; its values stay
+opaque to operators, logs, arguments, artifacts, and summaries. The route
+helper uses only `TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID` and
+`TS_DEVELOPMENT_ROUTE_OAUTH_SECRET`. Do not use a personal API token, an ACL
+OAuth client, or a legacy device identifier.
+The helper requests exactly the space-delimited scope string
+`devices:core:read devices:routes` and rejects a token response with missing,
+duplicated, insufficient, or additional scope tokens.
 
-The intended development device may not advertise or enable any IPv4 route. The
-separate production router remains permitted to advertise its `172.31.0.0/16`
-route.
+The protected `workflow_dispatch` run is the sole route-control boundary. It
+must run from `refs/heads/main`, retain the `development` environment reviewer,
+and keep `DEVELOPMENT_DELIVERY_ENABLED` absent or false. The foundation
+Terraform root creates and maintains the separate
+`nova-toll-v2-route-control-dev` role; the workflow assumes that
+administrator-controlled role first. It sends exactly one fixed, no-parameter
+custom SSM document named
+`nova-toll-v2-route-control-status-dev` to instance `i-0d33b9a9c15db93fc` in
+`us-east-1`. The document contains only `set -eu` and `tailscale status --json`,
+then the helper reads only that command's status and output. The command
+document is not `AWS-RunShellScript`, and callers cannot provide commands.
+The command must be successful, have response code `0`, empty stderr, and one
+JSON document with a nonempty `Self.ID`. The helper
+`v2/scripts/approve_development_tailscale_route.py` never prints that private
+output or the OAuth bearer.
 
-```sh
-set +x
-: "${TAILSCALE_API_TOKEN:?set a read-only Tailscale API token in the environment}"
-: "${TAILSCALE_TAILNET:?set the Tailscale tailnet name in the environment}"
-: "${TAILSCALE_INTENDED_DEVICE_ID:?set the reviewed intended development router device ID in the environment}"
-python3 - <<'PY'
-# BEGIN SLICE_2A_TAILSCALE_ALLOCATION_CHECK
-import ipaddress
-import json
-import os
-import urllib.parse
-import urllib.request
+The helper exchanges the route-control secrets in memory, requests the complete
+all-at-once `GET /api/v2/tailnet/rhprasad0.github/devices?fields=all`
+inventory, and rejects any pagination/continuation marker, malformed field,
+duplicate `nodeId`, duplicate route, noncanonical route, IPv4 on the bound
+device, foreign or ambiguous site-1 4via6 route, collision, or tag ambiguity.
+It selects exactly the API `nodeId` equal to SSM `Self.ID`; that device must
+have exactly `tag:nova-toll-development-router`, and the exact
+`fd7a:115c:a1e0:b1a:0:1:ac1f:0/112` must already be advertised there. If the
+route is not yet advertised, stop and use the reviewed exact-instance SSM
+advertisement procedure below.
 
-API_ROOT = "https://api.tailscale.com/api/v2"
-EXPECTED_TAILNET = "rhprasad0.github"
-SITE_ID = 1
-EXPECTED_TAG = "tag:nova-toll-development-router"
-EXPECTED_ROUTE = "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112"
-EXPECTED_HOST_ROUTE = "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7/128"
-VIA6_SPACE = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
+Immediately before a write, the helper re-fetches and revalidates the complete
+inventory. If the exact route is already enabled, it succeeds without a POST.
+Otherwise it sends exactly one
+`POST /api/v2/device/<nodeId>/routes` containing the complete current
+`enabledRoutes` list plus the exact route, preserving every unrelated entry.
+The API scope must include `devices:routes`; a 401/403, timeout, invalid
+response, or uncertain write is a hard failure and is never retried. A
+successful write is followed by a complete inventory read proving the same
+SSM/API node binding, sole tag ownership, no intended-device IPv4, and both
+advertised/enabled exact-route state. The API has no conditional version, so the
+pre-write re-fetch still has an irreducible sub-request TOCTOU window; drift is
+rejected before POST and the exact post-write readback is mandatory. Only the
+sanitized identity/route booleans are recorded as evidence.
 
-
-def _devices(document):
-    if not isinstance(document, dict) or not isinstance(document.get("devices"), list):
-        raise ValueError("invalid device inventory")
-    if document.get("nextPageToken") not in (None, ""):
-        raise ValueError("incomplete device inventory")
-    devices = document["devices"]
-    ids = []
-    for device in devices:
-        if not isinstance(device, dict) or not isinstance(device.get("id"), str) or not device["id"]:
-            raise ValueError("invalid device id")
-        if device["id"] in ids:
-            raise ValueError("duplicate device id")
-        ids.append(device["id"])
-    return devices, ids
-
-
-def _site_one_route(route, *, reject_ipv4=False):
-    if not isinstance(route, str) or not route:
-        raise ValueError("invalid route")
-    try:
-        network = ipaddress.ip_network(route, strict=False)
-    except ValueError as error:
-        raise ValueError("invalid route") from error
-    if str(network) != route:
-        raise ValueError("non-canonical route")
-    if network.version == 4:
-        if reject_ipv4:
-            raise ValueError("intended development device may not advertise or enable IPv4")
-        return False
-    if not network.overlaps(VIA6_SPACE):
-        return False
-    if network.prefixlen < 96:
-        raise ValueError("ambiguous 4via6 route")
-    translator_identifier = (int(network.network_address) >> 32) & 0xFFFFFFFF
-    if (translator_identifier >> 16) != 0:
-        raise ValueError("unsupported 4via6 translator identifier")
-    return (translator_identifier & 0xFFFF) == SITE_ID
-
-
-def check_allocation(
-    device_document,
-    routes_by_device,
-    intended_device_id,
-    *,
-    require_advertised_route=False,
-    require_host_route=False,
-    require_no_advertised_route=False,
-):
-    devices, device_ids = _devices(device_document)
-    if not isinstance(intended_device_id, str) or not intended_device_id:
-        raise ValueError("missing intended device")
-    if intended_device_id not in device_ids:
-        raise ValueError("intended device is absent")
-    if not isinstance(routes_by_device, dict) or set(routes_by_device) != set(device_ids):
-        raise ValueError("incomplete route inventory")
-
-    intended = next(device for device in devices if device["id"] == intended_device_id)
-    if intended.get("tags") != [EXPECTED_TAG]:
-        raise ValueError("intended device does not have exactly the development router tag")
-    allowed_routes = None
-    if require_advertised_route:
-        allowed_routes = {EXPECTED_ROUTE}
-        if require_host_route:
-            allowed_routes.add(EXPECTED_HOST_ROUTE)
-    elif require_host_route:
-        raise ValueError("host-route verification requires post-advertisement mode")
-    owners = {}
-    advertised_owners = {}
-    enabled_owners = {}
-    for device in devices:
-        device_id = device["id"]
-        tags = device.get("tags")
-        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
-            raise ValueError("invalid device tags")
-        if device_id != intended_device_id and EXPECTED_TAG in tags:
-            raise ValueError("development router tag has multiple owners")
-        route_document = routes_by_device[device_id]
-        if not isinstance(route_document, dict):
-            raise ValueError("invalid route response")
-        for field in ("advertisedRoutes", "enabledRoutes"):
-            routes = route_document.get(field)
-            if not isinstance(routes, list) or any(not isinstance(route, str) for route in routes):
-                raise ValueError("invalid route response")
-            if len(routes) != len(set(routes)):
-                raise ValueError("duplicate route")
-            for route in routes:
-                if _site_one_route(route, reject_ipv4=device_id == intended_device_id):
-                    if allowed_routes is not None and route not in allowed_routes:
-                        raise ValueError("unexpected site-1 route")
-                    owners.setdefault(route, set()).add(device_id)
-                    if field == "advertisedRoutes":
-                        advertised_owners.setdefault(route, set()).add(device_id)
-                    else:
-                        enabled_owners.setdefault(route, set()).add(device_id)
-    if any(route_owners != {intended_device_id} for route_owners in owners.values()):
-        raise ValueError("site-1 route has unknown owner")
-    if require_advertised_route and advertised_owners.get(EXPECTED_ROUTE) != {
-        intended_device_id
-    }:
-        raise ValueError("exact site-1 route is not advertised by intended device")
-    if require_advertised_route and enabled_owners.get(EXPECTED_ROUTE) != {
-        intended_device_id
-    }:
-        raise ValueError("exact site-1 route is not enabled on intended device")
-    if require_host_route and advertised_owners.get(EXPECTED_HOST_ROUTE) != {
-        intended_device_id
-    }:
-        raise ValueError("exact host route is not advertised by intended device")
-    if require_host_route and enabled_owners.get(EXPECTED_HOST_ROUTE) != {
-        intended_device_id
-    }:
-        raise ValueError("exact host route is not enabled on intended device")
-    if require_no_advertised_route and advertised_owners:
-        raise ValueError("site-1 route remains advertised")
-    if owners:
-        return "site-1 4via6 allocation check passed: route is owned only by intended device"
-    return "site-1 4via6 allocation check passed: no route is allocated"
-
-
-def _fetch_json(path, token):
-    request = urllib.request.Request(
-        f"{API_ROOT}{path}",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            if getattr(response, "status", None) != 200:
-                raise ValueError("unexpected API status")
-            return json.load(response)
-    except Exception as error:
-        raise ValueError("Tailscale API request failed") from error
-
-
-def run_check(
-    fetch_json,
-    tailnet,
-    intended_device_id,
-    token,
-    *,
-    post_advertisement=False,
-    require_host_route=False,
-    require_no_advertised_route=False,
-):
-    if tailnet != EXPECTED_TAILNET or not isinstance(token, str) or not token:
-        raise ValueError("missing API inputs")
-    devices_path = f"/tailnet/{urllib.parse.quote(tailnet, safe='')}/devices?fields=all"
-    device_document = fetch_json(devices_path, token)
-    _, device_ids = _devices(device_document)
-    routes = {
-        device_id: fetch_json(
-            f"/device/{urllib.parse.quote(device_id, safe='')}/routes", token
-        )
-        for device_id in device_ids
-    }
-    return check_allocation(
-        device_document,
-        routes,
-        intended_device_id,
-        require_advertised_route=post_advertisement,
-        require_host_route=require_host_route,
-        require_no_advertised_route=require_no_advertised_route,
-    )
-
-
-def main():
-    token = os.environ.get("TAILSCALE_API_TOKEN", "")
-    tailnet = os.environ.get("TAILSCALE_TAILNET", "")
-    intended_device_id = os.environ.get("TAILSCALE_INTENDED_DEVICE_ID", "")
-    post_advertisement = os.environ.get("TAILSCALE_POST_ADVERTISEMENT", "")
-    require_host_route = os.environ.get("TAILSCALE_VERIFY_HOST_ROUTE", "")
-    no_advertised_route = os.environ.get("TAILSCALE_NO_ADVERTISED_ROUTE", "")
-    if (
-        post_advertisement not in ("", "1")
-        or require_host_route not in ("", "1")
-        or no_advertised_route not in ("", "1")
-    ):
-        raise ValueError("invalid verification mode")
-    if require_host_route == "1" and post_advertisement != "1":
-        raise ValueError("host-route verification requires post-advertisement mode")
-    if no_advertised_route == "1" and post_advertisement == "1":
-        raise ValueError("no-advertised-route verification cannot be post-advertisement mode")
-    result = run_check(
-        _fetch_json,
-        tailnet,
-        intended_device_id,
-        token,
-        post_advertisement=post_advertisement == "1",
-        require_host_route=require_host_route == "1",
-        require_no_advertised_route=no_advertised_route == "1",
-    )
-    if post_advertisement == "1":
-        result = result.replace("allocation check", "post-advertisement verification")
-    print(result)
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        raise SystemExit("site-1 4via6 allocation check failed")
-# END SLICE_2A_TAILSCALE_ALLOCATION_CHECK
-PY
-```
-
-The pre-advertisement result is a point-in-time allocation check and is not a
-durable reservation. Slice 2B must run the same check immediately after the
-router advertises its route, with `TAILSCALE_POST_ADVERTISEMENT=1`; that mode
-requires the exact `EXPECTED_ROUTE` in both `advertisedRoutes` and
-`enabledRoutes` on the explicitly supplied intended device ID and nowhere else.
-If Slice 2B intentionally advertises the current RDS host route too, it must
-also set `TAILSCALE_VERIFY_HOST_ROUTE=1`, which permits only the exact
-`EXPECTED_HOST_ROUTE` in both route sets on that same device. A wrong, multiple,
-missing, advertised-only, enabled-only, or malformed route is an immediate
-failure: use the approved router control path to disable the development advertised route immediately, abort, and leave CI unbound. It must then confirm
-through the same read-only API check that no site-1 route remains advertised
-before any retry. CI identity binding may begin only after this
-post-advertisement check passes; a successful 2A precheck can never substitute
-for it. The successful precheck can never substitute for it. Slice 2A documents
-this failure path only and does not execute it.
+Any SSM, OAuth, inventory, identity, ownership, route, POST, or post-read
+failure stops before the DB role is assumed. Do not guess a device, accept a
+partial list, use an alternate credential, or continue to TLS/SQL checks.
 
 #### Slice 2B development router and protected connectivity handoff
 
@@ -2484,33 +2289,14 @@ aws --region us-east-1 ssm wait command_executed --command-id "$COMMAND_ID" --in
 test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query Status --output text)" = Success
 ```
 
-Confirm the resulting Tailscale device by its explicit device ID and require
-exactly `tag:nova-toll-development-router`; do not select by hostname, IP, or
-partial inventory. Then immediately consume the one-off key and leave only a
-harmless placeholder in the existing development SecureString. The placeholder
-is not an auth key and is never used for enrollment:
+After enrollment, do not select the device by hostname, address, or the
+legacy device identifier. The protected workflow obtains the local
+Tailscale node ID from the exact instance's SSM `Self.ID` and binds that
+value to exactly one API `nodeId` with exactly the router tag.
 
-```sh
-set +x
-printf '{"Name":"/nova-toll/tailscale-authkey","Type":"SecureString","Value":"REVOKED_AFTER_DEV_ROUTER_ENROLLMENT","Overwrite":true}\n' |
-  aws --region us-east-1 ssm put-parameter --cli-input-json file:///dev/stdin >/dev/null
-unset COMMAND_ID INSTANCE_ID
-aws --region us-east-1 ssm describe-parameters \
-  --parameter-filters 'Key=Name,Option=Equals,Values=/nova-toll/tailscale-authkey' \
-  --query 'Parameters[0].{Name:Name,Type:Type,Version:Version}' --output json
-```
-
-In **Tailscale Admin Console → Keys**, verify that the one-off key is consumed,
-expired, or revoked. If it remains usable, revoke that key manually; do not
-revoke the enrolled node. A future router replacement always uses a freshly
-generated one-off key and repeats this SSM write, enrollment, exact device/tag
-confirmation, placeholder cleanup, and key-revocation sequence.
-
-Before any route change, set the read-only API token and explicit device ID,
-then run the complete Slice 2A inventory check. It must enumerate every device,
-fetch every device route, and pass with no site-1 route allocated. The token is
-used only in process memory and is never printed. Only after that precheck may
-the same target receive the reviewed route through SSM:
+In the existing development account, advertise the route only through the
+reviewed exact-instance SSM command below. This changes advertisement only;
+it does not approve an enabled route:
 
 ```sh
 set +x
@@ -2525,17 +2311,25 @@ aws --region us-east-1 ssm wait command_executed --command-id "$COMMAND_ID" --in
 test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id i-0d33b9a9c15db93fc --query Status --output text)" = Success
 ```
 
-Immediately rerun the inventory with `TAILSCALE_POST_ADVERTISEMENT=1`. It is a
-pass only when the exact `/112` is in both `advertisedRoutes` and
-`enabledRoutes`, owned only by the explicit device with exactly the router tag.
-An API error, incomplete/paginated response, unexpected site-1 route, wrong or
-multiple owner, missing enabled route, advertised-only route, or enabled-only
-route is a hard failure. CI identity binding and the database check remain
-unstarted until this postcheck passes.
+Immediately dispatch the protected connectivity workflow from the reviewed
+`main` SHA. Its route-control step passes only when the complete all-at-once
+inventory has the exact route in both `advertisedRoutes` and `enabledRoutes`,
+owned only by the exact SSM/API-bound device. It rejects partial or marked
+inventories, duplicate or malformed data, IPv4 on the bound device, foreign
+or ambiguous site-1 routes, collisions, tag drift, scope failure, and any
+uncertain API result before the DB role is assumed. The workflow records only
+its sanitized identity/route summary.
 
-On any postcheck failure, disable only the development advertisement
-immediately, wait for the SSM command, and abort before retry or CI binding. The
-remote command is exactly `tailscale set --advertise-routes=""`:
+If route approval or post-write proof fails, stop before TLS or SQL. Never
+retry an uncertain POST. With the still-proven exact node binding, restore
+the complete pre-write `enabledRoutes` list in one bounded replacement POST,
+preserving every unrelated entry; never replace it with a guessed single
+route. Then remove only the development advertisement through the exact
+instance SSM command below and prove that no site-1 route remains before any
+retry. If identity, command status, route state, or the pre-write list is
+uncertain, stop for human review and do not guess a rollback target.
+
+The remote rollback command is exactly `tailscale set --advertise-routes=""`:
 
 ```sh
 set +x
@@ -2547,16 +2341,11 @@ DISABLE_COMMAND_ID="$(aws --region us-east-1 ssm send-command \
   --query Command.CommandId --output text)"
 aws --region us-east-1 ssm wait command_executed --command-id "$DISABLE_COMMAND_ID" --instance-id i-0d33b9a9c15db93fc
 test "$(aws --region us-east-1 ssm get-command-invocation --command-id "$DISABLE_COMMAND_ID" --instance-id i-0d33b9a9c15db93fc --query Status --output text)" = Success
-export TAILSCALE_POST_ADVERTISEMENT= TAILSCALE_VERIFY_HOST_ROUTE= TAILSCALE_NO_ADVERTISED_ROUTE=1
-# Re-run the embedded Slice 2A `python3 - <<'PY'` allocation-check block above.
-exit 1
 ```
 
-The final read-only check must prove that no site-1 route remains in
-`advertisedRoutes` before any retry. Treat an uncertain SSM status or API
-response as failure and leave CI unbound. No failure or rollback path changes
-production.
-
+The final inventory proof must be complete, all-at-once, and show no site-1
+route in `advertisedRoutes`; an uncertain SSM/API response remains a hard
+stop. No failure or rollback path changes production.
 ##### Manual development TLS/query verification
 
 The separate
@@ -2620,13 +2409,17 @@ GitHub-main OIDC proof before enabling delivery.
 
 In **GitHub repository Settings → Environments → development**, retain the
 branch-policy protection rule and add a required owner/admin reviewer before
-adding any environment secret. In **Tailscale Admin Console →
-Settings → OAuth clients → Generate OAuth client**, create a client described
-as `nova-toll development CI` with scope `auth_keys` only and tag only
-`tag:ci-development`; do not grant device/route-write or ACL-policy scopes.
-Copy the client ID and secret once into the protected environment as exactly
-`TS_DEVELOPMENT_OAUTH_CLIENT_ID` and `TS_DEVELOPMENT_OAUTH_SECRET`. Do not
-replace repository production `TS_OAUTH_*` or policy `TS_ACL_OAUTH_*` secrets.
+adding any environment secret. In **Tailscale Admin Console → Settings → OAuth
+clients → Generate OAuth client**, retain the existing client described as
+`nova-toll development CI` with scope `auth_keys` only and tag only
+`tag:ci-development`. Copy it once into the protected environment as exactly
+`TS_DEVELOPMENT_OAUTH_CLIENT_ID` and `TS_DEVELOPMENT_OAUTH_SECRET`; these names
+remain exclusively for the third-party action. Create a second client for the
+route helper with only `devices:core:read` and `devices:routes` (no `all`, ACL,
+or other scopes), and copy it as exactly
+`TS_DEVELOPMENT_ROUTE_OAUTH_CLIENT_ID` and
+`TS_DEVELOPMENT_ROUTE_OAUTH_SECRET`. Keep both values opaque. Do not replace
+repository production `TS_OAUTH_*` or policy `TS_ACL_OAUTH_*` secrets.
 
 The delivery workflow's build job remains harmless without AWS OIDC. Its
 development deploy job has the job-level false-closed condition
