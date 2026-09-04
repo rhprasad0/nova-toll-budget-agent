@@ -613,5 +613,5 @@ if __name__ == "__main__":
     except ApprovalError as error:
         operation = "diagnostic" if sys.argv[1:] == ["--read-only"] else "approval"
         raise SystemExit(
-            f"development Tailscale route {operation} failed ({error.stage})"
+            f"development Tailscale route {operation} failed ({error})"
         ) from error
