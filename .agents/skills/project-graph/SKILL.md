@@ -25,7 +25,8 @@ verify in the parent thread.
 ```text
 intent → explorer → pre-checker → builder → review 1
 review 1 → PASS | FAIL → builder → review 2
-review 2 → PASS | CRITICAL → builder → focused recheck
+review 2 → PASS | CRITICAL → builder → critical recheck
+critical recheck → PASS | CRITICAL → builder
 PASS → human review
 ```
 
@@ -42,11 +43,12 @@ PASS → human review
    worktree, `explore.md`, and `checklist.md`. It implements and writes
    `change.md`.
 6. For review 1, update `STATE.md`, then spawn a fresh `checker` and a fresh
-   `security_reviewer`, both with `fork_turns: "none"`, before waiting for
-   either result. They review the same builder output concurrently. Checker
-   reads the worktree and artifacts, writes `verdict.md`, and never edits
-   application code. Security reviewer remains read-only and reports its result
-   to the parent without writing a graph artifact.
+   `security_reviewer`, both with `fork_turns: "none"`, and identify the review
+   stage in each task before waiting for either result. They review the same
+   builder output concurrently. Checker reads the worktree and artifacts,
+   writes `verdict.md`, and never edits application code. Security reviewer
+   remains read-only and reports its result to the parent without writing a
+   graph artifact.
 7. Review 1 keeps the full existing gate: PASS requires checker PASS and no
    actionable security findings. If either lane fails, update `STATE.md` and
    return evidence from every failing lane, and no evidence from passing lanes,
@@ -58,18 +60,18 @@ PASS → human review
    perform the requested core function. Record every other finding as a
    non-blocking note for human review and pass the graph.
 9. Return critical review-2 findings to the original builder. After repair,
-   spawn a fresh reviewer only for each lane that reported a critical issue,
-   scoped to confirming that issue is fixed. Repeat this builder and focused
-   recheck loop while the critical issue remains; never restart the graph or
-   escalate because of a retry count. Stop only if repair needs user input or
-   authority.
+   run a critical recheck with a fresh checker and security reviewer over the
+   complete repaired diff. The review-2 critical-only failure threshold still
+   applies. Return any critical finding to the original builder and repeat the
+   recheck; never restart the graph or escalate because of a retry count. Stop
+   only if repair needs user input or authority.
 10. On PASS, update `STATE.md`, then summarize files, checks, remaining risk,
     and non-blocking notes for human review.
 
 Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
 `STATE.md` to match the current node and next legal edge. Keep its exactly five
 lines—Intent, Worktree, Current node, Next legal edge (including the review
-round or focused recheck lanes), Blocked by. Never run parallel writers or
+round or critical recheck), Blocked by. Never run parallel writers or
 allow subagents to spawn subagents; checker alone writes `verdict.md`, security
 reviewer writes no artifact, and checker plus security review are the only
 concurrent work.
