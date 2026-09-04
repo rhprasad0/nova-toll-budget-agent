@@ -52,6 +52,7 @@ DEFAULT_OPENER = cast(UrlOpener, urllib.request.urlopen)
 
 
 STAGES = ("precondition", "oauth-token", "device-get", "re-get", "post", "verification")
+INVENTORY_GET_STAGES = ("device-get", "re-get", "verification")
 
 
 class ApprovalError(RuntimeError):
@@ -233,6 +234,19 @@ def _response_status(response: object) -> int | None:
     return code if isinstance(code, int) else None
 
 
+def _inventory_get_status_error(
+    method: str, stage: str, status: object
+) -> ApprovalError | None:
+    if (
+        method == "GET"
+        and stage in INVENTORY_GET_STAGES
+        and type(status) is int
+        and 100 <= status <= 599
+    ):
+        return _fail(f"Tailscale API returned HTTP {status}", stage=stage)
+    return None
+
+
 def _request_json(
     method: str,
     path: str,
@@ -252,6 +266,9 @@ def _request_json(
         with opener(request, timeout=HTTP_TIMEOUT) as response:
             status = _response_status(response)
             if status != 200:
+                status_error = _inventory_get_status_error(method, stage, status)
+                if status_error is not None:
+                    raise status_error
                 if status in (401, 403):
                     raise _fail(
                         "Tailscale OAuth scope or authorization denied", stage=stage
@@ -265,6 +282,9 @@ def _request_json(
     except ApprovalError:
         raise
     except urllib.error.HTTPError as error:
+        status_error = _inventory_get_status_error(method, stage, error.code)
+        if status_error is not None:
+            raise status_error from None
         if error.code in (401, 403):
             raise _fail(
                 "Tailscale OAuth scope or authorization denied", stage=stage
@@ -451,7 +471,7 @@ def _fetch_inventory(
     try:
         document = _request_json(
             "GET",
-            f"/tailnet/{urllib.parse.quote(TAILNET, safe='')}/devices?fields=all",
+            f"/tailnet/{urllib.parse.quote(TAILNET, safe='')}/devices",
             token=token,
             opener=opener,
             stage=stage,
