@@ -3754,6 +3754,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert proof_download_with == {
         "artifact-ids": "${{ needs.oidc-proof.outputs.artifact_id }}",
         "path": "${{ runner.temp }}",
+        "merge-multiple": True,
     }
     assert "name" not in proof_download_with
     assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in deploy_source

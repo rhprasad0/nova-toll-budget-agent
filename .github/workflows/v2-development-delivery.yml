@@ -191,6 +191,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.oidc-proof.outputs.artifact_id }}
           path: ${{ runner.temp }}
+          merge-multiple: true
 
       - name: Validate protected-main OIDC proof
         run: |
