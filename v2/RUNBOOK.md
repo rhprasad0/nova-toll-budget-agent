@@ -3366,6 +3366,9 @@ if ! AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" sh
     "aws_iam_role_policy_attachment.tailscale_router_ssm",
     "aws_iam_instance_profile.tailscale_router",
     "aws_instance.tailscale_router",
+    "aws_ssm_document.route_control[0]",
+    "aws_iam_role.route_control[0]",
+    "aws_iam_role_policy.route_control[0]",
     "aws_ssm_parameter.i95_token",
     "aws_ssm_parameter.i66_token",
     "aws_ssm_parameter.tailscale_authkey",
@@ -3442,7 +3445,9 @@ if ! AWS_PROFILE=nova-toll-dev terraform -chdir="$DEVELOPMENT_FOUNDATION_DIR" sh
     "data.aws_vpc.default",
     "data.aws_subnets.default",
     "data.aws_route_tables.default",
-    "data.aws_subnet.tailscale_router"
+    "data.aws_subnet.tailscale_router",
+    "data.aws_iam_policy_document.route_control_assume[0]",
+    "data.aws_iam_policy_document.route_control[0]"
   ];
   def expected_changes:
     ([foundation_create_addresses[] | {mode: "managed", address: ., actions: ["create"]}] +

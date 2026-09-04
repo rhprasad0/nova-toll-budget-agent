@@ -631,6 +631,24 @@ def test_v2_uses_the_typed_boundary_without_foundation_discovery():
         assert f"var.foundation.{field}" in terraform_sources
 
 
+def test_foundation_rds_database_name_tracks_environment_contract():
+    rds = (FOUNDATION_ROOT / "rds.tf").read_text()
+    instance = terraform_block(rds, 'resource "aws_db_instance" "main"')
+    assert _hcl_attribute(instance, "db_name") == (
+        'var.environment == "development" ? "nova_toll_development" : "nova_toll"'
+    )
+    assert (
+        'database_name  = local.is_production ? "nova_toll" : "nova_toll_development"'
+        in ENVIRONMENT_TF
+    )
+    assert (
+        "DEVELOPMENT_DB_NAME: nova_toll_development"
+        in DEVELOPMENT_CONNECTIVITY_WORKFLOW
+    )
+    for runtime in (MAIN_TF, (V2_ROOT / "infra" / "agentcore.tf").read_text()):
+        assert re.search(r"(?m)^\s*DB_NAME\s*=\s*local\.database_name$", runtime)
+
+
 def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
     runbook = DEPLOYMENT
     plan = (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
@@ -1104,7 +1122,13 @@ def test_development_foundation_gate_requires_the_complete_expected_set():
 
     create_addresses = addresses("foundation_create_addresses")
     data_addresses = addresses("foundation_data_addresses")
-    assert len(create_addresses) == len(set(create_addresses)) == 95
+    assert len(create_addresses) == len(set(create_addresses)) == 98
+    assert {
+        "aws_ssm_document.route_control[0]",
+        "aws_iam_role.route_control[0]",
+        "aws_iam_role_policy.route_control[0]",
+    } <= set(create_addresses)
+    assert len(data_addresses) == len(set(data_addresses)) == 8
     assert set(data_addresses) == {
         "data.aws_caller_identity.current",
         "data.aws_region.current",
@@ -1112,6 +1136,8 @@ def test_development_foundation_gate_requires_the_complete_expected_set():
         "data.aws_subnets.default",
         "data.aws_route_tables.default",
         "data.aws_subnet.tailscale_router",
+        "data.aws_iam_policy_document.route_control_assume[0]",
+        "data.aws_iam_policy_document.route_control[0]",
     }
 
     def change(mode: str, address: str, actions: list[str]) -> dict[str, object]:
@@ -1149,6 +1175,46 @@ def test_development_foundation_gate_requires_the_complete_expected_set():
     changed = [*expected_changes]
     changed[-1] = change("data", "unexpected", ["read"])
     assert not passes(changed)
+    for mode, address, actions, replacement in (
+        (
+            "data",
+            "data.aws_iam_policy_document.route_control_assume[0]",
+            ["read"],
+            "data.aws_iam_policy_document.route_control_assume",
+        ),
+        (
+            "data",
+            "data.aws_iam_policy_document.route_control[0]",
+            ["read"],
+            'data.aws_iam_policy_document.route_control["0"]',
+        ),
+        (
+            "managed",
+            "aws_ssm_document.route_control[0]",
+            ["create"],
+            "aws_ssm_document.route_control",
+        ),
+        (
+            "managed",
+            "aws_iam_role.route_control[0]",
+            ["create"],
+            "aws_iam_role.route_control[1]",
+        ),
+        (
+            "managed",
+            "aws_iam_role_policy.route_control[0]",
+            ["create"],
+            'aws_iam_role_policy.route_control["0"]',
+        ),
+    ):
+        changed = [*expected_changes]
+        index = next(
+            index
+            for index, item in enumerate(changed)
+            if item["mode"] == mode and item["address"] == address
+        )
+        changed[index] = change(mode, replacement, actions)
+        assert not passes(changed)
 
 
 def test_v2_pr_validation_has_no_aws_access_or_mutation_commands():
@@ -6425,7 +6491,7 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
     )
 
     for mode, address, actions in (
-        ("data", "data.aws_iam_policy_document.route_control_assume", ["read"]),
+        ("data", "data.aws_iam_policy_document.route_control_assume[0]", ["read"]),
         ("data", "data.aws_iam_policy_document.route_control[0]", ["read"]),
         ("managed", "aws_ssm_document.route_control[0]", ["create"]),
         ("managed", "aws_iam_role.route_control[0]", ["create"]),
@@ -6786,11 +6852,11 @@ def test_slice_3b3a_route_control_contract_is_fixed_and_least_privilege():
     )[1].split('resource "aws_ssm_document" "route_control"', maxsplit=1)[0]
     assert "token.actions.githubusercontent.com:aud" in trust
     assert "token.actions.githubusercontent.com:sub" in trust
-    assert "token.actions.githubusercontent.com:job_workflow_ref" in trust
     assert (
-        "rhprasad0/nova-toll-budget-agent/.github/workflows/"
-        "v2-development-connectivity-verification.yml@refs/heads/main" in trust
+        'values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"]'
+        in trust
     )
+    assert "token.actions.githubusercontent.com:job_workflow_ref" not in trust
 
     document = FOUNDATION_TAILSCALE.split(
         'resource "aws_ssm_document" "route_control"', maxsplit=1

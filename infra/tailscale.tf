@@ -179,12 +179,6 @@ data "aws_iam_policy_document" "route_control_assume" {
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"]
     }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:job_workflow_ref"
-      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-connectivity-verification.yml@refs/heads/main"]
-    }
   }
 }
 
