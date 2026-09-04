@@ -134,7 +134,11 @@ def core_inventory(document: dict[str, object]) -> dict[str, object]:
     devices = cast(list[dict[str, object]], devices)
     return {
         "devices": [
-            {key: raw_device[key] for key in ("nodeId", "tags", "connectedToControl")}
+            {
+                key: raw_device[key]
+                for key in ("nodeId", "tags", "connectedToControl")
+                if key in raw_device
+            }
             for raw_device in devices
         ]
     }
@@ -352,6 +356,45 @@ def test_inventory_binding_and_route_validation() -> None:
             route.validate_inventory(broken, "self-node")
 
 
+def test_inventory_accepts_omitted_tags_on_unrelated_device() -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    del devices[1]["tags"]
+
+    checked = route.validate_inventory(document, "self-node")
+
+    assert checked.devices[1].tags == ()
+
+
+@pytest.mark.parametrize(
+    "bad_tags",
+    [None, "invalid", [1], ["tag:duplicate", "tag:duplicate"]],
+)
+def test_inventory_rejects_malformed_tags(bad_tags: object) -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    devices[1]["tags"] = bad_tags
+
+    with pytest.raises(route.ApprovalError, match="device tags"):
+        route.validate_inventory(document, "self-node")
+
+
+def test_selected_omitted_tags_fail_approval_before_post() -> None:
+    document = inventory()
+    devices = cast(list[dict[str, object]], document["devices"])
+    del devices[0]["tags"]
+    fake_url = UrlFake([oauth_response(), *inventory_responses(document)])
+
+    with pytest.raises(route.ApprovalError):
+        route.approve_route("client", "secret", runner=AwsFake(), opener=fake_url)
+
+    assert not [
+        request
+        for request in fake_url.requests
+        if request.method == "POST" and request.full_url.endswith("/routes")
+    ]
+
+
 @pytest.mark.parametrize(
     ("advertised", "enabled"),
     [
@@ -443,6 +486,8 @@ def test_fetch_inventory_enriches_every_device_from_canonical_route_reads() -> N
             },
         ]
     }
+    devices = document["devices"]
+    del devices[1]["tags"]
     fake_url = UrlFake(
         [
             oauth_response(),
@@ -461,6 +506,11 @@ def test_fetch_inventory_enriches_every_device_from_canonical_route_reads() -> N
         f"{route.API_ROOT}/tailnet/{urllib.parse.quote(route.TAILNET, safe='')}/devices",
         f"{route.API_ROOT}/device/self-node/routes",
         f"{route.API_ROOT}/device/other%2Fnode/routes",
+    ]
+    assert not [
+        request
+        for request in fake_url.requests
+        if request.method == "POST" and request.full_url.endswith("/routes")
     ]
 
 

@@ -429,7 +429,7 @@ def validate_inventory(document: object, self_id: str) -> Inventory:
         if node_id in node_ids:
             raise _fail("device inventory contains duplicate nodeId")
         node_ids.add(node_id)
-        tags_value = raw_device.get("tags")
+        tags_value = raw_device.get("tags", [])
         if not isinstance(tags_value, list):
             raise _fail("device tags are malformed")
         tag_values = cast(list[object], tags_value)
@@ -533,7 +533,7 @@ def _fetch_inventory(
             enriched_devices.append(
                 {
                     "nodeId": node_id,
-                    "tags": raw_device.get("tags"),
+                    "tags": raw_device.get("tags", []),
                     "connectedToControl": raw_device.get("connectedToControl"),
                     "advertisedRoutes": advertised_routes,
                     "enabledRoutes": enabled_routes,
