@@ -200,6 +200,44 @@ class MetricTests(unittest.TestCase):
             metric.grade(root, case)
         self.assertEqual(outside.read_text(), "untouched")
 
+    def test_scorecard_temp_hardlink_cannot_overwrite_candidate(self) -> None:
+        root, case = self.artifact()
+        candidate = self.root / "candidate.py"
+        candidate.write_text("# frozen candidate\n")
+        (root / "scorecard.json.tmp").hardlink_to(candidate)
+        result = subprocess.run(
+            [str(metric.ROOT / "grade.sh"), str(root), str(case)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(candidate.read_text(), "# frozen candidate\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("infra_dependency", result.stderr)
+        self.assertFalse((root / "scorecard.json").exists())
+
+    def test_cases_require_valid_runner_inputs(self) -> None:
+        for field, invalid in (
+            ("prompt", None),
+            ("prompt", ""),
+            ("prompt", 1),
+            ("setup", None),
+            ("setup", []),
+        ):
+            with self.subTest(field=field, invalid=invalid):
+                root, case = self.artifact()
+                body = metric.read_json(case)
+                if invalid is None:
+                    del body[field]
+                else:
+                    body[field] = invalid
+                self.write(case, body)
+                run = metric.read_json(root / "run.json")
+                run["case_digest"] = metric.digest(case)
+                self.write(root / "run.json", run)
+                code, score = self.score(root, case)
+                self.assertEqual(code, 1)
+                self.assertEqual(score["failure_class"], "infra_dependency")
+
     def test_missing_identity_evidence_and_dependency_failure(self) -> None:
         for problem in ("identity", "stdout", "dependency", "grader", "case"):
             root, case = self.artifact(problem)

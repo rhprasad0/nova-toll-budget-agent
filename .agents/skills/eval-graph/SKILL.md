@@ -162,8 +162,9 @@ v2/eval/grade.sh <artifact-dir> <case.json>
 v2/eval/compare.sh <before> <after> [held-out-dir]
 ```
 
-Public case JSON: `case_id`, `prompt`, `setup`, `expected`, `rubric` (rubric ID
-array). `expected` is a nonempty object with only these checks:
+Public case JSON: `case_id`, `prompt` (nonempty string), `setup` (object, may be
+empty), `expected`, `rubric` (rubric ID array). Missing or invalid runner inputs
+are infra_dependency. `expected` is a nonempty object with only these checks:
 
 | Key | Value / deterministic meaning |
 | --- | --- |

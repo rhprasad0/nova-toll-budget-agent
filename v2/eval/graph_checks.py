@@ -156,6 +156,11 @@ def grade(artifact: Path, case_path: Path) -> int:
             "case ID required",
         )
         score["case_id"] = case["case_id"]
+        require(
+            type(case.get("prompt")) is str and bool(case["prompt"]),
+            "nonempty runner prompt required",
+        )
+        require(type(case.get("setup")) is dict, "runner setup object required")
         rubric = case.get("rubric")
         require(
             type(rubric) is list and all(type(x) is str and x for x in rubric),
@@ -269,8 +274,9 @@ def grade(artifact: Path, case_path: Path) -> int:
     target = artifact / "scorecard.json"
     require(not target.is_symlink(), "scorecard cannot be a symlink")
     temporary = artifact / "scorecard.json.tmp"
-    require(not temporary.is_symlink(), "temporary scorecard cannot be a symlink")
-    temporary.write_text(json.dumps(score, indent=2, allow_nan=False) + "\n")
+    # Exclusive creation rejects pre-existing hard links as well as symlinks.
+    with temporary.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(score, indent=2, allow_nan=False) + "\n")
     temporary.replace(target)
     return 0 if score["pass"] else 1
 
