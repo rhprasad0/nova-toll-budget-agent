@@ -23,6 +23,18 @@ uv run python eval/run_evaluation.py --check
 
 This command is network-free and runs in normal pull-request CI.
 
+The explicit v2 format sample is validated separately until the full corpus and
+its graders are ready. It selects rows through `membership`, overlays metadata
+by ID, and validates ordered typed scripts for the existing `current` and
+`annual` tools; `multiturn` and `nocall` are scenario properties:
+
+```bash
+uv run python eval/golden_corpus.py validate \
+  --manifest eval/golden/manifest-v2.json
+```
+
+The default manifest and evaluator continue to use the approved v1 corpus.
+
 ## Trusted recorded-fixture execution
 
 `eval.fixture_eval` is the callable boundary for a supplied model. The trusted

@@ -6,15 +6,18 @@ import json
 import os
 import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 import eval.golden_corpus as golden_corpus
+from agent_tools import current_price_domain as pricing_domain
 from eval.golden_corpus import (
     CorpusError,
     render,
     validate,
+    validate_private_manifest,
 )
 from eval.run_evaluation import (
     evaluate_annual_income_clarification,
@@ -27,6 +30,7 @@ from eval.run_evaluation import (
 
 ROOT = Path(__file__).parents[1]
 MANIFEST = ROOT / "eval/golden/manifest.json"
+V2_MANIFEST = ROOT / "eval/golden/manifest-v2.json"
 
 
 def _copy_corpus(tmp_path: Path) -> tuple[Path, Path]:
@@ -52,6 +56,38 @@ def _refresh(manifest_path: Path) -> None:
         ).encode()
     ).hexdigest()
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+
+
+def _copy_v2_corpus(tmp_path: Path) -> tuple[Path, Path]:
+    target = tmp_path / "golden"
+    shutil.copytree(MANIFEST.parent, target)
+    shutil.copy2(ROOT / "eval/test-cases.jsonl", target.parent / "test-cases.jsonl")
+    return target / "manifest-v2.json", target
+
+
+def _refresh_v2(manifest_path: Path) -> None:
+    manifest = json.loads(manifest_path.read_text())
+    for item in manifest["payloads"]:
+        item["sha256"] = hashlib.sha256(
+            (manifest_path.parent / item["path"]).read_bytes()
+        ).hexdigest()
+    manifest["membership_sha256"] = hashlib.sha256(
+        json.dumps(
+            manifest["membership"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    without_hash = {
+        key: value for key, value in manifest.items() if key != "dataset_sha256"
+    }
+    manifest["dataset_sha256"] = hashlib.sha256(
+        json.dumps(
+            without_hash, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()
+    ).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def _partial_fixture_response(payload: dict[str, object]) -> str:
@@ -793,3 +829,405 @@ def test_ci_invokes_network_free_validator() -> None:
     workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
     assert "eval/golden_corpus.py validate" in workflow
     assert "GOLDEN_CORPUS_BASE_REF" in workflow
+
+
+def test_v2_sample_preserves_membership_order_and_payload_free_render(
+    tmp_path: Path,
+) -> None:
+    corpus = validate(V2_MANIFEST)
+    assert [row["id"] for row in corpus.rows] == [
+        "reagan-airport-to-westpark",
+        "leesburg-route-28-annual-affordability",
+        "v2-annual-mixed-tool-multiturn",
+        "v2-current-no-call",
+    ]
+    assert [row["suite"] for row in corpus.rows] == [
+        "current",
+        "annual",
+        "annual",
+        "current",
+    ]
+    assert len(corpus.legacy_rows) == 2
+    assert len(corpus.annual_rows) == 2
+    assert corpus.rows[0]["script"][0]["tool"] == "get_current_toll_price"
+    assert [step["tool"] for step in corpus.rows[2]["script"]] == [
+        "get_current_toll_price",
+        "get_annual_toll_ballpark",
+    ]
+    assert corpus.rows[3]["script"] == []
+    output = render(V2_MANIFEST, tmp_path / "v2-review.html")
+    page = output.read_text()
+    assert page.count('class="case-card"') == 4
+    assert "Dulles Greenway" in page
+    assert "5.80" not in page
+    assert "Unable to get the current toll price" not in page
+    assert "Payloads withheld" in page
+
+
+@pytest.mark.parametrize("mutation", ["duplicate", "nonfinite", "path", "membership"])
+def test_v2_strict_manifest_mutations_are_rejected(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path, _ = _copy_v2_corpus(tmp_path / mutation)
+    raw = manifest_path.read_text()
+    if mutation == "duplicate":
+        raw = raw.replace(
+            '"corpus": "annual-affordability",',
+            '"corpus": "annual-affordability", "corpus": "annual-affordability",',
+            1,
+        )
+    else:
+        manifest = json.loads(raw)
+        if mutation == "nonfinite":
+            raw = raw.replace(
+                f'"dataset_sha256": "{manifest["dataset_sha256"]}"',
+                '"dataset_sha256": NaN',
+                1,
+            )
+        elif mutation == "path":
+            manifest["payloads"][0]["path"] = "../escape.jsonl"
+            raw = json.dumps(manifest)
+        else:
+            manifest["membership"].pop()
+            raw = json.dumps(manifest)
+    manifest_path.write_text(raw)
+    with pytest.raises(CorpusError):
+        validate(manifest_path)
+
+
+@pytest.mark.parametrize("mutation", ["script", "typed-result", "tool-version"])
+def test_v2_script_and_typed_fixture_mutations_are_rejected(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path, corpus_root = _copy_v2_corpus(tmp_path / mutation)
+    if mutation == "script":
+        case_path = corpus_root / "cases/v2-sample.jsonl"
+        rows = [json.loads(line) for line in case_path.read_text().splitlines()]
+        rows[0]["script"][1:] = rows[0]["script"][::-1]
+        case_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    elif mutation == "typed-result":
+        fixture_path = corpus_root / "fixtures/current-success.json"
+        fixture = json.loads(fixture_path.read_text())
+        fixture["result"]["total_usd"] = "not-money"
+        fixture_path.write_text(json.dumps(fixture))
+    else:
+        fixture_path = corpus_root / "fixtures/current-success.json"
+        fixture = json.loads(fixture_path.read_text())
+        fixture["tool_contract_version"] = "3.0.0"
+        fixture_path.write_text(json.dumps(fixture))
+    with pytest.raises(CorpusError):
+        validate(manifest_path)
+
+
+def test_v2_membership_must_name_the_shard_that_owns_the_row(
+    tmp_path: Path,
+) -> None:
+    manifest_path, corpus_root = _copy_v2_corpus(tmp_path / "shard-owner")
+    rows = [
+        json.loads(line)
+        for line in (corpus_root / "cases/v2-sample.jsonl").read_text().splitlines()
+    ]
+    (corpus_root / "cases/v2-sample.jsonl").write_text(json.dumps(rows[1]) + "\n")
+    (corpus_root / "cases/v2-other.jsonl").write_text(json.dumps(rows[0]) + "\n")
+    manifest = json.loads(manifest_path.read_text())
+    manifest["case_shards"] = [
+        {"path": "cases/v2-other.jsonl", "count": 1},
+        {"path": "cases/v2-sample.jsonl", "count": 1},
+    ]
+    manifest["payloads"].append({"path": "cases/v2-other.jsonl", "sha256": ""})
+    manifest["payloads"].sort(key=lambda item: item["path"])
+    manifest["membership"][2]["shard"] = "cases/v2-sample.jsonl"
+    manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="does not own"):
+        validate(manifest_path)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["fixture-request", "result-time", "script-request"]
+)
+def test_v2_requests_and_typed_results_are_bound(tmp_path: Path, mutation: str) -> None:
+    manifest_path, corpus_root = _copy_v2_corpus(tmp_path / mutation)
+    fixture_path = corpus_root / "fixtures/current-success.json"
+    fixture = json.loads(fixture_path.read_text())
+    if mutation == "fixture-request":
+        fixture["request"]["destination_point_id"] = "greenway:99:exit:EB"
+        fixture_path.write_text(json.dumps(fixture))
+    elif mutation == "result-time":
+        fixture["evaluated_at"] = "2026-08-17T07:30:00-04:00"
+        fixture_path.write_text(json.dumps(fixture))
+    else:
+        case_path = corpus_root / "cases/v2-sample.jsonl"
+        rows = [json.loads(line) for line in case_path.read_text().splitlines()]
+        rows[0]["script"][0]["request"]["destination_point_id"] = "greenway:99:exit:EB"
+        case_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+        manifest = json.loads(manifest_path.read_text())
+        target = next(
+            item
+            for item in manifest["membership"]
+            if item.get("id") == "v2-annual-mixed-tool-multiturn"
+        )
+        target["row_sha256"] = hashlib.sha256(
+            json.dumps(
+                rows[0], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest()
+        manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match=r"(route|evaluated_at|request)"):
+        validate(manifest_path)
+
+
+def test_v2_assembled_rows_require_explicit_scripts(tmp_path: Path) -> None:
+    manifest_path, _ = _copy_v2_corpus(tmp_path / "mandatory-script")
+    manifest = json.loads(manifest_path.read_text())
+    source_metadata = next(
+        item
+        for item in manifest["case_metadata"]
+        if item["id"] == "reagan-airport-to-westpark"
+    )
+    del source_metadata["script"]
+    manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="requires an ordered script"):
+        validate(manifest_path)
+
+
+def test_v2_strict_float_parser_rejects_exponent_overflow() -> None:
+    with pytest.raises(CorpusError, match="non-finite"):
+        golden_corpus._strict_loads('{"n":1e9999}', "overflow probe")
+
+
+def test_v2_current_binding_accepts_all_typed_adapter_variants() -> None:
+    request = {
+        "origin_point_id": "greenway:1:entry:EB",
+        "destination_point_id": "greenway:28:exit:EB",
+        "pricing_profile": {
+            "vehicle_class": "two_axle_passenger",
+            "payment_method": "e_zpass",
+            "transponder_mode": "toll",
+        },
+    }
+    route = {
+        "origin_point_id": request["origin_point_id"],
+        "destination_point_id": request["destination_point_id"],
+    }
+    unsupported = pricing_domain._PricingUnavailableResponse(
+        **route,
+        error="pricing_unavailable",
+        reason="unsupported_pricing_profile",
+    ).model_dump(mode="json")
+    incomplete = pricing_domain._IncompleteRoutePriceResponse(
+        **route,
+        error="pricing_unavailable",
+        reason="incomplete_route_price",
+        unavailable_components=[
+            pricing_domain._UnavailableComponent(
+                route_step_id="step-1",
+                reason="stale_observation",
+                component_evaluated_at=datetime.fromisoformat(
+                    "2026-08-17T06:30:00-04:00"
+                ),
+                interval_end_at=None,
+                observed_at=None,
+            )
+        ],
+    ).model_dump(mode="json")
+    route_status = pricing_domain._NonValidRouteResponse.model_validate(
+        {
+            "status": "no_supported_route",
+            "reason": {"code": "no_supported_route", "details": route},
+            "point_ids": [],
+            "connection_ids": [],
+            "connection_types": [],
+            "general_purpose_gaps": [],
+            "i95_evidence": None,
+        }
+    ).model_dump(mode="json")
+    for label, result in (
+        ("unsupported", unsupported),
+        ("incomplete", incomplete),
+        ("route-status", route_status),
+    ):
+        pricing_domain._OUTPUT_ADAPTER.validate_json(json.dumps(result))
+        golden_corpus._v2_fixture_result_binding(
+            {
+                "evaluated_at": "2026-08-17T06:30:00-04:00",
+                "result": result,
+            },
+            request,
+            "get_current_toll_price",
+            label,
+        )
+
+
+def test_v2_source_manifest_version_is_bound_before_v1_validation(
+    tmp_path: Path,
+) -> None:
+    manifest_path, corpus_root = _copy_v2_corpus(tmp_path / "source-version")
+    source_path = corpus_root / "source.json"
+    source = json.loads((corpus_root / "manifest.json").read_text())
+    source["dataset_version"] = "2.0.0"
+    source_without_hash = {
+        key: value for key, value in source.items() if key != "dataset_sha256"
+    }
+    source_hash = hashlib.sha256(
+        json.dumps(
+            source_without_hash,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    source["dataset_sha256"] = source_hash
+    source_path.write_text(json.dumps(source, indent=2) + "\n")
+
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source_manifests"][0]["path"] = "source.json"
+    manifest["source_manifests"][0]["dataset_sha256"] = source_hash
+    for item in manifest["membership"]:
+        if "source_manifest" in item:
+            item["source_manifest"] = "source.json"
+            item["source_dataset_sha256"] = source_hash
+    for item in manifest["fixtures"]:
+        if "source_manifest" in item:
+            item["source_manifest"] = "source.json"
+    manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="version disagrees"):
+        validate(manifest_path)
+
+
+@pytest.mark.parametrize("mutation", ["capture-source", "naive-time", "secret-text"])
+def test_v2_fixture_evidence_is_timestamped_and_sanitized(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path, corpus_root = _copy_v2_corpus(tmp_path / mutation)
+    fixture_path = corpus_root / "fixtures/current-success.json"
+    fixture = json.loads(fixture_path.read_text())
+    if mutation == "capture-source":
+        fixture["evidence_type"] = "retained_production_capture"
+    elif mutation == "naive-time":
+        fixture["evaluated_at"] = "2026-08-17T06:30:00"
+    else:
+        fixture["provenance"] = "secret=EXFILTRATE https://internal.invalid"
+    fixture_path.write_text(json.dumps(fixture))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError):
+        validate(manifest_path)
+
+
+def _write_synthetic_private_manifest(
+    root: Path, public: golden_corpus.Corpus, case_id: str
+) -> Path:
+    cases = root / "cases"
+    cases.mkdir(parents=True)
+    row = {
+        "id": case_id,
+        "prompt": "Please provide a supported toll origin and destination.",
+        "conversation": ["Please provide a supported toll origin and destination."],
+        "script": [],
+    }
+    shard = cases / "private.jsonl"
+    shard.write_text(json.dumps(row) + "\n")
+    membership = [
+        {
+            "id": case_id,
+            "shard": "cases/private.jsonl",
+            "row_sha256": hashlib.sha256(
+                json.dumps(
+                    row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode()
+            ).hexdigest(),
+        }
+    ]
+    manifest = {
+        "corpus": "annual-affordability",
+        "format_version": "2.0.0",
+        "dataset_version": "2.0.0",
+        "source_manifests": [],
+        "membership": membership,
+        "membership_sha256": hashlib.sha256(
+            json.dumps(
+                membership, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest(),
+        "case_metadata": [
+            {
+                "id": case_id,
+                "suite": "current",
+                "primary_category": "current",
+                "tags": ["synthetic", "private"],
+                "grouping": "synthetic-private",
+                "provenance": "synthetic-private-test",
+                "expected_assertion": "Required: request supported endpoints. Prohibited: infer a route or make a tool call.",
+            }
+        ],
+        "case_shards": [{"path": "cases/private.jsonl", "count": 1}],
+        "fixtures": [],
+        "payloads": [
+            {
+                "path": "cases/private.jsonl",
+                "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+            }
+        ],
+        "public_dataset_sha256": public.manifest["dataset_sha256"],
+        "public_membership_sha256": public.manifest["membership_sha256"],
+        "dataset_sha256": "",
+    }
+    manifest["dataset_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in manifest.items() if key != "dataset_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    path = root / "private-manifest.json"
+    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    return path
+
+
+def test_private_v2_validator_uses_supplied_public_identity_and_rejects_overlap(
+    tmp_path: Path,
+) -> None:
+    public = validate(V2_MANIFEST)
+    private_path = _write_synthetic_private_manifest(
+        tmp_path / "private", public, "private-synthetic-case"
+    )
+    private = validate_private_manifest(private_path, public)
+    assert [row["id"] for row in private.rows] == ["private-synthetic-case"]
+
+    manifest = json.loads(private_path.read_text())
+    row_path = private_path.parent / "cases/private.jsonl"
+    row = json.loads(row_path.read_text())
+    row["id"] = "reagan-airport-to-westpark"
+    row_path.write_text(json.dumps(row) + "\n")
+    manifest["membership"][0]["id"] = row["id"]
+    manifest["membership"][0]["row_sha256"] = hashlib.sha256(
+        json.dumps(
+            row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()
+    ).hexdigest()
+    manifest["membership_sha256"] = hashlib.sha256(
+        json.dumps(
+            manifest["membership"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    manifest["payloads"][0]["sha256"] = hashlib.sha256(
+        row_path.read_bytes()
+    ).hexdigest()
+    manifest["dataset_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in manifest.items() if key != "dataset_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    private_path.write_text(json.dumps(manifest))
+    with pytest.raises(CorpusError, match="overlaps public"):
+        validate_private_manifest(private_path, public)
