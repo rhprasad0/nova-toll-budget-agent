@@ -2,8 +2,8 @@
 
 ## 1. Evaluation Requirements
 
-- **User Input:** Add a 52-week annual commute-day proposal and bring annual-affordability coverage to parity with the six-case current-price suite.
-- **Interpreted Evaluation Requirements:** Code-grade six annual cases spanning grounded fixed and modeled results, route and income clarification, adjustable annual-day estimation, complete required-input acquisition, and safe route unavailability while retaining existing current-price coverage.
+- **User Input:** Add a 52-week annual commute-day proposal and a generic annual-affordability golden corpus.
+- **Interpreted Evaluation Requirements:** Code-grade ten annual cases spanning fixed and modeled results, route and income clarification, schedule correction, unsupported locations, adjustable annual-day estimation, complete required-input acquisition, partial coverage, and safe route unavailability while retaining existing current-price coverage.
 
 ---
 
@@ -58,8 +58,8 @@ flowchart LR
 
 ### Annual affordability grounding
 
-- **Evaluation Area:** Job-offer decision support
-- **Description:** The annual case makes the exact income-aware call and reports tool-provided annualized daily-P25/P50/P90 money in a Markdown table with emoji, tax, mileage, fixed TollChat vehicle-cost assumption, scope, and historical-evidence disclosures.
+- **Evaluation Area:** Annual affordability decision support
+- **Description:** Each annual case makes the exact income-aware call when inputs are valid and reports tool-provided annualized daily-P25/P50/P90 money in a Markdown table with emoji, tax, mileage, fixed TollChat vehicle-cost assumption, scope, and historical-evidence disclosures.
 - **Method:** Code-based
 
 ### Frozen-evidence quantitative hallucination rate
@@ -77,7 +77,7 @@ flowchart LR
 - **Springfield-Franconia to Westpark:** Direct two-component price in the northbound window with no restart.
 - **Dulles Airport to Backlick Road:** TP1SB fallback offer and accepted price in northbound and reversal windows.
 - **Old Keene Mill Road to Reagan Airport:** Northbound unavailability without an ineligible fallback offer in southbound and reversal windows.
-- **Leesburg Bypass to Route 28:** Annual job-offer affordability with gross income, a complete work schedule, and fixed-rate Greenway tolls.
+- **Leesburg Bypass to Route 28:** Annual affordability with gross income, a complete work schedule, and fixed-rate Greenway tolls.
 - **Springfield-Franconia to Tysons:** Exit clarification followed by an exact Westpark round-trip annual affordability call.
 - **Leesburg missing schedule:** Request every missing schedule field in one turn without calling a tool or re-requesting supplied income.
 - **Leesburg annual-day estimate:** Propose 260 for Monday-Friday, wait for confirmation or adjustment, then honor 240 in the exact annual call.
@@ -85,7 +85,7 @@ flowchart LR
 - **Dulles Airport to Reagan Airport:** Accept the cross-direction current-price route, then explain a deterministically unsupported annual return route without scenarios, totals, or a current-price restart.
 - **I-66 West to Route 7 / Route 7 to I-495 South:** Require observed tolls in
   the matching direction and schedule-derived `$0` in every free state.
-- **Total number of test cases:** 14; eight current-price and six annual-affordability cases.
+- **Total number of runtime cases:** 19; nine legacy current-price and ten annual-affordability golden cases. The golden manifest is version 1.0.0 and declares four sanitized typed fixtures.
 
 The separate hallucination battery uses one canonical annual-ballpark context,
 five reviewed prompt variants, and 200 repeat generations per variant. Repeats
@@ -98,7 +98,7 @@ measure reliability for that context, not route coverage.
 | `i95_southbound` | Two direct Westpark prices; northbound unavailable; both I-66 directions free |
 | `greenway_eb_peak` | I-66 eastbound tolled and westbound free (both free on holidays) |
 | `greenway_wb_peak` | I-66 westbound tolled and eastbound free (both free on holidays) |
-| `all` with `annual` suite | Six annual success, clarification, annual-day estimation, input-acquisition, and unavailable-route behaviors |
+| `all` with `annual` suite | Ten annual success, clarification, schedule correction, unsupported-location, partial-coverage, annual-day estimation, input-acquisition, and unavailable-route behaviors |
 
 ---
 
@@ -106,7 +106,9 @@ measure reliability for that context, not route coverage.
 
 ### 5.1 Evaluation Code Structure
 
-All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report, and results.
+All evaluator artifacts live in `v2/eval/`: this plan, legacy/current JSONL
+cases, the manifest-declared golden shard and fixtures, runner, validator,
+README, report, and results.
 
 ### 5.2 Recommended Evaluation Technical Stack
 
@@ -134,6 +136,7 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Annual parity | Expand annual coverage to five behavioral cases without changing production behavior or weakening graders for failures. |
 | 2026-08-22 | Annual-day estimate | Propose 52 times the weekly schedule, wait for acceptance or adjustment, and bind response money to its labeled context. |
 | 2026-08-22 | Hallucination Batch | Use a direct two-phase OpenAI Batch workflow, a frozen Springfield-Franconia–Westpark ballpark, five prompts, 1,000 responses, and a tiktoken gate against the Tier 3 40M queue. |
+| 2026-09-04 | Golden corpus | Ten generic annual cases, four recorded fixtures, SemVer and offline integrity checks; fixture-only review, without live previews or the graph workflow. |
 
 ### 6.2 Evaluation Progress
 
@@ -153,3 +156,4 @@ All artifacts live in `v2/eval/`: this plan, JSONL cases, runner, README, report
 | 2026-08-22 | Final annual parity run | Completed | 5/5 passed against the final prompt contract. |
 | 2026-08-22 | Annual-day estimate and evaluator hardening | Completed | 6/6 passed live: the agent proposed 260, waited, honored 240, and the evaluator enforced scenario-row and P50-context money binding. |
 | 2026-08-22 | Ballpark hallucination packet | Completed | Batch `batch_6a8a15e8f5fc81909b45e7e5831d0917` returned 1,000/1,000 responses. Adjudication found 99.6% strict quantitative grounding, one genuinely incorrect fact, and 93.1% conservative end-to-end compliance. |
+| 2026-09-04 | Golden corpus | Implemented; pending human approval | 10 annual cases plus 9 legacy cases, four fixtures, manifest-driven growth, and offline validation/rendering. Broad prose-grader hardening remains #360; baseline/pass³ execution remains #362/#363. |

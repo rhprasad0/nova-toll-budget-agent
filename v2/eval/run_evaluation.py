@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from argparse import ArgumentParser
 from calendar import monthcalendar
 from datetime import UTC, date, datetime, time, timedelta
@@ -49,6 +50,7 @@ _EMOJIS = (
     "🚧",
     "🚫",
     "💼",
+    "🗺️",
     "💰",
     "🧾",
     "🎯",
@@ -61,10 +63,22 @@ _MOVEMENT_EMOJIS = {
     "unchanged": "➡️",
     "mixed": "🔄",
 }
+_FINANCIAL_LANGUAGE = re.compile(
+    r"\b(?:dollars?|bucks?|usd|cents?|price|pricing|cost|costs|toll|income|"
+    r"earnings|salary|pay|expense|amount|fee|charge|estimate|financial|"
+    r"percentage|percent)\b",
+    re.IGNORECASE,
+)
 
 
 def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if path.resolve() != _CASES_PATH.resolve():
+        return [
+            json.loads(line) for line in path.read_text().splitlines() if line.strip()
+        ]
+    from eval.golden_corpus import load_rows as load_golden_rows
+
+    return load_golden_rows()
 
 
 def load_cases(
@@ -100,6 +114,27 @@ def _response_style_error(response: str, subject: str) -> list[EvaluationOutput]
     if not any(emoji in response for emoji in _EMOJIS):
         return _result(False, f"{subject} omitted an emoji", "missing_emoji")
     return None
+
+
+def _contains_financial_language(response: str) -> bool:
+    return (
+        "%" in response
+        or any(unicodedata.category(character) == "Sc" for character in response)
+        or bool(_FINANCIAL_LANGUAGE.search(response))
+    )
+
+
+def _semantic_words(value: str) -> str:
+    """Return conservative ASCII words for a small evaluator allowlist."""
+    value = value.casefold().replace("\u2019", "'")
+    value = re.sub(r"(?<=\d),(?=\d)", "", value)
+    value = re.sub(
+        r"\b(can|could|doesn|isn|wasn|weren|wouldn|shouldn)n?'t\b", r"\1not", value
+    )
+    value = re.sub(
+        r"\b(couldn|wouldn|shouldn|didn|doesn|isn|wasn|weren)'t\b", r"\1t", value
+    )
+    return " ".join(re.findall(r"[a-z0-9]+", value))
 
 
 def _eastern_time(timestamp: str) -> str:
@@ -853,6 +888,305 @@ def evaluate_annual_turn(
     ):
         return _result(False, "annual tool returned no scenarios", "tool_error")
 
+    if metadata.get("scenario_family") == "partial_historical_coverage":
+        coverage = payload.get("coverage")
+        if (
+            payload.get("sample_status") != "partial"
+            or not isinstance(coverage, dict)
+            or coverage.get("complete_pair_count") != 51
+            or coverage.get("eligible_date_count") != 60
+            or coverage.get("coverage_percent") != "85.0"
+        ):
+            return _result(
+                False,
+                "partial result did not match its typed 51/60, 85.0% contract",
+                "partial_coverage",
+            )
+        folded = response.casefold()
+        if (
+            not re.search(r"\b51\s*(?:of|/)\s*60\b", folded)
+            or "85.0" not in folded
+            or "partial" not in folded
+        ):
+            return _result(
+                False,
+                "partial response did not ground typed status and coverage",
+                "partial_coverage",
+            )
+        if re.search(
+            r"\b(?:full|complete)(?:\s+\w+){0,2}\s+coverage\b"
+            r"|\b(?:coverage|sample|result)(?:\s+\w+){0,2}\s+(?:full|complete)\b"
+            r"|\b(?:all|every)(?:\s+\d+)?(?:\s+eligible)?\s+dates?"
+            r"(?:\s+\w+){0,2}\s+(?:are\s+)?complete\b"
+            r"|\b100(?:\.0+)?\s*(?:%|percent)\b",
+            folded,
+        ):
+            return _result(
+                False,
+                "partial response contradicted its typed coverage",
+                "partial_coverage",
+            )
+
+        # ponytail: bounded prose regression checks, not a natural-language
+        # correctness proof; broader rubric grading belongs to #360.
+        # Keep every numeric
+        # token tied to that payload (or the exact annual call), then bind each
+        # financial token to the field label that gives it meaning.  This
+        # catches cross-field reuse and otherwise valid answers with appended
+        # savings, burden, or invented-money claims.
+        number_token = re.compile(r"(?<![\w])\d[\d,]*(?:\.\d+)?(?![\w])")
+        allowed_numbers: set[Decimal] = set()
+
+        def token_numbers(text: str) -> list[Decimal]:
+            return [
+                Decimal(unicodedata.normalize("NFKC", match.group(0)).replace(",", ""))
+                for match in number_token.finditer(text)
+            ]
+
+        def collect_numbers(value: object) -> None:
+            if isinstance(value, dict):
+                for nested in value.values():
+                    collect_numbers(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    collect_numbers(nested)
+            elif isinstance(value, (int, float, Decimal)) and not isinstance(
+                value, bool
+            ):
+                allowed_numbers.add(Decimal(str(value)))
+            elif isinstance(value, str):
+                allowed_numbers.update(token_numbers(value))
+
+        collect_numbers(payload)
+        collect_numbers(metadata.get("expected_call", {}))
+
+        quantity_words = re.compile(
+            r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+            r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+            r"eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
+            r"eighty|ninety|dozen|hundred|thousand|million)\b",
+            re.IGNORECASE,
+        )
+
+        scenarios = cast(dict[str, dict[str, Any]], payload["scenarios"])
+        p50 = scenarios["p50"]
+        income = cast(dict[str, Any], payload["income"])
+        vehicle_cost = cast(dict[str, Any], payload["vehicle_cost"])
+        assumptions = cast(dict[str, Any], payload["assumptions"])
+
+        def amount(field: dict[str, Any], key: str) -> Decimal:
+            return Decimal(str(field[key]))
+
+        def exact_values(text: str, expected: tuple[Decimal, ...]) -> bool:
+            return token_numbers(text) == list(expected)
+
+        def only_words(text: str, allowed: set[str]) -> bool:
+            return {
+                word for word in _semantic_words(text).split() if not word.isdigit()
+            } <= allowed
+
+        def approved_field_segment(segment: str) -> bool:
+            cleaned = segment.strip().strip("*-• ")
+            folded_segment = cleaned.casefold()
+            values = token_numbers(cleaned)
+
+            if "p50" in folded_segment and "leaves" in folded_segment:
+                return exact_values(
+                    cleaned,
+                    (
+                        amount(
+                            p50,
+                            "estimated_annual_income_after_tax_and_tolled_commute_usd",
+                        ),
+                    ),
+                ) and only_words(
+                    cleaned,
+                    {
+                        "after",
+                        "and",
+                        "assumed",
+                        "commuting",
+                        "leaves",
+                        "p50",
+                        "tax",
+                        "tolled",
+                    },
+                )
+            if "gross" in folded_segment and "income" in folded_segment:
+                clauses = [part.strip() for part in cleaned.split(";")]
+                return (
+                    len(clauses) == 2
+                    and exact_values(clauses[0], (amount(income, "gross_annual_usd"),))
+                    and exact_values(
+                        clauses[1],
+                        (amount(income, "estimated_after_tax_usd"),),
+                    )
+                    and ("one-third" in clauses[1].casefold() or "1/3" in clauses[1])
+                    and only_words(
+                        cleaned,
+                        {
+                            "after",
+                            "and",
+                            "gross",
+                            "income",
+                            "one",
+                            "tax",
+                            "third",
+                        },
+                    )
+                )
+            if "after" in folded_segment and "tax" in folded_segment:
+                return (
+                    exact_values(
+                        cleaned,
+                        (amount(income, "estimated_after_tax_usd"),),
+                    )
+                    and ("one-third" in folded_segment or "1/3" in cleaned)
+                    and only_words(cleaned, {"after", "one", "tax", "third"})
+                )
+            if (
+                "vehicle" in folded_segment
+                and "cost" in folded_segment
+                and not (
+                    ("per" in folded_segment and "mile" in folded_segment)
+                    or "/mile" in folded_segment
+                )
+            ):
+                return exact_values(cleaned, (amount(vehicle_cost, "annual_usd"),))
+            if "annualized" in folded_segment and "toll" in folded_segment:
+                clauses = [part.strip() for part in cleaned.split(";")]
+                return (
+                    len(clauses) == 2
+                    and "daily" in clauses[0].casefold()
+                    and "annual" in clauses[1].casefold()
+                    and exact_values(clauses[0], (amount(p50, "daily_toll_usd"),))
+                    and exact_values(clauses[1], (amount(p50, "annual_toll_usd"),))
+                )
+            if "total annual" in folded_segment and "tolled" in folded_segment:
+                return exact_values(
+                    cleaned,
+                    (amount(p50, "annual_total_tolled_commute_cost_usd"),),
+                )
+            if "additional" in folded_segment and "gross" in folded_segment:
+                return exact_values(
+                    cleaned,
+                    (amount(p50, "additional_gross_income_to_offset_usd"),),
+                )
+            if "partial" in folded_segment and "coverage" in folded_segment:
+                return set(values) <= {
+                    Decimal("51"),
+                    Decimal("60"),
+                    Decimal("85.0"),
+                } and {Decimal("51"), Decimal("60"), Decimal("85.0")} <= set(values)
+            if (
+                "per" in folded_segment and "mile" in folded_segment
+            ) or "/mile" in folded_segment:
+                return exact_values(
+                    cleaned,
+                    (amount(assumptions, "vehicle_cost_per_mile_usd"),),
+                )
+            return False
+
+        approved_heading_words = {
+            "annual",
+            "assumptions",
+            "commute",
+            "coverage",
+            "daily",
+            "income",
+            "impact",
+            "partial",
+            "result",
+            "scenario",
+            "toll",
+            "vehicle",
+        }
+        neutral_words = approved_heading_words | {
+            "a",
+            "after",
+            "and",
+            "are",
+            "because",
+            "date",
+            "dates",
+            "eligible",
+            "historical",
+            "incomplete",
+            "is",
+            "line",
+            "missing",
+            "observations",
+            "of",
+            "only",
+            "paired",
+            "portions",
+            "sample",
+            "straight",
+            "the",
+            "third",
+            "tolled",
+            "tollchat",
+            "with",
+        }
+
+        def is_neutral_fixture_text(segment: str) -> bool:
+            cleaned = re.sub(r"[*_`💼🧾🚗🛣️💵🎯⚠️✅📈📉➡️🔄🚫]", "", segment)
+            words = set(_semantic_words(cleaned).split())
+            return bool(words) and words <= neutral_words
+
+        def is_table_line(line: str) -> bool:
+            if not line.lstrip().startswith("|"):
+                return False
+            first_cell = line.strip().strip("|").split("|")[0].strip()
+            return (
+                first_cell.casefold() in {"scenario"}
+                or bool(re.fullmatch(r"[-: ]+", first_cell))
+                or first_cell.casefold() in scenarios
+            )
+
+        for line in response.splitlines():
+            if not line.strip():
+                continue
+            if is_table_line(line):
+                continue
+            if line.lstrip().startswith("#"):
+                heading = _semantic_words(re.sub(r"[*_`#]", "", line))
+                if set(heading.split()) <= approved_heading_words:
+                    continue
+                return _result(
+                    False,
+                    "partial response included an unapproved heading",
+                    "partial_residual_claim",
+                )
+            for segment in re.split(r"(?<=[.!?])\s+(?=[A-Z])", line):
+                if not segment.strip():
+                    continue
+                if approved_field_segment(segment):
+                    continue
+                values = token_numbers(segment)
+                if any(value not in allowed_numbers for value in values):
+                    return _result(
+                        False,
+                        "partial response used a value absent from the typed result",
+                        "partial_coverage",
+                    )
+                if (
+                    values
+                    or quantity_words.search(segment)
+                    or _contains_financial_language(segment)
+                ):
+                    return _result(
+                        False,
+                        "partial response added an ungrounded financial claim",
+                        "partial_financial_claim",
+                    )
+                if not is_neutral_fixture_text(segment):
+                    return _result(
+                        False,
+                        "partial response included an unapproved residual claim",
+                        "partial_residual_claim",
+                    )
+
     if style_error := _response_style_error(response, "annual response"):
         return style_error
     folded = response.casefold()
@@ -1059,45 +1393,329 @@ def evaluate_annual_income_clarification(
     response = str(clarification.get("response", ""))
     if style_error := _response_style_error(response, "income clarification"):
         return style_error
-    folded = response.casefold()
-    if not (
-        (
-            "?" in response
-            or any(
-                term in folded
-                for term in (
-                    "please give",
-                    "please provide",
-                    "could you provide",
-                    "please choose",
-                )
-            )
-        )
-        and any(term in folded for term in ("one", "single"))
-        and "annual" in folded
-        and any(term in folded for term in ("gross", "income", "salary"))
-    ):
-        return _result(
-            False,
-            "response did not request one annual gross estimate",
-            "bad_clarification",
-        )
-    amount = Decimal(str(metadata["forbidden_inferred_income_usd"]))
-    forbidden = {
-        f"${amount:f}",
-        f"${amount:,.0f}",
-        f"${amount:,.2f}",
-    }
-    selection = re.compile(
-        rf"(?:i(?:'|\u2019)ll use|i will use|we(?:'|\u2019)ll use|we will use|using|assume)"
-        rf".{{0,20}}(?:{'|'.join(re.escape(value) for value in forbidden)})",
+
+    # The first turn is intentionally a tiny allowlist.  It may ask the user
+    # for one annual gross estimate and repeat the supplied range verbatim;
+    # every other clause is an agent-generated selection or residual claim.
+    prompt_numbers = re.findall(
+        r"(?<![\w])\d[\d,]*(?:\.\d+)?(?![\w])",
+        str(metadata.get("prompt", "")),
+    )
+    salary_range = tuple(
+        Decimal(number.replace(",", "")) for number in prompt_numbers[:2]
+    )
+    ask = re.compile(
+        r"(?:(?:please|could you|can you|would you|kindly)\s+)?"
+        r"(?:provide|give|share|tell me|enter|select|choose)\s+"
+        r"(?:one|a single)\s+"
+        r"(?:annual\s+gross(?:[- ]income)?|gross\s+annual(?:[- ]income)?)\s+"
+        r"(?:salary\s+)?(?:estimate|amount|income)",
         re.IGNORECASE,
     )
-    if selection.search(response):
+    heading_words = {
+        "annual income estimate",
+        "annual income needed",
+        "annual gross income estimate",
+        "gross estimate needed",
+        "income clarification",
+        "income estimate needed",
+    }
+    range_words = {
+        "and",
+        "annual",
+        "between",
+        "from",
+        "gross",
+        "income",
+        "is",
+        "of",
+        "provided",
+        "range",
+        "salary",
+        "supplied",
+        "through",
+        "the",
+        "to",
+    }
+
+    def exact_range_clause(raw_clause: str) -> bool:
+        numbers = re.findall(r"(?<![\w])\d[\d,]*(?:\.\d+)?(?![\w])", raw_clause)
+        if len(salary_range) != 2 or len(numbers) != 2:
+            return False
+        try:
+            values = tuple(Decimal(number.replace(",", "")) for number in numbers)
+        except ArithmeticError:
+            return False
+        if values != salary_range:
+            return False
+        words = {word for word in _semantic_words(raw_clause).split() if word.isalpha()}
+        return (
+            bool(words & {"between", "from", "to", "through"}) and words <= range_words
+        )
+
+    def allowed_clause(raw_clause: str, heading: bool = False) -> bool:
+        cleaned = re.sub(r"[*_`]", "", raw_clause).strip(" \t-•")
+        normalized = _semantic_words(cleaned)
+        if not normalized:
+            return False
+        if heading:
+            return normalized in heading_words
+        if ask.fullmatch(normalized):
+            return True
+        ask_match = ask.match(normalized)
+        if ask_match:
+            suffix = normalized[ask_match.end() :].strip()
+            if re.fullmatch(r"for (?:that|the|this) salary range", suffix):
+                return True
+            if exact_range_clause(suffix):
+                return True
+        return exact_range_clause(cleaned)
+
+    for raw_line in response.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        heading = line.startswith("#")
+        if heading:
+            line = line.lstrip("# ")
+            if _semantic_words(re.sub(r"[*_`]", "", line)) not in heading_words:
+                heading = False
+        pieces = re.split(r"[.!?\n]+", line)
+        for piece in pieces:
+            if piece.strip() and not allowed_clause(piece, heading=heading):
+                normalized = _semantic_words(piece)
+                if re.search(
+                    r"\b(?:midpoint|average|median|center|centre|middle|select|choose|"
+                    r"pick|take|use|assume|recommend)\b|\d|[$€£₹]",
+                    normalized + piece.casefold(),
+                ) or re.search(
+                    r"\bone\s+hundred\s+(?:and\s+)?twenty\s+thousand\b",
+                    piece,
+                    re.IGNORECASE,
+                ):
+                    return _result(
+                        False,
+                        "response selected an income from the range",
+                        "inferred_income",
+                    )
+                return _result(
+                    False,
+                    "response included unapproved clarification content",
+                    "bad_clarification",
+                )
+        heading = False
+    return evaluate_annual_turn([turns[1]], metadata)
+
+
+def evaluate_annual_schedule_correction(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 2 or turns[0].get("calls"):
         return _result(
-            False, "response selected an income from the range", "inferred_income"
+            False,
+            "invalid schedule must be corrected before a tool call",
+            "premature_call",
+        )
+    first_response = str(turns[0].get("response", "")).casefold()
+    correction_clauses = re.split(r"[;,!?.\n]+", first_response)
+    negative_assertion = (
+        r"(?:invalid|not\s+(?:valid|acceptable|allowed|supported)|"
+        r"too\s+many|exceeds?|over\s+the\s+(?:maximum|limit)|"
+        r"(?:must|needs?|requires?)\s+(?:be\s+)?"
+        r"(?:corrected|changed|adjusted|fixed|replaced)|"
+        r"(?:needs?|requires?)\s+(?:a\s+)?"
+        r"(?:correction|adjustment|change|replacement))"
+    )
+    timing_subject = r"(?:overnight|5:30\s*(?:pm)?\s*(?:to|-)\s*8\s*(?:am)?)"
+    days_subject = r"\b300\s+days?\b"
+    timing_invalid = any(
+        re.search(timing_subject, clause) and re.search(negative_assertion, clause)
+        for clause in correction_clauses
+    )
+    days_invalid = any(
+        re.search(days_subject, clause) and re.search(negative_assertion, clause)
+        for clause in correction_clauses
+    )
+    requests_replacement = bool(
+        re.search(
+            r"\b(?:please\s+)?(?:correct|replace|adjust|change|provide|"
+            r"supply|enter|give)\b",
+            first_response,
+        )
+    )
+    if not (timing_invalid and days_invalid and requests_replacement):
+        return _result(
+            False, "invalid schedule was not explained", "missing_correction"
+        )
+    calls = turns[1].get("calls", [])
+    if len(calls) != 1 or calls[0].get("name") != "get_annual_toll_ballpark":
+        return _result(
+            False,
+            "corrected schedule expected exactly one annual call",
+            "tool_mismatch",
+        )
+    expected = metadata["expected_call"]
+    if calls[0].get("input") != expected:
+        return _result(
+            False, "corrected schedule used the wrong annual inputs", "input_mismatch"
         )
     return evaluate_annual_turn([turns[1]], metadata)
+
+
+def evaluate_annual_unmatched_location(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    if len(turns) != 1 or turns[0].get("calls"):
+        return _result(
+            False, "unsupported location must not call a pricing tool", "tool_mismatch"
+        )
+    response = str(turns[0].get("response", ""))
+    if "%" in response or any(
+        unicodedata.category(character) == "Sc" for character in response
+    ):
+        return _result(
+            False, "unsupported location response invented money", "invented_financials"
+        )
+    origin_match = re.search(
+        r"\bfrom\s+(.+?)\s+to\b", str(metadata.get("prompt", "")), re.IGNORECASE
+    )
+    origin = (
+        re.sub(r"[^a-z0-9]+", " ", origin_match.group(1).casefold()).strip()
+        if origin_match
+        else "winchester"
+    )
+    if not origin:
+        return _result(False, "unsupported location was not refused", "missing_refusal")
+    origin_pattern = re.escape(origin)
+    generic_refusal_heading = re.compile(
+        r"(?:"
+        r"(?:location|origin)\s+(?:is\s+)?(?:not\s+(?:covered|supported)|"
+        r"unsupported|unavailable)|"
+        r"(?:unsupported|unavailable)\s+(?:location|origin)|"
+        r"coverage\s+limitation|"
+        r"no\s+(?:annual\s+)?(?:estimate|price|calculation|amount|cost|toll)\s+"
+        r"(?:is\s+)?available|"
+        r"(?:annual\s+)?(?:estimate|price|calculation|amount|cost|toll)\s+"
+        r"(?:is\s+)?(?:unavailable|not\s+available)"
+        r")",
+        re.IGNORECASE,
+    )
+    clauses: list[str] = []
+    for line in response.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("# ")
+            if origin not in heading.casefold():
+                heading_words = " ".join(re.findall(r"[a-z0-9]+", heading.casefold()))
+                if generic_refusal_heading.fullmatch(heading_words):
+                    continue
+            line = heading
+        line = re.sub(r"^\s*[>\-•]+\s*", "", line)
+        clauses.extend(
+            re.split(
+                r"[.!?,;:\n—]+|\s+and\s+(?=(?:(?:i|we)\s+)?"
+                r"(?:cannot|can\s+not|unable\s+to)\b|(?:please\s+)?"
+                r"(?:provide|supply|select|choose|enter)\s+(?:a\s+|the\s+)?"
+                r"supported\b)",
+                line,
+            )
+        )
+
+    normalized_clauses = []
+    for clause in clauses:
+        normalized = " ".join(re.findall(r"[a-z0-9]+", clause.casefold()))
+        normalized = normalized.replace("can t", "cannot")
+        if any(
+            not character.isascii() and unicodedata.category(character)[0] in {"L", "N"}
+            for character in clause
+        ):
+            normalized = f"__non_ascii__ {normalized}".strip()
+        elif not normalized and clause.strip():
+            normalized = "__nonempty_without_semantic_content__"
+        normalized_clauses.append(normalized)
+    normalized_clauses = [clause for clause in normalized_clauses if clause]
+    status = re.compile(
+        rf"(?:the\s+)?{origin_pattern}\s+is\s+(?:"
+        r"unsupported|unavailable|not\s+(?:a\s+)?(?:covered|supported)"
+        r"(?:\s+(?:location|origin|prompt\s+point|route))?"
+        rf"|outside(?:\s+[a-z0-9]+){{0,8}}\s+coverage"
+        r")(?:\s+for\s+(?:pricing|calculation|estimation))?",
+        re.IGNORECASE,
+    )
+    inability = re.compile(
+        r"(?:"
+        r"(?:(?:(?:so|therefore)\s+)?(?:(?:i|we)\s+)?"
+        r"(?:cannot|can\s+not|unable\s+to)\s+"
+        r"(?:calculate|price|estimate|compute|provide)"
+        r"(?:\s+(?:the|this|an?|annual|round trip|toll|commute|route|trip|"
+        r"affordability|impact|estimate|price|amount|cost|calculation|"
+        r"request|result|it)){0,8})|"
+        r"(?:(?:so|therefore)\s+)?(?:i|we)\s+cannot\s+estimate\s+the\s+annual\s+"
+        r"round\s+trip\s+toll\s+or\s+affordability\s+impact\s+for\s+this\s+commute"
+        r"|(?:(?:the\s+)?(?:annual\s+)?(?:commute|route|trip|request|"
+        r"estimate|price|amount)?\s*(?:cannot|can\s+not|unable\s+to)\s+"
+        r"be\s+(?:calculated|priced|estimated)))",
+        re.IGNORECASE,
+    )
+    unavailable = re.compile(
+        r"(?:"
+        r"no\s+(?:annual\s+)?(?:estimate|price|calculation|amount|cost|toll)\s+"
+        r"(?:is\s+)?(?:available|possible|provided)|"
+        r"(?:annual\s+)?(?:estimate|price|calculation|amount|cost|toll)\s+"
+        r"(?:is\s+)?(?:unavailable|not\s+(?:available|possible|provided))"
+        r")",
+        re.IGNORECASE,
+    )
+    endpoint_request = re.compile(
+        r"(?:please\s+)?(?:provide|supply|select|choose|enter)\s+"
+        r"(?:a\s+|the\s+)?supported\s+(?:"
+        r"endpoints?|locations?|routes?|"
+        r"origin(?:\s+and\s+destination(?:\s+endpoints?)?)?|"
+        r"destination(?:\s+and\s+origin))|"
+        r"i\s+can\s+estimate\s+covered\s+trips\s+if\s+you\s+provide\s+a\s+listed\s+"
+        r"northern\s+virginia\s+origin\s+and\s+destination",
+        re.IGNORECASE,
+    )
+    endpoint_example = re.compile(
+        r"(?:such\s+as\s+(?:leesburg|dulles\s+airport|tysons|springfield\s+franconia)|"
+        r"or\s+a\s+covered\s+washington\s+endpoint)",
+        re.IGNORECASE,
+    )
+    endpoint_name = re.compile(
+        r"(?:leesburg|dulles\s+airport|tysons|springfield\s+franconia|"
+        r"or\s+a\s+covered\s+washington\s+endpoint)",
+        re.IGNORECASE,
+    )
+    status_seen = False
+    endpoint_examples_seen = False
+    for clause in normalized_clauses:
+        if status.fullmatch(clause):
+            status_seen = True
+        elif inability.fullmatch(clause) or unavailable.fullmatch(clause):
+            continue
+        elif endpoint_request.fullmatch(clause):
+            endpoint_examples_seen = True
+        elif endpoint_example.fullmatch(clause) or (
+            endpoint_examples_seen and endpoint_name.fullmatch(clause)
+        ):
+            continue
+        else:
+            label = (
+                "invented_financials"
+                if _contains_financial_language(clause)
+                else "route_substitution"
+            )
+            reason = (
+                "unsupported location response invented money"
+                if label == "invented_financials"
+                else "unsupported location response included unapproved content"
+            )
+            return _result(False, reason, label)
+    if not status_seen:
+        return _result(False, "unsupported location was not refused", "missing_refusal")
+    if style_error := _response_style_error(response, "unsupported-location response"):
+        return style_error
+    return _result(True, "unsupported location was safely refused", "passed")
 
 
 def evaluate_annual_route_unavailable(
@@ -1140,43 +1758,102 @@ def evaluate_annual_route_unavailable(
             )
 
     response = str(turn.get("response", ""))
-    if style_error := _response_style_error(response, "annual unavailable response"):
-        return style_error
     folded = response.casefold()
-    if (
-        not any(term in folded for term in ("unavailable", "unsupported"))
-        or "return" not in folded
-    ):
+    if "restart" in folded or "current-price" in folded or "current price" in folded:
+        return _result(False, "response offered a current-price restart", "bad_restart")
+    allowed_income = Decimal(str(expected_call["gross_annual_income_usd"]))
+    income_number = re.escape(f"{allowed_income:,.0f}")
+
+    def allowed_gross_restatement(value: str) -> bool:
+        cleaned = re.sub(r"[*_`]", "", value).strip(" \t-•")
+        return bool(
+            re.fullmatch(
+                rf"gross\s+annual\s+income\s*(?:is|:)?\s*\$?\s*"
+                rf"{income_number}(?:\.0+)?(?:\s+(?:usd|dollars?))?",
+                cleaned,
+                re.IGNORECASE,
+            )
+        )
+
+    allowed_headings = {
+        "annual toll estimate unavailable",
+        "annual affordability estimate unavailable",
+        "annual estimate unavailable",
+        "annual route unavailable",
+        "annual toll route unavailable",
+        "route data unavailable",
+    }
+    allowed_patterns = tuple(
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in (
+            r"(?:i|we) (?:couldnot|couldnt|cannot|can not|unable to) produce "
+            r"the affordability estimate because the return trip from [a-z0-9 ]+ "
+            r"to the [a-z0-9 ]+ area has no supported route in the registered coverage",
+            r"(?:i|we) (?:couldnot|couldnt|cannot|can not|unable to) "
+            r"(?:calculate|estimate|provide|produce) (?:the )?(?:annual )?"
+            r"(?:affordability estimate|toll estimate|annual estimate|annual result|calculation)",
+            r"(?:the )?return (?:trip|route|route data) (?:is )?"
+            r"(?:unavailable|unsupported|has no supported route)",
+            r"(?:the )?return (?:trip|route|route data) (?:is )?"
+            r"(?:unavailable|unsupported) so (?:i|we) (?:cannot|can not|"
+            r"couldnot|couldnt|unable to) (?:calculate|estimate) (?:the )?"
+            r"(?:annual estimate|affordability estimate|toll estimate)",
+            r"outbound (?:route )?validated",
+            r"return (?:route )?(?:is )?(?:unavailable|unsupported|no supported route)",
+            r"no supported route",
+            r"therefore no toll vehicle cost or remaining income totals are available",
+            r"the return toll route is unavailable so i cannot estimate its vehicle cost "
+            r"or provide annual toll scenarios or financial totals",
+            r"this tool covers only the tolled portion of validated northern virginia trips",
+        )
+    )
+    status_seen = False
+    for raw_line in response.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        heading = line.startswith("#")
+        if heading:
+            line = line.lstrip("# ")
+        for raw_clause in re.split(r"[.!?\n]+", line):
+            cleaned = re.sub(r"[*_`]", "", raw_clause).strip(" \t-•")
+            if not cleaned:
+                continue
+            if not _semantic_words(cleaned) and set(cleaned) <= {"🚗"}:
+                continue
+            normalized = _semantic_words(cleaned)
+            if heading and normalized in allowed_headings:
+                status_seen = True
+                continue
+            if allowed_gross_restatement(cleaned):
+                continue
+            if any(pattern.fullmatch(normalized) for pattern in allowed_patterns):
+                if any(
+                    marker in normalized
+                    for marker in ("unavailable", "unsupported", "no supported route")
+                ):
+                    status_seen = True
+                continue
+            label = (
+                "invented_financials"
+                if _contains_financial_language(cleaned)
+                else "unapproved_unavailability_content"
+            )
+            reason = (
+                "response invented unavailable financials"
+                if label == "invented_financials"
+                else "response included unapproved unavailable-route content"
+            )
+            return _result(False, reason, label)
+        heading = False
+    if not status_seen:
         return _result(
             False,
             "response did not explain route unavailability",
             "missing_unavailability",
         )
-    if any(term in folded for term in ("restart", "current-price", "current price")):
-        return _result(False, "response offered a current-price restart", "bad_restart")
-    allowed_income = Decimal(str(expected_call["gross_annual_income_usd"]))
-    without_input = response
-    for value in (
-        f"${allowed_income:f}",
-        f"${allowed_income:,.0f}",
-        f"${allowed_income:,.2f}",
-    ):
-        without_input = without_input.replace(value, "")
-    if re.search(r"\$\s*\d", without_input) or any(
-        term in folded
-        for term in (
-            "p25",
-            "p50",
-            "p90",
-            "after-tax",
-            "after tax",
-            "additional gross",
-            "|",
-        )
-    ):
-        return _result(
-            False, "response invented unavailable financials", "invented_financials"
-        )
+    if style_error := _response_style_error(response, "annual unavailable response"):
+        return style_error
     return _result(True, "annual route unavailability was safely explained", "passed")
 
 
@@ -1229,6 +1906,10 @@ class TollChatEvaluator(Evaluator[str, str]):
                 return evaluate_annual_day_estimate(turns, metadata)
             if behavior == "income_clarification":
                 return evaluate_annual_income_clarification(turns, metadata)
+            if behavior == "schedule_correction":
+                return evaluate_annual_schedule_correction(turns, metadata)
+            if behavior == "unmatched_location_refusal":
+                return evaluate_annual_unmatched_location(turns, metadata)
             if behavior == "route_unavailable":
                 return evaluate_annual_route_unavailable(turns, metadata)
             return evaluate_annual_turn(turns, metadata)
@@ -1277,24 +1958,29 @@ def _self_check() -> None:
     assert _movement_value_is_reported("\u2212$0.50", "-0.50")
     assert not _movement_value_is_reported("$0.50", "-0.50")
     rows = load_rows()
-    assert [row["id"] for row in rows] == [
+    by_id = {row["id"]: row for row in rows}
+    assert len(by_id) == len(rows)
+    assert {
         "reagan-airport-to-westpark",
         "pentagon-eads-to-westpark",
         "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
         "old-keene-mill-to-reagan-i95-unavailable",
-        "leesburg-route-28-job-offer",
-        "springfield-franconia-tysons-job-offer",
-        "leesburg-route-28-missing-schedule",
-        "leesburg-route-28-salary-range",
-        "dulles-to-reagan-annual-route-unavailable",
-        "leesburg-route-28-confirm-annual-days",
         "dulles-to-reagan-current-price",
         "i66-west-to-route-7-current-price",
         "route-7-to-i495-south-current-price",
         "leesburg-to-washington-i395-current-price",
-        "leesburg-to-washington-i395-job-offer",
-    ]
+        "leesburg-route-28-annual-affordability",
+        "springfield-franconia-tysons-annual-affordability",
+        "leesburg-route-28-schedule-inputs",
+        "leesburg-route-28-income-clarification",
+        "dulles-to-reagan-annual-unavailable",
+        "leesburg-route-28-annual-day-confirmation",
+        "leesburg-to-washington-annual-partial",
+        "greenway-hourly-income-clarification",
+        "greenway-invalid-schedule-correction",
+        "winchester-unsupported-location-refusal",
+    } <= by_id.keys()
     assert [case.name for case in load_cases(window="i95_northbound")] == [
         "springfield-franconia-to-westpark",
         "dulles-airport-to-backlick-tp1sb-fallback",
@@ -1323,7 +2009,7 @@ def _self_check() -> None:
     assert date(2026, 7, 3) in _i66_holidays(2026)
     assert date(2026, 7, 5) not in _i66_holidays(2026)
     assert date(2027, 7, 5) in _i66_holidays(2027)
-    i66_free = rows[12]
+    i66_free = by_id["i66-west-to-route-7-current-price"]
     i66_free_call = {
         "name": "get_current_toll_price",
         "input": i66_free["expected_call"],
@@ -1394,7 +2080,7 @@ def _self_check() -> None:
         )[0].label
         == "state_mismatch"
     )
-    wb_active = rows[13]
+    wb_active = by_id["route-7-to-i495-south-current-price"]
     i66_wb_active = json.loads(json.dumps(i66_active_call))
     i66_wb_active["input"] = wb_active["expected_call"]
     i66_wb_active["tool_result"].update(
@@ -1410,7 +2096,7 @@ def _self_check() -> None:
         "**$3.25 estimate** ✅ Observed pricing at 5:22 PM EDT.",
         wb_active,
     )[0].test_pass
-    metadata = rows[2]
+    metadata = by_id["springfield-franconia-to-westpark"]
     success = {
         "name": "get_current_toll_price",
         "input": metadata["expected_call"],
@@ -1472,7 +2158,7 @@ def _self_check() -> None:
         "range $11.25-$12.30"
     )
     assert evaluate_westpark_turn([success], good_response, metadata)[0].test_pass
-    washington_current = rows[14]
+    washington_current = by_id["leesburg-to-washington-i395-current-price"]
     washington_current_call = json.loads(json.dumps(success))
     washington_current_call["input"] = washington_current["expected_call"]
     washington_current_call["tool_result"].update(
@@ -1582,7 +2268,7 @@ def _self_check() -> None:
         evaluate_westpark_turn([error], good_response, metadata)[0].label
         == "tool_error"
     )
-    unavailable_metadata = rows[11]
+    unavailable_metadata = by_id["dulles-to-reagan-current-price"]
     unavailable = {
         **success,
         "input": unavailable_metadata["expected_call"],
@@ -1653,7 +2339,10 @@ def _self_check() -> None:
         evaluate_westpark_turn([closure], "### 🚧 Closed", metadata)[0].label
         == "tool_unavailable"
     )
-    fallback = {**rows[3], "active_window": "i95_northbound"}
+    fallback = {
+        **by_id["dulles-airport-to-backlick-tp1sb-fallback"],
+        "active_window": "i95_northbound",
+    }
     fallback_turns = [
         {
             "response": (
@@ -1742,7 +2431,10 @@ def _self_check() -> None:
         == "result_mismatch"
     )
 
-    unavailable = {**rows[4], "active_window": "i95_southbound"}
+    unavailable = {
+        **by_id["old-keene-mill-to-reagan-i95-unavailable"],
+        "active_window": "i95_southbound",
+    }
     unavailable_turns = [
         {
             "response": (
@@ -1801,7 +2493,7 @@ def _self_check() -> None:
         evaluate_unavailable_turn(wrong_unavailable_result, unavailable)[0].label
         == "result_mismatch"
     )
-    annual = rows[5]
+    annual = by_id["leesburg-route-28-annual-affordability"]
     annual_call = {
         "name": "get_annual_toll_ballpark",
         "input": annual["expected_call"],
@@ -1881,7 +2573,10 @@ def _self_check() -> None:
     )
     annual_turns = [{"response": annual_response, "calls": [annual_call]}]
     assert evaluate_annual_turn(annual_turns, annual)[0].test_pass
-    washington_annual = rows[15]
+    washington_annual = {
+        **by_id["leesburg-to-washington-annual-partial"],
+        "annual_behavior": "no_complete_paired_days",
+    }
     washington_annual_call = json.loads(json.dumps(annual_call))
     washington_annual_call["input"] = washington_annual["expected_call"]
     washington_annual_call["tool_result"] = {
@@ -2051,7 +2746,7 @@ def _self_check() -> None:
         evaluate_annual_turn(missing_method_turns, annual)[0].label
         == "missing_affordability_context"
     )
-    tysons = rows[6]
+    tysons = by_id["springfield-franconia-tysons-annual-affordability"]
     tysons_call = {**annual_call, "input": tysons["expected_call"]}
     tysons_turns = [
         {
@@ -2068,7 +2763,7 @@ def _self_check() -> None:
     premature_call[0]["calls"] = [tysons_call]
     assert evaluate_annual_turn(premature_call, tysons)[0].label == "bad_clarification"
 
-    missing = rows[7]
+    missing = by_id["leesburg-route-28-schedule-inputs"]
     missing_turns = [
         {
             "response": (
@@ -2110,7 +2805,7 @@ def _self_check() -> None:
         == "missing_required_input"
     )
 
-    estimate_case = rows[10]
+    estimate_case = by_id["leesburg-route-28-annual-day-confirmation"]
     estimate_call = {**annual_call, "input": estimate_case["expected_call"]}
     estimate_turns = [
         {
@@ -2137,7 +2832,7 @@ def _self_check() -> None:
         == "bad_annual_day_estimate"
     )
 
-    income = rows[8]
+    income = by_id["leesburg-route-28-income-clarification"]
     income_call = {**annual_call, "input": income["expected_call"]}
     income_turns = [
         {
@@ -2156,6 +2851,47 @@ def _self_check() -> None:
         evaluate_annual_income_clarification(inferred_income, income)[0].label
         == "inferred_income"
     )
+    midpoint_in_request = json.loads(json.dumps(income_turns))
+    midpoint_in_request[0]["response"] = (
+        "Please provide one annual gross amount. The amount is $120,000."
+    )
+    assert not evaluate_annual_income_clarification(midpoint_in_request, income)[
+        0
+    ].test_pass
+    for formatted_midpoint in ("$120000", "$120,000.00", "120000 USD"):
+        midpoint_variant = json.loads(json.dumps(income_turns))
+        midpoint_variant[0]["response"] = (
+            f"### 💰 Please provide one annual gross amount; the amount is {formatted_midpoint}."
+        )
+        assert (
+            evaluate_annual_income_clarification(midpoint_variant, income)[0].label
+            == "inferred_income"
+        )
+    for semantic_selection in (
+        "I will use the midpoint.",
+        "I can choose the average.",
+        "We should use the centre of the range.",
+    ):
+        semantic_variant = json.loads(json.dumps(income_turns))
+        semantic_variant[0]["response"] = (
+            f"### 💰 Please provide one annual gross amount. {semantic_selection}"
+        )
+        assert (
+            evaluate_annual_income_clarification(semantic_variant, income)[0].label
+            == "inferred_income"
+        )
+    for word_or_abbreviation in (
+        "one hundred twenty thousand dollars",
+        "$120k",
+    ):
+        word_variant = json.loads(json.dumps(income_turns))
+        word_variant[0]["response"] = (
+            f"### 💰 Please provide one annual gross amount: {word_or_abbreviation}."
+        )
+        assert (
+            evaluate_annual_income_clarification(word_variant, income)[0].label
+            == "inferred_income"
+        )
     premature_income_call = json.loads(json.dumps(income_turns))
     premature_income_call[0]["calls"] = [income_call]
     assert (
@@ -2163,7 +2899,7 @@ def _self_check() -> None:
         == "premature_call"
     )
 
-    unavailable_annual = rows[9]
+    unavailable_annual = by_id["dulles-to-reagan-annual-unavailable"]
     unavailable_call = {
         "name": "get_annual_toll_ballpark",
         "input": unavailable_annual["expected_call"],
@@ -2210,6 +2946,17 @@ def _self_check() -> None:
         evaluate_annual_route_unavailable(invented_totals, unavailable_annual)[0].label
         == "invented_financials"
     )
+    natural_amount = json.loads(json.dumps(unavailable_annual_turns))
+    natural_amount[0]["response"] += " The annual toll costs twelve dollars per day."
+    assert (
+        evaluate_annual_route_unavailable(natural_amount, unavailable_annual)[0].label
+        == "invented_financials"
+    )
+    allowed_income_restated = json.loads(json.dumps(unavailable_annual_turns))
+    allowed_income_restated[0]["response"] += " Gross annual income: $120,000."
+    assert evaluate_annual_route_unavailable(
+        allowed_income_restated, unavailable_annual
+    )[0].test_pass
     offered_restart = json.loads(json.dumps(unavailable_annual_turns))
     offered_restart[0]["response"] += " I can restart with the current-price tool."
     assert (
@@ -2223,6 +2970,51 @@ def _self_check() -> None:
             0
         ].label
         == "result_mismatch"
+    )
+    hourly = by_id["greenway-hourly-income-clarification"]
+    hourly_turns = [
+        {
+            "response": "### 💰 Annual income needed\n\nPlease provide one annual gross amount.",
+            "calls": [],
+        },
+        {"response": annual_response, "calls": [annual_call]},
+    ]
+    assert evaluate_annual_income_clarification(hourly_turns, hourly)[0].test_pass
+    schedule = by_id["greenway-invalid-schedule-correction"]
+    schedule_call = {**annual_call, "input": schedule["expected_call"]}
+    schedule_turns = [
+        {
+            "response": "### ⚠️ Schedule correction\n\nThat overnight 5:30 PM to 8 AM schedule and 300 days are invalid. Please correct them.",
+            "calls": [],
+        },
+        {"response": annual_response, "calls": [schedule_call]},
+    ]
+    assert evaluate_annual_schedule_correction(schedule_turns, schedule)[0].test_pass
+    invalid_schedule_call = json.loads(json.dumps(schedule_turns))
+    invalid_schedule_call[0]["calls"] = [schedule_call]
+    assert (
+        evaluate_annual_schedule_correction(invalid_schedule_call, schedule)[0].label
+        == "premature_call"
+    )
+    refusal = by_id["winchester-unsupported-location-refusal"]
+    refusal_turn = [
+        {
+            "response": "### 🚫 Location not covered\n\nWinchester is not a covered location, so I cannot price this annual commute.",
+            "calls": [],
+        }
+    ]
+    assert evaluate_annual_unmatched_location(refusal_turn, refusal)[0].test_pass
+    substituted_refusal = json.loads(json.dumps(refusal_turn))
+    substituted_refusal[0]["response"] += " Try Greenway instead."
+    assert (
+        evaluate_annual_unmatched_location(substituted_refusal, refusal)[0].label
+        == "route_substitution"
+    )
+    invented_refusal = json.loads(json.dumps(refusal_turn))
+    invented_refusal[0]["response"] += " It costs $12.00."
+    assert (
+        evaluate_annual_unmatched_location(invented_refusal, refusal)[0].label
+        == "invented_financials"
     )
     print("self-check ok (fixtures and evaluator pass/fail branches; no network)")
 
