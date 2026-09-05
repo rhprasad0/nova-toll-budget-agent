@@ -8337,7 +8337,7 @@ def test_slice_3_dns_allowlist_contract_covers_adversarial_records_and_order():
         "acm-validations\\.aws",
         'CERTIFICATE_STATUS") != "ISSUED"',
         'CLOUDFRONT_STATUS") != "Deployed"',
-        'ALIAS_ATTACHED") != "true"',
+        'LEGACY_ALIAS_RELEASED") != "true"',
         'method not in {"POST", "PUT"}',
         "ROLLBACK_SNAPSHOT",
         'old_snapshot["id"]',
@@ -8353,6 +8353,11 @@ def test_slice_3_dns_allowlist_contract_covers_adversarial_records_and_order():
     assert FOUNDATION_DNS_WORKFLOW.index(
         '"CERTIFICATE_STATUS"'
     ) < FOUNDATION_DNS_WORKFLOW.index('mutate(zone_id, account_id, "PUT"')
+    assert (
+        "LEGACY_ALIAS_RELEASED: ${{ inputs.legacy_alias_released }}"
+        in FOUNDATION_DNS_WORKFLOW
+    )
+    assert "alias_attached:" not in FOUNDATION_DNS_WORKFLOW
 
 
 def _slice3_dns_python_source() -> str:
@@ -8511,7 +8516,7 @@ def _set_dns_inputs(
     monkeypatch.setenv("CLOUDFRONT_HOSTNAME", "d1wqry4fbd92w5.cloudfront.net")
     monkeypatch.setenv("CERTIFICATE_STATUS", "ISSUED")
     monkeypatch.setenv("CLOUDFRONT_STATUS", "Deployed")
-    monkeypatch.setenv("ALIAS_ATTACHED", "true")
+    monkeypatch.setenv("LEGACY_ALIAS_RELEASED", "true")
     monkeypatch.setenv("OLD_DEV_TARGET", "dmsiz11apblcv.cloudfront.net")
     monkeypatch.setenv(
         "ROLLBACK_SNAPSHOT",
@@ -8609,6 +8614,55 @@ def test_slice3_dns_gate_rejects_adversarial_inputs_before_any_mutation(
         with pytest.raises(gate_error):
             main()
         assert not mock.mutations, label
+
+
+@pytest.mark.parametrize(
+    ("released", "certificate", "distribution", "accepted"),
+    [
+        ("true", "ISSUED", "Deployed", True),
+        ("false", "ISSUED", "Deployed", False),
+        (None, "ISSUED", "Deployed", False),
+        ("", "ISSUED", "Deployed", False),
+        ("TRUE", "ISSUED", "Deployed", False),
+        ("true", "PENDING_VALIDATION", "Deployed", False),
+        ("true", "ISSUED", "InProgress", False),
+    ],
+)
+def test_slice3_dns_cutover_precedes_new_alias_but_requires_legacy_release(
+    monkeypatch: pytest.MonkeyPatch,
+    released: str | None,
+    certificate: str,
+    distribution: str,
+    accepted: bool,
+) -> None:
+    _set_dns_inputs(monkeypatch, operation="cutover")
+    monkeypatch.delenv("ALIAS_ATTACHED", raising=False)
+    if released is None:
+        monkeypatch.delenv("LEGACY_ALIAS_RELEASED")
+    else:
+        monkeypatch.setenv("LEGACY_ALIAS_RELEASED", released)
+    monkeypatch.setenv("CERTIFICATE_STATUS", certificate)
+    monkeypatch.setenv("CLOUDFRONT_STATUS", distribution)
+    mock = _DnsApiMock(zones=[_dns_zone()])
+    namespace = _dns_namespace(mock)
+    main = cast(Callable[[], object], namespace["main"])
+    if accepted:
+        main()
+        assert len(mock.mutations) == 1
+        method, path, payload = mock.mutations[0]
+        assert method == "PUT"
+        assert path == "zones/" + "a" * 32 + "/dns_records/" + "c" * 32
+        assert payload == {
+            "name": "dev.tollchat.ai",
+            "type": "CNAME",
+            "content": "d1wqry4fbd92w5.cloudfront.net",
+            "ttl": 1,
+            "proxied": False,
+        }
+    else:
+        with pytest.raises(cast(type[Exception], namespace["GateError"])):
+            main()
+        assert not mock.mutations
 
 
 def test_slice3_dns_gate_rollback_puts_only_the_captured_record(
@@ -8736,6 +8790,15 @@ def test_slice3_rollback_legacy_https_health_fails_closed(
 
 
 def test_slice_3_runbook_and_plan_document_the_staged_order_and_rollback():
+    handoff = DEPLOYMENT.split("##### Exact DNS workflow operations and ordering", 1)[1]
+    assert handoff.index("legacy_alias_released=true") < handoff.index(
+        "before applying the reviewed development alias"
+    )
+    recovery = DEPLOYMENT.split("##### Failed-cutover recovery and cleanup gate", 1)[1]
+    assert recovery.index("first release") < recovery.index("operation=rollback")
+    assert recovery.index("operation=rollback") < recovery.index(
+        "restore only the old alias"
+    )
     for required in (
         "Slice 3 development custom-domain and DNS handoff",
         "enable_development_custom_domain",
@@ -8744,7 +8807,7 @@ def test_slice_3_runbook_and_plan_document_the_staged_order_and_rollback():
         "stage-validation",
         "certificate_status=ISSUED",
         "cloudfront_status=Deployed",
-        "alias_attached=true",
+        "legacy_alias_released=true",
         "dmsiz11apblcv.cloudfront.net",
         "E1JXKQYNAN39E4",
         "X-Robots-Tag: noindex",
