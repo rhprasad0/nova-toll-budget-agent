@@ -4978,6 +4978,7 @@ select a target.
    STATE_TERRAFORM_VERSION=1.15.8
    STATE_SSEKMS_KEY_ID=EXPECTED_APPROVED_PRODUCTION_STATE_CMK
    LIVE_IDENTITY_MANIFEST=EXPECTED_PRIVATE_LIVE_IDENTITY_MANIFEST
+   mkdir -p "$PROJECT_ROOT/.worktrees"
    WORK_DIR="$(mktemp -d "$PROJECT_ROOT/.worktrees/nova-toll-333-state-XXXXXX")"
    COMPAT_ROOT="$WORK_DIR/compat"
    SOURCE_STATE="$WORK_DIR/source-state.json"
@@ -5287,6 +5288,7 @@ select a target.
    DB_INSTANCE=nova-toll-db
    CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
    CA_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+   mkdir -p "$PROJECT_ROOT/.worktrees"
    WORK_DIR="$(mktemp -d "$PROJECT_ROOT/.worktrees/nova-toll-333-db-XXXXXX")"
    CA_FILE="$WORK_DIR/global-bundle.pem"
    HANDOFF="$WORK_DIR/legacy-db-handoff.json"
