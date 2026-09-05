@@ -4880,7 +4880,7 @@ select a target.
    aws_bedrock_guardrail_version.tollchat                 # skip_destroy retained
    ```
 
-   State-list/show and remote identity checks must pass for each address before
+   State-list and remote identity checks must pass for each address before
    using one exact multi-address `terraform state rm` command under one
    Terraform lock. Never use a pattern, `-target`, lifecycle edit, current
    `d4830c9`, `-refresh=false`, or `-auto-approve`. The command has four named
@@ -4954,6 +4954,8 @@ select a target.
    set +x
    umask 077
    ROOT="$(git rev-parse --show-toplevel)"
+   GIT_COMMON_DIR="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+   PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
    ORIGIN_URL="$(git -C "$ROOT" remote get-url origin 2>/dev/null)"
    case "$ORIGIN_URL" in
      git@github.com:rhprasad0/nova-toll-budget-agent.git|https://github.com/rhprasad0/nova-toll-budget-agent.git) ;;
@@ -4976,7 +4978,8 @@ select a target.
    STATE_TERRAFORM_VERSION=1.15.8
    STATE_SSEKMS_KEY_ID=EXPECTED_APPROVED_PRODUCTION_STATE_CMK
    LIVE_IDENTITY_MANIFEST=EXPECTED_PRIVATE_LIVE_IDENTITY_MANIFEST
-   WORK_DIR="$(mktemp -d -t nova-toll-333-state-XXXXXX)"
+   mkdir -p "$PROJECT_ROOT/.worktrees"
+   WORK_DIR="$(mktemp -d "$PROJECT_ROOT/.worktrees/nova-toll-333-state-XXXXXX")"
    COMPAT_ROOT="$WORK_DIR/compat"
    SOURCE_STATE="$WORK_DIR/source-state.json"
    ARCHIVE_STATE_PRIVATE="$WORK_DIR/archive-state.json"
@@ -4985,11 +4988,35 @@ select a target.
    DESTROY_PLAN="$WORK_DIR/legacy-retirement.tfplan"
    DESTROY_PLAN_JSON="$WORK_DIR/legacy-retirement.tfplan.json"
    DESTROY_PLAN_APPLY_JSON="$WORK_DIR/legacy-retirement.tfplan.immediately-before-apply.json"
-   trap 'git worktree remove --force "$COMPAT_ROOT" >/dev/null 2>&1 || true; rm -f -- "$SOURCE_STATE" "$ARCHIVE_STATE_PRIVATE" "$LIVE_STATE_PRIVATE" "$LIVE_STATE_AFTER_DETACH" "$DESTROY_PLAN" "$DESTROY_PLAN_JSON" "$DESTROY_PLAN_APPLY_JSON" "$WORK_DIR/head.json" "$WORK_DIR/foundation-head.json" "$WORK_DIR/archive-copy.json" "$WORK_DIR/archive-head.json" "$WORK_DIR/head-before-detach.json" "$WORK_DIR/head-after-detach.json" "$WORK_DIR/head-before-plan.json" "$WORK_DIR/head-before-plan-render.json" "$WORK_DIR/head-immediately-before-render.json" "$WORK_DIR/head-immediately-before-apply.json" "$WORK_DIR/state-list.txt" "$WORK_DIR/state-list-after-detach.txt" "$WORK_DIR"/state-show_*.txt; rmdir "$WORK_DIR"' EXIT
+   CLOUDFLARE_TOKEN= CLOUDFLARE_API_TOKEN=
+   trap 'git worktree remove --force "$COMPAT_ROOT" >/dev/null 2>&1 || true; unset CLOUDFLARE_TOKEN CLOUDFLARE_API_TOKEN; rm -f -- "$SOURCE_STATE" "$ARCHIVE_STATE_PRIVATE" "$LIVE_STATE_PRIVATE" "$LIVE_STATE_AFTER_DETACH" "$DESTROY_PLAN" "$DESTROY_PLAN_JSON" "$DESTROY_PLAN_APPLY_JSON" "$WORK_DIR/head.json" "$WORK_DIR/foundation-head.json" "$WORK_DIR/archive-copy.json" "$WORK_DIR/archive-head.json" "$WORK_DIR/head-before-detach.json" "$WORK_DIR/head-after-detach.json" "$WORK_DIR/head-before-plan.json" "$WORK_DIR/head-before-plan-render.json" "$WORK_DIR/head-immediately-before-render.json" "$WORK_DIR/head-immediately-before-apply.json" "$WORK_DIR/state-list.txt" "$WORK_DIR/state-list-after-detach.txt" "$WORK_DIR/retained-identities.json"; rmdir "$WORK_DIR"' EXIT
+   test ! -e "$COMPAT_ROOT"
+   for variable in $(compgen -A variable AWS_); do
+     test -z "${!variable-}"
+   done
+   for variable in $(compgen -A variable); do
+     case "$variable" in
+       TF_CLI_ARGS*|TF_VAR_*)
+         value="${!variable-}"
+         if [[ -n "$value" ]]; then
+           [[ "$variable" == TF_VAR_environment && "$value" == development ]] || exit 1
+         fi
+         ;;
+     esac
+   done
+   export TF_VAR_environment=development
+   test "$TF_VAR_environment" = development
+   test "$STATE_BUCKET" = nova-toll-tfstate-920534282028
+   test "$STATE_KEY" = nova-toll/v2/development/terraform.tfstate
    export AWS_PROFILE=nova-toll-prod
    export AWS_DEFAULT_REGION=us-east-1
    export AWS_REGION=us-east-1
    test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+   CLOUDFLARE_TOKEN="$(aws --region "$REGION" ssm get-parameter \
+     --name /nova-toll/cloudflare-development-dns-api-token --with-decryption \
+     --query Parameter.Value --output text 2>/dev/null)" || exit 1
+   test -n "$CLOUDFLARE_TOKEN" && test "$CLOUDFLARE_TOKEN" != None
+   export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_TOKEN"
    terraform_prod() {
      test "${AWS_PROFILE:-}" = nova-toll-prod
      test "${AWS_REGION:-}" = "$REGION"
@@ -5046,31 +5073,13 @@ select a target.
      -backend-config="encrypt=true" -backend-config="kms_key_id=alias/nova-toll-tfstate" >/dev/null
    test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
    terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state list >"$WORK_DIR/state-list.txt"
-   for address in \
-     'cloudflare_dns_record.apex[0]' \
-     'cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"]' \
-     'aws_bedrock_guardrail.tollchat' \
-     'aws_bedrock_guardrail_version.tollchat'; do
-     grep -Fqx "$address" "$WORK_DIR/state-list.txt"
-     terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state show -no-color "$address" >"$WORK_DIR/state-show-${address//[^A-Za-z0-9]/_}.txt"
-   done
    terraform_prod -chdir="$COMPAT_ROOT/v2/infra" state pull >"$LIVE_STATE_PRIVATE"
    # Parse the complete backend snapshot, rather than trusting text output.
    python3 "$ROOT/v2/scripts/validate_legacy_retirement_plan.py" --state "$LIVE_STATE_PRIVATE" --identity-manifest "$LIVE_IDENTITY_MANIFEST" --state-only
    python3 "$ROOT/v2/scripts/validate_legacy_retirement_plan.py" --state "$ARCHIVE_STATE_PRIVATE" --identity-manifest "$LIVE_IDENTITY_MANIFEST" --state-only
-   for address in \
-     'cloudflare_dns_record.apex[0]' \
-     'cloudflare_dns_record.site_cert_validation["dev.tollchat.ai"]' \
-     'aws_bedrock_guardrail.tollchat' \
-     'aws_bedrock_guardrail_version.tollchat'; do
-     expected_id="$(jq -er --arg address "$address" \
-       '[.resources[] | select(.address == $address) | .id] | if length == 1 then .[0] else error("retained identity cardinality") end' \
-       "$LIVE_IDENTITY_MANIFEST")"
-     actual_id="$(sed -nE 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"?([^" ]*)"?[[:space:]]*$/\1/p' \
-       "$WORK_DIR/state-show-${address//[^A-Za-z0-9]/_}.txt")"
-     test "$(printf '%s\n' "$actual_id" | awk 'NF {count++} END {print count + 0}')" -eq 1
-     test "$actual_id" = "$expected_id"
-   done
+   jq -e --arg account "$EXPECTED_ACCOUNT" \
+     '[.resources[] | select(.address == "cloudflare_dns_record.apex[0]" or .address == "cloudflare_dns_record.site_cert_validation[\"dev.tollchat.ai\"]" or .address == "aws_bedrock_guardrail.tollchat" or .address == "aws_bedrock_guardrail_version.tollchat")] | if length == 4 and all(.[]; .account_id == $account and (.address | type == "string") and (.id | type == "string" and length > 0)) then . else error("retained identity cardinality") end' \
+     "$LIVE_IDENTITY_MANIFEST" >"$WORK_DIR/retained-identities.json"
    # One exact multi-address invocation obtains one Terraform lock for all four
    # retained addresses; do not retry or restore from the archive automatically.
    assert_current_state "$STATE_VERSION" "\"$STATE_ETAG\"" "$WORK_DIR/head-before-detach.json"
@@ -5162,7 +5171,7 @@ select a target.
    during this invocation, and set `RETIRE_LEGACY_LIVE_IDENTITY_REVIEWED=YES`
    only after independent review of the fresh live manifest. If archive
    copy/readback, digest, metadata, state
-   identity, or any exact state-show check fails, stop with the canonical state
+   identity, or any exact state identity check fails, stop with the canonical state
    untouched and do not run a detach command.
 
    A state-lock/error result after the multi-address mutation, or any inability
@@ -5253,8 +5262,9 @@ select a target.
    The fetched secret, username, password, endpoint, CA, raw SQL, and psql
    stderr stay in process memory; no value is a file, argument, plan, or
    evidence. The wrapper asserts profile/account/region, one private available
-   `nova-toll-db`, the managed master-secret ARN, and the CA SHA-256 before
-   invoking the script against `postgres`. The script itself repeats fixed
+   `nova-toll-db`, PostgreSQL engine major version 17, the managed master-secret
+   ARN, and the CA SHA-256 before invoking the script against `postgres`. The
+   script itself repeats fixed
    account/region and `nova-toll-db` `DescribeDBInstances` checks immediately
    before preflight, and rejects any handoff endpoint, port, managed secret ARN,
    or caller account that differs from that fresh API truth. It does not accept
@@ -5271,24 +5281,35 @@ select a target.
    umask 077
    EXPECTED_ACCOUNT=920534282028
    REGION=us-east-1
-   AWS_PROFILE=nova-toll-prod
+   EXPECTED_AWS_PROFILE=nova-toll-prod
    ROOT="$(git rev-parse --show-toplevel)"
+   GIT_COMMON_DIR="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+   PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
    DB_INSTANCE=nova-toll-db
    CA_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
    CA_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
-   WORK_DIR="$(mktemp -d -t nova-toll-333-db-XXXXXX)"
+   mkdir -p "$PROJECT_ROOT/.worktrees"
+   WORK_DIR="$(mktemp -d "$PROJECT_ROOT/.worktrees/nova-toll-333-db-XXXXXX")"
    CA_FILE="$WORK_DIR/global-bundle.pem"
    HANDOFF="$WORK_DIR/legacy-db-handoff.json"
    RDS_JSON= SECRET_JSON= DB_HOST= DB_PORT= DB_USER= DB_PASSWORD=
    cleanup() { unset DB_PASSWORD DB_USER SECRET_JSON SECRET_ARN RDS_JSON RETIRE_LEGACY_DB_PASSWORD RETIRE_LEGACY_DB_USER; rm -rf -- "$WORK_DIR"; }
    trap cleanup EXIT
    trap 'exit 130' HUP INT TERM
-   test "$(AWS_PROFILE="$AWS_PROFILE" aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+   for variable in $(compgen -A variable AWS_); do
+     test -z "${!variable-}"
+   done
+   export AWS_PROFILE="$EXPECTED_AWS_PROFILE"
+   export AWS_DEFAULT_REGION=us-east-1
+   export AWS_REGION=us-east-1
+   test "$(aws --region "$REGION" sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
    RDS_JSON="$(AWS_PROFILE="$AWS_PROFILE" aws --region "$REGION" rds describe-db-instances \
      --db-instance-identifier "$DB_INSTANCE" --query DBInstances --output json)"
    printf '%s\n' "$RDS_JSON" | jq -e --arg account "$EXPECTED_ACCOUNT" --arg instance "$DB_INSTANCE" '
      type == "array" and length == 1 and .[0].DBInstanceIdentifier == $instance and
-     .[0].DBInstanceStatus == "available" and .[0].PubliclyAccessible == false and
+     .[0].DBInstanceStatus == "available" and .[0].Engine == "postgres" and
+     (.[0].EngineVersion | type == "string" and test("^17([.]|$)")) and
+     .[0].PubliclyAccessible == false and
      (.[0].Endpoint.Address | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9.-]*[.]rds[.]amazonaws[.]com$")) and
      (.[0].Endpoint.Port | type == "number" and floor == . and . > 0 and . < 65536) and
      (.[0].MasterUserSecret.SecretArn | type == "string" and test("^arn:aws:secretsmanager:us-east-1:920534282028:secret:[^[:space:]]+$"))
@@ -5332,12 +5353,18 @@ select a target.
    `CONNECT` on `nova_toll_development` only. After the database and each
    role mutation, the postcondition requires all six production roles to
    retain `CONNECT` on `nova_toll`.
-   The database comment `environment=development` and each development role's
-   comment `environment=development` are required, along with reviewed
-   pricing/database-owner and `oracle_owner_development` schema
-   owners, exactly `plpgsql` plus `postgis` (PostGIS in `oracle`), no
-   subscriptions, publications, replication slots, foreign wrappers/tables,
-   user mappings, event triggers, or unreviewed catalog dependencies. The
+   The exact shared labels are `shobj_description` values
+   `environment=production` for `nova_toll` and `environment=development` for
+   `nova_toll_development`; each development role's `shobj_description` value
+   is NULL. The reviewed database and schema owners, exact ACL grants, and
+   shared dependencies are checked before every destructive phase. Object
+   ownership permits only the ordinary database owner and six development
+   roles, the `pg_database_owner` public namespace owner, and the narrow
+   catalog-registered structural closure of `plpgsql` and `postgis`; those
+   extensions must both be owned by pinned `rdsadmin`, with PostGIS in
+   `oracle`. No subscriptions, publications, replication slots, foreign
+   wrappers/tables, user mappings, event triggers, or unreviewed catalog
+   dependencies are accepted. The
    script executes only
    `DROP DATABASE nova_toll_development WITH (FORCE)`, verifies the database
    is absent and production is unchanged, then drops each exact development
