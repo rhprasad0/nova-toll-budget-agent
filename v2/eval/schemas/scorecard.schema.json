@@ -138,6 +138,62 @@
             "null"
           ],
           "minLength": 1
+        },
+        "model_settings_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "prompt_context_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "render_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "source_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rate_card_source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rate_card_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rate_card_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rate_card_values_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
         }
       }
     },
@@ -162,6 +218,51 @@
         "null"
       ],
       "minimum": 0
+    },
+    "input_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "output_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "cache_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "cost": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "model_settings": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "contract_versions": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "candidate_artifact": {
+      "type": [
+        "object",
+        "null"
+      ]
     }
   }
 }

@@ -1,8 +1,15 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs nine current-toll routing cases and seven
-annual job-offer affordability cases through a fresh production agent. It
-verifies exact tool calls, route/fallback behavior, required-input and income
+This code-graded Strands suite runs nine current-toll routing cases and ten
+annual-affordability golden cases through a fresh production agent. The golden
+corpus is SemVer 1.0.0 and includes four sanitized typed fixtures. Fixture-backed
+case provenance uses the fixture source and compares aware ISO timestamps after
+UTC normalization at second precision, ignoring capture microseconds. A `success` fixture maps to a
+success/clarification/correction case outcome, `partial_success` maps only to
+`partial_success`, and `route_unavailable` maps to `structured_unavailability`.
+The manifest also hashes the raw nine-row legacy `test-cases.jsonl` source so all
+19 runtime cases participate in the versioned dataset contract. It verifies
+exact tool calls, route/fallback behavior, required-input and income
 clarification, adjustable 52-week commute-day estimates, safe annual route
 unavailability, scenario-bound money, and the required Markdown/emoji response
 hierarchy.
@@ -10,10 +17,114 @@ hierarchy.
 ## Offline check
 
 ```bash
+uv run python eval/golden_corpus.py validate --base-ref HEAD
 uv run python eval/run_evaluation.py --check
 ```
 
 This command is network-free and runs in normal pull-request CI.
+
+## Trusted recorded-fixture execution
+
+`eval.fixture_eval` is the callable boundary for a supplied model. The trusted
+caller validates a public row, supplies prompt points, render date, and a rate
+card, then creates one fresh agent per trial with both toll tools replaced by
+recorded `AgentTool` wrappers:
+
+```python
+from datetime import date
+from pathlib import Path
+
+from eval.fixture_eval import packet_for_case, run_and_seal_trial, trusted_case_evidence
+from eval.fixture_runner import RateCard
+
+packet = packet_for_case(
+    "dulles-to-reagan-annual-unavailable",
+    prompt_points=trusted_prompt_points,
+    render_date=date(2026, 9, 5),
+)
+case_bytes, dataset_hash, _ = trusted_case_evidence(packet.case_id)
+run_and_seal_trial(
+    packet,
+    model=injected_model,
+    artifact_root=Path("run") / packet.case_id / "1",
+    trial_id="1",
+    rate_card=RateCard("approved-source", "2026-09", rate_card_sha256, 1, 2, 3),
+    case_bytes=case_bytes,
+    dataset_hash=dataset_hash,
+)
+```
+
+The runner writes raw `output.json`, `stdout.txt`, and `exit_code.json` only.
+The trusted supervisor seals `run.json`, verifies source/case/rate identities,
+and invokes the shared annual grader to write `scorecard.json`. Call it three
+times with independent fresh model instances (`trial_id` `1`, `2`, `3`) for
+each public case, then use `aggregate_public_run` after all ten cases are
+sealed. `adapt_holdout_rows` (one call for the complete bundle),
+`packet_for_holdout`, and `holdout_case_document` provide the separate opaque
+holdout boundary; private holdout rows are supplied by the parent executor and
+are never stored in this repository. The plural adapter gives every row the
+same membership dataset hash, so do not adapt bundle rows independently with
+`adapt_holdout_row`.
+
+Each sealed report carries the actual nonsecret model parameters, dataset and
+prompt/tool contract versions, usage and cost fields, and a candidate artifact
+record of `kind: source-snapshot` whose digest is the in-scope source digest.
+`deployment_identity` remains `pending` until an external executor supplies a
+reviewed deployment artifact; no deployment or GitHub artifact ID is inferred
+by this offline tooling.
+
+Offline tests use only synthetic models and recorded fixture bytes. They are
+tooling checks and do not certify a model, baseline, candidate, or holdout.
+
+## Fixture-only golden review
+
+Render the self-contained, worktree-only review page from the validated
+manifest and its four recorded fixtures:
+
+```bash
+uv run python eval/golden_corpus.py render \
+  --manifest eval/golden/manifest.json --output ../.graph/golden-review.html
+```
+
+The page contains ten annual-affordability case cards, deterministic required
+and prohibited evaluator behavior, the 19-case coverage/hash contract, without
+fixture payload details. It clearly labels fixtures as byte-pinned
+historical regression evidence, shows pinned 08:00, 08:30, and rejected 12:00
+capture context, and shows no model output. Human approval is pending; the
+artifact is not pass^3 or unbiased evidence, and candidate execution is
+deferred to #362/#363.
+
+The pre-existing live evaluator and Batch utility documented below are separate
+manual workflows. Golden `validate`, golden `render`, and CI never invoke them;
+their historical reports are not approval evidence for this corpus.
+
+The #361 acceptance gate covers corpus integrity and structured expectations:
+exact arguments, call order, typed fixture results, references, and coverage.
+The existing prose graders are bounded regression heuristics. They can reject
+valid paraphrases or miss unsupported claims; passing them does not prove
+natural-language correctness. Broad prose-grading work belongs to #360, with
+baseline and candidate execution in #362/#363.
+
+## Growing the corpus
+
+Add cases to a declared JSONL shard or declare another shard in `case_shards`.
+Update fixture `case_ids`, shard counts, coverage, and the sorted payload list;
+hash each payload's raw bytes with SHA-256. Compute `dataset_sha256` over the
+manifest without that field, serialized as UTF-8 JSON with sorted keys, compact
+separators, and `ensure_ascii=False`. The legacy source has its own raw-byte hash.
+
+Advance `dataset_version` for any changed bundle: patch for corrections, minor
+for additive cases, major for incompatible dataset changes. Keep `format_version`
+at `1.0.0` while using this format. Validation against the PR base rejects a
+missing version advance or an invalid base ref; validation without a base checks
+only internal consistency. New tags have no prior version to compare.
+
+The initial `1.0.0` release also pins the reviewed cases and fixture bytes in
+code. Later releases use schema, references, coverage, hashes, and Git version
+comparison without changing the validator for each added case. Human review
+approves changed expectations and evidence; hashes detect drift, not truth.
+The current format supports the annual-affordability capability and existing
+scenario families. A new tool capability needs its own typed validation.
 
 ## Live run
 
@@ -31,7 +142,7 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
-The seven annual cases are independent of the live I-95 direction:
+The ten annual cases are independent of the live I-95 direction:
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
@@ -45,9 +156,10 @@ case then calls Greenway entry `greenway:1:entry:EB` to Washington exit
 `i95:2249ND`; the annual case uses that outbound route and the reverse
 `i95:2232SO` to `greenway:1:exit:WB` return with the supplied schedule and
 income. A current lane-closure result is valid only when its exact route and
-grounded closure explanation are present. An annual `no_complete_paired_days`
-result is valid only after that exact route call; `route_unavailable` or a
-Springfield alternative remains a failure.
+grounded closure explanation are present. The golden Leesburg-to-Washington
+fixture is an authentic 08:30/17:30 partial result (51/60 complete pairs,
+85.0% coverage); the rejected artificial 12:00 zero-pair diagnostic is not
+corpus evidence.
 
 Run each targeted workflow five times as a delivery check (not a reliability
 claim):
