@@ -37,6 +37,15 @@ app if it would actually help.
 - AWS and Context7 MCP: documentation lookup
 - Exa: other search
 
+# Coding agents
+
+Use GPT-6 Astra (`gpt-6-astra`) for the parent coding agent. Keep project-graph
+nodes and specialist reviewers on their existing models, reasoning efforts, and
+instructions in `.codex/agents/`.
+
+TollChat's application agent stays on `gpt-5.6-luna`. Leave its model and prompt
+unchanged unless the user explicitly requests an application-agent change.
+
 # Secrets and delivery
 
 - Deployed credentials live in SSM Parameter Store (`SECURITY.md`). Never a

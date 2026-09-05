@@ -19,8 +19,10 @@ low-risk fixes.
 
 ## Workflow
 
-The parent orchestrates only. Do not inspect the repository, implement, or
-verify in the parent thread.
+The GPT-6 Astra parent normally orchestrates. When a subagent stalls, it may
+inspect the repository, diagnose failures, run focused checks, and take over
+bounded exploration or implementation under the intervention rules below.
+Keep subagents on their existing models and reasoning efforts in `.codex/agents/`.
 
 ```text
 intent → explorer → pre-checker → builder → review 1
@@ -34,7 +36,9 @@ PASS → human review
    inside that worktree gitignored and free of secrets.
 2. Update `.graph/STATE.md`, then spawn `explorer` with `fork_turns: "none"`,
    the intent, and the absolute worktree path. Wait for `explore.md`.
-3. If exploration has a blocking gap, update `STATE.md`, stop, and ask the user.
+3. If exploration has a blocking gap, update `STATE.md` and try to resolve it
+   from available evidence. Ask the user only when missing intent, information,
+   or authority prevents progress.
 4. Update `STATE.md`, then spawn `pre_checker` with `fork_turns: "none"`,
    `explore.md`, and the worktree. Builder starts only after a non-blocking
    `checklist.md`. Return blocking checklist gaps to the original explorer and
@@ -74,7 +78,42 @@ lines—Intent, Worktree, Current node, Next legal edge (including the review
 round or critical recheck), Blocked by. Never run parallel writers or
 allow subagents to spawn subagents; checker alone writes `verdict.md`, security
 reviewer writes no artifact, and checker plus security review are the only
-concurrent work.
+concurrent subagent work. The parent may inspect evidence while a subagent runs.
+
+## Orchestrator intervention
+
+Intervene when a subagent repeats a failed approach without new evidence,
+loops through the same review finding, reports an impasse, or cannot explain
+what its ongoing work will resolve. Elapsed time alone is not a failure:
+check whether a long-running command is making useful progress.
+
+1. Request the current finding, blocker, running command, and next concrete
+   result. Inspect the current artifacts and relevant code or output yourself;
+   do not keep sending status requests while the task remains stuck.
+2. Give a specific correction, a smaller subtask, or evidence that resolves the
+   blocker. If this does not restore progress, interrupt the subagent and take
+   over the bounded diagnosis, exploration, or implementation needed to unblock
+   it. Do not wait for another identical failure or ask the user to debug a
+   problem you can resolve within the authorized scope.
+3. Before taking over, confirm the subagent and any commands it started have
+   stopped, with no pending writes. Pause any other active review lane before
+   changing its inputs. Update `STATE.md` to name the parent intervention at the
+   current node and the next legal edge. Preserve existing edits and work only
+   in the assigned worktree; never allow overlapping writers.
+4. Record evidence and changes in the artifact for the current work:
+   `explore.md` for exploration or `change.md` for implementation. Resume the
+   original subagent with a concrete handoff when useful; replace it with a
+   fresh agent of the same role and configured model if its context is no
+   longer useful. References above to the original agent then mean its replacement.
+5. Preserve the gates: a pre-checker must produce a non-blocking checklist before
+   implementation. If intervention changes the scope or invalidates that
+   checklist, update exploration and obtain a new pre-check before building.
+   The parent never writes `checklist.md` or `verdict.md`, substitutes its own
+   checks for independent review, or declares its own repair approved. Send
+   every implementation repair through fresh checker and security-review lanes
+   at the current review stage (review 1 if review has not started). Do not reset
+   the review round, weaken acceptance criteria, or
+   bypass security, data-safety, or authorization boundaries to make progress.
 
 The pre-checker and review-1 checker must require a ponytail review before
 completion: the pre-checker reviews the explored design and draft checklist;
