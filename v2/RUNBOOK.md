@@ -4935,7 +4935,16 @@ select a target.
    `arn:aws:acm:us-east-1:920534282028:certificate/b857cc16-ed20-476e-a64a-883b1624f6c8`,
    and both ACM manifest rows must use that API-described certificate ARN; its
    synthetic Terraform ID is bookkeeping only and is never an API identity or
-   deletion target. Set `STATE_SSEKMS_KEY_ID` to the exact reviewed
+   deletion target. The no-ID Bedrock and AgentCore rows use canonical ARNs:
+   guardrail ARN (and `guardrail_arn,version` for its published version), the
+   runtime ARN, its `/runtime-endpoint/preview` ARN, and matching policy and
+   runtime log-group parents. Method settings use `{rest_api_id}-preview-*/*`;
+   reviewed Lambda log groups and the exact bundled site asset whose filename
+   contains `shared` use their exact API names. The validator still requires an
+   independent `account-scoped-live-api-v1` manifest with the same canonical
+   identity for every row; this offline comparison does not authorize live
+   retirement.
+   Set `STATE_SSEKMS_KEY_ID` to the exact reviewed
    production state CMK ID/ARN captured from the source object's
    `SSEKMSKeyId`; the source and archive must both be checked against it.
 

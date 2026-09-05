@@ -275,6 +275,63 @@ NEW_DEVELOPMENT_DENY_MARKERS = ("903859731897", "E33DVF3KT7BTAC")
 SAFE_REMOTE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:/_.@+=,-]{0,1023}$")
 CF_RECORD_ID = re.compile(r"^[0-9a-f]{32}$")
 CLOUDFRONT_ID = re.compile(r"^E[A-Z0-9]+$")
+BEDROCK_GUARDRAIL_ARN = re.compile(
+    rf"^arn:aws:bedrock:us-east-1:{PRODUCTION_ACCOUNT}:guardrail/"
+    r"[A-Za-z0-9][A-Za-z0-9_-]*$"
+)
+AGENTCORE_RUNTIME_ARN = re.compile(
+    rf"^arn:aws:bedrock-agentcore:us-east-1:{PRODUCTION_ACCOUNT}:runtime/"
+    r"nova_toll_v2_development-[A-Za-z0-9][A-Za-z0-9_-]*$"
+)
+AGENTCORE_RUNTIME_ID = re.compile(
+    r"^nova_toll_v2_development-[A-Za-z0-9][A-Za-z0-9_-]*$"
+)
+REST_API_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+POSITIVE_VERSION = re.compile(r"^[1-9][0-9]*$")
+SHARED_ASSET_ADDRESS = (
+    'aws_s3_object.site_assets["maplibre-gl-6.0.0/maplibre-gl-shared.mjs"]'
+)
+SHARED_ASSET_ID = (
+    "tollchat-site-920534282028-dev/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs"
+)
+LAMBDA_LOG_GROUP_IDS = {
+    "aws_cloudwatch_log_group.agent_usage_rollup": (
+        "/aws/lambda/tollchat-v2-agent-usage-rollup-dev"
+    ),
+    "aws_cloudwatch_log_group.loader": "/aws/lambda/toll-v2-pricing-loader-dev",
+    "aws_cloudwatch_log_group.publisher": "/aws/lambda/toll-v2-report-publisher-dev",
+    "aws_cloudwatch_log_group.tollchat_proxy": (
+        "/aws/lambda/tollchat-v2-chat-proxy-dev"
+    ),
+    "aws_cloudwatch_log_group.usage_publisher": (
+        "/aws/lambda/tollchat-v2-usage-publisher-dev"
+    ),
+}
+RUNTIME_IDENTITY_ADDRESSES = frozenset(
+    {
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+        'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]',
+        'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+        'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]',
+        'aws_cloudwatch_log_group.agentcore_runtime["preview"]',
+    }
+)
+FRAMEWORK_ADDRESSES = frozenset(
+    {
+        "aws_bedrock_guardrail.tollchat",
+        "aws_bedrock_guardrail_version.tollchat",
+        "aws_bedrockagentcore_agent_runtime.tollchat",
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+        'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]',
+        'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+        "aws_api_gateway_method_settings.tollchat",
+        'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]',
+        'aws_cloudwatch_log_group.agentcore_runtime["preview"]',
+        SHARED_ASSET_ADDRESS,
+    }
+    | LAMBDA_LOG_GROUP_IDS.keys()
+)
 LEGACY_APPLICATION_REMOTE_ID_CONSTRAINTS = {
     "cloudflare_dns_record": CF_RECORD_ID,
     "aws_cloudfront_distribution": CLOUDFRONT_ID,
@@ -352,6 +409,222 @@ class ValidationError(Exception):
     """The private state or plan cannot be approved for retirement."""
 
 
+def _identity_source(
+    value: dict[str, Any], *, state: bool, fields: tuple[str, ...]
+) -> dict[str, Any]:
+    attributes = value.get("attributes")
+    if isinstance(attributes, dict):
+        nested = cast(dict[str, Any], attributes)
+        for field in fields:
+            if field in value and field in nested and value[field] != nested[field]:
+                raise ValidationError
+    if state:
+        if not isinstance(attributes, dict):
+            raise ValidationError
+        source = cast(dict[str, Any], attributes)
+    else:
+        if attributes is not None and not isinstance(attributes, dict):
+            raise ValidationError
+        source = value
+    return source
+
+
+def _required_text(source: dict[str, Any], field: str) -> str:
+    value = source.get(field)
+    if not isinstance(value, str) or not value:
+        raise ValidationError
+    return value
+
+
+def _valid_guardrail_arn(value: str) -> bool:
+    return bool(BEDROCK_GUARDRAIL_ARN.fullmatch(value))
+
+
+def _valid_runtime_arn(value: str) -> bool:
+    return bool(AGENTCORE_RUNTIME_ARN.fullmatch(value))
+
+
+def _canonical_framework_identity(
+    value: dict[str, Any], address: str, *, state: bool
+) -> str | None:
+    if address == "aws_bedrock_guardrail.tollchat":
+        source = _identity_source(
+            value,
+            state=state,
+            fields=("guardrail_arn", "guardrail_id", "name", "version"),
+        )
+        guardrail_arn = _required_text(source, "guardrail_arn")
+        guardrail_id = _required_text(source, "guardrail_id")
+        name = _required_text(source, "name")
+        version = _required_text(source, "version")
+        if (
+            not _valid_guardrail_arn(guardrail_arn)
+            or guardrail_arn.rsplit("/", 1)[-1] != guardrail_id
+            or name != "nova-toll-v2-agent-dev"
+            or version != "DRAFT"
+        ):
+            raise ValidationError
+        return guardrail_arn
+    if address == "aws_bedrock_guardrail_version.tollchat":
+        source = _identity_source(
+            value, state=state, fields=("guardrail_arn", "version")
+        )
+        guardrail_arn = _required_text(source, "guardrail_arn")
+        version = _required_text(source, "version")
+        if not _valid_guardrail_arn(guardrail_arn) or not POSITIVE_VERSION.fullmatch(
+            version
+        ):
+            raise ValidationError
+        return f"{guardrail_arn},{version}"
+    if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+        source = _identity_source(
+            value,
+            state=state,
+            fields=("agent_runtime_arn", "agent_runtime_id", "agent_runtime_name"),
+        )
+        runtime_arn = _required_text(source, "agent_runtime_arn")
+        runtime_id = _required_text(source, "agent_runtime_id")
+        runtime_name = _required_text(source, "agent_runtime_name")
+        if (
+            not _valid_runtime_arn(runtime_arn)
+            or not AGENTCORE_RUNTIME_ID.fullmatch(runtime_id)
+            or runtime_arn.rsplit("/", 1)[-1] != runtime_id
+            or runtime_name != "nova_toll_v2_development"
+        ):
+            raise ValidationError
+        return runtime_arn
+    if address == "aws_bedrockagentcore_agent_runtime_endpoint.tollchat":
+        source = _identity_source(
+            value,
+            state=state,
+            fields=(
+                "agent_runtime_endpoint_arn",
+                "agent_runtime_arn",
+                "agent_runtime_id",
+                "name",
+            ),
+        )
+        endpoint_arn = _required_text(source, "agent_runtime_endpoint_arn")
+        runtime_arn = _required_text(source, "agent_runtime_arn")
+        runtime_id = _required_text(source, "agent_runtime_id")
+        name = _required_text(source, "name")
+        if (
+            not _valid_runtime_arn(runtime_arn)
+            or not _valid_runtime_arn(endpoint_arn.split("/runtime-endpoint/", 1)[0])
+            or endpoint_arn != f"{runtime_arn}/runtime-endpoint/preview"
+            or runtime_arn.rsplit("/", 1)[-1] != runtime_id
+            or not AGENTCORE_RUNTIME_ID.fullmatch(runtime_id)
+            or name != "preview"
+        ):
+            raise ValidationError
+        return endpoint_arn
+    if address in {
+        'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+        'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]',
+    }:
+        source = _identity_source(value, state=state, fields=("resource_arn",))
+        resource_arn = _required_text(source, "resource_arn")
+        if address.endswith('["runtime"]'):
+            if not _valid_runtime_arn(resource_arn):
+                raise ValidationError
+        elif not (
+            "/runtime-endpoint/preview" in resource_arn
+            and _valid_runtime_arn(resource_arn.split("/runtime-endpoint/", 1)[0])
+            and resource_arn.endswith("/runtime-endpoint/preview")
+        ):
+            raise ValidationError
+        return resource_arn
+    if address == "aws_api_gateway_method_settings.tollchat":
+        source = _identity_source(
+            value,
+            state=state,
+            fields=("id", "rest_api_id", "stage_name", "method_path"),
+        )
+        identifier = _required_text(source, "id")
+        rest_api_id = _required_text(source, "rest_api_id")
+        stage_name = _required_text(source, "stage_name")
+        method_path = _required_text(source, "method_path")
+        if (
+            not REST_API_ID.fullmatch(rest_api_id)
+            or stage_name != "preview"
+            or method_path != "*/*"
+            or identifier != f"{rest_api_id}-preview-*/*"
+        ):
+            raise ValidationError
+        return identifier
+    if address in LAMBDA_LOG_GROUP_IDS:
+        source = _identity_source(value, state=state, fields=("id", "name"))
+        identifier = _required_text(source, "id")
+        name = _required_text(source, "name")
+        expected = LAMBDA_LOG_GROUP_IDS[address]
+        if identifier != expected or name != expected:
+            raise ValidationError
+        return identifier
+    if address in {
+        'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]',
+        'aws_cloudwatch_log_group.agentcore_runtime["preview"]',
+    }:
+        source = _identity_source(value, state=state, fields=("id", "name"))
+        identifier = _required_text(source, "id")
+        name = _required_text(source, "name")
+        if not _canonical_identity_shape(address, identifier) or identifier != name:
+            raise ValidationError
+        return identifier
+    if address == SHARED_ASSET_ADDRESS:
+        source = _identity_source(value, state=state, fields=("id", "bucket", "key"))
+        identifier = _required_text(source, "id")
+        bucket = _required_text(source, "bucket")
+        key = _required_text(source, "key")
+        if identifier != SHARED_ASSET_ID or f"{bucket}/{key}" != SHARED_ASSET_ID:
+            raise ValidationError
+        return identifier
+    return None
+
+
+def _canonical_identity_shape(address: str, identifier: str) -> bool:
+    if address == "aws_bedrock_guardrail.tollchat":
+        return _valid_guardrail_arn(identifier)
+    if address == "aws_bedrock_guardrail_version.tollchat":
+        guardrail_arn, separator, version = identifier.partition(",")
+        return bool(
+            separator
+            and _valid_guardrail_arn(guardrail_arn)
+            and POSITIVE_VERSION.fullmatch(version)
+        )
+    if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+        return _valid_runtime_arn(identifier)
+    if address == "aws_bedrockagentcore_agent_runtime_endpoint.tollchat":
+        runtime_arn, separator, suffix = identifier.partition("/runtime-endpoint/")
+        return bool(
+            separator and suffix == "preview" and _valid_runtime_arn(runtime_arn)
+        )
+    if address.endswith('["runtime"]'):
+        return _valid_runtime_arn(identifier)
+    if address.endswith('["endpoint"]'):
+        runtime_arn, separator, suffix = identifier.partition("/runtime-endpoint/")
+        return bool(
+            separator and suffix == "preview" and _valid_runtime_arn(runtime_arn)
+        )
+    if address == "aws_api_gateway_method_settings.tollchat":
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]+-preview-\*/\*", identifier))
+    if address in LAMBDA_LOG_GROUP_IDS:
+        return identifier == LAMBDA_LOG_GROUP_IDS[address]
+    if address in {
+        'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]',
+        'aws_cloudwatch_log_group.agentcore_runtime["preview"]',
+    }:
+        prefix = "/aws/bedrock-agentcore/runtimes/"
+        suffix = address.split('["', 1)[1].split('"]', 1)[0]
+        runtime_name = identifier.removeprefix(prefix)
+        if not runtime_name.endswith(f"-{suffix}"):
+            return False
+        runtime_id = runtime_name[: -(len(suffix) + 1)]
+        return bool(
+            identifier.startswith(prefix) and AGENTCORE_RUNTIME_ID.fullmatch(runtime_id)
+        )
+    return address == SHARED_ASSET_ADDRESS and identifier == SHARED_ASSET_ID
+
+
 def _json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -383,6 +656,11 @@ def _remote_id(value: object, address: str, *, state: bool = False) -> str:
         if identifier != LEGACY_DEVELOPMENT_CERTIFICATE_ARN:
             raise ValidationError
         return LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    if address in FRAMEWORK_ADDRESSES:
+        identifier = _canonical_framework_identity(value, address, state=state)
+        if identifier is None:
+            raise ValidationError
+        return identifier
     identifier = direct if direct is not None else nested
     if not isinstance(identifier, str) or not SAFE_REMOTE_ID.fullmatch(identifier):
         raise ValidationError
@@ -460,14 +738,25 @@ def _validate_managed_address(
         and identifier != LEGACY_DEVELOPMENT_CERTIFICATE_ARN
     ):
         raise ValidationError
+    narrow_identity = address in FRAMEWORK_ADDRESSES and _canonical_identity_shape(
+        address, identifier
+    )
+    if address in FRAMEWORK_ADDRESSES and not narrow_identity:
+        raise ValidationError
     # Index keys are application names (for example a bundled asset named
     # ``maplibre-gl-shared.mjs``), not ownership evidence.  Apply the
     # denylist to the reviewed base address and remote identity only so a
     # harmless for_each key cannot impersonate a foundation/shared object.
     lowered = f"{base}\0{identifier}".lower()
+    if narrow_identity and address in RUNTIME_IDENTITY_ADDRESSES:
+        lowered = lowered.replace("nova_toll_v2_development", "", 1)
+    if narrow_identity and address == SHARED_ASSET_ADDRESS:
+        lowered = lowered.replace("shared", "", 1)
     if any(marker.lower() in lowered for marker in FOUNDATION_SHARED_DENY_MARKERS):
         raise ValidationError
     if any(marker.lower() in lowered for marker in NEW_DEVELOPMENT_DENY_MARKERS):
+        raise ValidationError
+    if not narrow_identity and not SAFE_REMOTE_ID.fullmatch(identifier):
         raise ValidationError
     constraint = LEGACY_APPLICATION_REMOTE_ID_CONSTRAINTS.get(address_type)
     if constraint is not None and not constraint.fullmatch(identifier):
@@ -614,6 +903,37 @@ def _identity_entries(document: dict[str, Any]) -> dict[str, StateEntry]:
     return entries
 
 
+def _validate_related_identities(entries: dict[str, StateEntry]) -> None:
+    guardrail = entries["aws_bedrock_guardrail.tollchat"].identifier
+    version = entries["aws_bedrock_guardrail_version.tollchat"].identifier
+    version_arn, separator, _ = version.partition(",")
+    if not separator or version_arn != guardrail:
+        raise ValidationError
+
+    runtime = entries["aws_bedrockagentcore_agent_runtime.tollchat"].identifier
+    endpoint = entries[
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat"
+    ].identifier
+    expected_endpoint = f"{runtime}/runtime-endpoint/preview"
+    if endpoint != expected_endpoint:
+        raise ValidationError
+    if (
+        entries['aws_bedrockagentcore_resource_policy.tollchat["runtime"]'].identifier
+        != runtime
+        or entries[
+            'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]'
+        ].identifier
+        != endpoint
+    ):
+        raise ValidationError
+    runtime_id = runtime.rsplit("/", 1)[-1]
+    for suffix in ("DEFAULT", "preview"):
+        address = f'aws_cloudwatch_log_group.agentcore_runtime["{suffix}"]'
+        expected_log_group = f"/aws/bedrock-agentcore/runtimes/{runtime_id}-{suffix}"
+        if entries[address].identifier != expected_log_group:
+            raise ValidationError
+
+
 def _compare_identity(state: StateSnapshot, identity: dict[str, StateEntry]) -> None:
     # State supplies the shape only; each exact address/type/ID pair must also
     # be present in the separately captured account-scoped live API manifest.
@@ -622,6 +942,7 @@ def _compare_identity(state: StateSnapshot, identity: dict[str, StateEntry]) -> 
     for address, entry in state.managed.items():
         if identity[address] != entry:
             raise ValidationError
+    _validate_related_identities(state.managed)
 
 
 def _digest(entries: dict[str, StateEntry]) -> str:
