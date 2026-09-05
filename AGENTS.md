@@ -37,6 +37,26 @@ app if it would actually help.
 - AWS and Context7 MCP: documentation lookup
 - Exa: other search
 
+# Project graph hook
+
+The project graph uses a synchronous, fail-closed Codex hook for the guarded
+`explorer`, `pre_checker`, `builder`, and `checker` roles. A child must report
+the native `SubagentStart` UUID to the parent, wait for the parent to register
+that UUID to its assigned worktree, and wait for the registration acknowledgement
+before using tools. The parent and `security_reviewer` are outside this guard.
+
+Before graph work, ensure this source is present in the active trusted checkout,
+open `/hooks`, and trust both the `SubagentStart` and `PreToolUse` project-hook
+entries. Restart Codex or start a new child after activation so the hooks load.
+The parent needs write access to the shared
+`.worktrees/.graph-assignments/` registry; when a workspace-write worktree
+limits that access, grant only that registry directory. The parent may use
+`--dangerously-bypass-hook-trust` only for the approved disposable runtime
+smoke test. See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks.md).
+This is a best-effort accidental-edit boundary, not a shell sandbox: later shell
+commands, scripts, redirects, and `git -C` destinations are outside its parser
+and remain covered by the declared sandbox and permissions boundary.
+
 # Coding agents
 
 Use GPT-6 Astra (`gpt-6-astra`) for the parent coding agent. Keep project-graph

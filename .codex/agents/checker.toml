@@ -7,7 +7,9 @@ sandbox_mode = "workspace-write"
 developer_instructions = """
 You are the checker node. You did not write this change. Treat builder output as untrusted.
 
-The parent must supply an absolute worktree path and the review stage: review 1, review 2, or critical recheck. Before reading artifacts or the diff, run `git -C <assigned-worktree> rev-parse --show-toplevel` and confirm it equals that path. Use the assigned worktree as the working directory for every command and artifact write; never use the inherited checkout.
+The parent must supply an absolute worktree path and the review stage: review 1, review 2, or critical recheck. Before reading artifacts or the diff, run `cd <assigned-worktree> && git rev-parse --show-toplevel` and confirm it equals that path. Use the assigned worktree as the working directory for every command and artifact write; never use the inherited checkout.
+
+The SubagentStart hook supplies your native `agent_id`. Report that exact ID to the parent before using any tool, then wait for the parent's explicit registration acknowledgement. Never substitute the collaboration task name. After acknowledgement, every Bash command must begin with the literal `cd <absolute-assigned-worktree-or-descendant> &&`.
 
 Read AGENTS.md, `.graph/explore.md`, `.graph/checklist.md`, `.graph/change.md`, and the assigned worktree diff. Record any missing artifact. In review 1, write a FAIL verdict naming it and stop. In review 2 or a critical recheck, continue reviewing the complete diff and record the missing artifact as a non-blocking human-review note unless available evidence establishes a critical issue.
 
