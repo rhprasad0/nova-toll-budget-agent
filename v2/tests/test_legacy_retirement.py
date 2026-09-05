@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -24,6 +25,13 @@ RETAINED = (
     "aws_bedrock_guardrail_version.tollchat",
 )
 ACCOUNT = "920534282028"
+CERTIFICATE_ADDRESS = "aws_acm_certificate.site"
+WAITER_ADDRESS = "aws_acm_certificate_validation.site"
+LEGACY_DEVELOPMENT_CERTIFICATE_ARN = (
+    "arn:aws:acm:us-east-1:920534282028:certificate/"
+    "b857cc16-ed20-476e-a64a-883b1624f6c8"
+)
+WAITER_BOOKKEEPING_ID = "0001-01-01 00:00:00 +0000 UTC"
 SOURCE_REMOTE = "https://github.com/rhprasad0/nova-toll-budget-agent.git"
 SOURCE_COMMIT = "4c1f684c02bf81187c2cc5f15883727cf15b11ee"
 DB_HOST = "nova-toll-db.abc.us-east-1.rds.amazonaws.com"
@@ -49,6 +57,10 @@ _database_spec.loader.exec_module(_database_module)
 
 
 def _instance_identifier(address: str) -> str:
+    if address == CERTIFICATE_ADDRESS:
+        return LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    if address == WAITER_ADDRESS:
+        return WAITER_BOOKKEEPING_ID
     if address == RETAINED[0]:
         return "a" * 32
     if address == RETAINED[1]:
@@ -71,7 +83,10 @@ def _instance_identifier(address: str) -> str:
 def _resource(address: str, identifier: str) -> dict[str, object]:
     base, _, raw_index = address.partition("[")
     resource_type, name = base.split(".", 1)
-    instance: dict[str, object] = {"attributes": {"id": identifier}}
+    attributes: dict[str, object] = {"id": identifier}
+    if address == WAITER_ADDRESS:
+        attributes["certificate_arn"] = LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    instance: dict[str, object] = {"attributes": attributes}
     if raw_index:
         instance["index_key"] = json.loads("[" + raw_index)[0]
     return {
@@ -109,7 +124,14 @@ def _state_and_plan(
             "type": address.split(".", 1)[0],
             "change": {
                 "actions": ["delete"],
-                "before": {"id": identifiers[address]},
+                "before": {
+                    "id": identifiers[address],
+                    **(
+                        {"certificate_arn": LEGACY_DEVELOPMENT_CERTIFICATE_ARN}
+                        if address == WAITER_ADDRESS
+                        else {}
+                    ),
+                },
                 "after": None,
             },
         }
@@ -130,7 +152,11 @@ def _state_and_plan(
         {
             "address": address,
             "type": address.split(".", 1)[0],
-            "id": identifiers[address],
+            "id": (
+                LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+                if address in {CERTIFICATE_ADDRESS, WAITER_ADDRESS}
+                else identifiers[address]
+            ),
             "account_id": ACCOUNT,
         }
         for address in sorted(INSTANCE_ADDRESSES)
@@ -169,6 +195,145 @@ def _run_validator(
         text=True,
         check=False,
     )
+
+
+def _state_resource(document: dict[str, Any], address: str) -> dict[str, Any]:
+    resource_type, name = address.split(".", 1)
+    resources = cast(list[dict[str, Any]], document["resources"])
+    return next(
+        item
+        for item in resources
+        if item.get("type") == resource_type and item.get("name") == name
+    )
+
+
+@pytest.mark.parametrize("location", ["state", "plan"])
+@pytest.mark.parametrize(
+    "certificate_arn",
+    [
+        pytest.param(None, id="missing"),
+        "arn:aws:acm:us-east-1:920534282028:certificate/other",
+        "arn:aws:acm:us-east-1:000000000000:certificate/b857cc16-ed20-476e-a64a-883b1624f6c8",
+        "arn:aws:acm:us-west-2:920534282028:certificate/b857cc16-ed20-476e-a64a-883b1624f6c8",
+    ],
+)
+def test_plan_validator_rejects_invalid_waiter_certificate_arn(
+    tmp_path: Path, location: str, certificate_arn: str | None
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    if location == "state":
+        document = json.loads(state.read_text(encoding="utf-8"))
+        attributes = _state_resource(document, WAITER_ADDRESS)["instances"][0][
+            "attributes"
+        ]
+        if certificate_arn is None:
+            attributes.pop("certificate_arn")
+        else:
+            attributes["certificate_arn"] = certificate_arn
+        state.write_text(json.dumps(document), encoding="utf-8")
+    else:
+        document = json.loads(plan.read_text(encoding="utf-8"))
+        before = next(
+            item["change"]["before"]
+            for item in document["resource_changes"]
+            if item["address"] == WAITER_ADDRESS
+        )
+        if certificate_arn is None:
+            before.pop("certificate_arn")
+        else:
+            before["certificate_arn"] = certificate_arn
+        plan.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+@pytest.mark.parametrize("location", ["state", "plan"])
+def test_plan_validator_rejects_waiter_id_disagreement(
+    tmp_path: Path, location: str
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    if location == "state":
+        document = json.loads(state.read_text(encoding="utf-8"))
+        instance = _state_resource(document, WAITER_ADDRESS)["instances"][0]
+        instance["id"] = "conflicting-bookkeeping-id"
+        state.write_text(json.dumps(document), encoding="utf-8")
+    else:
+        document = json.loads(plan.read_text(encoding="utf-8"))
+        before = next(
+            item["change"]["before"]
+            for item in document["resource_changes"]
+            if item["address"] == WAITER_ADDRESS
+        )
+        before["attributes"] = {"id": "conflicting-bookkeeping-id"}
+        plan.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+@pytest.mark.parametrize("address", [CERTIFICATE_ADDRESS, WAITER_ADDRESS])
+@pytest.mark.parametrize(
+    "certificate_arn",
+    [
+        pytest.param(None, id="missing"),
+        "arn:aws:acm:us-east-1:920534282028:certificate/other",
+        "arn:aws:acm:us-east-1:000000000000:certificate/b857cc16-ed20-476e-a64a-883b1624f6c8",
+        "arn:aws:acm:us-west-2:920534282028:certificate/b857cc16-ed20-476e-a64a-883b1624f6c8",
+    ],
+)
+def test_plan_validator_rejects_invalid_certificate_manifest_identity(
+    tmp_path: Path, address: str, certificate_arn: str | None
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(identity.read_text(encoding="utf-8"))
+    resource = next(
+        item for item in document["resources"] if item["address"] == address
+    )
+    if certificate_arn is None:
+        resource.pop("id")
+    else:
+        resource["id"] = certificate_arn
+    identity.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+def test_plan_validator_accepts_zero_time_waiter_bookkeeping_id(
+    tmp_path: Path,
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    state_document = json.loads(state.read_text(encoding="utf-8"))
+    waiter_state = _state_resource(state_document, WAITER_ADDRESS)["instances"][0]
+    assert waiter_state["attributes"]["id"] == WAITER_BOOKKEEPING_ID
+    assert waiter_state["attributes"]["certificate_arn"] == (
+        LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    )
+    plan_document = json.loads(plan.read_text(encoding="utf-8"))
+    waiter_before = next(
+        item["change"]["before"]
+        for item in plan_document["resource_changes"]
+        if item["address"] == WAITER_ADDRESS
+    )
+    assert waiter_before["id"] == WAITER_BOOKKEEPING_ID
+    assert waiter_before["certificate_arn"] == LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    identity_document = json.loads(identity.read_text(encoding="utf-8"))
+    waiter_identity = next(
+        item
+        for item in identity_document["resources"]
+        if item["address"] == WAITER_ADDRESS
+    )
+    assert waiter_identity["id"] == LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    result = _run_validator(state, plan, identity)
+    assert result.returncode == 0, result.stderr
+    assert WAITER_BOOKKEEPING_ID not in result.stdout
+
+
+def test_plan_validator_rejects_wrong_certificate_state_identity(
+    tmp_path: Path,
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(state.read_text(encoding="utf-8"))
+    _state_resource(document, CERTIFICATE_ADDRESS)["instances"][0]["attributes"][
+        "id"
+    ] = "arn:aws:acm:us-east-1:920534282028:certificate/other"
+    state.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
 
 
 def test_plan_validator_accepts_only_exact_delete_set(tmp_path: Path) -> None:
