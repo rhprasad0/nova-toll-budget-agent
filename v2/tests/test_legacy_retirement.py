@@ -34,6 +34,30 @@ LEGACY_DEVELOPMENT_CERTIFICATE_ARN = (
 WAITER_BOOKKEEPING_ID = "0001-01-01 00:00:00 +0000 UTC"
 SOURCE_REMOTE = "https://github.com/rhprasad0/nova-toll-budget-agent.git"
 SOURCE_COMMIT = "4c1f684c02bf81187c2cc5f15883727cf15b11ee"
+GUARDRAIL_ID = "guardrailfixture123"
+GUARDRAIL_ARN = f"arn:aws:bedrock:us-east-1:{ACCOUNT}:guardrail/{GUARDRAIL_ID}"
+GUARDRAIL_VERSION = "7"
+RUNTIME_ID = "nova_toll_v2_development-abc123def456"
+RUNTIME_ARN = f"arn:aws:bedrock-agentcore:us-east-1:{ACCOUNT}:runtime/{RUNTIME_ID}"
+ENDPOINT_ARN = f"{RUNTIME_ARN}/runtime-endpoint/preview"
+REST_API_ID = "a1b2c3d4e5"
+METHOD_SETTINGS_ID = f"{REST_API_ID}-preview-*/*"
+SHARED_ASSET_ID = (
+    f"tollchat-site-{ACCOUNT}-dev/assets/maplibre-gl-6.0.0/maplibre-gl-shared.mjs"
+)
+LAMBDA_LOG_GROUP_IDS = {
+    "aws_cloudwatch_log_group.agent_usage_rollup": (
+        "/aws/lambda/tollchat-v2-agent-usage-rollup-dev"
+    ),
+    "aws_cloudwatch_log_group.loader": "/aws/lambda/toll-v2-pricing-loader-dev",
+    "aws_cloudwatch_log_group.publisher": "/aws/lambda/toll-v2-report-publisher-dev",
+    "aws_cloudwatch_log_group.tollchat_proxy": (
+        "/aws/lambda/tollchat-v2-chat-proxy-dev"
+    ),
+    "aws_cloudwatch_log_group.usage_publisher": (
+        "/aws/lambda/tollchat-v2-usage-publisher-dev"
+    ),
+}
 DB_HOST = "nova-toll-db.abc.us-east-1.rds.amazonaws.com"
 DB_PORT = 5432
 SECRET_ARN = "arn:aws:secretsmanager:us-east-1:920534282028:secret:nova-toll-db-fixture"
@@ -65,10 +89,30 @@ def _instance_identifier(address: str) -> str:
         return "a" * 32
     if address == RETAINED[1]:
         return "b" * 32
-    if address == RETAINED[2]:
-        return "c" * 32
-    if address == RETAINED[3]:
-        return "d" * 32
+    if address == "aws_bedrock_guardrail.tollchat":
+        return GUARDRAIL_ARN
+    if address == "aws_bedrock_guardrail_version.tollchat":
+        return f"{GUARDRAIL_ARN},{GUARDRAIL_VERSION}"
+    if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+        return RUNTIME_ARN
+    if address == "aws_bedrockagentcore_agent_runtime_endpoint.tollchat":
+        return ENDPOINT_ARN
+    if address.endswith('["runtime"]'):
+        return RUNTIME_ARN
+    if address.endswith('["endpoint"]'):
+        return ENDPOINT_ARN
+    if address == "aws_api_gateway_method_settings.tollchat":
+        return METHOD_SETTINGS_ID
+    if address in LAMBDA_LOG_GROUP_IDS:
+        return LAMBDA_LOG_GROUP_IDS[address]
+    if address == 'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]':
+        return f"/aws/bedrock-agentcore/runtimes/{RUNTIME_ID}-DEFAULT"
+    if address == 'aws_cloudwatch_log_group.agentcore_runtime["preview"]':
+        return f"/aws/bedrock-agentcore/runtimes/{RUNTIME_ID}-preview"
+    if address == (
+        'aws_s3_object.site_assets["maplibre-gl-6.0.0/maplibre-gl-shared.mjs"]'
+    ):
+        return SHARED_ASSET_ID
     if address == "aws_lambda_function.loader":
         return "f" * 32
     if address == "aws_lambda_function.publisher":
@@ -80,10 +124,61 @@ def _instance_identifier(address: str) -> str:
     return hashlib.sha256(address.encode()).hexdigest()
 
 
+def _provider_fields(address: str, identifier: str) -> dict[str, object]:
+    if address == "aws_bedrock_guardrail.tollchat":
+        return {
+            "guardrail_arn": GUARDRAIL_ARN,
+            "guardrail_id": GUARDRAIL_ID,
+            "name": "nova-toll-v2-agent-dev",
+            "version": "DRAFT",
+        }
+    if address == "aws_bedrock_guardrail_version.tollchat":
+        return {"guardrail_arn": GUARDRAIL_ARN, "version": GUARDRAIL_VERSION}
+    if address == "aws_bedrockagentcore_agent_runtime.tollchat":
+        return {
+            "agent_runtime_arn": RUNTIME_ARN,
+            "agent_runtime_id": RUNTIME_ID,
+            "agent_runtime_name": "nova_toll_v2_development",
+        }
+    if address == "aws_bedrockagentcore_agent_runtime_endpoint.tollchat":
+        return {
+            "agent_runtime_endpoint_arn": ENDPOINT_ARN,
+            "agent_runtime_arn": RUNTIME_ARN,
+            "agent_runtime_id": RUNTIME_ID,
+            "name": "preview",
+        }
+    if address.endswith('["runtime"]'):
+        return {"resource_arn": RUNTIME_ARN}
+    if address.endswith('["endpoint"]'):
+        return {"resource_arn": ENDPOINT_ARN}
+    if address == "aws_api_gateway_method_settings.tollchat":
+        return {
+            "id": METHOD_SETTINGS_ID,
+            "rest_api_id": REST_API_ID,
+            "stage_name": "preview",
+            "method_path": "*/*",
+        }
+    if address in LAMBDA_LOG_GROUP_IDS:
+        return {"id": identifier, "name": identifier}
+    if address.startswith("aws_cloudwatch_log_group.agentcore_runtime["):
+        return {"id": identifier, "name": identifier}
+    if address == (
+        'aws_s3_object.site_assets["maplibre-gl-6.0.0/maplibre-gl-shared.mjs"]'
+    ):
+        bucket, _, key = identifier.partition("/")
+        return {"id": identifier, "bucket": bucket, "key": key}
+    if address == WAITER_ADDRESS:
+        return {
+            "id": identifier,
+            "certificate_arn": LEGACY_DEVELOPMENT_CERTIFICATE_ARN,
+        }
+    return {"id": identifier}
+
+
 def _resource(address: str, identifier: str) -> dict[str, object]:
     base, _, raw_index = address.partition("[")
     resource_type, name = base.split(".", 1)
-    attributes: dict[str, object] = {"id": identifier}
+    attributes = _provider_fields(address, identifier)
     if address == WAITER_ADDRESS:
         attributes["certificate_arn"] = LEGACY_DEVELOPMENT_CERTIFICATE_ARN
     instance: dict[str, object] = {"attributes": attributes}
@@ -124,14 +219,7 @@ def _state_and_plan(
             "type": address.split(".", 1)[0],
             "change": {
                 "actions": ["delete"],
-                "before": {
-                    "id": identifiers[address],
-                    **(
-                        {"certificate_arn": LEGACY_DEVELOPMENT_CERTIFICATE_ARN}
-                        if address == WAITER_ADDRESS
-                        else {}
-                    ),
-                },
+                "before": _provider_fields(address, identifiers[address]),
                 "after": None,
             },
         }
@@ -197,6 +285,23 @@ def _run_validator(
     )
 
 
+def _run_state_only(state: Path, identity: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(PLAN_VALIDATOR),
+            "--state",
+            str(state),
+            "--identity-manifest",
+            str(identity),
+            "--state-only",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def _state_resource(document: dict[str, Any], address: str) -> dict[str, Any]:
     resource_type, name = address.split(".", 1)
     resources = cast(list[dict[str, Any]], document["resources"])
@@ -204,6 +309,26 @@ def _state_resource(document: dict[str, Any], address: str) -> dict[str, Any]:
         item
         for item in resources
         if item.get("type") == resource_type and item.get("name") == name
+    )
+
+
+def _state_instance(document: dict[str, Any], address: str) -> dict[str, Any]:
+    resources = cast(list[dict[str, Any]], document["resources"])
+    for resource in resources:
+        instances = cast(list[dict[str, Any]], resource["instances"])
+        for instance in instances:
+            if (
+                _validator_module._address(resource, instance, len(instances))
+                == address
+            ):
+                return instance
+    raise AssertionError(address)
+
+
+def _plan_before(document: dict[str, Any], address: str) -> dict[str, Any]:
+    changes = cast(list[dict[str, Any]], document["resource_changes"])
+    return next(
+        item["change"]["before"] for item in changes if item["address"] == address
     )
 
 
@@ -349,6 +474,343 @@ def test_plan_validator_accepts_only_exact_delete_set(tmp_path: Path) -> None:
         value not in result.stdout
         for value in ("loader", "f" * 32, str(state), ACCOUNT)
     )
+
+
+def test_plan_validator_accepts_state_only_identity_check(tmp_path: Path) -> None:
+    state, _, identity = _state_and_plan(tmp_path)
+    result = _run_state_only(state, identity)
+    assert result.returncode == 0, result.stderr
+    manifest = json.loads(result.stdout)
+    assert manifest["state_instances"] == 166
+    assert manifest["retained_instances"] == 4
+    assert "delete_instances" not in manifest
+
+
+@pytest.mark.parametrize(
+    ("address", "field", "replacement"),
+    [
+        (
+            "aws_bedrock_guardrail.tollchat",
+            "guardrail_arn",
+            "arn:aws:bedrock:us-west-2:920534282028:guardrail/guardrailfixture123",
+        ),
+        ("aws_bedrock_guardrail_version.tollchat", "version", "DRAFT"),
+        (
+            "aws_bedrockagentcore_agent_runtime.tollchat",
+            "agent_runtime_arn",
+            f"arn:aws:bedrock-agentcore:us-east-1:000000000000:runtime/{RUNTIME_ID}",
+        ),
+        (
+            "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+            "agent_runtime_id",
+            "different-runtime-id",
+        ),
+        (
+            'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+            "resource_arn",
+            ENDPOINT_ARN,
+        ),
+        ("aws_api_gateway_method_settings.tollchat", "stage_name", "development"),
+        (
+            "aws_cloudwatch_log_group.loader",
+            "id",
+            "/aws/lambda/toll-v2-pricing-loader-production",
+        ),
+        (
+            'aws_cloudwatch_log_group.agentcore_runtime["preview"]',
+            "name",
+            "/aws/bedrock-agentcore/runtimes/other-runtime-preview",
+        ),
+        (
+            'aws_s3_object.site_assets["maplibre-gl-6.0.0/maplibre-gl-shared.mjs"]',
+            "bucket",
+            "other-site-bucket",
+        ),
+    ],
+)
+def test_plan_validator_rejects_invalid_provider_identity_state(
+    tmp_path: Path, address: str, field: str, replacement: object
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(state.read_text(encoding="utf-8"))
+    _state_instance(document, address)["attributes"][field] = replacement
+    state.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+@pytest.mark.parametrize(
+    ("address", "field", "replacement"),
+    [
+        (
+            "aws_bedrockagentcore_agent_runtime.tollchat",
+            "agent_runtime_arn",
+            f"arn:aws:bedrock-agentcore:us-east-1:000000000000:runtime/{RUNTIME_ID}",
+        ),
+        (
+            "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+            "agent_runtime_endpoint_arn",
+            f"arn:aws:bedrock-agentcore:us-west-2:{ACCOUNT}:runtime/{RUNTIME_ID}/runtime-endpoint/preview",
+        ),
+        (
+            'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]',
+            "resource_arn",
+            RUNTIME_ARN,
+        ),
+        ("aws_api_gateway_method_settings.tollchat", "method_path", "GET/*"),
+        (
+            "aws_cloudwatch_log_group.publisher",
+            "name",
+            "/aws/lambda/toll-v2-report-publisher-production",
+        ),
+        (
+            'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]',
+            "id",
+            "/aws/bedrock-agentcore/runtimes/other-runtime-DEFAULT",
+        ),
+        (
+            'aws_s3_object.site_assets["maplibre-gl-6.0.0/maplibre-gl-shared.mjs"]',
+            "key",
+            "assets/maplibre-gl-6.0.0/other.mjs",
+        ),
+    ],
+)
+def test_plan_validator_rejects_invalid_provider_identity_plan(
+    tmp_path: Path, address: str, field: str, replacement: object
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(plan.read_text(encoding="utf-8"))
+    _plan_before(document, address)[field] = replacement
+    plan.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+@pytest.mark.parametrize(
+    ("address", "field"),
+    [
+        ("aws_bedrock_guardrail.tollchat", "guardrail_id"),
+        ("aws_bedrock_guardrail_version.tollchat", "version"),
+        ("aws_bedrockagentcore_agent_runtime.tollchat", "agent_runtime_id"),
+        ("aws_bedrockagentcore_agent_runtime_endpoint.tollchat", "name"),
+        ('aws_bedrockagentcore_resource_policy.tollchat["runtime"]', "resource_arn"),
+        ("aws_api_gateway_method_settings.tollchat", "rest_api_id"),
+        ("aws_cloudwatch_log_group.loader", "name"),
+        ('aws_cloudwatch_log_group.agentcore_runtime["preview"]', "id"),
+        (
+            'aws_s3_object.site_assets["maplibre-gl-6.0.0/maplibre-gl-shared.mjs"]',
+            "bucket",
+        ),
+    ],
+)
+def test_plan_validator_rejects_missing_provider_identity_field(
+    tmp_path: Path, address: str, field: str
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(state.read_text(encoding="utf-8"))
+    _state_instance(document, address)["attributes"].pop(field)
+    state.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+def test_plan_validator_rejects_framework_raw_id_disagreement(
+    tmp_path: Path,
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    state_document = json.loads(state.read_text(encoding="utf-8"))
+    state_instance = _state_instance(
+        state_document, "aws_bedrockagentcore_agent_runtime.tollchat"
+    )
+    state_instance["id"] = "raw-runtime-id"
+    state_instance["attributes"]["id"] = "other-raw-runtime-id"
+    state.write_text(json.dumps(state_document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+    state, plan, identity = _state_and_plan(tmp_path)
+    plan_document = json.loads(plan.read_text(encoding="utf-8"))
+    before = _plan_before(
+        plan_document, "aws_bedrockagentcore_agent_runtime_endpoint.tollchat"
+    )
+    before["id"] = "raw-endpoint-id"
+    before["attributes"] = {"id": "other-raw-endpoint-id"}
+    plan.write_text(json.dumps(plan_document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+def test_plan_validator_rejects_unrelated_shared_and_wildcard_identities(
+    tmp_path: Path,
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(identity.read_text(encoding="utf-8"))
+    resource = next(
+        item
+        for item in document["resources"]
+        if item["address"] == 'aws_s3_object.site_assets["LICENSE.txt"]'
+    )
+    resource["id"] = "tollchat-site-920534282028-dev/assets/shared-other.txt"
+    identity.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+    state, plan, identity = _state_and_plan(tmp_path)
+    document = json.loads(identity.read_text(encoding="utf-8"))
+    resource = next(
+        item
+        for item in document["resources"]
+        if item["address"] == "aws_lambda_function.tollchat_proxy"
+    )
+    resource["id"] = "arbitrary/*/identifier"
+    identity.write_text(json.dumps(document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+def test_plan_validator_rejects_shared_runtime_namespace_when_consistent(
+    tmp_path: Path,
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    shared_runtime_id = "nova_toll_v2_development-shared"
+    shared_runtime_arn = (
+        f"arn:aws:bedrock-agentcore:us-east-1:{ACCOUNT}:runtime/{shared_runtime_id}"
+    )
+    shared_endpoint_arn = f"{shared_runtime_arn}/runtime-endpoint/preview"
+    state_document = json.loads(state.read_text(encoding="utf-8"))
+    runtime = _state_instance(
+        state_document, "aws_bedrockagentcore_agent_runtime.tollchat"
+    )["attributes"]
+    runtime.update(
+        {"agent_runtime_arn": shared_runtime_arn, "agent_runtime_id": shared_runtime_id}
+    )
+    endpoint = _state_instance(
+        state_document, "aws_bedrockagentcore_agent_runtime_endpoint.tollchat"
+    )["attributes"]
+    endpoint.update(
+        {
+            "agent_runtime_endpoint_arn": shared_endpoint_arn,
+            "agent_runtime_arn": shared_runtime_arn,
+            "agent_runtime_id": shared_runtime_id,
+        }
+    )
+    for address, resource_arn in (
+        (
+            'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+            shared_runtime_arn,
+        ),
+        (
+            'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]',
+            shared_endpoint_arn,
+        ),
+    ):
+        _state_instance(state_document, address)["attributes"]["resource_arn"] = (
+            resource_arn
+        )
+    for suffix in ("DEFAULT", "preview"):
+        log_id = f"/aws/bedrock-agentcore/runtimes/{shared_runtime_id}-{suffix}"
+        log = _state_instance(
+            state_document, f'aws_cloudwatch_log_group.agentcore_runtime["{suffix}"]'
+        )["attributes"]
+        log.update({"id": log_id, "name": log_id})
+    state.write_text(json.dumps(state_document), encoding="utf-8")
+
+    plan_document = json.loads(plan.read_text(encoding="utf-8"))
+    before = _plan_before(plan_document, "aws_bedrockagentcore_agent_runtime.tollchat")
+    before.update(
+        {"agent_runtime_arn": shared_runtime_arn, "agent_runtime_id": shared_runtime_id}
+    )
+    before = _plan_before(
+        plan_document, "aws_bedrockagentcore_agent_runtime_endpoint.tollchat"
+    )
+    before.update(
+        {
+            "agent_runtime_endpoint_arn": shared_endpoint_arn,
+            "agent_runtime_arn": shared_runtime_arn,
+            "agent_runtime_id": shared_runtime_id,
+        }
+    )
+    for address, resource_arn in (
+        (
+            'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
+            shared_runtime_arn,
+        ),
+        (
+            'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]',
+            shared_endpoint_arn,
+        ),
+    ):
+        _plan_before(plan_document, address)["resource_arn"] = resource_arn
+    for suffix in ("DEFAULT", "preview"):
+        log_id = f"/aws/bedrock-agentcore/runtimes/{shared_runtime_id}-{suffix}"
+        _plan_before(
+            plan_document, f'aws_cloudwatch_log_group.agentcore_runtime["{suffix}"]'
+        ).update({"id": log_id, "name": log_id})
+    plan.write_text(json.dumps(plan_document), encoding="utf-8")
+
+    identity_document = json.loads(identity.read_text(encoding="utf-8"))
+    identity_ids = {
+        "aws_bedrockagentcore_agent_runtime.tollchat": shared_runtime_arn,
+        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": shared_endpoint_arn,
+        'aws_bedrockagentcore_resource_policy.tollchat["runtime"]': shared_runtime_arn,
+        'aws_bedrockagentcore_resource_policy.tollchat["endpoint"]': shared_endpoint_arn,
+        'aws_cloudwatch_log_group.agentcore_runtime["DEFAULT"]': (
+            f"/aws/bedrock-agentcore/runtimes/{shared_runtime_id}-DEFAULT"
+        ),
+        'aws_cloudwatch_log_group.agentcore_runtime["preview"]': (
+            f"/aws/bedrock-agentcore/runtimes/{shared_runtime_id}-preview"
+        ),
+    }
+    for resource in identity_document["resources"]:
+        if resource["address"] in identity_ids:
+            resource["id"] = identity_ids[resource["address"]]
+    identity.write_text(json.dumps(identity_document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
+
+
+def test_plan_validator_rejects_shared_guardrail_state_only(
+    tmp_path: Path,
+) -> None:
+    state, _, identity = _state_and_plan(tmp_path)
+    shared_arn = f"arn:aws:bedrock:us-east-1:{ACCOUNT}:guardrail/shared"
+    state_document = json.loads(state.read_text(encoding="utf-8"))
+    guardrail = _state_instance(state_document, "aws_bedrock_guardrail.tollchat")[
+        "attributes"
+    ]
+    guardrail.update({"guardrail_arn": shared_arn, "guardrail_id": "shared"})
+    _state_instance(state_document, "aws_bedrock_guardrail_version.tollchat")[
+        "attributes"
+    ]["guardrail_arn"] = shared_arn
+    state.write_text(json.dumps(state_document), encoding="utf-8")
+    identity_document = json.loads(identity.read_text(encoding="utf-8"))
+    for resource in identity_document["resources"]:
+        if resource["address"] == "aws_bedrock_guardrail.tollchat":
+            resource["id"] = shared_arn
+        elif resource["address"] == "aws_bedrock_guardrail_version.tollchat":
+            resource["id"] = f"{shared_arn},{GUARDRAIL_VERSION}"
+    identity.write_text(json.dumps(identity_document), encoding="utf-8")
+    assert _run_state_only(state, identity).returncode != 0
+
+
+def test_plan_validator_rejects_foundation_method_settings_identity(
+    tmp_path: Path,
+) -> None:
+    state, plan, identity = _state_and_plan(tmp_path)
+    foundation_id = "foundation-preview-*/*"
+    state_document = json.loads(state.read_text(encoding="utf-8"))
+    _state_instance(state_document, "aws_api_gateway_method_settings.tollchat")[
+        "attributes"
+    ].update(
+        {
+            "id": foundation_id,
+            "rest_api_id": "foundation",
+        }
+    )
+    state.write_text(json.dumps(state_document), encoding="utf-8")
+    plan_document = json.loads(plan.read_text(encoding="utf-8"))
+    _plan_before(plan_document, "aws_api_gateway_method_settings.tollchat").update(
+        {"id": foundation_id, "rest_api_id": "foundation"}
+    )
+    plan.write_text(json.dumps(plan_document), encoding="utf-8")
+    identity_document = json.loads(identity.read_text(encoding="utf-8"))
+    for resource in identity_document["resources"]:
+        if resource["address"] == "aws_api_gateway_method_settings.tollchat":
+            resource["id"] = foundation_id
+    identity.write_text(json.dumps(identity_document), encoding="utf-8")
+    assert _run_validator(state, plan, identity).returncode != 0
 
 
 def test_plan_validator_handles_approved_data_separately(tmp_path: Path) -> None:
