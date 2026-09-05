@@ -1387,13 +1387,24 @@ def verify_post_purge(
 
 
 def _waf_configuration(aws: GuardedAWS) -> dict[str, Any]:
-    response = aws.call("wafv2", "list_web_acls", Scope="CLOUDFRONT")
-    items = _list(response.get("WebACLs", []), "WAF ACL inventory")
     matches: list[Mapping[str, Any]] = []
-    for item in items:
-        candidate = _mapping(item, "WAF ACL")
-        if candidate.get("Name") == WAF_NAME:
-            matches.append(candidate)
+    marker: str | None = None
+    seen_markers: set[str] = set()
+    while True:
+        params = {"Scope": "CLOUDFRONT"}
+        if marker is not None:
+            params["NextMarker"] = marker
+        response = aws.call("wafv2", "list_web_acls", **params)
+        for item in _list(response.get("WebACLs", []), "WAF ACL inventory"):
+            candidate = _mapping(item, "WAF ACL")
+            if candidate.get("Name") == WAF_NAME:
+                matches.append(candidate)
+        if response.get("NextMarker") in (None, ""):
+            break
+        marker = _text(response["NextMarker"], "WAF NextMarker")
+        if marker in seen_markers:
+            raise RetirementError("WAF inventory pagination repeated a marker")
+        seen_markers.add(marker)
     if len(matches) != 1:
         raise RetirementError("exact WAF ACL is not unique")
     arn = _text(matches[0].get("ARN"), "WAF ARN")

@@ -551,6 +551,46 @@ def test_lifecycle_change_preserves_transition_and_rule_fields() -> None:
         )
 
 
+@pytest.mark.parametrize("mode", ("later", "duplicate", "repeated", "invalid"))
+def test_waf_inventory_reads_all_pages_before_selecting_acl(mode: str) -> None:
+    arn = f"arn:aws:wafv2:us-east-1:{module.PRODUCTION_ACCOUNT}:global/webacl/legacy/id"
+    target = {"Name": module.WAF_NAME, "ARN": arn}
+    first: dict[str, object] = {
+        "WebACLs": [target] if mode == "duplicate" else [],
+        "NextMarker": "next-page",
+    }
+    last: dict[str, object] = {"WebACLs": [target]}
+    if mode == "repeated":
+        last["NextMarker"] = "next-page"
+    elif mode == "invalid":
+        last["NextMarker"] = 12
+    pages = [first, last]
+    requests: list[dict[str, object]] = []
+
+    class AWS:
+        def call(
+            self, service: str, operation: str, **params: object
+        ) -> dict[str, object]:
+            assert service == "wafv2"
+            if operation == "list_web_acls":
+                requests.append(params)
+                return pages.pop(0)
+            assert operation == "get_logging_configuration"
+            assert mode == "later" and not pages
+            assert params == {"ResourceArn": arn}
+            return {"LoggingConfiguration": {"ResourceArn": arn}}
+
+    if mode == "later":
+        assert module._waf_configuration(AWS()) == {"ResourceArn": arn}
+    else:
+        with pytest.raises(module.RetirementError):
+            module._waf_configuration(AWS())
+    assert requests == [
+        {"Scope": "CLOUDFRONT"},
+        {"Scope": "CLOUDFRONT", "NextMarker": "next-page"},
+    ]
+
+
 def test_draining_contract_is_exactly_900_seconds() -> None:
     assert module.DRAIN_SECONDS == 900
     assert module.HISTORICAL_UNMANAGED_COUNT == 1655
