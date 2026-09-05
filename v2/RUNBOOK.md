@@ -4870,6 +4870,184 @@ select a target.
    SQL, or secret-bearing errors. S3 versioning supplies recovery, but this
    bucket has no Object Lock; do not test restore or delete against production.
 
+### Bounded bucket archive and purge phase
+
+The state archive above is already the canonical state evidence.  Do not copy
+it again during this phase.  The bucket helper uses the distinct
+`nova-toll/v2/development/retirement-archives/objects/` prefix and writes one
+content-free, SSE-KMS encrypted manifest under the same existing state bucket.
+The helper never deletes a bucket, the archive, or a shared bucket.
+
+Run this phase only after the fresh 166-entry account-scoped live manifest,
+the 25 exact S3 mappings, and the state identity checks above have passed.  The
+sanitized design captures in the graph are review input only; they do not
+replace these reads.  The exact source scope is fixed:
+
+```text
+old buckets:
+  tollchat-site-920534282028-dev
+  aws-waf-logs-tollchat-agent-reports-920534282028-dev
+shared bucket (objects only; never delete this bucket):
+  nova-toll-agentcore-920534282028/runtime/v2/agentcore-dev.zip
+  nova-toll-agentcore-920534282028/lambda/v2/chat-proxy-dev.zip
+managed old objects retained for Terraform: 22 site keys + 1 registry key
+historical reconciliation only: 1,655 unmanaged old objects, 5 shared versions
+```
+
+Use the helper only from the production account and `us-east-1`.  Its boto3
+clients use `total_max_attempts=1`, assert the caller account at session
+construction and before each non-S3 API request, pass
+`ExpectedBucketOwner=920534282028` and (for copies)
+`ExpectedSourceBucketOwner=920534282028` to S3, and fail closed on an
+unknown, partial, timeout, 412, or ambiguous result.  It streams plaintext
+SHA-256 digests and keeps raw bodies out of stdout and evidence files.  The
+private snapshot contains only metadata needed for comparison; the archive
+manifest containing metadata and tags is encrypted with the retained state CMK.
+
+The operator must refresh the old delivery-role and workflow separation before
+the first capture.  The old role must be absent, and both queued and
+in-progress GitHub Actions runs for the old production delivery must be zero;
+the current `903859731897` development delivery role and artifact bucket are
+not part of this retirement:
+
+Set `RETIRE_LEGACY_EVIDENCE_DIR` to an absolute private directory outside the
+repository before running the block.  The directory retains the digest-only
+snapshots, writer freeze evidence, exact encrypted-manifest VersionId/digest,
+and sanitized phase summaries for review and Terraform revalidation; only
+temporary material is eligible for cleanup.
+
+```sh
+(
+set -euo pipefail
+umask 077
+ROOT="$(git rev-parse --show-toplevel)"
+HELPER="$ROOT/v2/scripts/retire_legacy_development_buckets.py"
+EVIDENCE_DIR="${RETIRE_LEGACY_EVIDENCE_DIR:?set an absolute private durable evidence directory outside the repository}"
+case "$EVIDENCE_DIR" in
+  "$ROOT"|"$ROOT"/*) exit 1 ;;
+  /*) ;;
+  *) exit 1 ;;
+esac
+mkdir -p "$EVIDENCE_DIR"
+chmod 700 "$EVIDENCE_DIR"
+INITIAL="$EVIDENCE_DIR/initial.json"
+FROZEN="$EVIDENCE_DIR/frozen.json"
+WRITERS="$EVIDENCE_DIR/writers.json"
+ARCHIVE_STATE="$EVIDENCE_DIR/archive-state.json"
+LIVE_IDENTITY_MANIFEST="${LIVE_IDENTITY_MANIFEST:?set the fresh 166-entry live identity manifest}"
+MANAGED_OBJECT_MAPPING="${MANAGED_OBJECT_MAPPING:?set the fresh 25-row managed-object mapping}"
+STATE_SSEKMS_KEY_ID="${STATE_SSEKMS_KEY_ID:?set the retained state CMK from the fresh state head}"
+for name in "${!AWS_@}"; do
+  case "$name" in
+    AWS_PROFILE|AWS_DEFAULT_REGION) ;;
+    *) exit 1 ;;
+  esac
+done
+test "${AWS_PROFILE:-nova-toll-prod}" = "nova-toll-prod"
+test "${AWS_DEFAULT_REGION:-us-east-1}" = "us-east-1"
+test "$(aws --profile nova-toll-prod --region us-east-1 sts get-caller-identity --query Account --output text)" = "920534282028"
+ROLE_STATUS=0
+ROLE_ERROR="$(aws --profile nova-toll-prod --region us-east-1 iam get-role --role-name nova-toll-v2-development-delivery 2>&1 >/dev/null)" || ROLE_STATUS=$?
+if test "$ROLE_STATUS" -eq 0; then
+  exit 1
+fi
+grep -qF 'An error occurred (NoSuchEntity) when calling the GetRole operation' <<<"$ROLE_ERROR"
+for status in queued in_progress; do
+  test "$(gh run list --repo rhprasad0/nova-toll-budget-agent --status "$status" --limit 100 --json databaseId --jq 'length')" -eq 0
+done
+
+# This is the only read-only default.  It inventories key, ETag, size,
+# LastModified, metadata, tags, and streamed digest, plus version/configuration
+# and multipart boundaries.  It rejects unknown keys and missing managed rows.
+uv run --project "$ROOT/v2" python "$HELPER" --phase capture --output "$INITIAL" >"$EVIDENCE_DIR/initial-summary.json"
+
+# The mapping is independently captured and reviewed; it must contain exactly
+# 25 rows, with 22 site keys, one registry key, and only the two shared keys.
+test -s "$MANAGED_OBJECT_MAPPING"
+jq -e '
+  .total == 25 and
+  .counts["tollchat-site-920534282028-dev"] == 22 and
+  .counts["aws-waf-logs-tollchat-agent-reports-920534282028-dev"] == 1 and
+  .counts["nova-toll-agentcore-920534282028"] == 2 and
+  all(.rows[];
+    (.bucket == "tollchat-site-920534282028-dev" or
+     .bucket == "aws-waf-logs-tollchat-agent-reports-920534282028-dev" or
+     (.bucket == "nova-toll-agentcore-920534282028" and
+      (.key == "runtime/v2/agentcore-dev.zip" or .key == "lambda/v2/chat-proxy-dev.zip"))))
+' "$MANAGED_OBJECT_MAPPING" >/dev/null
+
+# Freeze exactly three writers.  The helper retrieves and replays the complete
+# WAF document, changing only this exact KEEP filter to DROP, and the complete
+# lifecycle document, changing only IDs expire-raw-waf-logs and
+# expire-athena-results to Disabled.  It preserves WAF destination, default
+# behavior, redaction, LogScope, LogType, ManagedByFirewallManager, lifecycle
+# filters, expiration, abort-multipart settings, and
+# TransitionDefaultMinimumObjectSize.  It sets only these reserved concurrency
+# values to zero and waits a full 900 seconds after the final mutation before
+# requiring tollchat-agent-reports-dev to have no QUEUED or RUNNING queries.
+uv run --project "$ROOT/v2" python "$HELPER" --phase freeze --execute --snapshot "$INITIAL" \
+  --output "$FROZEN" --freeze-state "$WRITERS" \
+  --identity-manifest "$LIVE_IDENTITY_MANIFEST" \
+  --managed-object-mapping "$MANAGED_OBJECT_MAPPING" \
+  >"$EVIDENCE_DIR/frozen-summary.json"
+
+# STATE_SSEKMS_KEY_ID is the fixed retained production state CMK read from the
+# canonical state object.  Archive every old object and every actual version of
+# both exact shared keys, including each delete-marker identity/status.  A
+# delete marker has no body and is recorded in the encrypted manifest without
+# CopyObject.  Source and destination ETags are recorded separately; source
+# and archive size, custom and HTTP metadata (including redirect), tags,
+# plaintext SHA-256, source key/version identity, archive VersionId, KMS key,
+# and private readback must all verify before this command succeeds.  The copy
+# uses the source ETag as CopySourceIfMatch.
+uv run --project "$ROOT/v2" python "$HELPER" --phase archive --execute --snapshot "$FROZEN" \
+  --state-kms-key-id "$STATE_SSEKMS_KEY_ID" --freeze-state "$WRITERS" \
+  --archive-state "$ARCHIVE_STATE" \
+  --identity-manifest "$LIVE_IDENTITY_MANIFEST" \
+  --managed-object-mapping "$MANAGED_OBJECT_MAPPING" \
+  >"$EVIDENCE_DIR/archive-summary.json"
+
+# The purge selector is recomputed from the fresh frozen inventory minus the
+# exact 23 Terraform-managed old-bucket keys.  Historical 1,655 is only a
+# reconciliation signal.  Each delete uses exact If-Match and expected owner;
+# size and LastModified are comparison guards.  No retry or target broadening
+# is allowed after a mismatch, 412, partial, timeout, or ambiguous response.
+uv run --project "$ROOT/v2" python "$HELPER" --phase purge --execute --snapshot "$FROZEN" \
+  --state-kms-key-id "$STATE_SSEKMS_KEY_ID" --freeze-state "$WRITERS" \
+  --archive-state "$ARCHIVE_STATE" \
+  --identity-manifest "$LIVE_IDENTITY_MANIFEST" \
+  --managed-object-mapping "$MANAGED_OBJECT_MAPPING" \
+  >"$EVIDENCE_DIR/purge-summary.json"
+uv run --project "$ROOT/v2" python "$HELPER" --phase verify --snapshot "$FROZEN" \
+  --state-kms-key-id "$STATE_SSEKMS_KEY_ID" --freeze-state "$WRITERS" \
+  --archive-state "$ARCHIVE_STATE" \
+  --identity-manifest "$LIVE_IDENTITY_MANIFEST" \
+  --managed-object-mapping "$MANAGED_OBJECT_MAPPING" \
+  >"$EVIDENCE_DIR/verify-summary.json"
+)
+```
+
+Before continuing, review only the sanitized summaries and the encrypted
+archive manifest.  The two old buckets must contain exactly the 23 managed
+keys, both shared keys must still contain every frozen object version and
+delete marker, all archive readbacks must pass, and the three reserved
+concurrency values, WAF filter, and lifecycle statuses must still be frozen.
+The pinned cutover baseline already removed the old CloudFront alias.  Its
+`aws_s3_object.usage` resource intentionally retains
+`ignore_changes = [content, etag]` because the usage Lambda writes
+`usage.json`; do not broaden that exception.  Compare the exact saved-plan
+resource drift against that pinned baseline and the archived frozen object
+identities and metadata.  The existing validator proves the 166 managed
+identity set and the 162 delete actions, but it does not inspect
+`resource_drift`; any unreviewed drift is a hard stop.
+Keep that intentional drift in place through the compatibility checkout,
+saved `terraform plan -destroy`, and its separately approved apply.  Reconcile
+only this exact drift in the reviewed plan: any other update, replacement,
+unknown action, shared-bucket target, archive target, managed-object purge, or
+bucket deletion before the final Terraform apply is a hard stop.  The reviewed
+plan must still contain exactly 162 deletes, exactly two old-bucket deletes,
+four retained addresses, and no shared-bucket deletion.
+
 4. Build a durable detach manifest after the archive and identity checks. The
    only exact state addresses that may be detached are:
 
