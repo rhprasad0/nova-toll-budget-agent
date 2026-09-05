@@ -2558,22 +2558,26 @@ It has no application, state, CloudFront, ACM, or cross-account AWS access.
 The token is read into the workflow process only, never printed, passed to
 development, put in Terraform input/state, or retained in an artifact.
 
-The Terraform switch `enable_development_custom_domain` defaults to `false` and
-is explicitly false in recurring `development.tfvars` and the development
-delivery workflow. With it false, the development distribution has no aliases,
+The Terraform switch `enable_development_custom_domain` defaults to `false`.
+After certificate staging, recurring `development.tfvars` records `true` and
+the development delivery workflow preserves that setting. With it false, the development distribution has no aliases,
 uses the CloudFront default certificate and `TLSv1`, and has no development ACM
 resource. Production keeps its existing certificate, aliases, validation records,
-resource addresses, and Cloudflare provider path. Do not set the switch in the
-recurring delivery job. The switch is enabled only for the administrator-owned
-staging/apply described here; the development delivery role remains unable to
-request ACM certificates or update CloudFront aliases/certificates.
+resource addresses, and Cloudflare provider path. Certificate creation and
+CloudFront alias/certificate changes remain administrator-owned. The recurring
+role can only describe and read tags of the exact staged development certificate;
+the plan gate accepts its no-op refresh, not creation, updates, or deletion.
+It cannot request ACM certificates or update CloudFront aliases/certificates.
 
 ##### Protected environment and preflight
 
-1. Start from a clean, protected `origin/main` checkout. Confirm the existing
-   `DEVELOPMENT_DELIVERY_ENABLED` false/absent gate, the development health and
-   connectivity workflows, and the Slice 2 route/TLS/query evidence. Do not
-   enable delivery as part of this procedure. The DNS workflow must be dispatched
+1. Start from a clean, protected `origin/main` checkout. Retain the successful
+   automatic delivery, development health/connectivity, and Slice 2 route/TLS/query
+   evidence. Set `DEVELOPMENT_DELIVERY_ENABLED=false` during administrator staging
+   and cutover. Restore it only after the issued certificate, alias, DNS and health
+   checks pass and an ordinary recurring plan contains no administrator-owned
+   changes. Keep the development environment's secrets and main-only branch
+   restriction unchanged. The DNS workflow must be dispatched
    only from `refs/heads/main` with the protected GitHub environment named exactly
    `production-foundation-dns`; its required reviewer must approve the run.
 2. In the production foundation state, apply the reviewed role only after the
@@ -2606,7 +2610,7 @@ request ACM certificates or update CloudFront aliases/certificates.
    ephemerally as the existing delivery workflow does; never read production
    state. Keep the terminal non-traced (`set +x`) and use a private temporary
    directory for plans.
-2. Run a targeted administrator apply with
+2. Save and review a targeted administrator plan with
    `enable_development_custom_domain=true` to request only the ACM certificate
    first. The certificate must be exactly `dev.tollchat.ai`, DNS validated, and
    in `us-east-1`; do not attach an alias before validation. A representative
@@ -2616,14 +2620,18 @@ request ACM certificates or update CloudFront aliases/certificates.
    set -euo pipefail
    set +x
    terraform -chdir=v2/infra init -input=false -backend-config=backend.development.hcl
-   terraform -chdir=v2/infra apply -input=false \
+   terraform -chdir=v2/infra plan -input=false \
+     -out=/private/reviewed/development-certificate.tfplan \
      -var-file=development.tfvars \
      -var enable_development_custom_domain=true \
      -target=aws_acm_certificate.site[0] \
      -var-file=/private/reviewed/development-foundation.tfvars.json
    ```
 
-   The target is a staging convenience only; review the complete follow-up
+   Require exactly one create, `aws_acm_certificate.site[0]`, for `dev.tollchat.ai`
+   in development `us-east-1`, DNS validation, and the existing project,
+   environment=development and version=v2 tags. Apply only that reviewed saved
+   plan. The target is a staging convenience only; review the complete follow-up
    plan. Do not apply if it proposes a production backend/account, Cloudflare
    data/resource, Route 53 object, or any production address. Capture only the
    non-secret outputs:
@@ -2652,7 +2660,7 @@ request ACM certificates or update CloudFront aliases/certificates.
 
 Dispatch `.github/workflows/v2-production-foundation-dns.yml` from protected
 `main` with `operation=stage-validation`, the non-secret certificate ARN, the
-JSON `development_acm_validation_records` value, distribution ID
+   JSON `development_acm_validation_records` value, distribution ID
 `E33DVF3KT7BTAC`, deployed hostname `d1wqry4fbd92w5.cloudfront.net`, and the
 captured old target/snapshot. The workflow rejects any record except exactly
 one ACM-looking `_...dev.tollchat.ai` CNAME with the expected ACM

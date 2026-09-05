@@ -779,8 +779,12 @@ alias-attached. Rollback restores that captured record by ID; the old
 distribution/certificate and validation records remain until #333 closes the
 rollback window.
 
-The delivery role/workflow remains Cloudflare-free and explicitly passes the
-custom-domain switch as false. Post-merge gates begin from protected `main`,
+The delivery role/workflow remains Cloudflare-free and preserves the committed
+custom-domain setting after administrator staging. It can refresh only the exact
+staged certificate with metadata reads; certificate and distribution changes
+remain forbidden by the recurring plan gate. Disable recurring delivery during
+administrator staging/cutover, then restore it after the full domain and health
+proof. Post-merge gates begin from protected `main`,
 run the development health/connectivity checks, validate HTTPS/API/no-index and
 development-origin identity, and compare apex/`www` plus production ACM/CloudFront
 health before and after. No certificate, CloudFront alias, or DNS write is

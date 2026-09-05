@@ -611,6 +611,12 @@ data "aws_iam_policy_document" "development_delivery" {
     actions   = ["wafv2:GetLoggingConfiguration", "wafv2:GetWebACL", "wafv2:ListTagsForResource"]
     resources = ["arn:aws:wafv2:${local.development_delivery_region}:${local.development_delivery_account_id}:global/webacl/tollchat-v2-public-chat-dev/*"]
   }
+
+  statement {
+    sid       = "ReadDevelopmentCertificate"
+    actions   = ["acm:DescribeCertificate", "acm:ListTagsForCertificate"]
+    resources = ["arn:aws:acm:us-east-1:903859731897:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"]
+  }
 }
 
 resource "aws_iam_role" "development_delivery" {
@@ -652,7 +658,7 @@ locals {
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 36, 43)
+      Statement = slice(local.development_delivery_policy_statements, 36, 44)
     })
   }
 }
