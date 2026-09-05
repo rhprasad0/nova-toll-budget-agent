@@ -35,24 +35,33 @@ PASS → human review
 1. Create or reuse an isolated project-root `.worktrees/` path. Keep `.graph/`
    inside that worktree gitignored and free of secrets.
 2. Update `.graph/STATE.md`, then spawn `explorer` with `fork_turns: "none"`,
-   the intent, and the absolute worktree path. Wait for `explore.md`.
+   the intent, and the absolute worktree path. The synchronous `SubagentStart`
+   hook supplies the child’s native UUID; wait for the child to report that UUID
+   before it uses tools, then register it with the hook CLI and send an explicit
+   registration acknowledgement. Run `python3 <active-checkout>/.codex/hooks/graph-write-guard.py register <agent-id> <role> <absolute-worktree>` for that registration. The collaboration task name is never an ID.
+   Preserve this same registration across follow-ups, repairs, and review turns.
+   Wait for `explore.md`.
 3. If exploration has a blocking gap, update `STATE.md` and try to resolve it
    from available evidence. Ask the user only when missing intent, information,
    or authority prevents progress.
 4. Update `STATE.md`, then spawn `pre_checker` with `fork_turns: "none"`,
-   `explore.md`, and the worktree. Builder starts only after a non-blocking
-   `checklist.md`. Return blocking checklist gaps to the original explorer and
-   rerun a new pre-checker after repair.
+   `explore.md`, and the worktree. Repeat the UUID report, CLI registration,
+   and acknowledgement before the child’s first tool call. Builder starts only
+   after a non-blocking `checklist.md`. Return blocking checklist gaps to the
+   original explorer and rerun a new pre-checker after repair.
 5. Update `STATE.md`, then spawn one `builder` with `fork_turns: "none"`, the
-   worktree, `explore.md`, and `checklist.md`. It implements and writes
-   `change.md`.
+   worktree, `explore.md`, and `checklist.md`. Register and acknowledge its hook
+   UUID before tools; retain the original assignment for any follow-up or
+   repair. It implements and writes `change.md`.
 6. For review 1, update `STATE.md`, then spawn a fresh `checker` and a fresh
    `security_reviewer`, both with `fork_turns: "none"`, and identify the review
    stage in each task before waiting for either result. They review the same
-   builder output concurrently. Checker reads the worktree and artifacts,
-   writes `verdict.md`, and never edits application code. Security reviewer
-   remains read-only and reports its result to the parent without writing a
-   graph artifact.
+   builder output concurrently. Register and acknowledge the checker UUID before
+   tools and retain its assignment through review follow-ups. Checker reads the
+   worktree and artifacts, writes `verdict.md`, and never edits application code.
+   Security reviewer remains read-only, outside this guard, and reports its
+   result to the parent without writing a graph artifact. The Astra parent is
+   also outside the guard.
 7. Review 1 keeps the full existing gate: PASS requires checker PASS and no
    actionable security findings. If either lane fails, update `STATE.md` and
    return evidence from every failing lane, and no evidence from passing lanes,

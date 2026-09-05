@@ -22,3 +22,20 @@ config_file = "agents/checker.toml"
 
 [agents.security_reviewer]
 config_file = "agents/security_reviewer.toml"
+
+[[hooks.SubagentStart]]
+
+[[hooks.SubagentStart.hooks]]
+type = "command"
+command = "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/graph-write-guard.py\" subagent-start"
+async = false
+timeout = 10
+
+[[hooks.PreToolUse]]
+matcher = "Bash|apply_patch"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/graph-write-guard.py\" pre-tool-use"
+async = false
+timeout = 10
