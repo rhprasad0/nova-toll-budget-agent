@@ -19,6 +19,10 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 PRODUCTION_ACCOUNT = "920534282028"
+LEGACY_DEVELOPMENT_CERTIFICATE_ARN = (
+    "arn:aws:acm:us-east-1:920534282028:certificate/"
+    "b857cc16-ed20-476e-a64a-883b1624f6c8"
+)
 CANONICAL_SOURCE_COMMIT = "4c1f684c02bf81187c2cc5f15883727cf15b11ee"
 LIVE_IDENTITY_SOURCE = "account-scoped-live-api-v1"
 CANONICAL_SOURCE_REMOTES = frozenset(
@@ -358,7 +362,7 @@ def _json(path: Path) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
-def _remote_id(value: object) -> str:
+def _remote_id(value: object, address: str, *, state: bool = False) -> str:
     if not isinstance(value, dict):
         raise ValidationError
     value = cast(dict[str, Any], value)
@@ -370,6 +374,15 @@ def _remote_id(value: object) -> str:
         nested = None
     if direct is not None and nested is not None and direct != nested:
         raise ValidationError
+    if address == "aws_acm_certificate_validation.site":
+        source = value.get("attributes") if state else value
+        if not isinstance(source, dict):
+            raise ValidationError
+        source = cast(dict[str, Any], source)
+        identifier = source.get("certificate_arn")
+        if identifier != LEGACY_DEVELOPMENT_CERTIFICATE_ARN:
+            raise ValidationError
+        return LEGACY_DEVELOPMENT_CERTIFICATE_ARN
     identifier = direct if direct is not None else nested
     if not isinstance(identifier, str) or not SAFE_REMOTE_ID.fullmatch(identifier):
         raise ValidationError
@@ -438,6 +451,15 @@ def _validate_managed_address(
         raise ValidationError
     if resource_type is not None and resource_type != LEGACY_ADDRESS_TYPES[base]:
         raise ValidationError
+    if (
+        base
+        in {
+            "aws_acm_certificate.site",
+            "aws_acm_certificate_validation.site",
+        }
+        and identifier != LEGACY_DEVELOPMENT_CERTIFICATE_ARN
+    ):
+        raise ValidationError
     # Index keys are application names (for example a bundled asset named
     # ``maplibre-gl-shared.mjs``), not ownership evidence.  Apply the
     # denylist to the reviewed base address and remote identity only so a
@@ -485,7 +507,7 @@ def _state_entries(document: dict[str, Any]) -> StateSnapshot:
                     raise ValidationError
                 data.add(address)
                 continue
-            identifier = _remote_id(instance)
+            identifier = _remote_id(instance, address, state=True)
             _validate_managed_address(address, identifier, resource_type)
             managed[address] = StateEntry(resource_type, identifier)
     if not managed:
@@ -536,7 +558,7 @@ def _plan_entries(
         if actions != ["delete"] or change.get("after") is not None:
             raise ValidationError
         before = change.get("before")
-        identifier = _remote_id(before)
+        identifier = _remote_id(before, address)
         expected = state.managed[address]
         if identifier != expected.identifier:
             raise ValidationError

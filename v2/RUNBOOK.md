@@ -4930,7 +4930,12 @@ select a target.
    compatibility inventory is exactly 166 managed instances, with every
    count/for_each index reviewed (there is no base-address fallback). Every
    state/manifest address and type must match, and the archived state alone
-   can never authorize a deletion. Set `STATE_SSEKMS_KEY_ID` to the exact reviewed
+   can never authorize a deletion. The ACM validation waiter has no independent
+   remote identity: its state/plan `certificate_arn` must equal
+   `arn:aws:acm:us-east-1:920534282028:certificate/b857cc16-ed20-476e-a64a-883b1624f6c8`,
+   and both ACM manifest rows must use that API-described certificate ARN; its
+   synthetic Terraform ID is bookkeeping only and is never an API identity or
+   deletion target. Set `STATE_SSEKMS_KEY_ID` to the exact reviewed
    production state CMK ID/ARN captured from the source object's
    `SSEKMSKeyId`; the source and archive must both be checked against it.
 
