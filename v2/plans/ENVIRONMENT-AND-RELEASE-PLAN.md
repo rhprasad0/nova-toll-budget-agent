@@ -766,7 +766,11 @@ the current ACM/Cloudflare resource addresses and semantics. An administrator
 may enable it only in the development account to request the us-east-1 DNS
 certificate for exactly `dev.tollchat.ai`, pass its non-secret DVO output to the
 protected production-foundation DNS workflow, wait for ACM `ISSUED`, and then
-attach the certificate and exact alias to the development distribution.
+prepare the reviewed development alias/application plan. Release only the old
+development alias using a full-config, fresh-ETag update; preserve every other
+field and wait for deployment. Switch the exact DNS target before attaching
+the new alias, because CloudFront can reject an alias whose DNS still resolves
+to another distribution. Temporary downtime is acceptable.
 
 The DNS workflow derives the active `tollchat.ai` zone/account from an
 authenticated exact-name lookup, verifies the account-owned token at the
@@ -774,10 +778,14 @@ account endpoint, and allows only exact unproxied validation CNAMEs and the
 captured `dev.tollchat.ai` CNAME. It has no record deletion or broad
 reconciliation path, and no access to application state or production
 resources. The workflow records the old dev record before cutover and changes
-it only after the development CloudFront distribution is deployed and
-alias-attached. Rollback restores that captured record by ID; the old
-distribution/certificate and validation records remain until #333 closes the
-rollback window.
+it only with an issued certificate, the exact deployed development distribution,
+and fresh `legacy_alias_released=true` evidence. After DNS points to the new
+target, apply the reviewed new alias/certificate and application-origin changes,
+then verify deployment and health. Rollback restores that captured record by ID
+after freeing the new alias, and before restoring the old alias with a fresh
+ETag. Verify the restored custom hostname, not just the legacy CloudFront URL.
+The old distribution/certificate and validation records remain until #333
+closes the rollback window.
 
 The delivery role/workflow remains Cloudflare-free and preserves the committed
 custom-domain setting after administrator staging. It can refresh only the exact

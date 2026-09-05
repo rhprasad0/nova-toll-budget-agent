@@ -37,8 +37,8 @@ on:
         required: false
         default: ""
         type: string
-      alias_attached:
-        description: "Fresh operator evidence that the exact alias is attached"
+      legacy_alias_released:
+        description: "Fresh operator evidence that E1JXKQYNAN39E4 no longer owns dev.tollchat.ai"
         required: false
         default: "false"
         type: string
@@ -80,7 +80,7 @@ jobs:
           CLOUDFRONT_HOSTNAME: ${{ inputs.cloudfront_hostname }}
           CERTIFICATE_STATUS: ${{ inputs.certificate_status }}
           CLOUDFRONT_STATUS: ${{ inputs.cloudfront_status }}
-          ALIAS_ATTACHED: ${{ inputs.alias_attached }}
+          LEGACY_ALIAS_RELEASED: ${{ inputs.legacy_alias_released }}
           OLD_DEV_TARGET: ${{ inputs.old_dev_target }}
           ROLLBACK_SNAPSHOT: ${{ inputs.rollback_snapshot }}
         run: |
@@ -340,7 +340,7 @@ jobs:
                   if len(found) != 1 or not exact(found[0], expected):
                       fail()
               if os.environ["OPERATION"] == "cutover":
-                  if os.environ.get("CERTIFICATE_STATUS") != "ISSUED" or os.environ.get("CLOUDFRONT_STATUS") != "Deployed" or os.environ.get("ALIAS_ATTACHED") != "true":
+                  if os.environ.get("CERTIFICATE_STATUS") != "ISSUED" or os.environ.get("CLOUDFRONT_STATUS") != "Deployed" or os.environ.get("LEGACY_ALIAS_RELEASED") != "true":
                       fail()
                   target = {"name": EXPECTED_DEV_NAME, "type": "CNAME", "content": EXPECTED_CLOUDFRONT_HOSTNAME, "ttl": EXPECTED_DEV_TTL, "proxied": False}
                   mutate(zone_id, account_id, "PUT", old_snapshot["id"], target)

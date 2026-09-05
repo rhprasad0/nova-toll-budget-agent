@@ -2673,27 +2673,48 @@ write re-verifies the token. The workflow uses only GET/POST/PUT; it has no
 record deletion or proxy-mode path, and all API failures are sanitized.
 
 After validation records are verified, wait for ACM `ISSUED` in the development
-account. Then, as the development administrator, enable the switch for a normal
-application plan and apply only after the issued certificate is confirmed. The
-enabled plan must set the sole alias to `dev.tollchat.ai`, use that issued
-certificate ARN with `sni-only` and `TLSv1.2_2021`, and make
-`local.public_site_url`, `PUBLIC_ORIGINS`, and `PUBLIC_BASE_URL` exactly
-`https://dev.tollchat.ai`. `public_preview_hostname` cannot override this URL.
-Wait for the exact distribution to report `Deployed` with a bounded 30-minute
-wait (30 checks at 60 seconds), and independently verify the alias is attached.
-Do not dispatch the DNS cutover while the certificate is pending, the alias is
-missing, the distribution is not deployed, or any value is uncertain.
+account. Prepare and review the administrator's enabled development application
+plan before moving traffic, but do not attach the new alias yet. CloudFront
+checks the existing DNS target and can reject attachment with
+`CNAMEAlreadyExists` while DNS still points to the old distribution, even after
+its alias was removed. This handoff therefore uses **DNS before alias
+attachment**, accepting temporary downtime; see the AWS
+[incorrectly configured DNS record guidance](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/troubleshooting-distributions.html#troubleshooting-distributions-dns-errors).
+
+First release only `dev.tollchat.ai` from legacy distribution `E1JXKQYNAN39E4`.
+In account `920534282028`, require its expected hostname, `Deployed` status, and
+sole alias; capture the complete `GetDistributionConfig` response and ETag.
+Change only `Aliases` to `{"Quantity":0}`, prove every other field is identical,
+then use `UpdateDistribution` with that complete payload and fresh `IfMatch`.
+Wait for `Deployed` and verify zero aliases and unchanged non-alias configuration.
+Keep the old certificate, origins, distribution, and captured configuration.
+Do not apply the production Terraform root or delete any legacy resource.
 
 Before `operation=cutover`, immediately re-read the dev record and compare it
 to the supplied snapshot: one record ID, exact name/type, old content
 `dmsiz11apblcv.cloudfront.net`, TTL `1`, and `proxied=false`. The workflow also
 rechecks every validation record and requires operator evidence
 `certificate_status=ISSUED`, `cloudfront_status=Deployed`, and
-`alias_attached=true`. It then updates only the captured dev record ID to the
+`legacy_alias_released=true`. The development distribution must be the exact
+staged target; its new alias need not be attached yet. Never supply guessed or
+stale evidence or bypass the protected environment reviewer. The workflow
+updates only the captured dev record ID to the
 validated development hostname and verifies the same ID/content after the
 write. It never touches apex, `www`, production CloudFront/ACM, the old
-distribution `E1JXKQYNAN39E4`, or validation records. Allow up to 15 minutes
-for DNS propagation before declaring the cutover healthy.
+distribution `E1JXKQYNAN39E4`, or validation records. Verify DNS resolves to
+`d1wqry4fbd92w5.cloudfront.net` before applying the reviewed development alias
+plan. The new alias must be exactly `dev.tollchat.ai`, with the issued
+certificate, `sni-only`, and `TLSv1.2_2021`; `local.public_site_url`,
+`PUBLIC_ORIGINS`, and `PUBLIC_BASE_URL` must become exactly
+`https://dev.tollchat.ai`. `public_preview_hostname` cannot override this URL.
+If a bounded native CloudFront-target stage is needed to resolve downstream
+policy-document values, review every included dependency update and apply
+only the saved plan, then review and apply the full application follow-up.
+Never apply unknown IAM/KMS policy values or reuse a partially applied plan.
+Wait for the exact new distribution to report `Deployed` with a bounded
+30-minute wait (30 checks at 60 seconds), and independently verify its alias
+and certificate. Allow up to 15 minutes for DNS propagation; a successful DNS
+workflow alone is not proof of a healthy cutover.
 
 Run read-only smoke checks after propagation: HTTPS must present a certificate
 for `dev.tollchat.ai`, the page and `/api/config` must return successfully, the
@@ -2707,14 +2728,22 @@ workflow run, and operator identities.
 
 Keep the old distribution, old certificate, and validation records throughout
 the rollback window; #333 cleanup is not authorized by this procedure. If any
-post-cutover smoke, certificate, deployment, or DNS check fails, dispatch the
-same workflow with `operation=rollback` and the exact captured snapshot. It
+post-cutover smoke, certificate, deployment, or DNS check fails, first release
+the new development alias, if attached, using an exact reviewed administrator
+plan or full-config/ETag alias-only update, and wait for `Deployed`. Then dispatch
+the same workflow with `operation=rollback` and the exact captured snapshot. It
 must fail closed unless the current dev record still has the captured ID and
 currently points to the staged development hostname. It then PUTs only that ID
-back to the captured old content and verifies the old HTTPS endpoint is healthy.
+back to the captured old content and checks the legacy CloudFront hostname.
+After DNS resolves to the old target, restore only the old alias with the
+captured configuration and a freshly fetched ETag; assert all non-alias fields
+are unchanged, wait for `Deployed`, and verify `https://dev.tollchat.ai` itself.
+If DNS never changed, skip the DNS rollback and restore the old alias directly.
+As in the forward move, DNS must point to the destination before restoring its
+alias. The workflow's legacy-host probe alone is not custom-host health proof.
 Do not remove a validation record, alter apex/`www`, or use a generic record
-delete. If alias removal is needed, a development administrator performs it
-only after DNS rollback and health confirmation, using the development state.
+delete. Keep recurring delivery disabled until the chosen endpoint and the
+full application plan are healthy and contain no administrator-owned changes.
 
 Before authorizing #333 cleanup, prove a successful rollback against the
 captured record in a disposable/reviewed gate, retain production no-change
