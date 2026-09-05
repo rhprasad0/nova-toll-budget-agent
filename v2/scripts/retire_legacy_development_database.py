@@ -38,6 +38,9 @@ PRODUCTION_PROFILE = "nova-toll-prod"
 DB_INSTANCE = "nova-toll-db"
 HANDOFF_MANIFEST = "legacy-db-handoff-v1"
 APPROVED_EXTENSIONS = ("plpgsql", "postgis")
+REQUIRED_RDS_ENGINE = "postgres"
+REQUIRED_POSTGRES_MAJOR = "17"
+APPROVED_EXTENSION_OWNER = "rdsadmin"
 RUNBOOK_HANDOFF_APPROVED = "YES"
 RUNBOOK_CREDENTIALS_ENV = (
     "RETIRE_LEGACY_DB_USER",
@@ -100,8 +103,8 @@ BEGIN
   IF production_oid IS NULL OR development_oid IS NULL THEN
     RAISE EXCEPTION 'exact production and development databases are required';
   END IF;
-  IF obj_description(production_oid, 'pg_database') IS DISTINCT FROM 'environment=production'
-     OR obj_description(development_oid, 'pg_database') IS DISTINCT FROM 'environment=development' THEN
+  IF shobj_description(production_oid, 'pg_database') IS DISTINCT FROM 'environment=production'
+     OR shobj_description(development_oid, 'pg_database') IS DISTINCT FROM 'environment=development' THEN
     RAISE EXCEPTION 'database environment comments are wrong';
   END IF;
   IF (SELECT datdba FROM pg_database WHERE oid = production_oid)
@@ -115,7 +118,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_roles
     WHERE rolname IN ({_sql_list(DEVELOPMENT_ROLES)})
-      AND shobj_description(oid, 'pg_authid') IS DISTINCT FROM 'environment=development'
+      AND shobj_description(oid, 'pg_authid') IS NOT NULL
   ) THEN
     RAISE EXCEPTION 'development role environment comments are wrong';
   END IF;
@@ -184,22 +187,34 @@ BEGIN
     RAISE EXCEPTION 'production and development database isolation is broken';
   END IF;
   IF EXISTS (
-    SELECT 1 FROM pg_shdepend dependency
-    WHERE dependency.dbid = 0 AND dependency.classid = 'pg_database'::regclass
+    SELECT 1
+    FROM pg_shdepend dependency
+    WHERE dependency.dbid = 0
+      AND dependency.classid = 'pg_database'::regclass
       AND dependency.objid = development_oid
-      AND dependency.refobjid <> (SELECT datdba FROM pg_database WHERE oid = development_oid)
+      AND (
+        dependency.refclassid <> 'pg_authid'::regclass
+        OR dependency.deptype NOT IN ('o', 'a')
+        OR (dependency.deptype = 'o' AND dependency.refobjid <> (SELECT datdba FROM pg_database WHERE oid = development_oid))
+        OR (dependency.deptype = 'a' AND dependency.refobjid NOT IN (
+          SELECT oid FROM pg_roles WHERE rolname IN ({_sql_list(DEVELOPMENT_ROLES)})
+        ))
+      )
   ) THEN
     RAISE EXCEPTION 'development database has an unexpected shared dependency';
   END IF;
 END $$;
 """
 
-DEVELOPMENT_PREFLIGHT_SQL = """
+DEVELOPMENT_PREFLIGHT_SQL = f"""
 DO $$
 DECLARE
   database_owner name;
+  target_database oid;
+  role_name name;
+  role_oid oid;
 BEGIN
-  SELECT pg_get_userbyid(datdba) INTO database_owner
+  SELECT oid, pg_get_userbyid(datdba) INTO target_database, database_owner
   FROM pg_database WHERE datname = current_database();
   IF (SELECT count(*) FROM pg_namespace WHERE nspname = 'pricing') <> 1
      OR (SELECT nspowner::regrole::name FROM pg_namespace WHERE nspname = 'pricing') <> database_owner
@@ -208,16 +223,154 @@ BEGIN
     RAISE EXCEPTION 'development schema ownership is outside the reviewed baseline';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'public', 'pricing', 'oracle'))
-     OR EXISTS (SELECT 1 FROM pg_class WHERE relnamespace IN (
-       SELECT oid FROM pg_namespace WHERE nspname IN ('pricing', 'oracle')
-     ) AND relowner NOT IN ((SELECT datdba FROM pg_database WHERE datname = current_database()), to_regrole('oracle_owner_development'), to_regrole('pricing_loader_writer_development'),
-       to_regrole('pricing_reader_development'), to_regrole('tollchat_agent_development'), to_regrole('pricing_caller_development'),
-       to_regrole('report_publisher_development'))) THEN
+     OR (SELECT nspowner FROM pg_namespace WHERE nspname = 'public') <> to_regrole('pg_database_owner')
+     OR (SELECT nspowner FROM pg_namespace WHERE nspname = 'pricing') <> (SELECT datdba FROM pg_database WHERE oid = target_database)
+     OR (SELECT nspowner FROM pg_namespace WHERE nspname = 'oracle') <> to_regrole('oracle_owner_development') THEN
     RAISE EXCEPTION 'development database has unexpected object ownership';
   END IF;
+  IF EXISTS (
+    WITH RECURSIVE extension_members(classid, objid, extension_owner) AS (
+      SELECT dependency.classid, dependency.objid, extension.extowner
+      FROM pg_depend dependency
+      JOIN pg_extension extension
+        ON extension.oid = dependency.refobjid
+       AND dependency.refclassid = 'pg_extension'::regclass
+      WHERE dependency.deptype = 'e'
+        AND extension.extname IN ('plpgsql', 'postgis')
+        AND extension.extowner = to_regrole('{APPROVED_EXTENSION_OWNER}')
+      UNION
+      SELECT dependency.classid, dependency.objid, members.extension_owner
+      FROM pg_depend dependency
+      JOIN extension_members members
+        ON dependency.refclassid = members.classid
+       AND dependency.refobjid = members.objid
+      WHERE dependency.deptype IN ('i', 'a')
+    ), catalog_owners(classid, objid, objowner) AS (
+      SELECT 'pg_namespace'::regclass, oid, nspowner
+      FROM pg_namespace
+      WHERE nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_class'::regclass, relation.oid, relation.relowner
+      FROM pg_class relation
+      JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_proc'::regclass, procedure.oid, procedure.proowner
+      FROM pg_proc procedure
+      JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_type'::regclass, type.oid, type.typowner
+      FROM pg_type type
+      JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_operator'::regclass, operator.oid, operator.oprowner
+      FROM pg_operator operator
+      JOIN pg_namespace namespace ON namespace.oid = operator.oprnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_opclass'::regclass, opclass.oid, opclass.opcowner
+      FROM pg_opclass opclass
+      JOIN pg_namespace namespace ON namespace.oid = opclass.opcnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_opfamily'::regclass, opfamily.oid, opfamily.opfowner
+      FROM pg_opfamily opfamily
+      JOIN pg_namespace namespace ON namespace.oid = opfamily.opfnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_collation'::regclass, coll.oid, coll.collowner
+      FROM pg_collation coll
+      JOIN pg_namespace namespace ON namespace.oid = coll.collnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_conversion'::regclass, conversion.oid, conversion.conowner
+      FROM pg_conversion conversion
+      JOIN pg_namespace namespace ON namespace.oid = conversion.connamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_ts_dict'::regclass, dictionary.oid, dictionary.dictowner
+      FROM pg_ts_dict dictionary
+      JOIN pg_namespace namespace ON namespace.oid = dictionary.dictnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_ts_config'::regclass, config.oid, config.cfgowner
+      FROM pg_ts_config config
+      JOIN pg_namespace namespace ON namespace.oid = config.cfgnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_statistic_ext'::regclass, statistics.oid, statistics.stxowner
+      FROM pg_statistic_ext statistics
+      JOIN pg_namespace namespace ON namespace.oid = statistics.stxnamespace
+      WHERE namespace.nspname IN ('public', 'pricing', 'oracle')
+      UNION ALL
+      SELECT 'pg_largeobject'::regclass, metadata.oid, metadata.lomowner
+      FROM pg_largeobject_metadata metadata
+      UNION ALL
+      SELECT dependency.classid, dependency.objid, dependency.refobjid
+      FROM pg_shdepend dependency
+      WHERE dependency.dbid = target_database
+        AND dependency.refclassid = 'pg_authid'::regclass
+        AND dependency.deptype = 'o'
+    )
+    SELECT 1
+    FROM catalog_owners object
+    WHERE object.objowner NOT IN (
+      (SELECT datdba FROM pg_database WHERE oid = target_database),
+      to_regrole('pricing_loader_writer_development'),
+      to_regrole('pricing_reader_development'),
+      to_regrole('oracle_owner_development'),
+      to_regrole('tollchat_agent_development'),
+      to_regrole('pricing_caller_development'),
+      to_regrole('report_publisher_development')
+    )
+    AND NOT (
+      object.classid = 'pg_namespace'::regclass
+      AND object.objid = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+      AND object.objowner = to_regrole('pg_database_owner')
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM extension_members member
+      WHERE member.classid = object.classid
+        AND member.objid = object.objid
+        AND member.extension_owner = object.objowner
+    )
+  ) THEN
+    RAISE EXCEPTION 'development database has unexpected object ownership';
+  END IF;
+  FOREACH role_name IN ARRAY ARRAY[
+    'pricing_loader_writer_development', 'pricing_reader_development',
+    'oracle_owner_development', 'tollchat_agent_development',
+    'pricing_caller_development', 'report_publisher_development'
+  ]::name[] LOOP
+    role_oid := to_regrole(role_name);
+    IF EXISTS (
+      SELECT 1
+      FROM pg_shdepend dependency
+      WHERE dependency.refobjid = role_oid
+        AND NOT (
+          (dependency.dbid = target_database
+           AND dependency.refclassid = 'pg_authid'::regclass
+           AND dependency.deptype IN ('o', 'a'))
+          OR (dependency.dbid = 0
+              AND dependency.classid = 'pg_database'::regclass
+              AND dependency.objid = target_database
+              AND dependency.refclassid = 'pg_authid'::regclass
+              AND dependency.deptype = 'a')
+        )
+    ) THEN
+      RAISE EXCEPTION 'development role has an unexpected dependency';
+    END IF;
+  END LOOP;
   IF (SELECT coalesce(array_agg(extname ORDER BY extname), ARRAY[]::name[])
       FROM pg_extension) <> ARRAY['plpgsql'::name, 'postgis'::name]
-     OR (SELECT extnamespace::regnamespace::name FROM pg_extension WHERE extname = 'postgis') <> 'oracle' THEN
+     OR (SELECT extnamespace::regnamespace::name FROM pg_extension WHERE extname = 'postgis') <> 'oracle'
+     OR EXISTS (
+       SELECT 1 FROM pg_extension
+       WHERE extname IN ('plpgsql', 'postgis')
+         AND extowner IS DISTINCT FROM to_regrole('{APPROVED_EXTENSION_OWNER}')
+     ) THEN
     RAISE EXCEPTION 'development extension baseline is not exact';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_subscription)
@@ -243,7 +396,7 @@ END $$;
 """
 
 PRODUCTION_INVARIANTS = f"""
-  IF (SELECT obj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') IS DISTINCT FROM 'environment=production'
+  IF (SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') IS DISTINCT FROM 'environment=production'
      OR (SELECT count(*) FROM pg_roles WHERE rolname IN ({_sql_list(PRODUCTION_ROLES)})) <> 6 THEN
     RAISE EXCEPTION 'production database or role contract changed';
   END IF;
@@ -324,13 +477,8 @@ BEGIN
   END IF;
   IF EXISTS (
     SELECT 1 FROM pg_shdepend
-    WHERE refobjid = target_role AND dbid <> 0
-  ) THEN
-    RAISE EXCEPTION 'development role has a dependency in another database';
-  END IF;
-  IF EXISTS (
-    SELECT 1 FROM pg_shdepend
-    WHERE refobjid = target_role AND dbid = 0 AND deptype NOT IN ('a', 'o')
+    WHERE refclassid = 'pg_authid'::regclass
+      AND refobjid = target_role
   ) THEN
     RAISE EXCEPTION 'development role has an unexpected shared dependency';
   END IF;
@@ -343,7 +491,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '{DEVELOPMENT_DATABASE}')
      OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ({_sql_list(DEVELOPMENT_ROLES)}))
      OR NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}')
-     OR (SELECT obj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') IS DISTINCT FROM 'environment=production'
+     OR (SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = '{PRODUCTION_DATABASE}') IS DISTINCT FROM 'environment=production'
      OR (SELECT count(*) FROM pg_roles WHERE rolname IN ({_sql_list(PRODUCTION_ROLES)})) <> 6 THEN
     RAISE EXCEPTION 'final production-preservation check failed';
   END IF;
@@ -539,9 +687,13 @@ def _verify_live_rds(handoff: dict[str, object]) -> tuple[str, int] | None:
     endpoint_address = endpoint.get("Address")
     endpoint_port = endpoint.get("Port")
     secret_arn = secret.get("SecretArn")
+    engine_version = instance.get("EngineVersion")
     if (
         instance.get("DBInstanceIdentifier") != DB_INSTANCE
         or instance.get("DBInstanceStatus") != "available"
+        or instance.get("Engine") != REQUIRED_RDS_ENGINE
+        or not isinstance(engine_version, str)
+        or not re.fullmatch(rf"{REQUIRED_POSTGRES_MAJOR}(?:\..+)?", engine_version)
         or instance.get("PubliclyAccessible") is not False
         or not isinstance(endpoint_address, str)
         or endpoint_address != handoff.get("host")

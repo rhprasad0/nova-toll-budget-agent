@@ -1021,7 +1021,11 @@ def _fake_psql(
         "    marker.write_text('recreated', encoding='utf-8')\n"
         f"if {survive_role!r} and 'role postcondition failed' in sql and marker.exists():\n"
         "    sys.exit(1)\n"
-        f"if {null_comment_target!r} and {null_comment_target!r} in sql and \"IS DISTINCT FROM 'environment=development'\" in sql:\n"
+        f"if {null_comment_target!r} and {null_comment_target!r} in sql and (\n"
+        "    \"shobj_description(production_oid, 'pg_database') IS DISTINCT FROM\" in sql\n"
+        "    or \"shobj_description(development_oid, 'pg_database') IS DISTINCT FROM\" in sql\n"
+        "    or \"shobj_description(oid, 'pg_authid') IS NOT NULL\" in sql\n"
+        "):\n"
         "    sys.exit(1)\n"
         f"sys.exit(1 if {fail_on!r} and {fail_on!r} in sql else 0)\n",
         encoding="utf-8",
@@ -1030,13 +1034,17 @@ def _fake_psql(
     return executable, log
 
 
-def _fake_aws(tmp_path: Path) -> Path:
+def _fake_aws(
+    tmp_path: Path, *, engine: str = "postgres", engine_version: str = "17.9"
+) -> Path:
     executable = tmp_path / "aws"
     rds_response = json.dumps(
         [
             {
                 "DBInstanceIdentifier": "nova-toll-db",
                 "DBInstanceStatus": "available",
+                "Engine": engine,
+                "EngineVersion": engine_version,
                 "PubliclyAccessible": False,
                 "Endpoint": {"Address": DB_HOST, "Port": DB_PORT},
                 "MasterUserSecret": {"SecretArn": SECRET_ARN},
@@ -1073,6 +1081,8 @@ def _run_database(
     handoff_secret_arn: str = SECRET_ARN,
     ambient_profile: str | None = None,
     pin_ca_for_fixture: bool = True,
+    engine: str = "postgres",
+    engine_version: str = "17.9",
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     _, log = _fake_psql(
         tmp_path,
@@ -1080,7 +1090,7 @@ def _run_database(
         survive_role=survive_role,
         null_comment_target=null_comment_target,
     )
-    _fake_aws(tmp_path)
+    _fake_aws(tmp_path, engine=engine, engine_version=engine_version)
     ca_file = tmp_path / "ca.pem"
     ca_file.write_text("fixture", encoding="utf-8")
     digest = hashlib.sha256(ca_file.read_bytes()).hexdigest()
@@ -1222,12 +1232,21 @@ def test_database_missing_connect_grant_stops_before_drop(tmp_path: Path) -> Non
     assert all("DROP " not in line for line in calls)
 
 
-def test_database_null_environment_comments_stop_before_drop(tmp_path: Path) -> None:
+def test_database_invalid_environment_comments_stop_before_drop(tmp_path: Path) -> None:
     preflight = _database_module.PREFLIGHT_SQL
-    assert "IS DISTINCT FROM 'environment=development'" in preflight
+    assert (
+        "shobj_description(production_oid, 'pg_database') IS DISTINCT FROM 'environment=production'"
+        in preflight
+    )
+    assert (
+        "shobj_description(development_oid, 'pg_database') IS DISTINCT FROM 'environment=development'"
+        in preflight
+    )
+    assert "shobj_description(oid, 'pg_authid') IS NOT NULL" in preflight
     assert "shobj_description(oid, 'pg_authid')" in preflight
     targets = [
-        "obj_description(development_oid, 'pg_database')",
+        "shobj_description(production_oid, 'pg_database')",
+        "shobj_description(development_oid, 'pg_database')",
         *[f"'{role}'" for role in _database_module.DEVELOPMENT_ROLES],
     ]
     for index, target in enumerate(targets):
@@ -1295,6 +1314,20 @@ def test_database_rejects_mismatched_secret_or_ambient_profile(
         handoff_secret_arn="arn:aws:secretsmanager:us-east-1:920534282028:secret:other",
     )
     assert result.returncode != 0 and not calls
+
+
+@pytest.mark.parametrize(
+    ("engine", "engine_version"),
+    [("mysql", "8.0"), ("postgres", "16.4"), ("postgres", "18")],
+)
+def test_database_requires_postgres_major_seventeen(
+    tmp_path: Path, engine: str, engine_version: str
+) -> None:
+    result, calls = _run_database(
+        tmp_path, engine=engine, engine_version=engine_version
+    )
+    assert result.returncode != 0
+    assert not calls
     result, calls = _run_database(tmp_path, ambient_profile="attacker")
     assert result.returncode != 0 and not calls
 
@@ -1342,7 +1375,10 @@ def test_database_role_dependency_failure_stops_before_role_drop(
     tmp_path: Path,
 ) -> None:
     result, calls = _run_database(
-        tmp_path, execute=True, approval="YES", fail_on="another database"
+        tmp_path,
+        execute=True,
+        approval="YES",
+        fail_on="development role has an unexpected shared dependency",
     )
     assert result.returncode != 0
     assert len(calls) == 5
@@ -1369,7 +1405,9 @@ def test_database_execute_drops_only_exact_targets(tmp_path: Path) -> None:
     assert "ambient-password" not in sql
     assert "fixture-password" not in result.stdout + result.stderr
     assert "rolname IN ('')" in sql
-    assert "<> 0" in sql
+    assert "refclassid = 'pg_authid'::regclass" in sql
+    assert "refobjid = target_role" in sql
+    assert "dbid <> 0" not in sql
 
 
 def test_database_stops_when_a_dropped_role_survives_or_reappears(

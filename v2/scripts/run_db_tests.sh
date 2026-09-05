@@ -236,6 +236,9 @@ if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   exit 1
 fi
 v2/scripts/test_development_database_bootstrap.sh
+POSTGRES_CONTAINER_ID="$POSTGRES_CONTAINER_ID" \
+  PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" \
+  python3 v2/scripts/test_legacy_database_retirement.py
 
 createdb --template template0 "$bootstrap_db"
 psql --dbname "$bootstrap_db" \
