@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Any
 
 
-GUARDED_ROLES = frozenset({"explorer", "pre_checker", "builder", "checker"})
+GUARDED_ROLES = frozenset({
+    "explorer", "pre_checker", "builder", "checker",
+    "case_miner", "eval_runner", "eval_reviewer", "eval_fixer",
+})
 GIT_TIMEOUT = 2
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 PATCH_HEADERS = (

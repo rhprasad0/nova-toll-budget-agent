@@ -77,3 +77,16 @@ unchanged unless the user explicitly requests an application-agent change.
   `v2/RUNBOOK.md`. Generic or future manual migrations are not authorized;
   other schema-changing work remains blocked pending approved deployment
   automation.
+
+# Eval graph
+
+Use [.agents/skills/eval-graph/SKILL.md](.agents/skills/eval-graph/SKILL.md)
+for `$eval-graph`, eval loops, pinning a case, fixture runs, and pass^k gates.
+The eval root is `v2/eval/`; preserve the existing harness and corpus.
+Astra medium orchestrates; case_miner, eval_runner, eval_reviewer, and
+eval_fixer use Luna medium and the existing native-ID/worktree registry.
+Keep one writer; grade.sh and compare.sh own the metric. The critic never
+patches, and gate never starts a fixer. Require sealed runtime access for
+runner inputs; the worktree hook does not isolate reads. Humans control
+correctness, sealed held-out execution, case acceptance, and merge.
+Do not start trials merely by installing or editing the graph.

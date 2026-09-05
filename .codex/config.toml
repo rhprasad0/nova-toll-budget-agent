@@ -23,6 +23,18 @@ config_file = "agents/checker.toml"
 [agents.security_reviewer]
 config_file = "agents/security_reviewer.toml"
 
+[agents.case_miner]
+config_file = "agents/case_miner.toml"
+
+[agents.eval_runner]
+config_file = "agents/eval_runner.toml"
+
+[agents.eval_reviewer]
+config_file = "agents/eval_reviewer.toml"
+
+[agents.eval_fixer]
+config_file = "agents/eval_fixer.toml"
+
 [[hooks.SubagentStart]]
 
 [[hooks.SubagentStart.hooks]]

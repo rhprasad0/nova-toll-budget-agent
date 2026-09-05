@@ -97,6 +97,23 @@ class GraphWriteGuardTests(unittest.TestCase):
         self.assertNotEqual(self.register(target=self.sibling)[0], 0)
         self.assertEqual(json.loads(record_path.read_text(encoding="utf-8")), original)
 
+    def test_eval_roles_use_existing_identity_and_worktree_guard(self) -> None:
+        for role in ("case_miner", "eval_runner", "eval_reviewer", "eval_fixer"):
+            agent_id = f"native-{role}"
+            _, started, _ = self.invoke(
+                "subagent-start", payload={"agent_type": role, "agent_id": agent_id}
+            )
+            self.assertIn(agent_id, started["hookSpecificOutput"]["additionalContext"])
+            payload = self.payload(role=role, agent_id=agent_id,
+                                   command=f"cd {self.target} && pwd")
+            self.assertIn("register", self.denied_reason(
+                self.invoke("pre-tool-use", payload=payload)[1]))
+            self.assertEqual(self.register(agent_id=agent_id, role=role)[0], 0)
+            self.assertIsNone(self.invoke("pre-tool-use", payload=payload)[1])
+            payload["tool_input"]["command"] = f"cd {self.sibling} && pwd"
+            self.assertIn("outside", self.denied_reason(
+                self.invoke("pre-tool-use", payload=payload)[1]))
+
     def test_registration_rejects_invalid_role_main_outside_and_registry(self) -> None:
         self.assertNotEqual(self.register(role="security_reviewer")[0], 0)
         self.assertNotEqual(self.register(agent_id="main", target=self.repo)[0], 0)

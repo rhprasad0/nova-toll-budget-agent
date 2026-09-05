@@ -35,3 +35,9 @@ test-results/
 !v2/infra/production.tfvars
 !v2/infra/development.tfvars
 /v2/eval/private/
+
+!/.agents/skills/eval-graph/
+/v2/eval/artifacts/*
+!/v2/eval/artifacts/.gitkeep
+/v2/eval/held_out/*
+!/v2/eval/held_out/.gitkeep
