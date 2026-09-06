@@ -239,3 +239,55 @@ writes `results.json` plus every failure and a deterministic 20-pass sample in
 `review.json`. Expired or failed work is never resubmitted automatically.
 The completed run and adjudicated findings are summarized in
 [`ballpark-hallucination-report.md`](ballpark-hallucination-report.md).
+
+
+## Directional evidence matrix
+
+`uv run python eval/directional_matrix.py --check --output /tmp/directional-matrix.json`
+(from `v2/`) builds the directed movement × tool × selected state plan. The
+inventory has 996 connections: 670 within-facility, 300 general-purpose gaps,
+14 toll handoffs, and 12 airport connections. These are implementation counts,
+not independently verified roadway coverage. The report separates required and
+exercised rows, physical evidence, and passed conformance. Its canonical digest
+covers the report without the digest field itself.
+
+The default report contains **no executed observations**. The latest AWS identity
+check succeeded, but no fresh raw history or typed production capture has been
+recorded for this expansion. Existing domain tests and the guarded disposable SQL
+suite are separate checks, not default matrix capture evidence. Two direct I66/I495 handoff
+expectations are prohibited according to the retained operator access evidence.
+A mismatch requires an observed route proof using the direct edge. A complete,
+supported route through the Dulles Connector may establish an alternate journey;
+a missing direct edge alone does not establish journey unavailability.
+
+Matrix annual requests use a separately specified valid Greenway return control
+leg. They are domain probes, not proposed real-world commute conversations. The
+250 public / 50 private corpus work supplies realistic independently mapped
+round trips. State labels define requested probes; labels and inventory alone
+never establish that a state was exercised or a route was available.
+
+`history_capture.capture_raw_history` reads bounded I95 OD selectors and paired
+I66 start/end selectors with the existing `pricing_reader` role. It verifies
+read privileges and lack of raw writes, uses a read-only repeatable-read
+transaction, rejects cap overflow, and closes before hashing canonical raw rows.
+It records the historical as-of anchor separately from actual transaction time.
+Its deadline is checked between operations; statement, lock and idle limits do
+not provide a hard connection or wall-clock deadline. Raw source rows are not
+typed tool outputs and cannot reproduce a historical database clock.
+
+`directional_matrix.capture_typed_tool` invokes the unchanged public tool stream
+and validates its v2 fixture. Current route/comparison queries retain separate
+connections; annual retains its existing transaction and independent legs. The
+source hash for a live fixture covers the returned tool result. Domain tests use
+explicit synthetic evidence and existing tool seams. Historical replay requires
+separate retained source and transformation provenance; fixture playback and
+model trajectory evaluation belong to the following implementation slice.
+
+`build_matrix` accepts trusted retained observation receipts keyed by exact row
+ID. Receipts bind state, exact request, execution layer, source digest, typed
+fixture (for tool execution), and any retained route proof. Their hashes detect
+changed evidence; they are not an independent attestation that code executed.
+The report refuses disconnected/partial proofs and unknown row IDs. Keep raw
+history, actual-anchor SQL, synthetic domain execution, fixture playback, and
+live typed captures in their declared layers. Production writes, grants,
+migrations, application model/prompt changes, and topology repairs are excluded.
