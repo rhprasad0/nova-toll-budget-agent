@@ -72,7 +72,7 @@ cleanup_databases() {
     dropdb --if-exists "$database"
   done
   psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, loader_writer"
+    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development, loader_writer"
 }
 
 cleanup() {
@@ -181,7 +181,11 @@ dropdb "$development_db"
 
 createdb --template template0 "$development_db"
 python3 v2/scripts/bootstrap_development_database.py --fresh-development
+pricing_sha256="$(sha256sum v2/db/schema.sql | awk '{print $1}')"
+oracle_sha256="$(sha256sum v2/db/oracle/schema.sql | awk '{print $1}')"
 psql --dbname "$development_db" --variable fresh_development=1 \
+  --variable pricing_sha256="$pricing_sha256" \
+  --variable oracle_sha256="$oracle_sha256" \
   --file v2/tests/development_bootstrap_contract.sql
 if psql --dbname postgres --tuples-only --no-align --command \
   "SELECT count(*) FROM pg_database WHERE datname = '$production_db'" | grep -qx 0 &&
@@ -194,7 +198,7 @@ else
 fi
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development'
+  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development'
 
 createdb --template template0 "$production_db"
 psql --dbname "$production_db" --file v2/db/schema.sql
@@ -229,13 +233,38 @@ END $$;
 SQL
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development"
+  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development"
 if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   v2/scripts/test_development_database_bootstrap.sh; then
   echo "disposable bootstrap test accepted NOVA_TOLL_ADMIN_URL" >&2
   exit 1
 fi
 v2/scripts/test_development_database_bootstrap.sh
+development_migration_output="$(python3 v2/scripts/run_development_migrations.py)"
+DEVELOPMENT_MIGRATION_OUTPUT="$development_migration_output" python3 - <<'PY'
+import json
+import os
+import re
+
+result = json.loads(os.environ["DEVELOPMENT_MIGRATION_OUTPUT"])
+assert set(result) == {
+    "database", "user", "before", "after", "applied", "commit", "run_id", "status"
+}
+assert result["database"] == "nova_toll_development"
+assert result["user"] == "schema_migrator_development"
+assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.14.0"}
+assert result["applied"] == []
+assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
+assert re.fullmatch(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+    result["run_id"],
+)
+assert result["status"] == "ok"
+assert not any(
+    secret in json.dumps(result).lower()
+    for secret in ("password", "token", "endpoint", "host", "port", "url")
+)
+PY
 POSTGRES_CONTAINER_ID="$POSTGRES_CONTAINER_ID" \
   PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" \
   python3 v2/scripts/test_legacy_database_retirement.py

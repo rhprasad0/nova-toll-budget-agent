@@ -3865,10 +3865,14 @@ v2/db/schema.sql, v2/db/analysis.sql, v2/db/roles.sql,
 v2/db/oracle/schema.sql, and v2/db/oracle/data.sql; it never connects to
 or changes nova_toll, production roles, or v2/db/migrations/. Its
 postcondition runs v2/tests/development_bootstrap_contract.sql in fresh mode,
-proving versions, canonical row counts, development ownership/grants, no PUBLIC
-CONNECT, and no foreign or integration objects. A failure removes only schemas,
-roles, grants, and comments created by that invocation and stops if cleanup is
-not proven.
+proving versions, canonical row counts, development ownership/grants, the
+private `tollchat_migration.schema_history` baseline, no PUBLIC CONNECT, and no
+foreign or integration objects. In addition to the six runtime roles, it
+creates only `pricing_owner_development` and `schema_migrator_development`;
+the latter is an IAM-authenticated login with CONNECT only to the development
+database and SET ROLE membership in the two stable owners. A failure removes
+only schemas, roles, grants, and comments created by that invocation and stops
+if cleanup is not proven.
 
 #### Protected development replacement and foundation plan
 
@@ -4382,6 +4386,63 @@ holds that same identifier.
    contains only the approved account/region, exact route ownership,
    development query identity, and both production denial booleans; it contains
    no secret, endpoint credential, raw command output, plan JSON, or state.
+
+##### Protected development migration workflow (#305 slice 3)
+
+This workflow is a post-merge, protected development operation. The builder and
+CI checks do not assume the migration role, fetch an IAM token, connect to RDS,
+apply Terraform, bootstrap PostgreSQL, or dispatch a workflow. No live action is
+authorized from this graph run.
+
+After human review and merge, use a clean checkout of protected `origin/main`
+and follow this exact order:
+
+1. Review the saved development foundation plan and apply only that exact plan
+   in account `903859731897` and region `us-east-1`, for example
+   `terraform -chdir=infra apply /private/reviewed/development-foundation.tfplan`.
+   Do not use a broad selector, `-target`, a new plan, or an apply from a dirty
+   worktree. Confirm the plan includes exactly one
+   `nova-toll-v2-development-migrations-dev` role with the trust and two RDS
+   permissions documented here.
+2. After the RDS instance is available and the protected private route/
+   transport proof passes, run the existing fresh development bootstrap in its
+   own protected step (`python3 v2/scripts/bootstrap_development_database.py
+   --fresh-development`). Keep the reviewed administrator URL, password, and
+   any IAM token in process memory only; never write them to a file, argument,
+   state, plan, log, summary, or artifact.
+
+   When a canonical schema version advances, add its contiguous migration
+   chain and append the matching immutable record to
+   `v2/db/migration-baselines.json`. Existing manifest records must never be
+   rewritten or deleted; this metadata change does not authorize a live action.
+
+3. Approve the protected `development` environment and dispatch
+   `.github/workflows/v2-development-migrations.yml` from `refs/heads/main`:
+
+   ```sh
+   gh workflow run v2-development-migrations.yml \
+     --repo rhprasad0/nova-toll-budget-agent --ref main
+   ```
+
+   The job joins only `tag:ci-development`, validates the fixed site-1 route,
+   keeps the verified RDS DNS name in `PGHOST`, uses only the derived 4via6
+   address in `PGHOSTADDR`, and authenticates only as
+   `schema_migrator_development`. It accepts no database, user, host, port,
+   migration-path, role, or production target input. Keep
+   `DEVELOPMENT_DELIVERY_ENABLED` absent or `false` throughout this sequence.
+
+When the fresh bootstrap is current, the successful migration result must have
+canonical `after` versions `pricing=1.3.0` and `oracle=1.14.0` with
+`applied=[]` (a non-current before state may contain only registered migration
+paths and must finish at those same canonical versions). Runner history evidence
+uses exactly `commit=<40 lowercase hex>;run=<UUID>`; the workflow summary and
+artifact add only the commit, GitHub run identifiers, account, fixed role,
+database/user, before/after versions, applied paths, route/transport booleans,
+and `status=ok`. They never contain a token, password, endpoint, host/port URL,
+OAuth value, raw command output, error text, Terraform state, or plan. Preserve
+the sanitized evidence with the reviewed foundation/bootstrap records. Any
+failure stops for human review; do not retry an uncertain write or run a generic
+migration command.
 
 No rollback rehearsal or production migration is part of this handoff.
 ### Guarded production release

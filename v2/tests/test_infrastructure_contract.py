@@ -69,6 +69,9 @@ DEVELOPMENT_DELIVERY_WORKFLOW = (
 DEVELOPMENT_CONNECTIVITY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-connectivity-verification.yml"
 ).read_text()
+DEVELOPMENT_MIGRATIONS_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-development-migrations.yml"
+).read_text()
 DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR = (
     V2_ROOT / "scripts" / "validate_development_foundation_plan.py"
 )
@@ -8829,3 +8832,159 @@ def test_slice_3_runbook_and_plan_document_the_staged_order_and_rollback():
             required
             in (V2_ROOT / "plans" / "ENVIRONMENT-AND-RELEASE-PLAN.md").read_text()
         )
+
+
+def test_development_migrations_iam_is_development_only_and_least_privilege():
+    assume = _top_level_terraform_block(
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "development_migrations_assume"',
+    )
+    policy = _top_level_terraform_block(
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "development_migrations"',
+    )
+    role = _top_level_terraform_block(
+        FOUNDATION_IAM,
+        'resource "aws_iam_role" "development_migrations"',
+    )
+    inline = _top_level_terraform_block(
+        FOUNDATION_IAM,
+        'resource "aws_iam_role_policy" "development_migrations"',
+    )
+    for block in (assume, policy, role, inline):
+        assert re.search(
+            r'count\s*=\s*var\.environment == "development" \? 1 : 0', block
+        )
+    statements = _parsed_policy_document(FOUNDATION_IAM, "development_migrations")
+    assert [statement["actions"] for statement in statements] == [
+        ["rds:DescribeDBInstances"],
+        ["rds-db:connect"],
+    ]
+    assert all(statement["resources"] for statement in statements)
+    assert "aws_db_instance.main.identifier" in policy
+    assert "aws_db_instance.main.resource_id" in policy
+    assert "/schema_migrator_development" in policy
+    assert "nova-toll-v2-development-migrations-dev" in role
+    assert 'actions = ["sts:AssumeRoleWithWebIdentity"]' in assume
+    assert 'variable = "token.actions.githubusercontent.com:aud"' in assume
+    assert 'values   = ["sts.amazonaws.com"]' in assume
+    assert (
+        "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"
+        in assume
+    )
+    for forbidden in (
+        "sts:AssumeRole",
+        "ssm:",
+        "secretsmanager:",
+        "terraform.tfstate",
+        "development_delivery",
+        "timed_checks",
+        "production",
+        "*",
+    ):
+        assert forbidden not in policy
+
+
+def test_development_migrations_workflow_is_main_only_private_and_sanitized(
+    tmp_path: Path,
+):
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_MIGRATIONS_WORKFLOW))
+    assert _workflow_trigger(workflow) == {"workflow_dispatch": None}
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    job = jobs["migrate"]
+    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["environment"] == "development"
+    assert job["permissions"] == {"contents": "read", "id-token": "write"}
+    defaults = cast(dict[str, object], job["defaults"])
+    run_defaults = cast(dict[str, object], defaults["run"])
+    assert run_defaults["working-directory"] == "v2"
+    assert "workflow_dispatch" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert (
+        "arn:aws:iam::903859731897:role/nova-toll-v2-development-migrations-dev"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert "tag:ci-development" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert 'PGHOST="$DB_HOST"' in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert 'PGHOSTADDR="$TRANSPORT_IPV6"' in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert "PGSSLMODE=verify-full" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert (
+        "RDS_CA_BUNDLE: $GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        'export RDS_CA_BUNDLE="$GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"'
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert "RDS_CA_BUNDLE: infra/build/ca/rds-ca-bundle.pem" not in (
+        DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    fetched = tmp_path / "v2/infra/build/ca/rds-ca-bundle.pem"
+    fetched.parent.mkdir(parents=True)
+    fetched.write_text("disposable CA fixture", encoding="utf-8")
+    assert fetched == tmp_path / "v2/infra/build/ca/rds-ca-bundle.pem"
+    assert fetched != tmp_path / "infra/build/ca/rds-ca-bundle.pem"
+    assert "generate-db-auth-token" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert (
+        "python3 scripts/run_development_migrations.py"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        'test("^v2/db/migrations/[0-9]{3}_upgrade_(pricing|oracle)_.*\\\\.sql$")'
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        "tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert "jq -cn" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert "RUNNER_TEMP" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    for forbidden in (
+        "secretsmanager",
+        "ssm:",
+        "terraform apply",
+        "terraform plan",
+        'nova_toll"',
+        "raw psql",
+    ):
+        assert forbidden not in DEVELOPMENT_MIGRATIONS_WORKFLOW
+
+
+def test_development_migrations_runbook_requires_post_merge_order_and_allowlist():
+    section = DEPLOYMENT.split(
+        "##### Protected development migration workflow (#305 slice 3)", 1
+    )[1]
+    assert section.index("human review and merge") < section.index("foundation plan")
+    assert section.index("foundation plan") < section.index(
+        "fresh development bootstrap"
+    )
+    assert section.index("fresh development bootstrap") < section.index(
+        "gh workflow run"
+    )
+    for required in (
+        "nova-toll-v2-development-migrations-dev",
+        "schema_migrator_development",
+        "PGHOST",
+        "PGHOSTADDR",
+        "applied=[]",
+        "commit=<40 lowercase hex>;run=<UUID>",
+        "token, password, endpoint",
+        "authorized from this graph run",
+    ):
+        assert required in section

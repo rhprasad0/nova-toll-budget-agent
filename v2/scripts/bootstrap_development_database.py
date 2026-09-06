@@ -11,6 +11,8 @@ a nonempty reviewed CA bundle.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -18,9 +20,11 @@ import sys
 import tempfile
 from contextlib import suppress
 from pathlib import Path
+from typing import NamedTuple, cast
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
+BASELINE_MANIFEST_PATH = ROOT / "v2/db/migration-baselines.json"
 DATABASES = {"production": "nova_toll", "development": "nova_toll_development"}
 ROLES = {
     "production": (
@@ -38,11 +42,174 @@ ROLES = {
         "tollchat_agent_development",
         "pricing_caller_development",
         "report_publisher_development",
+        "pricing_owner_development",
+        "schema_migrator_development",
     ),
 }
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_]*\Z")
 RDS_ENDPOINT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\Z")
 LOCAL_PORT = re.compile(r"[1-9][0-9]{0,4}\Z")
+DEVELOPMENT_RUNTIME_ROLE_COUNT = len(ROLES["production"])
+PRICING_OWNER_TABLES = (
+    "pricing.schema_version",
+    "pricing.trip_pricing_i95",
+    "pricing.trip_pricing_i66",
+)
+PRICING_OWNER_VIEWS = (
+    "pricing.current_trip_pricing_i95",
+    "pricing.current_trip_pricing_i66",
+    "pricing.current_i95_direction",
+    "pricing.i95_modeled_od_proxy",
+    "pricing.modeled_trip_pricing_i95",
+    "pricing.modeled_current_trip_pricing_i95",
+    "pricing.i66_pricing_comparisons",
+    "pricing.i95_i495_pricing_comparisons",
+    "pricing.i66_ballpark_samples",
+    "pricing.i95_i495_ballpark_samples",
+)
+BASELINE_EVIDENCE = "canonical bootstrap baseline; no application migration executed"
+BASELINE_MIGRATION_ID = "baseline"
+BASELINE_PATHS = {
+    "pricing": "v2/db/schema.sql",
+    "oracle": "v2/db/oracle/schema.sql",
+}
+VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$")
+SCHEMA_VERSION_PATTERN = re.compile(
+    r"^-- (?P<schema>[a-z][a-z0-9_]*) schema version: (?P<version>\S+)$",
+    re.MULTILINE,
+)
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+class Baseline(NamedTuple):
+    schema: str
+    version: str
+    migration_id: str
+    source_path: str
+    source_sha256: str
+    evidence: str
+
+
+def load_baseline_manifest(
+    path: Path | None = None,
+) -> tuple[Baseline, ...]:
+    manifest_path = path or BASELINE_MANIFEST_PATH
+    try:
+        raw: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValueError("development baseline manifest is invalid") from error
+    if not isinstance(raw, list):
+        raise ValueError("development baseline manifest must contain a list")
+
+    baselines: list[Baseline] = []
+    raw_items = cast(list[object], raw)
+    keys = {
+        "schema",
+        "version",
+        "migration_id",
+        "source_path",
+        "source_sha256",
+        "evidence",
+    }
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            raise ValueError("development baseline manifest record is invalid")
+        item = cast(dict[str, object], raw_item)
+        if set(item) != keys:
+            raise ValueError("development baseline manifest record is invalid")
+        schema = item["schema"]
+        version = item["version"]
+        migration_id = item["migration_id"]
+        source_path = item["source_path"]
+        source_sha256 = item["source_sha256"]
+        evidence = item["evidence"]
+        if (
+            not all(
+                isinstance(value, str)
+                for value in (
+                    schema,
+                    version,
+                    migration_id,
+                    source_path,
+                    source_sha256,
+                    evidence,
+                )
+            )
+            or not isinstance(schema, str)
+            or not isinstance(version, str)
+            or not isinstance(migration_id, str)
+            or not isinstance(source_path, str)
+            or not isinstance(source_sha256, str)
+            or not isinstance(evidence, str)
+        ):
+            raise ValueError("development baseline manifest record is invalid")
+        if (
+            schema not in BASELINE_PATHS
+            or source_path != BASELINE_PATHS[schema]
+            or migration_id != BASELINE_MIGRATION_ID
+            or VERSION_PATTERN.fullmatch(version) is None
+            or SHA256_PATTERN.fullmatch(source_sha256) is None
+            or evidence != BASELINE_EVIDENCE
+        ):
+            raise ValueError("development baseline manifest record is invalid")
+        baselines.append(
+            Baseline(
+                schema=schema,
+                version=version,
+                migration_id=migration_id,
+                source_path=source_path,
+                source_sha256=source_sha256,
+                evidence=evidence,
+            )
+        )
+
+    identities = [(baseline.schema, baseline.version) for baseline in baselines]
+    sources = [
+        (baseline.schema, baseline.source_path, baseline.source_sha256)
+        for baseline in baselines
+    ]
+    if len(identities) != len(set(identities)) or len(sources) != len(set(sources)):
+        raise ValueError("development baseline manifest contains duplicates")
+    if {baseline.schema for baseline in baselines} != set(BASELINE_PATHS):
+        raise ValueError("development baseline manifest lacks schema coverage")
+    return tuple(baselines)
+
+
+def baseline_for_canonical(schema: str, relative: str) -> Baseline:
+    if BASELINE_PATHS.get(schema) != relative:
+        raise RuntimeError("canonical source is not an approved baseline path")
+    source = ROOT / relative
+    try:
+        content = source.read_bytes()
+        text = content.decode("utf-8")
+        digest = hashlib.sha256(content).hexdigest()
+    except (OSError, UnicodeError) as error:
+        raise RuntimeError("canonical source is unavailable") from error
+    matches = [
+        match.group("version")
+        for match in SCHEMA_VERSION_PATTERN.finditer(text)
+        if match.group("schema") == schema
+    ]
+    if len(matches) != 1 or VERSION_PATTERN.fullmatch(matches[0]) is None:
+        raise RuntimeError("canonical source has no exact schema version")
+    inserted = re.findall(
+        rf"INSERT INTO {re.escape(schema)}[.]schema_version "
+        rf"\(version\) VALUES \('([^']+)'\)",
+        text,
+    )
+    if inserted != matches:
+        raise RuntimeError("canonical source schema version is not exact")
+    recognized = [
+        baseline
+        for baseline in load_baseline_manifest()
+        if baseline.schema == schema
+        and baseline.version == matches[0]
+        and baseline.source_path == relative
+        and baseline.source_sha256 == digest
+    ]
+    if len(recognized) != 1:
+        raise RuntimeError("canonical source is not represented in baseline manifest")
+    return recognized[0]
 
 
 def run(
@@ -209,11 +376,237 @@ def psql(
 
 
 def render(source: Path, destination: Path) -> None:
-    replacements = dict(zip(ROLES["production"], ROLES["development"], strict=True))
+    replacements = dict(
+        zip(
+            ROLES["production"],
+            ROLES["development"][:DEVELOPMENT_RUNTIME_ROLE_COUNT],
+            strict=True,
+        )
+    )
     pattern = re.compile(r"\b(" + "|".join(map(re.escape, replacements)) + r")\b")
     destination.write_text(
         pattern.sub(lambda match: replacements[match[0]], source.read_text())
     )
+
+
+def prepare_development_ownership() -> None:
+    """Create bounded owners and temporarily delegate ownership transfers."""
+
+    psql(
+        "postgres",
+        sql="""
+BEGIN;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pricing_owner_development') THEN
+    CREATE ROLE pricing_owner_development
+      NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
+      NOREPLICATION NOBYPASSRLS;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'schema_migrator_development') THEN
+    CREATE ROLE schema_migrator_development
+      LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
+      NOREPLICATION NOBYPASSRLS;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oracle_owner_development') THEN
+    CREATE ROLE oracle_owner_development
+      NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
+      NOREPLICATION NOBYPASSRLS;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname IN ('pricing_owner_development', 'oracle_owner_development')
+      AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
+           OR rolreplication OR rolbypassrls)
+  ) OR EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = 'schema_migrator_development'
+      AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolinherit
+           OR rolreplication OR rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'development ownership roles are not safely bounded';
+  END IF;
+END $$;
+DO $$
+DECLARE
+  owner_role name;
+  owner_roles name[] := ARRAY[
+    'pricing_owner_development', 'oracle_owner_development'
+  ];
+BEGIN
+  FOREACH owner_role IN ARRAY owner_roles LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      JOIN pg_roles member_role ON member_role.oid = membership.member
+      JOIN pg_roles granted_role ON granted_role.oid = membership.roleid
+      WHERE member_role.rolname = 'schema_migrator_development'
+        AND granted_role.rolname = owner_role
+        AND NOT membership.inherit_option
+        AND membership.set_option
+        AND NOT membership.admin_option
+    ) THEN
+      EXECUTE format(
+        'GRANT %I TO schema_migrator_development WITH INHERIT FALSE, SET TRUE, ADMIN FALSE',
+        owner_role
+      );
+    END IF;
+    EXECUTE format(
+      'GRANT %I TO %I WITH INHERIT FALSE, SET TRUE, ADMIN FALSE',
+      owner_role, current_user
+    );
+  END LOOP;
+END $$;
+COMMIT;
+""",
+    )
+
+
+def revoke_development_ownership() -> None:
+    psql(
+        "postgres",
+        sql="""
+DO $$
+DECLARE
+  owner_role name;
+  owner_roles name[] := ARRAY[
+    'pricing_owner_development', 'oracle_owner_development'
+  ];
+BEGIN
+  FOREACH owner_role IN ARRAY owner_roles LOOP
+    EXECUTE format('REVOKE %I FROM %I', owner_role, current_user);
+  END LOOP;
+END $$;
+""",
+    )
+
+
+def bootstrap_development_objects(database: str) -> None:
+    pricing_baseline = baseline_for_canonical("pricing", "v2/db/schema.sql")
+    oracle_baseline = baseline_for_canonical("oracle", "v2/db/oracle/schema.sql")
+    pricing_tables = "\n".join(
+        f"ALTER TABLE {table} OWNER TO pricing_owner_development;"
+        for table in PRICING_OWNER_TABLES
+    )
+    pricing_views = "\n".join(
+        f"ALTER VIEW {view} OWNER TO pricing_owner_development;"
+        for view in PRICING_OWNER_VIEWS
+    )
+    runtime_roles = ", ".join(ROLES["development"][:DEVELOPMENT_RUNTIME_ROLE_COUNT])
+    prepare_development_ownership()
+    try:
+        psql(
+            database,
+            sql=f"""
+BEGIN;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname IN ('pricing_owner_development', 'oracle_owner_development')
+      AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
+           OR rolreplication OR rolbypassrls)
+  ) OR EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = 'schema_migrator_development'
+      AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolinherit
+           OR rolreplication OR rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'development ownership roles are not safely bounded';
+  END IF;
+END $$;
+
+DO $$
+DECLARE
+  granted_role name;
+  granted_roles name[] := ARRAY[
+    'rds_iam', 'pricing_owner_development', 'oracle_owner_development'
+  ];
+BEGIN
+  FOREACH granted_role IN ARRAY granted_roles LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      JOIN pg_roles member_role ON member_role.oid = membership.member
+      JOIN pg_roles role_name ON role_name.oid = membership.roleid
+      WHERE member_role.rolname = 'schema_migrator_development'
+        AND role_name.rolname = granted_role
+        AND (
+          (granted_role = 'rds_iam'
+           AND membership.inherit_option
+           AND membership.set_option
+           AND NOT membership.admin_option)
+          OR (granted_role <> 'rds_iam'
+              AND NOT membership.inherit_option
+              AND membership.set_option
+              AND NOT membership.admin_option)
+        )
+    ) THEN
+      EXECUTE format(
+        'GRANT %I TO schema_migrator_development WITH INHERIT %s, SET TRUE, ADMIN FALSE',
+        granted_role, CASE WHEN granted_role = 'rds_iam' THEN 'TRUE' ELSE 'FALSE' END
+      );
+    END IF;
+  END LOOP;
+END $$;
+
+GRANT USAGE, CREATE ON SCHEMA pricing TO pricing_owner_development;
+{pricing_tables}
+{pricing_views}
+ALTER SCHEMA pricing OWNER TO pricing_owner_development;
+
+CREATE SCHEMA IF NOT EXISTS tollchat_migration;
+REVOKE ALL ON SCHEMA tollchat_migration FROM PUBLIC, {runtime_roles}, schema_migrator_development;
+GRANT USAGE, CREATE ON SCHEMA tollchat_migration TO pricing_owner_development;
+CREATE TABLE IF NOT EXISTS tollchat_migration.schema_history (
+    schema_name text NOT NULL CHECK (schema_name IN ('pricing', 'oracle')),
+    schema_version text NOT NULL CHECK (
+        schema_version ~ '^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$'
+    ),
+    migration_id text NOT NULL,
+    source_path text NOT NULL CHECK (btrim(source_path) <> ''),
+    source_sha256 text NOT NULL CHECK (source_sha256 ~ '^[0-9a-f]{{64}}$'),
+    evidence text NOT NULL CHECK (btrim(evidence) <> ''),
+    is_baseline boolean NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+    PRIMARY KEY (schema_name, migration_id),
+    UNIQUE (schema_name, schema_version),
+    CHECK (
+        (is_baseline AND migration_id = 'baseline')
+        OR (NOT is_baseline AND migration_id <> 'baseline')
+    )
+);
+REVOKE ALL ON tollchat_migration.schema_history
+  FROM PUBLIC, {runtime_roles}, schema_migrator_development;
+ALTER TABLE tollchat_migration.schema_history OWNER TO pricing_owner_development;
+ALTER SCHEMA tollchat_migration OWNER TO pricing_owner_development;
+SET LOCAL ROLE pricing_owner_development;
+INSERT INTO tollchat_migration.schema_history (
+    schema_name, schema_version, migration_id, source_path,
+    source_sha256, evidence, is_baseline
+) VALUES
+    ('pricing', :'pricing_version', :'pricing_migration_id', :'pricing_source_path',
+     :'pricing_sha256', :'pricing_evidence', true),
+    ('oracle', :'oracle_version', :'oracle_migration_id', :'oracle_source_path',
+     :'oracle_sha256', :'oracle_evidence', true)
+ON CONFLICT (schema_name, migration_id) DO NOTHING;
+COMMIT;
+""",
+            variables={
+                "pricing_version": pricing_baseline.version,
+                "pricing_migration_id": pricing_baseline.migration_id,
+                "pricing_source_path": pricing_baseline.source_path,
+                "pricing_sha256": pricing_baseline.source_sha256,
+                "pricing_evidence": pricing_baseline.evidence,
+                "oracle_version": oracle_baseline.version,
+                "oracle_migration_id": oracle_baseline.migration_id,
+                "oracle_source_path": oracle_baseline.source_path,
+                "oracle_sha256": oracle_baseline.source_sha256,
+                "oracle_evidence": oracle_baseline.evidence,
+            },
+        )
+    finally:
+        revoke_development_ownership()
 
 
 def rollback_development() -> None:
@@ -310,7 +703,9 @@ def cleanup_fresh_development() -> None:
     for database, sql in (
         (
             DATABASES["development"],
-            "DROP SCHEMA IF EXISTS oracle CASCADE; DROP SCHEMA IF EXISTS pricing CASCADE;",
+            "DROP SCHEMA IF EXISTS tollchat_migration CASCADE;"
+            " DROP SCHEMA IF EXISTS oracle CASCADE;"
+            " DROP SCHEMA IF EXISTS pricing CASCADE;",
         ),
         (
             "postgres",
@@ -358,12 +753,14 @@ def fresh_development() -> int:
         started = False
         try:
             started = True
+            prepare_development_ownership()
             for relative in (
                 "v2/db/schema.sql",
                 "v2/db/roles.sql",
                 "v2/db/oracle/schema.sql",
             ):
                 psql(DATABASES["development"], file=rendered / relative)
+            bootstrap_development_objects(DATABASES["development"])
             development_roles = ", ".join(ROLES["development"])
             role_comments = "\n".join(
                 f"COMMENT ON ROLE {role} IS 'environment=development';"
@@ -397,7 +794,7 @@ def main() -> int:
         not IDENTIFIER.fullmatch(name) for names in ROLES.values() for name in names
     ):
         raise RuntimeError("bootstrap role map contains an unsafe identifier")
-    if len(set(ROLES["production"] + ROLES["development"])) != 12:
+    if len(set(ROLES["production"] + ROLES["development"])) != 14:
         raise RuntimeError("bootstrap role map contains duplicate identifiers")
     if len(sys.argv) == 2 and sys.argv[1] == "--fresh-development":
         return fresh_development()
@@ -491,9 +888,11 @@ END $$;
                 sql="CREATE DATABASE nova_toll_development TEMPLATE template0;",
             )
             created_development = True
+            prepare_development_ownership()
             psql(DATABASES["development"], file=rendered / "v2/db/schema.sql")
             psql(DATABASES["development"], file=rendered / "v2/db/roles.sql")
             psql(DATABASES["development"], file=rendered / "v2/db/oracle/schema.sql")
+            bootstrap_development_objects(DATABASES["development"])
             psql(
                 DATABASES["development"],
                 sql="""
@@ -517,12 +916,7 @@ END $$;
 BEGIN;
 COMMENT ON DATABASE nova_toll IS 'environment=production';
 COMMENT ON DATABASE nova_toll_development IS 'environment=development';
-COMMENT ON ROLE pricing_loader_writer_development IS 'environment=development';
-COMMENT ON ROLE pricing_reader_development IS 'environment=development';
-COMMENT ON ROLE oracle_owner_development IS 'environment=development';
-COMMENT ON ROLE tollchat_agent_development IS 'environment=development';
-COMMENT ON ROLE pricing_caller_development IS 'environment=development';
-COMMENT ON ROLE report_publisher_development IS 'environment=development';
+{chr(10).join(f"COMMENT ON ROLE {role} IS 'environment=development';" for role in ROLES["development"])}
 REVOKE CONNECT ON DATABASE nova_toll FROM PUBLIC;
 REVOKE CONNECT ON DATABASE nova_toll_development FROM PUBLIC;
 GRANT CONNECT ON DATABASE nova_toll TO {prod_roles};
@@ -552,7 +946,8 @@ BEGIN
       AND privilege.grantee NOT IN (to_regrole('pricing_loader_writer_development'),
         to_regrole('pricing_reader_development'), to_regrole('oracle_owner_development'),
         to_regrole('tollchat_agent_development'), to_regrole('pricing_caller_development'),
-        to_regrole('report_publisher_development'))
+        to_regrole('report_publisher_development'), to_regrole('pricing_owner_development'),
+        to_regrole('schema_migrator_development'))
   ) THEN RAISE EXCEPTION 'database has unexpected CONNECT grantee'; END IF;
   FOREACH role_name IN ARRAY production_roles LOOP
     IF NOT has_database_privilege(role_name, 'nova_toll', 'CONNECT')

@@ -237,6 +237,65 @@ data "aws_iam_policy_document" "development_delivery_assume" {
   }
 }
 
+# The migration runner is a separate, development-only identity. It can read
+# the endpoint metadata needed by the protected job and authenticate only as
+# the fixed schema migrator database role.
+data "aws_iam_policy_document" "development_migrations_assume" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    sid     = "GitHubDevelopmentEnvironment"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "development_migrations" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    sid       = "DescribeDevelopmentRds"
+    actions   = ["rds:DescribeDBInstances"]
+    resources = ["arn:aws:rds:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:db:${aws_db_instance.main.identifier}"]
+  }
+
+  statement {
+    sid       = "ConnectAsSchemaMigrator"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/schema_migrator_development"]
+  }
+}
+
+resource "aws_iam_role" "development_migrations" {
+  count                = var.environment == "development" ? 1 : 0
+  name                 = "nova-toll-v2-development-migrations-dev"
+  assume_role_policy   = data.aws_iam_policy_document.development_migrations_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy" "development_migrations" {
+  count  = var.environment == "development" ? 1 : 0
+  name   = "nova-toll-v2-development-migrations-dev"
+  role   = aws_iam_role.development_migrations[0].id
+  policy = data.aws_iam_policy_document.development_migrations[0].json
+}
+
 data "aws_iam_policy_document" "development_delivery" {
   # Terraform state is the only shared control-plane data this role can read.
   statement {

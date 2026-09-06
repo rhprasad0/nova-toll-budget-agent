@@ -11,11 +11,12 @@ development_db="nova_toll_development"
 development_roles=(
   pricing_loader_writer_development pricing_reader_development oracle_owner_development
   tollchat_agent_development pricing_caller_development report_publisher_development
+  pricing_owner_development schema_migrator_development
 )
 login_roles=(
   pricing_loader_writer pricing_reader tollchat_agent pricing_caller report_publisher
   pricing_loader_writer_development pricing_reader_development tollchat_agent_development
-  pricing_caller_development report_publisher_development
+  pricing_caller_development report_publisher_development schema_migrator_development
 )
 
 sentinel='VERIFIER_SENTINEL_SECRET'
@@ -312,7 +313,7 @@ FROM pg_database WHERE datname = '$production_db'
 DO \$\$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '$development_db')
-     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ANY (ARRAY['${development_roles[0]}', '${development_roles[1]}', '${development_roles[2]}', '${development_roles[3]}', '${development_roles[4]}', '${development_roles[5]}'])) THEN
+     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ANY (ARRAY['${development_roles[0]}', '${development_roles[1]}', '${development_roles[2]}', '${development_roles[3]}', '${development_roles[4]}', '${development_roles[5]}', '${development_roles[6]}', '${development_roles[7]}'])) THEN
     RAISE EXCEPTION 'failed bootstrap left development artifacts';
   END IF;
 END \$\$;"
@@ -330,12 +331,12 @@ bootstrap = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bootstrap)
 real_psql = bootstrap.psql
 
-def fail_after_create(database, *, sql=None, file=None):
+def fail_after_create(database, *, sql=None, file=None, variables=None):
     if os.environ["BOOTSTRAP_FAILURE_MODE"] == "load" and file is not None:
         raise RuntimeError("injected load failure")
     if os.environ["BOOTSTRAP_FAILURE_MODE"] == "finalization" and sql and "COMMENT ON DATABASE nova_toll" in sql:
         sql = sql.replace("COMMIT;", "DO $$ BEGIN RAISE EXCEPTION 'injected finalization failure'; END $$;\nCOMMIT;", 1)
-    return real_psql(database, sql=sql, file=file)
+    return real_psql(database, sql=sql, file=file, variables=variables)
 
 bootstrap.psql = fail_after_create
 try:
@@ -353,7 +354,81 @@ PY
 done
 
 python3 v2/scripts/bootstrap_development_database.py
-psql --dbname "$development_db" --file v2/tests/development_bootstrap_contract.sql
+pricing_sha256="$(sha256sum v2/db/schema.sql | awk '{print $1}')"
+oracle_sha256="$(sha256sum v2/db/oracle/schema.sql | awk '{print $1}')"
+psql --dbname "$development_db" \
+  --variable pricing_sha256="$pricing_sha256" \
+  --variable oracle_sha256="$oracle_sha256" \
+  --file v2/tests/development_bootstrap_contract.sql
+
+history_before="$(psql --dbname "$development_db" --tuples-only --no-align \
+  --command 'SELECT concat_ws($$|$$, schema_name, schema_version, migration_id, source_sha256, evidence) FROM tollchat_migration.schema_history ORDER BY schema_name')"
+python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+assert spec and spec.loader
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+bootstrap.bootstrap_development_objects("nova_toll_development")
+PY
+history_after="$(psql --dbname "$development_db" --tuples-only --no-align \
+  --command 'SELECT concat_ws($$|$$, schema_name, schema_version, migration_id, source_sha256, evidence) FROM tollchat_migration.schema_history ORDER BY schema_name')"
+[[ "$history_before" == "$history_after" ]]
+
+psql --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE bootstrap_non_superuser LOGIN NOSUPERUSER CREATEDB CREATEROLE NOINHERIT;
+GRANT CONNECT, CREATE ON DATABASE nova_toll_development TO bootstrap_non_superuser;
+GRANT pricing_owner_development TO bootstrap_non_superuser
+  WITH INHERIT FALSE, SET TRUE, ADMIN TRUE;
+GRANT oracle_owner_development TO bootstrap_non_superuser
+  WITH INHERIT FALSE, SET TRUE, ADMIN TRUE;
+SQL
+psql --dbname "$development_db" --set ON_ERROR_STOP=1 <<'SQL'
+ALTER SCHEMA pricing OWNER TO bootstrap_non_superuser;
+ALTER TABLE pricing.schema_version OWNER TO bootstrap_non_superuser;
+ALTER TABLE pricing.trip_pricing_i95 OWNER TO bootstrap_non_superuser;
+ALTER TABLE pricing.trip_pricing_i66 OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.current_trip_pricing_i95 OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.current_trip_pricing_i66 OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.current_i95_direction OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.i95_modeled_od_proxy OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.modeled_trip_pricing_i95 OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.modeled_current_trip_pricing_i95 OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.i66_pricing_comparisons OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.i95_i495_pricing_comparisons OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.i66_ballpark_samples OWNER TO bootstrap_non_superuser;
+ALTER VIEW pricing.i95_i495_ballpark_samples OWNER TO bootstrap_non_superuser;
+ALTER SCHEMA tollchat_migration OWNER TO bootstrap_non_superuser;
+ALTER TABLE tollchat_migration.schema_history OWNER TO bootstrap_non_superuser;
+SQL
+PGUSER=bootstrap_non_superuser python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+path = Path("v2/scripts/bootstrap_development_database.py")
+spec = importlib.util.spec_from_file_location("bootstrap", path)
+assert spec and spec.loader
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+bootstrap.bootstrap_development_objects("nova_toll_development")
+PY
+psql --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+REVOKE CONNECT, CREATE ON DATABASE nova_toll_development FROM bootstrap_non_superuser;
+DROP ROLE bootstrap_non_superuser;
+SQL
+
+if psql --username schema_migrator_development --dbname "$development_db" \
+  --set ON_ERROR_STOP=1 --command \
+  'SELECT count(*) FROM tollchat_migration.schema_history' >/dev/null 2>&1; then
+  echo 'schema migrator has direct history access' >&2
+  exit 1
+fi
+psql --username schema_migrator_development --dbname "$development_db" \
+  --set ON_ERROR_STOP=1 --command \
+  'SET ROLE pricing_owner_development; SELECT count(*) FROM tollchat_migration.schema_history' >/dev/null
 
 for role in "${login_roles[@]}"; do
   if [[ "$role" == *_development ]]; then

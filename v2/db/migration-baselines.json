@@ -1,0 +1,18 @@
+[
+  {
+    "schema": "pricing",
+    "version": "1.3.0",
+    "migration_id": "baseline",
+    "source_path": "v2/db/schema.sql",
+    "source_sha256": "fbfe52f47d1cc1f88d97e9e2f9b641f73f2798ecf9bc88e4abc9897c9190bddf",
+    "evidence": "canonical bootstrap baseline; no application migration executed"
+  },
+  {
+    "schema": "oracle",
+    "version": "1.14.0",
+    "migration_id": "baseline",
+    "source_path": "v2/db/oracle/schema.sql",
+    "source_sha256": "2634341b7c84ed42c0cd56fe94532cbe6e6b49ae9a2f81245635cb7b659d8911",
+    "evidence": "canonical bootstrap baseline; no application migration executed"
+  }
+]
