@@ -34,6 +34,26 @@ review is separate and parent-controlled.
 The replay prompt date is fixed at **2026-09-05**; retained observations are
 historical evidence, not present-day quotes.
 
+### Offline calibration review
+
+`eval.calibration` validates a complete retained three-trial split before it
+binds evidence or renders the approved 30-case review. Inputs are always
+explicit; the command never discovers private files or runs an agent:
+
+```bash
+uv run python -m eval.calibration review \
+  --public-manifest eval/golden/manifest-v2.json \
+  --public-root /path/to/public-run \
+  --rate-card /path/to/trusted-rate-card.json \
+  --output ../.graph/calibration-review.html
+```
+
+The explicit trusted rate card must be the canonical card supplied to the run.
+The page uses public trial `1`, hides machine verdicts and internal IDs, and
+downloads a SHA-256-bound Pass/Fail/Unsure label packet. A trusted parent can
+use `combine` with explicit public/private manifests and roots to create a
+mechanical report; the private projection contains aggregates and digests only.
+
 ## What is measured
 
 Both production tool contracts use recorded `AgentTool` wrappers. Each trial
