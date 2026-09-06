@@ -4894,6 +4894,58 @@ managed old objects retained for Terraform: 22 site keys + 1 registry key
 historical reconciliation only: 1,655 unmanaged old objects, 5 shared versions
 ```
 
+#### Resuming the interrupted writer freeze
+
+The interrupted run must use `resume-frozen`; it must not be re-run as
+`freeze`, and `--execute` is rejected for this phase. Keep the original
+`writers-before.json` immutable and supply it as `--resume-baseline`. Before
+starting the drain, freshly run and review the read-only semantic comparison
+against canonical Terraform state. The proof must be a
+`lambda-semantic-proof-v1` document with `status: pass`, `read_only: true`,
+account `920534282028`, region `us-east-1`, exactly the three fixed writer
+names, all 20 checks true for each writer, no mismatches, and each current
+`configuration_sha256` from that same read.
+
+The proof's single `canonical_state` binding must contain the fixed state
+bucket/key, version `DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3`, SHA-256
+`6080bb945772256bbbe389dc6cf15804ba297ad6399dc9f10ebb8cc315a6b720`, and a
+fresh `head` object whose `version_id` and `etag` come from an unversioned
+`head-object` read. Retain its KMS algorithm and key ID too. This HEAD check
+prevents a proof from silently following a changed state object. The proof is
+accepted only when its capture time is after the final permitted writer
+mutation and before the resume starts.
+
+For this one-time recovery, use the independently reviewed private
+`freeze-state-config-compare.py` retained with the operator's graph evidence.
+It is not a checked-in application script. Set
+`RETIRE_LEGACY_SEMANTIC_COMPARATOR` to its absolute reviewed path and verify
+its reviewed SHA-256 before running it. It must reject optimized Python,
+assert the current canonical state VersionId/ETag/CMK before and after its
+read-only comparison, and keep raw state and Lambda configuration in memory.
+Run it immediately before the wrapper below and review its sanitized output. Create
+the strict proof with this small wrapper after obtaining the fresh unversioned
+HEAD response. It adds no configuration data or secrets; it fails if the
+comparator did not pass or widened the writer set:
+
+The shell block below selects this recovery with
+`RETIRE_LEGACY_FREEZE_MODE=resume-frozen`. It runs the comparison and proof
+wrapper before the read-only drain. Use a fresh evidence directory and set
+`RETIRE_LEGACY_RESUME_BASELINE` to the original immutable `writers-before.json`.
+
+This phase reads the three writers, WAF logging document, lifecycle document,
+Athena workgroup, and complete object/configuration inventory before the
+drain; it then waits at least 900 seconds without Lambda, WAF, lifecycle,
+archive, delete, Terraform, or database calls and repeats those reads. It
+requires exact zero reserved concurrency, the reviewed WAF `KEEP` to `DROP`
+change, the two reviewed lifecycle `Enabled` to `Disabled` changes, byte-stable
+current writer hashes (including live-only status fields), and a stable full
+snapshot. Resumed evidence records its own start/completion times and contains
+no claim that the historical whole-hash mismatch was equal or understood.
+Review the sanitized resumed state and snapshot before archive. Archive, purge,
+and verify consume resumed evidence only through that marker and remain behind
+all existing archive/readback, conditional-delete, managed-object,
+shared-version, and Terraform-plan gates.
+
 Use the helper only from the production account and `us-east-1`.  Its boto3
 clients use `total_max_attempts=1`, assert the caller account at session
 construction and before each non-S3 API request, pass
@@ -4976,6 +5028,9 @@ jq -e '
       (.key == "runtime/v2/agentcore-dev.zip" or .key == "lambda/v2/chat-proxy-dev.zip"))))
 ' "$MANAGED_OBJECT_MAPPING" >/dev/null
 
+# Explicit selection prevents an interrupted run from repeating mutations.
+case "${RETIRE_LEGACY_FREEZE_MODE:?set freeze for a new run or resume-frozen for the interrupted run}" in
+freeze)
 # Freeze exactly three writers.  The helper retrieves and replays the complete
 # WAF document, changing only this exact KEEP filter to DROP, and the complete
 # lifecycle document, changing only IDs expire-raw-waf-logs and
@@ -4990,6 +5045,78 @@ uv run --project "$ROOT/v2" python "$HELPER" --phase freeze --execute --snapshot
   --identity-manifest "$LIVE_IDENTITY_MANIFEST" \
   --managed-object-mapping "$MANAGED_OBJECT_MAPPING" \
   >"$EVIDENCE_DIR/frozen-summary.json"
+
+;;
+resume-frozen)
+SEMANTIC_COMPARATOR="${RETIRE_LEGACY_SEMANTIC_COMPARATOR:?set the absolute independently reviewed private comparator path}"
+SEMANTIC_COMPARATOR_SHA256="${RETIRE_LEGACY_SEMANTIC_COMPARATOR_SHA256:?set its reviewed SHA-256}"
+test "$(sha256sum "$SEMANTIC_COMPARATOR" | awk '{print $1}')" = "$SEMANTIC_COMPARATOR_SHA256"
+uv run --project "$ROOT/v2" python "$SEMANTIC_COMPARATOR" \
+  >"$EVIDENCE_DIR/freeze-state-config-comparison.json"
+CANONICAL_STATE_VERSION="DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3"
+CANONICAL_HEAD="$(aws --profile nova-toll-prod --region us-east-1 s3api head-object \
+  --bucket nova-toll-tfstate-920534282028 \
+  --key nova-toll/v2/development/terraform.tfstate \
+  --expected-bucket-owner 920534282028 \
+  --query '{version_id:VersionId,etag:ETag,sse_algorithm:ServerSideEncryption,kms_key_id:SSEKMSKeyId}' \
+  --output json)"
+python3 - "$EVIDENCE_DIR/freeze-state-config-comparison.json" \
+  "$EVIDENCE_DIR/semantic-proof.json" "$CANONICAL_HEAD" <<'PY'
+import json, sys
+from pathlib import Path
+
+if sys.flags.optimize:
+    raise SystemExit("optimized Python is prohibited")
+source = json.loads(Path(sys.argv[1]).read_text())
+head = json.loads(sys.argv[3])
+names = {
+    "toll-v2-report-publisher-dev",
+    "tollchat-v2-usage-publisher-dev",
+    "tollchat-v2-agent-usage-rollup-dev",
+}
+assert source.get("status") == "pass" and source.get("read_only") is True
+assert {row.get("name") for row in source.get("functions", [])} == names
+assert all(row.get("not_in_terraform_state") == [
+    "LastUpdateStatus", "RevisionId", "RuntimeVersionConfig", "State"
+] for row in source["functions"])
+assert head["version_id"] == "DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3"
+assert head["etag"] == '"375ef3e67c0f52f518883e6cb6791baa"'
+assert head["sse_algorithm"] == "aws:kms"
+assert head["kms_key_id"] == "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
+assert source["account_id"] == "920534282028" and source["region"] == "us-east-1"
+assert source["canonical_state_version"] == "DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3"
+proof = {
+    "manifest": "lambda-semantic-proof-v1",
+    "status": "pass",
+    "read_only": True,
+    "account_id": "920534282028",
+    "region": "us-east-1",
+    "captured_at": source["captured_at"],
+    "canonical_state": {
+        "bucket": "nova-toll-tfstate-920534282028",
+        "key": "nova-toll/v2/development/terraform.tfstate",
+        "version_id": "DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3",
+        "sha256": "6080bb945772256bbbe389dc6cf15804ba297ad6399dc9f10ebb8cc315a6b720",
+        "head": head,
+    },
+    "live_only_fields": ["LastUpdateStatus", "RevisionId", "RuntimeVersionConfig", "State"],
+    "functions": source["functions"],
+}
+Path(sys.argv[2]).write_text(json.dumps(proof, sort_keys=True, separators=(",", ":")) + "\n")
+PY
+
+LAST_WRITER_MUTATION_AT="${LAST_WRITER_MUTATION_AT:?set the final permitted writer mutation timestamp}"
+uv run --project "$ROOT/v2" python "$HELPER" --phase resume-frozen \
+  --snapshot "$INITIAL" --output "$FROZEN" --freeze-state "$WRITERS" \
+  --resume-baseline "${RETIRE_LEGACY_RESUME_BASELINE:?set the original immutable writers-before.json path}" \
+  --semantic-proof "$EVIDENCE_DIR/semantic-proof.json" \
+  --last-writer-mutation-at "$LAST_WRITER_MUTATION_AT" \
+  --identity-manifest "$LIVE_IDENTITY_MANIFEST" \
+  --managed-object-mapping "$MANAGED_OBJECT_MAPPING" \
+  >"$EVIDENCE_DIR/resume-frozen-summary.json"
+;;
+*) exit 1 ;;
+esac
 
 # STATE_SSEKMS_KEY_ID is the fixed retained production state CMK read from the
 # canonical state object.  Archive every old object and every actual version of

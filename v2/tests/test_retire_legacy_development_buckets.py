@@ -6,7 +6,7 @@ import importlib.util
 import io
 import sys
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +88,117 @@ def _snapshot(extra: list[Any] | None = None) -> dict[str, Any]:
 def _records(extra: list[Any] | None = None) -> list[Any]:
     snapshot = _snapshot(extra)
     return [module._record_from_dict(raw) for raw in snapshot["objects"]]
+
+
+def _resume_baseline() -> dict[str, Any]:
+    return {
+        "functions": [
+            {
+                "name": name,
+                "timeout": timeout,
+                "configuration_sha256": hashlib.sha256(
+                    f"old-{name}".encode()
+                ).hexdigest(),
+                "concurrency": {},
+            }
+            for name, timeout in module.LAMBDA_WRITERS
+        ],
+        "waf": {
+            "ResourceArn": "arn:aws:wafv2:us-east-1:920534282028:global/webacl/test/id",
+            "LogDestinationConfigs": ["arn:aws:s3:::aws-waf-logs"],
+            "RedactedFields": [{"QueryString": {}}],
+            "ManagedByFirewallManager": False,
+            "LogType": "WAF_LOGS",
+            "LogScope": "CUSTOMER",
+            "LoggingFilter": {
+                "DefaultBehavior": "DROP",
+                "Filters": [
+                    {
+                        "Behavior": "KEEP",
+                        "Requirement": "MEETS_ALL",
+                        "Conditions": [
+                            {
+                                "LabelNameCondition": {
+                                    "LabelName": module.WAF_AGENT_LABEL
+                                }
+                            }
+                        ],
+                    }
+                ],
+            },
+        },
+        "lifecycle": {
+            "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K",
+            "Rules": [
+                {
+                    "ID": "expire-raw-waf-logs",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "AWSLogs/"},
+                    "Expiration": {"Days": 7},
+                },
+                {
+                    "ID": "expire-athena-results",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "athena-results/"},
+                    "Expiration": {"Days": 7},
+                    "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1},
+                },
+            ],
+        },
+    }
+
+
+def _resume_current(baseline: dict[str, Any], *, suffix: str = "") -> dict[str, Any]:
+    return {
+        "functions": [
+            {
+                "name": name,
+                "timeout": timeout,
+                "configuration_sha256": hashlib.sha256(
+                    f"current-{name}{suffix}".encode()
+                ).hexdigest(),
+                "concurrency": {"ReservedConcurrentExecutions": 0},
+            }
+            for name, timeout in module.LAMBDA_WRITERS
+        ],
+        "waf": module._change_waf_filter(baseline["waf"]),
+        "lifecycle": module._disable_lifecycle(baseline["lifecycle"]),
+    }
+
+
+def _semantic_proof(current: dict[str, Any], captured_at: str) -> dict[str, Any]:
+    functions = [
+        {
+            "name": item["name"],
+            "configuration_sha256": item["configuration_sha256"],
+            "checks": {field: True for field in module.SEMANTIC_FIELDS},
+            "mismatches": [],
+            "not_in_terraform_state": sorted(module.LIVE_ONLY_FIELDS),
+        }
+        for item in current["functions"]
+    ]
+    return {
+        "manifest": module.SEMANTIC_PROOF_MANIFEST,
+        "status": "pass",
+        "read_only": True,
+        "account_id": module.PRODUCTION_ACCOUNT,
+        "region": module.PRODUCTION_REGION,
+        "captured_at": captured_at,
+        "canonical_state": {
+            "bucket": module.STATE_BUCKET,
+            "key": module.CANONICAL_STATE_KEY,
+            "version_id": module.CANONICAL_STATE_VERSION,
+            "sha256": module.CANONICAL_STATE_SHA256,
+            "head": {
+                "version_id": module.CANONICAL_STATE_VERSION,
+                "etag": module.CANONICAL_STATE_ETAG,
+                "sse_algorithm": "aws:kms",
+                "kms_key_id": module.CANONICAL_STATE_CMK,
+            },
+        },
+        "live_only_fields": sorted(module.LIVE_ONLY_FIELDS),
+        "functions": functions,
+    }
 
 
 def test_allowlist_has_exact_bucket_and_managed_boundaries() -> None:
@@ -597,6 +708,211 @@ def test_draining_contract_is_exactly_900_seconds() -> None:
     assert module.HISTORICAL_SHARED_VERSION_COUNT == 5
 
 
+def test_normal_freeze_rejects_the_old_full_hash_mismatch() -> None:
+    baseline = _resume_baseline()
+    before = copy.deepcopy(baseline)
+    after = _resume_current(baseline)
+    after["functions"][0]["configuration_sha256"] = "different"
+    with pytest.raises(module.RetirementError, match="configuration changed"):
+        module._verify_frozen_writers(before, after)
+
+
+def test_semantic_proof_requires_exact_current_head_and_twenty_fields() -> None:
+    baseline = _resume_baseline()
+    current = _resume_current(baseline)
+    now = datetime.now(UTC)
+    proof = _semantic_proof(current, now.isoformat())
+    binding = module._validate_semantic_proof(
+        proof,
+        current,
+        last_writer_mutation_at=now - timedelta(seconds=1),
+        resume_started_at=now + timedelta(seconds=1),
+    )
+    assert len(binding["functions"][current["functions"][0]["name"]]) == 64
+
+    for change in ("account", "writer", "hash", "checks", "state", "future"):
+        invalid = copy.deepcopy(proof)
+        if change == "account":
+            invalid["account_id"] = "903859731897"
+        elif change == "writer":
+            invalid["functions"][0]["name"] = "other-writer"
+        elif change == "hash":
+            invalid["functions"][0]["configuration_sha256"] = "0" * 64
+        elif change == "checks":
+            invalid["functions"][0]["checks"].pop("Environment")
+        elif change == "state":
+            invalid["canonical_state"]["version_id"] = "other-state"
+        else:
+            invalid["captured_at"] = (now + timedelta(seconds=2)).isoformat()
+        with pytest.raises(module.RetirementError):
+            module._validate_semantic_proof(
+                invalid,
+                current,
+                last_writer_mutation_at=now - timedelta(seconds=1),
+                resume_started_at=now + timedelta(seconds=1),
+            )
+
+    for boundary in (now - timedelta(seconds=1), now + timedelta(seconds=1)):
+        invalid = copy.deepcopy(proof)
+        invalid["captured_at"] = boundary.isoformat()
+        with pytest.raises(module.RetirementError, match="stale"):
+            module._validate_semantic_proof(
+                invalid,
+                current,
+                last_writer_mutation_at=now - timedelta(seconds=1),
+                resume_started_at=now + timedelta(seconds=1),
+            )
+
+    proof["canonical_state"]["head"]["etag"] = ""
+    with pytest.raises(module.RetirementError, match="canonical state"):
+        module._validate_semantic_proof(
+            proof,
+            current,
+            last_writer_mutation_at=now - timedelta(seconds=1),
+            resume_started_at=now + timedelta(seconds=1),
+        )
+
+
+def test_resumed_writer_checks_require_zero_and_exact_waf_lifecycle() -> None:
+    baseline = _resume_baseline()
+    current = _resume_current(baseline)
+    module._verify_resumed_writers(baseline, current, copy.deepcopy(current))
+
+    changed = copy.deepcopy(current)
+    changed["functions"][1]["concurrency"]["ReservedConcurrentExecutions"] = 1
+    with pytest.raises(module.RetirementError, match="exactly zero"):
+        module._verify_resumed_writers(baseline, current, changed)
+
+    changed = copy.deepcopy(current)
+    changed["waf"]["LogDestinationConfigs"].append("arn:aws:s3:::other")
+    with pytest.raises(module.RetirementError, match="WAF drift"):
+        module._verify_resumed_writers(baseline, current, changed)
+
+
+def test_resume_frozen_is_read_only_and_requires_a_full_900_second_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline = _resume_baseline()
+    current = _resume_current(baseline)
+    snapshot = _snapshot()
+    records = [module._record_from_dict(item) for item in snapshot["objects"]]
+    snapshot["objects"] = [
+        record.snapshot_dict() for record in sorted(records, key=module._record_sort)
+    ]
+    now = datetime.now(UTC)
+    proof = _semantic_proof(current, (now - timedelta(seconds=1)).isoformat())
+    calls: list[float] = []
+    events: list[str] = []
+    clocks = iter((100.0, 1000.0))
+    states = iter((current, copy.deepcopy(current)))
+    snapshots = iter((snapshot, copy.deepcopy(snapshot)))
+
+    def fake_writer(_aws: Any) -> dict[str, Any]:
+        return next(states)
+
+    def fake_snapshot(_aws: Any) -> dict[str, Any]:
+        return next(snapshots)
+
+    def fake_athena(_aws: Any) -> None:
+        events.append("athena")
+
+    def fake_clock() -> float:
+        events.append("clock")
+        return next(clocks)
+
+    def fake_sleep(seconds: float) -> None:
+        events.append("sleep")
+        calls.append(seconds)
+
+    monkeypatch.setattr(module, "writer_state", fake_writer)
+    monkeypatch.setattr(module, "capture_snapshot", fake_snapshot)
+    monkeypatch.setattr(module, "_athena_idle", fake_athena)
+
+    state = module.resume_frozen(
+        object(),
+        baseline,
+        proof,
+        snapshot=snapshot,
+        fresh_snapshot=snapshot,
+        last_writer_mutation_at=(now - timedelta(seconds=30)).isoformat(),
+        clock=fake_clock,
+        sleep=fake_sleep,
+    )
+    assert calls == [module.DRAIN_SECONDS]
+    assert events == ["athena", "clock", "sleep", "clock", "athena"]
+    # A bare object has no AWS call method: any direct mutation would fail.
+    assert state["mode"] == module.RESUMED_FREEZE_MODE
+    assert state["before_snapshot_sha256"] == state["after_snapshot_sha256"]
+
+    states = iter((current,))
+    short_clock = iter((100.0, 999.0))
+    with pytest.raises(module.RetirementError, match="900 seconds"):
+        module.resume_frozen(
+            object(),
+            baseline,
+            proof,
+            snapshot=snapshot,
+            fresh_snapshot=snapshot,
+            last_writer_mutation_at=(now - timedelta(seconds=30)).isoformat(),
+            clock=lambda: next(short_clock),
+            sleep=calls.append,
+        )
+
+    states = iter((current,))
+    snapshots = iter((snapshot,))
+    monkeypatch.setattr(module, "writer_state", fake_writer)
+    monkeypatch.setattr(module, "capture_snapshot", fake_snapshot)
+    monkeypatch.setattr(module.time, "monotonic", lambda: 1000.0)
+    module._require_freeze_evidence(object(), state, snapshot=snapshot)
+
+    invalid = copy.deepcopy(state)
+    invalid["after_snapshot_sha256"] = "0" * 64
+    with pytest.raises(module.RetirementError, match="different snapshot"):
+        module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+
+    for value in (999.0, 1001.0, float("nan"), float("inf")):
+        invalid = copy.deepcopy(state)
+        invalid["drain_completed_monotonic"] = value
+        with pytest.raises(module.RetirementError, match="900 elapsed"):
+            module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+    for start, completion in ((-1.0, 899.0), (-901.0, -1.0)):
+        invalid = copy.deepcopy(state)
+        invalid["drain_started_monotonic"] = start
+        invalid["drain_completed_monotonic"] = completion
+        with pytest.raises(module.RetirementError, match="900 elapsed"):
+            module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+    invalid = copy.deepcopy(state)
+    invalid["semantic_proof"]["functions"][0]["checks"]["Environment"] = False
+    with pytest.raises(module.RetirementError, match="digest"):
+        module._require_freeze_evidence(object(), invalid, snapshot=snapshot)
+
+    # Post-purge verification must check the smaller intended inventory, not
+    # demand the original unmanaged objects still exist in the writer gate.
+    states = iter((current,))
+    post_purge = copy.deepcopy(snapshot)
+    post_purge["objects"] = [
+        item
+        for item in post_purge["objects"]
+        if not item["key"].startswith("unmanaged/")
+    ]
+    snapshots = iter((post_purge,))
+
+    def archive_readback(*_args: Any) -> dict[str, Any]:
+        return {}
+
+    def archive_objects(*_args: Any) -> None:
+        return None
+
+    monkeypatch.setattr(module, "_load_archive_manifest", archive_readback)
+    monkeypatch.setattr(module, "_verify_archive_objects", archive_objects)
+    result = module.verify_post_purge(object(), snapshot, "retained-cmk", state, {})
+    assert result == {
+        "managed_old_objects": 23,
+        "shared_versions": 2,
+        "unmanaged_purged": 2,
+    }
+
+
 def test_freeze_evidence_requires_elapsed_drain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -632,6 +948,12 @@ def test_runbook_contract_mentions_bounded_phase_guards() -> None:
         "ManagedByFirewallManager",
         "total_max_attempts=1",
         "exactly 162 deletes",
+        "resume-frozen",
+        "lambda-semantic-proof-v1",
+        "canonical_state",
+        "--last-writer-mutation-at",
+        "without Lambda, WAF, lifecycle",
+        "historical whole-hash mismatch",
     ):
         assert required in runbook
     source = SCRIPT.read_text(encoding="utf-8")
