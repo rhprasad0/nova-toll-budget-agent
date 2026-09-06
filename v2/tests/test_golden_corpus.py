@@ -161,7 +161,13 @@ def test_corpus_counts_and_loader_source_of_truth() -> None:
     assert len(corpus.legacy_rows) == 9
     assert len(corpus.annual_rows) == 10
     assert len(corpus.rows) == 19
-    assert len(load_cases()) == 250
+    assert [case.name for case in load_cases()] == [row["id"] for row in corpus.rows]
+    for suite in ("direct", "fallback", "unavailable", "annual", "i66_schedule"):
+        expected = [row["id"] for row in corpus.rows if row["suite"] == suite]
+        assert expected, suite
+        assert [case.name for case in load_cases(suite=suite)] == expected
+    assert len(load_cases(suite="annual")) == 10
+    assert len(golden_corpus.load_rows()) == 250
     assert len(golden_corpus.load_rows(MANIFEST)) == 19
     assert not any(row.get("suite") == "annual" for row in corpus.legacy_rows)
 
@@ -907,8 +913,11 @@ def test_i66_pairing_contract_keeps_schedule_zero_distinct() -> None:
 
 def test_ci_invokes_network_free_validator() -> None:
     workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
-    assert "eval/golden_corpus.py validate" in workflow
-    assert "GOLDEN_CORPUS_BASE_REF" in workflow
+    for manifest in ("manifest.json", "manifest-v2.json"):
+        assert (
+            f"eval/golden_corpus.py validate --manifest eval/golden/{manifest} "
+            '--base-ref "$GOLDEN_CORPUS_BASE_REF"'
+        ) in workflow
 
 
 def test_v2_sample_preserves_membership_order_and_payload_free_render(

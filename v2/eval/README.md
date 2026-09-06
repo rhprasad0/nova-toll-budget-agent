@@ -8,6 +8,10 @@ exact ordered tool scripts. The original v1 corpus and four-row v2 sample remain
 reproducible through explicit manifests, and the pinned v1 source files and
 fixture bytes remain unchanged.
 
+The live `run_evaluation.py` commands load the original 19-case v1 corpus,
+including ten annual cases and the original live suite labels. The 250-case v2
+corpus is used by the separate fixture workflow.
+
 ## Offline validation and review
 
 Run from `v2/`:

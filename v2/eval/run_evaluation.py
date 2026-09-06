@@ -97,7 +97,8 @@ def load_rows(path: Path = _CASES_PATH) -> list[dict[str, Any]]:
         ]
     from eval.golden_corpus import load_rows as load_golden_rows
 
-    return load_golden_rows()
+    # Live suites keep the original labels and ten annual cases; v2 is fixture-only.
+    return load_golden_rows(_CASES_PATH.parent / "golden" / "manifest.json")
 
 
 def load_cases(
