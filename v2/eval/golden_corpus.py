@@ -12,10 +12,12 @@ import math
 import re
 import subprocess
 import sys
+from copy import deepcopy
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 _V2_ROOT = Path(__file__).resolve().parents[1]
@@ -354,6 +356,13 @@ class Corpus:
     annual_rows: list[dict[str, Any]]
     fixtures: dict[str, dict[str, Any]]
     ordered_rows: list[dict[str, Any]] | None = None
+    manifest_path: Path | None = None
+    fixture_paths: dict[str, Path] = dataclass_field(default_factory=dict)
+    fixture_raw_bytes: dict[str, bytes] = dataclass_field(default_factory=dict)
+    fixture_tools: dict[str, str] = dataclass_field(default_factory=dict)
+    fixture_declarations: dict[str, dict[str, Any]] = dataclass_field(
+        default_factory=dict
+    )
 
     @property
     def rows(self) -> list[dict[str, Any]]:
@@ -362,6 +371,54 @@ class Corpus:
             if self.ordered_rows is None
             else self.ordered_rows
         )
+
+    def fixture_evidence(self, fixture_id: str) -> dict[str, Any]:
+        """Return one validated fixture and its exact source bytes.
+
+        Callers receive a copy of parsed JSON but the original bytes are read
+        from the path recorded while validating this corpus.  This keeps source
+        references and local fixtures on one trusted lookup boundary.
+        """
+        if fixture_id not in self.fixtures or fixture_id not in self.fixture_paths:
+            raise CorpusError(f"fixture is not resolved: {fixture_id}")
+        path = self.fixture_paths[fixture_id]
+        try:
+            raw = self.fixture_raw_bytes[fixture_id]
+            if path.read_bytes() != raw:
+                raise CorpusError(
+                    f"fixture bytes changed after validation: {fixture_id}"
+                )
+        except OSError as error:
+            raise CorpusError(f"fixture bytes are unavailable: {fixture_id}") from error
+        try:
+            fixture = _strict_loads(raw.decode("utf-8"), str(path))
+        except (UnicodeDecodeError, CorpusError) as error:
+            raise CorpusError(f"fixture bytes are invalid: {fixture_id}") from error
+        if not isinstance(fixture, dict):
+            raise CorpusError(f"fixture bytes are not an object: {fixture_id}")
+        outcome = fixture.get("result", fixture.get("payload"))
+        error = fixture.get("error")
+        if (outcome is None) == (error is None):
+            raise CorpusError(f"fixture outcome is ambiguous: {fixture_id}")
+        return {
+            "id": fixture_id,
+            "tool": self.fixture_tools[fixture_id],
+            "request": json.loads(json.dumps(fixture["request"])),
+            "result_kind": fixture.get("result_kind"),
+            "evidence_type": fixture.get("evidence_type")
+            or fixture.get("source", {}).get("evidence_type"),
+            "evaluated_at": fixture.get("evaluated_at")
+            or fixture.get("source", {}).get("captured_at"),
+            "provenance": fixture.get("provenance") or fixture.get("source"),
+            "result": json.loads(json.dumps(outcome)) if outcome is not None else None,
+            "error": json.loads(json.dumps(error)) if error is not None else None,
+            "raw_bytes": raw,
+            "raw_sha256": _sha256_bytes(raw),
+            "path": path,
+            "declaration": json.loads(
+                json.dumps(self.fixture_declarations[fixture_id])
+            ),
+        }
 
 
 def _json(path: Path) -> Any:
@@ -1188,7 +1245,25 @@ def _validate_v1_manifest(
             raise CorpusError(
                 "unchanged corpus has a historically mismatched dataset_version"
             )
-    return Corpus(manifest, legacy, annual, fixtures)
+    fixture_declarations = {
+        item["id"]: dict(item) for item in cast(list[dict[str, Any]], fixtures_declared)
+    }
+    fixture_raw_bytes = {
+        fixture_id: fixture_paths[fixture_id].read_bytes() for fixture_id in fixtures
+    }
+    return Corpus(
+        manifest,
+        legacy,
+        annual,
+        fixtures,
+        manifest_path=manifest_path,
+        fixture_paths=fixture_paths,
+        fixture_raw_bytes=fixture_raw_bytes,
+        fixture_tools={
+            fixture_id: "get_annual_toll_ballpark" for fixture_id in fixtures
+        },
+        fixture_declarations=fixture_declarations,
+    )
 
 
 def _v2_metadata(item: Any, label: str) -> dict[str, Any]:
@@ -1642,13 +1717,16 @@ def _v2_validate_manifest(
     if set(metadata) != selected_ids:
         raise CorpusError("v2 metadata must have exactly one entry per selected case")
 
-    fixture_declarations = manifest.get("fixtures")
-    if not isinstance(fixture_declarations, list):
+    fixture_declaration_items = manifest.get("fixtures")
+    if not isinstance(fixture_declaration_items, list):
         raise CorpusError("v2 fixtures must be a list")
     fixtures: dict[str, dict[str, Any]] = {}
     fixture_tools: dict[str, str] = {}
+    fixture_paths_by_id: dict[str, Path] = {}
+    fixture_raw_bytes: dict[str, bytes] = {}
+    fixture_declarations: dict[str, dict[str, Any]] = {}
     fixture_paths: set[str] = set()
-    for item in fixture_declarations:
+    for item in fixture_declaration_items:
         if not isinstance(item, dict):
             raise CorpusError("v2 fixture declaration is malformed")
         if set(item) == _V2_FIXTURE_SOURCE_KEYS:
@@ -1671,17 +1749,21 @@ def _v2_validate_manifest(
             source_fixture_path = _v2_source_fixture_path(
                 source_path, source_fixture_id
             )
+            source_fixture_raw = source[1].fixture_raw_bytes[source_fixture_id]
             expected_hash = item["source_fixture_sha256"]
             if not isinstance(expected_hash, str) or not _SHA256.fullmatch(
                 expected_hash
             ):
                 raise CorpusError("v2 source fixture hash is malformed")
-            if expected_hash != _sha256_bytes(source_fixture_path.read_bytes()):
+            if expected_hash != _sha256_bytes(source_fixture_raw):
                 raise CorpusError("v2 source fixture hash mismatch")
             if fixture_id in fixtures:
                 raise CorpusError("v2 fixture IDs are not unique")
             fixtures[fixture_id] = fixture
             fixture_tools[fixture_id] = item["tool"]
+            fixture_paths_by_id[fixture_id] = source_fixture_path
+            fixture_raw_bytes[fixture_id] = source_fixture_raw
+            fixture_declarations[fixture_id] = dict(item)
         elif set(item) == {"id", "tool", "path", "tool_contract_version"}:
             fixture_id = item["id"]
             tool = item["tool"]
@@ -1696,11 +1778,21 @@ def _v2_validate_manifest(
             if item["path"] in fixture_paths or fixture_id in fixtures:
                 raise CorpusError("v2 fixture IDs or paths are not unique")
             fixture_paths.add(item["path"])
+            try:
+                raw = path.read_bytes()
+                parsed = _strict_loads(raw.decode("utf-8"), str(path))
+            except OSError as error:
+                raise CorpusError(f"cannot read JSON: {path}: {error}") from error
+            except UnicodeError as error:
+                raise CorpusError(f"cannot decode JSON: {path}: {error}") from error
             fixture = _v2_validate_fixture_file(
-                _strict_json(path), path, fixture_id, tool, f"v2 fixture {fixture_id}"
+                parsed, path, fixture_id, tool, f"v2 fixture {fixture_id}"
             )
             fixtures[fixture_id] = fixture
             fixture_tools[fixture_id] = tool
+            fixture_paths_by_id[fixture_id] = path
+            fixture_raw_bytes[fixture_id] = raw
+            fixture_declarations[fixture_id] = dict(item)
         else:
             raise CorpusError("v2 fixture declaration has unknown keys")
 
@@ -1708,6 +1800,24 @@ def _v2_validate_manifest(
     for row in selected:
         item = dict(row)
         overlay = metadata[item["id"]]
+        source_suite = item.get("suite")
+        if source_suite is not None:
+            item["source_suite"] = source_suite
+        for source_key in (
+            "annual_behavior",
+            "expected_call",
+            "expected_calls",
+            "expected_clarification",
+            "expected_missing_fields",
+            "expected_route_status",
+            "expected_component_count",
+            "allow_pricing_unavailable",
+            "expected_reasons",
+            "expected_availability",
+            "expected_required_i95_directions",
+        ):
+            if source_key in item:
+                item[f"source_{source_key}"] = deepcopy(item[source_key])
         if (
             item.get("suite") in {"current", "annual"}
             and item["suite"] != overlay["suite"]
@@ -1716,6 +1826,9 @@ def _v2_validate_manifest(
         item.update(overlay)
         if "conversation" not in item:
             item["conversation"] = [item["prompt"]]
+        if item.get("follow_up") and item["follow_up"] not in item["conversation"]:
+            item["conversation"] = list(item["conversation"])
+            item["conversation"].append(item["follow_up"])
         if item.get("fixture_id") is not None and item["fixture_id"] not in fixtures:
             raise CorpusError(f"v2 case {item['id']} references an undeclared fixture")
         if (
@@ -1725,7 +1838,17 @@ def _v2_validate_manifest(
         ):
             item["script"] = [
                 {
-                    "turn": 0,
+                    "turn": (
+                        len(item["conversation"]) - 1
+                        if item.get("expected_clarification")
+                        or item.get("annual_behavior")
+                        in {
+                            "annual_day_estimate",
+                            "income_clarification",
+                            "schedule_correction",
+                        }
+                        else 0
+                    ),
                     "tool": (
                         "get_current_toll_price"
                         if item["suite"] == "current"
@@ -1833,7 +1956,18 @@ def _v2_validate_manifest(
         raise CorpusError("private validation requires a supplied public corpus")
     legacy = [row for row in rows if row.get("suite") == "current"]
     annual = [row for row in rows if row.get("suite") == "annual"]
-    return Corpus(manifest, legacy, annual, fixtures, rows)
+    return Corpus(
+        manifest,
+        legacy,
+        annual,
+        fixtures,
+        rows,
+        manifest_path=manifest_path,
+        fixture_paths=fixture_paths_by_id,
+        fixture_raw_bytes=fixture_raw_bytes,
+        fixture_tools=fixture_tools,
+        fixture_declarations=fixture_declarations,
+    )
 
 
 def validate(

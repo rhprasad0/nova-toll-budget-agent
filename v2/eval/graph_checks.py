@@ -225,22 +225,32 @@ def valid_annual_identity(identity: dict[str, Any], trial: bool = True) -> None:
 def _annual_corpus(manifest_path: Path | None = None) -> object:
     try:
         from golden_corpus import validate as validate_corpus
+        from golden_corpus import validate_private_manifest
     except ModuleNotFoundError:
         from eval.golden_corpus import validate as validate_corpus
+        from eval.golden_corpus import validate_private_manifest
 
-    return validate_corpus(manifest_path or (ROOT / "golden" / "manifest.json"))
+    path = manifest_path or (ROOT / "golden" / "manifest.json")
+    manifest = read_json(path)
+    if isinstance(manifest, dict) and {
+        "public_dataset_sha256",
+        "public_membership_sha256",
+    }.issubset(manifest):
+        public = validate_corpus(ROOT / "golden" / "manifest-v2.json")
+        return validate_private_manifest(path, public)
+    return validate_corpus(path)
 
 
 def _annual_fixture_corpus_hash(corpus: object, manifest_path: Path | None) -> str:
-    path = manifest_path or (ROOT / "golden" / "manifest.json")
     entries = []
     for declaration in cast(Any, corpus).manifest["fixtures"]:
-        fixture_path = path.parent / declaration["path"]
+        fixture_id = declaration["id"]
+        evidence = cast(Any, corpus).fixture_evidence(fixture_id)
         entries.append(
             {
-                "id": declaration["id"],
-                "result_kind": declaration["result_kind"],
-                "sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+                "id": fixture_id,
+                "result_kind": evidence.get("result_kind"),
+                "sha256": evidence["raw_sha256"],
             }
         )
     entries.sort(key=lambda item: item["id"])
@@ -284,20 +294,30 @@ def _annual_contract_versions(corpus: object) -> dict[str, Any]:
 def _annual_case(case: dict[str, Any], corpus: object) -> dict[str, Any]:
     case_id = case.get("case_id")
     require(type(case_id) is str and case_id, "annual case ID required")
-    rows = [row for row in cast(Any, corpus).annual_rows if row.get("id") == case_id]
+    corpus_data = cast(Any, corpus)
+    if case.get("holdout") is True:
+        require(
+            case.get("suite") == "annual" and type(case.get("row")) is dict,
+            "annual holdout case envelope is incomplete",
+        )
+        holdout = cast(dict[str, Any], case["row"])
+        require(holdout.get("id") == case_id, "holdout case ID mismatch")
+        validated_ids = {row["id"] for row in corpus_data.rows}
+        require(
+            "public_dataset_sha256" in corpus_data.manifest
+            or case_id not in validated_ids,
+            "holdout case overlaps validated public corpus",
+        )
+        return holdout
+    v2 = corpus_data.manifest.get("format_version") == "2.0.0"
+    source_rows = corpus_data.rows if v2 else corpus_data.annual_rows
+    rows = [row for row in source_rows if row.get("id") == case_id]
     if rows:
         require(len(rows) == 1, "annual case ID is duplicated")
-        require(case.get("suite") == "annual", "annual suite marker required")
+        require(v2 or case.get("suite") == "annual", "annual suite marker required")
         return rows[0]
-    require(
-        case.get("suite") == "annual"
-        and case.get("holdout") is True
-        and type(case.get("row")) is dict,
-        "annual case is outside validated corpus",
-    )
-    holdout = cast(dict[str, Any], case["row"])
-    require(holdout.get("id") == case_id, "holdout case ID mismatch")
-    return holdout
+    require(False, "annual case is outside validated corpus")
+    return {}
 
 
 def _annual_cost(run: dict[str, Any]) -> None:
@@ -307,16 +327,22 @@ def _annual_cost(run: dict[str, Any]) -> None:
     rates_value = cost.get("rate_card")
     require(type(rates_value) is dict, "annual rate-card provenance required")
     rates = cast(dict[str, Any], rates_value)
+    legacy_rate_keys = {
+        "source",
+        "version",
+        "digest",
+        "input_rate_usd_per_million",
+        "output_rate_usd_per_million",
+        "cache_rate_usd_per_million",
+    }
+    request_rate_keys = legacy_rate_keys | {
+        "cache_write_rate_usd_per_million",
+        "long_context_threshold_tokens",
+        "long_context_input_multiplier",
+        "long_context_output_multiplier",
+    }
     require(
-        set(rates)
-        == {
-            "source",
-            "version",
-            "digest",
-            "input_rate_usd_per_million",
-            "output_rate_usd_per_million",
-            "cache_rate_usd_per_million",
-        },
+        set(rates) in (legacy_rate_keys, request_rate_keys),
         "annual rate-card fields incomplete",
     )
     require(type(rates["source"]) is str and rates["source"], "rate source required")
@@ -332,6 +358,135 @@ def _annual_cost(run: dict[str, Any]) -> None:
             type(value) in (int, float) and math.isfinite(value) and value >= 0,
             "invalid rate",
         )
+    requests_value = cost.get("requests")
+    if set(rates) == request_rate_keys or requests_value is not None:
+        require(
+            set(rates) == request_rate_keys, "per-request rate-card fields incomplete"
+        )
+        threshold = rates["long_context_threshold_tokens"]
+        require(
+            type(threshold) is int and threshold > 0, "invalid long-context threshold"
+        )
+        for key in (
+            "cache_write_rate_usd_per_million",
+            "long_context_input_multiplier",
+            "long_context_output_multiplier",
+        ):
+            value = rates[key]
+            require(
+                type(value) in (int, float) and math.isfinite(value) and value >= 0,
+                "invalid rate-card tier",
+            )
+        require(
+            type(requests_value) is list and bool(requests_value),
+            "request cost evidence required",
+        )
+        request_totals = {
+            key: 0
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "cache_tokens",
+                "cache_write_tokens",
+            )
+        }
+        expected_costs = {
+            key: 0.0
+            for key in (
+                "input_usd",
+                "output_usd",
+                "cache_usd",
+                "cache_write_usd",
+                "total_usd",
+            )
+        }
+        for request in cast(list[object], requests_value):
+            require(type(request) is dict, "request cost evidence malformed")
+            item = cast(dict[str, Any], request)
+            for key in (
+                "tokens",
+                "input_tokens",
+                "output_tokens",
+                "cache_tokens",
+                "cache_write_tokens",
+                "ordinary_input_tokens",
+            ):
+                value = item.get(key)
+                require(
+                    type(value) is int and value >= 0, "request token evidence invalid"
+                )
+            require(
+                item["tokens"] == item["input_tokens"] + item["output_tokens"]
+                and item["cache_tokens"] + item["cache_write_tokens"]
+                <= item["input_tokens"]
+                and item["ordinary_input_tokens"]
+                == item["input_tokens"]
+                - item["cache_tokens"]
+                - item["cache_write_tokens"],
+                "request token buckets are inconsistent",
+            )
+            long_context = item.get("long_context")
+            require(type(long_context) is bool, "request tier marker is invalid")
+            require(
+                long_context == (item["input_tokens"] > threshold),
+                "request tier marker is inconsistent",
+            )
+            for key in expected_costs:
+                value = item.get(key)
+                numeric_value = cast(int | float, value)
+                require(
+                    type(value) in (int, float)
+                    and math.isfinite(numeric_value)
+                    and numeric_value >= 0,
+                    "request cost invalid",
+                )
+            input_multiplier = (
+                rates["long_context_input_multiplier"] if long_context else 1.0
+            )
+            output_multiplier = (
+                rates["long_context_output_multiplier"] if long_context else 1.0
+            )
+            expected = {
+                "input_usd": item["ordinary_input_tokens"]
+                * rates["input_rate_usd_per_million"]
+                * input_multiplier
+                / 1_000_000,
+                "output_usd": item["output_tokens"]
+                * rates["output_rate_usd_per_million"]
+                * output_multiplier
+                / 1_000_000,
+                "cache_usd": item["cache_tokens"]
+                * rates["cache_rate_usd_per_million"]
+                * input_multiplier
+                / 1_000_000,
+                "cache_write_usd": item["cache_write_tokens"]
+                * rates["cache_write_rate_usd_per_million"]
+                * input_multiplier
+                / 1_000_000,
+            }
+            expected["total_usd"] = sum(expected.values())
+            for key, value in expected.items():
+                require(
+                    math.isclose(item[key], value, rel_tol=1e-12, abs_tol=1e-15),
+                    "request cost does not match usage",
+                )
+                expected_costs[key] += value
+            for key in request_totals:
+                request_totals[key] += item[key]
+        for key in request_totals:
+            require(
+                run.get(key) == request_totals[key], "request token aggregate mismatch"
+            )
+        for key, expected in expected_costs.items():
+            value = cost.get(key)
+            numeric_value = cast(int | float, value)
+            require(
+                type(value) in (int, float)
+                and math.isclose(numeric_value, expected, rel_tol=1e-12, abs_tol=1e-15),
+                "model cost aggregate mismatch",
+            )
+        return
+    require(requests_value is None, "legacy cost evidence contains requests")
     for key in ("input_usd", "output_usd", "cache_usd"):
         value = cast(float, cost.get(key))
         require(
@@ -406,6 +561,7 @@ def grade_annual(
         "input_tokens": None,
         "output_tokens": None,
         "cache_tokens": None,
+        "cache_write_tokens": None,
         "cost": None,
         "model_settings": None,
         "contract_versions": None,
@@ -424,14 +580,21 @@ def grade_annual(
     try:
         case = read_json(case_path)
         require(type(case) is dict, "annual case object required")
-        corpus = _annual_corpus(manifest_path)
-        row = _annual_case(case, corpus)
-        score["case_id"] = row["id"]
         run = read_json(_annual_artifact_file(artifact, "run.json"))
         require(
             run.get("artifact_type") == "annual_fixture_trial",
             "annual artifact marker required",
         )
+        if manifest_path is None:
+            contract_versions = run.get("contract_versions")
+            if (
+                isinstance(contract_versions, dict)
+                and contract_versions.get("dataset_version") == "2.0.0"
+            ):
+                manifest_path = ROOT / "golden" / "manifest-v2.json"
+        corpus = _annual_corpus(manifest_path)
+        row = _annual_case(case, corpus)
+        score["case_id"] = row["id"]
         identity = run["identity"]
         valid_annual_identity(identity)
         score["identity"] = identity
@@ -526,7 +689,11 @@ def grade_annual(
             == (
                 None
                 if row.get("fixture_id") is None
-                else cast(Any, corpus).fixtures[row["fixture_id"]]["result_kind"]
+                else (
+                    cast(Any, corpus).fixture_evidence(row["fixture_id"])["result_kind"]
+                    if cast(Any, corpus).manifest.get("format_version") == "2.0.0"
+                    else cast(Any, corpus).fixtures[row["fixture_id"]]["result_kind"]
+                )
             ),
             "annual fixture result kind mismatch",
         )
@@ -539,6 +706,7 @@ def grade_annual(
         score["input_tokens"] = run["input_tokens"]
         score["output_tokens"] = run["output_tokens"]
         score["cache_tokens"] = run["cache_tokens"]
+        score["cache_write_tokens"] = run.get("cache_write_tokens")
         score["cost"] = run["cost"]
         model_settings = run.get("model_settings")
         contract_versions = run.get("contract_versions")
@@ -617,6 +785,7 @@ def grade_annual(
             ),
             "annual turns incomplete",
         )
+        typed_trajectory = cast(list[dict[str, Any]], trajectory)
         expected_turns = list(row.get("conversation", [row["prompt"]]))
         if row.get("follow_up") and row["follow_up"] not in expected_turns:
             expected_turns.append(row["follow_up"])
@@ -649,14 +818,42 @@ def grade_annual(
                 and item["output_tokens"] >= 0
                 and type(item.get("cache_tokens")) is int
                 and item["cache_tokens"] >= 0
+                and type(item.get("cache_write_tokens")) is int
+                and item["cache_write_tokens"] >= 0
                 and type(item.get("latency_ms")) is int
                 and item["latency_ms"] >= 0
                 and item["tokens"] == item["input_tokens"] + item["output_tokens"]
-                and item["cache_tokens"] <= item["input_tokens"]
+                and item["cache_tokens"] + item["cache_write_tokens"]
+                <= item["input_tokens"]
+                and type(item.get("requests")) is list
+                and bool(item["requests"])
                 for item in typed_turn_measurements
             ),
             "annual per-turn measurements missing",
         )
+        flattened_requests = [
+            request
+            for item in typed_turn_measurements
+            for request in cast(list[dict[str, Any]], item["requests"])
+        ]
+        require(
+            flattened_requests == cast(dict[str, Any], run["cost"])["requests"],
+            "annual request boundaries are inconsistent",
+        )
+        for item in typed_turn_measurements:
+            requests = cast(list[dict[str, Any]], item["requests"])
+            require(
+                item["tokens"] == sum(request["tokens"] for request in requests)
+                and item["input_tokens"]
+                == sum(request["input_tokens"] for request in requests)
+                and item["output_tokens"]
+                == sum(request["output_tokens"] for request in requests)
+                and item["cache_tokens"]
+                == sum(request["cache_tokens"] for request in requests)
+                and item["cache_write_tokens"]
+                == sum(request["cache_write_tokens"] for request in requests),
+                "annual per-turn request totals are inconsistent",
+            )
         require(
             measurements.get("tokens") == run["tokens"]
             and measurements.get("latency_ms") == run["latency_ms"],
@@ -680,6 +877,11 @@ def grade_annual(
             "annual measurement totals are inconsistent",
         )
         require(
+            run.get("cache_write_tokens")
+            == sum(item["cache_write_tokens"] for item in typed_turn_measurements),
+            "annual cache-write totals are inconsistent",
+        )
+        require(
             run.get("output_digest")
             == hashlib.sha256(
                 b"".join(
@@ -693,8 +895,13 @@ def grade_annual(
             "annual raw artifact digest mismatch",
         )
         require(not _annual_live_marker(output), "live-tool marker")
+        v2_case = cast(Any, corpus).manifest.get("format_version") == "2.0.0"
         expected_fixture = (
-            cast(Any, corpus).fixtures[row["fixture_id"]]
+            (
+                cast(Any, corpus).fixture_evidence(row["fixture_id"])
+                if v2_case
+                else cast(Any, corpus).fixtures[row["fixture_id"]]
+            )
             if row.get("fixture_id") is not None
             else None
         )
@@ -714,32 +921,115 @@ def grade_annual(
                     "annual tool-use/result IDs are not correlated",
                 )
                 require(
-                    call.get("name")
-                    in {"get_current_toll_price", "get_annual_toll_ballpark"},
-                    "unknown tool in fixture trajectory",
+                    type(call.get("name")) is str and call["name"],
+                    "tool name is malformed",
                 )
+                if not v2_case:
+                    require(
+                        call.get("name")
+                        in {"get_current_toll_price", "get_annual_toll_ballpark"},
+                        "unknown tool in fixture trajectory",
+                    )
                 if not call.get("is_error"):
                     require(
                         "tool_result" in call,
                         "successful tool call is missing its correlated result",
                     )
-                if call.get("name") == "get_current_toll_price" and not call.get(
-                    "is_error"
-                ):
-                    raise ValueError("current-price fixture success is not permitted")
-                if call.get("name") == "get_annual_toll_ballpark" and not call.get(
-                    "is_error"
-                ):
-                    require(expected_fixture is not None, "unexpected fixture success")
-                    typed_fixture = cast(dict[str, Any], expected_fixture)
-                    require(
-                        call.get("input") == typed_fixture["request"],
-                        "fixture request mismatch",
+        if v2_case:
+            authored = row.get("script", [])
+            require(type(authored) is list, "v2 authored script is missing")
+            observed = [call for turn in typed_trajectory for call in turn["calls"]]
+            check(
+                "script:count",
+                len(observed) == len(authored),
+                "observed tool-call count differs from authored script",
+            )
+
+            def without_tool_id(value: object) -> object:
+                if isinstance(value, dict):
+                    return {
+                        key: without_tool_id(item)
+                        for key, item in value.items()
+                        if key != "toolUseId"
+                    }
+                if isinstance(value, list):
+                    return [without_tool_id(item) for item in value]
+                return value
+
+            turn_sequences: dict[int, int] = {}
+            for index, step in enumerate(cast(list[dict[str, Any]], authored)):
+                if index >= len(observed):
+                    break
+                call = observed[index]
+                evidence = cast(Any, corpus).fixture_evidence(step["fixture_id"])
+                expected_sequence = turn_sequences.get(step["turn"], 0)
+                turn_sequences[step["turn"]] = expected_sequence + 1
+                check(
+                    f"script:{index}:turn",
+                    call.get("script_turn") == step["turn"],
+                    "tool call was emitted in the wrong conversation turn",
+                )
+                check(
+                    f"script:{index}:sequence",
+                    call.get("script_sequence") == expected_sequence,
+                    "tool call order differs from authored script",
+                )
+                check(
+                    f"script:{index}:tool",
+                    call.get("name") == step["tool"],
+                    "tool call differs from authored script",
+                )
+                check(
+                    f"script:{index}:request",
+                    call.get("input") == step["request"],
+                    "tool request differs from authored script",
+                )
+                check(
+                    f"script:{index}:fixture",
+                    call.get("fixture_id") == step["fixture_id"],
+                    "tool call is not bound to its authored fixture",
+                )
+                expected_error = evidence.get("error") is not None
+                check(
+                    f"script:{index}:status",
+                    bool(call.get("is_error")) == expected_error,
+                    "tool error status differs from authored evidence",
+                )
+                if expected_error:
+                    check(
+                        f"script:{index}:error",
+                        without_tool_id(call.get("tool_error"))
+                        == without_tool_id(evidence["error"]),
+                        "tool error payload differs from authored evidence",
                     )
-                    require(
-                        call.get("tool_result") == typed_fixture["payload"],
-                        "fixture payload mismatch",
+                else:
+                    check(
+                        f"script:{index}:result",
+                        call.get("tool_result") == evidence.get("result"),
+                        "tool result differs from authored evidence",
                     )
+        else:
+            if expected_fixture is not None:
+                typed_fixture = cast(dict[str, Any], expected_fixture)
+                for turn in cast(list[dict[str, Any]], trajectory):
+                    for call in turn["calls"]:
+                        if call.get(
+                            "name"
+                        ) == "get_current_toll_price" and not call.get("is_error"):
+                            raise ValueError(
+                                "current-price fixture success is not permitted"
+                            )
+                        if call.get(
+                            "name"
+                        ) == "get_annual_toll_ballpark" and not call.get("is_error"):
+                            require(
+                                call.get("input") == typed_fixture["request"],
+                                "fixture request mismatch",
+                            )
+                            require(
+                                call.get("tool_result") == typed_fixture["payload"],
+                                "fixture payload mismatch",
+                            )
         require(
             run.get("failure_class") == "none", "annual execution infrastructure failed"
         )
@@ -781,14 +1071,14 @@ def grade_annual(
     return 0 if score["pass"] else 1
 
 
-def grade(artifact: Path, case_path: Path) -> int:
+def grade(artifact: Path, case_path: Path, manifest_path: Path | None = None) -> int:
     artifact = artifact.resolve()
     try:
         marker = read_json(inside(artifact, "run.json"))
     except (OSError, ValueError, KeyError, TypeError):
         marker = None
     if type(marker) is dict and marker.get("artifact_type") == "annual_fixture_trial":
-        return grade_annual(artifact, case_path)
+        return grade_annual(artifact, case_path, manifest_path)
     score: dict[str, Any] = {
         "case_id": "invalid-case",
         "pass": False,

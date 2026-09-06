@@ -8,12 +8,14 @@ import hashlib
 import json
 import shutil
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import eval.fixture_runner as fixture_runner
 from eval import graph_checks
 from eval.fixture_eval import (
     _model_settings,
@@ -27,7 +29,15 @@ from eval.fixture_eval import (
     run_and_seal_trial,
     trusted_case_evidence,
 )
-from eval.fixture_runner import RateCard, run_fixture_trial
+from eval.fixture_runner import (
+    FixtureRunPacket,
+    RateCard,
+    _FixtureScriptCursor,
+    _request_cost,
+    _response_cycle_usages,
+    _usage_record,
+    run_fixture_trial,
+)
 from eval.golden_corpus import validate
 from eval.graph_checks import read_json
 
@@ -42,6 +52,7 @@ _POINT = {
     "location": {"type": "Point", "coordinates": [-77.5652813, 39.1000972]},
 }
 _RATE_CARD = RateCard("synthetic-tooling", "v1", "a" * 64, 10, 20, 30)
+_V2_MANIFEST = Path(__file__).parents[1] / "eval/golden/manifest-v2.json"
 
 
 class _FakeModel:
@@ -49,9 +60,16 @@ class _FakeModel:
 
     stateful = False
 
-    def __init__(self, packet: Any, *, unavailable: bool = False) -> None:
+    def __init__(
+        self,
+        packet: Any,
+        *,
+        unavailable: bool = False,
+        response: str | None = None,
+    ) -> None:
         self.packet = packet
         self.unavailable = unavailable
+        self.response = response
         self.stream_count = 0
 
     def get_config(self) -> dict[str, Any]:
@@ -75,7 +93,7 @@ class _FakeModel:
             for message in messages
         )
         request = self.packet.fixture_request
-        answer = (
+        answer = self.response or (
             "### 🚧 Annual toll estimate unavailable\n"
             "I couldn't produce the affordability estimate because the return trip "
             "from Reagan Airport to the Dulles Airport area has no supported route "
@@ -128,12 +146,653 @@ class _FakeModel:
         return events()
 
 
-def _packet(case_id: str) -> Any:
+class _MixedTurnModel:
+    """Emit both authored tool calls in one assistant message."""
+
+    stateful = False
+
+    def __init__(
+        self,
+        packet: FixtureRunPacket,
+        *,
+        response: str | None = None,
+    ) -> None:
+        self.packet = packet
+        self.response = response
+        self.stream_count = 0
+
+    def get_config(self) -> dict[str, Any]:
+        return {"model_id": "synthetic-tooling", "params": {"temperature": 0}}
+
+    def stream(
+        self,
+        messages: list[dict[str, Any]],
+        tool_specs: object = None,
+        system_prompt: str | None = None,
+        **kwargs: object,
+    ) -> Any:
+        del tool_specs, system_prompt, kwargs
+        self.stream_count += 1
+        has_tool_result = any(
+            type(message) is dict
+            and any(
+                type(block) is dict and "toolResult" in block
+                for block in message.get("content", [])
+            )
+            for message in messages
+        )
+        requests = [step["request"] for step in self.packet.script]
+
+        async def events() -> Any:
+            yield {"messageStart": {"role": "assistant"}}
+            if not has_tool_result:
+                for index, step in enumerate(self.packet.script):
+                    yield {
+                        "contentBlockStart": {
+                            "start": {
+                                "toolUse": {
+                                    "toolUseId": f"mixed-call-{index}",
+                                    "name": step["tool"],
+                                }
+                            }
+                        }
+                    }
+                    yield {
+                        "contentBlockDelta": {
+                            "delta": {"toolUse": {"input": json.dumps(requests[index])}}
+                        }
+                    }
+                    yield {"contentBlockStop": {}}
+                yield {"messageStop": {"stopReason": "tool_use"}}
+            else:
+                yield {"contentBlockStart": {"start": {"text": ""}}}
+                yield {
+                    "contentBlockDelta": {
+                        "delta": {
+                            "text": self.response or "### Mixed-tool fixture complete"
+                        }
+                    }
+                }
+                yield {"contentBlockStop": {}}
+                yield {"messageStop": {"stopReason": "end_turn"}}
+            # Deliberately omit optional cache buckets, as the provider formatters
+            # do for zero values.  The runner must seal explicit zero buckets.
+            yield {
+                "metadata": {
+                    "usage": {
+                        "inputTokens": 4,
+                        "outputTokens": 2,
+                        "totalTokens": 6,
+                    }
+                },
+                "metrics": {"latencyMs": 0},
+            }
+
+        return events()
+
+
+class _DuplicateTurnModel:
+    """Repeat one exact successful call so the frozen guard cancels the retry."""
+
+    stateful = False
+
+    def __init__(self, packet: FixtureRunPacket) -> None:
+        self.packet = packet
+        self.stream_count = 0
+
+    def get_config(self) -> dict[str, Any]:
+        return {"model_id": "synthetic-tooling", "params": {"temperature": 0}}
+
+    def stream(
+        self,
+        messages: list[dict[str, Any]],
+        tool_specs: object = None,
+        system_prompt: str | None = None,
+        **kwargs: object,
+    ) -> Any:
+        del messages, tool_specs, system_prompt, kwargs
+        self.stream_count += 1
+        step = self.packet.script[0]
+
+        async def events() -> Any:
+            yield {"messageStart": {"role": "assistant"}}
+            if self.stream_count <= 2:
+                yield {
+                    "contentBlockStart": {
+                        "start": {
+                            "toolUse": {
+                                "toolUseId": f"duplicate-call-{self.stream_count}",
+                                "name": step["tool"],
+                            }
+                        }
+                    }
+                }
+                yield {
+                    "contentBlockDelta": {
+                        "delta": {"toolUse": {"input": json.dumps(step["request"])}},
+                    }
+                }
+                yield {"contentBlockStop": {}}
+                yield {"messageStop": {"stopReason": "tool_use"}}
+            else:
+                yield {"contentBlockStart": {"start": {"text": ""}}}
+                yield {
+                    "contentBlockDelta": {
+                        "delta": {"text": "### Duplicate call handled 🚗"}
+                    }
+                }
+                yield {"contentBlockStop": {}}
+                yield {"messageStop": {"stopReason": "end_turn"}}
+            yield {
+                "metadata": {
+                    "usage": {
+                        "inputTokens": 4,
+                        "outputTokens": 2,
+                        "totalTokens": 6,
+                    }
+                },
+                "metrics": {"latencyMs": 0},
+            }
+
+        return events()
+
+
+def _packet(case_id: str, *, manifest_path: Path | None = None) -> Any:
     return packet_for_case(
         case_id,
+        manifest_path=manifest_path
+        or Path(__file__).parents[1] / "eval/golden/manifest.json",
         prompt_points=[_POINT],
         render_date=date(2026, 9, 5),
     )
+
+
+def _write_private_no_call_manifest(root: Path) -> Path:
+    root.mkdir(parents=True)
+    cases = root / "cases"
+    cases.mkdir()
+    row = {
+        "id": "private-synthetic-no-call",
+        "prompt": "I have not provided a supported origin or destination yet.",
+        "conversation": ["I have not provided a supported origin or destination yet."],
+        "script": [],
+    }
+    shard = cases / "private.jsonl"
+    shard.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    membership = [
+        {
+            "id": row["id"],
+            "shard": "cases/private.jsonl",
+            "row_sha256": hashlib.sha256(
+                json.dumps(
+                    row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode()
+            ).hexdigest(),
+        }
+    ]
+    public = json.loads(_V2_MANIFEST.read_text(encoding="utf-8"))
+    manifest: dict[str, Any] = {
+        "corpus": "annual-affordability",
+        "format_version": "2.0.0",
+        "dataset_version": "2.0.0",
+        "source_manifests": [],
+        "membership": membership,
+        "membership_sha256": hashlib.sha256(
+            json.dumps(
+                membership, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest(),
+        "case_metadata": [
+            {
+                "id": row["id"],
+                "suite": "current",
+                "primary_category": "current",
+                "tags": ["synthetic", "private"],
+                "grouping": "synthetic-private",
+                "provenance": "synthetic-private-test",
+                "expected_assertion": "Required: request supported endpoints. Prohibited: infer a route or make a tool call.",
+            }
+        ],
+        "case_shards": [{"path": "cases/private.jsonl", "count": 1}],
+        "fixtures": [],
+        "payloads": [
+            {
+                "path": "cases/private.jsonl",
+                "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+            }
+        ],
+        "public_dataset_sha256": public["dataset_sha256"],
+        "public_membership_sha256": public["membership_sha256"],
+        "dataset_sha256": "",
+    }
+    manifest["dataset_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in manifest.items() if key != "dataset_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    path = root / "private-manifest.json"
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_private_typed_manifest(root: Path) -> Path:
+    path = _write_private_no_call_manifest(root)
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    shard = path.parent / "cases/private.jsonl"
+    fixture = json.loads(
+        (
+            Path(__file__).parents[1] / "eval/golden/fixtures/current-success.json"
+        ).read_text(encoding="utf-8")
+    )
+    fixture["fixture_id"] = "private-current-success"
+    fixture["provenance"] = "synthetic-private-test"
+    fixture_path = path.parent / "fixtures/private-current-success.json"
+    fixture_path.parent.mkdir()
+    fixture_path.write_text(json.dumps(fixture, indent=2) + "\n", encoding="utf-8")
+    row = {
+        "id": "private-synthetic-typed",
+        "prompt": "Price this supported Greenway route.",
+        "conversation": ["Price this supported Greenway route."],
+        "script": [
+            {
+                "turn": 0,
+                "tool": "get_current_toll_price",
+                "request": fixture["request"],
+                "fixture_id": "private-current-success",
+            }
+        ],
+    }
+    shard.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    manifest["membership"][0]["id"] = row["id"]
+    manifest["membership"][0]["row_sha256"] = hashlib.sha256(
+        json.dumps(
+            row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()
+    ).hexdigest()
+    manifest["membership_sha256"] = hashlib.sha256(
+        json.dumps(
+            manifest["membership"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    manifest["case_metadata"][0]["id"] = row["id"]
+    manifest["case_metadata"][0]["expected_assertion"] = (
+        "Required: ground the current price in the private typed fixture. "
+        "Prohibited: substitute a public fixture."
+    )
+    manifest["fixtures"] = [
+        {
+            "id": "private-current-success",
+            "tool": "get_current_toll_price",
+            "path": "fixtures/private-current-success.json",
+            "tool_contract_version": "1.5.0",
+        }
+    ]
+    manifest["payloads"] = [
+        {
+            "path": "cases/private.jsonl",
+            "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+        },
+        {
+            "path": "fixtures/private-current-success.json",
+            "sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+        },
+    ]
+    manifest["dataset_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in manifest.items() if key != "dataset_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def test_v2_mixed_tools_share_one_assistant_batch_and_preserve_order(
+    tmp_path: Path,
+) -> None:
+    packet = _packet("v2-annual-mixed-tool-multiturn", manifest_path=_V2_MANIFEST)
+    same_turn = replace(
+        packet,
+        conversation=(packet.conversation[0],),
+        script=tuple({**step, "turn": 0} for step in packet.script),
+    )
+    result = run_fixture_trial(
+        same_turn,
+        model=_MixedTurnModel(same_turn),
+        artifact_root=tmp_path / "mixed" / "1",
+        trial_id="1",
+        rate_card=_RATE_CARD,
+    )
+
+    assert result["failure_class"] == "none"
+    calls = result["output"]["trajectory"][0]["calls"]
+    assert [call["name"] for call in calls] == [
+        "get_current_toll_price",
+        "get_annual_toll_ballpark",
+    ]
+    assert [call["script_sequence"] for call in calls] == [0, 1]
+    assert result["output"]["measurements"]["cache_write_tokens"] == 0
+
+
+def test_fixture_script_cursor_rejects_wrong_order_and_duplicate_batch_ids() -> None:
+    packet = _packet("v2-annual-mixed-tool-multiturn", manifest_path=_V2_MANIFEST)
+    script = tuple({**step, "turn": 0} for step in packet.script)
+    cursor = _FixtureScriptCursor(script, packet.fixture_evidence)
+    cursor.begin_turn(0)
+
+    wrong = {
+        "content": [
+            {
+                "toolUse": {
+                    "toolUseId": "wrong-first",
+                    "name": script[1]["tool"],
+                    "input": script[1]["request"],
+                }
+            }
+        ]
+    }
+    assignment = cursor.assign_message(wrong)["wrong-first"]
+    assert assignment["error"] == "tool call does not match authored order"
+    assert assignment["step_index"] is None
+
+    expected = {
+        "content": [
+            {
+                "toolUse": {
+                    "toolUseId": "expected-first",
+                    "name": script[0]["tool"],
+                    "input": script[0]["request"],
+                }
+            }
+        ]
+    }
+    assert cursor.assign_message(expected)["expected-first"]["step_index"] == 0
+    duplicate = {
+        "content": [
+            {
+                "toolUse": {
+                    "toolUseId": "expected-first",
+                    "name": script[1]["tool"],
+                    "input": script[1]["request"],
+                }
+            }
+        ]
+    }
+    assert cursor.assign_message(duplicate)["expected-first"]["error"] == (
+        "tool-use ID is missing or duplicated"
+    )
+
+
+def test_real_strands_repeated_hook_retains_frozen_duplicate_guard_denial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _packet("v2-annual-mixed-tool-multiturn", manifest_path=_V2_MANIFEST)
+    packet = replace(
+        source,
+        conversation=(source.conversation[0],),
+        script=(source.script[0],),
+        fixture_evidence=(source.fixture_evidence[0],),
+    )
+    hook_messages: list[object] = []
+    original_before_tools = fixture_runner._FixtureScriptHook.before_tools
+
+    def record_before_tools(self: Any, event: Any) -> None:
+        hook_messages.append(event.message)
+        original_before_tools(self, event)
+        # Re-enter the hook with the exact same event/message to model an
+        # interrupt replay; the cursor must not consume the authored step twice.
+        original_before_tools(self, event)
+
+    monkeypatch.setattr(
+        fixture_runner._FixtureScriptHook, "before_tools", record_before_tools
+    )
+    result = run_fixture_trial(
+        packet,
+        model=_DuplicateTurnModel(packet),
+        artifact_root=tmp_path / "duplicate" / "1",
+        trial_id="1",
+        rate_card=_RATE_CARD,
+    )
+
+    assert result["failure_class"] == "none"
+    assert len(hook_messages) >= 2
+    calls = result["output"]["trajectory"][0]["calls"]
+    assert len(calls) == 2
+    assert calls[0]["is_error"] is False
+    assert calls[0]["script_sequence"] == 0
+    assert calls[0]["fixture_id"] == packet.script[0]["fixture_id"]
+    assert calls[1]["is_error"] is True
+    assert calls[1]["tool_error"]
+    assert "fixture_id" not in calls[1]
+    assert calls[1]["toolUseId"] == "duplicate-call-2"
+
+
+def test_cycle_usage_with_missing_entry_is_not_filtered() -> None:
+    class _Cycle:
+        def __init__(self, usage: object) -> None:
+            self.usage = usage
+
+    class _Invocation:
+        def __init__(self) -> None:
+            self.cycles = [_Cycle({"totalTokens": 6}), _Cycle(None)]
+
+    class _Metrics:
+        def __init__(self) -> None:
+            self.agent_invocations = [_Invocation()]
+
+    class _Response:
+        def __init__(self) -> None:
+            self.metrics = _Metrics()
+
+    assert _response_cycle_usages(_Response()) == [
+        {"totalTokens": 6},
+        None,
+    ]
+
+
+def test_incomplete_cycle_usage_keeps_extracted_calls_in_infra_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _packet("v2-annual-mixed-tool-multiturn", manifest_path=_V2_MANIFEST)
+    packet = replace(
+        source,
+        conversation=(source.conversation[0],),
+        script=tuple({**step, "turn": 0} for step in source.script),
+    )
+    monkeypatch.setattr(
+        fixture_runner, "_response_cycle_usages", lambda _response: [None]
+    )
+    result = run_fixture_trial(
+        packet,
+        model=_MixedTurnModel(packet),
+        artifact_root=tmp_path / "incomplete-usage" / "1",
+        trial_id="1",
+        rate_card=_RATE_CARD,
+    )
+
+    assert result["failure_class"] == "infra_dependency"
+    assert result["output"]["trajectory"][0]["calls"]
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {
+            "totalTokens": 6,
+            "inputTokens": 4,
+            "outputTokens": 2,
+            "cacheReadInputTokens": -1,
+        },
+        {
+            "totalTokens": 6,
+            "inputTokens": 4,
+            "outputTokens": 2,
+            "cacheWriteInputTokens": True,
+        },
+        {
+            "totalTokens": 6,
+            "inputTokens": 4,
+            "outputTokens": 2,
+            "cacheReadInputTokens": None,
+        },
+    ],
+)
+def test_usage_rejects_explicit_malformed_cache_buckets(
+    usage: dict[str, Any],
+) -> None:
+    with pytest.raises(ValueError, match="cache usage counters"):
+        _usage_record(usage)
+
+
+def test_request_cost_uses_long_context_tier_per_request_and_splits_cache_buckets() -> (
+    None
+):
+    rates = RateCard("synthetic-tooling", "v1", "a" * 64, 10, 20, 30).as_dict()
+    two_normal = [
+        _request_cost(
+            _usage_record(
+                {"totalTokens": 200_002, "inputTokens": 200_000, "outputTokens": 2}
+            ),
+            rates,
+        )
+        for _ in range(2)
+    ]
+    assert [item["long_context"] for item in two_normal] == [False, False]
+    premium = _request_cost(
+        _usage_record(
+            {"totalTokens": 272_003, "inputTokens": 272_001, "outputTokens": 2}
+        ),
+        rates,
+    )
+    assert premium["long_context"] is True
+    split = _request_cost(
+        _usage_record(
+            {
+                "totalTokens": 110,
+                "inputTokens": 100,
+                "outputTokens": 10,
+                "cacheReadInputTokens": 30,
+                "cacheWriteInputTokens": 20,
+            }
+        ),
+        rates,
+    )
+    assert split["ordinary_input_tokens"] == 50
+    assert split["input_usd"] == 50 * 10 / 1_000_000
+    assert split["cache_usd"] == 30 * 30 / 1_000_000
+    assert split["cache_write_usd"] == 20 * 12.5 / 1_000_000
+
+
+def test_private_v2_holdout_uses_supplied_manifest_at_grading_boundary(
+    tmp_path: Path,
+) -> None:
+    private_manifest = _write_private_no_call_manifest(tmp_path / "private")
+    source_row = {
+        "id": "private-synthetic-no-call",
+        "prompt": "I have not provided a supported origin or destination yet.",
+        "conversation": ["I have not provided a supported origin or destination yet."],
+        "script": [],
+        "suite": "current",
+    }
+    adapted = adapt_holdout_rows([source_row], manifest_path=private_manifest)[0]
+    packet, case_bytes, dataset_hash = packet_for_holdout(
+        adapted,
+        manifest_path=private_manifest,
+        prompt_points=[_POINT],
+        render_date=date(2026, 9, 5),
+    )
+    assert packet.dataset_version == "2.0.0"
+    assert (
+        run_and_seal_trial(
+            packet,
+            model=_FakeModel(
+                packet,
+                response="Please provide a supported origin and destination before pricing. 🚗",
+            ),
+            artifact_root=tmp_path / "artifact" / "1",
+            trial_id="1",
+            rate_card=_RATE_CARD,
+            case_bytes=case_bytes,
+            dataset_hash=dataset_hash,
+            case_document=holdout_case_document(adapted),
+            manifest_path=private_manifest,
+        )
+        == 0
+    )
+    assert read_json(tmp_path / "artifact" / "1" / "scorecard.json")["pass"] is True
+
+
+def test_private_v2_holdout_resolves_own_typed_fixture_and_rejects_public_substitution(
+    tmp_path: Path,
+) -> None:
+    private_manifest = _write_private_typed_manifest(tmp_path / "private-typed")
+    row = {
+        "id": "private-synthetic-typed",
+        "prompt": "Price this supported Greenway route.",
+        "conversation": ["Price this supported Greenway route."],
+        "script": [
+            {
+                "turn": 0,
+                "tool": "get_current_toll_price",
+                "request": {
+                    "origin_point_id": "greenway:1:entry:EB",
+                    "destination_point_id": "greenway:28:exit:EB",
+                    "pricing_profile": {
+                        "vehicle_class": "two_axle_passenger",
+                        "payment_method": "e_zpass",
+                        "transponder_mode": "toll",
+                    },
+                },
+                "fixture_id": "private-current-success",
+            }
+        ],
+        "suite": "current",
+    }
+    adapted = adapt_holdout_rows([row], manifest_path=private_manifest)[0]
+    packet, case_bytes, dataset_hash = packet_for_holdout(
+        adapted,
+        manifest_path=private_manifest,
+        prompt_points=[_POINT],
+        render_date=date(2026, 9, 5),
+    )
+    assert packet.fixture_evidence[0]["id"] == "private-current-success"
+    assert packet.fixture_evidence[0]["result"]["total_usd"] == "5.80"
+    response = (
+        "### Current toll pricing\n"
+        "Current toll pricing is $5.80 at 6:30 AM EDT. "
+        "Pricing provenance: schedule_derived from the published schedule. 🚗"
+    )
+    artifact = tmp_path / "artifact" / "1"
+    assert (
+        run_and_seal_trial(
+            packet,
+            model=_MixedTurnModel(packet, response=response),
+            artifact_root=artifact,
+            trial_id="1",
+            rate_card=_RATE_CARD,
+            case_bytes=case_bytes,
+            dataset_hash=dataset_hash,
+            case_document=holdout_case_document(adapted),
+            manifest_path=private_manifest,
+        )
+        == 0
+    )
+    output = read_json(artifact / "output.json")
+    assert output["trajectory"][0]["calls"][0]["tool_result"]["total_usd"] == "5.80"
+    assert read_json(artifact / "scorecard.json")["pass"] is True
+
+    public_substitution = deepcopy(row)
+    public_substitution["script"][0]["fixture_id"] = "current-success"
+    with pytest.raises(ValueError, match="script is invalid"):
+        adapt_holdout_rows([public_substitution], manifest_path=private_manifest)
 
 
 def test_actual_strands_fixture_trial_seals_and_grades(tmp_path: Path) -> None:

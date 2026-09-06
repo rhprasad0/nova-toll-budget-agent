@@ -978,6 +978,16 @@ def test_v2_requests_and_typed_results_are_bound(tmp_path: Path, mutation: str) 
         validate(manifest_path)
 
 
+def test_v2_fixture_evidence_rejects_post_validation_mutation(tmp_path: Path) -> None:
+    manifest_path, corpus_root = _copy_v2_corpus(tmp_path / "evidence-mutation")
+    corpus = validate(manifest_path)
+    fixture_path = corpus_root / "fixtures/current-success.json"
+    fixture_path.write_bytes(fixture_path.read_bytes() + b" ")
+
+    with pytest.raises(CorpusError, match="bytes changed after validation"):
+        corpus.fixture_evidence("current-success")
+
+
 def test_v2_assembled_rows_require_explicit_scripts(tmp_path: Path) -> None:
     manifest_path, _ = _copy_v2_corpus(tmp_path / "mandatory-script")
     manifest = json.loads(manifest_path.read_text())

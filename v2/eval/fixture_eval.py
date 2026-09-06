@@ -30,14 +30,81 @@ from eval.fixture_runner import (
     RateCard,
     run_fixture_trial,
 )
-from eval.golden_corpus import _canonical, _validate_case, validate
+from eval.golden_corpus import (
+    Corpus,
+    _canonical,
+    _validate_case,
+    validate,
+    validate_private_manifest,
+)
 
 _DEFAULT_MANIFEST = Path(__file__).with_name("golden") / "manifest.json"
+_DEFAULT_V2_MANIFEST = Path(__file__).with_name("golden") / "manifest-v2.json"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _default_script_turn(row: Mapping[str, Any]) -> int:
+    if row.get("expected_clarification") or row.get("annual_behavior") in {
+        "annual_day_estimate",
+        "income_clarification",
+        "schedule_correction",
+    }:
+        conversation = row.get("conversation", [])
+        if isinstance(conversation, list) and conversation:
+            return len(conversation) - 1
+    return 0
 
 
 def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def _packet_script(
+    corpus: object, row: Mapping[str, Any]
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+    """Resolve every authored script step through the validated corpus."""
+    script = deepcopy(row.get("script", []))
+    if not script and isinstance(row.get("fixture_id"), str):
+        request = row.get("expected_call")
+        if isinstance(request, dict):
+            script = [
+                {
+                    "turn": _default_script_turn(row),
+                    "tool": (
+                        "get_current_toll_price"
+                        if row.get("suite") == "current"
+                        else "get_annual_toll_ballpark"
+                    ),
+                    "request": deepcopy(request),
+                    "fixture_id": row["fixture_id"],
+                }
+            ]
+    if not isinstance(script, list):
+        raise ValueError("validated case script is unavailable")
+    evidence: list[dict[str, Any]] = []
+    for step in script:
+        if not isinstance(step, dict) or not isinstance(step.get("fixture_id"), str):
+            raise ValueError("script step fixture identity is invalid")
+        item = cast(Any, corpus).fixture_evidence(step["fixture_id"])
+        if item["tool"] != step.get("tool") or item["request"] != step.get("request"):
+            raise ValueError("script step disagrees with fixture evidence")
+        evidence.append(item)
+    return tuple(cast(dict[str, Any], step) for step in script), tuple(evidence)
+
+
+def _validated_manifest(
+    manifest_path: Path, public_manifest_path: Path | None = None
+) -> Corpus:
+    """Validate a public or supplied-own private manifest at the trust boundary."""
+    manifest = graph_checks.read_json(manifest_path)
+    if (
+        isinstance(manifest, dict)
+        and "public_dataset_sha256" in manifest
+        and "public_membership_sha256" in manifest
+    ):
+        public = validate(public_manifest_path or _DEFAULT_V2_MANIFEST)
+        return validate_private_manifest(manifest_path, public)
+    return validate(manifest_path)
 
 
 def _commit(root: Path) -> str:
@@ -62,21 +129,23 @@ def packet_for_case(
     render_date: date | None = None,
 ) -> FixtureRunPacket:
     """Adapt one validated public row while omitting grader-only metadata."""
-    corpus = validate(manifest_path)
-    rows = [row for row in corpus.annual_rows if row.get("id") == case_id]
+    corpus = _validated_manifest(manifest_path)
+    rows = [row for row in corpus.rows if row.get("id") == case_id]
     if len(rows) != 1:
         raise ValueError("annual case is not in the validated corpus")
     row = rows[0]
     fixture_id = row.get("fixture_id")
-    fixture = corpus.fixtures.get(fixture_id) if fixture_id else None
+    v2 = corpus.manifest.get("format_version") == "2.0.0"
+    if v2:
+        script, evidence = _packet_script(corpus, row)
+        primary = evidence[0] if len(evidence) == 1 else None
+    else:
+        script = ()
+        evidence = ()
+        primary = corpus.fixtures.get(fixture_id) if fixture_id else None
     fixture_bytes: bytes | None = None
-    if fixture_id:
-        if fixture is None:
-            raise ValueError("annual fixture reference is invalid")
-        declaration = next(
-            item for item in corpus.manifest["fixtures"] if item["id"] == fixture_id
-        )
-        fixture_bytes = (manifest_path.parent / declaration["path"]).read_bytes()
+    if primary is not None and "raw_bytes" in primary:
+        fixture_bytes = cast(bytes, primary["raw_bytes"])
     turns = list(row.get("conversation", [row["prompt"]]))
     if row.get("follow_up") and row["follow_up"] not in turns:
         turns.append(row["follow_up"])
@@ -85,16 +154,30 @@ def packet_for_case(
         prompt=row["prompt"],
         conversation=tuple(turns),
         fixture_id=fixture_id,
-        fixture_result_kind=fixture.get("result_kind") if fixture else None,
-        fixture_request=deepcopy(fixture["request"]) if fixture else None,
-        fixture_payload=deepcopy(fixture["payload"]) if fixture else None,
-        fixture_bytes=fixture_bytes,
+        fixture_result_kind=(
+            primary.get("result_kind") if primary is not None else None
+        ),
+        fixture_request=deepcopy(primary["request"]) if primary is not None else None,
+        fixture_payload=(
+            deepcopy(primary.get("result", primary.get("payload")))
+            if primary is not None
+            else None
+        ),
+        fixture_bytes=(
+            cast(bytes, corpus.fixture_raw_bytes[fixture_id])
+            if fixture_id is not None and fixture_id in corpus.fixture_raw_bytes
+            else fixture_bytes
+        ),
         prompt_points=(
             tuple(deepcopy(dict(point)) for point in prompt_points)
             if prompt_points is not None
             else None
         ),
         render_date=render_date,
+        script=script,
+        fixture_evidence=evidence,
+        strict_usage=v2,
+        dataset_version=str(corpus.manifest.get("dataset_version", "1.0.0")),
     )
 
 
@@ -102,8 +185,8 @@ def trusted_case_evidence(
     case_id: str, *, manifest_path: Path = _DEFAULT_MANIFEST
 ) -> tuple[bytes, str, str]:
     """Return full adapted case bytes and manifest identity for trusted sealing."""
-    corpus = validate(manifest_path)
-    rows = [row for row in corpus.annual_rows if row.get("id") == case_id]
+    corpus = _validated_manifest(manifest_path)
+    rows = [row for row in corpus.rows if row.get("id") == case_id]
     if len(rows) != 1:
         raise ValueError("annual case is not in the validated corpus")
     return (
@@ -192,7 +275,7 @@ def _safe_model_settings(
     }
 
 
-def _contract_versions() -> dict[str, Any]:
+def _contract_versions(dataset_version: str | None = None) -> dict[str, Any]:
     root = Path(__file__).resolve().parents[1]
     prompt_manifest = json.loads(
         (root / "agent" / "contract-manifest.json").read_text(encoding="utf-8")
@@ -201,7 +284,8 @@ def _contract_versions() -> dict[str, Any]:
         (root / "agent_tools" / "contract-manifest.json").read_text(encoding="utf-8")
     )
     return {
-        "dataset_version": validate(_DEFAULT_MANIFEST).manifest["dataset_version"],
+        "dataset_version": dataset_version
+        or validate(_DEFAULT_MANIFEST).manifest["dataset_version"],
         "system_prompt": prompt_manifest["system_prompt"]["current"],
         "system_prompt_renderer": prompt_manifest["system_prompt_renderer"]["current"],
         "tools": {
@@ -251,12 +335,12 @@ def _fixture_corpus_hash(corpus: object, manifest_path: Path) -> str:
     corpus_data = cast(Any, corpus)
     entries = []
     for declaration in corpus_data.manifest["fixtures"]:
-        fixture_path = manifest_path.parent / declaration["path"]
+        evidence = corpus_data.fixture_evidence(declaration["id"])
         entries.append(
             {
                 "id": declaration["id"],
-                "result_kind": declaration["result_kind"],
-                "sha256": _sha256(fixture_path.read_bytes()),
+                "result_kind": evidence.get("result_kind"),
+                "sha256": evidence["raw_sha256"],
             }
         )
     entries.sort(key=lambda item: item["id"])
@@ -287,6 +371,7 @@ def _report_card(
         "input_tokens": score["input_tokens"],
         "output_tokens": score["output_tokens"],
         "cache_tokens": score["cache_tokens"],
+        "cache_write_tokens": score.get("cache_write_tokens"),
         "latency_ms": score["latency_ms"],
         "cost": score["cost"],
         "model_settings": score["model_settings"],
@@ -429,7 +514,9 @@ def seal_trial_artifact(
             else None
         ),
         "contract_versions": (
-            _contract_versions() if failure_class == "none" else None
+            _contract_versions(packet.dataset_version)
+            if failure_class == "none"
+            else None
         ),
         "candidate_artifact": {
             "artifact_id": f"source-snapshot:{identity['artifact_digest']}",
@@ -444,6 +531,7 @@ def seal_trial_artifact(
         "input_tokens": _sum_measurement(measurements, "input_tokens"),
         "output_tokens": _sum_measurement(measurements, "output_tokens"),
         "cache_tokens": _sum_measurement(measurements, "cache_tokens"),
+        "cache_write_tokens": _sum_measurement(measurements, "cache_write_tokens"),
         "latency_ms": measurements.get("latency_ms")
         if isinstance(measurements, dict)
         else None,
@@ -465,6 +553,7 @@ def run_and_seal_trial(
     case_bytes: bytes,
     dataset_hash: str,
     case_document: Mapping[str, Any] | None = None,
+    manifest_path: Path | None = None,
 ) -> int:
     """Trusted callable boundary for one real-model fixture trial."""
     run_fixture_trial(
@@ -493,7 +582,9 @@ def run_and_seal_trial(
             handle,
         )
         handle.flush()
-        return graph_checks.grade(artifact_root, Path(handle.name))
+        return graph_checks.grade(
+            artifact_root, Path(handle.name), manifest_path=manifest_path
+        )
 
 
 def aggregate_public_run(
@@ -571,6 +662,8 @@ def aggregate_holdout_run(
     if not cases or len(cases) != len(set(cases)):
         raise ValueError("holdout case set is invalid")
     public_ids = {row["id"] for row in validate(_DEFAULT_MANIFEST).rows}
+    if _DEFAULT_V2_MANIFEST.is_file():
+        public_ids.update(row["id"] for row in validate(_DEFAULT_V2_MANIFEST).rows)
     if public_ids.intersection(cases):
         raise ValueError("holdout case IDs must be opaque and outside the public set")
     if mode not in {"pin", "improve", "gate"}:
@@ -645,7 +738,61 @@ def adapt_holdout_rows(
     """
     if not rows:
         raise ValueError("holdout row set is empty")
-    corpus = validate(manifest_path)
+    corpus = _validated_manifest(manifest_path)
+    if corpus.manifest.get("format_version") == "2.0.0":
+        public_ids = {item["id"] for item in corpus.rows}
+        if "public_dataset_sha256" in corpus.manifest:
+            public_ids = {item["id"] for item in validate(_DEFAULT_V2_MANIFEST).rows}
+        prepared_v2: list[tuple[str, dict[str, Any], str | None, str]] = []
+        seen_v2: set[str] = set()
+        for source in rows:
+            row = deepcopy(dict(source))
+            case_id = row.get("id")
+            prompt = row.get("prompt")
+            fixture_id = row.get("fixture_id")
+            if (
+                not isinstance(case_id, str)
+                or not case_id
+                or case_id in public_ids
+                or case_id in seen_v2
+                or not isinstance(prompt, str)
+                or not prompt
+                or (fixture_id is not None and not isinstance(fixture_id, str))
+            ):
+                raise ValueError("v2 holdout row identity or prompt is invalid")
+            if row.get("suite") not in {"current", "annual"}:
+                raise ValueError("v2 holdout row suite is invalid")
+            try:
+                _packet_script(corpus, row)
+            except Exception as error:
+                raise ValueError("v2 holdout row script is invalid") from error
+            seen_v2.add(case_id)
+            prepared_v2.append((case_id, row, fixture_id, _sha256(_canonical(row))))
+        fixture_hash = _fixture_corpus_hash(corpus, manifest_path)
+        membership = [
+            [case_id, row_hash]
+            for case_id, _row, _fixture_id, row_hash in sorted(prepared_v2)
+        ]
+        bundle_hash = _sha256(
+            _canonical({"fixture_corpus_hash": fixture_hash, "rows": membership})
+        )
+        return [
+            {
+                "case_id": case_id,
+                "suite": "annual",
+                "holdout": True,
+                "row": row,
+                "dataset_hash": bundle_hash,
+                "membership_hash": bundle_hash,
+                "holdout_membership": membership,
+                "fixture_corpus_hash": fixture_hash,
+                "row_digest": row_hash,
+                "fixture_id": fixture_id,
+                "prompt": row["prompt"],
+                "conversation": list(row.get("conversation", [row["prompt"]])),
+            }
+            for case_id, row, fixture_id, row_hash in prepared_v2
+        ]
     public_ids = {item["id"] for item in corpus.rows}
     prepared: list[tuple[str, dict[str, Any], str | None, str]] = []
     seen: set[str] = set()
@@ -757,10 +904,20 @@ def packet_for_holdout(
     fixture_id = adapted.get("fixture_id")
     if not isinstance(case_id, str) or row.get("id") != case_id:
         raise ValueError("holdout identity is invalid")
-    corpus = validate(manifest_path)
-    fixture = corpus.fixtures.get(fixture_id) if fixture_id else None
-    if fixture_id and fixture is None:
-        raise ValueError("holdout fixture is not in the validated corpus")
+    corpus = _validated_manifest(manifest_path)
+    v2 = corpus.manifest.get("format_version") == "2.0.0"
+    if v2:
+        if fixture_id and fixture_id not in corpus.fixture_tools:
+            raise ValueError("holdout fixture is not in the validated corpus")
+        script, evidence = _packet_script(corpus, row)
+        primary = evidence[0] if len(evidence) == 1 else None
+    else:
+        fixture = corpus.fixtures.get(fixture_id) if fixture_id else None
+        if fixture_id and fixture is None:
+            raise ValueError("holdout fixture is not in the validated corpus")
+        script = ()
+        evidence = ()
+        primary = fixture
     turns = list(row.get("conversation", [row["prompt"]]))
     if row.get("follow_up") and row["follow_up"] not in turns:
         turns.append(row["follow_up"])
@@ -769,15 +926,29 @@ def packet_for_holdout(
         prompt=str(row["prompt"]),
         conversation=tuple(turns),
         fixture_id=fixture_id,
-        fixture_result_kind=fixture.get("result_kind") if fixture else None,
-        fixture_request=deepcopy(fixture["request"]) if fixture else None,
-        fixture_payload=deepcopy(fixture["payload"]) if fixture else None,
-        fixture_bytes=None,
+        fixture_result_kind=primary.get("result_kind") if primary else None,
+        fixture_request=deepcopy(primary["request"]) if primary else None,
+        fixture_payload=(
+            deepcopy(primary.get("result", primary.get("payload"))) if primary else None
+        ),
+        fixture_bytes=(
+            cast(bytes, primary["raw_bytes"])
+            if primary and "raw_bytes" in primary
+            else (
+                cast(bytes, corpus.fixture_raw_bytes[fixture_id])
+                if fixture_id is not None and fixture_id in corpus.fixture_raw_bytes
+                else None
+            )
+        ),
         prompt_points=(
             tuple(deepcopy(dict(point)) for point in prompt_points)
             if prompt_points is not None
             else None
         ),
         render_date=render_date,
+        script=script,
+        fixture_evidence=evidence,
+        strict_usage=v2,
+        dataset_version=str(corpus.manifest.get("dataset_version", "1.0.0")),
     )
     return packet, _canonical(row), case_document["dataset_hash"]

@@ -240,6 +240,13 @@
       ],
       "minimum": 0
     },
+    "cache_write_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
     "cost": {
       "type": [
         "object",

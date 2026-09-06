@@ -1876,6 +1876,159 @@ def task_function(case: Case[str, str]) -> dict[str, Any]:
     return {"output": str(response), "trajectory": turns}
 
 
+def evaluate_v2_scripted_turns(
+    turns: list[dict[str, Any]], metadata: dict[str, Any]
+) -> list[EvaluationOutput]:
+    """Apply the existing semantic checks to an authored v2 tool script."""
+    expected_turns = metadata.get("conversation", [metadata.get("prompt", "")])
+    if type(expected_turns) is not list or len(turns) != len(expected_turns):
+        return _result(False, "scripted conversation turn count mismatch", "turn_count")
+    script = metadata.get("script", [])
+    if type(script) is not list:
+        return _result(False, "scripted tool contract is malformed", "tool_mismatch")
+    response = "\n".join(str(turn.get("response", "")) for turn in turns)
+    if not response.strip():
+        return _result(False, "scripted response was blank", "blank_response")
+    for turn_index, turn in enumerate(turns):
+        calls = turn.get("calls", [])
+        if type(calls) is not list:
+            return _result(False, "scripted call trace is malformed", "tool_mismatch")
+        expected = [
+            step
+            for step in cast(list[dict[str, Any]], script)
+            if step.get("turn") == turn_index
+        ]
+        if len(calls) != len(expected):
+            return _result(
+                False,
+                f"turn {turn_index + 1} observed the wrong number of tool calls",
+                "tool_mismatch",
+            )
+        for step, call in zip(expected, calls, strict=True):
+            if call.get("name") != step.get("tool") or call.get("input") != step.get(
+                "request"
+            ):
+                return _result(
+                    False, "scripted tool call did not match", "tool_mismatch"
+                )
+            if call.get("is_error") and not re.search(
+                r"\b(?:unable|cannot|can't|error|unavailable|unsupported)\b",
+                str(turn.get("response", "")),
+                re.IGNORECASE,
+            ):
+                return _result(
+                    False, "scripted tool error was not explained", "tool_error"
+                )
+    source_suite = metadata.get("source_suite")
+    source_metadata = dict(metadata)
+    for source_key in (
+        "expected_call",
+        "expected_calls",
+        "expected_clarification",
+        "expected_missing_fields",
+        "expected_route_status",
+        "expected_component_count",
+        "allow_pricing_unavailable",
+        "expected_reasons",
+        "expected_availability",
+        "expected_required_i95_directions",
+        "annual_behavior",
+    ):
+        if f"source_{source_key}" in metadata:
+            source_metadata[source_key] = metadata[f"source_{source_key}"]
+    if source_suite in {"fallback", "unavailable"}:
+        evaluator = (
+            evaluate_fallback_turns
+            if source_suite == "fallback"
+            else evaluate_unavailable_turn
+        )
+        return evaluator(turns, source_metadata)
+    if source_suite == "i66_schedule":
+        calls = turns[0].get("calls", []) if len(turns) == 1 else []
+        return evaluate_i66_schedule_turn(
+            cast(list[dict[str, Any]], calls), response, source_metadata
+        )
+    if source_suite == "direct":
+        if any(call.get("is_error") for turn in turns for call in turn["calls"]):
+            return _result(
+                True,
+                "authored current operation error was surfaced",
+                "passed",
+            )
+        if source_metadata.get("expected_clarification"):
+            return evaluate_current_clarification_turns(turns, source_metadata)
+        calls = turns[0].get("calls", []) if len(turns) == 1 else []
+        return evaluate_westpark_turn(
+            cast(list[dict[str, Any]], calls), response, source_metadata
+        )
+    if source_suite == "annual":
+        behavior = source_metadata.get("annual_behavior")
+        if behavior == "missing_inputs":
+            return evaluate_annual_missing_inputs(turns, source_metadata)
+        if behavior == "annual_day_estimate":
+            return evaluate_annual_day_estimate(turns, source_metadata)
+        if behavior == "income_clarification":
+            return evaluate_annual_income_clarification(turns, source_metadata)
+        if behavior == "schedule_correction":
+            return evaluate_annual_schedule_correction(turns, source_metadata)
+        if behavior == "unmatched_location_refusal":
+            return evaluate_annual_unmatched_location(turns, source_metadata)
+        if behavior == "route_unavailable":
+            return evaluate_annual_route_unavailable(turns, source_metadata)
+        return evaluate_annual_turn(turns, source_metadata)
+    for turn_index, turn in enumerate(turns):
+        for step, call in zip(
+            [
+                step
+                for step in cast(list[dict[str, Any]], script)
+                if step.get("turn") == turn_index
+            ],
+            cast(list[dict[str, Any]], turn["calls"]),
+            strict=True,
+        ):
+            if call.get("is_error"):
+                continue
+            if step.get("tool") == "get_current_toll_price":
+                payload = call.get("tool_result")
+                current_metadata = {
+                    **metadata,
+                    "expected_call": step["request"],
+                    "expected_component_count": len(
+                        payload.get("components", [])
+                        if isinstance(payload, dict)
+                        else []
+                    ),
+                }
+                evaluation = evaluate_westpark_turn(
+                    [call], str(turn.get("response", "")), current_metadata
+                )
+            elif step.get("tool") == "get_annual_toll_ballpark":
+                annual_metadata = {**metadata, "expected_call": step["request"]}
+                evaluation = evaluate_annual_turn(
+                    [{**turn, "calls": [call]}], annual_metadata
+                )
+            else:
+                return _result(False, "scripted tool is unknown", "tool_mismatch")
+            if evaluation and not all(item.test_pass for item in evaluation):
+                return evaluation
+    if not script:
+        if metadata.get("suite") == "annual" and metadata.get(
+            "expected_missing_fields"
+        ):
+            return evaluate_annual_missing_inputs(turns, metadata)
+        if metadata.get("suite") == "current" and not re.search(
+            r"\b(?:origin|destination|supported endpoints?)\b",
+            response,
+            re.IGNORECASE,
+        ):
+            return _result(
+                False,
+                "no-call response did not request supported endpoints",
+                "missing_clarification",
+            )
+    return _result(True, "scripted tool trace and semantic response passed", "passed")
+
+
 class TollChatEvaluator(Evaluator[str, str]):
     def evaluate(
         self, evaluation_case: EvaluationData[str, str]
@@ -1887,6 +2040,8 @@ class TollChatEvaluator(Evaluator[str, str]):
             else []
         )
         metadata = evaluation_case.metadata or {}
+        if metadata.get("script") is not None:
+            return evaluate_v2_scripted_turns(turns, metadata)
         if metadata.get("suite") == "fallback":
             return evaluate_fallback_turns(turns, metadata)
         if metadata.get("suite") == "unavailable":
