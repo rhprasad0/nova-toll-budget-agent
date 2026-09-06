@@ -1,0 +1,188 @@
+{
+  "fixture_id": "september-five-proof-dulles-toll-road-westbound-to-i495-north-annual",
+  "tool": "get_annual_toll_ballpark",
+  "tool_contract_version": "3.0.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-05T23:00:18.687132-04:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=single_repeatable_read_transaction;independent_legs=outbound,return",
+  "source": {
+    "id": "september-five-proof-dulles-toll-road-westbound-to-i495-north-annual",
+    "sha256": "be90a862d7f49c08ab30371fd0437c88b95a97985552799725f46be292beb2be"
+  },
+  "request": {
+    "outbound": {
+      "origin_point_id": "dtr:66:entry:WB",
+      "destination_point_id": "i495:181ND",
+      "departure_time": "08:00:00"
+    },
+    "return": {
+      "origin_point_id": "greenway:28:entry:WB",
+      "destination_point_id": "greenway:1:exit:WB",
+      "departure_time": "17:30:00"
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "120000.00"
+  },
+  "result": {
+    "method": "recent_complete_same_date_round_trips",
+    "evaluated_at": "2026-09-05T23:00:18.687132-04:00",
+    "timezone": "America/New_York",
+    "target_window": {
+      "start_date": "2026-06-13",
+      "end_date": "2026-09-04",
+      "date_count": 84
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "coverage": {
+      "eligible_date_count": 60,
+      "complete_pair_count": 57,
+      "coverage_percent": "95.0",
+      "by_weekday": [
+        {
+          "weekday": "monday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 11,
+          "coverage_percent": "91.7"
+        },
+        {
+          "weekday": "tuesday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        },
+        {
+          "weekday": "wednesday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 12,
+          "coverage_percent": "100.0"
+        },
+        {
+          "weekday": "thursday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 11,
+          "coverage_percent": "91.7"
+        },
+        {
+          "weekday": "friday",
+          "eligible_date_count": 12,
+          "complete_pair_count": 11,
+          "coverage_percent": "91.7"
+        }
+      ]
+    },
+    "uses_modeled": false,
+    "uses_current_fixed_rates": true,
+    "facilities": [
+      {
+        "facility": "i95_i495",
+        "sample_count": 57,
+        "uses_modeled": false,
+        "uses_current_fixed_rates": false,
+        "scenarios": {
+          "p25": {
+            "daily_toll_usd": "5.80",
+            "annual_toll_usd": "1392.00"
+          },
+          "p50": {
+            "daily_toll_usd": "6.25",
+            "annual_toll_usd": "1500.00"
+          },
+          "p90": {
+            "daily_toll_usd": "8.85",
+            "annual_toll_usd": "2124.00"
+          }
+        }
+      },
+      {
+        "facility": "greenway",
+        "sample_count": 57,
+        "uses_modeled": false,
+        "uses_current_fixed_rates": true,
+        "scenarios": {
+          "p25": {
+            "daily_toll_usd": "5.80",
+            "annual_toll_usd": "1392.00"
+          },
+          "p50": {
+            "daily_toll_usd": "5.80",
+            "annual_toll_usd": "1392.00"
+          },
+          "p90": {
+            "daily_toll_usd": "5.80",
+            "annual_toll_usd": "1392.00"
+          }
+        }
+      }
+    ],
+    "assumptions": {
+      "estimated_tax_fraction": "1/3",
+      "vehicle_cost_per_mile_usd": "0.685",
+      "distance_method": "straight_line_priced_facility_legs",
+      "scope": "tolled_portions_only"
+    },
+    "income": {
+      "gross_annual_usd": "120000.00",
+      "estimated_tax_usd": "40000.00",
+      "estimated_after_tax_usd": "80000.00"
+    },
+    "tolled_distance": {
+      "daily_round_trip_miles": "14.57",
+      "annual_miles": "3496.50"
+    },
+    "vehicle_cost": {
+      "daily_usd": "9.98",
+      "annual_usd": "2395.10"
+    },
+    "sample_status": "partial",
+    "available_date_range": {
+      "start_date": "2026-06-15",
+      "end_date": "2026-09-04"
+    },
+    "scenarios": {
+      "p25": {
+        "daily_toll_usd": "11.60",
+        "annual_toll_usd": "2784.00",
+        "daily_total_tolled_commute_cost_usd": "21.58",
+        "average_monthly_tolled_commute_cost_usd": "431.59",
+        "annual_total_tolled_commute_cost_usd": "5179.10",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "74820.90",
+        "tolled_commute_share_of_after_tax_income_percent": "6.5",
+        "additional_gross_income_to_offset_usd": "7768.65"
+      },
+      "p50": {
+        "daily_toll_usd": "12.05",
+        "annual_toll_usd": "2892.00",
+        "daily_total_tolled_commute_cost_usd": "22.03",
+        "average_monthly_tolled_commute_cost_usd": "440.59",
+        "annual_total_tolled_commute_cost_usd": "5287.10",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "74712.90",
+        "tolled_commute_share_of_after_tax_income_percent": "6.6",
+        "additional_gross_income_to_offset_usd": "7930.65"
+      },
+      "p90": {
+        "daily_toll_usd": "14.65",
+        "annual_toll_usd": "3516.00",
+        "daily_total_tolled_commute_cost_usd": "24.63",
+        "average_monthly_tolled_commute_cost_usd": "492.59",
+        "annual_total_tolled_commute_cost_usd": "5911.10",
+        "estimated_annual_income_after_tax_and_tolled_commute_usd": "74088.90",
+        "tolled_commute_share_of_after_tax_income_percent": "7.4",
+        "additional_gross_income_to_offset_usd": "8866.65"
+      }
+    }
+  }
+}

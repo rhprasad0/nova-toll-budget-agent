@@ -1,0 +1,68 @@
+{
+  "fixture_id": "september-five-proof-dca-to-i95-south-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T02:59:41.924563+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-proof-dca-to-i95-south-current",
+    "sha256": "2601a41c321488d9365ab20a9deae8c6a12a4776fcdd73e93b8626e3b2b07c8b"
+  },
+  "request": {
+    "origin_point_id": "airport_dca",
+    "destination_point_id": "i495:1819ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "currently_unavailable",
+    "reason": {
+      "code": "i95_opposite_direction_open",
+      "details": {
+        "required_i95_directions": [
+          "SB",
+          "SB"
+        ],
+        "availability": "northbound"
+      }
+    },
+    "point_ids": [
+      "airport_dca",
+      "i95:2233SO",
+      "i495:1819ND"
+    ],
+    "connection_ids": [
+      "dca_to_i95_south",
+      "source:i95_shared:Southbound:2233SO:1819ND"
+    ],
+    "connection_types": [
+      "airport_access",
+      "general_purpose_gap"
+    ],
+    "general_purpose_gaps": [
+      {
+        "connection_id": "source:i95_shared:Southbound:2233SO:1819ND",
+        "boundary_point_id": "i495:192SD",
+        "role": "prefix",
+        "i95_direction": "SB",
+        "fallback_required": true
+      }
+    ],
+    "i95_evidence": {
+      "availability": "northbound",
+      "northbound_corridor_name": "I-95-NB",
+      "northbound_link_status": "NORTHBOUND_OPEN",
+      "northbound_interval_end_at": "2026-09-06T02:50:00+00:00",
+      "northbound_calculated_at": "2026-09-06T02:40:00+00:00",
+      "southbound_corridor_name": "I-95-SB",
+      "southbound_link_status": "CLOSED",
+      "southbound_interval_end_at": "2026-09-06T02:50:00+00:00",
+      "southbound_calculated_at": "2026-09-06T02:40:00+00:00"
+    },
+    "facility_legs": []
+  }
+}

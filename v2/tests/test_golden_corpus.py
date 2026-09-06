@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -25,12 +26,14 @@ from eval.run_evaluation import (
     evaluate_annual_schedule_correction,
     evaluate_annual_turn,
     evaluate_annual_unmatched_location,
+    evaluate_v2_scripted_turns,
     load_cases,
 )
 
 ROOT = Path(__file__).parents[1]
 MANIFEST = ROOT / "eval/golden/manifest.json"
-V2_MANIFEST = ROOT / "eval/golden/manifest-v2.json"
+V2_MANIFEST = ROOT / "eval/golden/manifest-v2-sample.json"
+V2_FINAL_MANIFEST = ROOT / "eval/golden/manifest-v2.json"
 
 
 def _copy_corpus(tmp_path: Path) -> tuple[Path, Path]:
@@ -59,6 +62,13 @@ def _refresh(manifest_path: Path) -> None:
 
 
 def _copy_v2_corpus(tmp_path: Path) -> tuple[Path, Path]:
+    target = tmp_path / "golden"
+    shutil.copytree(MANIFEST.parent, target)
+    shutil.copy2(ROOT / "eval/test-cases.jsonl", target.parent / "test-cases.jsonl")
+    return target / "manifest-v2-sample.json", target
+
+
+def _copy_final_v2_corpus(tmp_path: Path) -> tuple[Path, Path]:
     target = tmp_path / "golden"
     shutil.copytree(MANIFEST.parent, target)
     shutil.copy2(ROOT / "eval/test-cases.jsonl", target.parent / "test-cases.jsonl")
@@ -119,12 +129,28 @@ Historical partial coverage: 51 of 60 eligible dates; partial sample at 85.0% co
 {rows}"""
 
 
+def _new_partial_fixture_response(payload: dict[str, object]) -> str:
+    coverage = payload["coverage"]
+    assert isinstance(coverage, dict)
+    replacement = (
+        f"Historical partial coverage: {coverage['complete_pair_count']} of "
+        f"{coverage['eligible_date_count']} eligible dates; partial sample at "
+        f"{coverage['coverage_percent']}% coverage."
+    )
+    return _partial_fixture_response(payload).replace(
+        "Historical partial coverage: 51 of 60 eligible dates; partial sample at "
+        "85.0% coverage.",
+        replacement,
+    )
+
+
 def test_corpus_counts_and_loader_source_of_truth() -> None:
     corpus = validate(MANIFEST)
     assert len(corpus.legacy_rows) == 9
     assert len(corpus.annual_rows) == 10
     assert len(corpus.rows) == 19
-    assert len(load_cases()) == 19
+    assert len(load_cases()) == 250
+    assert len(golden_corpus.load_rows(MANIFEST)) == 19
     assert not any(row.get("suite") == "annual" for row in corpus.legacy_rows)
 
 
@@ -269,6 +295,48 @@ def test_partial_annual_grader_requires_typed_51_of_60_coverage() -> None:
     wrong_status = json.loads(json.dumps(turns))
     wrong_status[1]["calls"][0]["tool_result"]["sample_status"] = "complete"
     assert evaluate_annual_turn(wrong_status, row)[0].label == "partial_coverage"
+
+
+def test_new_v2_partial_annual_grader_uses_bound_typed_coverage() -> None:
+    corpus = validate(V2_FINAL_MANIFEST)
+    row = next(
+        row
+        for row in corpus.rows
+        if row["id"] == "topology-proof-dulles-toll-road-to-i495-annual"
+    )
+    fixture = corpus.fixtures["september-five-proof-dulles-toll-road-to-i495-annual"]
+    payload = fixture["result"]
+    assert isinstance(payload, dict)
+    call = {
+        "name": "get_annual_toll_ballpark",
+        "input": row["script"][0]["request"],
+        "tool_result": payload,
+        "is_error": False,
+    }
+    turns = [
+        {
+            "response": _new_partial_fixture_response(payload),
+            "calls": [call],
+        }
+    ]
+    assert evaluate_v2_scripted_turns(turns, row)[0].test_pass
+
+    equivalent_format = json.loads(json.dumps(turns))
+    equivalent_format[0]["response"] = equivalent_format[0]["response"].replace(
+        "95.0%", "95%"
+    )
+    assert evaluate_v2_scripted_turns(equivalent_format, row)[0].test_pass
+
+    stale = json.loads(json.dumps(turns))
+    stale[0]["response"] = stale[0]["response"].replace("57 of 60", "58 of 60")
+    stale[0]["response"] = stale[0]["response"].replace("95.0%", "96.7%")
+    assert evaluate_v2_scripted_turns(stale, row)[0].label == "partial_coverage"
+
+    malformed_payload = json.loads(json.dumps(payload))
+    malformed_payload["coverage"]["coverage_percent"] = "96.7"
+    bad_payload = json.loads(json.dumps(turns))
+    bad_payload[0]["calls"][0]["tool_result"] = malformed_payload
+    assert evaluate_v2_scripted_turns(bad_payload, row)[0].label == "partial_coverage"
 
 
 def test_validator_requires_trusted_v1_case_contract(tmp_path: Path) -> None:
@@ -862,6 +930,333 @@ def test_v2_sample_preserves_membership_order_and_payload_free_render(
     assert "5.80" not in page
     assert "Unable to get the current toll price" not in page
     assert "Payloads withheld" in page
+
+
+def test_final_v2_manifest_has_250_cases_and_approved_allocation() -> None:
+    corpus = validate(V2_FINAL_MANIFEST)
+    assert len(corpus.rows) == 250
+    assert Counter(row["primary_category"] for row in corpus.rows) == Counter(
+        {
+            "topology": 100,
+            "current": 45,
+            "annual": 35,
+            "multiturn": 30,
+            "fault": 20,
+            "abuse": 20,
+        }
+    )
+    assert corpus.manifest["allocation"] == {
+        "topology": 100,
+        "current": 45,
+        "annual": 35,
+        "multiturn": 30,
+        "fault": 20,
+        "abuse": 20,
+        "total": 250,
+    }
+
+
+def test_final_v2_allocation_mutation_is_rejected(tmp_path: Path) -> None:
+    manifest_path, _ = _copy_final_v2_corpus(tmp_path / "allocation")
+    manifest = json.loads(manifest_path.read_text())
+    manifest["allocation"]["topology"] = 99
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(CorpusError, match="allocation"):
+        validate(manifest_path)
+
+
+def test_final_v2_count_and_self_consistent_reclassification_are_rejected(
+    tmp_path: Path,
+) -> None:
+    def mutate_count(root: Path, target_count: int) -> Path:
+        manifest_path, corpus_root = _copy_final_v2_corpus(root)
+        manifest = json.loads(manifest_path.read_text())
+        shard_path = corpus_root / "cases/v2-public.jsonl"
+        rows = [json.loads(line) for line in shard_path.read_text().splitlines()]
+        removable_id = "current-boundary-three-axle"
+        if target_count == 249:
+            manifest["membership"] = [
+                item for item in manifest["membership"] if item["id"] != removable_id
+            ]
+            manifest["case_metadata"] = [
+                item for item in manifest["case_metadata"] if item["id"] != removable_id
+            ]
+        else:
+            original = next(row for row in rows if row["id"] == removable_id)
+            extra = json.loads(json.dumps(original))
+            extra["id"] = "allocation-overflow-case"
+            extra["prompt"] += " State the supported endpoint boundary explicitly."
+            extra["conversation"] = [extra["prompt"]]
+            rows.append(extra)
+            shard_path.write_text(
+                "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+            )
+            metadata = next(
+                item for item in manifest["case_metadata"] if item["id"] == removable_id
+            )
+            extra_metadata = json.loads(json.dumps(metadata))
+            extra_metadata["id"] = extra["id"]
+            manifest["case_metadata"].append(extra_metadata)
+            manifest["case_shards"][0]["count"] += 1
+            manifest["membership"].append(
+                {
+                    "id": extra["id"],
+                    "shard": "cases/v2-public.jsonl",
+                    "row_sha256": hashlib.sha256(
+                        json.dumps(
+                            extra,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode()
+                    ).hexdigest(),
+                }
+            )
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+        _refresh_v2(manifest_path)
+        return manifest_path
+
+    for target_count in (249, 251):
+        with pytest.raises(CorpusError, match="allocation"):
+            validate(mutate_count(tmp_path / str(target_count), target_count))
+
+    manifest_path, _ = _copy_final_v2_corpus(tmp_path / "reclassified")
+    manifest = json.loads(manifest_path.read_text())
+    row = next(
+        item
+        for item in manifest["case_metadata"]
+        if item["id"] == "current-boundary-three-axle"
+    )
+    row["primary_category"] = "topology"
+    manifest["allocation"] = {
+        "topology": 101,
+        "current": 44,
+        "annual": 35,
+        "multiturn": 30,
+        "fault": 20,
+        "abuse": 20,
+        "total": 250,
+    }
+    manifest["direction_coverage"]["sampled_rows"] = 101
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="approved release"):
+        validate(manifest_path)
+
+
+def test_final_v2_rejects_normalized_duplicate_case_content(tmp_path: Path) -> None:
+    manifest_path, corpus_root = _copy_final_v2_corpus(tmp_path / "content-duplicate")
+    manifest = json.loads(manifest_path.read_text())
+    shard_path = corpus_root / "cases/v2-public.jsonl"
+    rows = [json.loads(line) for line in shard_path.read_text().splitlines()]
+    source = next(row for row in rows if row["id"] == "current-boundary-three-axle")
+    duplicate = json.loads(json.dumps(source))
+    duplicate["id"] = "normalized-content-duplicate"
+    duplicate["prompt"] = (
+        "  \n"
+        + source["prompt"].upper().replace("WHAT", "\uff37\uff28\uff21\uff34")
+        + "\t"
+    )
+    duplicate["conversation"] = [duplicate["prompt"]]
+    rows.append(duplicate)
+    shard_path.write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+    )
+    metadata = next(
+        item for item in manifest["case_metadata"] if item["id"] == source["id"]
+    )
+    duplicate_metadata = json.loads(json.dumps(metadata))
+    duplicate_metadata["id"] = duplicate["id"]
+    manifest["case_metadata"].append(duplicate_metadata)
+    manifest["case_shards"][0]["count"] += 1
+    manifest["membership"].append(
+        {
+            "id": duplicate["id"],
+            "shard": "cases/v2-public.jsonl",
+            "row_sha256": hashlib.sha256(
+                json.dumps(
+                    duplicate,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode()
+            ).hexdigest(),
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="duplicate case content"):
+        validate(manifest_path)
+
+
+def test_private_v2_rejects_normalized_canonical_identity_overlap(
+    tmp_path: Path,
+) -> None:
+    public = validate(V2_FINAL_MANIFEST)
+    public_row = next(row for row in public.rows if not row.get("script"))
+    row = {
+        "id": "private-normalized-identity",
+        "prompt": "Please provide a supported toll origin and destination.",
+        "conversation": ["Please provide a supported toll origin and destination."],
+        "script": [],
+    }
+    root = tmp_path / "canonical"
+    (root / "cases").mkdir(parents=True)
+    shard = root / "cases/private.jsonl"
+    shard.write_text(json.dumps(row) + "\n")
+    membership = [
+        {
+            "id": row["id"],
+            "shard": "cases/private.jsonl",
+            "row_sha256": hashlib.sha256(
+                json.dumps(
+                    row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode()
+            ).hexdigest(),
+        }
+    ]
+    metadata = {
+        "id": row["id"],
+        "suite": "current",
+        "primary_category": "topology",
+        "tags": ["synthetic", "private"],
+        "grouping": "private-normalized-identity",
+        "provenance": "synthetic-private-test",
+        "expected_assertion": (
+            "Required: request supported endpoints. "
+            "Prohibited: infer a route or make a tool call."
+        ),
+        "split": "private",
+        "scenario_key": "  " + public_row["scenario_key"].upper() + "  ",
+        "template_key": "  " + public_row["template_key"].upper() + "  ",
+        "route_key": public_row["route_key"],
+    }
+    manifest: dict[str, object] = {
+        "corpus": "annual-affordability",
+        "format_version": "2.0.0",
+        "dataset_version": "2.1.0",
+        "source_manifests": [],
+        "membership": membership,
+        "membership_sha256": hashlib.sha256(
+            json.dumps(
+                membership, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest(),
+        "case_metadata": [metadata],
+        "case_shards": [{"path": "cases/private.jsonl", "count": 1}],
+        "fixtures": [],
+        "payloads": [
+            {
+                "path": "cases/private.jsonl",
+                "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+            }
+        ],
+        "public_dataset_sha256": public.manifest["dataset_sha256"],
+        "public_membership_sha256": public.manifest["membership_sha256"],
+        "allocation": {
+            "topology": 1,
+            "current": 0,
+            "annual": 0,
+            "multiturn": 0,
+            "fault": 0,
+            "abuse": 0,
+            "total": 1,
+        },
+        "render_date": "2026-09-05",
+        "direction_coverage": {
+            "inventory_rows": 1,
+            "sampled_rows": 1,
+            "gaps": ["synthetic private identity test"],
+        },
+        "dataset_sha256": "",
+    }
+    manifest["dataset_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in manifest.items() if key != "dataset_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    path = root / "private-manifest.json"
+    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    with pytest.raises(CorpusError, match="canonical identity overlaps"):
+        validate_private_manifest(path, public)
+
+
+def test_private_v2_rejects_normalized_content_overlap(tmp_path: Path) -> None:
+    public = validate(V2_FINAL_MANIFEST)
+    public_row = next(row for row in public.rows if not row.get("script"))
+    private_path = _write_synthetic_private_manifest(
+        tmp_path / "content-overlap", public, "private-normalized-content"
+    )
+    manifest = json.loads(private_path.read_text())
+    shard_path = private_path.parent / "cases/private.jsonl"
+    row = json.loads(shard_path.read_text())
+    row["prompt"] = (
+        "  \n"
+        + public_row["prompt"].upper().replace("WHAT", "\uff37\uff28\uff21\uff34")
+        + "\t"
+    )
+    row["conversation"] = [row["prompt"]]
+    shard_path.write_text(json.dumps(row, ensure_ascii=False) + "\n")
+    manifest["membership"][0]["row_sha256"] = hashlib.sha256(
+        json.dumps(
+            row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()
+    ).hexdigest()
+    private_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(private_path)
+    with pytest.raises(CorpusError, match="content overlaps public corpus"):
+        validate_private_manifest(private_path, public)
+
+
+def test_v2_release_base_ref_rejects_version_only_bump(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in tuple(os.environ):
+        if name.startswith("GIT_"):
+            monkeypatch.delenv(name)
+    manifest_path, _ = _copy_final_v2_corpus(tmp_path / "version-only")
+    monkeypatch.setattr(golden_corpus, "_REPO_ROOT", tmp_path / "version-only")
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=tmp_path / "version-only",
+            check=True,
+            capture_output=True,
+        )
+
+    git("init")
+    git("add", ".")
+    git(
+        "-c",
+        "user.name=Corpus test",
+        "-c",
+        "user.email=corpus@example.invalid",
+        "commit",
+        "-m",
+        "Initial release",
+    )
+    manifest = json.loads(manifest_path.read_text())
+    manifest["dataset_version"] = "2.2.0"
+    manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="unchanged v2 corpus"):
+        validate(manifest_path, "HEAD")
+
+    manifest = json.loads(manifest_path.read_text())
+    manifest["dataset_version"] = "2.1.0"
+    manifest["direction_coverage"]["gaps"].append("Additional reviewed coverage limit.")
+    manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError, match="advanced dataset_version"):
+        validate(manifest_path, "HEAD")
+    manifest["dataset_version"] = "2.2.0"
+    manifest_path.write_text(json.dumps(manifest))
+    _refresh_v2(manifest_path)
+    assert validate(manifest_path, "HEAD").manifest["dataset_version"] == "2.2.0"
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "nonfinite", "path", "membership"])

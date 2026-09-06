@@ -1,0 +1,39 @@
+{
+  "fixture_id": "fault-annual-06",
+  "tool": "get_annual_toll_ballpark",
+  "tool_contract_version": "3.0.0",
+  "evidence_type": "synthetic_fault",
+  "evaluated_at": "2026-08-22T16:40:59.392081-04:00",
+  "source": null,
+  "provenance": "Explicit synthetic typed operation error; no claim of an injected database or network fault.",
+  "request": {
+    "outbound": {
+      "origin_point_id": "greenway:1:entry:EB",
+      "destination_point_id": "greenway:28:exit:EB",
+      "departure_time": "08:00:00"
+    },
+    "return": {
+      "origin_point_id": "greenway:28:entry:WB",
+      "destination_point_id": "greenway:1:exit:WB",
+      "departure_time": "17:30:00"
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 180,
+    "gross_annual_income_usd": "135000.00"
+  },
+  "error": {
+    "toolUseId": "fault-annual-06",
+    "status": "error",
+    "content": [
+      {
+        "text": "Unable to calculate the annual toll ballpark. Reference: fault-annual-06."
+      }
+    ]
+  }
+}

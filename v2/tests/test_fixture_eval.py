@@ -51,8 +51,10 @@ _POINT = {
     "aliases": ["Leesburg"],
     "location": {"type": "Point", "coordinates": [-77.5652813, 39.1000972]},
 }
+_MANIFEST = Path(__file__).parents[1] / "eval/golden/manifest.json"
 _RATE_CARD = RateCard("synthetic-tooling", "v1", "a" * 64, 10, 20, 30)
-_V2_MANIFEST = Path(__file__).parents[1] / "eval/golden/manifest-v2.json"
+_V2_MANIFEST = Path(__file__).parents[1] / "eval/golden/manifest-v2-sample.json"
+_PUBLIC_V2_MANIFEST = Path(__file__).parents[1] / "eval/golden/manifest-v2.json"
 
 
 class _FakeModel:
@@ -330,7 +332,7 @@ def _write_private_no_call_manifest(root: Path) -> Path:
             ).hexdigest(),
         }
     ]
-    public = json.loads(_V2_MANIFEST.read_text(encoding="utf-8"))
+    public = json.loads(_PUBLIC_V2_MANIFEST.read_text(encoding="utf-8"))
     manifest: dict[str, Any] = {
         "corpus": "annual-affordability",
         "format_version": "2.0.0",
@@ -796,8 +798,10 @@ def test_private_v2_holdout_resolves_own_typed_fixture_and_rejects_public_substi
 
 
 def test_actual_strands_fixture_trial_seals_and_grades(tmp_path: Path) -> None:
-    packet = _packet("dulles-to-reagan-annual-unavailable")
-    case_bytes, dataset_hash, _ = trusted_case_evidence(packet.case_id)
+    packet = _packet("dulles-to-reagan-annual-unavailable", manifest_path=_MANIFEST)
+    case_bytes, dataset_hash, _ = trusted_case_evidence(
+        packet.case_id, manifest_path=_MANIFEST
+    )
     artifact = tmp_path / "case" / "1"
 
     result = run_and_seal_trial(
@@ -808,6 +812,7 @@ def test_actual_strands_fixture_trial_seals_and_grades(tmp_path: Path) -> None:
         rate_card=_RATE_CARD,
         case_bytes=case_bytes,
         dataset_hash=dataset_hash,
+        manifest_path=_MANIFEST,
     )
 
     assert result == 0
@@ -824,8 +829,10 @@ def test_two_public_cases_have_three_independent_sealed_trials(tmp_path: Path) -
     )
     identities: list[dict[str, str]] = []
     for case_id, unavailable in cases:
-        packet = _packet(case_id)
-        case_bytes, dataset_hash, _ = trusted_case_evidence(case_id)
+        packet = _packet(case_id, manifest_path=_MANIFEST)
+        case_bytes, dataset_hash, _ = trusted_case_evidence(
+            case_id, manifest_path=_MANIFEST
+        )
         for trial_id in ("1", "2", "3"):
             artifact = tmp_path / case_id / trial_id
             assert (
@@ -837,6 +844,7 @@ def test_two_public_cases_have_three_independent_sealed_trials(tmp_path: Path) -
                     rate_card=_RATE_CARD,
                     case_bytes=case_bytes,
                     dataset_hash=dataset_hash,
+                    manifest_path=_MANIFEST,
                 )
                 == 0
             )
@@ -927,7 +935,9 @@ def test_two_synthetic_holdout_rows_aggregate_and_compare(tmp_path: Path) -> Non
 def test_two_turn_usage_is_per_invocation_and_cache_is_charged_separately(
     tmp_path: Path,
 ) -> None:
-    packet = _packet("springfield-franconia-tysons-annual-affordability")
+    packet = _packet(
+        "springfield-franconia-tysons-annual-affordability", manifest_path=_MANIFEST
+    )
     # The fake emits the same valid usage on each SDK invocation.  The packet has
     # two user turns, so the runner must retain two measurements rather than use
     # the cumulative summary from the second response.
@@ -951,8 +961,10 @@ def test_two_turn_usage_is_per_invocation_and_cache_is_charged_separately(
 def test_forged_fixture_payload_and_matching_prose_fail_before_grading(
     tmp_path: Path,
 ) -> None:
-    packet = _packet("dulles-to-reagan-annual-unavailable")
-    case_bytes, dataset_hash, _ = trusted_case_evidence(packet.case_id)
+    packet = _packet("dulles-to-reagan-annual-unavailable", manifest_path=_MANIFEST)
+    case_bytes, dataset_hash, _ = trusted_case_evidence(
+        packet.case_id, manifest_path=_MANIFEST
+    )
     artifact = tmp_path / "case" / "1"
     run_and_seal_trial(
         packet,
@@ -962,6 +974,7 @@ def test_forged_fixture_payload_and_matching_prose_fail_before_grading(
         rate_card=_RATE_CARD,
         case_bytes=case_bytes,
         dataset_hash=dataset_hash,
+        manifest_path=_MANIFEST,
     )
 
     output = read_json(artifact / "output.json")
@@ -1029,8 +1042,10 @@ def test_annual_marker_never_falls_back_to_generic_grader(tmp_path: Path) -> Non
 
 
 def test_annual_prompt_ids_and_rate_numbers_are_trusted(tmp_path: Path) -> None:
-    packet = _packet("dulles-to-reagan-annual-unavailable")
-    case_bytes, dataset_hash, _ = trusted_case_evidence(packet.case_id)
+    packet = _packet("dulles-to-reagan-annual-unavailable", manifest_path=_MANIFEST)
+    case_bytes, dataset_hash, _ = trusted_case_evidence(
+        packet.case_id, manifest_path=_MANIFEST
+    )
     artifact = tmp_path / "case" / "1"
     run_and_seal_trial(
         packet,
@@ -1040,6 +1055,7 @@ def test_annual_prompt_ids_and_rate_numbers_are_trusted(tmp_path: Path) -> None:
         rate_card=_RATE_CARD,
         case_bytes=case_bytes,
         dataset_hash=dataset_hash,
+        manifest_path=_MANIFEST,
     )
     output = read_json(artifact / "output.json")
     output["trajectory"][0]["prompt"] = "forged prompt"
@@ -1073,8 +1089,10 @@ def test_annual_prompt_ids_and_rate_numbers_are_trusted(tmp_path: Path) -> None:
 def test_annual_tool_use_ids_and_result_correlation_are_required(
     tmp_path: Path,
 ) -> None:
-    packet = _packet("dulles-to-reagan-annual-unavailable")
-    case_bytes, dataset_hash, _ = trusted_case_evidence(packet.case_id)
+    packet = _packet("dulles-to-reagan-annual-unavailable", manifest_path=_MANIFEST)
+    case_bytes, dataset_hash, _ = trusted_case_evidence(
+        packet.case_id, manifest_path=_MANIFEST
+    )
     artifact = tmp_path / "case" / "1"
     run_and_seal_trial(
         packet,
@@ -1084,6 +1102,7 @@ def test_annual_tool_use_ids_and_result_correlation_are_required(
         rate_card=_RATE_CARD,
         case_bytes=case_bytes,
         dataset_hash=dataset_hash,
+        manifest_path=_MANIFEST,
     )
     output = read_json(artifact / "output.json")
     output["trajectory"][0]["calls"][0]["toolUseId"] = None

@@ -20,7 +20,7 @@ title = "Nova Toll secret scanning configuration"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 # gitleaks checks a regex against the *captured secret value*, not the full
 # line -- for the generic-api-key rule that value is the RHS (e.g.
 # "EXCLUDED.s3_key"), not "s3_key = EXCLUDED...". The previous regex never
@@ -32,3 +32,15 @@ description = "PostgreSQL EXCLUDED pseudo-table is not a credential"
 regexes = [
   '''EXCLUDED\.\w+''',
 ]
+
+[[allowlists]]
+description = "Public corpus route identity is a non-secret SHA-256 digest"
+condition = "AND"
+paths = [
+  '''^v2/eval/golden/manifest-v2\.json$''',
+]
+regexTarget = "line"
+regexes = [
+  '''^\s*"route_key"\s*:\s*"[0-9a-f]{64}"\s*,?\s*$''',
+]
+targetRules = ["generic-api-key"]

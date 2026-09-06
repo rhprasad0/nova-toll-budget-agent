@@ -230,7 +230,7 @@ def _annual_corpus(manifest_path: Path | None = None) -> object:
         from eval.golden_corpus import validate as validate_corpus
         from eval.golden_corpus import validate_private_manifest
 
-    path = manifest_path or (ROOT / "golden" / "manifest.json")
+    path = manifest_path or (ROOT / "golden" / "manifest-v2.json")
     manifest = read_json(path)
     if isinstance(manifest, dict) and {
         "public_dataset_sha256",

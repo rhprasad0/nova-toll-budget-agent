@@ -38,7 +38,7 @@ from eval.golden_corpus import (
     validate_private_manifest,
 )
 
-_DEFAULT_MANIFEST = Path(__file__).with_name("golden") / "manifest.json"
+_DEFAULT_MANIFEST = Path(__file__).with_name("golden") / "manifest-v2.json"
 _DEFAULT_V2_MANIFEST = Path(__file__).with_name("golden") / "manifest-v2.json"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 

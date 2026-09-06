@@ -1,0 +1,36 @@
+{
+  "fixture_id": "september-five-probe-dca-to-iad-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T03:18:09.643925+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-probe-dca-to-iad-current",
+    "sha256": "f0378f59bb3b624761ba700c69873908098dcda7573b3a31ea3c79c164737665"
+  },
+  "request": {
+    "origin_point_id": "airport_dca",
+    "destination_point_id": "airport_iad",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "no_supported_route",
+    "reason": {
+      "code": "no_supported_route",
+      "details": {
+        "origin_point_id": "airport_dca",
+        "destination_point_id": "airport_iad"
+      }
+    },
+    "point_ids": [],
+    "connection_ids": [],
+    "connection_types": [],
+    "general_purpose_gaps": [],
+    "i95_evidence": null
+  }
+}

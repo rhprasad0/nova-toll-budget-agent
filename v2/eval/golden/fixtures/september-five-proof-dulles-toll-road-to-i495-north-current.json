@@ -1,0 +1,126 @@
+{
+  "fixture_id": "september-five-proof-dulles-toll-road-to-i495-north-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-05T23:00:12.789178-04:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-proof-dulles-toll-road-to-i495-north-current",
+    "sha256": "43698be2007c64dd205624b284bd285cc761f45df895d9554e8855fc010d23fa"
+  },
+  "request": {
+    "origin_point_id": "dtr:10:entry:EB",
+    "destination_point_id": "i495:181ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "dtr:10:entry:EB",
+    "destination_point_id": "i495:181ND",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-05T23:00:12.789178-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "mixed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "2.00",
+        "source_kind": "schedule_derived",
+        "pricing_method": "published_schedule",
+        "facility": "dtr",
+        "component_evaluated_at": "2026-09-05T23:00:12.682878-04:00",
+        "published_schedule": {
+          "schedule_id": "dulles_toll_road_2023_rates",
+          "rate_name": "ramp",
+          "source_url": "https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate",
+          "retrieved_at": "2026-07-26"
+        }
+      },
+      {
+        "route_step_id": "step-2",
+        "price_usd": "4.00",
+        "source_kind": "schedule_derived",
+        "pricing_method": "published_schedule",
+        "facility": "dtr",
+        "component_evaluated_at": "2026-09-05T23:00:12.682878-04:00",
+        "published_schedule": {
+          "schedule_id": "dulles_toll_road_2023_rates",
+          "rate_name": "mainline_plaza",
+          "source_url": "https://www.dullestollroad.com/toll-rates-electronic-payment-and-pay-plate",
+          "retrieved_at": "2026-07-26"
+        }
+      },
+      {
+        "route_step_id": "step-3",
+        "price_usd": "3.15",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "facility": "i95_i495",
+        "component_evaluated_at": "2026-09-05T23:00:12.789178-04:00",
+        "bin_minutes": 10,
+        "bin_start": "2026-09-05T22:50:00-04:00",
+        "bin_end": "2026-09-05T23:00:00-04:00",
+        "interval_end_at": "2026-09-05T22:50:00-04:00",
+        "observed_at": "2026-09-05T22:40:00-04:00",
+        "od_pair_id": 1038,
+        "source_status": "NO_DETERMINATION",
+        "recent_movement": {
+          "method": "same_facility_leg_three_cycles",
+          "direction": "mixed",
+          "samples": [
+            {
+              "cycle_offset": -2,
+              "price_usd": "3.20"
+            },
+            {
+              "cycle_offset": -1,
+              "price_usd": "3.10"
+            },
+            {
+              "cycle_offset": 0,
+              "price_usd": "3.15"
+            }
+          ],
+          "net_change_usd": "-0.05",
+          "net_change_percent": "-1.6"
+        },
+        "prior_week_comparison": {
+          "method": "same_weekday_same_facility_bins",
+          "comparable_period_count": 3,
+          "expected_comparable_period_count": 3,
+          "comparable_prices": [
+            {
+              "week_offset": 3,
+              "price_usd": "3.70"
+            },
+            {
+              "week_offset": 2,
+              "price_usd": "3.60"
+            },
+            {
+              "week_offset": 1,
+              "price_usd": "3.35"
+            }
+          ],
+          "median_usd": "3.60",
+          "minimum_usd": "3.35",
+          "maximum_usd": "3.70",
+          "current_delta_usd": "-0.45",
+          "current_delta_percent": "-12.5",
+          "position": "below_recent_range",
+          "higher_than_count": 0
+        }
+      }
+    ],
+    "total_usd": "9.15"
+  }
+}

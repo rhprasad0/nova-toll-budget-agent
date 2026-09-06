@@ -1,0 +1,89 @@
+{
+  "fixture_id": "september-five-probe-dtr-wb-to-greenway-eb-annual",
+  "tool": "get_annual_toll_ballpark",
+  "tool_contract_version": "3.0.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T03:18:08.056407+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=single_repeatable_read_transaction;independent_legs=outbound,return",
+  "source": {
+    "id": "september-five-probe-dtr-wb-to-greenway-eb-annual",
+    "sha256": "cebcea0c41346ad0afa3bc9eeace4dad0313b21c3d86c4fb222a028e97a8c6ad"
+  },
+  "request": {
+    "outbound": {
+      "origin_point_id": "dtr:10:entry:WB",
+      "destination_point_id": "greenway:28:exit:EB",
+      "departure_time": "08:00:00"
+    },
+    "return": {
+      "origin_point_id": "greenway:28:entry:WB",
+      "destination_point_id": "greenway:1:exit:WB",
+      "departure_time": "17:30:00"
+    },
+    "weekdays": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "120000.00"
+  },
+  "result": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {
+      "origin_point_id": "dtr:10:entry:WB",
+      "destination_point_id": "greenway:28:exit:EB",
+      "status": "invalid_destination",
+      "reason": {
+        "code": "destination_ramp_incompatible",
+        "details": {
+          "point_id": "greenway:28:exit:EB",
+          "point_type": "exit",
+          "alternatives": [
+            {
+              "point_id": "greenway:8:exit:WB",
+              "network_id": "greenway",
+              "source_node_id": "8",
+              "point_type": "exit",
+              "direction": "WB",
+              "label": "Exit 8 - SR 606 (Ox Rd)",
+              "aliases": [],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.458962,
+                  38.9906018
+                ]
+              }
+            },
+            {
+              "point_id": "greenway:7:exit:WB",
+              "network_id": "greenway",
+              "source_node_id": "7",
+              "point_type": "exit",
+              "direction": "WB",
+              "label": "Exit 7 - SR 607 (Loudoun County Pkwy)",
+              "aliases": [],
+              "location": {
+                "type": "Point",
+                "coordinates": [
+                  -77.4784892,
+                  38.9975485
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "return": {
+      "origin_point_id": "greenway:28:entry:WB",
+      "destination_point_id": "greenway:1:exit:WB",
+      "status": "valid",
+      "reason": null
+    }
+  }
+}

@@ -12,10 +12,12 @@ import math
 import re
 import subprocess
 import sys
+import unicodedata
 from copy import deepcopy
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
@@ -35,7 +37,7 @@ from agent_tools.get_annual_toll_ballpark import (  # noqa: E402
     _BallparkRequest,
 )
 
-_DEFAULT_MANIFEST = Path(__file__).with_name("golden") / "manifest.json"
+_DEFAULT_MANIFEST = Path(__file__).with_name("golden") / "manifest-v2.json"
 _SEMVER = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
@@ -130,6 +132,11 @@ _V2_MANIFEST_KEYS = {
     "payloads",
     "dataset_sha256",
 }
+_V2_RELEASE_KEYS = _V2_MANIFEST_KEYS | {
+    "allocation",
+    "render_date",
+    "direction_coverage",
+}
 _V2_PRIVATE_MANIFEST_KEYS = _V2_MANIFEST_KEYS | {
     "public_dataset_sha256",
     "public_membership_sha256",
@@ -144,6 +151,12 @@ _V2_METADATA_KEYS = {
     "provenance",
     "expected_assertion",
 }
+_V2_RELEASE_METADATA_KEYS = _V2_METADATA_KEYS | {
+    "split",
+    "scenario_key",
+    "template_key",
+    "route_key",
+}
 _V2_METADATA_OPTIONAL_KEYS = {
     "script",
     "expected_call",
@@ -152,6 +165,18 @@ _V2_METADATA_OPTIONAL_KEYS = {
     "expected_missing_fields",
     "expected_route_status",
     "expected_component_count",
+    "allow_pricing_unavailable",
+    "allowed_route_statuses",
+    "response_checks",
+}
+_V2_CATEGORIES = ("topology", "current", "annual", "multiturn", "fault", "abuse")
+_V2_RELEASE_ALLOCATION = {
+    "topology": 100,
+    "current": 45,
+    "annual": 35,
+    "multiturn": 30,
+    "fault": 20,
+    "abuse": 20,
 }
 _V2_SOURCE_KEYS = {
     "id",
@@ -1266,11 +1291,12 @@ def _validate_v1_manifest(
     )
 
 
-def _v2_metadata(item: Any, label: str) -> dict[str, Any]:
+def _v2_metadata(item: Any, label: str, *, release: bool = False) -> dict[str, Any]:
+    required_keys = _V2_RELEASE_METADATA_KEYS if release else _V2_METADATA_KEYS
     if (
         not isinstance(item, dict)
-        or not set(item) >= _V2_METADATA_KEYS
-        or set(item) - (_V2_METADATA_KEYS | _V2_METADATA_OPTIONAL_KEYS)
+        or not set(item) >= required_keys
+        or set(item) - (required_keys | _V2_METADATA_OPTIONAL_KEYS)
     ):
         raise CorpusError(f"{label} metadata keys are invalid")
     if not isinstance(item.get("id"), str) or not _ID.fullmatch(item["id"]):
@@ -1286,6 +1312,13 @@ def _v2_metadata(item: Any, label: str) -> dict[str, Any]:
         "abuse",
     }:
         raise CorpusError(f"{label} metadata category is invalid")
+    if release:
+        if item.get("split") not in {"public", "private"}:
+            raise CorpusError(f"{label} metadata split is invalid")
+        for field in ("scenario_key", "template_key", "route_key"):
+            value = item.get(field)
+            if not isinstance(value, str) or not value.strip() or len(value) > 1024:
+                raise CorpusError(f"{label} metadata {field} is invalid")
     if (
         not isinstance(item.get("tags"), list)
         or not item["tags"]
@@ -1331,6 +1364,56 @@ def _v2_metadata(item: Any, label: str) -> dict[str, Any]:
         or item["expected_component_count"] < 0
     ):
         raise CorpusError(f"{label} metadata expected_component_count is invalid")
+    if (
+        "allow_pricing_unavailable" in item
+        and type(item["allow_pricing_unavailable"]) is not bool
+    ):
+        raise CorpusError(f"{label} metadata allow_pricing_unavailable is invalid")
+    if "allowed_route_statuses" in item and (
+        not isinstance(item["allowed_route_statuses"], list)
+        or not item["allowed_route_statuses"]
+        or not all(
+            isinstance(value, str) and value.strip()
+            for value in item["allowed_route_statuses"]
+        )
+    ):
+        raise CorpusError(f"{label} metadata allowed_route_statuses is invalid")
+    checks = item.get("response_checks")
+    if checks is not None:
+        if not isinstance(checks, list) or not checks or len(checks) > 32:
+            raise CorpusError(f"{label} metadata response_checks is invalid")
+        turns: set[int] = set()
+        for check in checks:
+            if not isinstance(check, dict) or set(check) != {
+                "turn",
+                "required",
+                "forbidden",
+            }:
+                raise CorpusError(f"{label} response check shape is invalid")
+            turn = check["turn"]
+            if type(turn) is not int or turn < 0 or turn in turns:
+                raise CorpusError(f"{label} response check turn is invalid")
+            turns.add(turn)
+            for field in ("required", "forbidden"):
+                patterns = check[field]
+                if (
+                    not isinstance(patterns, list)
+                    or (field == "required" and not patterns)
+                    or len(patterns) > 16
+                    or not all(
+                        isinstance(pattern, str) and pattern for pattern in patterns
+                    )
+                ):
+                    raise CorpusError(f"{label} response check patterns are invalid")
+                for pattern in patterns:
+                    if len(pattern) > 200:
+                        raise CorpusError(f"{label} response check regex is invalid")
+                    try:
+                        re.compile(pattern, re.IGNORECASE)
+                    except re.error as error:
+                        raise CorpusError(
+                            f"{label} response check regex is invalid"
+                        ) from error
     return item
 
 
@@ -1354,8 +1437,87 @@ def _v2_case_row(row: Any, label: str) -> dict[str, Any]:
     return row
 
 
-def _v2_content_key(row: dict[str, Any]) -> bytes:
-    return _canonical({key: value for key, value in row.items() if key != "id"})
+def _v2_normalize_content(value: Any) -> Any:
+    if isinstance(value, str):
+        return (
+            re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value)).strip().casefold()
+        )
+    if isinstance(value, list):
+        return [_v2_normalize_content(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _v2_normalize_content(nested) for key, nested in value.items()}
+    return value
+
+
+def _v2_content_key(
+    row: dict[str, Any], fixtures: dict[str, dict[str, Any]] | None = None
+) -> bytes:
+    script: list[dict[str, Any]] = []
+    evidence: list[Any] = []
+    for step in row.get("script", []):
+        script.append(
+            {key: value for key, value in step.items() if key != "fixture_id"}
+        )
+        if fixtures is not None:
+            fixture = fixtures[step["fixture_id"]]
+            evidence.append(
+                fixture.get("result", fixture.get("payload", fixture.get("error")))
+            )
+    return _canonical(
+        _v2_normalize_content(
+            {
+                "prompt": row["prompt"],
+                "conversation": row["conversation"],
+                "script": script,
+                "evidence": evidence,
+            }
+        )
+    )
+
+
+def _v2_route_key(row: dict[str, Any], metadata: dict[str, Any]) -> str:
+    """Derive stable route identity from the ordered authored script."""
+    parts: list[str] = []
+    for step in row.get("script", []):
+        request = step["request"]
+        if step["tool"] == "get_current_toll_price":
+            route = f"{request['origin_point_id']}->{request['destination_point_id']}"
+        else:
+            route = ";".join(
+                f"{direction}:{request[direction]['origin_point_id']}"
+                f"->{request[direction]['destination_point_id']}"
+                for direction in ("outbound", "return")
+            )
+        parts.append(f"{step['turn']}:{step['tool']}:{route}")
+    identity = "|".join(parts) if parts else "no-tool-call"
+    tags = metadata.get("tags", [])
+    qualifiers = sorted(
+        tag
+        for tag in tags
+        if isinstance(tag, str)
+        and (tag.startswith("direction-") or tag.startswith("state-"))
+    )
+    return _sha256_bytes(
+        (identity + ("#" + "#".join(qualifiers) if qualifiers else "")).encode()
+    )
+
+
+def _v2_canonical_identity(row: dict[str, Any]) -> tuple[str, str, str]:
+    return tuple(
+        re.sub(r"\s+", " ", str(row.get(field, "")).strip().casefold())
+        for field in ("scenario_key", "template_key", "route_key")
+    )  # type: ignore[return-value]
+
+
+def _v2_validate_response_checks(
+    metadata: dict[str, Any], conversation_length: int, label: str
+) -> None:
+    checks = metadata.get("response_checks")
+    if checks is None:
+        return
+    for check in checks:
+        if check["turn"] >= conversation_length:
+            raise CorpusError(f"{label} response check turn is outside conversation")
 
 
 def _v2_validate_request(tool: str, value: Any, label: str) -> dict[str, Any]:
@@ -1423,6 +1585,51 @@ def _v2_sanitize_fixture(value: Any, label: str, key: str = "") -> None:
         raise CorpusError(f"{label} contains prohibited secret or user data")
 
 
+def _adapt_current_nullable_wire(result: Any, label: str) -> dict[str, Any]:
+    """Validate the unchanged serializer's two proven nullable omissions.
+
+    The application emits these nullable fields with ``exclude_none=True``.
+    Adapt only those exact nested keys for model validation; callers retain the
+    original result and source bytes for evidence and grading.
+    """
+    if not isinstance(result, dict):
+        raise CorpusError(f"{label} current result is not an object")
+    adapted = deepcopy(result)
+    components = adapted.get("components")
+    if not isinstance(components, list):
+        return adapted
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        movement = component.get("recent_movement")
+        if isinstance(movement, dict) and "net_change_percent" not in movement:
+            try:
+                samples = movement.get("samples", [])
+                denominator = samples[0].get("price_usd") if samples else None
+                zero_denominator = (
+                    denominator is not None and Decimal(str(denominator)) == 0
+                )
+            except (
+                AttributeError,
+                IndexError,
+                TypeError,
+                ValueError,
+                InvalidOperation,
+            ):
+                zero_denominator = False
+            if zero_denominator:
+                movement["net_change_percent"] = None
+        comparison = component.get("prior_week_comparison")
+        if isinstance(comparison, dict) and "current_delta_percent" not in comparison:
+            try:
+                zero_denominator = Decimal(str(comparison.get("median_usd"))) == 0
+            except (TypeError, ValueError, InvalidOperation):
+                zero_denominator = False
+            if zero_denominator:
+                comparison["current_delta_percent"] = None
+    return adapted
+
+
 def _v2_fixture_result_binding(
     fixture: dict[str, Any], request: dict[str, Any], tool: str, label: str
 ) -> None:
@@ -1441,8 +1648,9 @@ def _v2_fixture_result_binding(
     ):
         raise CorpusError(f"{label} result evaluated_at disagrees with evidence")
     if tool == "get_current_toll_price":
+        adapted_result = _adapt_current_nullable_wire(result, label)
         typed = _CURRENT_OUTPUT_ADAPTER.validate_json(
-            json.dumps(result, ensure_ascii=False)
+            json.dumps(adapted_result, ensure_ascii=False)
         )
         origin = result.get("origin_point_id")
         destination = result.get("destination_point_id")
@@ -1463,7 +1671,7 @@ def _v2_fixture_result_binding(
         if destination is not None and destination != request["destination_point_id"]:
             raise CorpusError(f"{label} result destination disagrees with request")
         if isinstance(typed, _CurrentPriceResponse):
-            if result.get("pricing_profile") != request["pricing_profile"]:
+            if adapted_result.get("pricing_profile") != request["pricing_profile"]:
                 raise CorpusError(f"{label} result profile disagrees with request")
             if result_timestamp is None:
                 raise CorpusError(f"{label} current result has no evaluated_at")
@@ -1530,7 +1738,10 @@ def _v2_validate_fixture_file(
         if "result" in fixture:
             if not isinstance(fixture["result"], dict):
                 raise ValueError("typed result is not an object")
-            contract[1].validate_json(json.dumps(fixture["result"], ensure_ascii=False))
+            result = fixture["result"]
+            if tool == "get_current_toll_price":
+                result = _adapt_current_nullable_wire(result, label)
+            contract[1].validate_json(json.dumps(result, ensure_ascii=False))
         else:
             if not isinstance(fixture["error"], dict):
                 raise ValueError("typed error is not an object")
@@ -1557,8 +1768,25 @@ def _v2_validate_manifest(
     *,
     private: bool = False,
     public_ids: set[str] | None = None,
+    public_canonical_keys: set[tuple[str, str, str]] | None = None,
+    public_content_keys: set[bytes] | None = None,
 ) -> Corpus:
-    expected_keys = _V2_PRIVATE_MANIFEST_KEYS if private else _V2_MANIFEST_KEYS
+    try:
+        dataset_version = _semver(manifest.get("dataset_version"), "dataset_version")
+    except CorpusError:
+        raise
+    release = dataset_version >= (2, 1, 0)
+    expected_keys = (
+        _V2_PRIVATE_MANIFEST_KEYS
+        if private
+        else (_V2_RELEASE_KEYS if release else _V2_MANIFEST_KEYS)
+    )
+    if private and release:
+        expected_keys = _V2_PRIVATE_MANIFEST_KEYS | {
+            "allocation",
+            "render_date",
+            "direction_coverage",
+        }
     if set(manifest) != expected_keys:
         raise CorpusError("v2 manifest has unknown or missing top-level keys")
     if manifest.get("corpus") != "annual-affordability":
@@ -1566,9 +1794,57 @@ def _v2_validate_manifest(
     if manifest.get("format_version") != "2.0.0":
         _semver(manifest.get("format_version"), "format_version")
         raise CorpusError("v2 manifest format_version must be 2.0.0")
-    if manifest.get("dataset_version") != "2.0.0":
-        _semver(manifest.get("dataset_version"), "dataset_version")
-        raise CorpusError("v2 manifest dataset_version must be 2.0.0")
+    if dataset_version < (2, 0, 0) or (2, 0, 0) < dataset_version < (2, 1, 0):
+        raise CorpusError("v2 manifest dataset_version must be 2.0.0 or at least 2.1.0")
+    if release:
+        if manifest.get("render_date") != "2026-09-05":
+            raise CorpusError("v2 release render_date must be 2026-09-05")
+        allocation = manifest.get("allocation")
+        if not isinstance(allocation, dict) or set(allocation) != {
+            *(_V2_CATEGORIES),
+            "total",
+        }:
+            raise CorpusError("v2 release allocation is malformed")
+        if any(
+            type(allocation[key]) is not int or allocation[key] < 0
+            for key in allocation
+        ):
+            raise CorpusError("v2 release allocation values are malformed")
+        if allocation["total"] != sum(
+            allocation[category] for category in _V2_CATEGORIES
+        ):
+            raise CorpusError("v2 release allocation total does not reconcile")
+        if not private:
+            expected_allocation = {
+                **_V2_RELEASE_ALLOCATION,
+                "total": sum(_V2_RELEASE_ALLOCATION.values()),
+            }
+            if allocation != expected_allocation:
+                raise CorpusError(
+                    "v2 release allocation does not match the approved release"
+                )
+        direction_coverage = manifest.get("direction_coverage")
+        if not isinstance(direction_coverage, dict) or set(direction_coverage) != {
+            "inventory_rows",
+            "sampled_rows",
+            "gaps",
+        }:
+            raise CorpusError("v2 direction coverage is malformed")
+        if (
+            type(direction_coverage.get("inventory_rows")) is not int
+            or type(direction_coverage.get("sampled_rows")) is not int
+            or direction_coverage["inventory_rows"] <= 0
+            or direction_coverage["sampled_rows"] <= 0
+            or not isinstance(direction_coverage.get("gaps"), list)
+            or not direction_coverage["gaps"]
+            or not all(
+                isinstance(gap, str) and gap.strip()
+                for gap in direction_coverage["gaps"]
+            )
+        ):
+            raise CorpusError("v2 direction coverage is malformed")
+        if direction_coverage["sampled_rows"] != allocation["topology"]:
+            raise CorpusError("v2 direction coverage sampled_rows disagrees")
     if private:
         for field in ("public_dataset_sha256", "public_membership_sha256"):
             if not isinstance(manifest.get(field), str) or not _SHA256.fullmatch(
@@ -1652,7 +1928,7 @@ def _v2_validate_manifest(
         raise CorpusError("v2 case_metadata must be a list")
     metadata: dict[str, dict[str, Any]] = {}
     for item in metadata_items:
-        value = _v2_metadata(item, "v2")
+        value = _v2_metadata(item, "v2", release=release)
         if value["id"] in metadata:
             raise CorpusError("v2 metadata IDs are not unique")
         metadata[value["id"]] = value
@@ -1662,7 +1938,6 @@ def _v2_validate_manifest(
         raise CorpusError("v2 membership must be a nonempty ordered list")
     selected: list[dict[str, Any]] = []
     selected_ids: set[str] = set()
-    selected_contents: set[bytes] = set()
     for index, item in enumerate(membership, 1):
         if not isinstance(item, dict):
             raise CorpusError(f"v2 membership item {index} is malformed")
@@ -1706,11 +1981,7 @@ def _v2_validate_manifest(
             raise CorpusError(f"v2 membership item {index} has unknown keys")
         if case_id in selected_ids:
             raise CorpusError("v2 membership contains duplicate case IDs")
-        content = _v2_content_key(row)
-        if content in selected_contents:
-            raise CorpusError("v2 membership contains duplicate case content")
         selected_ids.add(case_id)
-        selected_contents.add(content)
         selected.append(row)
     if private and public_ids and selected_ids & public_ids:
         raise CorpusError("private v2 membership overlaps public case IDs")
@@ -1797,6 +2068,7 @@ def _v2_validate_manifest(
             raise CorpusError("v2 fixture declaration has unknown keys")
 
     rows: list[dict[str, Any]] = []
+    selected_contents: set[bytes] = set()
     for row in selected:
         item = dict(row)
         overlay = metadata[item["id"]]
@@ -1860,6 +2132,9 @@ def _v2_validate_manifest(
             ]
         if "script" not in item or not isinstance(item["script"], list):
             raise CorpusError(f"v2 case {item['id']} requires an ordered script")
+        _v2_validate_response_checks(
+            item, len(item["conversation"]), f"v2 case {item['id']}"
+        )
         script = item["script"]
         if not script and (
             isinstance(item.get("expected_call"), dict)
@@ -1895,7 +2170,12 @@ def _v2_validate_manifest(
             if "result" in fixture:
                 try:
                     _V2_TOOLS[tool][1].validate_json(
-                        json.dumps(fixture["result"], ensure_ascii=False)
+                        json.dumps(
+                            _adapt_current_nullable_wire(fixture["result"], label)
+                            if tool == "get_current_toll_price"
+                            else fixture["result"],
+                            ensure_ascii=False,
+                        )
                     )
                 except Exception as error:
                     raise CorpusError(f"{label} fixture result is invalid") from error
@@ -1914,7 +2194,39 @@ def _v2_validate_manifest(
                 except Exception as error:
                     raise CorpusError(f"{label} fixture error is invalid") from error
             _v2_fixture_result_binding(fixture, request, tool, label)
+        content = _v2_content_key(item, fixtures)
+        if content in selected_contents:
+            raise CorpusError("v2 membership contains duplicate case content")
+        selected_contents.add(content)
+        if release and item["route_key"] != _v2_route_key(item, item):
+            raise CorpusError(
+                f"v2 case {item['id']} route identity disagrees with script"
+            )
         rows.append(item)
+    if release:
+        actual_allocation = {
+            category: sum(1 for row in rows if row.get("primary_category") == category)
+            for category in _V2_CATEGORIES
+        }
+        if actual_allocation != {
+            category: manifest["allocation"][category] for category in _V2_CATEGORIES
+        }:
+            raise CorpusError(
+                "v2 selected rows do not match the declared category allocation"
+            )
+        if sum(actual_allocation.values()) != manifest["allocation"]["total"]:
+            raise CorpusError("v2 selected rows do not match allocation total")
+        if private and any(row.get("split") != "private" for row in rows):
+            raise CorpusError("private v2 rows must use the private split")
+        if not private and any(row.get("split") != "public" for row in rows):
+            raise CorpusError("public v2 rows must use the public split")
+        canonical_keys = [_v2_canonical_identity(row) for row in rows]
+        if public_canonical_keys and set(canonical_keys) & public_canonical_keys:
+            raise CorpusError("private v2 canonical identity overlaps public corpus")
+    if private and public_content_keys:
+        content_keys = [_v2_content_key(row, fixtures) for row in rows]
+        if set(content_keys) & public_content_keys:
+            raise CorpusError("private v2 content overlaps public corpus")
     used_fixture_ids = {
         step["fixture_id"] for row in rows for step in row.get("script", [])
     }
@@ -1978,12 +2290,41 @@ def validate(
     if not isinstance(manifest, dict):
         raise CorpusError("manifest is not an object")
     if manifest.get("format_version") == "2.0.0":
-        if base_ref is not None:
-            raise CorpusError("base ref comparison is only supported for v1")
         strict_manifest = _strict_json(manifest_path)
         if not isinstance(strict_manifest, dict):
             raise CorpusError("v2 manifest is not an object")
-        return _v2_validate_manifest(manifest_path, strict_manifest)
+        corpus = _v2_validate_manifest(manifest_path, strict_manifest)
+        if base_ref is not None:
+            old_manifest, _old_payloads = _base_manifest(manifest_path, base_ref)
+            if (
+                old_manifest is not None
+                and old_manifest.get("format_version") == "2.0.0"
+            ):
+                old_version = _semver(
+                    old_manifest.get("dataset_version"), "base dataset_version"
+                )
+                current_version = _semver(
+                    strict_manifest.get("dataset_version"), "dataset_version"
+                )
+                excluded = {"dataset_version", "dataset_sha256"}
+                changed = {
+                    key: value
+                    for key, value in strict_manifest.items()
+                    if key not in excluded
+                } != {
+                    key: value
+                    for key, value in old_manifest.items()
+                    if key not in excluded
+                }
+                if changed and current_version <= old_version:
+                    raise CorpusError(
+                        "edited v2 corpus requires an advanced dataset_version"
+                    )
+                if not changed and current_version != old_version:
+                    raise CorpusError(
+                        "unchanged v2 corpus has a gratuitously advanced dataset_version"
+                    )
+        return corpus
     return _validate_v1_manifest(manifest_path, base_ref)
 
 
@@ -2012,6 +2353,14 @@ def validate_private_manifest(
         manifest,
         private=True,
         public_ids={row["id"] for row in public.rows},
+        public_canonical_keys={
+            _v2_canonical_identity(row)
+            for row in public.rows
+            if {"scenario_key", "template_key", "route_key"}.issubset(row)
+        },
+        public_content_keys={
+            _v2_content_key(row, public.fixtures) for row in public.rows
+        },
     )
 
 
@@ -2028,28 +2377,75 @@ def _esc(value: Any) -> str:
 
 def _render_v2(corpus: Corpus, output_path: Path) -> Path:
     cards: list[str] = []
+    categories = (
+        "topology",
+        "current",
+        "annual",
+        "multiturn",
+        "fault",
+        "abuse",
+    )
+    counts = {
+        category: sum(
+            1 for row in corpus.rows if row.get("primary_category") == category
+        )
+        for category in categories
+    }
+    coverage = "".join(
+        f'<tr><th scope="row">{_esc(category)}</th><td>{counts[category]}</td>'
+        f"<td>{corpus.manifest.get('allocation', {}).get(category, counts[category])}</td></tr>"
+        for category in categories
+    )
+    directional_counts: dict[tuple[str, str, str], int] = {}
+    for row in corpus.rows:
+        if row.get("primary_category") != "topology":
+            continue
+        for step in row.get("script", []):
+            request = step["request"]
+            route = request.get("outbound", request)
+            family = " / ".join(
+                sorted(
+                    {
+                        route["origin_point_id"].split(":")[0],
+                        route["destination_point_id"].split(":")[0],
+                    }
+                )
+            )
+            direction = next(
+                (
+                    tag.removeprefix("direction-")
+                    for tag in row["tags"]
+                    if tag.startswith("direction-")
+                ),
+                "unspecified",
+            )
+            key = (family, direction, step["tool"])
+            directional_counts[key] = directional_counts.get(key, 0) + 1
+    directions = "".join(
+        f"<tr><td>{_esc(family)}</td><td>{_esc(direction)}</td><td>{_esc(tool)}</td><td>{count}</td></tr>"
+        for (family, direction, tool), count in sorted(directional_counts.items())
+    )
+    gaps = "".join(
+        f"<li>{_esc(gap)}</li>"
+        for gap in corpus.manifest.get("direction_coverage", {}).get("gaps", [])
+    )
     for row in corpus.rows:
         turns = "".join(f"<li>{_esc(turn)}</li>" for turn in row["conversation"])
-        script = row.get("script", [])
         assertion = row["expected_assertion"]
-        if script:
-            tools = ", ".join(step["tool"] for step in script)
-            summary = f"{len(script)} ordered tool step(s): {tools}. Payloads withheld."
-        else:
-            summary = "No tool call is authored for this case."
         cards.append(
             f'<article class="case-card" data-case-id="{_esc(row["id"])}">'
             f'<h2>{_esc(row["id"])}</h2><p class="tags">'
-            f"{_esc(row['suite'])} · {_esc(row['primary_category'])} · "
-            f"{_esc(', '.join(row['tags']))} · {_esc(row['grouping'])}</p>"
+            f"{_esc(row.get('split', 'public'))} · {_esc(row['suite'])} · "
+            f"{_esc(row['primary_category'])} · {_esc(', '.join(row['tags']))} · "
+            f"{_esc(row['grouping'])}</p>"
             f"<h3>Prompt and conversation</h3><ol>{turns}</ol>"
             f"<h3>Expected behavior</h3><p>{_esc(assertion)}</p>"
-            f"<h3>Script summary</h3><p>{_esc(summary)}</p></article>"
+            f"<h3>Evidence provenance</h3><p>{_esc(row['provenance'])}</p></article>"
         )
     html_text = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Versioned golden review</title>
-<style>body{{font:16px system-ui,sans-serif;line-height:1.5;margin:0;background:#f4f7fb;color:#18202a}}main{{max-width:1100px;margin:auto;padding:2rem}}.case-card{{background:white;border:1px solid #ccd6e0;border-radius:.5rem;padding:1rem;margin:1rem 0}}.tags{{color:#52677c}}</style></head>
-<body><main><h1>Versioned golden review</h1><p>Dataset {_esc(corpus.manifest["dataset_version"])} · {len(corpus.rows)} declared cases · {len(corpus.fixtures)} typed fixtures.</p><p>Canonical dataset SHA-256: <code>{_esc(corpus.manifest["dataset_sha256"])}</code></p><p>Fixture request, result, and error payloads are withheld from this payload-free review.</p>{"".join(cards)}</main></body></html>"""
+<style>body{{font:16px system-ui,sans-serif;line-height:1.5;margin:0;background:#f4f7fb;color:#18202a}}main{{max-width:1100px;margin:auto;padding:2rem}}.case-card{{background:white;border:1px solid #ccd6e0;border-radius:.5rem;padding:1rem;margin:1rem 0}}.tags{{color:#52677c}}table{{border-collapse:collapse;background:white}}th,td{{border:1px solid #ccd6e0;padding:.4rem .7rem;text-align:left}}</style></head>
+<body><main><h1>Versioned golden review</h1><p>Dataset {_esc(corpus.manifest["dataset_version"])} · {len(corpus.rows)} selected public cases · render date {_esc(corpus.manifest.get("render_date", "historical"))}.</p><p>Canonical dataset SHA-256: <code>{_esc(corpus.manifest["dataset_sha256"])}</code></p><p>Payloads withheld from this review page.</p><h2>Coverage and allocation</h2><table><thead><tr><th>Category</th><th>Selected</th><th>Target</th></tr></thead><tbody>{coverage}</tbody></table><p>Topology coverage is sampled from the directional inventory; documented gaps remain gaps and do not certify the full matrix.</p><h2>Directional case coverage</h2><table><thead><tr><th>Networks</th><th>Direction</th><th>Tool</th><th>Cases</th></tr></thead><tbody>{directions}</tbody></table><h2>Coverage limits and physical findings</h2><ul>{gaps}</ul>{"".join(cards)}</main></body></html>"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html_text, encoding="utf-8")
     return output_path

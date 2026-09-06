@@ -1,0 +1,64 @@
+{
+  "fixture_id": "september-five-legacy-pentagon-eads-to-westpark-0",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T02:42:44.776864+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public tool stream; source_commit=5e7941f; original_v1_current_request_overlay_candidate;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-legacy-pentagon-eads-to-westpark-0",
+    "sha256": "2f6f82406ced77f2f6a9b1bb1c225914e5c5896d99cd55a176ce4f50aae67307"
+  },
+  "request": {
+    "origin_point_id": "i95:2233SO",
+    "destination_point_id": "i495:1859ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "currently_unavailable",
+    "reason": {
+      "code": "i95_opposite_direction_open",
+      "details": {
+        "required_i95_directions": [
+          "SB"
+        ],
+        "availability": "northbound"
+      }
+    },
+    "point_ids": [
+      "i95:2233SO",
+      "i495:1859ND"
+    ],
+    "connection_ids": [
+      "source:i95_shared:Southbound:2233SO:1859ND"
+    ],
+    "connection_types": [
+      "general_purpose_gap"
+    ],
+    "general_purpose_gaps": [
+      {
+        "connection_id": "source:i95_shared:Southbound:2233SO:1859ND",
+        "boundary_point_id": "i495:192SD",
+        "role": "prefix",
+        "i95_direction": "SB",
+        "fallback_required": true
+      }
+    ],
+    "i95_evidence": {
+      "availability": "northbound",
+      "northbound_corridor_name": "I-95-NB",
+      "northbound_link_status": "NORTHBOUND_OPEN",
+      "northbound_interval_end_at": "2026-09-06T02:40:00+00:00",
+      "northbound_calculated_at": "2026-09-06T02:30:00+00:00",
+      "southbound_corridor_name": "I-95-SB",
+      "southbound_link_status": "CLOSED",
+      "southbound_interval_end_at": "2026-09-06T02:40:00+00:00",
+      "southbound_calculated_at": "2026-09-06T02:30:00+00:00"
+    },
+    "facility_legs": []
+  }
+}

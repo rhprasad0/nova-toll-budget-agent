@@ -1,0 +1,98 @@
+{
+  "fixture_id": "september-five-proof-i495-north-to-iad-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-05T23:00:30.371400-04:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-proof-i495-north-to-iad-current",
+    "sha256": "39d29f77439a8ca2af255744a772879b19e11b04ca9bcddce9e3aff29b74cd90"
+  },
+  "request": {
+    "origin_point_id": "i495:185NO",
+    "destination_point_id": "airport_iad",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i495:185NO",
+    "destination_point_id": "airport_iad",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-05T23:00:30.371400-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "observed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "1.50",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "facility": "i95_i495",
+        "component_evaluated_at": "2026-09-05T23:00:30.371400-04:00",
+        "bin_minutes": 10,
+        "bin_start": "2026-09-05T22:50:00-04:00",
+        "bin_end": "2026-09-05T23:00:00-04:00",
+        "interval_end_at": "2026-09-05T22:50:00-04:00",
+        "observed_at": "2026-09-05T22:40:00-04:00",
+        "od_pair_id": 1036,
+        "source_status": "NO_DETERMINATION",
+        "recent_movement": {
+          "method": "same_facility_leg_three_cycles",
+          "direction": "mixed",
+          "samples": [
+            {
+              "cycle_offset": -2,
+              "price_usd": "1.55"
+            },
+            {
+              "cycle_offset": -1,
+              "price_usd": "1.55"
+            },
+            {
+              "cycle_offset": 0,
+              "price_usd": "1.50"
+            }
+          ],
+          "net_change_usd": "-0.05",
+          "net_change_percent": "-3.2"
+        },
+        "prior_week_comparison": {
+          "method": "same_weekday_same_facility_bins",
+          "comparable_period_count": 3,
+          "expected_comparable_period_count": 3,
+          "comparable_prices": [
+            {
+              "week_offset": 3,
+              "price_usd": "1.80"
+            },
+            {
+              "week_offset": 2,
+              "price_usd": "1.55"
+            },
+            {
+              "week_offset": 1,
+              "price_usd": "1.55"
+            }
+          ],
+          "median_usd": "1.55",
+          "minimum_usd": "1.55",
+          "maximum_usd": "1.80",
+          "current_delta_usd": "-0.05",
+          "current_delta_percent": "-3.2",
+          "position": "below_recent_range",
+          "higher_than_count": 0
+        }
+      }
+    ],
+    "total_usd": "1.50"
+  }
+}

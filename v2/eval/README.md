@@ -1,142 +1,93 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs nine current-toll routing cases and ten
-annual-affordability golden cases through a fresh production agent. The golden
-corpus is SemVer 1.0.0 and includes four sanitized typed fixtures. Fixture-backed
-case provenance uses the fixture source and compares aware ISO timestamps after
-UTC normalization at second precision, ignoring capture microseconds. A `success` fixture maps to a
-success/clarification/correction case outcome, `partial_success` maps only to
-`partial_success`, and `route_unavailable` maps to `structured_unavailability`.
-The manifest also hashes the raw nine-row legacy `test-cases.jsonl` source so all
-19 runtime cases participate in the versioned dataset contract. It verifies
-exact tool calls, route/fallback behavior, required-input and income
-clarification, adjustable 52-week commute-day estimates, safe annual route
-unavailability, scenario-bound money, and the required Markdown/emoji response
-hierarchy.
+The default golden dataset is **250 public cases**, format `2.0.0`, dataset
+`2.1.0`: 100 topology, 45 current-price, 35 annual-affordability, 30 multiturn,
+20 fault, and 20 abuse cases. It selects the 19 immutable v1 cases plus 231 new
+rows through explicit membership and exact ordered tool scripts. The original
+v1 corpus and four-row v2 sample remain reproducible through explicit manifests.
 
-## Offline check
+## Offline validation and review
+
+Run from `v2/`:
 
 ```bash
 uv run python eval/golden_corpus.py validate --base-ref HEAD
+uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest.json
+uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest-v2-sample.json
 uv run python eval/run_evaluation.py --check
+uv run python eval/golden_corpus.py render --output ../.graph/golden-review.html
 ```
 
-This command is network-free and runs in normal pull-request CI.
+The review page contains all public prompts, conversation turns, expected
+behavior, category and directional coverage, and provenance labels. It omits
+recorded fixture details. Private review is separate and parent-controlled.
+The replay prompt date is fixed at **2026-09-05**; retained observations are
+historical evidence, not present-day quotes.
 
-The explicit v2 format sample is validated separately until the full corpus and
-its graders are ready. It selects rows through `membership`, overlays metadata
-by ID, and validates ordered typed scripts for the existing `current` and
-`annual` tools; `multiturn` and `nocall` are scenario properties:
+## What is measured
 
-```bash
-uv run python eval/golden_corpus.py validate \
-  --manifest eval/golden/manifest-v2.json
-```
+Both production tool contracts use recorded `AgentTool` wrappers. Each trial
+gets a fresh agent, the full canonical prompt-point context, the fixed render
+date, and a rate card. The application model, prompt, tool implementation, and
+Oracle behavior remain unchanged. `fixture_eval.packet_for_case` supplies one
+case without grading assertions; `fixture_runner.run_fixture_trial` records
+raw observations, and the trusted supervisor seals and grades them.
 
-The default manifest and evaluator continue to use the approved v1 corpus.
+The shared evaluator checks exact tool names, inputs, order, turn boundaries,
+fallback consent, typed price and annual financial grounding, and response
+checks for clarification, refusal, failures, and synthetic canary disclosure.
+Fault data represents typed operation errors; it does not claim a database or
+network outage was injected. Synthetic financial variants recompute dependent
+amounts using the frozen domain formulas and identify their synthetic origin.
+The two known omitted nullable comparison fields are adapted for validation
+only when their denominator is zero; original evidence bytes stay unchanged.
 
-## Trusted recorded-fixture execution
+Response regexes and the existing prose graders are bounded heuristics. Passing
+them does not establish unrestricted natural-language correctness. Usage and
+cost evidence must include every provider cycle; missing evidence remains an
+infrastructure failure. Cache reads and writes are billed separately, and the
+long-context tier applies to each provider request.
 
-`eval.fixture_eval` is the callable boundary for a supplied model. The trusted
-caller validates a public row, supplies prompt points, render date, and a rate
-card, then creates one fresh agent per trial with both toll tools replaced by
-recorded `AgentTool` wrappers:
+## Evidence and isolation
 
-```python
-from datetime import date
-from pathlib import Path
+`directional-capture-evidence.json` retains 100 unchanged raw tool results and
+same-invocation route receipts: 50 directional movements across both tools.
+The public topology cases cover eight orientation combinations per core
+junction family, one additional I-495 endpoint variant, and 17 airport probes.
+Annual topology returns are explicit independent Greenway controls.
 
-from eval.fixture_eval import packet_for_case, run_and_seal_trial, trusted_case_evidence
-from eval.fixture_runner import RateCard
+Physical conformance and agent grounding are separate measures. Two independently
+prohibited direct I-66/I-495 handoffs appeared in both tools' observed routes,
+leaving four physical-conformance findings. No routing repair is included.
+Other missing direct connections are not automatically prohibited whole journeys.
+The 100 cases do not exhaust the 11,732 movement/tool/state inventory rows.
+Bounded raw historical I-95/I-66 state evidence is retained separately; raw rows
+alone do not establish that a historical domain execution occurred.
 
-packet = packet_for_case(
-    "dulles-to-reagan-annual-unavailable",
-    prompt_points=trusted_prompt_points,
-    render_date=date(2026, 9, 5),
-)
-case_bytes, dataset_hash, _ = trusted_case_evidence(packet.case_id)
-run_and_seal_trial(
-    packet,
-    model=injected_model,
-    artifact_root=Path("run") / packet.case_id / "1",
-    trial_id="1",
-    rate_card=RateCard("approved-source", "2026-09", rate_card_sha256, 1, 2, 3),
-    case_bytes=case_bytes,
-    dataset_hash=dataset_hash,
-)
-```
+Private manifests bind the exact public dataset and membership hashes. The
+trusted parent validates canonical scenario/template/route separation and
+supplies private evidence explicitly; loaders never discover sibling paths.
+The parent-validated private allocation is 20 topology, 9 current, 7 annual, 6 multiturn,
+4 fault, and 4 abuse cases. The container worker and 30-case public pilot are
+follow-on slices. Human acceptance freezes cases and the metric before the
+final 900 executions (three fresh trials for each of 300 cases).
 
-The runner writes raw `output.json`, `stdout.txt`, and `exit_code.json` only.
-The trusted supervisor seals `run.json`, verifies source/case/rate identities,
-and invokes the shared annual grader to write `scorecard.json`. Call it three
-times with independent fresh model instances (`trial_id` `1`, `2`, `3`) for
-each public case, then use `aggregate_public_run` after all ten cases are
-sealed. `adapt_holdout_rows` (one call for the complete bundle),
-`packet_for_holdout`, and `holdout_case_document` provide the separate opaque
-holdout boundary; private holdout rows are supplied by the parent executor and
-are never stored in this repository. The plural adapter gives every row the
-same membership dataset hash, so do not adapt bundle rows independently with
-`adapt_holdout_row`.
+CI remains offline. The legacy graph aggregation helpers retain their explicit
+pass^k gate semantics; they are not the forthcoming all-category baseline
+reporter. The manual live diagnostics below remain separate from fixture replay.
 
-Each sealed report carries the actual nonsecret model parameters, dataset and
-prompt/tool contract versions, usage and cost fields, and a candidate artifact
-record of `kind: source-snapshot` whose digest is the in-scope source digest.
-`deployment_identity` remains `pending` until an external executor supplies a
-reviewed deployment artifact; no deployment or GitHub artifact ID is inferred
-by this offline tooling.
+## Updating the dataset
 
-Offline tests use only synthetic models and recorded fixture bytes. They are
-tooling checks and do not certify a model, baseline, candidate, or holdout.
+Add concrete rows to a declared shard, update exact membership and metadata,
+and declare only fixtures referenced by scripts. Hash each local payload's raw
+bytes. Membership and dataset hashes use UTF-8 canonical JSON with sorted keys,
+compact separators, and `ensure_ascii=False`; omit only `dataset_sha256` when
+computing the dataset digest. Source memberships retain their original hashes.
 
-## Fixture-only golden review
-
-Render the self-contained, worktree-only review page from the validated
-manifest and its four recorded fixtures:
-
-```bash
-uv run python eval/golden_corpus.py render \
-  --manifest eval/golden/manifest.json --output ../.graph/golden-review.html
-```
-
-The page contains ten annual-affordability case cards, deterministic required
-and prohibited evaluator behavior, the 19-case coverage/hash contract, without
-fixture payload details. It clearly labels fixtures as byte-pinned
-historical regression evidence, shows pinned 08:00, 08:30, and rejected 12:00
-capture context, and shows no model output. Human approval is pending; the
-artifact is not pass^3 or unbiased evidence, and candidate execution is
-deferred to #362/#363.
-
-The pre-existing live evaluator and Batch utility documented below are separate
-manual workflows. Golden `validate`, golden `render`, and CI never invoke them;
-their historical reports are not approval evidence for this corpus.
-
-The #361 acceptance gate covers corpus integrity and structured expectations:
-exact arguments, call order, typed fixture results, references, and coverage.
-The existing prose graders are bounded regression heuristics. They can reject
-valid paraphrases or miss unsupported claims; passing them does not prove
-natural-language correctness. Broad prose-grading work belongs to #360, with
-baseline and candidate execution in #362/#363.
-
-## Growing the corpus
-
-Add cases to a declared JSONL shard or declare another shard in `case_shards`.
-Update fixture `case_ids`, shard counts, coverage, and the sorted payload list;
-hash each payload's raw bytes with SHA-256. Compute `dataset_sha256` over the
-manifest without that field, serialized as UTF-8 JSON with sorted keys, compact
-separators, and `ensure_ascii=False`. The legacy source has its own raw-byte hash.
-
-Advance `dataset_version` for any changed bundle: patch for corrections, minor
-for additive cases, major for incompatible dataset changes. Keep `format_version`
-at `1.0.0` while using this format. Validation against the PR base rejects a
-missing version advance or an invalid base ref; validation without a base checks
-only internal consistency. New tags have no prior version to compare.
-
-The initial `1.0.0` release also pins the reviewed cases and fixture bytes in
-code. Later releases use schema, references, coverage, hashes, and Git version
-comparison without changing the validator for each added case. Human review
-approves changed expectations and evidence; hashes detect drift, not truth.
-The current format supports the annual-affordability capability and existing
-scenario families. A new tool capability needs its own typed validation.
+Advance the dataset SemVer when content changes. Base-ref validation rejects
+content drift without an advance and version-only bumps without content changes.
+Format `2.0.0` supports both tools, typed results/errors, ordered multi-turn
+scripts, and no-call cases. Hashes detect drift; human review evaluates truth.
 
 ## Live run
 
@@ -251,19 +202,16 @@ not independently verified roadway coverage. The report separates required and
 exercised rows, physical evidence, and passed conformance. Its canonical digest
 covers the report without the digest field itself.
 
-The default report contains **no executed observations**. The latest AWS identity
-check succeeded, but no fresh raw history or typed production capture has been
-recorded for this expansion. Existing domain tests and the guarded disposable SQL
-suite are separate checks, not default matrix capture evidence. Two direct I66/I495 handoff
-expectations are prohibited according to the retained operator access evidence.
-A mismatch requires an observed route proof using the direct edge. A complete,
-supported route through the Dulles Connector may establish an alternate journey;
-a missing direct edge alone does not establish journey unavailability.
+The default matrix command contains **no executed observations** unless supplied
+receipts. The expansion's 100 retained typed/raw observations are stored in
+`directional-capture-evidence.json`; they are reported separately from the
+inventory's unexercised rows. Existing domain tests and disposable SQL checks
+are separate evidence. A supported alternate journey requires a complete
+independent route proof; a missing direct edge alone is insufficient.
 
 Matrix annual requests use a separately specified valid Greenway return control
-leg. They are domain probes, not proposed real-world commute conversations. The
-250 public / 50 private corpus work supplies realistic independently mapped
-round trips. State labels define requested probes; labels and inventory alone
+leg. They are domain probes, not proposed real-world commute conversations. The corpus labels these controls explicitly and includes separate annual
+affordability scenarios. State labels define requested probes; labels and inventory alone
 never establish that a state was exercised or a route was available.
 
 `history_capture.capture_raw_history` reads bounded I95 OD selectors and paired
@@ -281,7 +229,7 @@ connections; annual retains its existing transaction and independent legs. The
 source hash for a live fixture covers the returned tool result. Domain tests use
 explicit synthetic evidence and existing tool seams. Historical replay requires
 separate retained source and transformation provenance; fixture playback and
-model trajectory evaluation belong to the following implementation slice.
+model trajectory evaluation use the shared recorded-tool runner.
 
 `build_matrix` accepts trusted retained observation receipts keyed by exact row
 ID. Receipts bind state, exact request, execution layer, source digest, typed

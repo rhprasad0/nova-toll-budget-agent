@@ -1,0 +1,27 @@
+{
+  "fixture_id": "fault-current-05",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "synthetic_fault",
+  "evaluated_at": "2026-09-05T23:00:17.891240-04:00",
+  "provenance": "Explicit synthetic typed operation error; no claim of an injected database or network fault.",
+  "source": null,
+  "request": {
+    "origin_point_id": "dtr:10:entry:EB",
+    "destination_point_id": "i66:10:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "error": {
+    "toolUseId": "fault-current-05",
+    "status": "error",
+    "content": [
+      {
+        "text": "Unable to get the current toll price. Reference: fault-current-05."
+      }
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "fixture_id": "september-five-probe-i495-nb-to-dtr-eb-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T03:18:01.975822+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-probe-i495-nb-to-dtr-eb-current",
+    "sha256": "423d2c1199d124cae3d773014b7576bfdb8d8399049ed143c22b97d93d3bffe9"
+  },
+  "request": {
+    "origin_point_id": "i495:191NO",
+    "destination_point_id": "dtr:66:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "invalid_destination",
+    "reason": {
+      "code": "destination_ramp_incompatible",
+      "details": {
+        "point_id": "dtr:66:exit:EB",
+        "point_type": "exit",
+        "alternatives": [
+          {
+            "point_id": "dtr:10:exit:WB",
+            "network_id": "dtr",
+            "source_node_id": "10",
+            "point_type": "exit",
+            "direction": "WB",
+            "label": "Exit 10 - SR 657",
+            "aliases": [],
+            "location": {
+              "type": "Point",
+              "coordinates": [
+                -77.3983638,
+                38.9545776
+              ]
+            }
+          },
+          {
+            "point_id": "dtr:11:exit:WB",
+            "network_id": "dtr",
+            "source_node_id": "11",
+            "point_type": "exit",
+            "direction": "WB",
+            "label": "Exit 11 - SR 286 (Fairfax County Pkwy)",
+            "aliases": [],
+            "location": {
+              "type": "Point",
+              "coordinates": [
+                -77.3739791,
+                38.952852
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "point_ids": [],
+    "connection_ids": [],
+    "connection_types": [],
+    "general_purpose_gaps": [],
+    "i95_evidence": null
+  }
+}
