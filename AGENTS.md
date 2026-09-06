@@ -59,9 +59,9 @@ and remain covered by the declared sandbox and permissions boundary.
 
 # Coding agents
 
-Use GPT-6 Astra (`gpt-6-astra`) for the parent coding agent. Keep project-graph
-nodes and specialist reviewers on their existing models, reasoning efforts, and
-instructions in `.codex/agents/`.
+Use GPT-5.6 Sol (`gpt-5.6-sol`) at medium reasoning effort for the parent coding
+agent. Keep project-graph nodes and specialist reviewers on their existing
+models, reasoning efforts, and instructions in `.codex/agents/`.
 
 TollChat's application agent stays on `gpt-5.6-luna`. Leave its model and prompt
 unchanged unless the user explicitly requests an application-agent change.
@@ -83,7 +83,7 @@ unchanged unless the user explicitly requests an application-agent change.
 Use [.agents/skills/eval-graph/SKILL.md](.agents/skills/eval-graph/SKILL.md)
 for `$eval-graph`, eval loops, pinning a case, fixture runs, and pass^k gates.
 The eval root is `v2/eval/`; preserve the existing harness and corpus.
-Astra medium orchestrates; case_miner, eval_runner, eval_reviewer, and
+Sol medium orchestrates; case_miner, eval_runner, eval_reviewer, and
 eval_fixer use Luna medium and the existing native-ID/worktree registry.
 Keep one writer; grade.sh and compare.sh own the metric. The critic never
 patches, and gate never starts a fixer. Require sealed runtime access for
