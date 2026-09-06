@@ -1,0 +1,49 @@
+{
+  "fixture_id": "current-success",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "synthetic",
+  "evaluated_at": "2026-08-17T06:30:00-04:00",
+  "provenance": "synthetic-v2-slice1",
+  "source": null,
+  "request": {
+    "origin_point_id": "greenway:1:entry:EB",
+    "destination_point_id": "greenway:28:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "greenway:1:entry:EB",
+    "destination_point_id": "greenway:28:exit:EB",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-08-17T06:30:00-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "schedule_derived",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "5.80",
+        "source_kind": "schedule_derived",
+        "pricing_method": "published_schedule",
+        "facility": "greenway",
+        "component_evaluated_at": "2026-08-17T06:30:00-04:00",
+        "rate_period": "peak",
+        "published_schedule": {
+          "schedule_id": "dulles_greenway_toll_calculator_2026-08-04",
+          "rate_name": "mainline_plaza",
+          "source_url": "https://www.dullesgreenway.com/toll-calculator/",
+          "retrieved_at": "2026-08-04"
+        }
+      }
+    ],
+    "total_usd": "5.80"
+  }
+}

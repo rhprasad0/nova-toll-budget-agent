@@ -1,0 +1,94 @@
+{
+  "fixture_id": "september-five-legacy-old-keene-mill-to-reagan-i95-unavailable-0",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-05T22:42:46.383781-04:00",
+  "provenance": "2026-09-05 parent read-only unchanged public tool stream; source_commit=5e7941f; original_v1_current_request_overlay_candidate;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-legacy-old-keene-mill-to-reagan-i95-unavailable-0",
+    "sha256": "8067f7b068a478e186f59255c2ef6f12102cb4c7c380e32293e524cd76bf0bd8"
+  },
+  "request": {
+    "origin_point_id": "i95:203NO",
+    "destination_point_id": "airport_dca",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i95:203NO",
+    "destination_point_id": "airport_dca",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-05T22:42:46.383781-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "observed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "7.15",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "facility": "i95_i495",
+        "component_evaluated_at": "2026-09-05T22:42:46.383781-04:00",
+        "bin_minutes": 10,
+        "bin_start": "2026-09-05T22:40:00-04:00",
+        "bin_end": "2026-09-05T22:50:00-04:00",
+        "interval_end_at": "2026-09-05T22:40:00-04:00",
+        "observed_at": "2026-09-05T22:30:00-04:00",
+        "od_pair_id": 1261,
+        "source_status": "NORTHBOUND_OPEN",
+        "recent_movement": {
+          "method": "same_facility_leg_three_cycles",
+          "direction": "mixed",
+          "samples": [
+            {
+              "cycle_offset": -2,
+              "price_usd": "9.05"
+            },
+            {
+              "cycle_offset": -1,
+              "price_usd": "7.15"
+            },
+            {
+              "cycle_offset": 0,
+              "price_usd": "7.15"
+            }
+          ],
+          "net_change_usd": "-1.90",
+          "net_change_percent": "-21.0"
+        },
+        "prior_week_comparison": {
+          "method": "same_weekday_same_facility_bins",
+          "comparable_period_count": 2,
+          "expected_comparable_period_count": 3,
+          "comparable_prices": [
+            {
+              "week_offset": 3,
+              "price_usd": "7.70"
+            },
+            {
+              "week_offset": 2,
+              "price_usd": "7.15"
+            }
+          ],
+          "median_usd": "7.425",
+          "minimum_usd": "7.15",
+          "maximum_usd": "7.70",
+          "current_delta_usd": "-0.275",
+          "current_delta_percent": "-3.7",
+          "position": "within_recent_range",
+          "higher_than_count": 0
+        }
+      }
+    ],
+    "total_usd": "7.15"
+  }
+}

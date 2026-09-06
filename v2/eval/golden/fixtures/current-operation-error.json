@@ -1,0 +1,25 @@
+{
+  "fixture_id": "current-operation-error",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "synthetic_fault",
+  "evaluated_at": "2026-09-05T12:00:00-04:00",
+  "provenance": "synthetic-fault-v2-slice1",
+  "source": null,
+  "request": {
+    "origin_point_id": "airport_dca",
+    "destination_point_id": "i495:1859ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "error": {
+    "toolUseId": "v2-current-operation-error",
+    "status": "error",
+    "content": [
+      {"text": "Unable to get the current toll price. Reference: v2-current-operation-error."}
+    ]
+  }
+}

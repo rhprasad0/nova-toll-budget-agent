@@ -1,0 +1,51 @@
+{
+  "fixture_id": "september-five-legacy-i66-west-to-route-7-current-price-0",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-05T22:42:47.141914-04:00",
+  "provenance": "2026-09-05 parent read-only unchanged public tool stream; source_commit=5e7941f; original_v1_current_request_overlay_candidate;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-legacy-i66-west-to-route-7-current-price-0",
+    "sha256": "566ca6078b6745de8f447801dcb53b00f88dd2c2f80708a1949b3234d02e84ce"
+  },
+  "request": {
+    "origin_point_id": "i66:1:entry:EB",
+    "destination_point_id": "i66:4:exit:EB",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i66:1:entry:EB",
+    "destination_point_id": "i66:4:exit:EB",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-05T22:42:47.141914-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "schedule_derived",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "0",
+        "source_kind": "schedule_derived",
+        "pricing_method": "published_schedule",
+        "facility": "i66",
+        "component_evaluated_at": "2026-09-05T22:42:47.141914-04:00",
+        "rate_period": "off_peak",
+        "published_schedule": {
+          "schedule_id": "vdot_i66_inside_beltway_2026-08-10",
+          "source_url": "https://www.vdot.virginia.gov/projects/major-projects/66expresslanes/faqs/",
+          "retrieved_at": "2026-08-24"
+        }
+      }
+    ],
+    "total_usd": "0.00"
+  }
+}

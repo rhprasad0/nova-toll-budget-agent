@@ -1,0 +1,70 @@
+{
+  "fixture_id": "september-five-probe-i66-eb-to-i495-sb-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T03:18:03.046864+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-probe-i66-eb-to-i495-sb-current",
+    "sha256": "e598f372ec5b770e2b9d087e6495a80404731d7d649317e0fa038154fa057a28"
+  },
+  "request": {
+    "origin_point_id": "i66:1:entry:EB",
+    "destination_point_id": "i495:191SD",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "status": "invalid_origin",
+    "reason": {
+      "code": "origin_ramp_incompatible",
+      "details": {
+        "point_id": "i66:1:entry:EB",
+        "point_type": "entry",
+        "alternatives": [
+          {
+            "point_id": "i66:4:entry:WB",
+            "network_id": "i66",
+            "source_node_id": "4",
+            "point_type": "entry",
+            "direction": "WB",
+            "label": "Route 7 - Leesburg Pike",
+            "aliases": [],
+            "location": {
+              "type": "Point",
+              "coordinates": [
+                -77.1967508,
+                38.8987045
+              ]
+            }
+          },
+          {
+            "point_id": "i66:11:entry:WB",
+            "network_id": "i66",
+            "source_node_id": "11",
+            "point_type": "entry",
+            "direction": "WB",
+            "label": "Washington Blvd",
+            "aliases": [],
+            "location": {
+              "type": "Point",
+              "coordinates": [
+                -77.1603661,
+                38.8870753
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "point_ids": [],
+    "connection_ids": [],
+    "connection_types": [],
+    "general_purpose_gaps": [],
+    "i95_evidence": null
+  }
+}

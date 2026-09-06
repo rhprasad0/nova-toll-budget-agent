@@ -469,4 +469,60 @@ BEGIN
     END;
 END $$;
 
+DO $$
+DECLARE
+    sample_day date := (
+        SELECT min(day::date)
+        FROM generate_series(
+            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 40,
+            (transaction_timestamp() AT TIME ZONE 'America/New_York')::date - 30,
+            interval '1 day'
+        ) AS days(day)
+        WHERE extract(isodow FROM day) = 3
+    );
+    scheduled record;
+    active_missing record;
+    off_peak record;
+BEGIN
+    SELECT * INTO STRICT off_peak
+    FROM oracle.get_i66_ballpark_samples(
+        3100, 3110, 'EB', time '12:00', ARRAY[sample_day],
+        transaction_timestamp()
+    );
+    IF off_peak.price_usd <> 0
+       OR off_peak.pricing_method <> 'published_schedule'
+       OR off_peak.observed_at IS NOT NULL THEN
+        RAISE EXCEPTION 'off-peak I-66 row was not schedule-derived neutral pricing: %',
+            row_to_json(off_peak);
+    END IF;
+
+    SELECT * INTO STRICT scheduled
+    FROM oracle.get_annual_ballpark_summary(
+        '[{"direction":"outbound","facility":"i66","route_step_id":"step-1",
+          "start_zone_id":3100,"end_zone_id":3110}]'::jsonb,
+        time '12:00', time '12:00', ARRAY[sample_day], '[]'::jsonb, 1,
+        transaction_timestamp()
+    );
+    IF scheduled.complete_pair_count <> 1
+       OR scheduled.coverage_percent <> '100.0'
+       OR scheduled.p50_daily_usd <> 0 THEN
+        RAISE EXCEPTION 'off-peak scheduled I-66 leg did not complete neutrally: %',
+            row_to_json(scheduled);
+    END IF;
+
+    SELECT * INTO STRICT active_missing
+    FROM oracle.get_annual_ballpark_summary(
+        '[{"direction":"outbound","facility":"i66","route_step_id":"step-1",
+          "start_zone_id":3100,"end_zone_id":3110}]'::jsonb,
+        time '08:00', time '08:00', ARRAY[sample_day], '[]'::jsonb, 1,
+        transaction_timestamp()
+    );
+    IF active_missing.complete_pair_count <> 0
+       OR active_missing.coverage_percent <> '0.0'
+       OR jsonb_array_length(active_missing.facility_scenarios) <> 0 THEN
+        RAISE EXCEPTION 'active-window missing I-66 observation was fabricated: %',
+            row_to_json(active_missing);
+    END IF;
+END $$;
+
 ROLLBACK;

@@ -1,0 +1,37 @@
+{
+  "fixture_id": "september-five-proof-dca-to-i95-north-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-06T02:59:36.402079+00:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-proof-dca-to-i95-north-current",
+    "sha256": "e02dd1a4d1b7db751ee9cb75b2bd861171567c1f73555e5a479d8429e0a78cc5"
+  },
+  "request": {
+    "origin_point_id": "airport_dca",
+    "destination_point_id": "i95:224ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "airport_dca",
+    "destination_point_id": "i95:224ND",
+    "error": "pricing_unavailable",
+    "reason": "incomplete_route_price",
+    "unavailable_components": [
+      {
+        "route_step_id": "step-1",
+        "reason": "facility_unavailable",
+        "component_evaluated_at": "2026-09-05T22:59:36.832955-04:00",
+        "interval_end_at": "2026-09-05T22:50:00-04:00",
+        "observed_at": "2026-09-05T22:40:00-04:00",
+        "source_status": "NO_DETERMINATION"
+      }
+    ]
+  }
+}

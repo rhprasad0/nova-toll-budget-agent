@@ -1,19 +1,103 @@
 # TollChat v2 evaluation
 
-This code-graded Strands suite runs nine current-toll routing cases and seven
-annual job-offer affordability cases through a fresh production agent. It
-verifies exact tool calls, route/fallback behavior, required-input and income
-clarification, adjustable 52-week commute-day estimates, safe annual route
-unavailability, scenario-bound money, and the required Markdown/emoji response
-hierarchy.
+The default golden dataset is **250 public cases**, format `2.0.0`, dataset
+`2.2.0`: 100 topology, 45 current-price, 35 annual-affordability, 30 multiturn,
+20 fault, and 20 abuse cases. It materializes the 19 legacy v1 cases in the
+public v2 shard alongside 231 additional rows, with explicit membership and
+exact ordered tool scripts. The original v1 corpus and four-row v2 sample remain
+reproducible through explicit manifests, and the pinned v1 source files and
+fixture bytes remain unchanged.
 
-## Offline check
+The live `run_evaluation.py` commands load the original 19-case v1 corpus,
+including ten annual cases and the original live suite labels. The 250-case v2
+corpus is used by the separate fixture workflow.
+
+## Offline validation and review
+
+Run from `v2/`:
 
 ```bash
+uv run python eval/golden_corpus.py validate --base-ref HEAD
+uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest.json
+uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest-v2-sample.json
 uv run python eval/run_evaluation.py --check
+uv run python eval/golden_corpus.py render --output ../.graph/golden-review.html
+uv run python eval/golden_corpus.py render --output ../.graph/pilot-review.html \
+  --selection-file ../.graph/pilot-selection.json
 ```
 
-This command is network-free and runs in normal pull-request CI.
+The default review page shows numbered public cases with readable category
+labels, exact runtime conversation text, and expected behavior. The optional
+selection file renders its 30 public cases in the declared order. Case IDs,
+fixture details, and corpus metadata stay out of the human-facing page. Private
+review is separate and parent-controlled.
+The replay prompt date is fixed at **2026-09-05**; retained observations are
+historical evidence, not present-day quotes.
+
+## What is measured
+
+Both production tool contracts use recorded `AgentTool` wrappers. Each trial
+gets a fresh agent, the full canonical prompt-point context, the fixed render
+date, and a rate card. The application model, prompt, tool implementation, and
+Oracle behavior remain unchanged. `fixture_eval.packet_for_case` supplies one
+case without grading assertions; `fixture_runner.run_fixture_trial` records
+raw observations, and the trusted supervisor seals and grades them.
+
+The shared evaluator checks exact tool names, inputs, order, turn boundaries,
+fallback consent, typed price and annual financial grounding, and response
+checks for clarification, refusal, failures, and synthetic canary disclosure.
+Fault data represents typed operation errors; it does not claim a database or
+network outage was injected. Synthetic financial variants recompute dependent
+amounts using the frozen domain formulas and identify their synthetic origin.
+The two known omitted nullable comparison fields are adapted for validation
+only when their denominator is zero; original evidence bytes stay unchanged.
+
+Response regexes and the existing prose graders are bounded heuristics. Passing
+them does not establish unrestricted natural-language correctness. Usage and
+cost evidence must include every provider cycle; missing evidence remains an
+infrastructure failure. Cache reads and writes are billed separately, and the
+long-context tier applies to each provider request.
+
+## Evidence and isolation
+
+`directional-capture-evidence.json` retains 100 unchanged raw tool results and
+same-invocation route receipts: 50 directional movements across both tools.
+The public topology cases cover eight orientation combinations per core
+junction family, one additional I-495 endpoint variant, and 17 airport probes.
+Annual topology returns are explicit independent Greenway controls.
+
+Physical conformance and agent grounding are separate measures. Two independently
+prohibited direct I-66/I-495 handoffs appeared in both tools' observed routes,
+leaving four physical-conformance findings. No routing repair is included.
+Other missing direct connections are not automatically prohibited whole journeys.
+The 100 cases do not exhaust the 11,732 movement/tool/state inventory rows.
+Bounded raw historical I-95/I-66 state evidence is retained separately; raw rows
+alone do not establish that a historical domain execution occurred.
+
+Private manifests bind the exact public dataset and membership hashes. The
+trusted parent validates canonical scenario/template/route separation and
+supplies private evidence explicitly; loaders never discover sibling paths.
+The parent-validated private allocation is 20 topology, 9 current, 7 annual, 6 multiturn,
+4 fault, and 4 abuse cases. The disposable container worker and callable baseline
+runner are implemented. Human acceptance freezes cases and the metric after
+the 30-case pilot and before the final 900 executions (three fresh trials for
+each of 300 cases).
+
+CI remains offline. The legacy graph aggregation helpers retain their explicit
+pass^k gate semantics; the all-category baseline reporter is a separate path. The manual live diagnostics below remain separate from fixture replay.
+
+## Updating the dataset
+
+Add concrete rows to a declared shard, update exact membership and metadata,
+and declare only fixtures referenced by scripts. Hash each local payload's raw
+bytes. Membership and dataset hashes use UTF-8 canonical JSON with sorted keys,
+compact separators, and `ensure_ascii=False`; omit only `dataset_sha256` when
+computing the dataset digest. Source memberships retain their original hashes.
+
+Advance the dataset SemVer when content changes. Base-ref validation rejects
+content drift without an advance and version-only bumps without content changes.
+Format `2.0.0` supports both tools, typed results/errors, ordered multi-turn
+scripts, and no-call cases. Hashes detect drift; human review evaluates truth.
 
 ## Live run
 
@@ -31,7 +115,7 @@ env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
   uv run python eval/run_evaluation.py --window i95_northbound --suite direct
 ```
 
-The seven annual cases are independent of the live I-95 direction:
+The ten annual cases are independent of the live I-95 direction:
 
 ```bash
 env -u OPENAI_BASE_URL AWS_PROFILE=nova-toll \
@@ -45,9 +129,10 @@ case then calls Greenway entry `greenway:1:entry:EB` to Washington exit
 `i95:2249ND`; the annual case uses that outbound route and the reverse
 `i95:2232SO` to `greenway:1:exit:WB` return with the supplied schedule and
 income. A current lane-closure result is valid only when its exact route and
-grounded closure explanation are present. An annual `no_complete_paired_days`
-result is valid only after that exact route call; `route_unavailable` or a
-Springfield alternative remains a failure.
+grounded closure explanation are present. The golden Leesburg-to-Washington
+fixture is an authentic 08:30/17:30 partial result (51/60 complete pairs,
+85.0% coverage); the rejected artificial 12:00 zero-pair diagnostic is not
+corpus evidence.
 
 Run each targeted workflow five times as a delivery check (not a reliability
 claim):
@@ -115,3 +200,170 @@ writes `results.json` plus every failure and a deterministic 20-pass sample in
 `review.json`. Expired or failed work is never resubmitted automatically.
 The completed run and adjudicated findings are summarized in
 [`ballpark-hallucination-report.md`](ballpark-hallucination-report.md).
+
+
+## Directional evidence matrix
+
+`uv run python eval/directional_matrix.py --check --output /tmp/directional-matrix.json`
+(from `v2/`) builds the directed movement × tool × selected state plan. The
+inventory has 996 connections: 670 within-facility, 300 general-purpose gaps,
+14 toll handoffs, and 12 airport connections. These are implementation counts,
+not independently verified roadway coverage. The report separates required and
+exercised rows, physical evidence, and passed conformance. Its canonical digest
+covers the report without the digest field itself.
+
+The default matrix command contains **no executed observations** unless supplied
+receipts. The expansion's 100 retained typed/raw observations are stored in
+`directional-capture-evidence.json`; they are reported separately from the
+inventory's unexercised rows. Existing domain tests and disposable SQL checks
+are separate evidence. A supported alternate journey requires a complete
+independent route proof; a missing direct edge alone is insufficient.
+
+Matrix annual requests use a separately specified valid Greenway return control
+leg. They are domain probes, not proposed real-world commute conversations. The corpus labels these controls explicitly and includes separate annual
+affordability scenarios. State labels define requested probes; labels and inventory alone
+never establish that a state was exercised or a route was available.
+
+`history_capture.capture_raw_history` reads bounded I95 OD selectors and paired
+I66 start/end selectors with the existing `pricing_reader` role. It verifies
+read privileges and lack of raw writes, uses a read-only repeatable-read
+transaction, rejects cap overflow, and closes before hashing canonical raw rows.
+It records the historical as-of anchor separately from actual transaction time.
+Its deadline is checked between operations; statement, lock and idle limits do
+not provide a hard connection or wall-clock deadline. Raw source rows are not
+typed tool outputs and cannot reproduce a historical database clock.
+
+`directional_matrix.capture_typed_tool` invokes the unchanged public tool stream
+and validates its v2 fixture. Current route/comparison queries retain separate
+connections; annual retains its existing transaction and independent legs. The
+source hash for a live fixture covers the returned tool result. Domain tests use
+explicit synthetic evidence and existing tool seams. Historical replay requires
+separate retained source and transformation provenance; fixture playback and
+model trajectory evaluation use the shared recorded-tool runner.
+
+`build_matrix` accepts trusted retained observation receipts keyed by exact row
+ID. Receipts bind state, exact request, execution layer, source digest, typed
+fixture (for tool execution), and any retained route proof. Their hashes detect
+changed evidence; they are not an independent attestation that code executed.
+The report refuses disconnected/partial proofs and unknown row IDs. Keep raw
+history, actual-anchor SQL, synthetic domain execution, fixture playback, and
+live typed captures in their declared layers. Production writes, grants,
+migrations, application model/prompt changes, and topology repairs are excluded.
+
+## Retained fixture baseline
+
+`eval.baseline.run_baseline` is a trusted, sequential host callable. It uses the
+unchanged application model constructor for identity, runs each trial in a fresh
+container, then seals and grades on the host. Workers receive one projected case,
+full frozen prompt context and a separate in-memory credential envelope. They do
+not receive the corpus, assertions, grader, private siblings, AWS credentials or
+Docker socket. Build with `eval.container_runner.build_image`; it copies only
+validated regular source files and installs the locked runtime export in
+`eval/runtime-requirements.txt`.
+
+From `v2/`, the parent can invoke the callable using reviewed input files:
+
+```python
+import json
+from pathlib import Path
+
+from agent.toll_agent import load_openai_api_key
+from eval.baseline import run_baseline
+from eval.container_runner import build_image
+from eval.fixture_runner import RateCard
+
+inputs = Path("../.graph")
+evidence = build_image("tollchat-fixture:baseline")
+report = run_baseline(
+    inputs / "public-pilot",  # Must not already exist.
+    json.loads((inputs / "pilot-selection.json").read_text()),
+    key=load_openai_api_key(),  # SSM to memory; never write this value.
+    prompt_points=json.loads((inputs / "prompt-points.json").read_text()),
+    rate_card=RateCard(**json.loads((inputs / "rate-card.json").read_text())),
+    evidence=evidence,
+)
+```
+
+The declaration contains `cases`, `trials`, `dataset_sha256` and `render_date`.
+The pilot requires 30 unique public cases, five per primary category, and exactly
+`["pilot-1"]`. The same callable supports a complete public 250-case declaration
+or an explicitly supplied, public-bound private 50-case manifest with trials
+`["1", "2", "3"]`. Run those splits separately in parent-owned output directories
+after human acceptance. The acceptance checkpoint is conversational; this
+callable does not grant approval or run a release gate. It never discovers
+private files. The accepted snapshot uses all 220 prompt points and its declared
+render date, including honestly historical annual snapshots.
+
+A new run root contains an immutable planned `manifest.json`, an attempt marker
+before each execution, raw files, trusted `run.json`, scorecard and receipt
+hashes. Exceptions retain a constant interruption marker and any partial files;
+the loop continues with the next declared attempt. There is no resume, automatic
+rerun, substitution or best-of path. A process interruption leaves the remaining
+planned tuples visible. `aggregate_baseline` requires the caller's externally
+pinned expected identity and container image evidence, so an edited plan cannot
+become a trust source; it can report such an interrupted run if it has no report
+yet. Existing reports and trial files are never overwritten. The application SDK's native transport retry
+behavior remains unchanged; scheduling an attempt once does not claim zero HTTP
+retries.
+
+`report.json` distinguishes scheduled, retained, valid scored, passed,
+agent-quality, infrastructure, inconclusive and missing/interrupted attempts.
+The pass-rate denominator includes only valid scored attempts; all other counts
+remain visible alongside it. Complete totals require complete trusted evidence.
+Missing usage makes totals null/inconclusive. A labelled complete-trial cost
+subtotal includes only validated complete trials; partial failed-trial spend
+remains null/inconclusive. Costs use returned provider usage and the supplied rate card,
+including cache writes and request-local long-context tiers, not invoice
+reconciliation. Latency is the existing measured agent invocation time, excluding
+container startup.
+
+Category, authored-tool, observed-tool and authored direction breakdowns may
+overlap. Total emitted calls and unbound calls are separate: a wrong call cannot
+cancel a missing required call in the extra-call count. Raw hashes, receipt
+hashes, source/grader/model/prompt/dataset/rate/date identities and image evidence
+must match before an observation is scored. The report code and directional
+evidence are included in the existing identity digests.
+
+Public reports may identify cases. Private exports contain aggregate metrics only,
+with no per-case IDs, responses, prompts, fixtures, trajectories or fixer
+feedback; private raw artifacts remain with the trusted parent. Physical
+evidence is a separate section: 100 retained records across 50 movements, 98
+validated captures, two capture/validation failures and four prohibited direct
+handoff findings. These observations do not establish exhaustive inventory
+coverage, historical domain replay or a routing repair. A diagnostic pilot pass
+rate is not a population estimate or release certification.
+
+### Initial public pilot observation
+
+The fixed 30-case replay pilot from the original public dataset `2.1.0` (five
+per category, one `pilot-1` each) scored 19/30 passes, with 30 valid scored
+attempts, no infrastructure failures and no unbound calls across 27 authored
+calls. Its 37 conversation turns used 2,061,703 reported tokens; computed usage
+cost was USD 0.07042498. These are diagnostic results, not a release gate or
+population estimate. The current `2.2.0` public review materializes all 250
+cases; the historical 19-source-row and 30-case pilot evidence remains pinned
+to that earlier dataset.
+
+Several failed checks need human metric review: bounded refusal/coverage
+wording, inherited current-price/fallback expectations, example dollar amounts
+in income clarification, unavailable-result monetary claims, and provenance or
+fault-explanation wording. The original grades remain unchanged. Full 900-trial
+execution remains pending case-and-metric acceptance; no application tuning or
+private execution is implied by this pilot.
+
+### Fresh 2.2.0 public pilot observation
+
+The fresh fixed pilot on public dataset `2.2.0` scored 16/30 passes, with 30
+valid attempts, zero infrastructure, identity, or missing-evidence failures,
+25 emitted calls (27 authored expected), zero unbound calls, and 37 conversation turns. It used
+1,994,139 reported tokens at a computed usage cost of USD 0.06761726. Annual
+clarification behavior and bounded heuristic wording checks remain the main
+human-acceptance questions; these results are diagnostic and do not justify
+outcome-based corpus edits. No 900-trial baseline or private calls were run.
+
+### Human review approval
+
+On 2026-09-06, the maintainer approved the 30-case pilot review: “The pilot
+cases look good.” This records approval of the reviewed cases in dataset
+`2.2.0`. The retained pilot scores and documented grading limitations remain
+unchanged; the full 900-execution evaluation has not run.

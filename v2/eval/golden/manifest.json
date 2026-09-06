@@ -1,0 +1,33 @@
+{
+  "corpus": "annual-affordability",
+  "dataset_version": "1.0.0",
+  "format_version": "1.0.0",
+  "legacy_source_sha256": "640923a807fba8a1cae9fabca10cea59b7f375ef32bef4d6895eccf14d244796",
+  "contract_versions": {
+    "get_annual_toll_ballpark": "3.0.0",
+    "agent_system_prompt": "2.0.2",
+    "system_prompt_renderer": "1.0.0"
+  },
+  "case_shards": [{"path": "cases/annual-affordability.jsonl", "count": 10}],
+  "fixtures": [
+    {"id": "dulles-reagan-route-unavailable", "path": "fixtures/dulles-reagan-route-unavailable.json", "result_kind": "route_unavailable", "case_ids": ["dulles-to-reagan-annual-unavailable"]},
+    {"id": "greenway-success", "path": "fixtures/greenway-success.json", "result_kind": "success", "case_ids": ["greenway-hourly-income-clarification", "leesburg-route-28-annual-affordability", "leesburg-route-28-annual-day-confirmation", "leesburg-route-28-income-clarification", "greenway-invalid-schedule-correction"]},
+    {"id": "leesburg-washington-partial-0830", "path": "fixtures/leesburg-washington-partial-0830.json", "result_kind": "partial_success", "case_ids": ["leesburg-to-washington-annual-partial"]},
+    {"id": "springfield-tysons-success", "path": "fixtures/springfield-tysons-success.json", "result_kind": "partial_success", "case_ids": ["springfield-franconia-tysons-annual-affordability"]}
+  ],
+  "counts": {"legacy_current": 9, "golden_annual": 10, "runtime_cases": 19, "fixtures": 4},
+  "coverage": {"legacy_current": 9, "golden_annual": 10, "runtime_cases": 19, "fixtures": 4, "annual_scenario_families": {"annual_day_estimation": 1, "clarified_destination": 1, "complete_fixed_rate": 1, "hourly_income_clarification": 1, "income_clarification": 1, "invalid_schedule_correction": 1, "missing_schedule_inputs": 1, "partial_historical_coverage": 1, "route_unavailable": 1, "unmatched_location_refusal": 1}},
+  "payloads": [
+    {"path": "cases/annual-affordability.jsonl", "sha256": "d5f7f822801f3ff4bd77940e6cc9a181cd6cf02c9cde5959ae03b9174965027f"},
+    {"path": "fixtures/dulles-reagan-route-unavailable.json", "sha256": "8c5133b44720a04dc856efcd8a50b21bb07b62b4d4b26fa137b3a71244d54414"},
+    {"path": "fixtures/greenway-success.json", "sha256": "c4cea708c6cb38fb4d6ad58011db9ddf413056e37c88216187f6bbe4d638c5cd"},
+    {"path": "fixtures/leesburg-washington-partial-0830.json", "sha256": "fd3dd8b4d865a367339b4a7373034eb9a812bb06a51087432d453810c1172753"},
+    {"path": "fixtures/springfield-tysons-success.json", "sha256": "5269b117cf8653dd96083a6847549ee1d8716b7dce79311bc6334a2490c2ba0f"}
+  ],
+  "capture_history": [
+    {"capture_id": "leesburg-washington-0800-prior", "captured_at": "2026-09-04T10:55:38.987941-04:00", "tool_contract_version": "3.0.0", "result": "08:00/17:30 typed success, 51/60 complete pairs, 85.0% coverage", "corpus_use": "authentic prior capture; not this fixture"},
+    {"capture_id": "leesburg-washington-0830", "captured_at": "2026-09-04T10:55:38.987941-04:00", "tool_contract_version": "3.0.0", "result": "08:30/17:30 typed partial success, 51/60 complete pairs, 85.0% coverage", "corpus_use": "accepted fourth fixture"},
+    {"capture_id": "leesburg-washington-1200-diagnostic", "captured_at": "2026-09-04", "tool_contract_version": "3.0.0", "result": "12:00 typed no_complete_paired_days, 0/60 complete pairs, 0.0% coverage", "corpus_use": "rejected artificial diagnostic; never a fixture"}
+  ],
+  "dataset_sha256": "a68e9bc647cad4b9c674c5c6dbea799c71b79e8df5454037b61c37eb6e7606df"
+}

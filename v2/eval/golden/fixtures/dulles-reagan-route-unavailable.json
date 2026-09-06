@@ -1,0 +1,20 @@
+{
+  "fixture_id": "dulles-reagan-route-unavailable",
+  "capability": "annual_affordability",
+  "result_kind": "route_unavailable",
+  "request": {
+    "outbound": {"origin_point_id": "airport_iad", "destination_point_id": "airport_dca", "departure_time": "08:00:00"},
+    "return": {"origin_point_id": "airport_dca", "destination_point_id": "airport_iad", "departure_time": "17:30:00"},
+    "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "planned_annual_commute_days": 240,
+    "gross_annual_income_usd": "120000.00"
+  },
+  "route": {"outbound": ["airport_iad", "airport_dca"], "return": ["airport_dca", "airport_iad"]},
+  "source": {"evidence_type": "retained_production_capture", "captured_at": "2026-08-22T16:41:39-04:00", "tool_contract_version": "3.0.0"},
+  "payload": {
+    "error": "ballpark_unavailable",
+    "reason": "route_unavailable",
+    "outbound": {"origin_point_id": "airport_iad", "destination_point_id": "airport_dca", "status": "valid", "reason": null},
+    "return": {"origin_point_id": "airport_dca", "destination_point_id": "airport_iad", "status": "no_supported_route", "reason": {"code": "no_supported_route", "details": {"origin_point_id": "airport_dca", "destination_point_id": "airport_iad"}}}
+  }
+}

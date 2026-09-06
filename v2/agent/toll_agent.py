@@ -322,17 +322,20 @@ def build_system_prompt(
 def build_agent(
     *,
     prompt_points: list[dict[str, object]] | list[_PromptPoint] | None = None,
+    current_date: date | None = None,
+    model: object | None = None,
+    tools: list[Any] | None = None,
     hooks: list[object] | None = None,
 ) -> Agent:
-    system_prompt = build_system_prompt(prompt_points)
+    system_prompt = build_system_prompt(prompt_points, current_date=current_date)
     trace_attributes = {
         "tollchat.system_prompt_version": SYSTEM_PROMPT_VERSION,
         "tollchat.system_prompt_renderer_version": SYSTEM_PROMPT_RENDERER_VERSION,
         "tollchat.system_prompt_sha256": sha256(system_prompt.encode()).hexdigest(),
     }
     return Agent(
-        model=_build_model(),
-        tools=_agent_tools(),
+        model=_build_model() if model is None else cast(Any, model),
+        tools=_agent_tools() if tools is None else tools,
         system_prompt=system_prompt,
         callback_handler=None,
         trace_attributes=trace_attributes,

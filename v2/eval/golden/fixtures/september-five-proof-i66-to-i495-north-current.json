@@ -1,0 +1,112 @@
+{
+  "fixture_id": "september-five-proof-i66-to-i495-north-current",
+  "tool": "get_current_toll_price",
+  "tool_contract_version": "1.5.0",
+  "evidence_type": "live_read_only_capture",
+  "evaluated_at": "2026-09-05T23:00:57.304283-04:00",
+  "provenance": "2026-09-05 parent read-only unchanged public stream with pass-through same-invocation route observation; source_commit=5e7941f; annual_return=independent_Greenway_WB_control_not_realistic_commute;connection_scope=separate_route_comparison_connections",
+  "source": {
+    "id": "september-five-proof-i66-to-i495-north-current",
+    "sha256": "e8e2e185945396f5333c21f51aa59d4ed5142143f4ca2f2d65f28b10e07668b2"
+  },
+  "request": {
+    "origin_point_id": "i66:11:entry:WB",
+    "destination_point_id": "i495:181ND",
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    }
+  },
+  "result": {
+    "origin_point_id": "i66:11:entry:WB",
+    "destination_point_id": "i495:181ND",
+    "method": "latest_complete_current_facility_prices",
+    "evaluated_at": "2026-09-05T23:00:57.304283-04:00",
+    "maximum_observation_age_minutes": 30,
+    "pricing_profile": {
+      "vehicle_class": "two_axle_passenger",
+      "payment_method": "e_zpass",
+      "transponder_mode": "toll"
+    },
+    "source_kind": "mixed",
+    "components": [
+      {
+        "route_step_id": "step-1",
+        "price_usd": "0",
+        "source_kind": "schedule_derived",
+        "pricing_method": "published_schedule",
+        "facility": "i66",
+        "component_evaluated_at": "2026-09-05T23:00:57.304283-04:00",
+        "rate_period": "off_peak",
+        "published_schedule": {
+          "schedule_id": "vdot_i66_inside_beltway_2026-08-10",
+          "source_url": "https://www.vdot.virginia.gov/projects/major-projects/66expresslanes/faqs/",
+          "retrieved_at": "2026-08-24"
+        }
+      },
+      {
+        "route_step_id": "step-2",
+        "price_usd": "5.45",
+        "source_kind": "observed",
+        "pricing_method": "source_observation",
+        "facility": "i95_i495",
+        "component_evaluated_at": "2026-09-05T23:00:57.432213-04:00",
+        "bin_minutes": 10,
+        "bin_start": "2026-09-05T23:00:00-04:00",
+        "bin_end": "2026-09-05T23:10:00-04:00",
+        "interval_end_at": "2026-09-05T23:00:00-04:00",
+        "observed_at": "2026-09-05T22:50:00-04:00",
+        "od_pair_id": 1034,
+        "source_status": "NO_DETERMINATION",
+        "recent_movement": {
+          "method": "same_facility_leg_three_cycles",
+          "direction": "mixed",
+          "samples": [
+            {
+              "cycle_offset": -2,
+              "price_usd": "5.55"
+            },
+            {
+              "cycle_offset": -1,
+              "price_usd": "5.60"
+            },
+            {
+              "cycle_offset": 0,
+              "price_usd": "5.45"
+            }
+          ],
+          "net_change_usd": "-0.10",
+          "net_change_percent": "-1.8"
+        },
+        "prior_week_comparison": {
+          "method": "same_weekday_same_facility_bins",
+          "comparable_period_count": 3,
+          "expected_comparable_period_count": 3,
+          "comparable_prices": [
+            {
+              "week_offset": 3,
+              "price_usd": "6.05"
+            },
+            {
+              "week_offset": 2,
+              "price_usd": "6.00"
+            },
+            {
+              "week_offset": 1,
+              "price_usd": "5.85"
+            }
+          ],
+          "median_usd": "6.00",
+          "minimum_usd": "5.85",
+          "maximum_usd": "6.05",
+          "current_delta_usd": "-0.55",
+          "current_delta_percent": "-9.2",
+          "position": "below_recent_range",
+          "higher_than_count": 0
+        }
+      }
+    ],
+    "total_usd": "5.45"
+  }
+}
