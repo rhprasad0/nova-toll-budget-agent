@@ -81,6 +81,9 @@ def grader_digest() -> str:
         "fixture_eval.py",
         "container_runner.py",
         "container_worker.py",
+        "baseline.py",
+        "directional_matrix.py",
+        "directional-capture-evidence.json",
         "golden_corpus.py",
     ):
         path = ROOT / name
@@ -113,6 +116,9 @@ def source_digest() -> str:
         "fixture_eval.py",
         "container_runner.py",
         "container_worker.py",
+        "baseline.py",
+        "directional_matrix.py",
+        "directional-capture-evidence.json",
         "Dockerfile",
         "runtime-requirements.txt",
     ):
