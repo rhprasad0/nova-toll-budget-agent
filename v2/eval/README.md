@@ -1,10 +1,12 @@
 # TollChat v2 evaluation
 
 The default golden dataset is **250 public cases**, format `2.0.0`, dataset
-`2.1.0`: 100 topology, 45 current-price, 35 annual-affordability, 30 multiturn,
-20 fault, and 20 abuse cases. It selects the 19 immutable v1 cases plus 231 new
-rows through explicit membership and exact ordered tool scripts. The original
-v1 corpus and four-row v2 sample remain reproducible through explicit manifests.
+`2.2.0`: 100 topology, 45 current-price, 35 annual-affordability, 30 multiturn,
+20 fault, and 20 abuse cases. It materializes the 19 legacy v1 cases in the
+public v2 shard alongside 231 additional rows, with explicit membership and
+exact ordered tool scripts. The original v1 corpus and four-row v2 sample remain
+reproducible through explicit manifests, and the pinned v1 source files and
+fixture bytes remain unchanged.
 
 ## Offline validation and review
 
@@ -16,11 +18,15 @@ uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest.jso
 uv run python eval/golden_corpus.py validate --manifest eval/golden/manifest-v2-sample.json
 uv run python eval/run_evaluation.py --check
 uv run python eval/golden_corpus.py render --output ../.graph/golden-review.html
+uv run python eval/golden_corpus.py render --output ../.graph/pilot-review.html \
+  --selection-file ../.graph/pilot-selection.json
 ```
 
-The review page contains all public prompts, conversation turns, expected
-behavior, category and directional coverage, and provenance labels. It omits
-recorded fixture details. Private review is separate and parent-controlled.
+The default review page shows numbered public cases with readable category
+labels, exact runtime conversation text, and expected behavior. The optional
+selection file renders its 30 public cases in the declared order. Case IDs,
+fixture details, and corpus metadata stay out of the human-facing page. Private
+review is separate and parent-controlled.
 The replay prompt date is fixed at **2026-09-05**; retained observations are
 historical evidence, not present-day quotes.
 
@@ -325,11 +331,14 @@ rate is not a population estimate or release certification.
 
 ### Initial public pilot observation
 
-The fixed 30-case replay pilot (five per category, one `pilot-1` each) scored
-19/30 passes, with 30 valid scored attempts, no infrastructure failures and no
-unbound calls across 27 authored calls. Its 37 conversation turns used 2,061,703
-reported tokens; computed usage cost was USD 0.07042498. These are diagnostic
-results, not a release gate or population estimate.
+The fixed 30-case replay pilot from the original public dataset `2.1.0` (five
+per category, one `pilot-1` each) scored 19/30 passes, with 30 valid scored
+attempts, no infrastructure failures and no unbound calls across 27 authored
+calls. Its 37 conversation turns used 2,061,703 reported tokens; computed usage
+cost was USD 0.07042498. These are diagnostic results, not a release gate or
+population estimate. The current `2.2.0` public review materializes all 250
+cases; the historical 19-source-row and 30-case pilot evidence remains pinned
+to that earlier dataset.
 
 Several failed checks need human metric review: bounded refusal/coverage
 wording, inherited current-price/fallback expectations, example dollar amounts
@@ -337,3 +346,13 @@ in income clarification, unavailable-result monetary claims, and provenance or
 fault-explanation wording. The original grades remain unchanged. Full 900-trial
 execution remains pending case-and-metric acceptance; no application tuning or
 private execution is implied by this pilot.
+
+### Fresh 2.2.0 public pilot observation
+
+The fresh fixed pilot on public dataset `2.2.0` scored 16/30 passes, with 30
+valid attempts, zero infrastructure, identity, or missing-evidence failures,
+25 emitted calls (27 authored expected), zero unbound calls, and 37 conversation turns. It used
+1,994,139 reported tokens at a computed usage cost of USD 0.06761726. Annual
+clarification behavior and bounded heuristic wording checks remain the main
+human-acceptance questions; these results are diagnostic and do not justify
+outcome-based corpus edits. No 900-trial baseline or private calls were run.

@@ -40,7 +40,7 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 _DIRECTION = re.compile(r"direction-(?:NB|SB|EB|WB|airport)-to-(?:NB|SB|EB|WB|airport)")
 # Approved 2026-09-05 pilot declaration; a new pilot needs a reviewed code change.
 _PILOT_SELECTION_SHA256 = (
-    "7c4f87f3cce0808e7e176df617115b6309d609277dd8160eb6c6d97b6c31461d"
+    "7e38594c06a38a0c853ff1442b970bcc797068937bccfee072714af795901557"
 )
 _PILOT_CASES = (
     "topology-proof-dtr-to-greenway-current",

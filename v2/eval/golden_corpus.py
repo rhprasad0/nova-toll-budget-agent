@@ -1896,6 +1896,15 @@ def _v2_validate_manifest(
         sources[str(source_path)] = (source_path, source_corpus, item["dataset_sha256"])
     if not private and not sources:
         raise CorpusError("public v2 manifest must declare a v1 source manifest")
+    pinned_source_rows: dict[str, dict[str, Any]] = {}
+    for _source_path, source_corpus, _source_hash in sources.values():
+        for source_row in [*source_corpus.legacy_rows, *source_corpus.annual_rows]:
+            source_id = source_row["id"]
+            if source_id in pinned_source_rows:
+                raise CorpusError(
+                    f"v2 pinned source case is declared more than once: {source_id}"
+                )
+            pinned_source_rows[source_id] = source_row
 
     shards = manifest.get("case_shards")
     if not isinstance(shards, list) or (not shards and not private):
@@ -1977,6 +1986,16 @@ def _v2_validate_manifest(
             ):
                 raise CorpusError(f"v2 selected row hash mismatch: {case_id}")
             row = dict(row)
+            source_row = pinned_source_rows.get(case_id)
+            if source_row is not None:
+                inherited = {
+                    key: deepcopy(value)
+                    for key, value in source_row.items()
+                    if key
+                    not in {"id", "prompt", "conversation", "follow_up", "script"}
+                }
+                inherited.update(row)
+                row = inherited
         else:
             raise CorpusError(f"v2 membership item {index} has unknown keys")
         if case_id in selected_ids:
@@ -2375,77 +2394,58 @@ def _esc(value: Any) -> str:
     return html.escape(str(value), quote=True)
 
 
-def _render_v2(corpus: Corpus, output_path: Path) -> Path:
+def _v2_selection_rows(
+    corpus: Corpus, selection_file: Path | None
+) -> list[dict[str, Any]]:
+    if selection_file is None:
+        return list(corpus.rows)
+    path = Path(selection_file)
+    if not path.is_file() or path.is_symlink():
+        raise CorpusError("selection file must be a regular file")
+    selection = _strict_json(path)
+    if not isinstance(selection, dict):
+        raise CorpusError("selection file must contain an object")
+    by_id = {row["id"]: row for row in corpus.rows}
+    try:
+        # Keep the fixed pilot IDs/order in the existing baseline contract. The
+        # import stays lazy because baseline imports Corpus from this module.
+        from eval.baseline import validate_selection
+
+        validated = validate_selection(selection, corpus)
+    except (KeyError, TypeError, ValueError) as error:
+        raise CorpusError(
+            f"selection file is not the approved pilot: {error}"
+        ) from error
+    if validated["phase"] != "pilot":
+        raise CorpusError("selection file must describe the approved pilot")
+    return [by_id[case_id] for case_id in validated["cases"]]
+
+
+def _render_v2(
+    corpus: Corpus, output_path: Path, selection_file: Path | None = None
+) -> Path:
+    rows = _v2_selection_rows(corpus, selection_file)
     cards: list[str] = []
-    categories = (
-        "topology",
-        "current",
-        "annual",
-        "multiturn",
-        "fault",
-        "abuse",
-    )
-    counts = {
-        category: sum(
-            1 for row in corpus.rows if row.get("primary_category") == category
-        )
-        for category in categories
+    category_labels = {
+        "topology": "Road connections",
+        "current": "Current toll",
+        "annual": "Yearly toll budget",
+        "multiturn": "Follow-up questions",
+        "fault": "Pricing failures",
+        "abuse": "Unsafe requests",
     }
-    coverage = "".join(
-        f'<tr><th scope="row">{_esc(category)}</th><td>{counts[category]}</td>'
-        f"<td>{corpus.manifest.get('allocation', {}).get(category, counts[category])}</td></tr>"
-        for category in categories
-    )
-    directional_counts: dict[tuple[str, str, str], int] = {}
-    for row in corpus.rows:
-        if row.get("primary_category") != "topology":
-            continue
-        for step in row.get("script", []):
-            request = step["request"]
-            route = request.get("outbound", request)
-            family = " / ".join(
-                sorted(
-                    {
-                        route["origin_point_id"].split(":")[0],
-                        route["destination_point_id"].split(":")[0],
-                    }
-                )
-            )
-            direction = next(
-                (
-                    tag.removeprefix("direction-")
-                    for tag in row["tags"]
-                    if tag.startswith("direction-")
-                ),
-                "unspecified",
-            )
-            key = (family, direction, step["tool"])
-            directional_counts[key] = directional_counts.get(key, 0) + 1
-    directions = "".join(
-        f"<tr><td>{_esc(family)}</td><td>{_esc(direction)}</td><td>{_esc(tool)}</td><td>{count}</td></tr>"
-        for (family, direction, tool), count in sorted(directional_counts.items())
-    )
-    gaps = "".join(
-        f"<li>{_esc(gap)}</li>"
-        for gap in corpus.manifest.get("direction_coverage", {}).get("gaps", [])
-    )
-    for row in corpus.rows:
+    for number, row in enumerate(rows, 1):
         turns = "".join(f"<li>{_esc(turn)}</li>" for turn in row["conversation"])
-        assertion = row["expected_assertion"]
         cards.append(
-            f'<article class="case-card" data-case-id="{_esc(row["id"])}">'
-            f'<h2>{_esc(row["id"])}</h2><p class="tags">'
-            f"{_esc(row.get('split', 'public'))} · {_esc(row['suite'])} · "
-            f"{_esc(row['primary_category'])} · {_esc(', '.join(row['tags']))} · "
-            f"{_esc(row['grouping'])}</p>"
-            f"<h3>Prompt and conversation</h3><ol>{turns}</ol>"
-            f"<h3>Expected behavior</h3><p>{_esc(assertion)}</p>"
-            f"<h3>Evidence provenance</h3><p>{_esc(row['provenance'])}</p></article>"
+            f'<article class="case-card"><h2>Case {number}</h2>'
+            f'<p class="category">{_esc(category_labels[row["primary_category"]])}</p>'
+            f"<h3>Conversation</h3><ol>{turns}</ol>"
+            f"<h3>Expected behavior</h3><p>{_esc(row['expected_assertion'])}</p></article>"
         )
     html_text = f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Versioned golden review</title>
-<style>body{{font:16px system-ui,sans-serif;line-height:1.5;margin:0;background:#f4f7fb;color:#18202a}}main{{max-width:1100px;margin:auto;padding:2rem}}.case-card{{background:white;border:1px solid #ccd6e0;border-radius:.5rem;padding:1rem;margin:1rem 0}}.tags{{color:#52677c}}table{{border-collapse:collapse;background:white}}th,td{{border:1px solid #ccd6e0;padding:.4rem .7rem;text-align:left}}</style></head>
-<body><main><h1>Versioned golden review</h1><p>Dataset {_esc(corpus.manifest["dataset_version"])} · {len(corpus.rows)} selected public cases · render date {_esc(corpus.manifest.get("render_date", "historical"))}.</p><p>Canonical dataset SHA-256: <code>{_esc(corpus.manifest["dataset_sha256"])}</code></p><p>Payloads withheld from this review page.</p><h2>Coverage and allocation</h2><table><thead><tr><th>Category</th><th>Selected</th><th>Target</th></tr></thead><tbody>{coverage}</tbody></table><p>Topology coverage is sampled from the directional inventory; documented gaps remain gaps and do not certify the full matrix.</p><h2>Directional case coverage</h2><table><thead><tr><th>Networks</th><th>Direction</th><th>Tool</th><th>Cases</th></tr></thead><tbody>{directions}</tbody></table><h2>Coverage limits and physical findings</h2><ul>{gaps}</ul>{"".join(cards)}</main></body></html>"""
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Toll case review</title>
+<style>body{{font:16px system-ui,sans-serif;line-height:1.5;margin:0;background:#f4f7fb;color:#18202a}}main{{max-width:900px;margin:auto;padding:2rem}}.case-card{{background:white;border:1px solid #ccd6e0;border-radius:.5rem;padding:1rem;margin:1rem 0}}.category{{color:#52677c;font-weight:600}}h2{{margin:.1rem 0}}</style></head>
+<body><main><h1>Public case review</h1><p>{len(rows)} cases for human review.</p>{"".join(cards)}</main></body></html>"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html_text, encoding="utf-8")
     return output_path
@@ -2454,10 +2454,11 @@ def _render_v2(corpus: Corpus, output_path: Path) -> Path:
 def render(
     manifest_path: Path = _DEFAULT_MANIFEST,
     output_path: Path = Path(".graph/golden-review.html"),
+    selection_file: Path | None = None,
 ) -> Path:
     corpus = validate(manifest_path)
     if corpus.manifest.get("format_version") == "2.0.0":
-        return _render_v2(corpus, output_path)
+        return _render_v2(corpus, output_path, selection_file)
     annual_count = len(corpus.annual_rows)
     legacy_count = len(corpus.legacy_rows)
     fixture_count = len(corpus.fixtures)
@@ -2530,6 +2531,7 @@ def main() -> None:
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--manifest", type=Path, default=_DEFAULT_MANIFEST)
     render_parser.add_argument("--output", type=Path, required=True)
+    render_parser.add_argument("--selection-file", type=Path)
     args = parser.parse_args()
     if args.command == "validate":
         corpus = validate(args.manifest, args.base_ref)
@@ -2537,7 +2539,7 @@ def main() -> None:
             f"validated {len(corpus.legacy_rows)} legacy + {len(corpus.annual_rows)} golden = {len(corpus.rows)} unique cases; {len(corpus.fixtures)} fixtures"
         )
     elif args.command == "render":
-        print(render(args.manifest, args.output))
+        print(render(args.manifest, args.output, args.selection_file))
 
 
 if __name__ == "__main__":

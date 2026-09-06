@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections import Counter
@@ -12,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+import eval.baseline as baseline
 import eval.golden_corpus as golden_corpus
 from agent_tools import current_price_domain as pricing_domain
 from eval.golden_corpus import (
@@ -73,6 +76,15 @@ def _copy_final_v2_corpus(tmp_path: Path) -> tuple[Path, Path]:
     shutil.copytree(MANIFEST.parent, target)
     shutil.copy2(ROOT / "eval/test-cases.jsonl", target.parent / "test-cases.jsonl")
     return target / "manifest-v2.json", target
+
+
+def _fixed_pilot_selection(corpus: golden_corpus.Corpus) -> dict[str, object]:
+    return {
+        "dataset_sha256": corpus.manifest["dataset_sha256"],
+        "render_date": corpus.manifest["render_date"],
+        "cases": list(baseline._PILOT_CASES),
+        "trials": ["pilot-1"],
+    }
 
 
 def _refresh_v2(manifest_path: Path) -> None:
@@ -929,7 +941,96 @@ def test_v2_sample_preserves_membership_order_and_payload_free_render(
     assert "Dulles Greenway" in page
     assert "5.80" not in page
     assert "Unable to get the current toll price" not in page
-    assert "Payloads withheld" in page
+    assert "Payloads withheld" not in page
+    assert "data-case-id" not in page
+
+
+def test_final_v2_renderer_supports_ordered_pilot_review_selection(
+    tmp_path: Path,
+) -> None:
+    corpus = validate(V2_FINAL_MANIFEST)
+    selection = _fixed_pilot_selection(corpus)
+    cases = selection["cases"]
+    assert isinstance(cases, list)
+    selection_path = tmp_path / "selection.json"
+    selection_path.write_text(json.dumps(selection))
+    selected_page = render(
+        V2_FINAL_MANIFEST,
+        tmp_path / "selected.html",
+        selection_file=selection_path,
+    ).read_text()
+    default_page = render(V2_FINAL_MANIFEST, tmp_path / "default.html").read_text()
+
+    assert selected_page.count('class="case-card"') == 30
+    assert default_page.count('class="case-card"') == 250
+    assert [
+        html.unescape(value) for value in re.findall(r"<h2>(.*?)</h2>", selected_page)
+    ] == [f"Case {index}" for index in range(1, 31)]
+    for category in (
+        "Road connections",
+        "Current toll",
+        "Yearly toll budget",
+        "Follow-up questions",
+        "Pricing failures",
+        "Unsafe requests",
+    ):
+        assert selected_page.count(f'class="category">{category}</p>') == 5
+    cursor = -1
+    for case_id in cases:
+        row = next(row for row in corpus.rows if row["id"] == case_id)
+        for turn in row["conversation"]:
+            position = selected_page.index(html.escape(turn), cursor + 1)
+            assert position > cursor
+            cursor = position
+        assert row["id"] not in selected_page
+    for page in (selected_page, default_page):
+        assert "data-case-id" not in page
+        assert "dataset_sha256" not in page
+        assert "provenance" not in page
+        assert "grouping" not in page
+        assert "fixture" not in page.casefold()
+        assert "directional" not in page.casefold()
+
+
+def test_final_v2_renderer_rejects_invalid_selection_files(tmp_path: Path) -> None:
+    corpus = validate(V2_FINAL_MANIFEST)
+    selection = _fixed_pilot_selection(corpus)
+    cases = selection["cases"]
+    assert isinstance(cases, list)
+    alternate = json.loads(json.dumps(selection))
+    alternate_cases = []
+    for category in ("topology", "current", "annual", "multiturn", "fault", "abuse"):
+        category_cases = [
+            row["id"] for row in corpus.rows if row["primary_category"] == category
+        ]
+        alternate_cases.extend(category_cases[:5])
+    assert alternate_cases != cases
+    alternate["cases"] = alternate_cases
+    reordered = json.loads(json.dumps(selection))
+    reordered["cases"] = [cases[1], cases[0], *cases[2:]]
+    full_baseline = {
+        "dataset_sha256": corpus.manifest["dataset_sha256"],
+        "render_date": corpus.manifest["render_date"],
+        "cases": [row["id"] for row in corpus.rows],
+        "trials": ["1", "2", "3"],
+    }
+    mutations = [
+        {**selection, "cases": cases[:-1]},
+        {**selection, "cases": [cases[0], cases[0], *cases[2:]]},
+        {**selection, "cases": ["unknown-case", *cases[1:]]},
+        {**selection, "dataset_sha256": "0" * 64},
+        {**selection, "render_date": "2026-09-06"},
+        alternate,
+        reordered,
+        full_baseline,
+    ]
+    for index, value in enumerate(mutations):
+        path = tmp_path / f"selection-{index}.json"
+        path.write_text(json.dumps(value))
+        with pytest.raises(CorpusError, match="selection file"):
+            render(
+                V2_FINAL_MANIFEST, tmp_path / f"out-{index}.html", selection_file=path
+            )
 
 
 def test_final_v2_manifest_has_250_cases_and_approved_allocation() -> None:
@@ -954,6 +1055,57 @@ def test_final_v2_manifest_has_250_cases_and_approved_allocation() -> None:
         "abuse": 20,
         "total": 250,
     }
+    assert sum(len(row["conversation"]) for row in corpus.rows) == 288
+    assert (
+        hashlib.sha256(
+            json.dumps(
+                [row["script"] for row in corpus.rows],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode()
+        ).hexdigest()
+        == "a664a984346317f3bccb99bdcf23e308d2daff0c7d8142288fbe6655b841dfee"
+    )
+    tester_framing = re.compile(
+        r"\b(?:tester|fixture|payload|canary|grounding)\b", re.I
+    )
+    for row in corpus.rows:
+        conversation = " ".join(row["conversation"])
+        assert row["id"] not in conversation
+        assert not tester_framing.search(conversation)
+
+    source = golden_corpus._validate_v1_manifest(MANIFEST)
+    source_rows = {row["id"]: row for row in source.rows}
+    effective_rows = {row["id"]: row for row in corpus.rows}
+    captured_fields = {
+        "suite",
+        "annual_behavior",
+        "expected_call",
+        "expected_calls",
+        "expected_clarification",
+        "expected_missing_fields",
+        "expected_route_status",
+        "expected_component_count",
+        "allow_pricing_unavailable",
+        "expected_reasons",
+        "expected_availability",
+        "expected_required_i95_directions",
+    }
+    ignored_prose = {
+        "prompt",
+        "conversation",
+        "follow_up",
+        "expected_assertion",
+        "provenance",
+    }
+    for case_id, source_row in source_rows.items():
+        row = effective_rows[case_id]
+        for field, expected in source_row.items():
+            if field in ignored_prose:
+                continue
+            effective_field = f"source_{field}" if field in captured_fields else field
+            assert row.get(effective_field) == expected, (case_id, effective_field)
 
 
 def test_final_v2_allocation_mutation_is_rejected(tmp_path: Path) -> None:
@@ -1240,23 +1392,23 @@ def test_v2_release_base_ref_rejects_version_only_bump(
         "Initial release",
     )
     manifest = json.loads(manifest_path.read_text())
-    manifest["dataset_version"] = "2.2.0"
+    manifest["dataset_version"] = "2.3.0"
     manifest_path.write_text(json.dumps(manifest))
     _refresh_v2(manifest_path)
     with pytest.raises(CorpusError, match="unchanged v2 corpus"):
         validate(manifest_path, "HEAD")
 
     manifest = json.loads(manifest_path.read_text())
-    manifest["dataset_version"] = "2.1.0"
+    manifest["dataset_version"] = "2.2.0"
     manifest["direction_coverage"]["gaps"].append("Additional reviewed coverage limit.")
     manifest_path.write_text(json.dumps(manifest))
     _refresh_v2(manifest_path)
     with pytest.raises(CorpusError, match="advanced dataset_version"):
         validate(manifest_path, "HEAD")
-    manifest["dataset_version"] = "2.2.0"
+    manifest["dataset_version"] = "2.3.0"
     manifest_path.write_text(json.dumps(manifest))
     _refresh_v2(manifest_path)
-    assert validate(manifest_path, "HEAD").manifest["dataset_version"] == "2.2.0"
+    assert validate(manifest_path, "HEAD").manifest["dataset_version"] == "2.3.0"
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "nonfinite", "path", "membership"])
