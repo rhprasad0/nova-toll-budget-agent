@@ -3865,10 +3865,14 @@ v2/db/schema.sql, v2/db/analysis.sql, v2/db/roles.sql,
 v2/db/oracle/schema.sql, and v2/db/oracle/data.sql; it never connects to
 or changes nova_toll, production roles, or v2/db/migrations/. Its
 postcondition runs v2/tests/development_bootstrap_contract.sql in fresh mode,
-proving versions, canonical row counts, development ownership/grants, no PUBLIC
-CONNECT, and no foreign or integration objects. A failure removes only schemas,
-roles, grants, and comments created by that invocation and stops if cleanup is
-not proven.
+proving versions, canonical row counts, development ownership/grants, the
+private `tollchat_migration.schema_history` baseline, no PUBLIC CONNECT, and no
+foreign or integration objects. In addition to the six runtime roles, it
+creates only `pricing_owner_development` and `schema_migrator_development`;
+the latter is an IAM-authenticated login with CONNECT only to the development
+database and SET ROLE membership in the two stable owners. A failure removes
+only schemas, roles, grants, and comments created by that invocation and stops
+if cleanup is not proven.
 
 #### Protected development replacement and foundation plan
 

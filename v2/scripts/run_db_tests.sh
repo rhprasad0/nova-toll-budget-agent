@@ -72,7 +72,7 @@ cleanup_databases() {
     dropdb --if-exists "$database"
   done
   psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, loader_writer"
+    "DROP ROLE IF EXISTS pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development, loader_writer"
 }
 
 cleanup() {
@@ -181,7 +181,11 @@ dropdb "$development_db"
 
 createdb --template template0 "$development_db"
 python3 v2/scripts/bootstrap_development_database.py --fresh-development
+pricing_sha256="$(sha256sum v2/db/schema.sql | awk '{print $1}')"
+oracle_sha256="$(sha256sum v2/db/oracle/schema.sql | awk '{print $1}')"
 psql --dbname "$development_db" --variable fresh_development=1 \
+  --variable pricing_sha256="$pricing_sha256" \
+  --variable oracle_sha256="$oracle_sha256" \
   --file v2/tests/development_bootstrap_contract.sql
 if psql --dbname postgres --tuples-only --no-align --command \
   "SELECT count(*) FROM pg_database WHERE datname = '$production_db'" | grep -qx 0 &&
@@ -194,7 +198,7 @@ else
 fi
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development'
+  'DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development'
 
 createdb --template template0 "$production_db"
 psql --dbname "$production_db" --file v2/db/schema.sql
@@ -229,7 +233,7 @@ END $$;
 SQL
 dropdb "$development_db"
 psql --dbname postgres --set ON_ERROR_STOP=1 --command \
-  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development"
+  "DROP ROLE pricing_loader_writer_development, pricing_reader_development, oracle_owner_development, tollchat_agent_development, pricing_caller_development, report_publisher_development, pricing_owner_development, schema_migrator_development"
 if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   v2/scripts/test_development_database_bootstrap.sh; then
   echo "disposable bootstrap test accepted NOVA_TOLL_ADMIN_URL" >&2
