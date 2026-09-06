@@ -11,6 +11,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -485,6 +486,56 @@ def test_v2_mixed_tools_share_one_assistant_batch_and_preserve_order(
     ]
     assert [call["script_sequence"] for call in calls] == [0, 1]
     assert result["output"]["measurements"]["cache_write_tokens"] == 0
+
+
+def test_fixture_trial_caps_provider_cycles_per_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    packet = _packet("v2-annual-mixed-tool-multiturn", manifest_path=_V2_MANIFEST)
+    packet = replace(
+        packet,
+        conversation=(packet.conversation[0],),
+        script=tuple({**step, "turn": 0} for step in packet.script),
+    )
+
+    class CapturingAgent:
+        def __init__(self) -> None:
+            self.messages: list[object] = []
+            self.limits_seen: list[dict[str, int]] = []
+
+        def __call__(self, prompt: str, *, limits: dict[str, int]) -> object:
+            del prompt
+            self.limits_seen.append(limits)
+            return SimpleNamespace(
+                metrics=SimpleNamespace(
+                    agent_invocations=[
+                        SimpleNamespace(
+                            usage={
+                                "inputTokens": 4,
+                                "outputTokens": 2,
+                                "totalTokens": 6,
+                            }
+                        )
+                    ]
+                )
+            )
+
+    agent = CapturingAgent()
+
+    def build_agent(**_: object) -> CapturingAgent:
+        return agent
+
+    monkeypatch.setattr(fixture_runner, "build_agent", build_agent)
+    result = run_fixture_trial(
+        packet,
+        model=object(),
+        artifact_root=None,
+        trial_id="1",
+        rate_card=_RATE_CARD,
+    )
+
+    assert result["failure_class"] == "none"
+    assert agent.limits_seen == [{"turns": 1 + len(packet.script)}]
 
 
 def test_fixture_script_cursor_rejects_wrong_order_and_duplicate_batch_ids() -> None:

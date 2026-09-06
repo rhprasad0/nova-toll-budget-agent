@@ -4,15 +4,23 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 import re
-from collections import Counter
+import time
+from collections import Counter, deque
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 from statistics import mean
+from threading import Condition
 from typing import Any
 
-from agent.toll_agent import parse_prompt_points
+import tiktoken
+
+from agent.toll_agent import build_system_prompt, parse_prompt_points
 from eval import graph_checks
 from eval.container_runner import ContainerEvidence, run_container_trial
 from eval.container_worker import _contains_credential, model_from_key, strict_json
@@ -30,7 +38,7 @@ from eval.fixture_eval import (
     seal_trial_artifact,
     trusted_case_evidence,
 )
-from eval.fixture_runner import RateCard
+from eval.fixture_runner import _TOOL_SPECS, FixtureRunPacket, RateCard
 from eval.golden_corpus import Corpus
 
 _DEFAULT = Path(__file__).with_name("golden") / "manifest-v2.json"
@@ -38,6 +46,17 @@ _CATEGORIES = {"topology", "current", "annual", "multiturn", "fault", "abuse"}
 _TOOLS = {"get_current_toll_price", "get_annual_toll_ballpark"}
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 _DIRECTION = re.compile(r"direction-(?:NB|SB|EB|WB|airport)-to-(?:NB|SB|EB|WB|airport)")
+_MODEL = "gpt-5.6-luna"
+_TOKENIZER = "o200k_base"
+_OUTPUT_TOKENS_PER_CYCLE = 2_048
+_RESERVATION_MULTIPLIER = 1.35
+_WINDOW_TOKENS = 3_200_000
+_WINDOW_SECONDS = 60.0
+_WORKERS = 4
+_INTERRUPTION_REASONS = {
+    "baseline_infrastructure_failure",
+    "baseline_over_reservation",
+}
 # Approved 2026-09-05 pilot declaration; a new pilot needs a reviewed code change.
 _PILOT_SELECTION_SHA256 = (
     "7e38594c06a38a0c853ff1442b970bcc797068937bccfee072714af795901557"
@@ -132,6 +151,129 @@ def validate_selection(selection: dict[str, Any], corpus: Corpus) -> dict[str, A
     }
 
 
+def _json_text(value: object) -> str:
+    """Serialize host-known material without retaining a private payload."""
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+        default=lambda item: (
+            item.decode("utf-8", errors="strict")
+            if isinstance(item, bytes)
+            else str(item)
+        ),
+    )
+
+
+def _tokenizer() -> tiktoken.Encoding:
+    try:
+        encoding = tiktoken.encoding_for_model(_MODEL)
+    except Exception as error:
+        raise ValueError("pinned Luna tokenizer is unavailable") from error
+    if encoding.name != _TOKENIZER:
+        raise ValueError("pinned Luna tokenizer mapping changed")
+    return encoding
+
+
+def _estimate_packet_tokens(
+    packet: FixtureRunPacket, *, encoding: tiktoken.Encoding | None = None
+) -> int:
+    """Estimate every known provider request for one immutable fixture packet."""
+    if packet.prompt_points is None or packet.render_date is None:
+        raise ValueError("preflight requires explicit prompt context")
+    encoding = _tokenizer() if encoding is None else encoding
+    system_prompt = build_system_prompt(
+        list(packet.prompt_points), current_date=packet.render_date
+    )
+    tool_specs = _json_text(list(_TOOL_SPECS.values()))
+    dynamic = _json_text(
+        {
+            "conversation": packet.conversation,
+            "script": packet.script,
+            "fixture_evidence": packet.fixture_evidence,
+        }
+    )
+    cycles = max(1, len(packet.conversation) + len(packet.script))
+    base_tokens = len(encoding.encode(system_prompt)) + len(encoding.encode(tool_specs))
+    dynamic_tokens = len(encoding.encode(dynamic))
+    estimate = (base_tokens + dynamic_tokens) * cycles + _OUTPUT_TOKENS_PER_CYCLE * (
+        cycles * (cycles + 1) // 2
+    )
+    if type(estimate) is not int or estimate <= 0 or not math.isfinite(estimate):
+        raise ValueError("token estimate is invalid")
+    return estimate
+
+
+def _reserve_tokens(raw_estimate: int | float) -> int:
+    if (
+        type(raw_estimate) not in (int, float)
+        or not math.isfinite(raw_estimate)
+        or raw_estimate <= 0
+    ):
+        raise ValueError("token estimate is invalid")
+    reserved = math.ceil(raw_estimate * _RESERVATION_MULTIPLIER)
+    if type(reserved) is not int or reserved <= 0 or reserved > _WINDOW_TOKENS:
+        raise ValueError("token reservation exceeds rolling window")
+    return reserved
+
+
+class _RollingReservationLedger:
+    """Serialize bounded reservations and retain each one for the full window."""
+
+    def __init__(
+        self,
+        *,
+        limit: int = _WINDOW_TOKENS,
+        window: float = _WINDOW_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if type(limit) is not int or limit <= 0 or window <= 0:
+            raise ValueError("invalid reservation ledger bounds")
+        self.limit = limit
+        self.window = window
+        self.clock = clock
+        self._condition = Condition()
+        self._entries: deque[tuple[float, int]] = deque()
+        self._total = 0
+
+    def _expire(self, now: float) -> None:
+        while self._entries and self._entries[0][0] <= now:
+            _, tokens = self._entries.popleft()
+            self._total -= tokens
+
+    def reserve(self, tokens: int) -> None:
+        if type(tokens) is not int or tokens <= 0 or tokens > self.limit:
+            raise ValueError("invalid token reservation")
+        with self._condition:
+            while True:
+                now = self.clock()
+                self._expire(now)
+                if self._total + tokens <= self.limit:
+                    self._entries.append((now + self.window, tokens))
+                    self._total += tokens
+                    return
+                wait_for = max(0.0, self._entries[0][0] - now)
+                self._condition.wait(timeout=wait_for)
+
+    @property
+    def reserved_tokens(self) -> int:
+        with self._condition:
+            self._expire(self.clock())
+            return self._total
+
+
+def _observed_tokens(result: object) -> int | None:
+    record = getattr(result, "record", result)
+    if not isinstance(record, dict):
+        return None
+    output = record.get("output")
+    measurements = output.get("measurements") if isinstance(output, dict) else None
+    tokens = measurements.get("tokens") if isinstance(measurements, dict) else None
+    return tokens if type(tokens) is int and tokens >= 0 else None
+
+
 def run_baseline(
     root: Path,
     selection: dict[str, Any],
@@ -183,6 +325,12 @@ def run_baseline(
         if _contains_credential(document, key):
             raise ValueError("credential in trusted case document")
         prepared[case_id] = packet, case_bytes, dataset_hash, document
+    encoding = _tokenizer()
+    estimates: dict[str, tuple[int, int]] = {}
+    for case_id in selected["cases"]:
+        packet, _, _, _ = prepared[case_id]
+        raw_estimate = _estimate_packet_tokens(packet, encoding=encoding)
+        estimates[case_id] = raw_estimate, _reserve_tokens(raw_estimate)
     model = model_from_key(key)  # Constructor only; every invocation is inside Docker.
     packet, _, dataset_hash, _ = prepared[selected["cases"][0]]
     identity = _seal_identity(
@@ -195,6 +343,34 @@ def run_baseline(
         dataset_hash=dataset_hash,
     )
     identity.pop("trial_id")
+    preflight_attempts = [
+        {
+            "ordinal": ordinal,
+            "trial_id": trial_id,
+            "raw_tokens": estimates[case_id][0],
+            "reserved_tokens": estimates[case_id][1],
+        }
+        for ordinal, (case_id, trial_id) in enumerate(
+            (case_id, trial_id)
+            for case_id in selected["cases"]
+            for trial_id in selected["trials"]
+        )
+    ]
+    pacing = {
+        "model": _MODEL,
+        "encoding": _TOKENIZER,
+        "output_tokens_per_cycle": _OUTPUT_TOKENS_PER_CYCLE,
+        "reservation_multiplier": _RESERVATION_MULTIPLIER,
+        "window_seconds": _WINDOW_SECONDS,
+        "window_tokens": _WINDOW_TOKENS,
+        "max_workers": _WORKERS,
+        "planned_attempts": len(preflight_attempts),
+        "raw_tokens_total": sum(item["raw_tokens"] for item in preflight_attempts),
+        "reserved_tokens_total": sum(
+            item["reserved_tokens"] for item in preflight_attempts
+        ),
+        "attempts": preflight_attempts,
+    }
     plan = {
         "artifact_type": "fixture_baseline_run",
         "selection": selected,
@@ -206,57 +382,92 @@ def run_baseline(
         "container_execution": asdict(evidence),
         "rate_card": rate_card.as_dict(),
         "private": private,
+        "pacing": pacing,
     }
     if _contains_credential(plan, key):
         raise ValueError("credential in baseline metadata")
     root = root.resolve()
     root.mkdir(parents=True, mode=0o700, exist_ok=False)
     _write_json(root / "manifest.json", plan)
-    for case_id in selected["cases"]:
+    ledger = _RollingReservationLedger(
+        limit=(
+            _WINDOW_TOKENS
+            if selected["phase"] == "baseline"
+            else sum(item["reserved_tokens"] for item in preflight_attempts)
+        )
+    )
+
+    def execute(item: tuple[str, str, int, int]) -> None:
+        case_id, trial_id, _raw_estimate, reserved_estimate = item
         packet, case_bytes, dataset_hash, document = prepared[case_id]
-        for trial_id in selected["trials"]:
-            artifact = root / case_id / trial_id
-            artifact.mkdir(parents=True, mode=0o700)
+        artifact = root / case_id / trial_id
+        artifact.mkdir(parents=True, mode=0o700)
+        try:
+            ledger.reserve(reserved_estimate)
             _write_json(
                 artifact / "attempt.json", {"case_id": case_id, "trial_id": trial_id}
             )
-            try:
-                _write_json(artifact / "case.json", document)
-                run_container_trial(
-                    packet,
-                    key=key,
-                    rate_card=rate_card,
-                    trial_id=trial_id,
-                    artifact_root=artifact,
-                    evidence=evidence,
-                )
-                seal_trial_artifact(
-                    artifact,
-                    packet,
-                    model=model,
-                    model_settings=None,
-                    rate_card=rate_card,
-                    trial_id=trial_id,
-                    case_bytes=case_bytes,
-                    dataset_hash=dataset_hash,
-                )
-                graph_checks.grade(
-                    artifact, artifact / "case.json", manifest_path=manifest_path
-                )
+            _write_json(artifact / "case.json", document)
+            result = run_container_trial(
+                packet,
+                key=key,
+                rate_card=rate_card,
+                trial_id=trial_id,
+                artifact_root=artifact,
+                evidence=evidence,
+            )
+            observed = _observed_tokens(result)
+            if observed is not None and observed > reserved_estimate:
                 _write_json(
-                    artifact / "receipt.json",
-                    {
-                        "scorecard_sha256": _digest(artifact / "scorecard.json"),
-                        "run_sha256": _digest(artifact / "run.json"),
-                        "raw_digest": _artifact_digest(artifact),
-                    },
+                    artifact / "interrupted.json",
+                    {"reason": "baseline_over_reservation"},
                 )
-            except Exception:
-                # No exception text, retry, replacement, or rewrite of partial files.
+                return
+            seal_trial_artifact(
+                artifact,
+                packet,
+                model=model,
+                model_settings=None,
+                rate_card=rate_card,
+                trial_id=trial_id,
+                case_bytes=case_bytes,
+                dataset_hash=dataset_hash,
+            )
+            graph_checks.grade(
+                artifact, artifact / "case.json", manifest_path=manifest_path
+            )
+            _write_json(
+                artifact / "receipt.json",
+                {
+                    "scorecard_sha256": _digest(artifact / "scorecard.json"),
+                    "run_sha256": _digest(artifact / "run.json"),
+                    "raw_digest": _artifact_digest(artifact),
+                },
+            )
+        except Exception:
+            # No exception text, retry, replacement, or rewrite of partial files.
+            if not (artifact / "attempt.json").exists():
+                _write_json(
+                    artifact / "attempt.json",
+                    {"case_id": case_id, "trial_id": trial_id},
+                )
+            if not (artifact / "interrupted.json").exists():
                 _write_json(
                     artifact / "interrupted.json",
                     {"reason": "baseline_infrastructure_failure"},
                 )
+
+    work = [
+        (case_id, trial_id, *estimates[case_id])
+        for case_id in selected["cases"]
+        for trial_id in selected["trials"]
+    ]
+    if selected["phase"] == "pilot":
+        for item in work:
+            execute(item)
+    else:
+        with ThreadPoolExecutor(max_workers=_WORKERS) as workers:
+            list(workers.map(execute, work))
     return aggregate_baseline(
         root,
         manifest_path=manifest_path,
@@ -358,11 +569,14 @@ def _attempt(
         )
         if any(not (artifact / name).exists() for name in required):
             if (artifact / "interrupted.json").exists():
-                if _read(artifact / "interrupted.json") != {
-                    "reason": "baseline_infrastructure_failure"
-                }:
+                interruption = _read(artifact / "interrupted.json")
+                if interruption.get("reason") not in _INTERRUPTION_REASONS:
                     raise ValueError("invalid interruption record")
-                item["state"] = "infrastructure_failure"
+                item["state"] = (
+                    "over_reservation_failure"
+                    if interruption["reason"] == "baseline_over_reservation"
+                    else "infrastructure_failure"
+                )
             return item
         receipt, score, run, output = (
             _read(artifact / name)
@@ -466,6 +680,7 @@ def _summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "passed": counts["passed"],
         "agent_quality_failures": counts["agent_quality_failure"],
         "infrastructure_failures": counts["infrastructure_failure"],
+        "over_reservation_failures": counts["over_reservation_failure"],
         "identity_mismatch_or_inconclusive": counts[
             "identity_mismatch_or_inconclusive"
         ],
@@ -605,6 +820,11 @@ def aggregate_baseline(
         for dimension, names in labels.items():
             for name in names:
                 groups[dimension].setdefault(name, []).append(item)
+    report_pacing = plan.get("pacing")
+    if private and isinstance(report_pacing, dict):
+        report_pacing = {
+            key: value for key, value in report_pacing.items() if key != "attempts"
+        }
     report = {
         "artifact_type": "fixture_baseline_report",
         "phase": selection["phase"],
@@ -612,6 +832,7 @@ def aggregate_baseline(
         "manifest_sha256": _digest(root / "manifest.json"),
         "identity": plan["identity"],
         "container_execution": plan["container_execution"],
+        "pacing": report_pacing,
         "selection_digest": plan["selection_digest"],
         "selection_file_sha256": plan.get("selection_file_sha256"),
         "summary": _summary(items),

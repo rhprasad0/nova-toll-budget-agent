@@ -681,7 +681,13 @@ def run_fixture_trial(
             messages = getattr(agent, "messages", None)
             try:
                 start_ns = time.perf_counter_ns()
-                response = agent(prompt)
+                script_steps = sum(
+                    1 for step in packet.script if step.get("turn") == turn_index
+                )
+                if not packet.script and packet.fixture_id is not None:
+                    script_steps = 1
+                turn_limit = 1 + script_steps
+                response = agent(prompt, limits={"turns": turn_limit})
                 elapsed_ns = time.perf_counter_ns() - start_ns
                 final_text = str(response)
             except Exception:

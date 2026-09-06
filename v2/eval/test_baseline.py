@@ -8,13 +8,18 @@ import json
 import shutil
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from copy import deepcopy
 from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
+
+import tiktoken
 
 _V2 = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_V2))
@@ -183,6 +188,215 @@ class BaselineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             baseline.validate_selection(alternate, self.corpus)
 
+    def test_tokenizer_preflight_and_reservation_safety(self) -> None:
+        class CountingEncoding:
+            name = "o200k_base"
+
+            def encode(self, value: str) -> list[int]:
+                return [0] * len(value)
+
+        packet = cast(
+            FixtureRunPacket,
+            SimpleNamespace(
+                prompt="first",
+                conversation=("first", "follow-up"),
+                script=({"fixture_id": "fixture"},),
+                fixture_evidence=({"fixture_id": "fixture", "result": "ok"},),
+                prompt_points=tuple(self.points),
+                render_date=date(2026, 9, 5),
+            ),
+        )
+        encoding = cast(tiktoken.Encoding, CountingEncoding())
+        with patch.object(baseline, "build_system_prompt", return_value="system"):
+            raw = baseline._estimate_packet_tokens(packet, encoding=encoding)
+        tool_specs = baseline._json_text(list(baseline._TOOL_SPECS.values()))
+        dynamic = baseline._json_text(
+            {
+                "conversation": packet.conversation,
+                "script": packet.script,
+                "fixture_evidence": packet.fixture_evidence,
+            }
+        )
+        base_dynamic = len("system") + len(tool_specs) + len(dynamic)
+        expected = base_dynamic * 3 + baseline._OUTPUT_TOKENS_PER_CYCLE * (3 * 4 // 2)
+        self.assertEqual(raw, expected)
+        self.assertEqual(baseline._reserve_tokens(raw), (raw * 135 + 99) // 100)
+        for invalid in (0, -1, float("nan"), float("inf")):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                baseline._reserve_tokens(invalid)
+        with self.assertRaises(ValueError):
+            baseline._reserve_tokens(baseline._WINDOW_TOKENS)
+
+    def test_rolling_reservation_holds_until_expiry(self) -> None:
+        class FakeClock:
+            now = 0.0
+
+            def __call__(self) -> float:
+                return self.now
+
+        clock = FakeClock()
+        ledger = baseline._RollingReservationLedger(limit=10, window=60, clock=clock)
+        ledger.reserve(6)
+        self.assertEqual(ledger.reserved_tokens, 6)
+        entered = []
+
+        def reserve_waiting() -> None:
+            ledger.reserve(5)
+            entered.append(True)
+
+        thread = threading.Thread(target=reserve_waiting)
+        thread.start()
+        thread.join(timeout=0.05)
+        self.assertTrue(thread.is_alive())
+        self.assertEqual(entered, [])
+        clock.now = 60
+        with ledger._condition:
+            ledger._condition.notify_all()
+        thread.join(timeout=1)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(entered, [True])
+        self.assertEqual(ledger.reserved_tokens, 5)
+
+    def test_bounded_workers_start_each_tuple_once_after_reservation(self) -> None:
+        case_ids = ["private-canary", *(f"case-{index}" for index in range(1, 6))]
+        rows = [
+            {"id": case_id, "primary_category": "current", "script": [], "tags": []}
+            for case_id in case_ids
+        ]
+        corpus = SimpleNamespace(
+            rows=rows,
+            manifest={
+                "dataset_sha256": "d" * 64,
+                "render_date": "2026-09-05",
+            },
+        )
+        selected = {
+            "phase": "baseline",
+            "cases": case_ids,
+            "trials": ["1", "2", "3"],
+            "dataset_sha256": "d" * 64,
+            "render_date": "2026-09-05",
+        }
+        active = 0
+        max_active = 0
+        started: list[tuple[str, str, int]] = []
+        reservations: list[int] = []
+        lock = threading.Lock()
+        ledger_holder: dict[str, object] = {}
+        writes: list[tuple[Path, object]] = []
+
+        class RecordingLedger:
+            def __init__(self, **_: object) -> None:
+                ledger_holder["ledger"] = self
+
+            def reserve(self, tokens: int) -> None:
+                reservations.append(tokens)
+
+        def fake_trial(
+            packet: FixtureRunPacket,
+            *,
+            trial_id: str,
+            **_: object,
+        ) -> ContainerTrial:
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+                started.append((packet.case_id, trial_id, len(reservations)))
+            try:
+                time.sleep(0.005)
+                if (packet.case_id, trial_id) == (case_ids[0], "1"):
+                    raise RuntimeError("credential-canary")
+                observed = (
+                    136 if (packet.case_id, trial_id) == (case_ids[0], "2") else 0
+                )
+                return ContainerTrial(
+                    {"output": {"measurements": {"tokens": observed}}},
+                    self.evidence,
+                )
+            finally:
+                with lock:
+                    active -= 1
+
+        def fake_packet(case_id: str, **_: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                case_id=case_id,
+                prompt="prompt",
+                conversation=("prompt",),
+                script=(),
+                fixture_evidence=(),
+                prompt_points=tuple(self.points),
+                render_date=date(2026, 9, 5),
+            )
+
+        def fake_write_json(path: Path, value: object) -> None:
+            writes.append((path, value))
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.multiple(
+                baseline,
+                _validated_manifest=lambda _: corpus,
+                validate_selection=lambda *_: selected,
+                packet_for_case=fake_packet,
+                trusted_case_evidence=lambda case_id, **_: (b"case", "d" * 64, case_id),
+                parse_prompt_points=lambda _: None,
+                _tokenizer=lambda: object(),
+                _estimate_packet_tokens=lambda *_args, **_kwargs: 100,
+                model_from_key=lambda _: object(),
+                _seal_identity=lambda *args, **kwargs: {
+                    "trial_id": "1",
+                    "model": "fake",
+                },
+                _write_json=fake_write_json,
+                _digest=lambda _: "digest",
+                _artifact_digest=lambda _: "raw",
+                seal_trial_artifact=lambda *args, **kwargs: None,
+                aggregate_baseline=lambda *args, **kwargs: {"ok": True},
+                run_container_trial=fake_trial,
+                _RollingReservationLedger=RecordingLedger,
+            ),
+        ):
+            report = baseline.run_baseline(
+                Path(directory) / "run",
+                {"cases": case_ids, "trials": ["1", "2", "3"]},
+                key="credential-canary",
+                prompt_points=self.points,
+                rate_card=self.card,
+                evidence=self.evidence,
+            )
+
+        expected = {
+            (case_id, trial_id) for case_id in case_ids for trial_id in ["1", "2", "3"]
+        }
+        self.assertEqual(report, {"ok": True})
+        self.assertEqual(
+            {(case_id, trial_id) for case_id, trial_id, _ in started}, expected
+        )
+        self.assertEqual(len(started), len(expected))
+        self.assertTrue(
+            all(reserved >= index + 1 for index, (_, _, reserved) in enumerate(started))
+        )
+        self.assertLessEqual(max_active, baseline._WORKERS)
+        self.assertEqual(len(reservations), len(expected))
+        reasons = [
+            value["reason"]
+            for _, value in writes
+            if isinstance(value, dict) and "reason" in value
+        ]
+        self.assertCountEqual(
+            reasons,
+            ["baseline_infrastructure_failure", "baseline_over_reservation"],
+        )
+        manifest = cast(
+            dict[str, Any],
+            next(value for path, value in writes if path.name == "manifest.json"),
+        )
+        pacing = manifest["pacing"]
+        pacing_text = json.dumps(pacing)
+        self.assertNotIn("private-canary", pacing_text)
+        self.assertNotIn("credential-canary", pacing_text)
+
     def test_missing_and_modified_artifacts_are_not_scored(self) -> None:
         root = self.copy_run("mutated")
         cases = self.selection["cases"]
@@ -316,6 +530,7 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(report["summary"]["missing_or_interrupted"], 150)
         self.assertNotIn("opaque_case_ids", report)
         self.assertNotIn("results", report)
+        self.assertNotIn("attempts", report["pacing"])
         self.assertNotIn("PRIVATE-CANARY", json.dumps(report))
         self.assertNotIn("PRIVATE-PROMPT-CANARY", json.dumps(report))
 
