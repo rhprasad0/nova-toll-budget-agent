@@ -34,7 +34,12 @@ PRODUCTION_ROLES = (
     "report_publisher",
 )
 DEVELOPMENT_ROLES = tuple(f"{role}_development" for role in PRODUCTION_ROLES)
-ALL_ROLES = PRODUCTION_ROLES + DEVELOPMENT_ROLES
+SLICE_ONE_ROLES = (
+    *DEVELOPMENT_ROLES,
+    "pricing_owner_development",
+    "schema_migrator_development",
+)
+ALL_ROLES = PRODUCTION_ROLES + SLICE_ONE_ROLES
 _fixture_started = False
 
 _spec = importlib.util.spec_from_file_location("legacy_retirer", RETIRER_PATH)
@@ -171,7 +176,7 @@ def _require_fixture_target() -> None:
             + ",".join(repr(role) for role in ALL_ROLES)
             + "])"
         )
-        != "12"
+        != "14"
     ):
         raise AssertionError(
             "focused retirement fixture has the wrong initialized roles"
@@ -197,7 +202,7 @@ def _require_fixture_target() -> None:
             "SELECT count(*) FROM pg_roles WHERE rolname LIKE '%\\_development' ESCAPE '\\' "
             "AND shobj_description(oid, 'pg_authid') = 'environment=development'"
         )
-        != "6"
+        != "8"
     ):
         raise AssertionError("initialized development role comments are wrong")
 
@@ -209,6 +214,7 @@ def _setup() -> None:
         f"DROP DATABASE {DEVELOPMENT} WITH (FORCE);"
         f"CREATE DATABASE {DEVELOPMENT} OWNER {FIXTURE_OWNER} TEMPLATE template0;"
     )
+    _sql("DROP ROLE pricing_owner_development, schema_migrator_development;")
     with tempfile.TemporaryDirectory(prefix="nova-toll-legacy-fixture-") as directory:
         rendered = Path(directory)
         for relative in (

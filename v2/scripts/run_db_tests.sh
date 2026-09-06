@@ -240,6 +240,31 @@ if NOVA_TOLL_ADMIN_URL='postgresql://must-not-be-used@127.0.0.1:1/postgres' \
   exit 1
 fi
 v2/scripts/test_development_database_bootstrap.sh
+development_migration_output="$(python3 v2/scripts/run_development_migrations.py)"
+DEVELOPMENT_MIGRATION_OUTPUT="$development_migration_output" python3 - <<'PY'
+import json
+import os
+import re
+
+result = json.loads(os.environ["DEVELOPMENT_MIGRATION_OUTPUT"])
+assert set(result) == {
+    "database", "user", "before", "after", "applied", "commit", "run_id", "status"
+}
+assert result["database"] == "nova_toll_development"
+assert result["user"] == "schema_migrator_development"
+assert result["before"] == result["after"] == {"pricing": "1.3.0", "oracle": "1.14.0"}
+assert result["applied"] == []
+assert re.fullmatch(r"[0-9a-f]{40}", result["commit"])
+assert re.fullmatch(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+    result["run_id"],
+)
+assert result["status"] == "ok"
+assert not any(
+    secret in json.dumps(result).lower()
+    for secret in ("password", "token", "endpoint", "host", "port", "url")
+)
+PY
 POSTGRES_CONTAINER_ID="$POSTGRES_CONTAINER_ID" \
   PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" \
   python3 v2/scripts/test_legacy_database_retirement.py
