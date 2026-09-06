@@ -15,8 +15,10 @@ from typing import Any
 
 import pytest
 
+import eval.container_runner as container_runner
 import eval.fixture_runner as fixture_runner
 from eval import graph_checks
+from eval.container_runner import source_digest as container_source_digest
 from eval.fixture_eval import (
     _model_settings,
     _safe_model_settings,
@@ -27,6 +29,7 @@ from eval.fixture_eval import (
     packet_for_case,
     packet_for_holdout,
     run_and_seal_trial,
+    seal_trial_artifact,
     trusted_case_evidence,
 )
 from eval.fixture_runner import (
@@ -820,6 +823,137 @@ def test_actual_strands_fixture_trial_seals_and_grades(tmp_path: Path) -> None:
     assert output["trajectory"][0]["calls"][0]["tool_result"] == packet.fixture_payload
     assert read_json(artifact / "run.json")["output_digest"]
     assert read_json(artifact / "scorecard.json")["pass"] is True
+
+
+def test_container_execution_evidence_seals_and_rejects_malformed_shape(
+    tmp_path: Path,
+) -> None:
+    packet = _packet("dulles-to-reagan-annual-unavailable", manifest_path=_MANIFEST)
+    case_bytes, dataset_hash, _ = trusted_case_evidence(
+        packet.case_id, manifest_path=_MANIFEST
+    )
+    artifact = tmp_path / "container" / "1"
+    run_fixture_trial(
+        packet,
+        model=_FakeModel(packet, unavailable=True),
+        artifact_root=artifact,
+        trial_id="1",
+        rate_card=_RATE_CARD,
+    )
+    output = read_json(artifact / "output.json")
+    output["container_execution"] = {
+        "image": "tollchat-fixture:slice5",
+        "image_id": "sha256:" + "b" * 64,
+        "source_digest": container_source_digest(),
+    }
+    (artifact / "output.json").write_text(
+        json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    seal_trial_artifact(
+        artifact,
+        packet,
+        model=_FakeModel(packet, unavailable=True),
+        model_settings=None,
+        rate_card=_RATE_CARD,
+        trial_id="1",
+        case_bytes=case_bytes,
+        dataset_hash=dataset_hash,
+    )
+    case_path = tmp_path / "container-case.json"
+    case_path.write_text(
+        json.dumps({"case_id": packet.case_id, "suite": "annual"}) + "\n",
+        encoding="utf-8",
+    )
+    assert graph_checks.grade(artifact, case_path, manifest_path=_MANIFEST) == 0
+
+    output["container_execution"]["image_id"] = None
+    (artifact / "output.json").write_text(
+        json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    run = read_json(artifact / "run.json")
+    run["output_digest"] = hashlib.sha256(
+        b"".join(
+            name.encode() + b"\0" + (artifact / name).read_bytes() + b"\0"
+            for name in ("output.json", "stdout.txt", "exit_code.json")
+        )
+    ).hexdigest()
+    (artifact / "run.json").write_text(
+        json.dumps(run, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    assert graph_checks.grade(artifact, case_path, manifest_path=_MANIFEST) == 1
+    assert read_json(artifact / "scorecard.json")["failure_class"] == (
+        "infra_dependency"
+    )
+
+
+def test_container_exit_mismatch_seals_partial_trace_as_infrastructure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    packet = _packet("v2-annual-mixed-tool-multiturn", manifest_path=_V2_MANIFEST)
+    case_bytes, dataset_hash, _ = trusted_case_evidence(
+        packet.case_id, manifest_path=_V2_MANIFEST
+    )
+    rate_card = _RATE_CARD
+    key = "synthetic-provider-credential"
+    worker_record = run_fixture_trial(
+        packet,
+        model=_MixedTurnModel(packet),
+        artifact_root=None,
+        trial_id="1",
+        rate_card=rate_card,
+    )
+    worker_record["exit_code"] = 0
+    worker_record["failure_class"] = "none"
+
+    class Result:
+        returncode = 1
+        stdout = (json.dumps(worker_record) + "\n").encode()
+        stderr = b"container diagnostic"
+
+    monkeypatch.setattr(container_runner.subprocess, "run", lambda *a, **k: Result())
+    evidence = container_runner.ContainerEvidence(
+        image="tollchat-fixture:test",
+        image_id="sha256:" + "b" * 64,
+        source_digest="a" * 64,
+    )
+    monkeypatch.setattr(
+        container_runner, "source_digest", lambda: evidence.source_digest
+    )
+    monkeypatch.setattr(container_runner, "_image_id", lambda _image: evidence.image_id)
+    artifact = tmp_path / "mismatch" / "1"
+    result = container_runner.run_container_trial(
+        packet,
+        key=key,
+        rate_card=rate_card,
+        trial_id="1",
+        artifact_root=artifact,
+        evidence=evidence,
+    )
+    output = read_json(artifact / "output.json")
+    assert result.record["failure_class"] == "infra_dependency"
+    assert result.record["exit_code"] == 1
+    assert output["error"] == "container_exit_failure"
+    assert output["trajectory"]
+    assert output["measurements"]["turns"]
+
+    seal_trial_artifact(
+        artifact,
+        packet,
+        model=_MixedTurnModel(packet),
+        model_settings=None,
+        rate_card=rate_card,
+        trial_id="1",
+        case_bytes=case_bytes,
+        dataset_hash=dataset_hash,
+    )
+    case_path = tmp_path / "mismatch-case.json"
+    case_path.write_text(
+        json.dumps({"case_id": packet.case_id, "suite": "annual"}) + "\n",
+        encoding="utf-8",
+    )
+    assert graph_checks.grade(artifact, case_path, manifest_path=_V2_MANIFEST) == 1
+    score = read_json(artifact / "scorecard.json")
+    assert score["failure_class"] == "infra_dependency"
 
 
 def test_two_public_cases_have_three_independent_sealed_trials(tmp_path: Path) -> None:

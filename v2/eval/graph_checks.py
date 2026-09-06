@@ -79,6 +79,8 @@ def grader_digest() -> str:
         "run_evaluation.py",
         "fixture_runner.py",
         "fixture_eval.py",
+        "container_runner.py",
+        "container_worker.py",
         "golden_corpus.py",
     ):
         path = ROOT / name
@@ -106,7 +108,14 @@ def source_digest() -> str:
         path = ROOT.parent / relative
         if path.is_file():
             files.append(path)
-    for relative in ("fixture_runner.py", "fixture_eval.py"):
+    for relative in (
+        "fixture_runner.py",
+        "fixture_eval.py",
+        "container_runner.py",
+        "container_worker.py",
+        "Dockerfile",
+        "runtime-requirements.txt",
+    ):
         path = ROOT / relative
         if path.is_file():
             files.append(path)
@@ -541,6 +550,38 @@ def _annual_live_marker(value: object) -> bool:
     return False
 
 
+def _container_execution(value: object) -> None:
+    require(
+        type(value) is dict and set(value) == {"image", "image_id", "source_digest"},
+        "container execution evidence is malformed",
+    )
+    execution = cast(dict[str, Any], value)
+    require(
+        type(execution["image"]) is str and bool(execution["image"]),
+        "container image evidence is malformed",
+    )
+    require(
+        type(execution["image_id"]) is str
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", execution["image_id"]),
+        "container image identity is malformed",
+    )
+    require(
+        type(execution["source_digest"]) is str
+        and re.fullmatch(r"[0-9a-f]{64}", execution["source_digest"]),
+        "container source identity is malformed",
+    )
+    try:
+        from eval.container_runner import source_digest as container_source_digest
+
+        expected_source_digest = container_source_digest()
+    except (ImportError, OSError, ValueError):
+        raise ValueError("container source identity is unavailable") from None
+    require(
+        execution["source_digest"] == expected_source_digest,
+        "container source identity is stale",
+    )
+
+
 def grade_annual(
     artifact: Path,
     case_path: Path,
@@ -766,9 +807,19 @@ def grade_annual(
         output = read_json(_annual_artifact_file(artifact, "output.json"))
         require(type(output) is dict, "annual output object required")
         require(
-            set(output) <= {"case_id", "output", "trajectory", "measurements", "cost"},
+            set(output)
+            <= {
+                "case_id",
+                "output",
+                "trajectory",
+                "measurements",
+                "cost",
+                "container_execution",
+            },
             "runner verdict or metadata is not allowed",
         )
+        if "container_execution" in output:
+            _container_execution(output["container_execution"])
         require(output.get("case_id") == row["id"], "annual output case mismatch")
         require(output.get("cost") == run["cost"], "annual cost evidence mismatch")
         trajectory = output.get("trajectory")

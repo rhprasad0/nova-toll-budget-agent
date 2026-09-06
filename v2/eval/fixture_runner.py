@@ -630,7 +630,7 @@ def run_fixture_trial(
     packet: FixtureRunPacket,
     *,
     model: object,
-    artifact_root: Path,
+    artifact_root: Path | None,
     trial_id: str,
     rate_card: RateCard | None,
 ) -> dict[str, Any]:
@@ -804,5 +804,6 @@ def run_fixture_trial(
     }
     if error_text:
         record["error"] = error_text
-    write_raw_artifact(artifact_root, record)
+    if artifact_root is not None:
+        write_raw_artifact(artifact_root, record)
     return record

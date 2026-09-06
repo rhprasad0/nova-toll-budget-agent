@@ -469,6 +469,8 @@ def seal_trial_artifact(
             )
         ):
             failure_class = "infra_dependency"
+    if "error" in raw:
+        failure_class = "infra_dependency"
     trusted_rate_card: dict[str, Any] | None = None
     try:
         trusted_rate_card = rate_card.as_dict()
