@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -47,6 +48,7 @@ EVIDENCE_PATTERN: Final = re.compile(
     r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 COMMIT_PATTERN: Final = re.compile(r"^[0-9a-f]{40}$")
+DEVELOPMENT_TRANSPORT_NETWORK: Final = ipaddress.ip_network("fd7a:115c:a1e0:b1a::/64")
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,13 @@ class MigrationError(RuntimeError):
 
 def _sql_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def _psql_path(path: Path) -> str:
+    value = str(path)
+    if "\x00" in value:
+        raise MigrationError("rendered migration path contains a NUL")
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 def _run_capture(*args: str) -> str:
@@ -636,7 +645,7 @@ SELECT (SELECT version FROM {migration.schema}.schema_version WHERE singleton)
     = {_sql_literal(migration.previous)}
     AND (:'no_history_{migration.number}' = 't') AS {apply_variable}\gset
 \if :{apply_variable}
-\ir {rendered_path}
+\ir {_psql_path(rendered_path)}
 RESET ROLE;
 SET ROLE pricing_owner_development;
 INSERT INTO {HISTORY_TABLE} (
@@ -729,8 +738,20 @@ def _session_sql(
 
 def _psql_environment() -> dict[str, str]:
     environment = os.environ.copy()
-    for key in ("PGDATABASE", "PGUSER", "PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR"):
+    transport = environment.pop("PGHOSTADDR", None)
+    for key in ("PGDATABASE", "PGUSER", "PGSERVICE", "PGSERVICEFILE"):
         environment.pop(key, None)
+    if transport is not None:
+        try:
+            address = ipaddress.ip_address(transport)
+        except ValueError:
+            address = None
+        if (
+            address is not None
+            and address.version == 6
+            and address in DEVELOPMENT_TRANSPORT_NETWORK
+        ):
+            environment["PGHOSTADDR"] = transport
     environment.update({"PGDATABASE": DATABASE, "PGUSER": USER})
     return environment
 
@@ -773,12 +794,15 @@ def run() -> dict[str, object]:
         prefix="nova-toll-development-migrations-"
     ) as directory:
         rendered: dict[str, Path] = {}
+        captured_sources: dict[str, bytes] = {}
         private = Path(directory)
         private.chmod(0o700)
         _assert_migration_tree()
         for migration in migrations:
             source = ROOT / migration.path
+            captured_source = private / "sources" / migration.path
             destination = private / migration.path
+            captured_source.parent.mkdir(parents=True, exist_ok=True)
             destination.parent.mkdir(parents=True, exist_ok=True)
             committed = _committed_bytes(migration.path)
             if hashlib.sha256(committed).hexdigest() != migration.source_sha256:
@@ -786,9 +810,18 @@ def run() -> dict[str, object]:
                     f"committed migration changed while being inspected: {migration.path}"
                 )
             _assert_source_bytes(migration.path, source, committed)
-            bootstrap.render(source, destination)
+            captured_source.write_bytes(committed)
+            captured_source.chmod(0o600)
+            bootstrap.render(captured_source, destination)
+            destination.chmod(0o600)
             rendered[migration.path] = destination
+            captured_sources[migration.path] = committed
             _assert_source_bytes(migration.path, source, committed)
+        _assert_migration_tree()
+        for migration in migrations:
+            _assert_source_bytes(
+                migration.path, ROOT / migration.path, captured_sources[migration.path]
+            )
         session = _session_sql(migrations, canonical_versions, rendered, commit, run_id)
         result = subprocess.run(
             ["psql", "-X", "--no-psqlrc", "-v", "ON_ERROR_STOP=1"],

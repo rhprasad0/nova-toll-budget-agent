@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -111,7 +115,7 @@ def test_generated_session_is_one_locked_psql_stream() -> None:
         )
         == 1
     )
-    assert sql.count("\\ir /private/002.sql") == 1
+    assert sql.count("\\ir '/private/002.sql'") == 1
     assert "SET ROLE pricing_owner_development;" in sql
     assert "SET ROLE oracle_owner_development;" in sql
     assert "\\set ON_ERROR_STOP on" in sql
@@ -143,6 +147,224 @@ def test_environment_cannot_redirect_fixed_identity(
     assert environment["PGUSER"] == runner.USER
     assert "PGSERVICE" not in environment
     assert "PGHOSTADDR" not in environment
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("fd7a:115c:a1e0:b1a:0:1:ac1f:4a7", "fd7a:115c:a1e0:b1a:0:1:ac1f:4a7"),
+        ("127.0.0.1", None),
+        ("fd7a:115c:a1e0:b1b::1", None),
+        ("not-an-ip", None),
+        (None, None),
+    ],
+)
+def test_environment_only_preserves_development_transport(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected: str | None
+) -> None:
+    if value is None:
+        monkeypatch.delenv("PGHOSTADDR", raising=False)
+    else:
+        monkeypatch.setenv("PGHOSTADDR", value)
+    environment = runner._psql_environment()
+    assert environment.get("PGHOSTADDR") == expected
+
+
+def test_psql_include_path_opens_exact_file(tmp_path: Path) -> None:
+    """Exercise psql's actual \\ir lexer against a disposable local fixture only."""
+    psql = shutil.which("psql")
+    container = os.environ.get("POSTGRES_CONTAINER_ID")
+    docker = shutil.which("docker")
+    if not psql or not docker or not container:
+        pytest.skip("requires the explicit disposable PostgreSQL fixture")
+
+    image = subprocess.run(
+        [docker, "inspect", "--format", "{{.Config.Image}}", container],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert image.returncode == 0
+    assert image.stdout.strip() == "postgis/postgis:17-3.5"
+    running = subprocess.run(
+        [docker, "inspect", "--format", "{{.State.Running}}", container],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert running.returncode == 0
+    assert running.stdout.strip() == "true"
+    published = subprocess.run(
+        [docker, "port", container, "5432/tcp"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert published.returncode == 0
+    endpoint = published.stdout.strip().splitlines()[0].rsplit(":", 1)
+    assert len(endpoint) == 2
+    host, port = endpoint
+    assert host in {"127.0.0.1", "localhost", "0.0.0.0", "::1", "[::]"}
+
+    include = tmp_path / "migration with 'single' \"double\" \\backslash.sql"
+    include.write_text("SELECT 'exact include opened' AS marker;\n", encoding="utf-8")
+    outer = tmp_path / "outer.sql"
+    outer.write_text(f"\\ir {runner._psql_path(include)}\n", encoding="utf-8")
+    environment = os.environ.copy()
+    for key in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGSERVICE", "PGPASSWORD"):
+        environment.pop(key, None)
+    result = subprocess.run(
+        [
+            psql,
+            "-X",
+            "--no-psqlrc",
+            "--set",
+            "ON_ERROR_STOP=1",
+            "--tuples-only",
+            "--no-align",
+            "--host",
+            host,
+            "--port",
+            port,
+            "--username",
+            "postgres",
+            "--dbname",
+            "postgres",
+            "--file",
+            str(outer),
+        ],
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "exact include opened"
+
+
+def test_run_renders_captured_committed_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql"
+    source.parent.mkdir(parents=True)
+    committed = b"HEAD bytes\n"
+    source.write_bytes(committed)
+    migration: Any = _migration()
+    migration = runner.Migration(
+        path=migration.path,
+        schema=migration.schema,
+        previous=migration.previous,
+        target=migration.target,
+        migration_id=migration.migration_id,
+        number=migration.number,
+        source_sha256=hashlib.sha256(committed).hexdigest(),
+    )
+    rendered_sources: list[Path] = []
+    captured_source_bytes: list[bytes] = []
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    monkeypatch.setattr(runner, "MIGRATIONS_DIR", source.parent)
+    monkeypatch.setattr(
+        runner,
+        "_registry",
+        lambda: ((), {"pricing": "1.3.0", "oracle": "1.14.0"}),
+    )
+
+    def fake_candidates(_schemas: Any) -> tuple[Any, ...]:
+        return (migration,)
+
+    monkeypatch.setattr(runner, "_migration_candidates", fake_candidates)
+    monkeypatch.setattr(runner, "_run_capture", _fixed_commit)
+
+    def fake_committed(_relative: str) -> bytes:
+        return committed
+
+    monkeypatch.setattr(runner, "_committed_bytes", fake_committed)
+
+    def fake_render(source_path: Path, destination: Path) -> None:
+        rendered_sources.append(source_path)
+        captured_source_bytes.append(source_path.read_bytes())
+        destination.write_bytes(source_path.read_bytes().replace(b"HEAD", b"DEV"))
+
+    monkeypatch.setattr(runner.bootstrap, "render", fake_render)
+
+    def fake_psql(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(
+            returncode=0,
+            stdout=kwargs["input"].removeprefix("\\echo "),
+            stderr="",
+        )
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_psql)
+
+    # The fake session embeds a stable marker instead of the real SQL stream.
+    def fake_session(
+        _migrations: Any,
+        _versions: Any,
+        rendered: dict[str, Path],
+        _commit: str,
+        run_id: str,
+    ) -> str:
+        rendered_sources.append(rendered[migration.path])
+        return f"\\echo TOLLCHAT_RESULT_{run_id} 1.3.0 1.14.0 1.3.0 1.14.0"
+
+    monkeypatch.setattr(runner, "_session_sql", fake_session)
+
+    result = runner.run()
+
+    assert result["status"] == "ok"
+    assert len(rendered_sources) == 2
+    assert rendered_sources[0] != source
+    assert captured_source_bytes == [committed]
+
+
+def test_run_rejects_worktree_swap_after_capture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql"
+    source.parent.mkdir(parents=True)
+    committed = b"HEAD bytes\n"
+    source.write_bytes(committed)
+    migration: Any = _migration(
+        path="v2/db/migrations/002_upgrade_pricing_1_0_0_to_1_0_1.sql"
+    )
+    migration = runner.Migration(
+        path=migration.path,
+        schema=migration.schema,
+        previous=migration.previous,
+        target=migration.target,
+        migration_id=migration.migration_id,
+        number=migration.number,
+        source_sha256=hashlib.sha256(committed).hexdigest(),
+    )
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    monkeypatch.setattr(runner, "MIGRATIONS_DIR", source.parent)
+    monkeypatch.setattr(
+        runner, "_registry", lambda: ((), {"pricing": "1.3.0", "oracle": "1.14.0"})
+    )
+
+    def fake_candidates(_schemas: Any) -> tuple[Any, ...]:
+        return (migration,)
+
+    monkeypatch.setattr(runner, "_migration_candidates", fake_candidates)
+    monkeypatch.setattr(runner, "_run_capture", _fixed_commit)
+
+    def fake_committed(_relative: str) -> bytes:
+        return committed
+
+    monkeypatch.setattr(runner, "_committed_bytes", fake_committed)
+
+    def fake_render(source_path: Path, destination: Path) -> None:
+        destination.write_bytes(source_path.read_bytes())
+        source.write_bytes(b"swapped\n")
+
+    monkeypatch.setattr(runner.bootstrap, "render", fake_render)
+
+    def fail_psql(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("psql must not start after a source swap")
+
+    monkeypatch.setattr(runner.subprocess, "run", fail_psql)
+    with pytest.raises(runner.MigrationError, match="worktree migration differs"):
+        runner.run()
 
 
 def test_result_parser_returns_only_marked_values() -> None:
