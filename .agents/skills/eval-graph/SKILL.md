@@ -10,7 +10,7 @@ gate. Do not use for feature implementation, ordinary code review, speculative
 case generation, or installing this skill. Installation never starts trials.
 The graph is the harness around the agent, not another agent.
 
-Parent: **gpt-6-astra, medium**. Every spawned leaf: **gpt-5.6-luna, medium**.
+Parent: **gpt-5.6-sol, medium**. Every spawned leaf: **gpt-5.6-luna, medium**.
 Reuse [project-graph](../project-graph/SKILL.md)'s registration, worktrees,
 five-line `.graph/STATE.md`, and one-writer discipline. Do not start its
 explorer/pre-checker/builder/checker sequence or add another orchestrator.

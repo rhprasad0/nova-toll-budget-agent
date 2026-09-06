@@ -19,7 +19,7 @@ low-risk fixes.
 
 ## Workflow
 
-The GPT-6 Astra parent normally orchestrates. When a subagent stalls, it may
+The GPT-5.6 Sol parent normally orchestrates. When a subagent stalls, it may
 inspect the repository, diagnose failures, run focused checks, and take over
 bounded exploration or implementation under the intervention rules below.
 Keep subagents on their existing models and reasoning efforts in `.codex/agents/`.
@@ -60,7 +60,7 @@ PASS → human review
    tools and retain its assignment through review follow-ups. Checker reads the
    worktree and artifacts, writes `verdict.md`, and never edits application code.
    Security reviewer remains read-only, outside this guard, and reports its
-   result to the parent without writing a graph artifact. The Astra parent is
+   result to the parent without writing a graph artifact. The Sol parent is
    also outside the guard.
 7. Review 1 keeps the full existing gate: PASS requires checker PASS and no
    actionable security findings. If either lane fails, update `STATE.md` and
