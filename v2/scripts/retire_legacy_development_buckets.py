@@ -13,6 +13,7 @@ import contextlib
 import copy
 import hashlib
 import json
+import math
 import os
 import sys
 import tempfile
@@ -45,6 +46,44 @@ ATHENA_WORKGROUP = "tollchat-agent-reports-dev"
 WAF_NAME = "tollchat-v2-public-chat-dev"
 WAF_AGENT_LABEL = f"awswaf:{PRODUCTION_ACCOUNT}:webacl:{WAF_NAME}:agent-route-report"
 DRAIN_SECONDS = 900
+RESUMED_FREEZE_MODE = "resumed-freeze-v1"
+SEMANTIC_PROOF_MANIFEST = "lambda-semantic-proof-v1"
+CANONICAL_STATE_VERSION = "DwY7IvIcq6sD3FfmKD4Z4LrSai5Q0Ls3"
+CANONICAL_STATE_SHA256 = (
+    "6080bb945772256bbbe389dc6cf15804ba297ad6399dc9f10ebb8cc315a6b720"
+)
+CANONICAL_STATE_KEY = "nova-toll/v2/development/terraform.tfstate"
+CANONICAL_STATE_ETAG = '"375ef3e67c0f52f518883e6cb6791baa"'
+CANONICAL_STATE_CMK = (
+    "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
+)
+SEMANTIC_FIELDS = frozenset(
+    {
+        "Architectures",
+        "CodeSha256",
+        "CodeSize",
+        "Description",
+        "Environment",
+        "EphemeralStorage",
+        "FunctionArn",
+        "FunctionName",
+        "Handler",
+        "LastModified",
+        "LoggingConfig",
+        "MemorySize",
+        "PackageType",
+        "Role",
+        "Runtime",
+        "SnapStart",
+        "Timeout",
+        "TracingConfig",
+        "Version",
+        "VpcConfig",
+    }
+)
+LIVE_ONLY_FIELDS = frozenset(
+    {"RevisionId", "State", "LastUpdateStatus", "RuntimeVersionConfig"}
+)
 HISTORICAL_UNMANAGED_COUNT = 1655
 HISTORICAL_MANAGED_OLD_COUNT = 23
 HISTORICAL_SHARED_VERSION_COUNT = 5
@@ -1067,7 +1106,7 @@ def archive_snapshot(
         raise RetirementError("retained state CMK is required")
     if freeze_state is None:
         raise RetirementError("frozen writer evidence is required before archive")
-    _require_freeze_evidence(aws, freeze_state)
+    _require_freeze_evidence(aws, freeze_state, snapshot=snapshot)
     frozen = _snapshot_records(snapshot)
     current = capture_snapshot(aws)
     assert_snapshot_stable(snapshot, current)
@@ -1314,7 +1353,7 @@ def purge_snapshot(
     """Delete only frozen unmanaged objects using exact ETag and owner guards."""
     if freeze_state is None or archive_state is None:
         raise RetirementError("freeze and archive evidence are required before purge")
-    _require_freeze_evidence(aws, freeze_state)
+    _require_freeze_evidence(aws, freeze_state, snapshot=snapshot)
     archive = _load_archive_manifest(aws, snapshot, kms_key_id, archive_state)
     _verify_archive_objects(aws, snapshot, archive, kms_key_id)
     frozen_targets = purge_targets(snapshot)
@@ -1347,7 +1386,7 @@ def verify_post_purge(
 ) -> dict[str, int]:
     if freeze_state is None or archive_state is None:
         raise RetirementError("freeze and archive evidence are required before verify")
-    _require_freeze_evidence(aws, freeze_state)
+    _require_freeze_evidence(aws, freeze_state, snapshot=snapshot)
     frozen = _snapshot_records(snapshot)
     current = capture_snapshot(aws)
     expected_managed = {
@@ -1575,7 +1614,274 @@ def _verify_frozen_writers(before: Mapping[str, Any], after: Mapping[str, Any]) 
         )
 
 
-def _require_freeze_evidence(aws: GuardedAWS, freeze_state: Mapping[str, Any]) -> None:
+def _aware_datetime(value: Any, field: str) -> datetime:
+    if not isinstance(value, str):
+        raise RetirementError(f"{field} is missing")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise RetirementError(f"{field} is malformed") from error
+    if parsed.tzinfo is None:
+        raise RetirementError(f"{field} has no timezone")
+    return parsed
+
+
+def _sha256(value: Any, field: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != hashlib.sha256().digest_size * 2
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise RetirementError(f"{field} is not a SHA-256 digest")
+    return value
+
+
+def _writer_functions(
+    state: Mapping[str, Any], field: str
+) -> dict[str, Mapping[str, Any]]:
+    functions: dict[str, Mapping[str, Any]] = {}
+    for raw in _list(state.get("functions"), field):
+        item = _mapping(raw, field)
+        name = _text(item.get("name"), f"{field} name")
+        if name in functions:
+            raise RetirementError(f"{field} contains a duplicate")
+        functions[name] = item
+    if set(functions) != {name for name, _ in LAMBDA_WRITERS}:
+        raise RetirementError("Lambda writer set changed")
+    for name, timeout in LAMBDA_WRITERS:
+        item = functions[name]
+        if item.get("timeout") != timeout:
+            raise RetirementError(
+                "Lambda writer identity or hash evidence is malformed"
+            )
+        _sha256(item.get("configuration_sha256"), "writer configuration hash")
+        _mapping(item.get("concurrency"), "writer concurrency")
+    return functions
+
+
+def _validate_resume_baseline(baseline: Mapping[str, Any]) -> None:
+    if "mode" in baseline or "schema" in baseline:
+        raise RetirementError("resumed evidence cannot be used as its old baseline")
+    _writer_functions(baseline, "original writer baseline")
+    _change_waf_filter(_mapping(baseline.get("waf"), "original WAF baseline"))
+    _disable_lifecycle(
+        _mapping(baseline.get("lifecycle"), "original lifecycle baseline")
+    )
+
+
+def _validate_semantic_proof(
+    proof: Mapping[str, Any],
+    current: Mapping[str, Any],
+    *,
+    last_writer_mutation_at: datetime,
+    resume_started_at: datetime,
+) -> dict[str, Any]:
+    if (
+        proof.get("manifest") != SEMANTIC_PROOF_MANIFEST
+        or proof.get("status") != "pass"
+        or proof.get("read_only") is not True
+        or proof.get("account_id") != PRODUCTION_ACCOUNT
+        or proof.get("region") != PRODUCTION_REGION
+    ):
+        raise RetirementError(
+            "semantic proof is not bound to the production read-only run"
+        )
+    source = _mapping(proof.get("canonical_state"), "canonical state proof")
+    head = _mapping(source.get("head"), "canonical state HEAD guard")
+    if (
+        source.get("bucket") != STATE_BUCKET
+        or source.get("key") != CANONICAL_STATE_KEY
+        or source.get("version_id") != CANONICAL_STATE_VERSION
+        or source.get("sha256") != CANONICAL_STATE_SHA256
+        or head.get("version_id") != CANONICAL_STATE_VERSION
+        or head.get("etag") != CANONICAL_STATE_ETAG
+        or head.get("sse_algorithm") != "aws:kms"
+        or head.get("kms_key_id") != CANONICAL_STATE_CMK
+    ):
+        raise RetirementError("semantic proof is bound to a different canonical state")
+    if proof.get("live_only_fields") != sorted(LIVE_ONLY_FIELDS):
+        raise RetirementError("semantic proof live-only field set is incomplete")
+    captured_at = _aware_datetime(proof.get("captured_at"), "semantic proof time")
+    if captured_at <= last_writer_mutation_at or captured_at >= resume_started_at:
+        raise RetirementError(
+            "semantic proof is stale or was captured after resume started"
+        )
+    current_functions = _writer_functions(current, "current writer functions")
+    checks_by_name: dict[str, Mapping[str, Any]] = {}
+    for raw in _list(proof.get("functions"), "semantic proof functions"):
+        item = _mapping(raw, "semantic proof function")
+        name = _text(item.get("name"), "semantic proof function name")
+        if name in checks_by_name:
+            raise RetirementError("semantic proof contains a duplicate writer")
+        if name not in current_functions:
+            raise RetirementError("semantic proof names an unknown writer")
+        checks_by_name[name] = item
+        checks = _mapping(item.get("checks"), "semantic proof checks")
+        if set(checks) != set(SEMANTIC_FIELDS) or any(
+            value is not True for value in checks.values()
+        ):
+            raise RetirementError(
+                "semantic proof does not pass the exact 20-field check set"
+            )
+        if item.get("mismatches") != []:
+            raise RetirementError("semantic proof contains a field mismatch")
+        live_only_raw = item.get("not_in_terraform_state", [])
+        if not isinstance(live_only_raw, list):
+            raise RetirementError("semantic proof live-only fields are malformed")
+        live_only_raw = cast(list[Any], live_only_raw)
+        live_only = [value for value in live_only_raw if isinstance(value, str)]
+        if len(live_only) != len(live_only_raw) or len(set(live_only)) != len(
+            live_only
+        ):
+            raise RetirementError("semantic proof live-only fields are malformed")
+        if live_only != sorted(LIVE_ONLY_FIELDS):
+            raise RetirementError("semantic proof live-only field set is incomplete")
+        if item.get("configuration_sha256") != current_functions[name].get(
+            "configuration_sha256"
+        ):
+            raise RetirementError(
+                "semantic proof hash does not match the fresh writer read"
+            )
+    if set(checks_by_name) != set(current_functions):
+        raise RetirementError("semantic proof writer set changed")
+    expected_hashes = {
+        name: _text(item.get("configuration_sha256"), "writer configuration hash")
+        for name, item in current_functions.items()
+    }
+    return {
+        "captured_at": captured_at.isoformat(),
+        "canonical_state": copy.deepcopy(dict(source)),
+        "live_only_fields": sorted(LIVE_ONLY_FIELDS),
+        "functions": expected_hashes,
+    }
+
+
+def _verify_resumed_writers(
+    baseline: Mapping[str, Any],
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+) -> None:
+    before_functions = _writer_functions(before, "resumed writer baseline")
+    after_functions = _writer_functions(after, "resumed writer result")
+    for name, _ in LAMBDA_WRITERS:
+        current = before_functions[name]
+        result = after_functions[name]
+        if current.get("configuration_sha256") != result.get("configuration_sha256"):
+            raise RetirementError(
+                "Lambda writer configuration changed during read-only drain"
+            )
+        for item in (current, result):
+            concurrency = _mapping(item.get("concurrency"), "writer concurrency")
+            if concurrency.get("ReservedConcurrentExecutions") != 0:
+                raise RetirementError("Lambda writer is not frozen at exactly zero")
+    expected_waf = _change_waf_filter(
+        _mapping(baseline.get("waf"), "original WAF baseline")
+    )
+    if before.get("waf") != expected_waf or after.get("waf") != expected_waf:
+        raise RetirementError("WAF drift is broader than the approved filter change")
+    expected_lifecycle = _disable_lifecycle(
+        _mapping(baseline.get("lifecycle"), "original lifecycle baseline")
+    )
+    if (
+        before.get("lifecycle") != expected_lifecycle
+        or after.get("lifecycle") != expected_lifecycle
+    ):
+        raise RetirementError(
+            "lifecycle drift is broader than the approved rule changes"
+        )
+
+
+def _require_resumed_freeze_evidence(
+    aws: GuardedAWS,
+    freeze_state: Mapping[str, Any],
+    snapshot: Mapping[str, Any] | None,
+) -> None:
+    if snapshot is None:
+        raise RetirementError("resumed evidence must bind a frozen snapshot")
+    if (
+        freeze_state.get("mode") != RESUMED_FREEZE_MODE
+        or freeze_state.get("schema") != RESUMED_FREEZE_MODE
+    ):
+        raise RetirementError("resumed writer evidence marker is missing")
+    if (
+        freeze_state.get("account_id") != PRODUCTION_ACCOUNT
+        or freeze_state.get("region") != PRODUCTION_REGION
+    ):
+        raise RetirementError("resumed evidence account or region is not production")
+    if freeze_state.get("drain_seconds") != DRAIN_SECONDS:
+        raise RetirementError("resumed evidence does not prove the 900-second drain")
+    drain_started = _aware_datetime(
+        freeze_state.get("drain_started_at"), "resumed drain start"
+    )
+    drain_completed = _aware_datetime(
+        freeze_state.get("drain_completed_at"), "resumed drain completion"
+    )
+    last_mutation = _aware_datetime(
+        freeze_state.get("last_writer_mutation_at"), "last writer mutation"
+    )
+    if drain_started <= last_mutation or drain_completed < drain_started:
+        raise RetirementError("resumed drain timing is out of order")
+    current_monotonic = time.monotonic()
+    started_monotonic = freeze_state.get("drain_started_monotonic")
+    completed_monotonic = freeze_state.get("drain_completed_monotonic")
+    if (
+        not isinstance(started_monotonic, (int, float))
+        or not isinstance(completed_monotonic, (int, float))
+        or not math.isfinite(started_monotonic)
+        or not math.isfinite(completed_monotonic)
+        or started_monotonic < 0
+        or completed_monotonic < 0
+        or completed_monotonic > current_monotonic
+        or current_monotonic - started_monotonic < DRAIN_SECONDS
+        or completed_monotonic - started_monotonic < DRAIN_SECONDS
+    ):
+        raise RetirementError("resumed evidence does not prove 900 elapsed seconds")
+    baseline = _mapping(
+        freeze_state.get("original_baseline"), "original baseline binding"
+    )
+    before = _mapping(freeze_state.get("before"), "resumed writer baseline")
+    after = _mapping(freeze_state.get("after"), "resumed writer result")
+    _verify_resumed_writers(baseline, before, after)
+    before_snapshot = freeze_state.get("before_snapshot_sha256")
+    after_snapshot = freeze_state.get("after_snapshot_sha256")
+    _sha256(before_snapshot, "resumed before snapshot binding")
+    _sha256(after_snapshot, "resumed after snapshot binding")
+    if before_snapshot != after_snapshot or before_snapshot != _snapshot_digest(
+        snapshot
+    ):
+        raise RetirementError("resumed evidence is bound to a different snapshot")
+    semantic = _mapping(freeze_state.get("semantic_proof"), "semantic proof binding")
+    _validate_resume_baseline(baseline)
+    for field, value in (("original_baseline", baseline), ("semantic_proof", semantic)):
+        if (
+            freeze_state.get(f"{field}_sha256")
+            != hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+        ):
+            raise RetirementError(f"resumed {field} digest does not match its content")
+    _validate_semantic_proof(
+        semantic,
+        before,
+        last_writer_mutation_at=last_mutation,
+        resume_started_at=_aware_datetime(
+            freeze_state.get("resume_started_at"), "resume start"
+        ),
+    )
+    _athena_idle(aws)
+    current = writer_state(aws)
+    _verify_resumed_writers(baseline, before, current)
+    # Each caller checks the appropriate live object set: frozen before purge,
+    # or only managed objects and shared versions after the intended purge.
+
+
+def _require_freeze_evidence(
+    aws: GuardedAWS,
+    freeze_state: Mapping[str, Any],
+    *,
+    snapshot: Mapping[str, Any] | None = None,
+) -> None:
+    if freeze_state.get("mode") == RESUMED_FREEZE_MODE:
+        _require_resumed_freeze_evidence(aws, freeze_state, snapshot)
+        return
     if freeze_state.get("drain_seconds") != DRAIN_SECONDS:
         raise RetirementError(
             "writer freeze evidence does not prove the 900-second drain"
@@ -1669,6 +1975,85 @@ def freeze_writers(
         "after": after,
         "drain_seconds": DRAIN_SECONDS,
         "freeze_completed_monotonic": freeze_completed,
+        "drain_completed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def resume_frozen(
+    aws: GuardedAWS,
+    baseline: Mapping[str, Any],
+    semantic_proof: Mapping[str, Any],
+    *,
+    snapshot: Mapping[str, Any] | None = None,
+    fresh_snapshot: Mapping[str, Any] | None = None,
+    last_writer_mutation_at: str | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Prove an already-frozen state remained stable without issuing writes."""
+    _validate_resume_baseline(baseline)
+    resume_started_at = datetime.now(UTC)
+    last_mutation_value = (
+        semantic_proof.get("last_writer_mutation_at")
+        if last_writer_mutation_at is None
+        else last_writer_mutation_at
+    )
+    last_mutation = _aware_datetime(last_mutation_value, "last writer mutation")
+    before = writer_state(aws)
+    _validate_semantic_proof(
+        semantic_proof,
+        before,
+        last_writer_mutation_at=last_mutation,
+        resume_started_at=resume_started_at,
+    )
+    _verify_resumed_writers(baseline, before, before)
+    baseline_snapshot = fresh_snapshot or capture_snapshot(aws)
+    if snapshot is not None:
+        assert_snapshot_stable(snapshot, baseline_snapshot)
+    _athena_idle(aws)
+    drain_started_monotonic = clock()
+    drain_started_at = datetime.now(UTC)
+    if drain_started_at <= last_mutation:
+        raise RetirementError("resumed drain started before the last writer mutation")
+    sleep(DRAIN_SECONDS)
+    drain_completed_monotonic = clock()
+    if (
+        not math.isfinite(drain_started_monotonic)
+        or not math.isfinite(drain_completed_monotonic)
+        or drain_completed_monotonic - drain_started_monotonic < DRAIN_SECONDS
+    ):
+        raise RetirementError("resumed drain did not last 900 seconds")
+    _athena_idle(aws)
+    after = writer_state(aws)
+    _verify_resumed_writers(baseline, before, after)
+    after_snapshot = capture_snapshot(aws)
+    assert_snapshot_stable(baseline_snapshot, after_snapshot)
+    snapshot_digest = _snapshot_digest(baseline_snapshot)
+    if _snapshot_digest(after_snapshot) != snapshot_digest:
+        raise RetirementError("resumed snapshot digest changed during drain")
+    return {
+        "mode": RESUMED_FREEZE_MODE,
+        "schema": RESUMED_FREEZE_MODE,
+        "account_id": PRODUCTION_ACCOUNT,
+        "region": PRODUCTION_REGION,
+        "before": before,
+        "after": after,
+        "original_baseline": copy.deepcopy(dict(baseline)),
+        "original_baseline_sha256": hashlib.sha256(
+            _canonical(baseline).encode("utf-8")
+        ).hexdigest(),
+        "semantic_proof": copy.deepcopy(dict(semantic_proof)),
+        "semantic_proof_sha256": hashlib.sha256(
+            _canonical(semantic_proof).encode("utf-8")
+        ).hexdigest(),
+        "before_snapshot_sha256": snapshot_digest,
+        "after_snapshot_sha256": _snapshot_digest(after_snapshot),
+        "last_writer_mutation_at": last_mutation.isoformat(),
+        "resume_started_at": resume_started_at.isoformat(),
+        "drain_seconds": DRAIN_SECONDS,
+        "drain_started_monotonic": drain_started_monotonic,
+        "drain_completed_monotonic": drain_completed_monotonic,
+        "drain_started_at": drain_started_at.isoformat(),
         "drain_completed_at": datetime.now(UTC).isoformat(),
     }
 
@@ -1788,12 +2173,17 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--phase",
-        choices=("capture", "freeze", "archive", "purge", "verify"),
+        choices=("capture", "freeze", "resume-frozen", "archive", "purge", "verify"),
         default="capture",
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--freeze-state", type=Path)
+    parser.add_argument(
+        "--resume-baseline", "--original-writers", dest="resume_baseline", type=Path
+    )
+    parser.add_argument("--semantic-proof", type=Path)
+    parser.add_argument("--last-writer-mutation-at")
     parser.add_argument("--archive-state", type=Path)
     parser.add_argument("--identity-manifest", type=Path)
     parser.add_argument("--managed-object-mapping", type=Path)
@@ -1807,6 +2197,8 @@ def main(argv: list[str] | None = None) -> int:
         args = _parser().parse_args(argv)
         if args.phase in {"freeze", "archive", "purge"} and not args.execute:
             raise RetirementError("mutation phase requires the reviewed --execute flag")
+        if args.phase == "resume-frozen" and args.execute:
+            raise RetirementError("resume-frozen is read-only and rejects --execute")
         evidence: dict[str, str] = {}
         if args.phase != "capture":
             if args.identity_manifest is None or args.managed_object_mapping is None:
@@ -1839,6 +2231,36 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     _summary(frozen_snapshot), sort_keys=True, separators=(",", ":")
+                )
+            )
+            return 0
+        if args.phase == "resume-frozen":
+            if (
+                args.output is None
+                or args.freeze_state is None
+                or args.resume_baseline is None
+                or args.semantic_proof is None
+            ):
+                raise RetirementError(
+                    "resume-frozen requires --output, --freeze-state, "
+                    "--resume-baseline, and --semantic-proof"
+                )
+            baseline = _read_json(args.resume_baseline)
+            semantic_proof = _read_json(args.semantic_proof)
+            fresh_snapshot = capture_snapshot(aws)
+            state = resume_frozen(
+                aws,
+                baseline,
+                semantic_proof,
+                snapshot=snapshot,
+                fresh_snapshot=fresh_snapshot,
+                last_writer_mutation_at=args.last_writer_mutation_at,
+            )
+            _write_private(args.output, fresh_snapshot)
+            _write_private(args.freeze_state, state)
+            print(
+                json.dumps(
+                    _summary(fresh_snapshot), sort_keys=True, separators=(",", ":")
                 )
             )
             return 0
