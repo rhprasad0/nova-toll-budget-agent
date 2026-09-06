@@ -66,6 +66,37 @@ resource "aws_s3_bucket_lifecycle_configuration" "hardened" {
       days_after_initiation = 7
     }
   }
+
+  dynamic "rule" {
+    for_each = each.key == "tfstate" && var.environment == "production" ? [1] : []
+    content {
+      id     = "expire-release-plans"
+      status = "Enabled"
+      filter {
+        prefix = "plans/"
+      }
+      expiration {
+        days = 7
+      }
+      noncurrent_version_expiration {
+        noncurrent_days = 1
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = each.key == "tfstate" && var.environment == "production" ? [1] : []
+    content {
+      id     = "clean-release-plan-delete-markers"
+      status = "Enabled"
+      filter {
+        prefix = "plans/"
+      }
+      expiration {
+        expired_object_delete_marker = true
+      }
+    }
+  }
 }
 
 # State migration for the consolidation above -- these keep the existing
@@ -285,6 +316,63 @@ data "aws_iam_policy_document" "tfstate_bucket" {
       test     = "StringNotEquals"
       variable = "aws:PrincipalAccount"
       values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.environment == "production" ? [1] : []
+    content {
+      sid       = "DenyUnconditionalReleasePlanPut"
+      effect    = "Deny"
+      actions   = ["s3:PutObject"]
+      resources = ["${aws_s3_bucket.tfstate.arn}/plans/*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "StringNotEquals"
+        variable = "s3:if-none-match"
+        values   = ["*"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.environment == "production" ? [1] : []
+    content {
+      sid       = "DenyUnencryptedReleasePlanPut"
+      effect    = "Deny"
+      actions   = ["s3:PutObject"]
+      resources = ["${aws_s3_bucket.tfstate.arn}/plans/*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "StringNotEquals"
+        variable = "s3:x-amz-server-side-encryption"
+        values   = ["aws:kms"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.environment == "production" ? [1] : []
+    content {
+      sid       = "DenyWrongReleasePlanKmsKey"
+      effect    = "Deny"
+      actions   = ["s3:PutObject"]
+      resources = ["${aws_s3_bucket.tfstate.arn}/plans/*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "StringNotEquals"
+        variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        values   = [aws_kms_key.tfstate.arn]
+      }
     }
   }
 }

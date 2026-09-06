@@ -485,7 +485,11 @@ def test_tfstate_bucket_is_hardened_and_denies_foreign_accounts():
     assert "data.aws_caller_identity.current.account_id" in policy
     assert "aws_s3_bucket.tfstate.arn" in policy
     assert '"${aws_s3_bucket.tfstate.arn}/*"' in policy
-    assert "s3:x-amz-server-side-encryption" not in policy
+    assert policy.count('variable = "s3:x-amz-server-side-encryption"') == 1
+    assert (
+        policy.count('variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"') == 1
+    )
+    assert policy.count('resources = ["${aws_s3_bucket.tfstate.arn}/plans/*"]') == 3
     assert "920534282028" not in policy
     assert "policy" not in key
     assert "enable_key_rotation     = true" in key
@@ -507,10 +511,11 @@ def test_foundation_names_and_budget_use_the_caller_account():
     ):
         assert name in source
     assert "account_id        = local.account_id" in budget
+    for source in (foundation_s3, foundation_agentcore, foundation_audit, budget):
+        assert "920534282028" not in source
     foundation_terraform = "".join(
         path.read_text() for path in FOUNDATION_ROOT.glob("*.tf")
     )
-    assert foundation_terraform.count("920534282028") == 1
     assert "cloudflare-development-dns-api-token" in foundation_terraform
 
 
