@@ -356,3 +356,10 @@ valid attempts, zero infrastructure, identity, or missing-evidence failures,
 clarification behavior and bounded heuristic wording checks remain the main
 human-acceptance questions; these results are diagnostic and do not justify
 outcome-based corpus edits. No 900-trial baseline or private calls were run.
+
+### Human review approval
+
+On 2026-09-06, the maintainer approved the 30-case pilot review: “The pilot
+cases look good.” This records approval of the reviewed cases in dataset
+`2.2.0`. The retained pilot scores and documented grading limitations remain
+unchanged; the full 900-execution evaluation has not run.
