@@ -8885,7 +8885,9 @@ def test_development_migrations_iam_is_development_only_and_least_privilege():
         assert forbidden not in policy
 
 
-def test_development_migrations_workflow_is_main_only_private_and_sanitized():
+def test_development_migrations_workflow_is_main_only_private_and_sanitized(
+    tmp_path: Path,
+):
     workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_MIGRATIONS_WORKFLOW))
     assert _workflow_trigger(workflow) == {"workflow_dispatch": None}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
@@ -8893,6 +8895,9 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized():
     assert job["if"] == "github.ref == 'refs/heads/main'"
     assert job["environment"] == "development"
     assert job["permissions"] == {"contents": "read", "id-token": "write"}
+    defaults = cast(dict[str, object], job["defaults"])
+    run_defaults = cast(dict[str, object], defaults["run"])
+    assert run_defaults["working-directory"] == "v2"
     assert "workflow_dispatch" in DEVELOPMENT_MIGRATIONS_WORKFLOW
     assert (
         "arn:aws:iam::903859731897:role/nova-toll-v2-development-migrations-dev"
@@ -8903,6 +8908,22 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized():
     assert 'PGHOST="$DB_HOST"' in DEVELOPMENT_MIGRATIONS_WORKFLOW
     assert 'PGHOSTADDR="$TRANSPORT_IPV6"' in DEVELOPMENT_MIGRATIONS_WORKFLOW
     assert "PGSSLMODE=verify-full" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert (
+        "RDS_CA_BUNDLE: $GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert (
+        'export RDS_CA_BUNDLE="$GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"'
+        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    assert "RDS_CA_BUNDLE: infra/build/ca/rds-ca-bundle.pem" not in (
+        DEVELOPMENT_MIGRATIONS_WORKFLOW
+    )
+    fetched = tmp_path / "v2/infra/build/ca/rds-ca-bundle.pem"
+    fetched.parent.mkdir(parents=True)
+    fetched.write_text("disposable CA fixture", encoding="utf-8")
+    assert fetched == tmp_path / "v2/infra/build/ca/rds-ca-bundle.pem"
+    assert fetched != tmp_path / "infra/build/ca/rds-ca-bundle.pem"
     assert "generate-db-auth-token" in DEVELOPMENT_MIGRATIONS_WORKFLOW
     assert (
         "python3 scripts/run_development_migrations.py"

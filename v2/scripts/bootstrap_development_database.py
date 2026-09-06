@@ -12,6 +12,7 @@ a nonempty reviewed CA bundle.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -19,9 +20,11 @@ import sys
 import tempfile
 from contextlib import suppress
 from pathlib import Path
+from typing import NamedTuple, cast
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
+BASELINE_MANIFEST_PATH = ROOT / "v2/db/migration-baselines.json"
 DATABASES = {"production": "nova_toll", "development": "nova_toll_development"}
 ROLES = {
     "production": (
@@ -64,6 +67,149 @@ PRICING_OWNER_VIEWS = (
     "pricing.i66_ballpark_samples",
     "pricing.i95_i495_ballpark_samples",
 )
+BASELINE_EVIDENCE = "canonical bootstrap baseline; no application migration executed"
+BASELINE_MIGRATION_ID = "baseline"
+BASELINE_PATHS = {
+    "pricing": "v2/db/schema.sql",
+    "oracle": "v2/db/oracle/schema.sql",
+}
+VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$")
+SCHEMA_VERSION_PATTERN = re.compile(
+    r"^-- (?P<schema>[a-z][a-z0-9_]*) schema version: (?P<version>\S+)$",
+    re.MULTILINE,
+)
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+class Baseline(NamedTuple):
+    schema: str
+    version: str
+    migration_id: str
+    source_path: str
+    source_sha256: str
+    evidence: str
+
+
+def load_baseline_manifest(
+    path: Path | None = None,
+) -> tuple[Baseline, ...]:
+    manifest_path = path or BASELINE_MANIFEST_PATH
+    try:
+        raw: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValueError("development baseline manifest is invalid") from error
+    if not isinstance(raw, list):
+        raise ValueError("development baseline manifest must contain a list")
+
+    baselines: list[Baseline] = []
+    raw_items = cast(list[object], raw)
+    keys = {
+        "schema",
+        "version",
+        "migration_id",
+        "source_path",
+        "source_sha256",
+        "evidence",
+    }
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            raise ValueError("development baseline manifest record is invalid")
+        item = cast(dict[str, object], raw_item)
+        if set(item) != keys:
+            raise ValueError("development baseline manifest record is invalid")
+        schema = item["schema"]
+        version = item["version"]
+        migration_id = item["migration_id"]
+        source_path = item["source_path"]
+        source_sha256 = item["source_sha256"]
+        evidence = item["evidence"]
+        if (
+            not all(
+                isinstance(value, str)
+                for value in (
+                    schema,
+                    version,
+                    migration_id,
+                    source_path,
+                    source_sha256,
+                    evidence,
+                )
+            )
+            or not isinstance(schema, str)
+            or not isinstance(version, str)
+            or not isinstance(migration_id, str)
+            or not isinstance(source_path, str)
+            or not isinstance(source_sha256, str)
+            or not isinstance(evidence, str)
+        ):
+            raise ValueError("development baseline manifest record is invalid")
+        if (
+            schema not in BASELINE_PATHS
+            or source_path != BASELINE_PATHS[schema]
+            or migration_id != BASELINE_MIGRATION_ID
+            or VERSION_PATTERN.fullmatch(version) is None
+            or SHA256_PATTERN.fullmatch(source_sha256) is None
+            or evidence != BASELINE_EVIDENCE
+        ):
+            raise ValueError("development baseline manifest record is invalid")
+        baselines.append(
+            Baseline(
+                schema=schema,
+                version=version,
+                migration_id=migration_id,
+                source_path=source_path,
+                source_sha256=source_sha256,
+                evidence=evidence,
+            )
+        )
+
+    identities = [(baseline.schema, baseline.version) for baseline in baselines]
+    sources = [
+        (baseline.schema, baseline.source_path, baseline.source_sha256)
+        for baseline in baselines
+    ]
+    if len(identities) != len(set(identities)) or len(sources) != len(set(sources)):
+        raise ValueError("development baseline manifest contains duplicates")
+    if {baseline.schema for baseline in baselines} != set(BASELINE_PATHS):
+        raise ValueError("development baseline manifest lacks schema coverage")
+    return tuple(baselines)
+
+
+def baseline_for_canonical(schema: str, relative: str) -> Baseline:
+    if BASELINE_PATHS.get(schema) != relative:
+        raise RuntimeError("canonical source is not an approved baseline path")
+    source = ROOT / relative
+    try:
+        content = source.read_bytes()
+        text = content.decode("utf-8")
+        digest = hashlib.sha256(content).hexdigest()
+    except (OSError, UnicodeError) as error:
+        raise RuntimeError("canonical source is unavailable") from error
+    matches = [
+        match.group("version")
+        for match in SCHEMA_VERSION_PATTERN.finditer(text)
+        if match.group("schema") == schema
+    ]
+    if len(matches) != 1 or VERSION_PATTERN.fullmatch(matches[0]) is None:
+        raise RuntimeError("canonical source has no exact schema version")
+    inserted = re.findall(
+        rf"INSERT INTO {re.escape(schema)}[.]schema_version "
+        rf"\(version\) VALUES \('([^']+)'\)",
+        text,
+    )
+    if inserted != matches:
+        raise RuntimeError("canonical source schema version is not exact")
+    recognized = [
+        baseline
+        for baseline in load_baseline_manifest()
+        if baseline.schema == schema
+        and baseline.version == matches[0]
+        and baseline.source_path == relative
+        and baseline.source_sha256 == digest
+    ]
+    if len(recognized) != 1:
+        raise RuntimeError("canonical source is not represented in baseline manifest")
+    return recognized[0]
 
 
 def run(
@@ -243,10 +389,6 @@ def render(source: Path, destination: Path) -> None:
     )
 
 
-def canonical_sha256(relative: str) -> str:
-    return hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
-
-
 def prepare_development_ownership() -> None:
     """Create bounded owners and temporarily delegate ownership transfers."""
 
@@ -340,6 +482,8 @@ END $$;
 
 
 def bootstrap_development_objects(database: str) -> None:
+    pricing_baseline = baseline_for_canonical("pricing", "v2/db/schema.sql")
+    oracle_baseline = baseline_for_canonical("oracle", "v2/db/oracle/schema.sql")
     pricing_tables = "\n".join(
         f"ALTER TABLE {table} OWNER TO pricing_owner_development;"
         for table in PRICING_OWNER_TABLES
@@ -441,16 +585,24 @@ INSERT INTO tollchat_migration.schema_history (
     schema_name, schema_version, migration_id, source_path,
     source_sha256, evidence, is_baseline
 ) VALUES
-    ('pricing', '1.3.0', 'baseline', 'v2/db/schema.sql', :'pricing_sha256',
-     'canonical bootstrap baseline; no application migration executed', true),
-    ('oracle', '1.14.0', 'baseline', 'v2/db/oracle/schema.sql', :'oracle_sha256',
-     'canonical bootstrap baseline; no application migration executed', true)
+    ('pricing', :'pricing_version', :'pricing_migration_id', :'pricing_source_path',
+     :'pricing_sha256', :'pricing_evidence', true),
+    ('oracle', :'oracle_version', :'oracle_migration_id', :'oracle_source_path',
+     :'oracle_sha256', :'oracle_evidence', true)
 ON CONFLICT (schema_name, migration_id) DO NOTHING;
 COMMIT;
 """,
             variables={
-                "pricing_sha256": canonical_sha256("v2/db/schema.sql"),
-                "oracle_sha256": canonical_sha256("v2/db/oracle/schema.sql"),
+                "pricing_version": pricing_baseline.version,
+                "pricing_migration_id": pricing_baseline.migration_id,
+                "pricing_source_path": pricing_baseline.source_path,
+                "pricing_sha256": pricing_baseline.source_sha256,
+                "pricing_evidence": pricing_baseline.evidence,
+                "oracle_version": oracle_baseline.version,
+                "oracle_migration_id": oracle_baseline.migration_id,
+                "oracle_source_path": oracle_baseline.source_path,
+                "oracle_sha256": oracle_baseline.source_sha256,
+                "oracle_evidence": oracle_baseline.evidence,
             },
         )
     finally:

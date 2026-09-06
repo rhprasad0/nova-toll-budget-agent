@@ -221,9 +221,14 @@ def _registry() -> tuple[tuple[schema_checks.RegisteredSchema, ...], dict[str, s
             raise MigrationError(
                 f"canonical schema source is not a regular file: {registered.canonical_sql}"
             )
-        version = schema_checks.schema_version(
-            registered.name, canonical.read_text(encoding="utf-8")
-        )
+        committed = _source_bytes(registered.canonical_sql, canonical)
+        try:
+            canonical_text = committed.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise MigrationError(
+                f"canonical schema source is not UTF-8: {registered.canonical_sql}"
+            ) from error
+        version = schema_checks.schema_version(registered.name, canonical_text)
         if version is None:
             raise MigrationError(f"canonical schema has no version: {registered.name}")
         versions[registered.name] = version
@@ -246,6 +251,28 @@ def _expected_values(migrations: tuple[Migration, ...]) -> str:
         )
         + ")"
         for migration in migrations
+    ]
+    if not rows:
+        return "SELECT NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text WHERE false"
+    return "VALUES\n        " + ",\n        ".join(rows)
+
+
+def _baseline_values(baselines: tuple[bootstrap.Baseline, ...]) -> str:
+    rows = [
+        "("
+        + ", ".join(
+            _sql_literal(value)
+            for value in (
+                baseline.schema,
+                baseline.version,
+                baseline.migration_id,
+                baseline.source_path,
+                baseline.source_sha256,
+                baseline.evidence,
+            )
+        )
+        + ")"
+        for baseline in baselines
     ]
     if not rows:
         return "SELECT NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text WHERE false"
@@ -549,41 +576,42 @@ FROM checks;
 
 
 def _history_preflight_sql(
-    migrations: tuple[Migration, ...], canonical_versions: dict[str, str]
+    migrations: tuple[Migration, ...],
+    canonical_versions: dict[str, str],
+    baselines: tuple[bootstrap.Baseline, ...] | None = None,
 ) -> str:
+    del canonical_versions
+    if baselines is None:
+        baselines = bootstrap.load_baseline_manifest()
     expected = _expected_values(migrations)
+    recognized_baselines = _baseline_values(baselines)
     return rf"""
 SET ROLE pricing_owner_development;
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM {HISTORY_TABLE} WHERE schema_name = 'pricing' AND is_baseline) <> 1
+  IF (SELECT count(*) FROM {HISTORY_TABLE} WHERE is_baseline) <> 2
+     OR (SELECT count(*) FROM {HISTORY_TABLE}
+         WHERE schema_name = 'pricing' AND is_baseline) <> 1
+     OR (SELECT count(*) FROM {HISTORY_TABLE}
+         WHERE schema_name = 'oracle' AND is_baseline) <> 1
      OR EXISTS (
-       SELECT 1 FROM {HISTORY_TABLE}
-       WHERE schema_name = 'pricing' AND is_baseline
-         AND (migration_id <> 'baseline'
-           OR schema_version <> {_sql_literal(canonical_versions["pricing"])}
-           OR source_path <> 'v2/db/schema.sql'
-           OR source_sha256 <> {_sql_literal(hashlib.sha256((ROOT / "v2/db/schema.sql").read_bytes()).hexdigest())}
-           OR evidence <> 'canonical bootstrap baseline; no application migration executed')
+       SELECT 1 FROM {HISTORY_TABLE} history
+       WHERE history.is_baseline
+         AND NOT EXISTS (
+           SELECT 1 FROM ({recognized_baselines}) AS baseline(
+             schema_name, schema_version, migration_id, source_path,
+             source_sha256, evidence
+           )
+           WHERE baseline.schema_name = history.schema_name
+             AND baseline.schema_version = history.schema_version
+             AND baseline.migration_id = history.migration_id
+             AND baseline.source_path = history.source_path
+             AND baseline.source_sha256 = history.source_sha256
+             AND baseline.evidence = history.evidence
+         )
      )
   THEN
-    RAISE EXCEPTION 'pricing migration baseline is not exact';
-  END IF;
-END $$;
-DO $$
-BEGIN
-  IF (SELECT count(*) FROM {HISTORY_TABLE} WHERE schema_name = 'oracle' AND is_baseline) <> 1
-     OR EXISTS (
-       SELECT 1 FROM {HISTORY_TABLE}
-       WHERE schema_name = 'oracle' AND is_baseline
-         AND (migration_id <> 'baseline'
-           OR schema_version <> {_sql_literal(canonical_versions["oracle"])}
-           OR source_path <> 'v2/db/oracle/schema.sql'
-           OR source_sha256 <> {_sql_literal(hashlib.sha256((ROOT / "v2/db/oracle/schema.sql").read_bytes()).hexdigest())}
-           OR evidence <> 'canonical bootstrap baseline; no application migration executed')
-     )
-  THEN
-    RAISE EXCEPTION 'oracle migration baseline is not exact';
+    RAISE EXCEPTION 'development migration baseline is not exact';
   END IF;
 END $$;
 DO $$
@@ -714,7 +742,10 @@ def _session_sql(
     rendered: dict[str, Path],
     commit: str,
     run_id: str,
+    baselines: tuple[bootstrap.Baseline, ...] | None = None,
 ) -> str:
+    if baselines is None:
+        baselines = bootstrap.load_baseline_manifest()
     lines = [
         "\\pset pager off",
         "\\set ON_ERROR_STOP on",
@@ -726,7 +757,7 @@ def _session_sql(
         "SET ROLE oracle_owner_development;",
         "SELECT version AS oracle_before FROM oracle.schema_version WHERE singleton\\gset",
         "RESET ROLE;",
-        _history_preflight_sql(migrations, canonical_versions),
+        _history_preflight_sql(migrations, canonical_versions, baselines),
     ]
     lines.extend(
         _migration_sql(migration, rendered[migration.path], commit, run_id)
@@ -781,6 +812,7 @@ def _parse_result(stdout: str, run_id: str) -> tuple[dict[str, str], list[str]]:
 
 
 def run() -> dict[str, object]:
+    bootstrap.load_baseline_manifest()
     schemas, canonical_versions = _registry()
     migrations = _migration_candidates(schemas)
     commit = _run_capture("git", "rev-parse", "HEAD")

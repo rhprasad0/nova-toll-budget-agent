@@ -53,10 +53,11 @@ jobs:
           DB_IDENTIFIER: nova-toll-db
           DB_NAME: nova_toll_development
           DB_USER: schema_migrator_development
-          RDS_CA_BUNDLE: infra/build/ca/rds-ca-bundle.pem
+          RDS_CA_BUNDLE: $GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem
         run: |
           set -euo pipefail
           set +x
+          export RDS_CA_BUNDLE="$GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"
           test "$GITHUB_REF" = "refs/heads/main"
           test "$GITHUB_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
 

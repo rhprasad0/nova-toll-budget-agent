@@ -4410,6 +4410,12 @@ and follow this exact order:
    --fresh-development`). Keep the reviewed administrator URL, password, and
    any IAM token in process memory only; never write them to a file, argument,
    state, plan, log, summary, or artifact.
+
+   When a canonical schema version advances, add its contiguous migration
+   chain and append the matching immutable record to
+   `v2/db/migration-baselines.json`. Existing manifest records must never be
+   rewritten or deleted; this metadata change does not authorize a live action.
+
 3. Approve the protected `development` environment and dispatch
    `.github/workflows/v2-development-migrations.yml` from `refs/heads/main`:
 

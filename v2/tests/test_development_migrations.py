@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -68,6 +69,198 @@ def test_migration_candidates_are_registered_and_exclude_bootstrap_files() -> No
         re.fullmatch(r"[0-9a-f]{64}", migration.source_sha256)
         for migration in migrations
     )
+
+
+def test_baseline_manifest_is_shared_and_matches_canonical_bytes() -> None:
+    baselines = runner.bootstrap.load_baseline_manifest()
+    assert {baseline.schema for baseline in baselines} == {"pricing", "oracle"}
+    assert all(
+        baseline
+        == runner.bootstrap.baseline_for_canonical(
+            baseline.schema, baseline.source_path
+        )
+        for baseline in baselines
+    )
+    assert {baseline.source_sha256 for baseline in baselines} == {
+        hashlib.sha256((runner.ROOT / baseline.source_path).read_bytes()).hexdigest()
+        for baseline in baselines
+    }
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "{}",
+        "[{}]",
+        '[{"schema":"pricing"}]',
+        "not json",
+    ],
+)
+def test_baseline_manifest_rejects_malformed_records(
+    tmp_path: Path, contents: str
+) -> None:
+    path = tmp_path / "migration-baselines.json"
+    path.write_text(contents, encoding="utf-8")
+    with pytest.raises(ValueError):
+        runner.bootstrap.load_baseline_manifest(path)
+
+
+def test_baseline_manifest_rejects_duplicate_generation(tmp_path: Path) -> None:
+    baselines = runner.bootstrap.load_baseline_manifest()
+    record = {
+        "schema": baselines[0].schema,
+        "version": baselines[0].version,
+        "migration_id": baselines[0].migration_id,
+        "source_path": baselines[0].source_path,
+        "source_sha256": baselines[0].source_sha256,
+        "evidence": baselines[0].evidence,
+    }
+    path = tmp_path / "migration-baselines.json"
+    path.write_text(json.dumps([record, record]), encoding="utf-8")
+    with pytest.raises(ValueError):
+        runner.bootstrap.load_baseline_manifest(path)
+
+
+def test_bootstrap_uses_manifest_values_for_history_insert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, str] | None]] = []
+
+    def fake_psql(database: str, **kwargs: Any) -> None:
+        calls.append((database, kwargs.get("variables")))
+
+    monkeypatch.setattr(runner.bootstrap, "psql", fake_psql)
+    runner.bootstrap.bootstrap_development_objects("nova_toll_development")
+    variables = next(
+        variables for database, variables in calls if database != "postgres"
+    )
+    assert variables is not None
+    baselines = runner.bootstrap.load_baseline_manifest()
+    assert variables["pricing_version"] == next(
+        baseline.version for baseline in baselines if baseline.schema == "pricing"
+    )
+    assert variables["oracle_sha256"] == next(
+        baseline.source_sha256 for baseline in baselines if baseline.schema == "oracle"
+    )
+
+
+def test_bootstrap_rejects_unrepresented_canonical_before_psql(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "v2/db/schema.sql"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "-- pricing schema version: 1.3.0\n"
+        "INSERT INTO pricing.schema_version (version) VALUES ('1.3.0');\n",
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "migration-baselines.json"
+    manifest_path.write_text(
+        (runner.ROOT / "v2/db/migration-baselines.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner.bootstrap, "ROOT", tmp_path)
+    monkeypatch.setattr(runner.bootstrap, "BASELINE_MANIFEST_PATH", manifest_path)
+
+    def fail_psql(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("psql must not run on manifest mismatch")
+
+    monkeypatch.setattr(runner.bootstrap, "psql", fail_psql)
+    with pytest.raises(RuntimeError, match="not represented"):
+        runner.bootstrap.bootstrap_development_objects("nova_toll_development")
+
+
+def test_history_preflight_uses_recognized_baselines_not_current_targets() -> None:
+    baselines = runner.bootstrap.load_baseline_manifest()
+    sql = runner._history_preflight_sql((), {}, baselines)
+    assert "canonical_versions" not in sql
+    assert "schema_version <> '1.3.0'" not in sql
+    assert "schema_version <> '1.14.0'" not in sql
+    assert all(baseline.source_sha256 in sql for baseline in baselines)
+    assert "baseline.migration_id = history.migration_id" in sql
+
+
+def test_old_baseline_can_reach_new_target_while_final_requires_new_target() -> None:
+    migration: Any = _migration(previous="1.3.0", target="1.4.0")
+    old_baseline = runner.bootstrap.Baseline(
+        schema="pricing",
+        version="1.3.0",
+        migration_id="baseline",
+        source_path="v2/db/schema.sql",
+        source_sha256="a" * 64,
+        evidence=runner.bootstrap.BASELINE_EVIDENCE,
+    )
+    oracle_baseline = runner.bootstrap.Baseline(
+        schema="oracle",
+        version="1.14.0",
+        migration_id="baseline",
+        source_path="v2/db/oracle/schema.sql",
+        source_sha256="b" * 64,
+        evidence=runner.bootstrap.BASELINE_EVIDENCE,
+    )
+    preflight = runner._history_preflight_sql(
+        (migration,),
+        {"pricing": "1.4.0", "oracle": "1.14.0"},
+        (old_baseline, oracle_baseline),
+    )
+    final = runner._final_sql(
+        (migration,), {"pricing": "1.4.0", "oracle": "1.14.0"}, "a" * 36
+    )
+    assert "'1.3.0', '1.4.0'" in preflight
+    assert "version FROM pricing.schema_version WHERE singleton) <> '1.4.0'" in final
+
+
+def test_runner_keeps_psql_cwd_at_repository_root() -> None:
+    assert "cwd=ROOT" in inspect.getsource(runner.run)
+
+
+def test_registry_rejects_dirty_canonical_before_psql(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pricing = tmp_path / "v2/db/schema.sql"
+    pricing.parent.mkdir(parents=True)
+    pricing.write_bytes(b"dirty canonical")
+    oracle = tmp_path / "v2/db/oracle/schema.sql"
+    oracle.parent.mkdir(parents=True)
+    oracle.write_bytes((runner.ROOT / "v2/db/oracle/schema.sql").read_bytes())
+    canonical_bytes = {
+        "v2/db/schema.sql": (runner.ROOT / "v2/db/schema.sql").read_bytes(),
+        "v2/db/oracle/schema.sql": oracle.read_bytes(),
+    }
+    registry = tmp_path / "application-schemas.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "schemas": [
+                    {
+                        "name": "oracle",
+                        "canonical_sql": "v2/db/oracle/schema.sql",
+                        "owned_paths": ["v2/db/oracle/*.sql"],
+                    },
+                    {
+                        "name": "pricing",
+                        "canonical_sql": "v2/db/schema.sql",
+                        "owned_paths": ["v2/db/*.sql"],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    monkeypatch.setattr(runner, "REGISTRY_PATH", registry)
+
+    def committed(relative: str) -> bytes:
+        return canonical_bytes[relative]
+
+    monkeypatch.setattr(runner, "_committed_bytes", committed)
+
+    def fail_subprocess(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("psql must not run after a dirty canonical source")
+
+    monkeypatch.setattr(runner.subprocess, "run", fail_subprocess)
+    with pytest.raises(runner.MigrationError, match="worktree migration differs"):
+        runner._registry()
 
 
 def test_source_bytes_must_match_committed_head(tmp_path: Path) -> None:
