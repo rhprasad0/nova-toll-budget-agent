@@ -21,6 +21,59 @@ S3 = (ROOT / "infra" / "s3.tf").read_text()
 WORKFLOW = (ROOT / ".github" / "workflows" / "terraform.yml").read_text()
 PRODUCTION_PLAN = (ROOT / ".github" / "workflows" / "v2-production-plan.yml").read_text()
 
+EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS = {
+    "ReadRetiredUsagePublisherIam": {
+        "Effect": "Allow",
+        "Action": [
+            "iam:GetRole",
+            "iam:GetRolePolicy",
+            "iam:ListAttachedRolePolicies",
+            "iam:ListRolePolicies",
+            "iam:ListRoleTags",
+        ],
+        "Resource": ["arn:aws:iam::920534282028:role/tollchat-v2-usage-publisher"],
+    },
+    "ReadRetiredUsagePublisherLambda": {
+        "Effect": "Allow",
+        "Action": [
+            "lambda:GetAlias",
+            "lambda:GetFunction",
+            "lambda:GetFunctionCodeSigningConfig",
+            "lambda:GetFunctionConfiguration",
+            "lambda:GetFunctionEventInvokeConfig",
+            "lambda:GetFunctionUrlConfig",
+            "lambda:GetPolicy",
+            "lambda:GetProvisionedConcurrencyConfig",
+            "lambda:ListAliases",
+            "lambda:ListProvisionedConcurrencyConfigs",
+            "lambda:ListTags",
+            "lambda:ListVersionsByFunction",
+        ],
+        "Resource": [
+            "arn:aws:lambda:us-east-1:920534282028:function:tollchat-v2-usage-publisher"
+        ],
+    },
+    "ReadRetiredUsagePublisherEvents": {
+        "Effect": "Allow",
+        "Action": [
+            "events:DescribeRule",
+            "events:ListTagsForResource",
+            "events:ListTargetsByRule",
+        ],
+        "Resource": [
+            "arn:aws:events:us-east-1:920534282028:rule/tollchat-v2-usage-publisher"
+        ],
+    },
+    "ReadRetiredUsagePublisherAlarms": {
+        "Effect": "Allow",
+        "Action": ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"],
+        "Resource": [
+            "arn:aws:cloudwatch:us-east-1:920534282028:alarm:tollchat-v2-usage-publisher-errors",
+            "arn:aws:cloudwatch:us-east-1:920534282028:alarm:tollchat-v2-usage-publisher-failed-invocations",
+        ],
+    },
+}
+
 
 def require(needle: str, haystack: str, message: str | None = None) -> None:
     if needle not in haystack:
@@ -58,7 +111,10 @@ def terraform_block(source: str, header: str, occurrence: int = 0) -> str:
 
 
 def rendered_production_policies() -> tuple[
-    dict[str, dict[str, object]], list[dict[str, object]], dict[str, dict[str, object]]
+    dict[str, dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    dict[str, dict[str, object]],
 ]:
     """Render the production policy locals in an isolated, backend-free root."""
     first_locals = terraform_block(IAM, "locals", 0)
@@ -107,6 +163,10 @@ def rendered_production_policies() -> tuple[
 
         output "production_delivery_planner_statements" {{
           value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_agentcore_default_statement])
+        }}
+
+        output "production_delivery_application_policy_statements" {{
+          value = local.production_delivery_application_policy_statements
         }}
 
         output "production_delivery_deploy_policy_documents" {{
@@ -169,10 +229,12 @@ def rendered_production_policies() -> tuple[
         outputs = json.loads(rendered.stdout)["planned_values"]["outputs"]
         documents = outputs["production_delivery_planner_policy_documents"]["value"]
         statements = outputs["production_delivery_planner_statements"]["value"]
+        application_statements = outputs["production_delivery_application_policy_statements"]["value"]
         deploy_documents = outputs["production_delivery_deploy_policy_documents"]["value"]
         return (
             {key: json.loads(value) for key, value in documents.items()},
             statements,
+            application_statements,
             {key: json.loads(value) for key, value in deploy_documents.items()},
         )
 
@@ -325,6 +387,22 @@ def _assert_gate_fixtures() -> None:
     indexed_target = _valid_plan()
     indexed_target["resource_changes"][0]["address"] = 'aws_cloudwatch_log_group.tollchat_proxy["unexpected"]'
     invalid.append(indexed_target)
+
+    for actions in (["delete"], ["delete", "create"], ["create", "delete"]):
+        publisher_change = _valid_plan()
+        publisher_change["resource_changes"].append(
+            {
+                "address": "aws_lambda_function.usage_publisher",
+                "mode": "managed",
+                "change": {
+                    "before": {"function_name": "tollchat-v2-usage-publisher"},
+                    "after": None,
+                    "after_unknown": {},
+                    "actions": actions,
+                },
+            }
+        )
+        invalid.append(publisher_change)
 
     deleted_tag = _valid_plan()
     del deleted_tag["resource_changes"][0]["change"]["after"]["tags_all"]["project"]
@@ -568,8 +646,12 @@ def _check_production_planner() -> None:
     assert predicate_manifest_keys == sorted(generated_manifest_keys)
     require('tags              = local.is_production ? { delivery_proof = "issue-301" } : {}', (ROOT / "v2" / "infra" / "agentcore.tf").read_text())
     require("v2-production-plan.yml", WORKFLOW)
-    require("PR CI never runs `terraform plan` or `apply`", (ROOT / "v2" / "README.md").read_text())
-    require("manual production planner stores only a gated", (ROOT / "v2" / "RUNBOOK.md").read_text())
+    v2_readme = (ROOT / "v2" / "README.md").read_text()
+    runbook = (ROOT / "v2" / "RUNBOOK.md").read_text()
+    require("credential-free PR CI never runs `terraform", v2_readme)
+    require("protected, manually\ndispatched [development migration workflow]", v2_readme)
+    require("manual production planner stores only a gated", runbook)
+    require("Production schema changes remain limited to the separately authorized", runbook)
 
 
 def _check_production_upload_stub() -> None:
@@ -1062,7 +1144,12 @@ def main() -> None:
     require("DecryptCloudflareProviderToken", planner)
 
     require("production_delivery_planner_policy_documents", production)
-    planner_documents, planner_statements, deploy_documents = rendered_production_policies()
+    (
+        planner_documents,
+        planner_statements,
+        application_statements,
+        deploy_documents,
+    ) = rendered_production_policies()
     assert len(planner_documents) == 9
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
@@ -1076,19 +1163,20 @@ def main() -> None:
         "edge",
         "endpoint",
     }
+    planner_keys = (
+        "state",
+        "plan",
+        "compute",
+        "observability",
+        "storage",
+        "data",
+        "runtime",
+        "edge",
+        "endpoint",
+    )
     split_statements = [
         statement
-        for key in (
-            "state",
-            "plan",
-            "compute",
-            "observability",
-            "storage",
-            "data",
-            "runtime",
-            "edge",
-            "endpoint",
-        )
+        for key in planner_keys
         for statement in planner_documents[key]["Statement"]
     ]
     assert split_statements == planner_statements
@@ -1098,12 +1186,93 @@ def main() -> None:
         size = len(rendered.encode("utf-8"))
         print(f"planner policy {key}: {size} UTF-8 bytes")
         assert size <= 6_144
+    planner_discovery_keys = planner_keys[2:-1]
+    rendered_planner_discovery = [
+        statement
+        for key in planner_discovery_keys
+        for statement in planner_documents[key]["Statement"]
+    ]
+    assert len({statement["Sid"] for statement in rendered_planner_discovery}) == len(rendered_planner_discovery)
     planner_json = json.dumps(planner_documents, sort_keys=True)
     assert "iam:PassRole" not in planner_json
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
     assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "edge"}
+    deploy_application_keys = ("compute", "observability", "storage", "data", "runtime", "edge")
+    rendered_deploy_application = [
+        statement
+        for key in deploy_application_keys
+        for statement in deploy_documents[key]["Statement"]
+        if statement["Sid"] not in {"ReadProductionAgentCoreDefaultEndpoint", "PassProductionAgentCoreRuntimeRole"}
+    ]
+    assert rendered_deploy_application == application_statements
+    assert len({statement["Sid"] for statement in rendered_deploy_application}) == len(rendered_deploy_application)
+    for key, policy in deploy_documents.items():
+        rendered = json.dumps(policy, separators=(",", ":"), ensure_ascii=False)
+        size = len(rendered.encode("utf-8"))
+        print(f"deploy policy {key}: {size} UTF-8 bytes")
+        assert size <= 6_144
+    production_deploy_json = json.dumps(deploy_documents, sort_keys=True)
+    expected_reads = {
+        sid: {
+            "Effect": values["Effect"],
+            "Action": sorted(values["Action"]),
+            "Resource": sorted(values["Resource"]),
+        }
+        for sid, values in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS.items()
+    }
+    for statements in (rendered_planner_discovery, application_statements):
+        actual_reads = {
+            statement["Sid"]: {
+                "Effect": statement["Effect"],
+                "Action": sorted(statement["Action"]),
+                "Resource": sorted(
+                    statement["Resource"]
+                    if isinstance(statement["Resource"], list)
+                    else [statement["Resource"]]
+                ),
+            }
+            for statement in statements
+            if statement["Sid"] in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS
+        }
+        assert all(
+            set(statement) == {"Action", "Effect", "Resource", "Sid"}
+            for statement in statements
+            if statement["Sid"] in EXPECTED_PRODUCTION_USAGE_PUBLISHER_READS
+        )
+        assert actual_reads == expected_reads
+    effective_policy_json = json.dumps(
+        planner_documents, sort_keys=True
+    )
+    effective_policy_json += production_deploy_json
+    assert "903859731897" not in effective_policy_json
+    assert "tollchat-v2-usage-publisher-dev" not in effective_policy_json
+    for sid in (
+        "RetireUsagePublisherIam",
+        "RetireUsagePublisherLambda",
+        "RetireUsagePublisherEvents",
+        "RetireUsagePublisherAlarms",
+    ):
+        assert sid not in planner_json
+        assert sid not in production_deploy_json
+    retired_actions = {
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "lambda:DeleteFunction",
+        "lambda:RemovePermission",
+        "events:DeleteRule",
+        "events:RemoveTargets",
+        "cloudwatch:DeleteAlarms",
+    }
+    for statements in (rendered_planner_discovery, application_statements):
+        for statement in statements:
+            if "tollchat-v2-usage-publisher" in json.dumps(statement):
+                assert not retired_actions.intersection(statement.get("Action", []))
+    for policy in deploy_documents.values():
+        for statement in policy["Statement"]:
+            if "tollchat-v2-usage-publisher" in json.dumps(statement):
+                assert not retired_actions.intersection(statement.get("Action", []))
     state_statements = deploy_documents["state"]["Statement"]
     release_statements = deploy_documents["release"]["Statement"]
     assert [statement["Sid"] for statement in state_statements] == ["ListProductionApplicationState", "ManageProductionApplicationState", "ManageProductionApplicationLock", "DecryptProductionApplicationStateAndLock", "GenerateProductionApplicationStateDataKeys"]

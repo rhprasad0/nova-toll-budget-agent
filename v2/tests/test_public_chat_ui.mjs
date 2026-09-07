@@ -9,7 +9,6 @@ import {
   post,
   runRequest,
   shouldSubmitOnEnter,
-  usageProofText,
 } from "../agent/public_chat.mjs";
 
 const element = (tagName = "div") => ({
@@ -159,29 +158,4 @@ test("public report routes rewrite toll directories with or without trailing sla
   ]) {
     assert.equal(context.rewrite({ request: { method: "GET", uri } }).uri, expected);
   }
-});
-
-test("usage proof accepts only current nonnegative cumulative snapshots", () => {
-  const snapshot = {
-    schema_version: 1,
-    collection_started_on: "2026-08-24",
-    as_of: "2026-08-25T05:15:00Z",
-    engaged_sessions: 12,
-    completed_responses: 34,
-  };
-  const now = Date.parse("2026-08-25T12:00:00Z");
-  const homepageUpdatedAt = "2026-08-26T16:05:17Z";
-
-  assert.equal(
-    usageProofText(snapshot, now, homepageUpdatedAt),
-    "Since August 24, 2026, 12 counted anonymous chat sessions sent a message. TollChat completed 34 responses. Fresh toll data is provided continuously; homepage last updated August 26, 2026.",
-  );
-  assert.equal(usageProofText(snapshot, now, "not-a-date"), null);
-  assert.equal(usageProofText({ ...snapshot, engaged_sessions: -1 }, now, homepageUpdatedAt), null);
-  assert.equal(usageProofText({ ...snapshot, engaged_sessions: 1.5 }, now, homepageUpdatedAt), null);
-  assert.equal(
-    usageProofText({ ...snapshot, as_of: "2026-08-22T05:15:00Z" }, now, homepageUpdatedAt),
-    null,
-  );
-  assert.equal(usageProofText({}, now, homepageUpdatedAt), null);
 });

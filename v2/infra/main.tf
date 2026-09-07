@@ -431,22 +431,11 @@ data "aws_iam_policy_document" "publisher" {
   }
 
   statement {
-    sid       = "WriteAgentReportGenerationMarkers"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.agent_measurement.arn}/generations/*"]
-  }
-
-  statement {
     sid       = "UseSiteKey"
     actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
     resources = [aws_kms_key.site.arn]
   }
 
-  statement {
-    sid       = "UseAgentMeasurementKey"
-    actions   = ["kms:Encrypt", "kms:GenerateDataKey"]
-    resources = [aws_kms_key.agent_measurement.arn]
-  }
 }
 
 resource "aws_iam_role_policy" "publisher" {
@@ -555,7 +544,6 @@ resource "aws_lambda_function" "publisher" {
       DB_READER_USER             = local.database_roles.reader
       REPORT_PUBLICATION_ENABLED = "true"
       SITE_BUCKET_NAME           = aws_s3_bucket.site.id
-      AGENT_MEASUREMENT_BUCKET   = aws_s3_bucket.agent_measurement.id
       }, local.is_production ? {} : {
       PUBLIC_BASE_URL      = local.public_site_url
       TOLLCHAT_ENVIRONMENT = var.environment
@@ -575,7 +563,6 @@ resource "aws_lambda_function" "publisher" {
     aws_iam_role_policy.publisher,
     aws_iam_role_policy_attachment.publisher_vpc,
     aws_s3_object.robots,
-    aws_s3_bucket_server_side_encryption_configuration.agent_measurement,
   ]
 }
 

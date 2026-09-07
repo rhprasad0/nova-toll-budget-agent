@@ -1428,15 +1428,20 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         assert forbidden not in workflow
     for text in (
         "PRs use disposable migration validation only",
+        "checks are credential-free",
         "never mutate deployed databases or schemas",
-        "Only the reviewed, explicitly authorized Oracle migration",
-        "Generic or future manual migrations are not authorized",
+        "protected `development` migration workflow",
+        "refs/heads/main",
+        "For production, only the reviewed, explicitly authorized Oracle migration",
+        "Generic or future manual migrations are not authorized for",
     ):
         assert text in AGENTS
     for text in (
         "PRs use disposable PostGIS migration validation only",
-        "sole\nschema-change exception is the separately authorized, reviewed migration 030",
+        "checks are\ncredential-free",
+        "Production schema changes remain limited to the separately authorized, reviewed",
         "Application release\nartifacts do not apply schema changes; this procedure is separate",
+        "protected development migration workflow",
         "nova-toll-tfstate-920534282028",
         "nova-toll/terraform.tfstate",
         "nova-toll/v2/terraform.tfstate",
@@ -1659,7 +1664,7 @@ def test_shared_dynamodb_endpoint_admits_v2_session_table():
     assert "tollchat-v2-anonymous-sessions-dev" in endpoint
     assert "table/tollchat-anonymous-sessions" not in endpoint
     assert "dynamodb:*" not in endpoint
-    assert '"dynamodb:TransactWriteItems"' in endpoint
+    assert '"dynamodb:TransactWriteItems"' not in endpoint
 
 
 def test_v2_has_an_independent_state_and_identity():
@@ -1685,25 +1690,15 @@ def test_v2_has_an_independent_state_and_identity():
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
     assert 'name = "tollchat-agent-reports${local.suffix}"' in measurement
     assert (
-        "webacl:tollchat-v2-public-chat${local.suffix}:agent-route-report"
-        in measurement
-    )
-    assert (
-        'WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"'
-        in measurement
-    )
-    assert (
-        'WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"'
-        in measurement
-    )
-    assert (
         'agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"'
         in measurement
     )
-    assert "TOLLCHAT_ENVIRONMENT = var.environment" in measurement
     assert (
-        "local.is_production ? null : { Environment = var.environment }" in measurement
+        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
+        not in measurement
     )
+    assert 'resource "aws_s3_object" "agent_registry"' in measurement
+    assert "ignore_changes = [source, source_hash]" in measurement
     assert "WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert (
         'resource "aws_cloudfront_response_headers_policy" "development_noindex"'
@@ -1794,7 +1789,7 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert "PUBLIC_ORIGINS = local.public_site_url" in proxy
     assert 'PUBLIC_ORIGINS = "https://${local.domains[0]}"' not in proxy
     loader = main.split('resource "aws_lambda_function" "loader"', maxsplit=1)[1].split(
-        'resource "aws_lambda_function" "agent_usage_rollup"', maxsplit=1
+        'resource "aws_lambda_function" "publisher"', maxsplit=1
     )[0]
     publisher = main.split('resource "aws_lambda_function" "publisher"', maxsplit=1)[
         1
@@ -2115,7 +2110,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
 
 def test_public_report_launch_is_selected_environment_and_correlated():
     launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
-        "## Agent-route measurement launch", 1
+        "## Smoke test", 1
     )[0]
     assert "production only" in launch.lower()
     assert re.search(
@@ -2299,21 +2294,15 @@ def test_public_report_launch_is_selected_environment_and_correlated():
     assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
 
 
-def test_agent_measurement_is_count_only_private_and_bounded():
+def test_agent_measurement_retains_historical_metadata_without_active_sink():
     measurement_path = V2_ROOT / "infra" / "agent_measurement.tf"
     assert measurement_path.exists()
     measurement = measurement_path.read_text()
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
-    bot = site.split('name     = "agent-report-bot-control"', maxsplit=1)[1].split(
-        'name     = "allow-static-site"', maxsplit=1
-    )[0]
-    assert 'version     = "Version_6.1"' in bot
-    assert 'inspection_level        = "COMMON"' in bot
-    assert "override_action" in bot and "count {}" in bot
-    assert 'search_string         = "/tolls/"' in bot
-    assert "sampled_requests_enabled   = true" in bot
-    assert "priority = 0" in bot
+    assert 'name     = "agent-report-bot-control"' not in site
+    assert 'name     = "agent-route-report"' not in site
+    assert 'name     = "allow-static-site"' in site
     assert (
         "priority = 7"
         in site.split('name     = "allow-static-site"', maxsplit=1)[1].split(
@@ -2338,30 +2327,20 @@ def test_agent_measurement_is_count_only_private_and_bounded():
     assert 'sse_algorithm     = "aws:kms"' in measurement
     assert "kms_master_key_id = aws_kms_key.agent_measurement.arn" in measurement
     assert "bucket_key_enabled = true" in measurement
-    assert 'identifiers = ["delivery.logs.amazonaws.com"]' in measurement
-    assert 'actions   = ["kms:GenerateDataKey*"]' in measurement
     assert 'encryption_option = "SSE_KMS"' in measurement
     assert (
         'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
-        in measurement
+        not in measurement
     )
-    assert 'default_behavior = "DROP"' in measurement
-    assert 'behavior    = "KEEP"' in measurement
-    assert "agent-route-report" in measurement
     assert measurement.count("days = 7") >= 2
     assert "enforce_workgroup_configuration    = true" in measurement
     assert "bytes_scanned_cutoff_per_query     = 1073741824" in measurement
     assert "/WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert "/WAFLogs/us-east-1/tollchat-v2-public-chat/" not in measurement
-    assert '"glue:GetPartition"' in measurement
-    assert 'schedule_expression = "cron(15 3 * * ? *)"' in measurement
-    assert "evaluation_periods  = 2" in measurement
-    assert "threshold           = 95" in measurement
-    coverage_alarm = measurement.split(
-        'resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage"',
-        maxsplit=1,
-    )[1]
-    assert 'treat_missing_data  = "notBreaching"' in coverage_alarm
+    assert 'resource "aws_cloudwatch_log_group" "agent_usage_rollup"' in measurement
+    assert "Historical rollup execution logs remain managed" in measurement
+    assert 'resource "aws_s3_object" "agent_registry"' in measurement
+    assert "ignore_changes = [source, source_hash]" in measurement
     assert "usage.json" not in measurement
 
 
@@ -2635,21 +2614,23 @@ def test_agent_measurement_privacy_notice_precedes_logging():
     for text in (
         "seven days",
         "IP address",
+        "full user-agent",
         "AWS WAF",
-        "published generation",
-        "five minutes",
-        "does not disable access or security logging",
+        "cookie values",
+        "authorization headers",
+        "New route-analytics collection and aggregate publication have stopped",
+        "security controls remain separate",
     ):
         assert text in privacy
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
-    logging = measurement.split(
-        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"',
-        maxsplit=1,
-    )[1]
-    assert "aws_s3_object.privacy" in logging
+    assert (
+        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
+        not in measurement
+    )
+    assert "aws_s3_bucket_lifecycle_configuration" in measurement
 
 
-def test_agent_registry_and_rollup_outputs_are_privacy_safe():
+def test_agent_registry_and_rollup_outputs_are_retained_inert_metadata():
     registry = [
         json.loads(line)
         for line in (V2_ROOT / "analytics" / "agent_registry.ndjson")
@@ -2665,30 +2646,17 @@ def test_agent_registry_and_rollup_outputs_are_privacy_safe():
     }
     assert all(entry["documentation_url"].startswith("https://") for entry in registry)
 
-    rollup = (V2_ROOT / "lambdas" / "agent_usage_rollup" / "rollup.sql").read_text()
-    completion = (
-        V2_ROOT / "lambdas" / "agent_usage_rollup" / "complete.sql"
-    ).read_text()
-    latest = (
-        V2_ROOT / "lambdas" / "agent_usage_rollup" / "latest_view.sql"
-    ).read_text()
-    assert "PARTITION BY httprequest.requestid" in rollup
-    assert "httprequest.httpmethod = 'GET'" in rollup
-    assert "report[.]json" in rollup
-    assert "identity_confidence" in rollup
-    assert "web_bot_auth:verified" in rollup
-    assert "assistant-referrer-([^,]+)" in rollup
-    assert "aws_vendor_family = declared_vendor_family" in rollup
-    assert re.search(r"contains\(\s*marker[.]route_keys", rollup)
-    assert "JOIN agent_report_generations marker" in rollup
-    assert "LEFT JOIN agent_report_generations marker" not in rollup
-    for forbidden in ("clientip", "args", "referer"):
-        assert forbidden not in rollup.lower()
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
     assert 'route_keys     = "array<string>"' in measurement
-    assert "INSERT INTO agent_report_rollup_completions" in completion
-    assert "JOIN latest" in latest
-    assert "agent_report_rollups usage" in latest
+    assert "ignore_changes = [source, source_hash]" in measurement
+    for name in (
+        "handler.py",
+        "coverage.sql",
+        "complete.sql",
+        "latest_view.sql",
+        "rollup.sql",
+    ):
+        assert not (V2_ROOT / "lambdas" / "agent_usage_rollup" / name).exists()
 
 
 def test_public_site_publishes_the_v2_ui_and_legal_assets():
@@ -2716,50 +2684,42 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
     assert '"/chat.mjs"' in server
     assert 'key           = "usage.json"' in site
     assert 'content       = "{}"' in site
-    assert 'id="usage-proof"' in page
-    assert re.search(r'<p[^>]*id="usage-proof"[^>]*hidden', page)
+    assert 'id="usage-proof"' not in page
+    assert "New public usage counting has stopped" in page
+    assert "TollChat counts anonymous chat sessions" not in page
 
 
 def test_agent_referrer_rules_match_only_exact_url_authorities():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
-    referrer_rules = site.split('dynamic "rule" {', maxsplit=1)[1].split(
-        'rule {\n    name     = "agent-route-report"', maxsplit=1
-    )[0]
-
-    assert "regex_match_statement" in referrer_rules
-    assert 'positional_constraint = "CONTAINS"' not in referrer_rules
-    assert "^https?://([a-z0-9-]+[.])*" in site
-    assert "(:[0-9]+)?([/?#]|$)" in site
+    assert "assistant_referrers" not in site
+    assert 'dynamic "rule" {' not in site
+    assert 'name     = "agent-route-report"' not in site
 
 
-def test_usage_publisher_is_daily_static_and_least_privilege():
+def test_retained_usage_snapshot_and_log_have_no_current_writer():
     agentcore = (V2_ROOT / "infra" / "agentcore.tf").read_text()
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
-    assert 'resource "aws_lambda_function" "usage_publisher"' in site
-    assert 'function_name = "tollchat-v2-usage-publisher${local.suffix}"' in site
-    assert 'schedule_expression = "cron(15 5 * * ? *)"' in site
-    assert "maximum_event_age_in_seconds = 86400" in site
-    assert "maximum_retry_attempts       = 185" in site
-    assert 'metric_name         = "Errors"' in site
-    assert 'metric_name         = "FailedInvocations"' in site
-
-    policy = site.split('data "aws_iam_policy_document" "usage_publisher"', maxsplit=1)[
-        1
-    ].split('resource "aws_iam_role_policy" "usage_publisher"', maxsplit=1)[0]
-    assert 'actions   = ["dynamodb:GetItem"]' in policy
-    assert 'variable = "dynamodb:LeadingKeys"' in policy
-    assert 'values   = ["usage#all"]' in policy
-    assert 'actions   = ["s3:PutObject"]' in policy
-    assert "${aws_s3_bucket.site.arn}/usage.json" in policy
-    assert 'actions   = ["kms:Encrypt", "kms:GenerateDataKey"]' in policy
-    assert "dynamodb:Scan" not in policy
-    assert "s3:*" not in policy
+    assert 'data "archive_file" "usage_publisher"' not in site
+    assert 'data "aws_iam_policy_document" "usage_publisher"' not in site
+    assert 'resource "aws_lambda_function" "usage_publisher"' not in site
+    assert 'resource "aws_iam_role" "usage_publisher"' not in site
+    assert 'resource "aws_iam_role_policy" "usage_publisher"' not in site
+    assert 'resource "aws_cloudwatch_event_rule" "usage_publisher"' not in site
+    assert 'resource "aws_cloudwatch_event_target" "usage_publisher"' not in site
+    assert 'resource "aws_lambda_permission" "usage_publisher"' not in site
+    assert 'resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors"' not in site
+    assert (
+        'resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations"'
+        not in site
+    )
+    assert 'resource "aws_cloudwatch_log_group" "usage_publisher"' in site
+    assert 'key           = "usage.json"' in site
 
     proxy_policy = terraform_block(
         agentcore, 'resource "aws_iam_role_policy" "tollchat_proxy"'
     )
-    assert '"dynamodb:TransactWriteItems"' in proxy_policy
+    assert '"dynamodb:TransactWriteItems"' not in proxy_policy
 
 
 def test_usage_rollout_has_no_retired_foundation_step():
@@ -2768,12 +2728,11 @@ def test_usage_rollout_has_no_retired_foundation_step():
     )[0]
     assert "usage-permissions.tfplan" not in DEPLOYMENT
     assert "usage-prerequisites.tfplan" not in DEPLOYMENT
-    assert "Do not use Terraform resource targets" in DEPLOYMENT
+    assert "Historical `usage.json` is retained" in DEPLOYMENT
     assert "iam get-role-policy" not in pre_bootstrap_runbook
     assert "dynamodb:TransactWriteItems" not in DEPLOYMENT
-    assert "tollchat_usage_optout=1" in DEPLOYMENT
-    assert "--consistent-read" in DEPLOYMENT
-    assert "must be unchanged" in DEPLOYMENT
+    assert "tollchat_usage_optout=1" not in DEPLOYMENT
+    assert "--consistent-read" not in DEPLOYMENT
 
 
 def test_metrics_aware_rollback_preserves_the_aggregate():
@@ -2787,8 +2746,8 @@ def test_metrics_aware_rollback_preserves_the_aggregate():
     assert 'SCHEDULE_GROUP="default"' not in rollback
     assert "toll-v2-committed-i95-loads" not in rollback
     assert "toll-v2-report-watchdog" not in rollback
-    assert "usage publisher" in rollback
-    assert "usage#all" in rollback
+    assert "historical" in rollback.lower()
+    assert "usage#all" not in rollback
     assert re.search(r"proxy and\s+public site together", rollback)
 
 
@@ -4177,9 +4136,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     )
     assert not {
         "iam:CreateRole",
-        "iam:DeleteRole",
         "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:DeleteRolePermissionsBoundary",
         "iam:TagRole",
@@ -4201,8 +4158,62 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRolePolicies",
             "iam:ListRoleTags",
         ],
+        "ReadRetiredUsagePublisherIam": [
+            "iam:GetRole",
+            "iam:GetRolePolicy",
+            "iam:ListAttachedRolePolicies",
+            "iam:ListRolePolicies",
+            "iam:ListRoleTags",
+        ],
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
+        "RetireUsagePublisherIam": ["iam:DeleteRole", "iam:DeleteRolePolicy"],
     }
+    assert by_sid["ReadRetiredUsagePublisherLambda"]["actions"] == [
+        "lambda:GetAlias",
+        "lambda:GetFunction",
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetFunctionEventInvokeConfig",
+        "lambda:GetFunctionUrlConfig",
+        "lambda:GetPolicy",
+        "lambda:GetProvisionedConcurrencyConfig",
+        "lambda:ListAliases",
+        "lambda:ListProvisionedConcurrencyConfigs",
+        "lambda:ListTags",
+        "lambda:ListVersionsByFunction",
+    ]
+    assert by_sid["ReadRetiredUsagePublisherEvents"]["actions"] == [
+        "events:DescribeRule",
+        "events:ListTagsForResource",
+        "events:ListTargetsByRule",
+    ]
+    assert by_sid["ReadRetiredUsagePublisherAlarms"]["actions"] == [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:ListTagsForResource",
+    ]
+    assert by_sid["ReadRetiredUsagePublisherIam"]["resources"] == [
+        "local.development_delivery_usage_publisher_role_arn"
+    ]
+    assert by_sid["ReadRetiredUsagePublisherLambda"]["resources"] == [
+        "local.development_delivery_usage_publisher_lambda_arn"
+    ]
+    assert by_sid["ReadRetiredUsagePublisherEvents"]["resources"] == [
+        "local.development_delivery_usage_publisher_rule_arn"
+    ]
+    assert by_sid["ReadRetiredUsagePublisherAlarms"]["resources"] == [
+        "local.development_delivery_usage_publisher_alarm_arns"
+    ]
+    assert by_sid["RetireUsagePublisherLambda"]["actions"] == [
+        "lambda:DeleteFunction",
+        "lambda:RemovePermission",
+    ]
+    assert by_sid["RetireUsagePublisherEvents"]["actions"] == [
+        "events:DeleteRule",
+        "events:RemoveTargets",
+    ]
+    assert by_sid["RetireUsagePublisherAlarms"]["actions"] == [
+        "cloudwatch:DeleteAlarms"
+    ]
     assert by_sid["ReadPreprovisionedApplicationRoles"]["actions"] == [
         "iam:GetRole",
         "iam:GetRolePolicy",
@@ -4305,7 +4316,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "/aws/lambda/toll-v2-report-publisher-dev",
             "/aws/lambda/tollchat-v2-chat-proxy-dev",
             "/aws/lambda/tollchat-v2-usage-publisher-dev",
-            "/aws/lambda/tollchat-v2-agent-usage-rollup-dev",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
         )
@@ -4331,21 +4341,19 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "s3:ListBucketMultipartUploads",
         "s3:ListBucketVersions",
     ]
-    assert by_sid["ManageApplicationAthenaNamedQueries"]["actions"] == [
+    assert by_sid["ReadRetainedApplicationAthenaNamedQueries"]["actions"] == [
         "athena:GetNamedQuery",
         "athena:ListTagsForResource",
     ]
-    assert by_sid["ManageApplicationAthenaNamedQueries"]["resources"] == [
+    assert by_sid["ReadRetainedApplicationAthenaNamedQueries"]["resources"] == [
         "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
     ]
-    assert by_sid["ManageApplicationAthenaWorkGroup"]["actions"] == [
+    assert by_sid["ReadRetainedApplicationAthenaWorkGroup"]["actions"] == [
         "athena:GetWorkGroup",
         "athena:ListNamedQueries",
-        "athena:TagResource",
-        "athena:UntagResource",
-        "athena:UpdateWorkGroup",
+        "athena:ListTagsForResource",
     ]
-    assert by_sid["ManageApplicationAthenaWorkGroup"]["resources"] == [
+    assert by_sid["ReadRetainedApplicationAthenaWorkGroup"]["resources"] == [
         "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
     ]
 
@@ -4373,6 +4381,25 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "ManageNewApplicationKmsKeys" not in by_sid
     assert by_sid["ReadApplicationKmsAliases"]["actions"] == ["kms:ListAliases"]
     assert by_sid["ReadApplicationKmsAliases"]["resources"] == ["*"]
+    assert by_sid["ReadRetainedMeasurementKey"]["actions"] == [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
+    ]
+    assert by_sid["ReadRetainedMeasurementKey"]["resources"] == [
+        "local.development_delivery_measurement_key_arn"
+    ]
+    assert {
+        (condition["variable"], tuple(cast(list[str], condition["values"])))
+        for condition in cast(
+            list[dict[str, object]], by_sid["ReadRetainedMeasurementKey"]["conditions"]
+        )
+    } == {
+        ("aws:ResourceTag/environment", ("development",)),
+        ("aws:ResourceTag/version", ("v2",)),
+    }
     assert re.search(
         r'sid\s*=\s*"ReadApplicationKmsAliases".*?test\s*=\s*"StringEquals"'
         r'.*?variable\s*=\s*"aws:RequestedRegion"'
@@ -4396,7 +4423,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "local.development_delivery_site_bucket_arn",
             "${local.development_delivery_site_bucket_arn}/*",
         ],
-        "ManageApplicationMeasurementRegistry": [
+        "ReadRetainedApplicationMeasurementRegistry": [
             "${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson",
         ],
         "PublishApplicationArtifacts": [
@@ -4405,9 +4432,17 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         ],
     }
     for sid, resources in object_scopes.items():
-        assert {"s3:GetObjectTagging", "s3:PutObjectTagging"} <= set(
-            cast(list[str], by_sid[sid]["actions"])
-        )
+        if sid == "ReadRetainedApplicationMeasurementRegistry":
+            assert set(cast(list[str], by_sid[sid]["actions"])) == {
+                "s3:GetObject",
+                "s3:GetObjectAttributes",
+                "s3:GetObjectTagging",
+                "s3:GetObjectVersion",
+            }
+        else:
+            assert {"s3:GetObjectTagging", "s3:PutObjectTagging"} <= set(
+                cast(list[str], by_sid[sid]["actions"])
+            )
         assert by_sid[sid]["resources"] == resources
     assert "lambda:GetFunctionCodeSigningConfig" in cast(
         list[str], by_sid["ReadApplicationLambdaFunctions"]["actions"]
@@ -4491,9 +4526,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "vpc/*" not in source
     forbidden_mutations = {
         "iam:CreateRole",
-        "iam:DeleteRole",
         "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:DeleteRolePermissionsBoundary",
         "iam:TagRole",
@@ -4506,7 +4539,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "bedrock-agentcore:PutResourcePolicy",
         "bedrock-agentcore:DeleteResourcePolicy",
         "lambda:AddPermission",
-        "lambda:RemovePermission",
         "lambda:CreateFunctionUrlConfig",
         "lambda:UpdateFunctionUrlConfig",
         "lambda:DeleteFunctionUrlConfig",
@@ -4538,8 +4570,8 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
     role_names = {
         "main.tf": ("loader", "timed_checks", "publisher", "publisher_scheduler"),
         "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
-        "site.tf": ("usage_publisher",),
-        "agent_measurement.tf": ("agent_usage_rollup",),
+        "site.tf": (),
+        "agent_measurement.tf": (),
     }
     for filename, names in role_names.items():
         for name in names:
@@ -4760,7 +4792,7 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
             "wafv2:PutLoggingConfiguration",
         ),
         (
-            'sid = "ManageApplicationAthenaNamedQueries"',
+            'sid = "ReadRetainedApplicationAthenaNamedQueries"',
             "workgroup/tollchat-agent-reports-dev",
             "workgroup/*",
         ),
@@ -4890,7 +4922,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 44
+    assert len(statements) == 56
     expected_groups = {
         "state": (
             0,
@@ -4919,45 +4951,57 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "observability": (
             13,
-            19,
+            22,
             [
                 "ManageApplicationEventRules",
+                "ReadRetainedRollupEventRule",
                 "ManageApplicationLogs",
+                "ReadRetainedRollupLogGroup",
                 "DescribeApplicationLogPolicies",
                 "DescribeApplicationLogGroups",
                 "ManageApplicationAlarms",
+                "ReadRetainedRollupAlarms",
                 "DescribeApplicationNetworking",
             ],
         ),
         "storage": (
-            19,
-            24,
+            22,
+            27,
             [
                 "ManageApplicationSiteBuckets",
                 "ManageApplicationMeasurementBucket",
-                "ManageApplicationMeasurementRegistry",
+                "ReadRetainedApplicationMeasurementRegistry",
                 "PublishApplicationArtifacts",
                 "ReadApplicationArtifactBucket",
             ],
         ),
         "data": (
-            24,
-            31,
+            27,
+            35,
             [
                 "UseApplicationKmsKeys",
+                "ReadRetainedMeasurementKey",
                 "ReadApplicationKmsAliases",
                 "ManageApplicationSessions",
-                "ManageApplicationCatalog",
-                "ManageApplicationAthenaNamedQueries",
-                "ManageApplicationAthenaWorkGroup",
+                "ReadRetainedApplicationCatalog",
+                "ReadRetainedApplicationAthenaNamedQueries",
+                "ReadRetainedApplicationAthenaWorkGroup",
                 "ListApplicationAthenaWorkGroups",
             ],
         ),
         "runtime": (
-            31,
-            36,
+            35,
+            48,
             [
                 "ManageApplicationSchedules",
+                "ReadRetiredUsagePublisherIam",
+                "ReadRetiredUsagePublisherLambda",
+                "ReadRetiredUsagePublisherEvents",
+                "ReadRetiredUsagePublisherAlarms",
+                "RetireUsagePublisherIam",
+                "RetireUsagePublisherLambda",
+                "RetireUsagePublisherEvents",
+                "RetireUsagePublisherAlarms",
                 "ManageApplicationGuardrail",
                 "PublishApplicationGuardrailVersions",
                 "ManageApplicationAgentCore",
@@ -4965,8 +5009,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "edge": (
-            36,
-            44,
+            48,
+            56,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -4984,7 +5028,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 44
+    assert len(rendered_aggregate) == len(statements) == 56
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
@@ -5486,7 +5530,6 @@ def _assert_development_bootstrap_contract(script: str) -> None:
         "timed_checks nova-toll-v2-timed-checks-dev nova-toll-v2-route-live-checks-dev",
         "tollchat_runtime nova-toll-v2-agentcore-runtime-dev nova-toll-v2-agentcore-runtime-dev",
         "tollchat_proxy nova-toll-v2-chat-proxy-dev nova-toll-v2-chat-proxy-dev",
-        "usage_publisher tollchat-v2-usage-publisher-dev tollchat-v2-usage-publisher-dev",
         "agent_usage_rollup tollchat-v2-agent-usage-rollup-dev tollchat-v2-agent-usage-rollup-dev",
     ):
         assert mapping in script
@@ -7481,6 +7524,59 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
                 ]
             }
         )
+
+    retired_usage_resources = (
+        "aws_iam_role.usage_publisher",
+        "aws_iam_role_policy.usage_publisher",
+        "aws_lambda_function.usage_publisher",
+        "aws_cloudwatch_event_rule.usage_publisher",
+        "aws_cloudwatch_event_target.usage_publisher",
+        "aws_lambda_permission.usage_publisher",
+        "aws_cloudwatch_metric_alarm.usage_publisher_errors",
+        "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
+    )
+    assert _run_development_plan_gate(
+        {
+            "resource_changes": [
+                _synthetic_change("managed", address, ["delete"])
+                for address in retired_usage_resources
+            ]
+        }
+    )
+    for address in retired_usage_resources:
+        assert _run_development_plan_gate(
+            {"resource_changes": [_synthetic_change("managed", address, ["delete"])]}
+        )
+        assert not _run_development_plan_gate(
+            {
+                "resource_changes": [
+                    _synthetic_change("managed", f"{address}[0]", ["delete"])
+                ]
+            }
+        )
+        for actions in (
+            ["create", "delete"],
+            ["delete", "create"],
+            ["update"],
+            ["create"],
+        ):
+            assert not _run_development_plan_gate(
+                {
+                    "resource_changes": [
+                        _synthetic_change("managed", address, list(actions))
+                    ]
+                }
+            )
+    for address in (
+        "aws_cloudwatch_log_group.usage_publisher",
+        "aws_s3_object.usage",
+        "aws_dynamodb_table.tollchat_sessions",
+        "aws_cloudwatch_metric_alarm.tollchat_sessions",
+    ):
+        assert not _run_development_plan_gate(
+            {"resource_changes": [_synthetic_change("managed", address, ["delete"])]}
+        )
+
     manual_mutations = (
         "aws_iam_role.loader",
         "aws_iam_role.publisher",
@@ -7488,7 +7584,6 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
         "aws_iam_role.timed_checks",
         "aws_iam_role.tollchat_proxy",
         "aws_iam_role.tollchat_runtime",
-        "aws_iam_role.usage_publisher",
         "aws_iam_role.agent_usage_rollup",
         "aws_iam_role_policy.loader",
         "aws_iam_role_policy.publisher",
@@ -7496,7 +7591,6 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
         "aws_iam_role_policy.timed_checks",
         "aws_iam_role_policy.tollchat_proxy",
         "aws_iam_role_policy.tollchat_runtime",
-        "aws_iam_role_policy.usage_publisher",
         "aws_iam_role_policy.agent_usage_rollup",
         "aws_iam_role_policy_attachment.loader_vpc",
         "aws_iam_role_policy_attachment.publisher_vpc",
@@ -7536,7 +7630,6 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
         "aws_lambda_permission.agent_usage_rollup",
         "aws_lambda_permission.eventbridge_invoke",
         "aws_lambda_permission.tollchat_api",
-        "aws_lambda_permission.usage_publisher",
         "aws_cloudfront_distribution.site",
         "aws_cloudfront_origin_access_control.site",
         "aws_cloudfront_origin_access_control.public_chat",
@@ -7544,7 +7637,6 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
         "aws_bedrock_guardrail.tollchat",
         "aws_cloudwatch_event_rule.agent_usage_rollup",
         "aws_cloudwatch_event_rule.raw_objects",
-        "aws_cloudwatch_event_rule.usage_publisher",
         "aws_cloudwatch_log_metric_filter.load_success",
         "aws_cloudwatch_log_metric_filter.proxy_failure",
         "aws_cloudwatch_metric_alarm.agent_usage_log_coverage",
@@ -7560,8 +7652,6 @@ def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_acti
         "aws_cloudwatch_metric_alarm.tollchat_proxy_failures",
         "aws_cloudwatch_metric_alarm.tollchat_proxy_latency",
         "aws_cloudwatch_metric_alarm.tollchat_sessions",
-        "aws_cloudwatch_metric_alarm.usage_publisher_errors",
-        "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
         "aws_cloudwatch_log_group.agentcore_runtime",
         "aws_wafv2_web_acl.public_chat",
         "aws_wafv2_web_acl_logging_configuration.agent_reports",

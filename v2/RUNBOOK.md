@@ -6,12 +6,19 @@ saved plan.
 
 ## Delivery contract and production baseline
 
-PRs use disposable PostGIS migration validation only; they never access or
-mutate deployed databases or schemas. `main` continues to run validation only.
-Published releases are manual, reviewed deployments from `main`. The sole
-schema-change exception is the separately authorized, reviewed migration 030
-procedure below; no other schema-changing release is authorized here, and
-future exceptions require approved deployment automation. Application release
+PRs use disposable PostGIS migration validation only; the checks are
+credential-free and never access or mutate deployed databases or schemas. The
+CI workflow on pushes to `main` also validates only. After merge, the
+protected development migration workflow may be manually dispatched from
+`refs/heads/main` for the fixed development target; it is separate from PR CI
+and accepts no arbitrary target or migration-path inputs. See the [protected
+development migration workflow](#protected-development-migration-workflow-305-slice-3)
+below for its foundation, bootstrap, identity, and evidence gates. Published
+releases are manual, reviewed deployments from `main`.
+Production schema changes remain limited to the separately authorized, reviewed
+migration 030 procedure below; no other production schema-changing release is
+authorized here, and future exceptions require approved deployment automation.
+Application release
 artifacts do not apply schema changes; this procedure is separate.
 
 The current production baseline is AWS account `920534282028` in `us-east-1`:
@@ -44,10 +51,14 @@ changes. Stop on any unexplained action or any replacement.
 ## Manual Oracle migration 030
 
 Migration `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` is the
-only currently approved manual schema change. Applying it requires separate,
-explicit operator authorization and a reviewed checkout containing that exact
-file. This procedure is not a PR or CI step: PRs remain offline and use only
-disposable PostgreSQL migration validation.
+only currently approved manual production schema change. Applying it requires
+separate, explicit operator authorization and a reviewed checkout containing
+that exact file. This procedure is not a PR or CI step: PRs remain offline and
+use only disposable PostgreSQL migration validation. Current development-account
+migrations follow the protected, fixed-target workflow documented below. The
+legacy `nova_toll_development` rehearsal step in this bounded, separately
+authorized migration-030 procedure remains a production-account rehearsal, not
+that workflow.
 
 Before starting, confirm all of the following in the operator's environment;
 these are runtime preconditions, not repository-verified facts:
@@ -292,15 +303,16 @@ read-only production foundation plan, extracts only its reviewed non-secret
 production v2 plan with its reviewed package arguments. It asserts the
 production account, reviews only the approved object shape, and removes its
 distinct temporary file through an EXIT trap; no credentials or SSM values are
-included. Do not use that generic planned-output or tfvars flow for
-development. Development #330 uses the retained private exact-plan root,
-binary plan, coupled manifest, local bootstrap, and encrypted backend migration
-documented below; its state is not discovered through a foundation output.
+included. Do not use that generic planned-output or tfvars flow for development.
+The current development foundation path is the authorized #327/#333
+replacement handoff documented below; the historical #330 exact-plan procedure
+remains below for audit context only. Development state is not discovered
+through a foundation output.
 
-The development foundation bootstrap is #330 and its application/database
-bootstrap is #331. Cloudflare DNS reads and writes (zone lookup, ACM
-certificate-validation records, and apex/www records) are production-only in
-`v2/infra/site.tf`; development DNS/certificate validation belongs to #332.
+Application/database bootstrap remains #331. Cloudflare DNS reads and writes
+(zone lookup, ACM certificate-validation records, and apex/www records) are
+production-only in `v2/infra/site.tf`; development DNS/certificate validation
+belongs to #332.
 `enable_public_dns = false` remains the production apex switch, while the
 development path has no Cloudflare data or resource instances. Legacy
 production-account development cleanup belongs to #333.
@@ -344,60 +356,15 @@ retained with that release; capture never overwrites an existing record.
 )
 ```
 
-For the first usage-counter release only, stage the public disclosure and
-hidden placeholder directly in the encrypted site bucket before deploying the
-proxy package. Do not use Terraform resource targets for this step: the site
-objects' KMS and CloudFront dependencies also pull the proxy and runtime into a
-targeted plan.
+Historical `usage.json` is retained as a managed, data-bearing site object.
+This release stops new writes and does not purge that snapshot or its logs; a
+separately approved retirement procedure is required before either is removed.
 
-```sh
-SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
-  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
-SITE_KMS_ARN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 kms describe-key \
-  --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
-EMPTY_USAGE="$(mktemp)"
-printf '{}\n' >"$EMPTY_USAGE"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key index.html --body ../agent/dev_chat.html \
-  --content-type 'text/html; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key faq.html --body ../agent/faq.html \
-  --content-type 'text/html; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
-  --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key usage.json --body "$EMPTY_USAGE" \
-  --content-type 'application/json; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-rm -f -- "$EMPTY_USAGE"
-unset EMPTY_USAGE SITE_BUCKET SITE_KMS_ARN
-curl --fail-with-body https://tollchat.ai/privacy.txt
-curl --fail-with-body https://tollchat.ai/faq.html
-```
-
-For the first agent-route measurement release, publish and verify the updated
-privacy notice before creating the release plan that enables WAF logging. This
-is intentionally a separate operation: a Terraform dependency can order S3 and
-WAF API calls, but it cannot prove the notice was already visible through the
-deployed CloudFront surface.
-
-```sh
-SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
-  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
-SITE_KMS_ARN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 kms describe-key \
-  --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
-  --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-curl --fail-with-body --silent --show-error https://tollchat.ai/privacy.txt \
-  | grep -F 'TollChat keeps filtered raw route-report access logs and Athena query results for seven days.'
-unset SITE_BUCKET SITE_KMS_ARN
-```
+The former first agent-route measurement release instructions are retained only
+in the reviewed historical checkout for that release. They are not an
+activation path for this source cleanup: no deployment claim follows from
+removing the producer, and the retained measurement bucket, catalog, and
+historical objects remain pending a separately approved retirement procedure.
 
 ## Development handoff and guarded production release
 
@@ -405,15 +372,28 @@ The bounded #331 application release and database validation below is the operat
 development release path. Deployed database bootstrap remains non-operative until
 approved deployment automation exists, except for the expressly authorized
 #327/#333 development RDS replacement handoff below; the #331 procedure only
-validates the already present development schema and isolation. Public report publication also remains
-non-operative: the existing publisher and scheduler are deployed unchanged, but no
-publication is manually invoked and no report data is copied. The #330 foundation
-handoff remains the documented sequence of local-backend plan generation and review,
-later exact-plan apply, and separately authorized state migration or recovery.
+validates the already present development schema and isolation. Public report publication remains
+non-operative: the separate report publisher is deployed unchanged, but no
+publication is manually invoked and no report data is copied. Historical public
+usage publication is retired; its snapshot and logs remain retained. The
+current development foundation path is the bounded #327/#333 replacement
+handoff below. The historical #330 foundation procedure retains the
+local-backend plan generation and review, later exact-plan apply, and
+separately authorized state migration or recovery only as audit context; it is
+not an activation path.
 Cloudflare/DNS/CI cutover is owned by #332, and legacy cleanup remains owned by
 #333. An AWS-only identity cannot write Cloudflare DNS.
 
 ### Development bootstrap/import boundary (#332)
+
+> **Historical source note.** The bootstrap/import procedure below predates the
+> route-analytics source retirement. It is retained for audit and separately
+> authorized recovery only; use the reviewed protected checkout that originally
+> authorized it, and do not treat its historical analytics reads, inventories, or
+> mutation simulations as
+> current delivery permissions. This cleanup makes no deployment claim. Any
+> retirement of retained measurement resources requires separate authority and
+> its existing guarded gates.
 
 Before the first recurring GitHub `development` run, a separately authorized
 development-account administrator must inventory the live resources and create
@@ -683,7 +663,7 @@ for role in \
   toll-v2-pricing-loader-dev toll-v2-report-publisher-dev \
   toll-v2-report-publisher-scheduler-dev nova-toll-v2-timed-checks-dev \
   nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev \
-  tollchat-v2-usage-publisher-dev tollchat-v2-agent-usage-rollup-dev; do
+  tollchat-v2-agent-usage-rollup-dev; do
   aws iam get-role --role-name "$role" --query 'Role.{name:RoleName,arn:Arn}' \
     --output json >"$WORK_DIR/role-$role.json" ||
     die "missing application role $role"
@@ -692,7 +672,7 @@ for role in \
   toll-v2-pricing-loader-dev toll-v2-report-publisher-dev \
   toll-v2-report-publisher-scheduler-dev nova-toll-v2-timed-checks-dev \
   nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev \
-  tollchat-v2-usage-publisher-dev tollchat-v2-agent-usage-rollup-dev; do
+  tollchat-v2-agent-usage-rollup-dev; do
   aws iam list-role-policies --role-name "$role" --query PolicyNames --output json \
     >"$WORK_DIR/role-policies-$role.json" || die "cannot list inline policies for $role"
   aws iam list-attached-role-policies --role-name "$role" \
@@ -1756,7 +1736,6 @@ for role_mapping in \
   'timed_checks nova-toll-v2-timed-checks-dev' \
   'tollchat_runtime nova-toll-v2-agentcore-runtime-dev' \
   'tollchat_proxy nova-toll-v2-chat-proxy-dev' \
-  'usage_publisher tollchat-v2-usage-publisher-dev' \
   'agent_usage_rollup tollchat-v2-agent-usage-rollup-dev'; do
   IFS=' ' read -r address role_name <<<"$role_mapping"
   printf 'aws_iam_role.%s\tarn:aws:iam::%s:role/%s\n' "$address" "$EXPECTED_ACCOUNT" "$role_name" >>"$ADDRESS_INVENTORY"
@@ -1768,7 +1747,6 @@ for policy_mapping in \
   'timed_checks nova-toll-v2-timed-checks-dev nova-toll-v2-route-live-checks-dev' \
   'tollchat_runtime nova-toll-v2-agentcore-runtime-dev nova-toll-v2-agentcore-runtime-dev' \
   'tollchat_proxy nova-toll-v2-chat-proxy-dev nova-toll-v2-chat-proxy-dev' \
-  'usage_publisher tollchat-v2-usage-publisher-dev tollchat-v2-usage-publisher-dev' \
   'agent_usage_rollup tollchat-v2-agent-usage-rollup-dev tollchat-v2-agent-usage-rollup-dev'; do
   IFS=' ' read -r address role_name policy_name <<<"$policy_mapping"
   printf 'aws_iam_role_policy.%s\t%s:%s\n' "$address" "$role_name" "$policy_name" >>"$ADDRESS_INVENTORY"
@@ -2897,16 +2875,19 @@ plan_policy() {
     PLAN_JSON="$PHASE_ONE_PLAN_JSON"
   fi
   tf_dev -chdir="$ROOT/v2/infra" show -json "$plan" >"$PLAN_JSON"
-  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" --arg data_allowlist "$DEVELOPMENT_DATA_ALLOWLIST" --arg readonly "$DEVELOPMENT_READ_ONLY_ALLOWLIST" '
+  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" --arg data_allowlist "$DEVELOPMENT_DATA_ALLOWLIST" --arg readonly "$DEVELOPMENT_READ_ONLY_ALLOWLIST" --arg retired "$DEVELOPMENT_RETIRED_USAGE_ALLOWLIST" '
     def base: .address | split("[")[0];
     def listed($items): .address as $address | any(($items | split("\n") | map(select(length > 0)))[]; . as $item | $address == $item or ($address | startswith($item + "[")));
+    def retired_exact($items): .address as $address | any(($items | split("\n") | map(select(length > 0)))[]; $address == .);
     def immutable: ((base == "aws_api_gateway_deployment.tollchat" and (.change.actions == ["create"] or .change.actions == ["delete"] or .change.actions == ["create", "delete"] or .change.actions == ["delete", "create"])) or (base == "aws_bedrock_guardrail_version.tollchat" and .change.actions == ["create"]));
     (.resource_changes | type == "array") and all(.resource_changes[];
       (.address | type == "string") and (.change.actions | type == "array" and length > 0) and (.deposed? == null) and (.previous_address? == null) and
       (.mode == "data" and listed($data_allowlist) and (.change.actions == ["read"] or .change.actions == ["no-op"]) or
-       .mode == "managed" and listed($allowlist) and
-       ((.change.actions == ["no-op"]) or
-        (.change.actions == ["update"] and (listed($readonly) | not)) or immutable)))
+       .mode == "managed" and
+       ((.change.actions == ["delete"] and retired_exact($retired)) or
+        (listed($allowlist) and
+         ((.change.actions == ["no-op"]) or
+          (.change.actions == ["update"] and (listed($readonly) | not)) or immutable))))
   ' "$PLAN_JSON" >/dev/null; then exit 1; fi
   if jq -r '.resource_changes[]? | [.address, (.change.after // {} | tostring)] | @json' "$PLAN_JSON" | rg --quiet '920534282028|dev.tollchat.ai' || jq -r '.resource_changes[]?.address' "$PLAN_JSON" | rg --ignore-case --quiet 'cloudflare|route53|terraform_remote_state'; then exit 1; fi
   if ! jq -e '
@@ -2914,11 +2895,11 @@ plan_policy() {
       (((($value | test("^arn:aws:[^:]*:[^:]*:[0-9]{12}:")) | not)
        or ($value | test("^arn:aws:[^:]*:[^:]*:903859731897:"))));
     def no_known_value($value):
-      (["toll-v2-pricing-loader", "toll-v2-report-publisher", "tollchat-v2-chat-proxy", "tollchat-v2-usage-publisher", "tollchat-v2-agent-usage-rollup", "nova-toll-v2-chat-proxy", "nova-toll-v2-preview", "tollchat-v2-anonymous-sessions", "tollchat-v2-agentcore-runtime"] | any(.[]; . == $value) | not);
+      (["toll-v2-pricing-loader", "toll-v2-report-publisher", "tollchat-v2-chat-proxy", "tollchat-v2-agent-usage-rollup", "nova-toll-v2-chat-proxy", "nova-toll-v2-preview", "tollchat-v2-anonymous-sessions", "tollchat-v2-agentcore-runtime"] | any(.[]; . == $value) | not);
     def identifier_ok($value):
       (($value | test("(^|[/:\"])(nova_toll|pricing_loader_writer|pricing_reader|oracle_owner|tollchat_agent|pricing_caller|report_publisher)([/:\"]|$)"; "i")) | not);
     def app_name_ok($value):
-      (($value | test("(^|[/:\"])(toll-v2-pricing-loader|toll-v2-report-publisher|tollchat-v2-chat-proxy|tollchat-v2-usage-publisher|tollchat-v2-agent-usage-rollup|nova-toll-v2-chat-proxy|nova-toll-v2-preview|tollchat-v2-anonymous-sessions|nova-toll-v2-agentcore-runtime)([/:\"]|$)"; "i")) | not);
+      (($value | test("(^|[/:\"])(toll-v2-pricing-loader|toll-v2-report-publisher|tollchat-v2-chat-proxy|tollchat-v2-agent-usage-rollup|nova-toll-v2-chat-proxy|nova-toll-v2-preview|tollchat-v2-anonymous-sessions|nova-toll-v2-agentcore-runtime)([/:\"]|$)"; "i")) | not);
     def suffix_ok($after):
       all(["function_name", "role", "role_arn", "table_name", "queue_name", "log_group_name", "alarm_name", "database_name", "workgroup_name"][];
         . as $key |
@@ -3012,10 +2993,8 @@ aws_cloudfront_origin_access_control.site
 aws_cloudfront_response_headers_policy.development_noindex
 aws_cloudwatch_event_rule.agent_usage_rollup
 aws_cloudwatch_event_rule.raw_objects
-aws_cloudwatch_event_rule.usage_publisher
 aws_cloudwatch_event_target.agent_usage_rollup
 aws_cloudwatch_event_target.loader
-aws_cloudwatch_event_target.usage_publisher
 aws_cloudwatch_log_group.agent_usage_rollup
 aws_cloudwatch_log_group.agentcore_runtime
 aws_cloudwatch_log_group.loader
@@ -3037,8 +3016,6 @@ aws_cloudwatch_metric_alarm.tollchat_proxy_errors
 aws_cloudwatch_metric_alarm.tollchat_proxy_failures
 aws_cloudwatch_metric_alarm.tollchat_proxy_latency
 aws_cloudwatch_metric_alarm.tollchat_sessions
-aws_cloudwatch_metric_alarm.usage_publisher_errors
-aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
 aws_dynamodb_table.tollchat_sessions
 aws_glue_catalog_database.agent_reports
 aws_glue_catalog_table.agent_registry
@@ -3053,7 +3030,6 @@ aws_iam_role.publisher_scheduler
 aws_iam_role.timed_checks
 aws_iam_role.tollchat_proxy
 aws_iam_role.tollchat_runtime
-aws_iam_role.usage_publisher
 aws_iam_role_policy.agent_usage_rollup
 aws_iam_role_policy.loader
 aws_iam_role_policy.publisher
@@ -3061,7 +3037,6 @@ aws_iam_role_policy.publisher_scheduler
 aws_iam_role_policy.timed_checks
 aws_iam_role_policy.tollchat_proxy
 aws_iam_role_policy.tollchat_runtime
-aws_iam_role_policy.usage_publisher
 aws_iam_role_policy_attachment.loader_vpc
 aws_iam_role_policy_attachment.publisher_vpc
 aws_iam_role_policy_attachment.tollchat_proxy_vpc
@@ -3074,7 +3049,6 @@ aws_lambda_function.agent_usage_rollup
 aws_lambda_function.loader
 aws_lambda_function.publisher
 aws_lambda_function.tollchat_proxy
-aws_lambda_function.usage_publisher
 aws_lambda_function_event_invoke_config.loader
 aws_lambda_function_event_invoke_config.publisher
 aws_lambda_function_url.public_chat
@@ -3083,7 +3057,6 @@ aws_lambda_permission.eventbridge_invoke
 aws_lambda_permission.public_chat_invoke
 aws_lambda_permission.public_chat_url
 aws_lambda_permission.tollchat_api
-aws_lambda_permission.usage_publisher
 aws_lambda_provisioned_concurrency_config.tollchat
 aws_s3_bucket.agent_measurement
 aws_s3_bucket.site
@@ -3134,7 +3107,6 @@ EOF
 read -r -d '' DEVELOPMENT_DATA_ALLOWLIST <<'EOF' || true
 data.archive_file.agent_usage_rollup
 data.archive_file.placeholder
-data.archive_file.usage_publisher
 data.aws_caller_identity.current
 data.aws_cloudfront_cache_policy.caching_disabled
 data.aws_cloudfront_origin_request_policy.all_except_host
@@ -3153,7 +3125,6 @@ data.aws_iam_policy_document.timed_checks
 data.aws_iam_policy_document.timed_checks_assume
 data.aws_iam_policy_document.tollchat_proxy
 data.aws_iam_policy_document.tollchat_runtime
-data.aws_iam_policy_document.usage_publisher
 data.aws_prefix_list.dynamodb
 data.aws_prefix_list.s3
 data.aws_region.current
@@ -3174,7 +3145,6 @@ aws_iam_role.publisher_scheduler
 aws_iam_role.timed_checks
 aws_iam_role.tollchat_proxy
 aws_iam_role.tollchat_runtime
-aws_iam_role.usage_publisher
 aws_iam_role_policy.agent_usage_rollup
 aws_iam_role_policy.loader
 aws_iam_role_policy.publisher
@@ -3182,7 +3152,6 @@ aws_iam_role_policy.publisher_scheduler
 aws_iam_role_policy.timed_checks
 aws_iam_role_policy.tollchat_proxy
 aws_iam_role_policy.tollchat_runtime
-aws_iam_role_policy.usage_publisher
 aws_iam_role_policy_attachment.loader_vpc
 aws_iam_role_policy_attachment.publisher_vpc
 aws_iam_role_policy_attachment.tollchat_proxy_vpc
@@ -3196,13 +3165,22 @@ aws_lambda_permission.eventbridge_invoke
 aws_lambda_permission.public_chat_invoke
 aws_lambda_permission.public_chat_url
 aws_lambda_permission.tollchat_api
-aws_lambda_permission.usage_publisher
 aws_s3_bucket.agent_measurement
 aws_s3_bucket_lifecycle_configuration.agent_measurement
 aws_s3_bucket_policy.agent_measurement
 aws_s3_bucket_policy.site
 aws_s3_bucket_public_access_block.agent_measurement
 aws_s3_bucket_server_side_encryption_configuration.agent_measurement
+EOF
+read -r -d '' DEVELOPMENT_RETIRED_USAGE_ALLOWLIST <<'EOF' || true
+aws_iam_role.usage_publisher
+aws_iam_role_policy.usage_publisher
+aws_lambda_function.usage_publisher
+aws_cloudwatch_event_rule.usage_publisher
+aws_cloudwatch_event_target.usage_publisher
+aws_lambda_permission.usage_publisher
+aws_cloudwatch_metric_alarm.usage_publisher_errors
+aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
 EOF
 source_tree_digest() {
   git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do
@@ -4678,34 +4656,6 @@ rm -f -- "$REPORT_PAGE" "$REPORT_URLS"
 unset REPORT_PAGE REPORT_URL REPORT_URLS SITE_URL
 ```
 
-## Agent-route measurement launch
-
-Confirm Cloudflare remains DNS-only, generate uniquely recognizable HTML and
-JSON requests, invoke the rollup, and inspect only the sanitized saved view.
-The WAF logging destination can take several minutes to deliver its first file.
-
-```sh
-REPORT_URL="https://tollchat.ai/tolls/i95-i495/dumfries-dumfries-road-route-234-northbound/tysons-westpark-drive-tysons-corner-northbound/"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 wafv2 get-logging-configuration \
-  --resource-arn "$(AWS_PROFILE=nova-toll-prod terraform output -raw agent_report_web_acl_arn)"
-curl --fail-with-body --silent --show-error --user-agent 'ChatGPT-User Task6Smoke' \
-  "$REPORT_URL" >/dev/null
-curl --fail-with-body --silent --show-error --user-agent 'ChatGPT-User Task6Smoke' \
-  "${REPORT_URL}report.json" >/dev/null
-curl --fail-with-body --silent --show-error --head "$REPORT_URL" >/dev/null
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda invoke \
-  --function-name tollchat-v2-agent-usage-rollup --payload '{}' \
-  --cli-binary-format raw-in-base64-out /tmp/agent-usage-rollup.json
-jq -e '.completed_dates | length == 3' /tmp/agent-usage-rollup.json
-rm -f /tmp/agent-usage-rollup.json
-unset REPORT_URL
-```
-
-Open the `tollchat-v2-public-chat` protection pack's **AI Traffic Analysis**
-tab for the native 14-day view. In Athena, select the
-`tollchat-agent-reports` workgroup and run the Terraform-managed top-routes or
-recent-request-times named query. Never export the raw WAF table.
-
 Terraform uploads both application packages to versioned S3 keys and pins the
 resulting object version IDs in Lambda and AgentCore. Do not apply an unsaved
 or unreviewed plan. The public Function URL targets the published `live` alias,
@@ -4742,31 +4692,11 @@ AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda get-provisioned-concurr
   --function-name tollchat-v2-chat-proxy --qualifier live
 ```
 
-The concurrency status and allocation must be `READY` and `1`. Submit a first
-chat only after opting that browser out. First save the consistent aggregate
-returned by this command:
-
-```sh
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 dynamodb get-item \
-  --table-name tollchat-v2-anonymous-sessions \
-  --key '{"credential_hash":{"S":"usage#all"}}' \
-  --projection-expression 'engaged_sessions, completed_responses' \
-  --consistent-read
-```
-
-In the public browser's developer console, set and check the owner opt-out,
-then click **New chat** to reset the session before submitting the smoke message:
-
-```js
-document.cookie = "tollchat_usage_optout=1; Domain=tollchat.ai; Path=/; Max-Age=31536000; Secure; SameSite=Strict";
-document.cookie.includes("tollchat_usage_optout=1");
-```
-
-The check must return `true`. Rerun the consistent DynamoDB read after the
-response completes; the aggregate must be unchanged. Confirm CloudWatch records
-the request under `ProvisionedConcurrencyInvocations`, without an on-demand
-Lambda initialization. The public Function URL must reject direct unsigned
-invocation.
+The concurrency status and allocation must be `READY` and `1`. Submit a smoke
+message only after the session-cookie reset path succeeds. There is no current
+public usage counter or opt-out cookie. Confirm CloudWatch records the request
+under `ProvisionedConcurrencyInvocations`, without an on-demand Lambda
+initialization. The public Function URL must reject direct unsigned invocation.
 
 ## Rollback
 
@@ -4819,13 +4749,6 @@ to delete the exact `tolls/i95-i495/` prefix and `sitemap.xml`, followed by a
 targeted CloudFront invalidation. Do not perform that destructive rollback as
 part of an ordinary application rollback.
 
-Disable daily publication before preparing a rollback:
-
-```sh
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 events disable-rule \
-  --name tollchat-v2-usage-publisher
-```
-
 For immediate recovery, set `RELEASE_EVIDENCE` to the original failed release's
 pre-apply evidence file. Do not rerun capture. Restore its targets before
 running the Terraform rollback; this deliberately creates temporary drift that
@@ -4859,11 +4782,9 @@ The apply must reconcile the Lambda alias and AgentCore endpoint with Terraform
 state; rerun the reviewed plan afterward and require it to report no changes.
 
 Deterministic builds restore the exact package bytes; bucket versioning retains
-the earlier runtime and proxy objects for 30 days. When rolling back to a
-pre-metrics revision, expect the plan to remove the usage publisher, schedule,
-alarms, placeholder, and metrics-era public/legal assets. Retain the DynamoDB
-`usage#all` aggregate; it is operational history and is not managed as a
-Terraform item.
+the earlier runtime and proxy objects for 30 days. Historical usage aggregate,
+snapshot, and publisher logs remain retained across rollback; no current writer
+or public usage proof is restored by this procedure.
 
 If the application cannot safely serve traffic while rollback is prepared, stop
 and obtain separate incident authorization. Do not mutate concurrency outside a
@@ -5223,8 +5144,8 @@ delete marker, all archive readbacks must pass, and the three reserved
 concurrency values, WAF filter, and lifecycle statuses must still be frozen.
 The pinned cutover baseline already removed the old CloudFront alias.  Its
 `aws_s3_object.usage` resource intentionally retains
-`ignore_changes = [content, etag]` because the usage Lambda writes
-`usage.json`; do not broaden that exception.  Compare the exact saved-plan
+`ignore_changes = [content, etag]` because the historical usage publisher wrote
+`usage.json`; do not broaden that exception. Compare the exact saved-plan
 resource drift against that pinned baseline and the archived frozen object
 identities and metadata.  The existing validator proves the 166 managed
 identity set and the 162 delete actions, but it does not inspect

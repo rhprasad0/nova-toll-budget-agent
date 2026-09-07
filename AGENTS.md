@@ -70,13 +70,20 @@ unchanged unless the user explicitly requests an application-agent change.
 
 - Deployed credentials live in SSM Parameter Store (`SECURITY.md`). Never a
   local secrets file.
-- PRs use disposable migration validation only: never mutate deployed databases or schemas, and never expose production deployment credentials.
-- Only the reviewed, explicitly authorized Oracle migration
+- PRs use disposable migration validation only: the checks are credential-free,
+  never mutate deployed databases or schemas, and never expose production
+  deployment credentials.
+- After merge, the protected `development` migration workflow may be manually
+  dispatched only from `refs/heads/main`; it uses the fixed development
+  database, role, and registered migration set, and emits sanitized evidence.
+  It is separate from disposable PR checks and accepts no arbitrary target or
+  migration inputs.
+- For production, only the reviewed, explicitly authorized Oracle migration
   `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` may be applied to
   a deployed database, and only by following its bounded procedure in
-  `v2/RUNBOOK.md`. Generic or future manual migrations are not authorized;
-  other schema-changing work remains blocked pending approved deployment
-  automation.
+  `v2/RUNBOOK.md`. Generic or future manual migrations are not authorized for
+  production; other production schema-changing work remains blocked pending
+  approved deployment automation.
 
 # Eval graph
 

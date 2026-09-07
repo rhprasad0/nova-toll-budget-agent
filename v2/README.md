@@ -44,7 +44,7 @@ uv run python oracle/build_oracle_data.py
 uv run python oracle/build_oracle_data.py --check
 ```
 
-For a new database, install pricing before oracle:
+For a disposable or local database, install pricing before oracle:
 
 ```sh
 psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
@@ -53,11 +53,18 @@ psql "$NOVA_TOLL_URL" -v ON_ERROR_STOP=1 \
   -f v2/db/migrations/003_create_oracle_schema.sql
 ```
 
-For an existing database, read both `schema_version` tables and apply only the
-matching guarded [`*_upgrade_*` migrations](db/migrations/) in dependency and
-version order. Never edit or skip a released migration.
+For a disposable or local existing database, read both `schema_version` tables
+and apply only the matching guarded [`*_upgrade_*` migrations](db/migrations/)
+in dependency and version order. Never edit or skip a released migration. Do
+not point these direct commands at a deployed database: development migrations
+use the protected workflow described below, and production remains limited to
+the [manual Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
 
 ## Verify the build
+
+The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
+documents the source-retired usage and agent-route analytics scopes without
+granting execution authority.
 
 From `v2/`, run the core application checks and deterministic release builds:
 
@@ -97,10 +104,19 @@ until docker exec "$container_id" pg_isready --username "$PGUSER" --dbname postg
 v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 ```
 
-Production deployment is manual; PR CI never runs `terraform plan` or `apply`.
-The manual production planner stores only a reviewed, gated saved plan. Follow
-the [deployment runbook](RUNBOOK.md) for the reviewed saved-plan,
-smoke-test, rollout, and rollback procedures.
+Production deployment is manual; credential-free PR CI never runs `terraform
+plan` or `apply`. The manual production planner stores only a reviewed, gated
+saved plan. Follow the [deployment runbook](RUNBOOK.md) for the reviewed
+saved-plan, smoke-test, rollout, and rollback procedures.
+
+After merge, development schema migrations use the protected, manually
+dispatched [development migration workflow](../.github/workflows/v2-development-migrations.yml)
+from `refs/heads/main`, after the foundation and fresh-bootstrap gates in the
+[protected development migration runbook](RUNBOOK.md#protected-development-migration-workflow-305-slice-3).
+Its fixed runner accepts no arbitrary target, role, or migration-path input and
+emits sanitized evidence. This is separate from disposable local/PR checks and
+does not authorize production schema changes; production remains limited to the
+[manual Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-030).
 
 The public interface at `tollchat.ai` uses a private S3 origin for the v2 site
 and an IAM-authenticated streaming Lambda URL behind CloudFront and WAF. The
