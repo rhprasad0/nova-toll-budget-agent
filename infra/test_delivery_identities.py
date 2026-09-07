@@ -452,10 +452,16 @@ def _check_production_planner() -> None:
         'IfNoneMatch="*"',
         'ServerSideEncryption="aws:kms"',
         'SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"]',
-        'ChecksumAlgorithm="SHA256"',
+        'ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"]',
     ):
         require(argument, PRODUCTION_PLAN)
     require('PLAN_KEY="$PLAN_KEY"', PRODUCTION_PLAN)
+    require('EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256"', PRODUCTION_PLAN)
+    assert "ChecksumAlgorithm" not in planner
+    require('"VersionId": response["VersionId"]', PRODUCTION_PLAN)
+    require('"ServerSideEncryption": response.get("ServerSideEncryption", "aws:kms")', PRODUCTION_PLAN)
+    require('"SSEKMSKeyId": response.get("SSEKMSKeyId", os.environ["TFSTATE_KMS_KEY_ARN"])', PRODUCTION_PLAN)
+    require('"ChecksumSHA256": response.get("ChecksumSHA256", os.environ["EXPECTED_S3_SHA256"])', PRODUCTION_PLAN)
     require('>/dev/null 2>"$PUT_ERROR"', PRODUCTION_PLAN)
     require("os.fchmod(response_fd, 0o600)", PRODUCTION_PLAN)
     for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
@@ -498,16 +504,20 @@ def _check_production_upload_stub() -> None:
     source = source.split("<<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
     source = textwrap.dedent(source)
     body = b"immutable reviewed plan"
-    response = {
+    kms_key_arn = "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
+    expected_checksum = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    response = {"VersionId": "version-301"}
+    expected_metadata = {
         "VersionId": "version-301",
         "ServerSideEncryption": "aws:kms",
-        "SSEKMSKeyId": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
-        "ChecksumSHA256": base64.b64encode(hashlib.sha256(body).digest()).decode(),
+        "SSEKMSKeyId": kms_key_arn,
+        "ChecksumSHA256": expected_checksum,
     }
 
     class MockS3:
-        def __init__(self) -> None:
+        def __init__(self, response: dict[str, str]) -> None:
             self.calls: list[dict[str, object]] = []
+            self.response = response
 
         def put_object(self, **kwargs: object) -> dict[str, str]:
             self.calls.append(kwargs)
@@ -519,41 +529,45 @@ def _check_production_upload_stub() -> None:
                 "IfNoneMatch",
                 "ServerSideEncryption",
                 "SSEKMSKeyId",
-                "ChecksumAlgorithm",
+                "ChecksumSHA256",
             }
             assert kwargs["Bucket"] == "nova-toll-tfstate-920534282028"
             assert kwargs["Key"] == "plans/release-301/12345/release.tfplan"
             assert kwargs["ExpectedBucketOwner"] == "920534282028"
             assert kwargs["IfNoneMatch"] == "*"
             assert kwargs["ServerSideEncryption"] == "aws:kms"
-            assert kwargs["SSEKMSKeyId"] == response["SSEKMSKeyId"]
-            assert kwargs["ChecksumAlgorithm"] == "SHA256"
+            assert kwargs["SSEKMSKeyId"] == kms_key_arn
+            assert kwargs["ChecksumSHA256"] == expected_checksum
             plan = kwargs["Body"]
             assert getattr(plan, "mode", None) == "rb"
             assert hasattr(plan, "read")
             assert plan.read() == body
-            return response
+            return self.response
 
-    s3 = MockS3()
+    s3 = MockS3(response)
 
     class MockBoto3:
+        def __init__(self, client: MockS3) -> None:
+            self.client_instance = client
+
         def client(self, service_name: str, *, region_name: str) -> MockS3:
             assert service_name == "s3"
             assert region_name == "us-east-1"
-            return s3
+            return self.client_instance
 
     previous_boto3 = sys.modules.get("boto3")
     had_boto3 = "boto3" in sys.modules
     previous_environment = os.environ.copy()
     previous_argv = sys.argv
-    sys.modules["boto3"] = MockBoto3()
+    sys.modules["boto3"] = MockBoto3(s3)
     try:
         os.environ.update(
             {
                 "AWS_REGION": "us-east-1",
                 "PLAN_BUCKET": "nova-toll-tfstate-920534282028",
                 "PLAN_KEY": "plans/release-301/12345/release.tfplan",
-                "TFSTATE_KMS_KEY_ARN": response["SSEKMSKeyId"],
+                "TFSTATE_KMS_KEY_ARN": kms_key_arn,
+                "EXPECTED_S3_SHA256": expected_checksum,
             }
         )
         with tempfile.TemporaryDirectory(prefix="nova-toll-upload-") as directory:
@@ -564,7 +578,20 @@ def _check_production_upload_stub() -> None:
             exec(compile(source, "<workflow upload>", "exec"), {"__name__": "__main__"})
             assert len(s3.calls) == 1
             assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
-            assert json.loads(response_path.read_text(encoding="utf-8")) == response
+            assert json.loads(response_path.read_text(encoding="utf-8")) == expected_metadata
+
+            missing_s3 = MockS3({})
+            sys.modules["boto3"] = MockBoto3(missing_s3)
+            missing_response_path = Path(directory) / "missing-version.json"
+            sys.argv = ["workflow-upload.py", str(plan_path), str(missing_response_path)]
+            try:
+                exec(compile(source, "<workflow upload missing version>", "exec"), {"__name__": "__main__"})
+            except KeyError as error:
+                assert error.args == ("VersionId",)
+            else:
+                raise AssertionError("missing VersionId must fail closed")
+            assert len(missing_s3.calls) == 1
+            assert not missing_response_path.exists()
     finally:
         sys.argv = previous_argv
         os.environ.clear()

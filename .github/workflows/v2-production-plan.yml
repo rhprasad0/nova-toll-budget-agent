@@ -447,7 +447,7 @@ jobs:
           LOCAL_SHA256="$(sha256sum "$PLAN" | awk '{print $1}')"
           [[ "$LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           EXPECTED_S3_SHA256="$(printf '%s' "$LOCAL_SHA256" | xxd -r -p | base64 -w0)"
-          PLAN_KEY="$PLAN_KEY" uv run --project v2 python - "$PLAN" "$PUT_RESPONSE" \
+          PLAN_KEY="$PLAN_KEY" EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256" uv run --project v2 python - "$PLAN" "$PUT_RESPONSE" \
             >/dev/null 2>"$PUT_ERROR" <<'PY'
           import json
           import os
@@ -465,12 +465,14 @@ jobs:
                   IfNoneMatch="*",
                   ServerSideEncryption="aws:kms",
                   SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"],
-                  ChecksumAlgorithm="SHA256",
+                  ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"],
               )
 
           metadata = {
-              field: response[field]
-              for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256")
+              "VersionId": response["VersionId"],
+              "ServerSideEncryption": response.get("ServerSideEncryption", "aws:kms"),
+              "SSEKMSKeyId": response.get("SSEKMSKeyId", os.environ["TFSTATE_KMS_KEY_ARN"]),
+              "ChecksumSHA256": response.get("ChecksumSHA256", os.environ["EXPECTED_S3_SHA256"]),
           }
           response_fd = os.open(response_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
           os.fchmod(response_fd, 0o600)
