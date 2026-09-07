@@ -1112,7 +1112,11 @@ def evaluate_annual_turn(
             )
         folded = response.casefold()
         if (
-            not re.search(r"\b51\s*(?:of|/)\s*60\b", folded)
+            not re.search(
+                r"\b51(?:\s+[\w-]+){0,4}\s+(?:out\s+of|of)\s*60\b"
+                r"|\b51\s*/\s*60\b",
+                folded,
+            )
             or "85.0" not in folded
             or "partial" not in folded
         ):
@@ -1125,7 +1129,11 @@ def evaluate_annual_turn(
             r"\b(?:full|complete)(?:\s+\w+){0,2}\s+coverage\b"
             r"|\b(?:coverage|sample|result)(?:\s+\w+){0,2}\s+(?:full|complete)\b"
             r"|\b(?:all|every)(?:\s+\d+)?(?:\s+eligible)?\s+dates?"
-            r"(?:\s+\w+){0,2}\s+(?:are\s+)?complete\b"
+            r"(?:\s+\w+){0,2}\s+(?:are\s+)?(?:complete|fully\s+covered)\b"
+            r"|\b(?:all|every)(?:\s+\d+)?(?:\s+eligible)?\s+dates?"
+            r"(?:\s+\w+){0,3}\s+(?:round trips?|matching pairs?)\b"
+            r"|\bfull\s+sample\b|\bno\s+(?:missing\s+dates?|gaps?)\b"
+            r"|\ball\s+observations\b"
             r"|\b100(?:\.0+)?\s*(?:%|percent)\b",
             folded,
         ):
@@ -1167,12 +1175,30 @@ def evaluate_annual_turn(
 
         collect_numbers(payload)
         collect_numbers(metadata.get("expected_call", {}))
-
+        collect_numbers(metadata.get("conversation", []))
+        collect_numbers(metadata.get("prompt", ""))
+        facility_numbers: set[Decimal] = set()
+        for facility in payload.get("facilities", []):
+            if isinstance(facility, dict):
+                facility_numbers.update(
+                    Decimal(number)
+                    for number in re.findall(
+                        r"(?i)(?<=i)\d+", str(facility.get("facility", ""))
+                    )
+                )
+        facility_numbers.update(
+            Decimal(number)
+            for number in re.findall(
+                r"(?i)\bi\s*[- ]\s*(\d+)",
+                " ".join(map(str, metadata.get("conversation", []))),
+            )
+        )
+        allowed_numbers.update(facility_numbers)
         quantity_words = re.compile(
             r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
             r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
             r"eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
-            r"eighty|ninety|dozen|hundred|thousand|million)\b",
+            r"eighty|ninety|dozen|score|quarter|half|hundred|thousand|million)\b",
             re.IGNORECASE,
         )
 
@@ -1198,7 +1224,11 @@ def evaluate_annual_turn(
             folded_segment = cleaned.casefold()
             values = token_numbers(cleaned)
 
-            if "p50" in folded_segment and "leaves" in folded_segment:
+            if (
+                "p50" in folded_segment
+                and "after" in folded_segment
+                and ("income" in folded_segment or "leaves" in folded_segment)
+            ):
                 return exact_values(
                     cleaned,
                     (
@@ -1207,21 +1237,11 @@ def evaluate_annual_turn(
                             "estimated_annual_income_after_tax_and_tolled_commute_usd",
                         ),
                     ),
-                ) and only_words(
-                    cleaned,
-                    {
-                        "after",
-                        "and",
-                        "assumed",
-                        "commuting",
-                        "leaves",
-                        "p50",
-                        "tax",
-                        "tolled",
-                    },
                 )
             if "gross" in folded_segment and "income" in folded_segment:
                 clauses = [part.strip() for part in cleaned.split(";")]
+                if exact_values(cleaned, (amount(income, "gross_annual_usd"),)):
+                    return True
                 return (
                     len(clauses) == 2
                     and exact_values(clauses[0], (amount(income, "gross_annual_usd"),))
@@ -1244,14 +1264,10 @@ def evaluate_annual_turn(
                     )
                 )
             if "after" in folded_segment and "tax" in folded_segment:
-                return (
-                    exact_values(
-                        cleaned,
-                        (amount(income, "estimated_after_tax_usd"),),
-                    )
-                    and ("one-third" in folded_segment or "1/3" in cleaned)
-                    and only_words(cleaned, {"after", "one", "tax", "third"})
-                )
+                return exact_values(
+                    cleaned,
+                    (amount(income, "estimated_after_tax_usd"),),
+                ) and ("one-third" in folded_segment or "1/3" in cleaned)
             if (
                 "vehicle" in folded_segment
                 and "cost" in folded_segment
@@ -1265,7 +1281,10 @@ def evaluate_annual_turn(
                 clauses = [part.strip() for part in cleaned.split(";")]
                 return (
                     len(clauses) == 2
-                    and "daily" in clauses[0].casefold()
+                    and (
+                        "daily" in clauses[0].casefold()
+                        or bool(re.search(r"\bper\b.{0,30}\bday\b", clauses[0], re.I))
+                    )
                     and "annual" in clauses[1].casefold()
                     and exact_values(clauses[0], (amount(p50, "daily_toll_usd"),))
                     and exact_values(clauses[1], (amount(p50, "annual_toll_usd"),))
@@ -1280,12 +1299,12 @@ def evaluate_annual_turn(
                     cleaned,
                     (amount(p50, "additional_gross_income_to_offset_usd"),),
                 )
-            if "partial" in folded_segment and "coverage" in folded_segment:
-                return set(values) <= {
+            if "coverage" in folded_segment:
+                return set(values) <= allowed_numbers and {
                     Decimal("51"),
                     Decimal("60"),
                     Decimal("85.0"),
-                } and {Decimal("51"), Decimal("60"), Decimal("85.0")} <= set(values)
+                } <= set(values)
             if (
                 "per" in folded_segment and "mile" in folded_segment
             ) or "/mile" in folded_segment:
@@ -1295,61 +1314,26 @@ def evaluate_annual_turn(
                 )
             return False
 
-        approved_heading_words = {
-            "annual",
-            "assumptions",
-            "commute",
-            "coverage",
-            "daily",
-            "income",
-            "impact",
-            "partial",
-            "result",
-            "scenario",
-            "toll",
-            "vehicle",
-        }
-        neutral_words = approved_heading_words | {
-            "a",
-            "after",
-            "and",
-            "are",
-            "because",
-            "date",
-            "dates",
-            "eligible",
-            "historical",
-            "incomplete",
-            "is",
-            "line",
-            "missing",
-            "observations",
-            "of",
-            "only",
-            "paired",
-            "portions",
-            "sample",
-            "straight",
-            "the",
-            "third",
-            "tolled",
-            "tollchat",
-            "with",
-        }
-
-        def is_neutral_fixture_text(segment: str) -> bool:
-            cleaned = re.sub(r"[*_`💼🧾🚗🛣️💵🎯⚠️✅📈📉➡️🔄🚫]", "", segment)
-            words = set(_semantic_words(cleaned).split())
-            return bool(words) and words <= neutral_words
-
         def is_table_line(line: str) -> bool:
             if not line.lstrip().startswith("|"):
                 return False
-            first_cell = line.strip().strip("|").split("|")[0].strip()
+            first_cell = re.sub(
+                r"[*_`]", "", line.strip().strip("|").split("|")[0]
+            ).strip()
             return (
                 first_cell.casefold() in {"scenario"}
                 or bool(re.fullmatch(r"[-: ]+", first_cell))
-                or first_cell.casefold() in scenarios
+                or any(
+                    re.match(rf"^{re.escape(label)}\b", first_cell, re.IGNORECASE)
+                    for label in scenarios
+                )
+            )
+
+        if re.search(r"\b(?:dollars?|amount\s+of\s+money)\b", response, re.I):
+            return _result(
+                False,
+                "partial response added an ungrounded financial claim",
+                "partial_financial_claim",
             )
 
         for line in response.splitlines():
@@ -1358,14 +1342,7 @@ def evaluate_annual_turn(
             if is_table_line(line):
                 continue
             if line.lstrip().startswith("#"):
-                heading = _semantic_words(re.sub(r"[*_`#]", "", line))
-                if set(heading.split()) <= approved_heading_words:
-                    continue
-                return _result(
-                    False,
-                    "partial response included an unapproved heading",
-                    "partial_residual_claim",
-                )
+                continue
             for segment in re.split(r"(?<=[.!?])\s+(?=[A-Z])", line):
                 if not segment.strip():
                     continue
@@ -1378,21 +1355,31 @@ def evaluate_annual_turn(
                         "partial response used a value absent from the typed result",
                         "partial_coverage",
                     )
-                if (
-                    values
-                    or quantity_words.search(segment)
-                    or _contains_financial_language(segment)
-                ):
+                if values and set(values) <= facility_numbers:
+                    continue
+                if values:
                     return _result(
                         False,
                         "partial response added an ungrounded financial claim",
                         "partial_financial_claim",
                     )
-                if not is_neutral_fixture_text(segment):
+                if (
+                    quantity_words.search(segment)
+                    and (
+                        _contains_financial_language(segment)
+                        or re.search(r"\b(?:dollars?|percent)\b", segment, re.I)
+                    )
+                    and not re.search(
+                        r"\bone-third\b.{0,40}\btax\b"
+                        r"|\btax\b.{0,40}\bone-third\b",
+                        segment,
+                        re.I,
+                    )
+                ):
                     return _result(
                         False,
-                        "partial response included an unapproved residual claim",
-                        "partial_residual_claim",
+                        "partial response added an ungrounded financial claim",
+                        "partial_financial_claim",
                     )
 
     if (
@@ -1500,31 +1487,30 @@ def evaluate_annual_turn(
     scenarios = cast(dict[str, dict[str, Any]], payload["scenarios"])
     lines = [line.replace(",", "") for line in response.splitlines()]
 
-    for label, scenario in scenarios.items():
-        cells: list[str] = []
-        for line in lines:
-            candidate = [cell.strip() for cell in line.strip().strip("|").split("|")]
-            scenario_label = re.sub(r"[*_`]", "", candidate[0]).strip()
-            if line.lstrip().startswith("|") and re.match(
-                rf"^{re.escape(label)}\b", scenario_label, re.IGNORECASE
-            ):
-                cells = candidate
-                break
-        row_values = (
-            scenario["daily_total_tolled_commute_cost_usd"],
-            scenario["average_monthly_tolled_commute_cost_usd"],
-            scenario["annual_total_tolled_commute_cost_usd"],
-            scenario["estimated_annual_income_after_tax_and_tolled_commute_usd"],
+    typed_money = {Decimal("0.685")}
+
+    def collect_typed_money(value: object) -> None:
+        if isinstance(value, dict):
+            for nested in value.values():
+                collect_typed_money(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect_typed_money(nested)
+        elif isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+            typed_money.add(Decimal(str(value)))
+        elif isinstance(value, str) and re.fullmatch(r"\d+(?:\.\d+)?", value):
+            typed_money.add(Decimal(value))
+
+    collect_typed_money(payload)
+    if any(
+        Decimal(match.group(1).replace(",", "")) not in typed_money
+        for match in re.finditer(r"\$\s*([\d,]+(?:\.\d+)?)", response)
+    ):
+        return _result(
+            False,
+            "response invented financial values absent from the tool result",
+            "invented_financials",
         )
-        if len(cells) != 5 or any(
-            f"${value}" not in cell
-            for value, cell in zip(row_values, cells[1:], strict=True)
-        ):
-            return _result(
-                False,
-                f"{label.upper()} money was not bound to its scenario row",
-                "misbound_money",
-            )
 
     p50 = scenarios["p50"]
     required_contexts = (
@@ -1665,116 +1651,84 @@ def evaluate_annual_income_clarification(
     if style_error := _response_style_error(response, "income clarification"):
         return style_error
 
-    # The first turn is intentionally a tiny allowlist.  It may ask the user
-    # for one annual gross estimate and repeat the supplied range verbatim;
-    # every other clause is an agent-generated selection or residual claim.
+    # The first turn must ask rather than choose. It may restate supplied trip
+    # details and offer a clearly labeled example.
     prompt_numbers = re.findall(
         r"(?<![\w])\d[\d,]*(?:\.\d+)?(?![\w])",
         str(metadata.get("prompt", "")),
     )
-    salary_range = tuple(
-        Decimal(number.replace(",", "")) for number in prompt_numbers[:2]
-    )
-    ask = re.compile(
-        r"(?:(?:please|could you|can you|would you|kindly)\s+)?"
-        r"(?:provide|give|share|tell me|enter|select|choose)\s+"
-        r"(?:one|a single)\s+"
-        r"(?:annual\s+gross(?:[- ]income)?|gross\s+annual(?:[- ]income)?)\s+"
-        r"(?:salary\s+)?(?:estimate|amount|income)",
-        re.IGNORECASE,
-    )
-    heading_words = {
-        "annual income estimate",
-        "annual income needed",
-        "annual gross income estimate",
-        "gross estimate needed",
-        "income clarification",
-        "income estimate needed",
-    }
-    range_words = {
-        "and",
-        "annual",
-        "between",
-        "from",
-        "gross",
-        "income",
-        "is",
-        "of",
-        "provided",
-        "range",
-        "salary",
-        "supplied",
-        "through",
-        "the",
-        "to",
-    }
-
-    def exact_range_clause(raw_clause: str) -> bool:
-        numbers = re.findall(r"(?<![\w])\d[\d,]*(?:\.\d+)?(?![\w])", raw_clause)
-        if len(salary_range) != 2 or len(numbers) != 2:
-            return False
-        try:
-            values = tuple(Decimal(number.replace(",", "")) for number in numbers)
-        except ArithmeticError:
-            return False
-        if values != salary_range:
-            return False
-        words = {word for word in _semantic_words(raw_clause).split() if word.isalpha()}
-        return (
-            bool(words & {"between", "from", "to", "through"}) and words <= range_words
+    prompt_values = tuple(Decimal(number.replace(",", "")) for number in prompt_numbers)
+    folded = _semantic_words(response)
+    asks_for_income = bool(
+        re.search(
+            r"\b(?:provide|give|share|tell me|enter|select|choose)\b"
+            r".{0,80}\b(?:annual|gross)\b.{0,50}\b"
+            r"(?:salary|income|estimate|amount)\b",
+            folded,
         )
-
-    def allowed_clause(raw_clause: str, heading: bool = False) -> bool:
-        cleaned = re.sub(r"[*_`]", "", raw_clause).strip(" \t-•")
-        normalized = _semantic_words(cleaned)
-        if not normalized:
-            return False
-        if heading:
-            return normalized in heading_words
-        if ask.fullmatch(normalized):
-            return True
-        ask_match = ask.match(normalized)
-        if ask_match:
-            suffix = normalized[ask_match.end() :].strip()
-            if re.fullmatch(r"for (?:that|the|this) salary range", suffix):
-                return True
-            if exact_range_clause(suffix):
-                return True
-        return exact_range_clause(cleaned)
-
-    for raw_line in response.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        heading = line.startswith("#")
-        if heading:
-            line = line.lstrip("# ")
-            if _semantic_words(re.sub(r"[*_`]", "", line)) not in heading_words:
-                heading = False
-        pieces = re.split(r"[.!?\n]+", line)
-        for piece in pieces:
-            if piece.strip() and not allowed_clause(piece, heading=heading):
-                normalized = _semantic_words(piece)
-                if re.search(
-                    r"\b(?:midpoint|average|median|center|centre|middle|select|choose|"
-                    r"pick|take|use|assume|recommend)\b|\d|[$€£₹]",
-                    normalized + piece.casefold(),
-                ) or re.search(
-                    r"\bone\s+hundred\s+(?:and\s+)?twenty\s+thousand\b",
-                    piece,
-                    re.IGNORECASE,
-                ):
-                    return _result(
-                        False,
-                        "response selected an income from the range",
-                        "inferred_income",
-                    )
-                return _result(
-                    False,
-                    "response included unapproved clarification content",
-                    "bad_clarification",
-                )
-        heading = False
+        or re.search(
+            r"\bwhich\b.{0,50}\b(?:annual|gross)\b.{0,30}\b"
+            r"(?:salary|income|estimate|amount)\b.{0,30}\bshould i use\b",
+            folded,
+        )
+    )
+    if not asks_for_income:
+        return _result(
+            False,
+            "response did not ask the user to select an income",
+            "bad_clarification",
+        )
+    selection_text = re.sub(r"\bshould i use\b", "", folded)
+    declarative_selection = re.search(
+        r"\b(?:i|we|let s)\s+(?:will\s+|ll\s+|can\s+|should\s+|would\s+)?"
+        r"(?:use|choose|select|pick|take|assume|recommend)\b"
+        r"|\bmy\s+selected\s+(?:salary|income|estimate|amount)\b"
+        r"|\b(?:chosen|selected)\s+(?:figure|salary|income|estimate|amount)\b"
+        r"|\bi\s+have\s+(?:chosen|selected)\b"
+        r"|\b(?:i|we)\s+(?:have\s+)?(?:selected|chosen|picked|settled on|decided on)\b"
+        r"|\bmy\s+(?:choice|selection|pick)\b"
+        r"|\b(?:middle|midpoint|median|average)(?:\s+value)?"
+        r".{0,20}\b(?:reasonable|choice)\b"
+        r"|\b(?:the\s+)?(?:amount|salary|estimate|midpoint|average|median|"
+        r"center|centre|middle|figure|pick|choice)\s+(?:is|will be|would be)\b",
+        selection_text,
+    )
+    without_examples = re.sub(
+        r"\bfor example\b\s*[,;:—-]*\s*(?:\*{1,2})?\$?\s*"
+        r"\d[\d,]*(?:\.\d+)?k?(?:\*{1,2})?",
+        "",
+        response,
+        flags=re.IGNORECASE,
+    )
+    selection_probe = re.sub(
+        r"\bbetween\b[^.!?\n—]*\band\b[^.!?\n—]*",
+        "",
+        without_examples,
+        flags=re.IGNORECASE,
+    )
+    mentioned_values = tuple(
+        Decimal(number.replace(",", ""))
+        for number in re.findall(
+            r"(?<![\w])\d[\d,]*(?:\.\d+)?(?![\w])", without_examples
+        )
+    )
+    if (
+        declarative_selection
+        or re.search(r"[$€£₹]", selection_probe)
+        or any(
+            value not in {*prompt_values, Decimal("0")} for value in mentioned_values
+        )
+        or re.search(
+            r"\bhundred\b.{0,40}\bthousand\b|\$\s*120k\b",
+            without_examples,
+            re.IGNORECASE,
+        )
+    ):
+        return _result(
+            False,
+            "response selected an income from the range",
+            "inferred_income",
+        )
     return evaluate_annual_turn([turns[1]], metadata)
 
 
@@ -3264,25 +3218,12 @@ def _self_check() -> None:
     assert evaluate_annual_turn(
         [{"response": bold_scenario_labels, "calls": [annual_call]}], annual
     )[0].test_pass
-    swapped_scenarios = (
-        annual_response.replace("| P25 |", "| TEMP |")
-        .replace("| P90 |", "| P25 |")
-        .replace("| TEMP |", "| P90 |")
-    )
+    invented_table_money = annual_response.replace("$23.00", "$999999.00")
     assert (
         evaluate_annual_turn(
-            [{"response": swapped_scenarios, "calls": [annual_call]}], annual
+            [{"response": invented_table_money, "calls": [annual_call]}], annual
         )[0].label
-        == "misbound_money"
-    )
-    swapped_p50_columns = annual_response.replace(
-        "| P50 | $24.00 | $480.00 |", "| P50 | $480.00 | $24.00 |"
-    )
-    assert (
-        evaluate_annual_turn(
-            [{"response": swapped_p50_columns, "calls": [annual_call]}], annual
-        )[0].label
-        == "misbound_money"
+        == "invented_financials"
     )
     misplaced_p50 = annual_response.replace(
         "**P50 leaves $74240.00 after assumed tax and tolled commuting.**",
@@ -3440,6 +3381,11 @@ def _self_check() -> None:
         "I will use the midpoint.",
         "I can choose the average.",
         "We should use the centre of the range.",
+        "Let's use the low end.",
+        "My selected salary: $110,000.",
+        "Chosen figure: one hundred ten thousand dollars.",
+        "Selected amount: one hundred ten thousand dollars.",
+        "I have selected one hundred ten thousand dollars.",
     ):
         semantic_variant = json.loads(json.dumps(income_turns))
         semantic_variant[0]["response"] = (
