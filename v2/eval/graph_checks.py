@@ -588,12 +588,13 @@ def _container_execution(value: object) -> None:
     )
 
 
-def grade_annual(
+def score_annual(
     artifact: Path,
     case_path: Path,
     manifest_path: Path | None = None,
-) -> int:
-    """Grade one fixture trajectory through the shared annual evaluator."""
+    accepted_grader_digest: str | None = None,
+) -> dict[str, Any]:
+    """Return one fixture score without writing into the retained artifact."""
     artifact = artifact.resolve()
     score: dict[str, Any] = {
         "case_id": "invalid-case",
@@ -625,7 +626,17 @@ def grade_annual(
         )
 
     try:
-        case = read_json(case_path)
+        if case_path.absolute() == (artifact / "case.json").absolute():
+            case_input = _annual_artifact_file(artifact, "case.json")
+        else:
+            require(not case_path.is_symlink(), "annual case symlink is not allowed")
+            metadata = case_path.stat()
+            require(
+                stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1,
+                "annual case must be a private regular file",
+            )
+            case_input = case_path
+        case = read_json(case_input)
         require(type(case) is dict, "annual case object required")
         run = read_json(_annual_artifact_file(artifact, "run.json"))
         require(
@@ -646,7 +657,7 @@ def grade_annual(
         valid_annual_identity(identity)
         score["identity"] = identity
         require(
-            identity["grader_digest"] == score["grader"],
+            identity["grader_digest"] == (accepted_grader_digest or score["grader"]),
             "annual grader identity mismatch",
         )
         current_source = source_digest()
@@ -1119,6 +1130,17 @@ def grade_annual(
         score["pass"] = False
         score["failure_class"] = "infra_dependency"
     validate(score, read_json(ROOT / "schemas/scorecard.schema.json"))
+    return score
+
+
+def grade_annual(
+    artifact: Path,
+    case_path: Path,
+    manifest_path: Path | None = None,
+) -> int:
+    """Grade one fixture trajectory and write its scorecard."""
+    artifact = artifact.resolve()
+    score = score_annual(artifact, case_path, manifest_path)
     target = artifact / "scorecard.json"
     require(not target.is_symlink(), "scorecard cannot be a symlink")
     temporary = artifact / "scorecard.json.tmp"

@@ -423,3 +423,16 @@ On 2026-09-06, the maintainer approved the 30-case pilot review: “The pilot
 cases look good.” This records approval of the reviewed cases in dataset
 `2.2.0`. The retained pilot scores and documented grading limitations remain
 unchanged; the full 900-execution evaluation has not run.
+
+### Evaluator calibration labels
+
+`eval/golden/human-labels-v2.3.json` is the fixed truth set for the 60 public
+trial-1 answers reviewed by a maintainer: 50 Pass and 10 Fail. It binds the
+current 2.3 corpus, the immutable 2.2 retained evidence, and the two returned
+label packets. The missing original pilot packet is recorded as unavailable;
+its 27 final decisions come from the maintainer-approved retained record.
+
+`python -m eval.calibration compare-labels` recomputes the current evaluator
+against those retained answers without changing their scorecards. The resulting
+matrix is useful for tuning evaluator rules, but the deliberately selected set
+is not a population estimate or release gate.

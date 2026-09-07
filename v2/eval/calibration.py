@@ -32,6 +32,22 @@ _V2_2_PUBLIC_MANIFEST_SHA256 = (
     "c08cdce610b4b42ca8acbec63db2074e8d72cefc631ccfb95924e4a53b9cb02a"
 )
 _V2_2_GRADER_DIGEST = "a68f2a8b7f2676530ba0bd54cce9f2cf90a40855e5fb7fd3dbdc8e54035f0812"
+_V2_2_EVIDENCE_SHA256 = (
+    "917db5b5187ed721b3cb9291185949bc7c1e417e9ac51f223419c5e336a12e09"
+)
+_V2_3_DATASET_VERSION = "2.3.0"
+_V2_3_PUBLIC_DATASET_SHA256 = (
+    "6fd9a3944407f1f39a803d8bf8498d032f22891643c4ffca0857d2e259ede49d"
+)
+_V2_3_MEMBERSHIP_SHA256 = (
+    "135021bff4e1ab1fac289a46f734f81dba7b95d452344383c19f3d4dc1dfccbe"
+)
+_BALANCED_PACKET_SHA256 = (
+    "9e017f3a0b01bd3db20f892c344fca033865ceee41676951bdc1d556a5c6fb5d"
+)
+_FOLLOW_UP_PACKET_SHA256 = (
+    "555e2fddecaaccc945813290a2d60ddc27278f6c1f03b89bbb9b062a30a1ea4d"
+)
 _V2_CATEGORIES = ("topology", "current", "annual", "multiturn", "fault", "abuse")
 _V2_FOLLOW_UP_CASES = (
     "multiturn-current-annual-01",
@@ -73,6 +89,11 @@ _V2_BALANCED_CASES = (
 _V2_SELECTIONS = {
     "follow-up": _V2_FOLLOW_UP_CASES,
     "balanced": _V2_BALANCED_CASES,
+}
+_LABEL_SOURCES = {
+    "retained_historical_pilot",
+    "returned_follow_up_packet",
+    "returned_balanced_packet",
 }
 _FACILITIES = {
     "dulles_toll_road": "Dulles Toll Road",
@@ -880,13 +901,203 @@ def validate_v2_labels(
     return dict(value)
 
 
+def _validated_label_ledger(
+    ledger_path: Path, public_manifest_path: Path
+) -> tuple[dict[str, Any], Corpus]:
+    ledger_path = _regular(ledger_path)
+    public_manifest_path = _regular(public_manifest_path)
+    value = graph_checks.read_json(ledger_path)
+    corpus = _validated_manifest(public_manifest_path)
+    expected_bindings = {
+        "current_public": {
+            "dataset_version": _V2_3_DATASET_VERSION,
+            "dataset_sha256": _V2_3_PUBLIC_DATASET_SHA256,
+            "membership_sha256": _V2_3_MEMBERSHIP_SHA256,
+        },
+        "retained_public": {
+            "dataset_version": _V2_DATASET_VERSION,
+            "dataset_sha256": _V2_PUBLIC_DATASET_SHA256,
+            "manifest_sha256": _V2_2_PUBLIC_MANIFEST_SHA256,
+            "evidence_sha256": _V2_2_EVIDENCE_SHA256,
+        },
+        "returned_packets": {
+            "balanced_sha256": _BALANCED_PACKET_SHA256,
+            "follow_up_sha256": _FOLLOW_UP_PACKET_SHA256,
+        },
+        "historical_pilot": {
+            "record": "maintainer_approved_26_pass_1_fail_3_unsure",
+            "original_packet": "unavailable",
+        },
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"artifact_type", "version", "bindings", "labels"}
+        or value.get("artifact_type") != "human_calibration_labels"
+        or value.get("version") != 1
+        or value.get("bindings") != expected_bindings
+        or corpus.manifest.get("dataset_version") != _V2_3_DATASET_VERSION
+        or corpus.manifest.get("dataset_sha256") != _V2_3_PUBLIC_DATASET_SHA256
+        or corpus.manifest.get("membership_sha256") != _V2_3_MEMBERSHIP_SHA256
+    ):
+        raise ValueError("human label ledger binding mismatch")
+    labels = value.get("labels")
+    if (
+        not isinstance(labels, list)
+        or len(labels) != 60
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"case_id", "verdict", "source"}
+            or not isinstance(item.get("case_id"), str)
+            or not item["case_id"]
+            or item.get("verdict") not in {"Pass", "Fail"}
+            or item.get("source") not in _LABEL_SOURCES
+            for item in labels
+        )
+    ):
+        raise ValueError("human label ledger decisions are invalid")
+    typed = list(labels)
+    case_ids = [item["case_id"] for item in typed]
+    rows = {row["id"]: row for row in corpus.rows}
+    reviewed = sorted(
+        case_id
+        for case_id, row in rows.items()
+        if row.get("review_status") == "human_reviewed"
+    )
+    pilot = set(baseline._PILOT_CASES) - set(_V2_FOLLOW_UP_CASES)
+    expected_sources = {
+        "retained_historical_pilot": pilot,
+        "returned_follow_up_packet": set(_V2_FOLLOW_UP_CASES),
+        "returned_balanced_packet": set(_V2_BALANCED_CASES),
+    }
+    actual_sources = {
+        source: {item["case_id"] for item in typed if item["source"] == source}
+        for source in _LABEL_SOURCES
+    }
+    if (
+        case_ids != sorted(case_ids)
+        or len(set(case_ids)) != len(case_ids)
+        or case_ids != reviewed
+        or actual_sources != expected_sources
+        or sum(item["verdict"] == "Pass" for item in typed) != 50
+        or sum(item["verdict"] == "Fail" for item in typed) != 10
+        or next(
+            (
+                item["verdict"]
+                for item in typed
+                if item["case_id"] == "topology-probe-dca-to-iad-current"
+            ),
+            None,
+        )
+        != "Fail"
+        or sum(
+            item["verdict"] == "Pass"
+            for item in typed
+            if item["source"] == "returned_balanced_packet"
+        )
+        != 21
+    ):
+        raise ValueError("human label ledger membership mismatch")
+    return value, corpus
+
+
+def _empty_matrix() -> dict[str, int]:
+    return {
+        "human_pass_evaluator_pass": 0,
+        "human_pass_evaluator_fail": 0,
+        "human_fail_evaluator_pass": 0,
+        "human_fail_evaluator_fail": 0,
+    }
+
+
+def compare_labels(
+    label_ledger: Path,
+    public_manifest: Path,
+    retained_manifest: Path,
+    public_root: Path,
+    rate_card: Path,
+) -> dict[str, Any]:
+    """Compare reviewed trial-1 labels with freshly recomputed evaluator results."""
+    ledger, current = _validated_label_ledger(label_ledger, public_manifest)
+    retained = _validated_split(
+        retained_manifest, public_root, _trusted_rate_card(rate_card)
+    )
+    if (
+        retained["manifest_sha256"] != _V2_2_PUBLIC_MANIFEST_SHA256
+        or retained["evidence_sha256"] != _V2_2_EVIDENCE_SHA256
+        or retained["report"].get("private") is not False
+    ):
+        raise ValueError("immutable retained evidence binding mismatch")
+    rows = {row["id"]: row for row in current.rows}
+    overall = _empty_matrix()
+    categories: dict[str, dict[str, int]] = {}
+    disagreements = []
+    for label in ledger["labels"]:
+        case_id = label["case_id"]
+        score = graph_checks.score_annual(
+            retained["root"] / case_id / "1",
+            retained["root"] / case_id / "1" / "case.json",
+            retained["manifest_path"],
+            accepted_grader_digest=_V2_2_GRADER_DIGEST,
+        )
+        if score["failure_class"] == "infra_dependency":
+            raise ValueError("current evaluator could not score retained evidence")
+        evaluator = "pass" if score["pass"] else "fail"
+        human = label["verdict"].lower()
+        key = f"human_{human}_evaluator_{evaluator}"
+        overall[key] += 1
+        category = rows[case_id]["primary_category"]
+        categories.setdefault(category, _empty_matrix())[key] += 1
+        if human != evaluator:
+            disagreements.append(
+                {
+                    "case_id": case_id,
+                    "human_verdict": label["verdict"],
+                    "evaluator_verdict": evaluator.title(),
+                    "failed_check_ids": sorted(
+                        check["id"] for check in score["checks"] if not check["pass"]
+                    ),
+                }
+            )
+    return {
+        "artifact_type": "evaluator_calibration_report",
+        "version": 1,
+        "bindings": {
+            "label_ledger_sha256": baseline._digest(_regular(label_ledger)),
+            "current_public_dataset_sha256": _V2_3_PUBLIC_DATASET_SHA256,
+            "current_public_membership_sha256": _V2_3_MEMBERSHIP_SHA256,
+            "retained_public_manifest_sha256": retained["manifest_sha256"],
+            "retained_public_dataset_sha256": _V2_PUBLIC_DATASET_SHA256,
+            "retained_evidence_sha256": retained["evidence_sha256"],
+            "current_grader_digest": graph_checks.grader_digest(),
+        },
+        "counts": {"reviewed": 60, "human_pass": 50, "human_fail": 10},
+        "overall": overall,
+        "categories": {key: categories[key] for key in sorted(categories)},
+        "disagreements": sorted(disagreements, key=lambda item: item["case_id"]),
+    }
+
+
 def _write(path: Path, value: object) -> None:
     if path.exists() or path.is_symlink():
         raise ValueError("calibration output already exists")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    )
+    parent = path.parent
+    if (
+        not parent.is_dir()
+        or parent.is_symlink()
+        or parent.resolve() != parent.absolute()
+    ):
+        raise ValueError("regular existing output directory required")
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                value,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+        )
 
 
 def main() -> None:
@@ -919,6 +1130,16 @@ def main() -> None:
     labels_v2.add_argument("--rate-card", type=Path, required=True)
     labels_v2.add_argument("--labels", type=Path, required=True)
     labels_v2.add_argument("--kind", choices=tuple(_V2_SELECTIONS), required=True)
+    comparison = commands.add_parser("compare-labels")
+    for name in (
+        "label-ledger",
+        "public-manifest",
+        "retained-manifest",
+        "public-root",
+        "rate-card",
+        "output",
+    ):
+        comparison.add_argument(f"--{name}", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "review":
         render_review(
@@ -950,7 +1171,7 @@ def main() -> None:
             args.public_root,
             args.rate_card,
         )
-    else:
+    elif args.command == "validate-v2-labels":
         validate_v2_labels(
             graph_checks.read_json(_regular(args.labels)),
             args.public_manifest,
@@ -958,7 +1179,21 @@ def main() -> None:
             args.rate_card,
             args.kind,
         )
+    else:
+        _write(
+            args.output,
+            compare_labels(
+                args.label_ledger,
+                args.public_manifest,
+                args.retained_manifest,
+                args.public_root,
+                args.rate_card,
+            ),
+        )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError, KeyError, TypeError):
+        raise SystemExit("calibration input validation failed") from None

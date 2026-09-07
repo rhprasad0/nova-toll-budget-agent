@@ -2,7 +2,9 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,9 +35,191 @@ _FOLLOW_UP_LABELS = Path(
 _LEGACY_EVIDENCE_SHA256 = (
     "917db5b5187ed721b3cb9291185949bc7c1e417e9ac51f223419c5e336a12e09"
 )
+_CURRENT_PUBLIC_MANIFEST = _V2 / "eval/golden/manifest-v2.json"
+_LABEL_LEDGER = _V2 / "eval/golden/human-labels-v2.3.json"
 
 
 class CalibrationTests(unittest.TestCase):
+    def test_human_label_ledger_is_strict_and_complete(self) -> None:
+        ledger, corpus = calibration._validated_label_ledger(
+            _LABEL_LEDGER, _CURRENT_PUBLIC_MANIFEST
+        )
+        self.assertEqual(len(ledger["labels"]), 60)
+        self.assertEqual(
+            {
+                row["id"]
+                for row in corpus.rows
+                if row["review_status"] == "human_reviewed"
+            },
+            {item["case_id"] for item in ledger["labels"]},
+        )
+        original = json.loads(_LABEL_LEDGER.read_text())
+        mutations = {
+            "extra top-level field": lambda value: value.update(unexpected=True),
+            "missing top-level field": lambda value: value.pop("version"),
+            "extra label field": lambda value: value["labels"][0].update(note="no"),
+            "duplicate ID": lambda value: value["labels"].__setitem__(
+                1, dict(value["labels"][0])
+            ),
+            "out-of-order ID": lambda value: value["labels"].reverse(),
+            "bad ID type": lambda value: value["labels"][0].update(case_id=1),
+            "bad verdict": lambda value: value["labels"][0].update(verdict="Unsure"),
+            "bad source": lambda value: value["labels"][0].update(source="packet"),
+            "bad count": lambda value: value["labels"].pop(),
+            "current binding": lambda value: value["bindings"]["current_public"].update(
+                dataset_sha256="0" * 64
+            ),
+            "immutable binding": lambda value: value["bindings"][
+                "retained_public"
+            ].update(manifest_sha256="0" * 64),
+            "packet binding": lambda value: value["bindings"][
+                "returned_packets"
+            ].update(balanced_sha256="0" * 64),
+            "provenance membership": lambda value: value["labels"][0].update(
+                source="returned_balanced_packet"
+            ),
+            "synthetic ID": lambda value: value["labels"][0].update(
+                case_id="abuse-annual-tool-injection-02"
+            ),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for number, (name, mutate) in enumerate(mutations.items()):
+                with self.subTest(name=name):
+                    changed = json.loads(json.dumps(original))
+                    mutate(changed)
+                    path = root / f"changed-{number}.json"
+                    path.write_text(json.dumps(changed))
+                    with self.assertRaises(ValueError):
+                        calibration._validated_label_ledger(
+                            path, _CURRENT_PUBLIC_MANIFEST
+                        )
+            for name, text in (
+                ("duplicate-key", '{"version":1,"version":1}'),
+                ("non-finite", '{"version":NaN}'),
+            ):
+                with self.subTest(name=name):
+                    path = root / f"{name}.json"
+                    path.write_text(text)
+                    with self.assertRaises(ValueError):
+                        calibration._validated_label_ledger(
+                            path, _CURRENT_PUBLIC_MANIFEST
+                        )
+
+    def test_compare_labels_recomputes_without_writing_retained_evidence(self) -> None:
+        required = (_LEGACY_PUBLIC_MANIFEST, _LEGACY_PUBLIC_ROOT, _LEGACY_RATE_CARD)
+        if not all(path.exists() for path in required):
+            self.skipTest("recorded 2.2 retained inputs are unavailable")
+
+        def tree_digest(root: Path) -> str:
+            digest = hashlib.sha256()
+            for path in sorted(item for item in root.rglob("*") if item.is_file()):
+                digest.update(path.relative_to(root).as_posix().encode())
+                digest.update(path.read_bytes())
+            return digest.hexdigest()
+
+        before = tree_digest(_LEGACY_PUBLIC_ROOT)
+        report = calibration.compare_labels(
+            _LABEL_LEDGER,
+            _CURRENT_PUBLIC_MANIFEST,
+            _LEGACY_PUBLIC_MANIFEST,
+            _LEGACY_PUBLIC_ROOT,
+            _LEGACY_RATE_CARD,
+        )
+        self.assertEqual(
+            report["overall"],
+            {
+                "human_pass_evaluator_pass": 29,
+                "human_pass_evaluator_fail": 21,
+                "human_fail_evaluator_pass": 3,
+                "human_fail_evaluator_fail": 7,
+            },
+        )
+        self.assertEqual(list(report["categories"]), sorted(report["categories"]))
+        self.assertEqual(
+            [item["case_id"] for item in report["disagreements"]],
+            sorted(item["case_id"] for item in report["disagreements"]),
+        )
+        self.assertTrue(
+            all(
+                item["failed_check_ids"] == sorted(item["failed_check_ids"])
+                for item in report["disagreements"]
+            )
+        )
+        self.assertEqual(before, tree_digest(_LEGACY_PUBLIC_ROOT))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, second = root / "first.json", root / "second.json"
+            calibration._write(first, report)
+            calibration._write(second, report)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            before_collision = first.read_bytes()
+            with self.assertRaises(ValueError):
+                calibration._write(first, report)
+            target = root / "target.json"
+            target.write_text("target")
+            for name, make in (
+                ("symlink", lambda path: path.symlink_to(target)),
+                ("hardlink", lambda path: path.hardlink_to(target)),
+            ):
+                candidate = root / name
+                make(candidate)
+                with self.assertRaises(ValueError):
+                    calibration._write(candidate, report)
+            self.assertEqual(first.read_bytes(), before_collision)
+            self.assertEqual(target.read_text(), "target")
+
+    def test_retained_evidence_mutations_fail_closed(self) -> None:
+        required = (_LEGACY_PUBLIC_MANIFEST, _LEGACY_PUBLIC_ROOT, _LEGACY_RATE_CARD)
+        if not all(path.exists() for path in required):
+            self.skipTest("recorded 2.2 retained inputs are unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "retained"
+            shutil.copytree(_LEGACY_PUBLIC_ROOT, root)
+            rate_card = calibration._trusted_rate_card(_LEGACY_RATE_CARD)
+            scorecard = root / "abuse-annual-tool-injection-01/1/scorecard.json"
+            original = scorecard.read_bytes()
+            changed = json.loads(original)
+            changed["pass"] = not changed["pass"]
+            scorecard.write_text(json.dumps(changed))
+            with self.assertRaisesRegex(ValueError, "invalid or incomplete"):
+                calibration._validated_split(_LEGACY_PUBLIC_MANIFEST, root, rate_card)
+            scorecard.write_bytes(original)
+            output = root / "abuse-annual-tool-injection-01/1/output.json"
+            output.unlink()
+            with self.assertRaisesRegex(ValueError, "invalid or incomplete"):
+                calibration._validated_split(_LEGACY_PUBLIC_MANIFEST, root, rate_card)
+
+    def test_pure_scorer_matches_normal_grade(self) -> None:
+        required = (_LEGACY_PUBLIC_MANIFEST, _LEGACY_PUBLIC_ROOT)
+        if not all(path.exists() for path in required):
+            self.skipTest("recorded 2.2 retained inputs are unavailable")
+        source = _LEGACY_PUBLIC_ROOT / "current-boundary-tomorrow" / "1"
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "attempt"
+            shutil.copytree(source, artifact)
+            (artifact / "scorecard.json").unlink()
+            pure = calibration.graph_checks.score_annual(
+                artifact,
+                artifact / "case.json",
+                _LEGACY_PUBLIC_MANIFEST,
+                accepted_grader_digest=calibration._V2_2_GRADER_DIGEST,
+            )
+            with patch.object(
+                calibration.graph_checks,
+                "grader_digest",
+                return_value=calibration._V2_2_GRADER_DIGEST,
+            ):
+                result = calibration.graph_checks.grade_annual(
+                    artifact, artifact / "case.json", _LEGACY_PUBLIC_MANIFEST
+                )
+            written = json.loads((artifact / "scorecard.json").read_text())
+            self.assertEqual(result, 0 if pure["pass"] else 1)
+            self.assertEqual(
+                [(item["id"], item["pass"]) for item in pure["checks"]],
+                [(item["id"], item["pass"]) for item in written["checks"]],
+            )
+
     def test_current_environment_rejects_stale_candidate(self) -> None:
         identity = {
             "dataset_hash": "dataset",
@@ -175,6 +359,10 @@ class CalibrationTests(unittest.TestCase):
             retained_link.symlink_to(retained, target_is_directory=True)
             with self.assertRaisesRegex(ValueError, "regular retained root"):
                 calibration._validated_split(source, retained_link, {})
+            output_parent = root / "output-parent"
+            output_parent.symlink_to(retained, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "output directory"):
+                calibration._write(output_parent / "report.json", {})
 
     def test_tool_projection_is_allowlisted(self) -> None:
         projected = calibration._tool_projection(
