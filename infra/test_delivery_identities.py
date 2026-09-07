@@ -458,7 +458,15 @@ def _check_production_planner() -> None:
     require('PLAN_KEY="$PLAN_KEY"', PRODUCTION_PLAN)
     require('EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256"', PRODUCTION_PLAN)
     assert "ChecksumAlgorithm" not in planner
-    require('"VersionId": response["VersionId"]', PRODUCTION_PLAN)
+    require("import re", PRODUCTION_PLAN)
+    require('if not isinstance(response, dict):', PRODUCTION_PLAN)
+    require('response["ResponseMetadata"] if "ResponseMetadata" in response else {}', PRODUCTION_PLAN)
+    require('response_metadata["HTTPHeaders"] if "HTTPHeaders" in response_metadata else {}', PRODUCTION_PLAN)
+    require('response_headers["x-amz-version-id"]', PRODUCTION_PLAN)
+    require('version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"', PRODUCTION_PLAN)
+    require('re.fullmatch(version_pattern, candidate)', PRODUCTION_PLAN)
+    require('response_version_id != header_version_id', PRODUCTION_PLAN)
+    require('"VersionId": version_id', PRODUCTION_PLAN)
     require('"ServerSideEncryption": response.get("ServerSideEncryption", "aws:kms")', PRODUCTION_PLAN)
     require('"SSEKMSKeyId": response.get("SSEKMSKeyId", os.environ["TFSTATE_KMS_KEY_ARN"])', PRODUCTION_PLAN)
     require('"ChecksumSHA256": response.get("ChecksumSHA256", os.environ["EXPECTED_S3_SHA256"])', PRODUCTION_PLAN)
@@ -506,7 +514,6 @@ def _check_production_upload_stub() -> None:
     body = b"immutable reviewed plan"
     kms_key_arn = "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7"
     expected_checksum = base64.b64encode(hashlib.sha256(body).digest()).decode()
-    response = {"VersionId": "version-301"}
     expected_metadata = {
         "VersionId": "version-301",
         "ServerSideEncryption": "aws:kms",
@@ -515,11 +522,11 @@ def _check_production_upload_stub() -> None:
     }
 
     class MockS3:
-        def __init__(self, response: dict[str, str]) -> None:
+        def __init__(self, response: object) -> None:
             self.calls: list[dict[str, object]] = []
             self.response = response
 
-        def put_object(self, **kwargs: object) -> dict[str, str]:
+        def put_object(self, **kwargs: object) -> object:
             self.calls.append(kwargs)
             assert set(kwargs) == {
                 "Bucket",
@@ -544,8 +551,6 @@ def _check_production_upload_stub() -> None:
             assert plan.read() == body
             return self.response
 
-    s3 = MockS3(response)
-
     class MockBoto3:
         def __init__(self, client: MockS3) -> None:
             self.client_instance = client
@@ -559,7 +564,6 @@ def _check_production_upload_stub() -> None:
     had_boto3 = "boto3" in sys.modules
     previous_environment = os.environ.copy()
     previous_argv = sys.argv
-    sys.modules["boto3"] = MockBoto3(s3)
     try:
         os.environ.update(
             {
@@ -572,26 +576,55 @@ def _check_production_upload_stub() -> None:
         )
         with tempfile.TemporaryDirectory(prefix="nova-toll-upload-") as directory:
             plan_path = Path(directory) / "release.tfplan"
-            response_path = Path(directory) / "put.json"
             plan_path.write_bytes(body)
-            sys.argv = ["workflow-upload.py", str(plan_path), str(response_path)]
-            exec(compile(source, "<workflow upload>", "exec"), {"__name__": "__main__"})
-            assert len(s3.calls) == 1
-            assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
-            assert json.loads(response_path.read_text(encoding="utf-8")) == expected_metadata
 
-            missing_s3 = MockS3({})
-            sys.modules["boto3"] = MockBoto3(missing_s3)
-            missing_response_path = Path(directory) / "missing-version.json"
-            sys.argv = ["workflow-upload.py", str(plan_path), str(missing_response_path)]
-            try:
-                exec(compile(source, "<workflow upload missing version>", "exec"), {"__name__": "__main__"})
-            except KeyError as error:
-                assert error.args == ("VersionId",)
-            else:
-                raise AssertionError("missing VersionId must fail closed")
-            assert len(missing_s3.calls) == 1
-            assert not missing_response_path.exists()
+            def run(response: object, name: str, expected: dict[str, str] | None) -> None:
+                client = MockS3(response)
+                sys.modules["boto3"] = MockBoto3(client)
+                response_path = Path(directory) / f"{name}.json"
+                sys.argv = ["workflow-upload.py", str(plan_path), str(response_path)]
+                try:
+                    exec(compile(source, f"<workflow upload {name}>", "exec"), {"__name__": "__main__"})
+                except ValueError:
+                    if expected is not None:
+                        raise
+                else:
+                    if expected is None:
+                        raise AssertionError(f"{name} response must fail closed")
+                    assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
+                    assert json.loads(response_path.read_text(encoding="utf-8")) == expected
+                assert len(client.calls) == 1
+                if expected is None:
+                    assert not response_path.exists()
+
+            run({"VersionId": "version-301"}, "modeled", expected_metadata)
+            run(
+                {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-301"}}},
+                "header",
+                expected_metadata,
+            )
+            run(
+                {
+                    "VersionId": "version-301",
+                    "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-301"}},
+                },
+                "equal",
+                expected_metadata,
+            )
+            for name, invalid_response in (
+                ("missing", {}),
+                ("conflicting", {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-302"}}}),
+                ("modeled-null", {"VersionId": None}),
+                ("header-null", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": None}}}),
+                ("modeled-non-string", {"VersionId": 301}),
+                ("header-non-string", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": 301}}}),
+                ("metadata-malformed", {"ResponseMetadata": None}),
+                ("headers-malformed", {"ResponseMetadata": {"HTTPHeaders": None}}),
+                ("invalid-character", {"VersionId": "version 301"}),
+                ("empty", {"VersionId": ""}),
+                ("overlong", {"VersionId": "v" * 257}),
+            ):
+                run(invalid_response, name, None)
     finally:
         sys.argv = previous_argv
         os.environ.clear()
