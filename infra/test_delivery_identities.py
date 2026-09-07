@@ -190,27 +190,7 @@ def _target_change(action: list[str] | None = None) -> dict[str, object]:
     }
 
 
-def _output_change(value: object, *, nested_metadata: bool = False) -> dict[str, object]:
-    metadata: object = {"known": False, "nested": [False]} if nested_metadata else False
-    return {
-        "before": value,
-        "after": value,
-        "after_unknown": metadata,
-        "before_sensitive": metadata,
-        "after_sensitive": metadata,
-        "actions": ["no-op"],
-    }
-
-
 def _valid_plan() -> dict[str, object]:
-    output_values = {
-        "development_acm_certificate_arn": "",
-        "development_acm_validation_records": [],
-        "public_site": {"distribution_id": "E16XVTXNFUS8T4", "hostname": "example.com", "url": "https://example.com"},
-        "agent_report_web_acl_arn": "arn:aws:wafv2:us-east-1:920534282028:regional/webacl/example/1234",
-        "agent_report_analytics": {"bucket": "reports", "database": "analytics", "workgroup": "primary"},
-        "private_preview": {"api_id": "api", "stage": "prod", "origin": "origin", "url": "https://api.example.com"},
-    }
     return {
         "resource_changes": [
             _target_change(),
@@ -225,10 +205,7 @@ def _valid_plan() -> dict[str, object]:
                 "change": {"before": {"name": "loader"}, "after": {"name": "loader"}, "after_unknown": {}, "actions": ["no-op"]},
             },
         ],
-        "output_changes": {
-            name: _output_change(value, nested_metadata=name in {"public_site", "agent_report_analytics", "private_preview"})
-            for name, value in output_values.items()
-        },
+        "output_changes": {},
     }
 
 
@@ -248,10 +225,15 @@ def _gate_result(plan: object | str) -> subprocess.CompletedProcess[str]:
             check=False,
         )
 def _assert_gate_fixtures() -> None:
-    accepted = _gate_result(_valid_plan())
-    assert accepted.returncode == 0
-    assert accepted.stdout == "production plan gate: approved exact delivery_proof update\n"
-    assert accepted.stderr == ""
+    accepted_plans = [_valid_plan()]
+    absent_output = _valid_plan()
+    del absent_output["output_changes"]
+    accepted_plans.append(absent_output)
+    for accepted_plan in accepted_plans:
+        accepted = _gate_result(accepted_plan)
+        assert accepted.returncode == 0
+        assert accepted.stdout == "production plan gate: approved exact delivery_proof update\n"
+        assert accepted.stderr == ""
 
     extra_update = _valid_plan()
     extra_update["resource_changes"].append(
@@ -339,45 +321,10 @@ def _assert_gate_fixtures() -> None:
     resource_drift["resource_drift"] = [_target_change()]
     invalid.append(resource_drift)
 
-    unknown_output = _valid_plan()
-    unknown_output["output_changes"]["public_site"]["after_unknown"] = {"nested": [False, True]}
-    invalid.append(unknown_output)
-
-    changed_output = _valid_plan()
-    changed_output["output_changes"]["public_site"]["after"] = {"distribution_id": "changed"}
-    invalid.append(changed_output)
-
-    output_action = _valid_plan()
-    output_action["output_changes"]["public_site"]["actions"] = ["update"]
-    invalid.append(output_action)
-
-    missing_output = _valid_plan()
-    del missing_output["output_changes"]["private_preview"]
-    invalid.append(missing_output)
-
-    extra_output = _valid_plan()
-    extra_output["output_changes"]["release"] = _output_change("unexpected")
-    invalid.append(extra_output)
-
-    malformed_output_entry = _valid_plan()
-    malformed_output_entry["output_changes"]["public_site"] = []
-    invalid.append(malformed_output_entry)
-
-    malformed_output_field = _valid_plan()
-    del malformed_output_field["output_changes"]["public_site"]["after_sensitive"]
-    invalid.append(malformed_output_field)
-
-    unrecognized_output_field = _valid_plan()
-    unrecognized_output_field["output_changes"]["public_site"]["replace_paths"] = []
-    invalid.append(unrecognized_output_field)
-
-    malformed_output_actions = _valid_plan()
-    malformed_output_actions["output_changes"]["public_site"]["actions"] = "no-op"
-    invalid.append(malformed_output_actions)
-
-    malformed_output_metadata = _valid_plan()
-    malformed_output_metadata["output_changes"]["public_site"]["after_unknown"] = {"nested": ["false"]}
-    invalid.append(malformed_output_metadata)
+    for output_changes in (None, [], "unexpected", 1, False, {"unexpected": {}}):
+        invalid_output = _valid_plan()
+        invalid_output["output_changes"] = output_changes
+        invalid.append(invalid_output)
 
     for rejected in invalid:
         result = _gate_result(rejected)
@@ -453,6 +400,7 @@ def _check_production_planner() -> None:
     require("-var publisher_package_path=build/publisher.zip", PRODUCTION_PLAN)
     require("-var agentcore_package_path=build/agentcore.zip", PRODUCTION_PLAN)
     require("-var chat_proxy_package_path=build/chat-proxy.zip", PRODUCTION_PLAN)
+    assert planner.count("-target=aws_cloudwatch_log_group.tollchat_proxy") == 1
     require("terraform -chdir=infra init -input=false -backend-config=backend.production.hcl", PRODUCTION_PLAN)
     require("terraform -chdir=infra output -json foundation", PRODUCTION_PLAN)
     require("jq -n --slurpfile foundation", PRODUCTION_PLAN)
@@ -483,6 +431,7 @@ def _check_production_planner() -> None:
     require('APPROVED_TAG = ("delivery_proof", "issue-301")', PRODUCTION_PLAN)
     require('"after_unknown"', PRODUCTION_PLAN)
     require('drift = plan.get("resource_drift", [])', PRODUCTION_PLAN)
+    require('if plan.get("output_changes", {}) != {}:', PRODUCTION_PLAN)
     require('replace_paths = change.get("replace_paths", [])', PRODUCTION_PLAN)
     require('"deposed" in item or "previous_address" in item', PRODUCTION_PLAN)
     require('print("production plan gate: approved exact delivery_proof update")', PRODUCTION_PLAN)
