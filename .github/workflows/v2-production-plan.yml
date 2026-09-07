@@ -176,6 +176,9 @@ jobs:
 
           TARGET = "aws_cloudwatch_log_group.tollchat_proxy"
           APPROVED_TAG = ("delivery_proof", "issue-301")
+          # Former usage-publisher addresses remain recognized only so stale
+          # state can be parsed as no-op/read-only compatibility. This proof
+          # planner never authorizes their deletion or replacement.
           known_managed = set("""
           aws_acm_certificate.site
           aws_acm_certificate_validation.site

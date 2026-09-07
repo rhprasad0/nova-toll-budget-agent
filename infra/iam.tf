@@ -130,7 +130,6 @@ locals {
     "nova-toll-v2-timed-checks-dev",
     "nova-toll-v2-agentcore-runtime-dev",
     "nova-toll-v2-chat-proxy-dev",
-    "tollchat-v2-usage-publisher-dev",
     "tollchat-v2-agent-usage-rollup-dev",
   ]
   development_delivery_role_arns = [
@@ -142,7 +141,6 @@ locals {
       "toll-v2-pricing-loader-dev",
       "toll-v2-report-publisher-dev",
       "tollchat-v2-chat-proxy-dev",
-      "tollchat-v2-usage-publisher-dev",
       "tollchat-v2-agent-usage-rollup-dev",
     ] : "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:${function_name}"
   ]
@@ -160,7 +158,6 @@ locals {
   development_delivery_event_rule_arns = [
     for rule_name in [
       "toll-v2-pricing-raw-objects-dev",
-      "tollchat-v2-usage-publisher-dev",
       "tollchat-v2-agent-usage-rollup-dev",
     ] : "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/${rule_name}"
   ]
@@ -191,9 +188,16 @@ locals {
       "tollchat-v2-chat-proxy-errors-dev",
       "tollchat-v2-chat-proxy-failures-dev",
       "tollchat-v2-chat-proxy-latency-dev",
-      "tollchat-v2-usage-publisher-errors-dev",
-      "tollchat-v2-usage-publisher-failed-invocations-dev",
     ] : "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:${alarm_name}"
+  ]
+  # Exact, one-time teardown targets for the retired stateless usage writer.
+  # Historical usage data and its log group are deliberately not in this set.
+  development_delivery_usage_publisher_role_arn   = "arn:aws:iam::${local.development_delivery_account_id}:role/tollchat-v2-usage-publisher-dev"
+  development_delivery_usage_publisher_lambda_arn = "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-usage-publisher-dev"
+  development_delivery_usage_publisher_rule_arn   = "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/tollchat-v2-usage-publisher-dev"
+  development_delivery_usage_publisher_alarm_arns = [
+    "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-errors-dev",
+    "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
   development_delivery_api_id                 = "ocw8sg0wlb"
   development_delivery_distribution_arn       = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
@@ -576,6 +580,60 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid = "ReadRetiredUsagePublisherIam"
+    actions = [
+      "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags",
+    ]
+    resources = [local.development_delivery_usage_publisher_role_arn]
+  }
+
+  statement {
+    sid = "ReadRetiredUsagePublisherLambda"
+    actions = [
+      "lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:GetFunctionConfiguration",
+      "lambda:GetFunctionEventInvokeConfig", "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:GetProvisionedConcurrencyConfig",
+      "lambda:ListAliases", "lambda:ListProvisionedConcurrencyConfigs", "lambda:ListTags", "lambda:ListVersionsByFunction",
+    ]
+    resources = [local.development_delivery_usage_publisher_lambda_arn]
+  }
+
+  statement {
+    sid       = "ReadRetiredUsagePublisherEvents"
+    actions   = ["events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule"]
+    resources = [local.development_delivery_usage_publisher_rule_arn]
+  }
+
+  statement {
+    sid       = "ReadRetiredUsagePublisherAlarms"
+    actions   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+    resources = local.development_delivery_usage_publisher_alarm_arns
+  }
+
+  statement {
+    sid       = "RetireUsagePublisherIam"
+    actions   = ["iam:DeleteRole", "iam:DeleteRolePolicy"]
+    resources = [local.development_delivery_usage_publisher_role_arn]
+  }
+
+  statement {
+    sid       = "RetireUsagePublisherLambda"
+    actions   = ["lambda:DeleteFunction", "lambda:RemovePermission"]
+    resources = [local.development_delivery_usage_publisher_lambda_arn]
+  }
+
+  statement {
+    sid       = "RetireUsagePublisherEvents"
+    actions   = ["events:DeleteRule", "events:RemoveTargets"]
+    resources = [local.development_delivery_usage_publisher_rule_arn]
+  }
+
+  statement {
+    sid       = "RetireUsagePublisherAlarms"
+    actions   = ["cloudwatch:DeleteAlarms"]
+    resources = local.development_delivery_usage_publisher_alarm_arns
+  }
+
+  statement {
     sid       = "ManageApplicationGuardrail"
     actions   = ["bedrock:GetGuardrail", "bedrock:ListTagsForResource"]
     resources = [local.development_delivery_guardrail_arn]
@@ -713,11 +771,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 31, 36)
+      Statement = slice(local.development_delivery_policy_statements, 31, 44)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 36, 44)
+      Statement = slice(local.development_delivery_policy_statements, 44, 52)
     })
   }
 }
@@ -895,7 +953,17 @@ locals {
       6,
       length(jsondecode(local.production_delivery_application_policy_json).Statement),
     ) : statement
-    if statement.Sid != "PassExistingAgentCoreRuntimeRole"
+    if !contains([
+      "PassExistingAgentCoreRuntimeRole",
+      "ReadRetiredUsagePublisherIam",
+      "ReadRetiredUsagePublisherLambda",
+      "ReadRetiredUsagePublisherEvents",
+      "ReadRetiredUsagePublisherAlarms",
+      "RetireUsagePublisherIam",
+      "RetireUsagePublisherLambda",
+      "RetireUsagePublisherEvents",
+      "RetireUsagePublisherAlarms",
+    ], statement.Sid)
   ]
 
   production_delivery_read_prefixes = ["Get", "List", "Describe", "GET"]

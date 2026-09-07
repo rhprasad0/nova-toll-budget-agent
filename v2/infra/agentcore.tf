@@ -443,7 +443,7 @@ resource "aws_iam_role_policy" "tollchat_proxy" {
       },
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]
+        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
         Resource = aws_dynamodb_table.tollchat_sessions.arn
       },
     ]

@@ -9,12 +9,6 @@ locals {
   }
 }
 
-data "archive_file" "usage_publisher" {
-  type        = "zip"
-  source_file = "${path.module}/../lambdas/usage_publisher/handler.py"
-  output_path = "${path.module}/build/usage-publisher.zip"
-}
-
 resource "aws_s3_bucket" "site" {
   bucket = "tollchat-site-${data.aws_caller_identity.current.account_id}${local.suffix}"
 }
@@ -177,130 +171,9 @@ resource "aws_s3_object" "site_assets" {
   depends_on = [aws_s3_bucket_server_side_encryption_configuration.site]
 }
 
-resource "aws_iam_role" "usage_publisher" {
-  name               = "tollchat-v2-usage-publisher${local.suffix}"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-data "aws_iam_policy_document" "usage_publisher" {
-  statement {
-    actions   = ["dynamodb:GetItem"]
-    resources = [aws_dynamodb_table.tollchat_sessions.arn]
-
-    condition {
-      test     = "ForAllValues:StringEquals"
-      variable = "dynamodb:LeadingKeys"
-      values   = ["usage#all"]
-    }
-  }
-
-  statement {
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.site.arn}/usage.json"]
-  }
-
-  statement {
-    actions   = ["kms:Encrypt", "kms:GenerateDataKey"]
-    resources = [aws_kms_key.site.arn]
-  }
-
-  statement {
-    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = ["${aws_cloudwatch_log_group.usage_publisher.arn}:*"]
-  }
-}
-
-resource "aws_iam_role_policy" "usage_publisher" {
-  name   = "tollchat-v2-usage-publisher${local.suffix}"
-  role   = aws_iam_role.usage_publisher.id
-  policy = data.aws_iam_policy_document.usage_publisher.json
-}
-
 resource "aws_cloudwatch_log_group" "usage_publisher" {
   name              = "/aws/lambda/tollchat-v2-usage-publisher${local.suffix}"
   retention_in_days = local.log_retention_days
-}
-
-resource "aws_lambda_function" "usage_publisher" {
-  function_name = "tollchat-v2-usage-publisher${local.suffix}"
-  role          = aws_iam_role.usage_publisher.arn
-  runtime       = "python3.13"
-  handler       = "handler.handler"
-  timeout       = 15
-  memory_size   = 128
-
-  filename         = data.archive_file.usage_publisher.output_path
-  source_code_hash = data.archive_file.usage_publisher.output_base64sha256
-
-  environment {
-    variables = {
-      SESSION_TABLE_NAME = aws_dynamodb_table.tollchat_sessions.name
-      SITE_BUCKET_NAME   = aws_s3_bucket.site.id
-      SITE_KMS_KEY_ARN   = aws_kms_key.site.arn
-    }
-  }
-
-  depends_on = [
-    aws_cloudwatch_log_group.usage_publisher,
-    aws_iam_role_policy.usage_publisher,
-    aws_s3_object.faq,
-    aws_s3_object.index,
-    aws_s3_object.privacy,
-    aws_s3_object.usage,
-  ]
-}
-
-resource "aws_cloudwatch_event_rule" "usage_publisher" {
-  name                = "tollchat-v2-usage-publisher${local.suffix}"
-  schedule_expression = "cron(15 5 * * ? *)"
-}
-
-resource "aws_lambda_permission" "usage_publisher" {
-  statement_id  = "AllowEventBridgeInvokeV2UsagePublisher"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.usage_publisher.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.usage_publisher.arn
-}
-
-resource "aws_cloudwatch_event_target" "usage_publisher" {
-  rule = aws_cloudwatch_event_rule.usage_publisher.name
-  arn  = aws_lambda_function.usage_publisher.arn
-
-  retry_policy {
-    maximum_event_age_in_seconds = 86400
-    maximum_retry_attempts       = 185
-  }
-
-  depends_on = [aws_lambda_permission.usage_publisher]
-}
-
-resource "aws_cloudwatch_metric_alarm" "usage_publisher_errors" {
-  alarm_name          = "tollchat-v2-usage-publisher-errors${local.suffix}"
-  namespace           = "AWS/Lambda"
-  metric_name         = "Errors"
-  dimensions          = { FunctionName = aws_lambda_function.usage_publisher.function_name }
-  period              = 300
-  evaluation_periods  = 1
-  statistic           = "Sum"
-  threshold           = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  alarm_actions       = local.alarm_actions
-}
-
-resource "aws_cloudwatch_metric_alarm" "usage_publisher_failed_invocations" {
-  alarm_name          = "tollchat-v2-usage-publisher-failed-invocations${local.suffix}"
-  namespace           = "AWS/Events"
-  metric_name         = "FailedInvocations"
-  dimensions          = { RuleName = aws_cloudwatch_event_rule.usage_publisher.name }
-  period              = 300
-  evaluation_periods  = 1
-  statistic           = "Sum"
-  threshold           = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  alarm_actions       = local.alarm_actions
 }
 
 resource "aws_cloudfront_origin_access_control" "site" {

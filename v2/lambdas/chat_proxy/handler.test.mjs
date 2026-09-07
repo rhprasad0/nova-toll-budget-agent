@@ -95,7 +95,7 @@ test("public CloudFront origin can invoke the Function URL", async () => {
   }
 });
 
-test("public first chat atomically counts one included session and completed answer", async () => {
+test("public first chat creates a leased session without usage fields", async () => {
   const writes = [];
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
@@ -112,32 +112,13 @@ test("public first chat atomically counts one included session and completed ans
   assert.equal(response.statusCode, 200);
   await bodyText(response.body);
 
-  assert.deepEqual(writes.map(({ name }) => name), [
-    "TransactWriteItemsCommand",
-    "TransactWriteItemsCommand",
-    "UpdateItemCommand",
-  ]);
-  const [engagement, completion] = writes;
-  assert.equal(
-    engagement.input.TransactItems[0].Put.Item.usage_excluded.BOOL,
-    false,
-  );
-  assert.equal(
-    engagement.input.TransactItems[1].Update.ExpressionAttributeNames["#metric"],
-    "engaged_sessions",
-  );
-  assert.equal(
-    completion.input.TransactItems[1].Update.ExpressionAttributeNames["#metric"],
-    "completed_responses",
-  );
-  assert.match(
-    completion.input.TransactItems[0].Update.ConditionExpression,
-    /usage_excluded.*lease_id.*counted_response_ids/,
-  );
-  assert.notEqual(engagement.input.ClientRequestToken, completion.input.ClientRequestToken);
+  assert.deepEqual(writes.map(({ name }) => name), ["PutItemCommand", "UpdateItemCommand"]);
+  assert.equal("usage_excluded" in writes[0].input.Item, false);
+  assert.equal("counted_response_ids" in writes[0].input.Item, false);
+  assert.doesNotMatch(JSON.stringify(writes[0].input), /usage#all/);
 });
 
-test("browser opt-out persists on a new session and suppresses both counters", async () => {
+test("browser usage cookies do not change the session write", async () => {
   const writes = [];
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
@@ -158,51 +139,49 @@ test("browser opt-out persists on a new session and suppresses both counters", a
   await bodyText(response.body);
 
   assert.deepEqual(writes.map(({ name }) => name), ["PutItemCommand", "UpdateItemCommand"]);
-  assert.equal(writes[0].input.Item.usage_excluded.BOOL, true);
+  assert.equal("usage_excluded" in writes[0].input.Item, false);
+  assert.equal("counted_response_ids" in writes[0].input.Item, false);
   assert.equal(writes.some(({ name }) => name === "TransactWriteItemsCommand"), false);
 });
 
-test("persisted and legacy exclusion state wins over the current cookie", async () => {
-  for (const [usageExcluded, currentCookies, expectedTransactions] of [
-    [true, [], 0],
-    [undefined, [], 0],
-    [false, ["tollchat_usage_optout=1"], 1],
-  ]) {
-    const writes = [];
-    const sessionClient = { async send(command) {
-      writes.push({ name: command.constructor.name, input: command.input });
-      if (command.constructor.name === "UpdateItemCommand" && command.input.ReturnValues === "ALL_NEW") {
-        return {
-          Attributes: {
-            runtime_session_id: { S: sessionId },
-            ...(usageExcluded === undefined ? {} : { usage_excluded: { BOOL: usageExcluded } }),
-          },
-        };
-      }
-      return {};
-    } };
-    const client = { async send() {
+test("legacy usage fields do not block a hashed session lease or release", async () => {
+  const writes = [];
+  const sessionClient = { async send(command) {
+    writes.push({ name: command.constructor.name, input: command.input });
+    if (command.constructor.name === "UpdateItemCommand" && command.input.ReturnValues === "ALL_NEW") {
       return {
-        contentType: "text/event-stream",
-        response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+        Attributes: {
+          credential_hash: { S: "ignored" },
+          runtime_session_id: { S: sessionId },
+          usage_excluded: { BOOL: false },
+          counted_response_ids: { SS: ["old-request"] },
+        },
       };
-    } };
-    const request = publicEvent(
-      { message: "Again" },
-      [`__Host-tollchat-session=${token}`, ...currentCookies],
-    );
+    }
+    return {};
+  } };
+  const client = { async send() {
+    return {
+      contentType: "text/event-stream",
+      response: chunks('data: {"type":"answer","text":"Done","blocked":false}\n\n'),
+    };
+  } };
+  const response = await route(
+    publicEvent({ message: "Again" }, [`__Host-tollchat-session=${token}`]),
+    dependencies(client, sessionClient),
+  );
+  await bodyText(response.body);
 
-    const response = await route(request, dependencies(client, sessionClient));
-    await bodyText(response.body);
-
-    assert.equal(
-      writes.filter(({ name }) => name === "TransactWriteItemsCommand").length,
-      expectedTransactions,
-    );
-  }
+  assert.deepEqual(writes.map(({ name }) => name), ["UpdateItemCommand", "UpdateItemCommand"]);
+  assert.equal(
+    writes[0].input.Key.credential_hash.S,
+    "66d34fba71f8f450f7e45598853e53bfc23bbd129027cbb131a2f4ffd7878cd0",
+  );
+  assert.match(writes[0].input.UpdateExpression, /lease_id/);
+  assert.match(writes[1].input.UpdateExpression, /REMOVE lease_id/);
 });
 
-test("a malformed trailing frame does not count the preceding answer", async () => {
+test("a malformed trailing frame becomes a safe stream error and releases its lease", async () => {
   const writes = [];
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
@@ -222,13 +201,133 @@ test("a malformed trailing frame does not count the preceding answer", async () 
   const output = await bodyText(response.body);
 
   assert.match(output, /agent_unavailable/);
+  const leaseWrites = writes.filter(({ name }) => name === "UpdateItemCommand");
+  assert.equal(leaseWrites.length, 1);
+  assert.equal(leaseWrites[0].input.UpdateExpression, "REMOVE lease_id, lease_until");
   assert.equal(
-    writes.filter(({ name }) => name === "TransactWriteItemsCommand").length,
-    1,
+    leaseWrites[0].input.ExpressionAttributeValues[":lease_id"].S,
+    writes[0].input.Item.lease_id.S,
   );
+  assert.equal(writes.some(({ name }) => name === "TransactWriteItemsCommand"), false);
 });
 
-test("private preview never writes aggregate transactions", async () => {
+test("session state rejection never invokes the runtime", async () => {
+  const cases = [
+    {
+      name: "busy session",
+      expectedStatus: 409,
+      item: {
+        runtime_session_id: { S: sessionId },
+        expires_at: { N: "1700003600" },
+        last_seen_at: { N: "1700000000" },
+        lease_until: { N: "1700000010" },
+      },
+    },
+    {
+      name: "expired session",
+      expectedStatus: 401,
+      item: {
+        runtime_session_id: { S: sessionId },
+        expires_at: { N: "1699999999" },
+        last_seen_at: { N: "1700000000" },
+      },
+    },
+  ];
+
+  for (const sessionCase of cases) {
+    const sessionCalls = [];
+    let runtimeCalls = 0;
+    const sessionClient = { async send(command) {
+      sessionCalls.push(command.input);
+      const error = new Error("conditional failure");
+      error.name = "ConditionalCheckFailedException";
+      error.Item = sessionCase.item;
+      throw error;
+    } };
+    const client = { async send() {
+      runtimeCalls += 1;
+      throw new Error(`${sessionCase.name} invoked runtime`);
+    } };
+
+    const response = await route(
+      publicEvent({ message: "Price it" }, [`__Host-tollchat-session=${token}`]),
+      dependencies(client, sessionClient),
+    );
+
+    assert.equal(response.statusCode, sessionCase.expectedStatus, sessionCase.name);
+    assert.equal(runtimeCalls, 0, sessionCase.name);
+    assert.equal(sessionCalls.length, 1, sessionCase.name);
+  }
+});
+
+test("invalid cookies reject before session or runtime access", async () => {
+  let sessionCalls = 0;
+  let runtimeCalls = 0;
+  const sessionClient = { async send() {
+    sessionCalls += 1;
+    throw new Error("invalid cookie accessed session");
+  } };
+  const client = { async send() {
+    runtimeCalls += 1;
+    throw new Error("invalid cookie invoked runtime");
+  } };
+
+  const response = await route(
+    publicEvent({ message: "Price it" }, ["__Host-tollchat-session=not-a-token"]),
+    dependencies(client, sessionClient),
+  );
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(sessionCalls, 0);
+  assert.equal(runtimeCalls, 0);
+});
+
+test("reset revokes the session and stops its runtime", async () => {
+  const sessionCalls = [];
+  const runtimeCalls = [];
+  const sessionClient = { async send(command) {
+    sessionCalls.push(command);
+    return {
+      Attributes: { runtime_session_id: { S: sessionId } },
+    };
+  } };
+  const client = { async send(command) {
+    runtimeCalls.push(command);
+    return {};
+  } };
+
+  const response = await route(
+    { ...publicEvent({}, [`__Host-tollchat-session=${token}`]), rawPath: "/api/reset" },
+    dependencies(client, sessionClient),
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["Set-Cookie"], /Max-Age=0/);
+  assert.equal(sessionCalls.length, 1);
+  assert.equal(sessionCalls[0].input.UpdateExpression, "SET revoked_at = :now");
+  assert.equal(runtimeCalls.length, 1);
+  assert.equal(runtimeCalls[0].input.runtimeSessionId, sessionId);
+});
+
+test("an upstream invocation error releases the matching lease", async () => {
+  const writes = [];
+  const sessionClient = { async send(command) {
+    writes.push({ name: command.constructor.name, input: command.input });
+    return {};
+  } };
+  const client = { async send() {
+    throw new Error("runtime unavailable");
+  } };
+
+  const response = await route(publicEvent({ message: "Price it" }), dependencies(client, sessionClient));
+
+  assert.equal(response.statusCode, 502);
+  const release = writes.find(({ input }) => input.UpdateExpression === "REMOVE lease_id, lease_until");
+  assert.ok(release);
+  assert.equal(release.input.ExpressionAttributeValues[":lease_id"].S, writes[0].input.Item.lease_id.S);
+});
+
+test("private preview still uses the normal session write", async () => {
   const writes = [];
   const sessionClient = { async send(command) {
     writes.push({ name: command.constructor.name, input: command.input });
@@ -247,7 +346,7 @@ test("private preview never writes aggregate transactions", async () => {
   await bodyText(response.body);
 
   assert.equal(writes[0].name, "PutItemCommand");
-  assert.equal(writes[0].input.Item.usage_excluded.BOOL, true);
+  assert.equal("usage_excluded" in writes[0].input.Item, false);
   assert.equal(writes.some(({ name }) => name === "TransactWriteItemsCommand"), false);
 });
 

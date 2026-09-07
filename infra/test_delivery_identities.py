@@ -326,6 +326,22 @@ def _assert_gate_fixtures() -> None:
     indexed_target["resource_changes"][0]["address"] = 'aws_cloudwatch_log_group.tollchat_proxy["unexpected"]'
     invalid.append(indexed_target)
 
+    for actions in (["delete"], ["delete", "create"], ["create", "delete"]):
+        publisher_change = _valid_plan()
+        publisher_change["resource_changes"].append(
+            {
+                "address": "aws_lambda_function.usage_publisher",
+                "mode": "managed",
+                "change": {
+                    "before": {"function_name": "tollchat-v2-usage-publisher"},
+                    "after": None,
+                    "after_unknown": {},
+                    "actions": actions,
+                },
+            }
+        )
+        invalid.append(publisher_change)
+
     deleted_tag = _valid_plan()
     del deleted_tag["resource_changes"][0]["change"]["after"]["tags_all"]["project"]
     invalid.append(deleted_tag)
@@ -1108,6 +1124,27 @@ def main() -> None:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
     assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "edge"}
+    production_deploy_json = json.dumps(deploy_documents, sort_keys=True)
+    for sid in (
+        "RetireUsagePublisherIam",
+        "RetireUsagePublisherLambda",
+        "RetireUsagePublisherEvents",
+        "RetireUsagePublisherAlarms",
+    ):
+        assert sid not in production_deploy_json
+    retired_actions = {
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "lambda:DeleteFunction",
+        "lambda:RemovePermission",
+        "events:DeleteRule",
+        "events:RemoveTargets",
+        "cloudwatch:DeleteAlarms",
+    }
+    for policy in deploy_documents.values():
+        for statement in policy["Statement"]:
+            if "tollchat-v2-usage-publisher" in json.dumps(statement):
+                assert not retired_actions.intersection(statement.get("Action", []))
     state_statements = deploy_documents["state"]["Statement"]
     release_statements = deploy_documents["release"]["Statement"]
     assert [statement["Sid"] for statement in state_statements] == ["ListProductionApplicationState", "ManageProductionApplicationState", "ManageProductionApplicationLock", "DecryptProductionApplicationStateAndLock", "GenerateProductionApplicationStateDataKeys"]

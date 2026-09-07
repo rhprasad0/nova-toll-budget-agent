@@ -355,40 +355,9 @@ retained with that release; capture never overwrites an existing record.
 )
 ```
 
-For the first usage-counter release only, stage the public disclosure and
-hidden placeholder directly in the encrypted site bucket before deploying the
-proxy package. Do not use Terraform resource targets for this step: the site
-objects' KMS and CloudFront dependencies also pull the proxy and runtime into a
-targeted plan.
-
-```sh
-SITE_BUCKET="$(AWS_PROFILE=nova-toll-prod terraform state show -no-color \
-  aws_s3_bucket.site | awk -F' = ' '$1 ~ /^    bucket/ {gsub(/"/, "", $2); print $2; exit}')"
-SITE_KMS_ARN="$(AWS_PROFILE=nova-toll-prod aws --region us-east-1 kms describe-key \
-  --key-id alias/tollchat-v2-site --query KeyMetadata.Arn --output text)"
-EMPTY_USAGE="$(mktemp)"
-printf '{}\n' >"$EMPTY_USAGE"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key index.html --body ../agent/dev_chat.html \
-  --content-type 'text/html; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key faq.html --body ../agent/faq.html \
-  --content-type 'text/html; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key privacy.txt --body ../agent/privacy.txt \
-  --content-type 'text/plain; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 s3api put-object \
-  --bucket "$SITE_BUCKET" --key usage.json --body "$EMPTY_USAGE" \
-  --content-type 'application/json; charset=utf-8' --cache-control no-cache \
-  --server-side-encryption aws:kms --ssekms-key-id "$SITE_KMS_ARN"
-rm -f -- "$EMPTY_USAGE"
-unset EMPTY_USAGE SITE_BUCKET SITE_KMS_ARN
-curl --fail-with-body https://tollchat.ai/privacy.txt
-curl --fail-with-body https://tollchat.ai/faq.html
-```
+Historical `usage.json` is retained as a managed, data-bearing site object.
+This release stops new writes and does not purge that snapshot or its logs; a
+separately approved retirement procedure is required before either is removed.
 
 For the first agent-route measurement release, publish and verify the updated
 privacy notice before creating the release plan that enables WAF logging. This
@@ -416,9 +385,10 @@ The bounded #331 application release and database validation below is the operat
 development release path. Deployed database bootstrap remains non-operative until
 approved deployment automation exists, except for the expressly authorized
 #327/#333 development RDS replacement handoff below; the #331 procedure only
-validates the already present development schema and isolation. Public report publication also remains
-non-operative: the existing publisher and scheduler are deployed unchanged, but no
-publication is manually invoked and no report data is copied. The #330 foundation
+validates the already present development schema and isolation. Public report publication remains
+non-operative: the separate report publisher is deployed unchanged, but no
+publication is manually invoked and no report data is copied. Historical public
+usage publication is retired; its snapshot and logs remain retained. The #330 foundation
 handoff remains the documented sequence of local-backend plan generation and review,
 later exact-plan apply, and separately authorized state migration or recovery.
 Cloudflare/DNS/CI cutover is owned by #332, and legacy cleanup remains owned by
@@ -694,7 +664,7 @@ for role in \
   toll-v2-pricing-loader-dev toll-v2-report-publisher-dev \
   toll-v2-report-publisher-scheduler-dev nova-toll-v2-timed-checks-dev \
   nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev \
-  tollchat-v2-usage-publisher-dev tollchat-v2-agent-usage-rollup-dev; do
+  tollchat-v2-agent-usage-rollup-dev; do
   aws iam get-role --role-name "$role" --query 'Role.{name:RoleName,arn:Arn}' \
     --output json >"$WORK_DIR/role-$role.json" ||
     die "missing application role $role"
@@ -703,7 +673,7 @@ for role in \
   toll-v2-pricing-loader-dev toll-v2-report-publisher-dev \
   toll-v2-report-publisher-scheduler-dev nova-toll-v2-timed-checks-dev \
   nova-toll-v2-agentcore-runtime-dev nova-toll-v2-chat-proxy-dev \
-  tollchat-v2-usage-publisher-dev tollchat-v2-agent-usage-rollup-dev; do
+  tollchat-v2-agent-usage-rollup-dev; do
   aws iam list-role-policies --role-name "$role" --query PolicyNames --output json \
     >"$WORK_DIR/role-policies-$role.json" || die "cannot list inline policies for $role"
   aws iam list-attached-role-policies --role-name "$role" \
@@ -1767,7 +1737,6 @@ for role_mapping in \
   'timed_checks nova-toll-v2-timed-checks-dev' \
   'tollchat_runtime nova-toll-v2-agentcore-runtime-dev' \
   'tollchat_proxy nova-toll-v2-chat-proxy-dev' \
-  'usage_publisher tollchat-v2-usage-publisher-dev' \
   'agent_usage_rollup tollchat-v2-agent-usage-rollup-dev'; do
   IFS=' ' read -r address role_name <<<"$role_mapping"
   printf 'aws_iam_role.%s\tarn:aws:iam::%s:role/%s\n' "$address" "$EXPECTED_ACCOUNT" "$role_name" >>"$ADDRESS_INVENTORY"
@@ -1779,7 +1748,6 @@ for policy_mapping in \
   'timed_checks nova-toll-v2-timed-checks-dev nova-toll-v2-route-live-checks-dev' \
   'tollchat_runtime nova-toll-v2-agentcore-runtime-dev nova-toll-v2-agentcore-runtime-dev' \
   'tollchat_proxy nova-toll-v2-chat-proxy-dev nova-toll-v2-chat-proxy-dev' \
-  'usage_publisher tollchat-v2-usage-publisher-dev tollchat-v2-usage-publisher-dev' \
   'agent_usage_rollup tollchat-v2-agent-usage-rollup-dev tollchat-v2-agent-usage-rollup-dev'; do
   IFS=' ' read -r address role_name policy_name <<<"$policy_mapping"
   printf 'aws_iam_role_policy.%s\t%s:%s\n' "$address" "$role_name" "$policy_name" >>"$ADDRESS_INVENTORY"
@@ -2908,16 +2876,19 @@ plan_policy() {
     PLAN_JSON="$PHASE_ONE_PLAN_JSON"
   fi
   tf_dev -chdir="$ROOT/v2/infra" show -json "$plan" >"$PLAN_JSON"
-  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" --arg data_allowlist "$DEVELOPMENT_DATA_ALLOWLIST" --arg readonly "$DEVELOPMENT_READ_ONLY_ALLOWLIST" '
+  if ! jq -e --arg allowlist "$DEVELOPMENT_RESOURCE_ALLOWLIST" --arg data_allowlist "$DEVELOPMENT_DATA_ALLOWLIST" --arg readonly "$DEVELOPMENT_READ_ONLY_ALLOWLIST" --arg retired "$DEVELOPMENT_RETIRED_USAGE_ALLOWLIST" '
     def base: .address | split("[")[0];
     def listed($items): .address as $address | any(($items | split("\n") | map(select(length > 0)))[]; . as $item | $address == $item or ($address | startswith($item + "[")));
+    def retired_exact($items): .address as $address | any(($items | split("\n") | map(select(length > 0)))[]; $address == .);
     def immutable: ((base == "aws_api_gateway_deployment.tollchat" and (.change.actions == ["create"] or .change.actions == ["delete"] or .change.actions == ["create", "delete"] or .change.actions == ["delete", "create"])) or (base == "aws_bedrock_guardrail_version.tollchat" and .change.actions == ["create"]));
     (.resource_changes | type == "array") and all(.resource_changes[];
       (.address | type == "string") and (.change.actions | type == "array" and length > 0) and (.deposed? == null) and (.previous_address? == null) and
       (.mode == "data" and listed($data_allowlist) and (.change.actions == ["read"] or .change.actions == ["no-op"]) or
-       .mode == "managed" and listed($allowlist) and
-       ((.change.actions == ["no-op"]) or
-        (.change.actions == ["update"] and (listed($readonly) | not)) or immutable)))
+       .mode == "managed" and
+       ((.change.actions == ["delete"] and retired_exact($retired)) or
+        (listed($allowlist) and
+         ((.change.actions == ["no-op"]) or
+          (.change.actions == ["update"] and (listed($readonly) | not)) or immutable))))
   ' "$PLAN_JSON" >/dev/null; then exit 1; fi
   if jq -r '.resource_changes[]? | [.address, (.change.after // {} | tostring)] | @json' "$PLAN_JSON" | rg --quiet '920534282028|dev.tollchat.ai' || jq -r '.resource_changes[]?.address' "$PLAN_JSON" | rg --ignore-case --quiet 'cloudflare|route53|terraform_remote_state'; then exit 1; fi
   if ! jq -e '
@@ -2925,11 +2896,11 @@ plan_policy() {
       (((($value | test("^arn:aws:[^:]*:[^:]*:[0-9]{12}:")) | not)
        or ($value | test("^arn:aws:[^:]*:[^:]*:903859731897:"))));
     def no_known_value($value):
-      (["toll-v2-pricing-loader", "toll-v2-report-publisher", "tollchat-v2-chat-proxy", "tollchat-v2-usage-publisher", "tollchat-v2-agent-usage-rollup", "nova-toll-v2-chat-proxy", "nova-toll-v2-preview", "tollchat-v2-anonymous-sessions", "tollchat-v2-agentcore-runtime"] | any(.[]; . == $value) | not);
+      (["toll-v2-pricing-loader", "toll-v2-report-publisher", "tollchat-v2-chat-proxy", "tollchat-v2-agent-usage-rollup", "nova-toll-v2-chat-proxy", "nova-toll-v2-preview", "tollchat-v2-anonymous-sessions", "tollchat-v2-agentcore-runtime"] | any(.[]; . == $value) | not);
     def identifier_ok($value):
       (($value | test("(^|[/:\"])(nova_toll|pricing_loader_writer|pricing_reader|oracle_owner|tollchat_agent|pricing_caller|report_publisher)([/:\"]|$)"; "i")) | not);
     def app_name_ok($value):
-      (($value | test("(^|[/:\"])(toll-v2-pricing-loader|toll-v2-report-publisher|tollchat-v2-chat-proxy|tollchat-v2-usage-publisher|tollchat-v2-agent-usage-rollup|nova-toll-v2-chat-proxy|nova-toll-v2-preview|tollchat-v2-anonymous-sessions|nova-toll-v2-agentcore-runtime)([/:\"]|$)"; "i")) | not);
+      (($value | test("(^|[/:\"])(toll-v2-pricing-loader|toll-v2-report-publisher|tollchat-v2-chat-proxy|tollchat-v2-agent-usage-rollup|nova-toll-v2-chat-proxy|nova-toll-v2-preview|tollchat-v2-anonymous-sessions|nova-toll-v2-agentcore-runtime)([/:\"]|$)"; "i")) | not);
     def suffix_ok($after):
       all(["function_name", "role", "role_arn", "table_name", "queue_name", "log_group_name", "alarm_name", "database_name", "workgroup_name"][];
         . as $key |
@@ -3023,10 +2994,8 @@ aws_cloudfront_origin_access_control.site
 aws_cloudfront_response_headers_policy.development_noindex
 aws_cloudwatch_event_rule.agent_usage_rollup
 aws_cloudwatch_event_rule.raw_objects
-aws_cloudwatch_event_rule.usage_publisher
 aws_cloudwatch_event_target.agent_usage_rollup
 aws_cloudwatch_event_target.loader
-aws_cloudwatch_event_target.usage_publisher
 aws_cloudwatch_log_group.agent_usage_rollup
 aws_cloudwatch_log_group.agentcore_runtime
 aws_cloudwatch_log_group.loader
@@ -3048,8 +3017,6 @@ aws_cloudwatch_metric_alarm.tollchat_proxy_errors
 aws_cloudwatch_metric_alarm.tollchat_proxy_failures
 aws_cloudwatch_metric_alarm.tollchat_proxy_latency
 aws_cloudwatch_metric_alarm.tollchat_sessions
-aws_cloudwatch_metric_alarm.usage_publisher_errors
-aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
 aws_dynamodb_table.tollchat_sessions
 aws_glue_catalog_database.agent_reports
 aws_glue_catalog_table.agent_registry
@@ -3064,7 +3031,6 @@ aws_iam_role.publisher_scheduler
 aws_iam_role.timed_checks
 aws_iam_role.tollchat_proxy
 aws_iam_role.tollchat_runtime
-aws_iam_role.usage_publisher
 aws_iam_role_policy.agent_usage_rollup
 aws_iam_role_policy.loader
 aws_iam_role_policy.publisher
@@ -3072,7 +3038,6 @@ aws_iam_role_policy.publisher_scheduler
 aws_iam_role_policy.timed_checks
 aws_iam_role_policy.tollchat_proxy
 aws_iam_role_policy.tollchat_runtime
-aws_iam_role_policy.usage_publisher
 aws_iam_role_policy_attachment.loader_vpc
 aws_iam_role_policy_attachment.publisher_vpc
 aws_iam_role_policy_attachment.tollchat_proxy_vpc
@@ -3085,7 +3050,6 @@ aws_lambda_function.agent_usage_rollup
 aws_lambda_function.loader
 aws_lambda_function.publisher
 aws_lambda_function.tollchat_proxy
-aws_lambda_function.usage_publisher
 aws_lambda_function_event_invoke_config.loader
 aws_lambda_function_event_invoke_config.publisher
 aws_lambda_function_url.public_chat
@@ -3094,7 +3058,6 @@ aws_lambda_permission.eventbridge_invoke
 aws_lambda_permission.public_chat_invoke
 aws_lambda_permission.public_chat_url
 aws_lambda_permission.tollchat_api
-aws_lambda_permission.usage_publisher
 aws_lambda_provisioned_concurrency_config.tollchat
 aws_s3_bucket.agent_measurement
 aws_s3_bucket.site
@@ -3145,7 +3108,6 @@ EOF
 read -r -d '' DEVELOPMENT_DATA_ALLOWLIST <<'EOF' || true
 data.archive_file.agent_usage_rollup
 data.archive_file.placeholder
-data.archive_file.usage_publisher
 data.aws_caller_identity.current
 data.aws_cloudfront_cache_policy.caching_disabled
 data.aws_cloudfront_origin_request_policy.all_except_host
@@ -3164,7 +3126,6 @@ data.aws_iam_policy_document.timed_checks
 data.aws_iam_policy_document.timed_checks_assume
 data.aws_iam_policy_document.tollchat_proxy
 data.aws_iam_policy_document.tollchat_runtime
-data.aws_iam_policy_document.usage_publisher
 data.aws_prefix_list.dynamodb
 data.aws_prefix_list.s3
 data.aws_region.current
@@ -3185,7 +3146,6 @@ aws_iam_role.publisher_scheduler
 aws_iam_role.timed_checks
 aws_iam_role.tollchat_proxy
 aws_iam_role.tollchat_runtime
-aws_iam_role.usage_publisher
 aws_iam_role_policy.agent_usage_rollup
 aws_iam_role_policy.loader
 aws_iam_role_policy.publisher
@@ -3193,7 +3153,6 @@ aws_iam_role_policy.publisher_scheduler
 aws_iam_role_policy.timed_checks
 aws_iam_role_policy.tollchat_proxy
 aws_iam_role_policy.tollchat_runtime
-aws_iam_role_policy.usage_publisher
 aws_iam_role_policy_attachment.loader_vpc
 aws_iam_role_policy_attachment.publisher_vpc
 aws_iam_role_policy_attachment.tollchat_proxy_vpc
@@ -3207,13 +3166,22 @@ aws_lambda_permission.eventbridge_invoke
 aws_lambda_permission.public_chat_invoke
 aws_lambda_permission.public_chat_url
 aws_lambda_permission.tollchat_api
-aws_lambda_permission.usage_publisher
 aws_s3_bucket.agent_measurement
 aws_s3_bucket_lifecycle_configuration.agent_measurement
 aws_s3_bucket_policy.agent_measurement
 aws_s3_bucket_policy.site
 aws_s3_bucket_public_access_block.agent_measurement
 aws_s3_bucket_server_side_encryption_configuration.agent_measurement
+EOF
+read -r -d '' DEVELOPMENT_RETIRED_USAGE_ALLOWLIST <<'EOF' || true
+aws_iam_role.usage_publisher
+aws_iam_role_policy.usage_publisher
+aws_lambda_function.usage_publisher
+aws_cloudwatch_event_rule.usage_publisher
+aws_cloudwatch_event_target.usage_publisher
+aws_lambda_permission.usage_publisher
+aws_cloudwatch_metric_alarm.usage_publisher_errors
+aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
 EOF
 source_tree_digest() {
   git -C "$ROOT" ls-files -z | while IFS= read -r -d '' path; do
@@ -4753,31 +4721,11 @@ AWS_PROFILE=nova-toll-prod aws --region us-east-1 lambda get-provisioned-concurr
   --function-name tollchat-v2-chat-proxy --qualifier live
 ```
 
-The concurrency status and allocation must be `READY` and `1`. Submit a first
-chat only after opting that browser out. First save the consistent aggregate
-returned by this command:
-
-```sh
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 dynamodb get-item \
-  --table-name tollchat-v2-anonymous-sessions \
-  --key '{"credential_hash":{"S":"usage#all"}}' \
-  --projection-expression 'engaged_sessions, completed_responses' \
-  --consistent-read
-```
-
-In the public browser's developer console, set and check the owner opt-out,
-then click **New chat** to reset the session before submitting the smoke message:
-
-```js
-document.cookie = "tollchat_usage_optout=1; Domain=tollchat.ai; Path=/; Max-Age=31536000; Secure; SameSite=Strict";
-document.cookie.includes("tollchat_usage_optout=1");
-```
-
-The check must return `true`. Rerun the consistent DynamoDB read after the
-response completes; the aggregate must be unchanged. Confirm CloudWatch records
-the request under `ProvisionedConcurrencyInvocations`, without an on-demand
-Lambda initialization. The public Function URL must reject direct unsigned
-invocation.
+The concurrency status and allocation must be `READY` and `1`. Submit a smoke
+message only after the session-cookie reset path succeeds. There is no current
+public usage counter or opt-out cookie. Confirm CloudWatch records the request
+under `ProvisionedConcurrencyInvocations`, without an on-demand Lambda
+initialization. The public Function URL must reject direct unsigned invocation.
 
 ## Rollback
 
@@ -4830,13 +4778,6 @@ to delete the exact `tolls/i95-i495/` prefix and `sitemap.xml`, followed by a
 targeted CloudFront invalidation. Do not perform that destructive rollback as
 part of an ordinary application rollback.
 
-Disable daily publication before preparing a rollback:
-
-```sh
-AWS_PROFILE=nova-toll-prod aws --region us-east-1 events disable-rule \
-  --name tollchat-v2-usage-publisher
-```
-
 For immediate recovery, set `RELEASE_EVIDENCE` to the original failed release's
 pre-apply evidence file. Do not rerun capture. Restore its targets before
 running the Terraform rollback; this deliberately creates temporary drift that
@@ -4870,11 +4811,9 @@ The apply must reconcile the Lambda alias and AgentCore endpoint with Terraform
 state; rerun the reviewed plan afterward and require it to report no changes.
 
 Deterministic builds restore the exact package bytes; bucket versioning retains
-the earlier runtime and proxy objects for 30 days. When rolling back to a
-pre-metrics revision, expect the plan to remove the usage publisher, schedule,
-alarms, placeholder, and metrics-era public/legal assets. Retain the DynamoDB
-`usage#all` aggregate; it is operational history and is not managed as a
-Terraform item.
+the earlier runtime and proxy objects for 30 days. Historical usage aggregate,
+snapshot, and publisher logs remain retained across rollback; no current writer
+or public usage proof is restored by this procedure.
 
 If the application cannot safely serve traffic while rollback is prepared, stop
 and obtain separate incident authorization. Do not mutate concurrency outside a
@@ -5234,8 +5173,8 @@ delete marker, all archive readbacks must pass, and the three reserved
 concurrency values, WAF filter, and lifecycle statuses must still be frozen.
 The pinned cutover baseline already removed the old CloudFront alias.  Its
 `aws_s3_object.usage` resource intentionally retains
-`ignore_changes = [content, etag]` because the usage Lambda writes
-`usage.json`; do not broaden that exception.  Compare the exact saved-plan
+`ignore_changes = [content, etag]` because the historical usage publisher wrote
+`usage.json`; do not broaden that exception. Compare the exact saved-plan
 resource drift against that pinned baseline and the archived frozen object
 identities and metadata.  The existing validator proves the 166 managed
 identity set and the 162 delete actions, but it does not inspect

@@ -220,11 +220,9 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         footer = html.split('<footer class="site-footer">', 1)[1].split("</footer>", 1)[
             0
         ]
-        assert 'id="usage-proof"' in footer
-        assert (
-            'id="usage-proof"' not in html.split('<footer class="site-footer">', 1)[0]
-        )
-        assert "counts anonymous chat sessions that send a message" in html
+        assert 'id="usage-proof"' not in footer
+        assert "New public usage counting has stopped" in footer
+        assert "Historical aggregate and snapshot data are retained" in footer
         assert "Responses storage disabled" in html
         assert "abuse-monitoring logs" in html
         assert "up to 30 days by default" in html
@@ -292,8 +290,8 @@ def test_http_server_serves_assets_streams_ndjson_and_resets():
         assert "330 origin-destination (OD) pairs" in faq
         assert "mean absolute error of $0.106, compared with $0.154" in faq
         assert "largest error was $8.05" in faq
-        assert "two cumulative, non-identifying counters" in faq
-        assert "These are sessions, not verified people" in faq
+        assert "New public usage counting and daily publication have stopped" in faq
+        assert "Historical aggregate and snapshot data remain retained" in faq
         assert "Responses storage disabled" in faq
         assert "abuse-monitoring logs" in faq
         assert "up to 30 days by default" in faq
