@@ -158,6 +158,7 @@ jobs:
           (
             export CLOUDFLARE_API_TOKEN
             terraform -chdir=v2/infra plan -input=false -out="$PLAN" \
+              -target=aws_cloudwatch_log_group.tollchat_proxy \
               -var-file=production.tfvars \
               -var-file="$FOUNDATION_VARS" \
               -var loader_package_path=build/loader.zip \
@@ -361,44 +362,6 @@ jobs:
                   raise ValueError("unknown shape")
               return value
 
-          output_names = {
-              "development_acm_certificate_arn",
-              "development_acm_validation_records",
-              "public_site",
-              "agent_report_web_acl_arn",
-              "agent_report_analytics",
-              "private_preview",
-          }
-          output_change_fields = {
-              "actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive"
-          }
-
-          def all_false(value):
-              if type(value) is bool:
-                  if value:
-                      raise ValueError("output metadata")
-                  return
-              if isinstance(value, dict):
-                  for item in value.values():
-                      all_false(item)
-                  return
-              if isinstance(value, list):
-                  for item in value:
-                      all_false(item)
-                  return
-              raise ValueError("output metadata shape")
-
-          def validate_outputs(outputs):
-              if not isinstance(outputs, dict) or set(outputs) != output_names:
-                  raise ValueError("output names")
-              for change in outputs.values():
-                  if not isinstance(change, dict) or set(change) != output_change_fields:
-                      raise ValueError("output change shape")
-                  if change["actions"] != ["no-op"] or change["before"] != change["after"]:
-                      raise ValueError("output change")
-                  for field in ("after_unknown", "before_sensitive", "after_sensitive"):
-                      all_false(change[field])
-
           def tag_delta(before, after):
               if not isinstance(before, dict) or not isinstance(after, dict):
                   raise ValueError("tag map")
@@ -432,7 +395,8 @@ jobs:
               drift = plan.get("resource_drift", [])
               if not isinstance(drift, list) or drift:
                   raise ValueError("resource drift")
-              validate_outputs(plan.get("output_changes"))
+              if plan.get("output_changes", {}) != {}:
+                  raise ValueError("output changes")
               target_count = 0
               for item in changes:
                   if not isinstance(item, dict) or "deposed" in item or "previous_address" in item:
