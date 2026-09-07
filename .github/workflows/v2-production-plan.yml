@@ -1,0 +1,545 @@
+name: v2-production-plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Release identifier for the immutable saved plan
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  EXPECTED_ACCOUNT: "920534282028"
+  PLAN_BUCKET: nova-toll-tfstate-920534282028
+  TFSTATE_KMS_KEY_ARN: arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7
+
+jobs:
+  planner:
+    name: Plan production v2 release
+    if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      bucket: ${{ steps.store.outputs.bucket }}
+      key: ${{ steps.store.outputs.key }}
+      version_id: ${{ steps.store.outputs.version_id }}
+      local_sha256: ${{ steps.store.outputs.local_sha256 }}
+      s3_sha256: ${{ steps.store.outputs.s3_sha256 }}
+      kms_key_arn: ${{ steps.store.outputs.kms_key_arn }}
+      release_id: ${{ steps.store.outputs.release_id }}
+      run_id: ${{ steps.store.outputs.run_id }}
+      repository: ${{ steps.store.outputs.repository }}
+      commit_sha: ${{ steps.store.outputs.commit_sha }}
+      account: ${{ steps.store.outputs.account }}
+      region: ${{ steps.store.outputs.region }}
+      resource: ${{ steps.store.outputs.resource }}
+      action: ${{ steps.store.outputs.action }}
+      tag_key: ${{ steps.store.outputs.tag_key }}
+      tag_value: ${{ steps.store.outputs.tag_value }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.13"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+          terraform_version: "1.15.8"
+
+      - name: Validate release identifier
+        id: validate
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          set +x
+          if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
+            exit 1
+          fi
+          printf 'release_id=%s\n' "$RELEASE_ID" >>"$GITHUB_OUTPUT"
+
+      - name: Build deterministic v2 packages
+        working-directory: v2
+        run: |
+          set -euo pipefail
+          umask 077
+          uv sync --locked
+          ./scripts/build_loader_zip.sh
+          ./scripts/build_publisher_zip.sh
+          ./scripts/build_agentcore_zips.sh
+          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+            test -f "$package"
+            test -s "$package"
+          done
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-planner
+          aws-region: us-east-1
+
+      - name: Plan and store the gated release
+        id: store
+        env:
+          RELEASE_ID: ${{ steps.validate.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          set +x
+
+          FOUNDATION_OUTPUT="$RUNNER_TEMP/production-foundation-${GITHUB_RUN_ID}.json"
+          FOUNDATION_OUTPUT_ERROR="$RUNNER_TEMP/production-foundation-${GITHUB_RUN_ID}.err"
+          FOUNDATION_VARS="$RUNNER_TEMP/production-foundation-${GITHUB_RUN_ID}.tfvars.json"
+          FOUNDATION_INIT_LOG="$RUNNER_TEMP/production-foundation-${GITHUB_RUN_ID}.init.log"
+          PLAN="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.tfplan"
+          PLAN_JSON="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.tfplan.json"
+          PLAN_LOG="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.plan.log"
+          PLAN_ERROR="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.plan.err"
+          SHOW_ERROR="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.show.err"
+          V2_INIT_LOG="$RUNNER_TEMP/production-v2-${GITHUB_RUN_ID}.init.log"
+          SSM_ERROR="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.ssm.err"
+          PUT_RESPONSE="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.put.json"
+          PUT_ERROR="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.put.err"
+          MANIFEST="$RUNNER_TEMP/production-${GITHUB_RUN_ID}.manifest.json"
+
+          cleanup() {
+            unset CLOUDFLARE_API_TOKEN
+            rm -f -- \
+              "$FOUNDATION_OUTPUT" "$FOUNDATION_OUTPUT_ERROR" "$FOUNDATION_VARS" "$FOUNDATION_INIT_LOG" \
+              "$PLAN" "$PLAN_JSON" "$PLAN_LOG" "$PLAN_ERROR" "$SHOW_ERROR" "$V2_INIT_LOG" \
+              "$SSM_ERROR" "$PUT_RESPONSE" "$PUT_ERROR" "$MANIFEST"
+          }
+          trap cleanup EXIT
+
+          if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
+            exit 1
+          fi
+          case "$GITHUB_RUN_ID" in
+            ''|*[!0-9]*) exit 1 ;;
+          esac
+          PLAN_KEY="plans/${RELEASE_ID}/${GITHUB_RUN_ID}/release.tfplan"
+
+          ACCOUNT="$(aws sts get-caller-identity \
+            --query Account --output text 2>"$FOUNDATION_OUTPUT_ERROR")"
+          test "$ACCOUNT" = "$EXPECTED_ACCOUNT"
+
+          terraform -chdir=infra init -input=false -backend-config=backend.production.hcl \
+            >"$FOUNDATION_INIT_LOG" 2>&1
+          terraform -chdir=infra output -json foundation \
+            >"$FOUNDATION_OUTPUT" 2>"$FOUNDATION_OUTPUT_ERROR"
+          jq -e '
+            def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+            . as $foundation |
+            exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"])
+            and all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string" and length > 0)
+            and ($foundation.private_subnet_ids | exact_keys(["a", "c"]) and all(.[]; type == "string" and length > 0))
+            and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string" and length > 0) and (.port | type == "number"))
+          ' "$FOUNDATION_OUTPUT" >/dev/null
+          jq -n --slurpfile foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation[0]}' >"$FOUNDATION_VARS"
+          chmod 600 -- "$FOUNDATION_VARS"
+
+          terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl \
+            >"$V2_INIT_LOG" 2>&1
+
+          CLOUDFLARE_API_TOKEN="$(aws ssm get-parameter \
+            --name /nova-toll/cloudflare-read-api-token --with-decryption \
+            --query Parameter.Value --output text 2>"$SSM_ERROR")"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          (
+            export CLOUDFLARE_API_TOKEN
+            terraform -chdir=v2/infra plan -input=false -out="$PLAN" \
+              -var-file=production.tfvars \
+              -var-file="$FOUNDATION_VARS" \
+              -var loader_package_path=build/loader.zip \
+              -var publisher_package_path=build/publisher.zip \
+              -var agentcore_package_path=build/agentcore.zip \
+              -var chat_proxy_package_path=build/chat-proxy.zip \
+              >"$PLAN_LOG" 2>"$PLAN_ERROR"
+          )
+          unset CLOUDFLARE_API_TOKEN
+
+          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_ERROR"
+          python3 - "$PLAN_JSON" <<'PY'
+          import json
+          import sys
+
+          TARGET = "aws_cloudwatch_log_group.tollchat_proxy"
+          APPROVED_TAG = ("delivery_proof", "issue-301")
+          known_managed = set("""
+          aws_acm_certificate.site
+          aws_acm_certificate_validation.site
+          aws_api_gateway_deployment.tollchat
+          aws_api_gateway_integration.tollchat_proxy
+          aws_api_gateway_integration.tollchat_root
+          aws_api_gateway_method.tollchat_proxy
+          aws_api_gateway_method.tollchat_root
+          aws_api_gateway_method_settings.tollchat
+          aws_api_gateway_resource.tollchat_proxy
+          aws_api_gateway_rest_api.tollchat
+          aws_api_gateway_rest_api_policy.tollchat
+          aws_api_gateway_stage.tollchat
+          aws_athena_named_query.recent_routes
+          aws_athena_named_query.top_routes
+          aws_athena_workgroup.agent_reports
+          aws_bedrock_guardrail.tollchat
+          aws_bedrock_guardrail_version.tollchat
+          aws_bedrockagentcore_agent_runtime.tollchat
+          aws_bedrockagentcore_agent_runtime_endpoint.tollchat
+          aws_bedrockagentcore_resource_policy.tollchat
+          aws_cloudfront_distribution.site
+          aws_cloudfront_function.public_chat_routes
+          aws_cloudfront_function.public_report_routes
+          aws_cloudfront_origin_access_control.public_chat
+          aws_cloudfront_origin_access_control.site
+          aws_cloudfront_response_headers_policy.development_noindex
+          aws_cloudwatch_event_rule.agent_usage_rollup
+          aws_cloudwatch_event_rule.raw_objects
+          aws_cloudwatch_event_rule.usage_publisher
+          aws_cloudwatch_event_target.agent_usage_rollup
+          aws_cloudwatch_event_target.loader
+          aws_cloudwatch_event_target.usage_publisher
+          aws_cloudwatch_log_group.agent_usage_rollup
+          aws_cloudwatch_log_group.agentcore_runtime
+          aws_cloudwatch_log_group.loader
+          aws_cloudwatch_log_group.publisher
+          aws_cloudwatch_log_group.tollchat_proxy
+          aws_cloudwatch_log_group.usage_publisher
+          aws_cloudwatch_log_metric_filter.load_success
+          aws_cloudwatch_log_metric_filter.proxy_failure
+          aws_cloudwatch_metric_alarm.agent_usage_log_coverage
+          aws_cloudwatch_metric_alarm.agent_usage_rollup_errors
+          aws_cloudwatch_metric_alarm.agent_usage_rollup_missing
+          aws_cloudwatch_metric_alarm.failure_queues
+          aws_cloudwatch_metric_alarm.freshness
+          aws_cloudwatch_metric_alarm.loader_errors
+          aws_cloudwatch_metric_alarm.publisher_errors
+          aws_cloudwatch_metric_alarm.publisher_failure_queues
+          aws_cloudwatch_metric_alarm.report_generation_freshness
+          aws_cloudwatch_metric_alarm.tollchat_proxy_errors
+          aws_cloudwatch_metric_alarm.tollchat_proxy_failures
+          aws_cloudwatch_metric_alarm.tollchat_proxy_latency
+          aws_cloudwatch_metric_alarm.tollchat_sessions
+          aws_cloudwatch_metric_alarm.usage_publisher_errors
+          aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations
+          aws_dynamodb_table.tollchat_sessions
+          aws_glue_catalog_database.agent_reports
+          aws_glue_catalog_table.agent_registry
+          aws_glue_catalog_table.agent_report_generations
+          aws_glue_catalog_table.agent_report_rollup_completions
+          aws_glue_catalog_table.agent_report_rollups
+          aws_glue_catalog_table.waf_logs
+          aws_iam_role.agent_usage_rollup
+          aws_iam_role.loader
+          aws_iam_role.publisher
+          aws_iam_role.publisher_scheduler
+          aws_iam_role.timed_checks
+          aws_iam_role.tollchat_proxy
+          aws_iam_role.tollchat_runtime
+          aws_iam_role.usage_publisher
+          aws_iam_role_policy.agent_usage_rollup
+          aws_iam_role_policy.loader
+          aws_iam_role_policy.publisher
+          aws_iam_role_policy.publisher_scheduler
+          aws_iam_role_policy.timed_checks
+          aws_iam_role_policy.tollchat_proxy
+          aws_iam_role_policy.tollchat_runtime
+          aws_iam_role_policy.usage_publisher
+          aws_iam_role_policy_attachment.loader_vpc
+          aws_iam_role_policy_attachment.publisher_vpc
+          aws_iam_role_policy_attachment.tollchat_proxy_vpc
+          aws_kms_alias.agent_measurement
+          aws_kms_alias.site
+          aws_kms_key.agent_measurement
+          aws_kms_key.site
+          aws_lambda_alias.tollchat_live
+          aws_lambda_function.agent_usage_rollup
+          aws_lambda_function.loader
+          aws_lambda_function.publisher
+          aws_lambda_function.tollchat_proxy
+          aws_lambda_function.usage_publisher
+          aws_lambda_function_event_invoke_config.loader
+          aws_lambda_function_event_invoke_config.publisher
+          aws_lambda_function_url.public_chat
+          aws_lambda_permission.agent_usage_rollup
+          aws_lambda_permission.eventbridge_invoke
+          aws_lambda_permission.public_chat_invoke
+          aws_lambda_permission.public_chat_url
+          aws_lambda_permission.tollchat_api
+          aws_lambda_permission.usage_publisher
+          aws_lambda_provisioned_concurrency_config.tollchat
+          aws_s3_bucket.agent_measurement
+          aws_s3_bucket.site
+          aws_s3_bucket_lifecycle_configuration.agent_measurement
+          aws_s3_bucket_policy.agent_measurement
+          aws_s3_bucket_policy.site
+          aws_s3_bucket_public_access_block.agent_measurement
+          aws_s3_bucket_public_access_block.site
+          aws_s3_bucket_server_side_encryption_configuration.agent_measurement
+          aws_s3_bucket_server_side_encryption_configuration.site
+          aws_s3_object.agent_registry
+          aws_s3_object.agentcore
+          aws_s3_object.chat
+          aws_s3_object.faq
+          aws_s3_object.index
+          aws_s3_object.privacy
+          aws_s3_object.robots
+          aws_s3_object.site_assets
+          aws_s3_object.terms
+          aws_s3_object.tollchat_proxy
+          aws_s3_object.usage
+          aws_scheduler_schedule.publisher
+          aws_security_group.loader
+          aws_security_group.publisher
+          aws_security_group.tollchat_proxy
+          aws_security_group.tollchat_runtime
+          aws_sqs_queue.delivery_failure
+          aws_sqs_queue.invoke_failure
+          aws_sqs_queue.publisher_delivery_failure
+          aws_sqs_queue.publisher_invoke_failure
+          aws_sqs_queue_policy.delivery_failure
+          aws_vpc_security_group_egress_rule.loader_to_eventbridge
+          aws_vpc_security_group_egress_rule.loader_to_rds
+          aws_vpc_security_group_egress_rule.loader_to_s3
+          aws_vpc_security_group_egress_rule.proxy_https
+          aws_vpc_security_group_egress_rule.proxy_to_dynamodb
+          aws_vpc_security_group_egress_rule.publisher_to_rds
+          aws_vpc_security_group_egress_rule.publisher_to_s3
+          aws_vpc_security_group_egress_rule.runtime_https
+          aws_vpc_security_group_egress_rule.runtime_to_rds
+          aws_vpc_security_group_ingress_rule.agentcore_from_proxy
+          aws_vpc_security_group_ingress_rule.rds_from_loader
+          aws_vpc_security_group_ingress_rule.rds_from_publisher
+          aws_vpc_security_group_ingress_rule.rds_from_runtime
+          aws_wafv2_web_acl.public_chat
+          aws_wafv2_web_acl_logging_configuration.agent_reports
+          cloudflare_dns_record.apex
+          cloudflare_dns_record.site_cert_validation
+          cloudflare_dns_record.www
+          """.split())
+          known_data = set("""
+          data.archive_file.agent_usage_rollup
+          data.archive_file.placeholder
+          data.archive_file.usage_publisher
+          data.aws_caller_identity.current
+          data.aws_cloudfront_cache_policy.caching_disabled
+          data.aws_cloudfront_origin_request_policy.all_except_host
+          data.aws_iam_policy_document.agent_measurement_bucket
+          data.aws_iam_policy_document.agent_measurement_kms
+          data.aws_iam_policy_document.agent_usage_rollup
+          data.aws_iam_policy_document.agentcore_assume
+          data.aws_iam_policy_document.delivery_failure
+          data.aws_iam_policy_document.lambda_assume
+          data.aws_iam_policy_document.loader
+          data.aws_iam_policy_document.publisher
+          data.aws_iam_policy_document.publisher_scheduler_assume
+          data.aws_iam_policy_document.site_kms
+          data.aws_iam_policy_document.timed_checks
+          data.aws_iam_policy_document.timed_checks_assume
+          data.aws_iam_policy_document.usage_publisher
+          data.aws_prefix_list.dynamodb
+          data.aws_prefix_list.s3
+          data.aws_region.current
+          data.cloudflare_zone.tollchat
+          """.split())
+
+          def unknown(value):
+              if isinstance(value, dict):
+                  return any(unknown(item) for item in value.values())
+              if isinstance(value, list):
+                  return any(unknown(item) for item in value)
+              if type(value) is not bool:
+                  raise ValueError("unknown shape")
+              return value
+
+          output_names = {
+              "development_acm_certificate_arn",
+              "development_acm_validation_records",
+              "public_site",
+              "agent_report_web_acl_arn",
+              "agent_report_analytics",
+              "private_preview",
+          }
+          output_change_fields = {
+              "actions", "before", "after", "after_unknown", "before_sensitive", "after_sensitive"
+          }
+
+          def all_false(value):
+              if type(value) is bool:
+                  if value:
+                      raise ValueError("output metadata")
+                  return
+              if isinstance(value, dict):
+                  for item in value.values():
+                      all_false(item)
+                  return
+              if isinstance(value, list):
+                  for item in value:
+                      all_false(item)
+                  return
+              raise ValueError("output metadata shape")
+
+          def validate_outputs(outputs):
+              if not isinstance(outputs, dict) or set(outputs) != output_names:
+                  raise ValueError("output names")
+              for change in outputs.values():
+                  if not isinstance(change, dict) or set(change) != output_change_fields:
+                      raise ValueError("output change shape")
+                  if change["actions"] != ["no-op"] or change["before"] != change["after"]:
+                      raise ValueError("output change")
+                  for field in ("after_unknown", "before_sensitive", "after_sensitive"):
+                      all_false(change[field])
+
+          def tag_delta(before, after):
+              if not isinstance(before, dict) or not isinstance(after, dict):
+                  raise ValueError("tag map")
+              if "delivery_proof" in before or after.get("delivery_proof") != APPROVED_TAG[1]:
+                  raise ValueError("tag proof")
+              if set(after) != set(before) | {APPROVED_TAG[0]}:
+                  raise ValueError("tag keys")
+              if any(before[key] != after[key] for key in before if key in after):
+                  raise ValueError("tag mutation")
+
+          def validate_target(change):
+              before = change.get("before")
+              after = change.get("after")
+              if not isinstance(before, dict) or not isinstance(after, dict):
+                  raise ValueError("target values")
+              before_other = {key: value for key, value in before.items() if key not in {"tags", "tags_all"}}
+              after_other = {key: value for key, value in after.items() if key not in {"tags", "tags_all"}}
+              if before_other != after_other:
+                  raise ValueError("target mutation")
+              tag_delta(before.get("tags"), after.get("tags"))
+              tag_delta(before.get("tags_all"), after.get("tags_all"))
+
+          def gate(path):
+              with open(path, encoding="utf-8") as plan_file:
+                  plan = json.load(plan_file)
+              if not isinstance(plan, dict):
+                  raise ValueError("plan shape")
+              changes = plan.get("resource_changes")
+              if not isinstance(changes, list):
+                  raise ValueError("resource changes")
+              drift = plan.get("resource_drift", [])
+              if not isinstance(drift, list) or drift:
+                  raise ValueError("resource drift")
+              validate_outputs(plan.get("output_changes"))
+              target_count = 0
+              for item in changes:
+                  if not isinstance(item, dict) or "deposed" in item or "previous_address" in item:
+                      raise ValueError("moved change")
+                  address = item.get("address")
+                  mode = item.get("mode")
+                  change = item.get("change")
+                  if not isinstance(address, str) or not isinstance(mode, str) or not isinstance(change, dict):
+                      raise ValueError("change shape")
+                  if "before" not in change or "after" not in change:
+                      raise ValueError("change values")
+                  if not isinstance(change.get("after_unknown"), dict) or unknown(change["after_unknown"]):
+                      raise ValueError("unknown value")
+                  replace_paths = change.get("replace_paths", [])
+                  if not isinstance(replace_paths, list) or replace_paths:
+                      raise ValueError("replacement")
+                  actions = change.get("actions")
+                  if not isinstance(actions, list) or any(not isinstance(action, str) for action in actions):
+                      raise ValueError("actions")
+                  base = address.split("[", 1)[0]
+                  if mode == "data":
+                      allowed = base in known_data and tuple(actions) in {("read",), ("no-op",)}
+                  elif mode == "managed":
+                      allowed = base in known_managed and tuple(actions) == ("no-op",)
+                      if address == TARGET and tuple(actions) == ("update",):
+                          target_count += 1
+                          validate_target(change)
+                          allowed = True
+                      if base == TARGET and address != TARGET:
+                          allowed = False
+                      if tuple(actions) == ("no-op",) and change.get("before") != change.get("after"):
+                          raise ValueError("drift")
+                  else:
+                      allowed = False
+                  if not allowed:
+                      raise ValueError("unapproved change")
+              if target_count != 1:
+                  raise ValueError("approved update count")
+
+          try:
+              gate(sys.argv[1])
+          except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+              print("production plan gate: rejected", file=sys.stderr)
+              raise SystemExit(1)
+          print("production plan gate: approved exact delivery_proof update")
+          PY
+
+          LOCAL_SHA256="$(sha256sum "$PLAN" | awk '{print $1}')"
+          [[ "$LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          EXPECTED_S3_SHA256="$(printf '%s' "$LOCAL_SHA256" | xxd -r -p | base64 -w0)"
+          aws s3api put-object \
+            --region "$AWS_REGION" \
+            --bucket "$PLAN_BUCKET" \
+            --key "$PLAN_KEY" \
+            --body "$PLAN" \
+            --expected-bucket-owner 920534282028 \
+            --if-none-match '*' \
+            --server-side-encryption aws:kms \
+            --sse-kms-key-id "$TFSTATE_KMS_KEY_ARN" \
+            --checksum-algorithm SHA256 \
+            >"$PUT_RESPONSE" 2>"$PUT_ERROR"
+
+          VERSION_ID="$(jq -er '.VersionId | strings' "$PUT_RESPONSE")"
+          SERVER_SIDE_ENCRYPTION="$(jq -er '.ServerSideEncryption | strings' "$PUT_RESPONSE")"
+          RESPONSE_KMS_KEY_ARN="$(jq -er '.SSEKMSKeyId | strings' "$PUT_RESPONSE")"
+          S3_SHA256="$(jq -er '.ChecksumSHA256 | strings' "$PUT_RESPONSE")"
+          [[ "$VERSION_ID" =~ ^[A-Za-z0-9._+/=-]+$ ]]
+          [[ "$SERVER_SIDE_ENCRYPTION" == aws:kms ]]
+          [[ "$RESPONSE_KMS_KEY_ARN" == "$TFSTATE_KMS_KEY_ARN" ]]
+          [[ "$S3_SHA256" == "$EXPECTED_S3_SHA256" ]]
+
+          jq -n \
+            --arg bucket "$PLAN_BUCKET" \
+            --arg key "$PLAN_KEY" \
+            --arg version_id "$VERSION_ID" \
+            --arg local_sha256 "$LOCAL_SHA256" \
+            --arg s3_sha256 "$S3_SHA256" \
+            --arg kms_key_arn "$TFSTATE_KMS_KEY_ARN" \
+            --arg release_id "$RELEASE_ID" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg commit_sha "$GITHUB_SHA" \
+            --arg account "$EXPECTED_ACCOUNT" \
+            --arg region "$AWS_REGION" \
+            --arg resource aws_cloudwatch_log_group.tollchat_proxy \
+            --arg action update \
+            --arg tag_key delivery_proof \
+            --arg tag_value issue-301 \
+            '{schema_version: 1, bucket: $bucket, key: $key, version_id: $version_id, local_sha256: $local_sha256, s3_sha256: $s3_sha256, kms_key_arn: $kms_key_arn, release_id: $release_id, run_id: $run_id, repository: $repository, commit_sha: $commit_sha, account: $account, region: $region, resource: $resource, action: $action, tag_key: $tag_key, tag_value: $tag_value}' \
+            >"$MANIFEST"
+          jq -e --arg commit_sha "$GITHUB_SHA" --arg key "$PLAN_KEY" --arg run_id "$GITHUB_RUN_ID" '
+            type == "object" and
+            (keys_unsorted | sort) == ["account", "action", "bucket", "commit_sha", "kms_key_arn", "key", "local_sha256", "region", "release_id", "repository", "resource", "run_id", "s3_sha256", "schema_version", "tag_key", "tag_value", "version_id"] and
+            .schema_version == 1 and .bucket == "nova-toll-tfstate-920534282028" and .key == $key and
+            (.version_id | test("^[A-Za-z0-9._+/=-]+$")) and (.local_sha256 | test("^[0-9a-f]{64}$")) and
+            (.s3_sha256 | test("^[A-Za-z0-9+/]+={0,2}$")) and .kms_key_arn == "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7" and
+            (.release_id | test("^[A-Za-z0-9._-]{1,64}$")) and .run_id == $run_id and
+            .repository == "rhprasad0/nova-toll-budget-agent" and .commit_sha == $commit_sha and
+            .account == "920534282028" and .region == "us-east-1" and
+            .resource == "aws_cloudwatch_log_group.tollchat_proxy" and .action == "update" and
+            .tag_key == "delivery_proof" and .tag_value == "issue-301"
+          ' "$MANIFEST" >/dev/null
+
+          {
+            jq -r '"bucket=" + .bucket, "key=" + .key, "version_id=" + .version_id, "local_sha256=" + .local_sha256, "s3_sha256=" + .s3_sha256, "kms_key_arn=" + .kms_key_arn, "release_id=" + .release_id, "run_id=" + .run_id, "repository=" + .repository, "commit_sha=" + .commit_sha, "account=" + .account, "region=" + .region, "resource=" + .resource, "action=" + .action, "tag_key=" + .tag_key, "tag_value=" + .tag_value' "$MANIFEST"
+          } >>"$GITHUB_OUTPUT"
+          {
+            printf '## Production plan evidence\n\n'
+            jq -r '"- bucket: `" + .bucket + "`\n- key: `" + .key + "`\n- version_id: `" + .version_id + "`\n- local_sha256: `" + .local_sha256 + "`\n- s3_sha256: `" + .s3_sha256 + "`\n- kms_key_arn: `" + .kms_key_arn + "`\n- release_id: `" + .release_id + "`\n- run_id: `" + .run_id + "`\n- repository: `" + .repository + "`\n- commit_sha: `" + .commit_sha + "`\n- account: `" + .account + "`\n- region: `" + .region + "`\n- resource: `" + .resource + "`\n- action: `" + .action + "`\n- tag: `" + .tag_key + "=" + .tag_value + "`\n"' "$MANIFEST"
+          } >>"$GITHUB_STEP_SUMMARY"

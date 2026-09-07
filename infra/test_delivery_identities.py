@@ -1,18 +1,21 @@
-"""Contract checks for the production Terraform delivery identities."""
+"""Contract checks for production delivery identities and planning."""
 
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 from textwrap import dedent
+import textwrap
 
 
 ROOT = Path(__file__).resolve().parents[1]
 IAM = (ROOT / "infra" / "iam.tf").read_text()
 S3 = (ROOT / "infra" / "s3.tf").read_text()
 WORKFLOW = (ROOT / ".github" / "workflows" / "terraform.yml").read_text()
+PRODUCTION_PLAN = (ROOT / ".github" / "workflows" / "v2-production-plan.yml").read_text()
 
 
 def require(needle: str, haystack: str, message: str | None = None) -> None:
@@ -157,6 +160,369 @@ def rendered_planner_policies() -> tuple[dict[str, dict[str, object]], list[dict
         documents = outputs["production_delivery_planner_policy_documents"]["value"]
         statements = outputs["production_delivery_planner_statements"]["value"]
         return {key: json.loads(value) for key, value in documents.items()}, statements
+
+
+def _gate_source() -> str:
+    marker = '          python3 - "$PLAN_JSON" <<\'PY\'\n'
+    start = PRODUCTION_PLAN.index(marker) + len(marker)
+    end = PRODUCTION_PLAN.index("\n          PY", start)
+    return textwrap.dedent(PRODUCTION_PLAN[start:end])
+
+
+def _target_change(action: list[str] | None = None) -> dict[str, object]:
+    defaults = {
+        "project": "nova-toll-budget-agent",
+        "version": "v2",
+        "environment": "production",
+    }
+    after_tags = {**defaults, "delivery_proof": "issue-301"}
+    return {
+        "address": "aws_cloudwatch_log_group.tollchat_proxy",
+        "mode": "managed",
+        "change": {
+            "before": {"name": "/aws/lambda/tollchat-v2-chat-proxy", "retention_in_days": 30, "tags": defaults, "tags_all": defaults},
+            "after": {"name": "/aws/lambda/tollchat-v2-chat-proxy", "retention_in_days": 30, "tags": after_tags, "tags_all": after_tags},
+            "after_unknown": {},
+            "actions": action or ["update"],
+        },
+    }
+
+
+def _output_change(value: object, *, nested_metadata: bool = False) -> dict[str, object]:
+    metadata: object = {"known": False, "nested": [False]} if nested_metadata else False
+    return {
+        "before": value,
+        "after": value,
+        "after_unknown": metadata,
+        "before_sensitive": metadata,
+        "after_sensitive": metadata,
+        "actions": ["no-op"],
+    }
+
+
+def _valid_plan() -> dict[str, object]:
+    output_values = {
+        "development_acm_certificate_arn": "",
+        "development_acm_validation_records": [],
+        "public_site": {"distribution_id": "E16XVTXNFUS8T4", "hostname": "example.com", "url": "https://example.com"},
+        "agent_report_web_acl_arn": "arn:aws:wafv2:us-east-1:920534282028:regional/webacl/example/1234",
+        "agent_report_analytics": {"bucket": "reports", "database": "analytics", "workgroup": "primary"},
+        "private_preview": {"api_id": "api", "stage": "prod", "origin": "origin", "url": "https://api.example.com"},
+    }
+    return {
+        "resource_changes": [
+            _target_change(),
+            {
+                "address": "data.aws_region.current",
+                "mode": "data",
+                "change": {"before": None, "after": {"name": "us-east-1"}, "after_unknown": {}, "actions": ["read"]},
+            },
+            {
+                "address": "aws_cloudwatch_log_group.loader",
+                "mode": "managed",
+                "change": {"before": {"name": "loader"}, "after": {"name": "loader"}, "after_unknown": {}, "actions": ["no-op"]},
+            },
+        ],
+        "output_changes": {
+            name: _output_change(value, nested_metadata=name in {"public_site", "agent_report_analytics", "private_preview"})
+            for name, value in output_values.items()
+        },
+    }
+
+
+def _gate_result(plan: object | str) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as directory:
+        plan_file = Path(directory) / "plan.json"
+        if isinstance(plan, str):
+            plan_file.write_text(plan)
+        else:
+            plan_file.write_text(json.dumps(plan))
+        return subprocess.run(
+            [sys.executable, "-", str(plan_file)],
+            cwd=ROOT,
+            input=_gate_source(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+def _assert_gate_fixtures() -> None:
+    accepted = _gate_result(_valid_plan())
+    assert accepted.returncode == 0
+    assert accepted.stdout == "production plan gate: approved exact delivery_proof update\n"
+    assert accepted.stderr == ""
+
+    extra_update = _valid_plan()
+    extra_update["resource_changes"].append(
+        {
+            "address": "aws_cloudwatch_log_group.loader",
+            "mode": "managed",
+            "change": {"before": {"name": "loader"}, "after": {"name": "loader2"}, "after_unknown": {}, "actions": ["update"]},
+        }
+    )
+    invalid = [extra_update]
+    for action in (["create"], ["delete"], ["delete", "create"]):
+        invalid.append({**_valid_plan(), "resource_changes": [_target_change(list(action))]})
+
+    wrong_address = _valid_plan()
+    wrong_address["resource_changes"][0]["address"] = "aws_cloudwatch_log_group.loader"
+    invalid.append(wrong_address)
+
+    bad_tags = _valid_plan()
+    bad_tags["resource_changes"][0]["change"]["after"]["tags"]["project"] = "changed"
+    invalid.append(bad_tags)
+
+    missing_tag = _valid_plan()
+    del missing_tag["resource_changes"][0]["change"]["after"]["tags_all"]["delivery_proof"]
+    invalid.append(missing_tag)
+
+    data_write = _valid_plan()
+    data_write["resource_changes"][1]["change"]["actions"] = ["update"]
+    invalid.append(data_write)
+
+    unknown_address = _valid_plan()
+    unknown_address["resource_changes"].append(
+        {
+            "address": "aws_unknown_resource.example",
+            "mode": "managed",
+            "change": {"before": {}, "after": {}, "after_unknown": {}, "actions": ["no-op"]},
+        }
+    )
+    invalid.append(unknown_address)
+
+    drift = _valid_plan()
+    drift["resource_changes"][2]["change"]["after"]["name"] = "changed"
+    invalid.append(drift)
+
+    deposed = _valid_plan()
+    deposed["resource_changes"][0]["deposed"] = "old"
+    invalid.append(deposed)
+
+    previous = _valid_plan()
+    previous["resource_changes"][0]["previous_address"] = "old.address"
+    invalid.append(previous)
+
+    unknown_value = _valid_plan()
+    unknown_value["resource_changes"][0]["change"]["after_unknown"] = {"retention_in_days": True}
+    invalid.append(unknown_value)
+
+    missing_unknown = _valid_plan()
+    del missing_unknown["resource_changes"][0]["change"]["after_unknown"]
+    invalid.append(missing_unknown)
+
+    malformed_unknown = _valid_plan()
+    malformed_unknown["resource_changes"][0]["change"]["after_unknown"] = False
+    invalid.append(malformed_unknown)
+
+    malformed_unknown_leaf = _valid_plan()
+    malformed_unknown_leaf["resource_changes"][0]["change"]["after_unknown"] = {"retention_in_days": "not-a-bool"}
+    invalid.append(malformed_unknown_leaf)
+
+    replacement = _valid_plan()
+    replacement["resource_changes"][0]["change"]["replace_paths"] = [["tags"]]
+    invalid.append(replacement)
+
+    malformed_replacement = _valid_plan()
+    malformed_replacement["resource_changes"][0]["change"]["replace_paths"] = None
+    invalid.append(malformed_replacement)
+
+    indexed_target = _valid_plan()
+    indexed_target["resource_changes"][0]["address"] = 'aws_cloudwatch_log_group.tollchat_proxy["unexpected"]'
+    invalid.append(indexed_target)
+
+    deleted_tag = _valid_plan()
+    del deleted_tag["resource_changes"][0]["change"]["after"]["tags_all"]["project"]
+    invalid.append(deleted_tag)
+
+    resource_drift = _valid_plan()
+    resource_drift["resource_drift"] = [_target_change()]
+    invalid.append(resource_drift)
+
+    unknown_output = _valid_plan()
+    unknown_output["output_changes"]["public_site"]["after_unknown"] = {"nested": [False, True]}
+    invalid.append(unknown_output)
+
+    changed_output = _valid_plan()
+    changed_output["output_changes"]["public_site"]["after"] = {"distribution_id": "changed"}
+    invalid.append(changed_output)
+
+    output_action = _valid_plan()
+    output_action["output_changes"]["public_site"]["actions"] = ["update"]
+    invalid.append(output_action)
+
+    missing_output = _valid_plan()
+    del missing_output["output_changes"]["private_preview"]
+    invalid.append(missing_output)
+
+    extra_output = _valid_plan()
+    extra_output["output_changes"]["release"] = _output_change("unexpected")
+    invalid.append(extra_output)
+
+    malformed_output_entry = _valid_plan()
+    malformed_output_entry["output_changes"]["public_site"] = []
+    invalid.append(malformed_output_entry)
+
+    malformed_output_field = _valid_plan()
+    del malformed_output_field["output_changes"]["public_site"]["after_sensitive"]
+    invalid.append(malformed_output_field)
+
+    unrecognized_output_field = _valid_plan()
+    unrecognized_output_field["output_changes"]["public_site"]["replace_paths"] = []
+    invalid.append(unrecognized_output_field)
+
+    malformed_output_actions = _valid_plan()
+    malformed_output_actions["output_changes"]["public_site"]["actions"] = "no-op"
+    invalid.append(malformed_output_actions)
+
+    malformed_output_metadata = _valid_plan()
+    malformed_output_metadata["output_changes"]["public_site"]["after_unknown"] = {"nested": ["false"]}
+    invalid.append(malformed_output_metadata)
+
+    for rejected in invalid:
+        result = _gate_result(rejected)
+        assert result.returncode != 0
+        assert result.stdout == ""
+        assert result.stderr == "production plan gate: rejected\n"
+
+    malformed = _gate_result("not json")
+    assert malformed.returncode != 0
+    assert malformed.stdout == ""
+    assert malformed.stderr == "production plan gate: rejected\n"
+
+
+def _check_production_planner() -> None:
+    require("workflow_dispatch:", PRODUCTION_PLAN)
+    assert PRODUCTION_PLAN.count("workflow_dispatch:") == 1
+    assert PRODUCTION_PLAN.count("jobs:") == 1
+    for forbidden in (
+        "push:",
+        "pull_request:",
+        "schedule:",
+        "workflow_call:",
+        "environment:",
+        "actions/upload-artifact",
+        "actions/download-artifact",
+        "terraform apply",
+        "aws s3api get-object",
+        "aws s3api head-object",
+        "aws s3api delete-object",
+        "aws cloudformation",
+    ):
+        assert forbidden not in PRODUCTION_PLAN, forbidden
+    require("release_id:", PRODUCTION_PLAN)
+    require("required: true", PRODUCTION_PLAN)
+    require("type: string", PRODUCTION_PLAN)
+    require("if: github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'", PRODUCTION_PLAN)
+    require("contents: read\n      id-token: write", PRODUCTION_PLAN)
+    require("RELEASE_ID: ${{ inputs.release_id }}", PRODUCTION_PLAN)
+    require("RELEASE_ID: ${{ steps.validate.outputs.release_id }}", PRODUCTION_PLAN)
+    assert PRODUCTION_PLAN.count("^[A-Za-z0-9._-]{1,64}$") >= 2
+    require('PLAN_KEY="plans/${RELEASE_ID}/${GITHUB_RUN_ID}/release.tfplan"', PRODUCTION_PLAN)
+
+    actions = re.findall(r"uses:\s+([^@\s]+)@([0-9a-f]{40})", PRODUCTION_PLAN)
+    assert {name for name, _ in actions} == {
+        "actions/checkout",
+        "astral-sh/setup-uv",
+        "hashicorp/setup-terraform",
+        "aws-actions/configure-aws-credentials",
+    }
+    assert len(actions) == 4
+    require("persist-credentials: false", PRODUCTION_PLAN)
+    require('python-version: "3.13"', PRODUCTION_PLAN)
+    require("terraform_wrapper: false", PRODUCTION_PLAN)
+    require('terraform_version: "1.15.8"', PRODUCTION_PLAN)
+
+    require("umask 077", PRODUCTION_PLAN)
+    require("set +x", PRODUCTION_PLAN)
+    require("role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-planner", PRODUCTION_PLAN)
+    require("aws sts get-caller-identity", PRODUCTION_PLAN)
+    require("test \"$ACCOUNT\" = \"$EXPECTED_ACCOUNT\"", PRODUCTION_PLAN)
+    require("--name /nova-toll/cloudflare-read-api-token --with-decryption", PRODUCTION_PLAN)
+    require("--query Parameter.Value --output text", PRODUCTION_PLAN)
+    require("export CLOUDFLARE_API_TOKEN", PRODUCTION_PLAN)
+    assert "GITHUB_ENV" not in PRODUCTION_PLAN
+    assert "add-mask" not in PRODUCTION_PLAN
+
+    require("uv sync --locked", PRODUCTION_PLAN)
+    for script in ("build_loader_zip.sh", "build_publisher_zip.sh", "build_agentcore_zips.sh"):
+        require(f"./scripts/{script}", PRODUCTION_PLAN)
+    for package in ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip"):
+        require(f"infra/build/{package}", PRODUCTION_PLAN)
+    require("-var loader_package_path=build/loader.zip", PRODUCTION_PLAN)
+    require("-var publisher_package_path=build/publisher.zip", PRODUCTION_PLAN)
+    require("-var agentcore_package_path=build/agentcore.zip", PRODUCTION_PLAN)
+    require("-var chat_proxy_package_path=build/chat-proxy.zip", PRODUCTION_PLAN)
+    require("terraform -chdir=infra init -input=false -backend-config=backend.production.hcl", PRODUCTION_PLAN)
+    require("terraform -chdir=infra output -json foundation", PRODUCTION_PLAN)
+    require("jq -n --slurpfile foundation", PRODUCTION_PLAN)
+    for field in (
+        "vpc_id",
+        "vpc_cidr_block",
+        "private_subnet_ids",
+        "rds_security_group_id",
+        "agentcore_endpoint_security_group_id",
+        "eventbridge_endpoint_security_group_id",
+        "agentcore_vpc_endpoint_id",
+        "agentcore_vpc_endpoint_dns_name",
+        "tollchat_api_vpc_endpoint_id",
+        "raw_bucket_name",
+        "raw_kms_key_arn",
+        "agentcore_artifacts_bucket_name",
+        "db_instance",
+        "alerts_topic_arn",
+    ):
+        require(field, PRODUCTION_PLAN)
+    require('exact_keys(["a", "c"])', PRODUCTION_PLAN)
+    require('exact_keys(["identifier", "resource_id", "address", "port"])', PRODUCTION_PLAN)
+    require('chmod 600 -- "$FOUNDATION_VARS"', PRODUCTION_PLAN)
+    require("terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl", PRODUCTION_PLAN)
+    require("-var-file=production.tfvars", PRODUCTION_PLAN)
+    require('python3 - "$PLAN_JSON" <<\'PY\'', PRODUCTION_PLAN)
+    require('TARGET = "aws_cloudwatch_log_group.tollchat_proxy"', PRODUCTION_PLAN)
+    require('APPROVED_TAG = ("delivery_proof", "issue-301")', PRODUCTION_PLAN)
+    require('"after_unknown"', PRODUCTION_PLAN)
+    require('drift = plan.get("resource_drift", [])', PRODUCTION_PLAN)
+    require('replace_paths = change.get("replace_paths", [])', PRODUCTION_PLAN)
+    require('"deposed" in item or "previous_address" in item', PRODUCTION_PLAN)
+    require('print("production plan gate: approved exact delivery_proof update")', PRODUCTION_PLAN)
+
+    require("--expected-bucket-owner 920534282028", PRODUCTION_PLAN)
+    require("--if-none-match '*'", PRODUCTION_PLAN)
+    require("--server-side-encryption aws:kms", PRODUCTION_PLAN)
+    require("--sse-kms-key-id \"$TFSTATE_KMS_KEY_ARN\"", PRODUCTION_PLAN)
+    require("--checksum-algorithm SHA256", PRODUCTION_PLAN)
+    assert PRODUCTION_PLAN.count("aws s3api put-object") == 1
+    for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
+        require(field, PRODUCTION_PLAN)
+    require('[[ "$S3_SHA256" == "$EXPECTED_S3_SHA256" ]]', PRODUCTION_PLAN)
+    require("trap cleanup EXIT", PRODUCTION_PLAN)
+    for path in ("$FOUNDATION_VARS", "$PLAN", "$PLAN_JSON", "$SSM_ERROR", "$PUT_RESPONSE", "$MANIFEST"):
+        require(path, PRODUCTION_PLAN)
+
+    for output in (
+        "bucket",
+        "key",
+        "version_id",
+        "local_sha256",
+        "s3_sha256",
+        "kms_key_arn",
+        "release_id",
+        "run_id",
+        "repository",
+        "commit_sha",
+        "account",
+        "region",
+        "resource",
+        "action",
+        "tag_key",
+        "tag_value",
+    ):
+        require(f"{output}: ${{{{ steps.store.outputs.{output} }}}}", PRODUCTION_PLAN)
+        require(f'"{output}="', PRODUCTION_PLAN)
+    require("GITHUB_STEP_SUMMARY", PRODUCTION_PLAN)
+    require('tags              = local.is_production ? { delivery_proof = "issue-301" } : {}', (ROOT / "v2" / "infra" / "agentcore.tf").read_text())
+    require("v2-production-plan.yml", WORKFLOW)
+    require("PR CI never runs `terraform plan` or `apply`", (ROOT / "v2" / "README.md").read_text())
+    require("manual production planner stores only a gated", (ROOT / "v2" / "RUNBOOK.md").read_text())
 
 
 def main() -> None:
@@ -309,6 +675,9 @@ def main() -> None:
     assert "aws-actions/configure-aws-credentials" not in WORKFLOW
     assert "terraform plan" not in WORKFLOW
     assert "terraform apply" not in WORKFLOW
+
+    _check_production_planner()
+    _assert_gate_fixtures()
 
     print("delivery identity contract: ok")
 
