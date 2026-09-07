@@ -472,13 +472,7 @@ jobs:
 
           if not isinstance(response, Mapping):
               raise ValueError("invalid S3 response")
-          response_metadata = response.get("ResponseMetadata")
-          if not isinstance(response_metadata, Mapping):
-              raise ValueError("invalid S3 response metadata")
-          response_headers = response_metadata.get("HTTPHeaders")
-          if not isinstance(response_headers, Mapping):
-              raise ValueError("invalid S3 response headers")
-          version_id = response_headers.get("x-amz-version-id")
+          version_id = response.get("VersionId")
           if not isinstance(version_id, str):
               raise ValueError("missing or invalid S3 version ID")
           version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"

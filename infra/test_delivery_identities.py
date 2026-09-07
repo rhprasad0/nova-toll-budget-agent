@@ -1,7 +1,6 @@
 """Contract checks for production delivery identities and planning."""
 
 import base64
-from collections import UserDict
 import hashlib
 import json
 import os
@@ -462,11 +461,7 @@ def _check_production_planner() -> None:
     require("from collections.abc import Mapping", PRODUCTION_PLAN)
     require("import re", PRODUCTION_PLAN)
     require('if not isinstance(response, Mapping):', PRODUCTION_PLAN)
-    require('response.get("ResponseMetadata")', PRODUCTION_PLAN)
-    require('if not isinstance(response_metadata, Mapping):', PRODUCTION_PLAN)
-    require('response_metadata.get("HTTPHeaders")', PRODUCTION_PLAN)
-    require('if not isinstance(response_headers, Mapping):', PRODUCTION_PLAN)
-    require('response_headers.get("x-amz-version-id")', PRODUCTION_PLAN)
+    require('version_id = response.get("VersionId")', PRODUCTION_PLAN)
     require('version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"', PRODUCTION_PLAN)
     require('if not isinstance(version_id, str):', PRODUCTION_PLAN)
     require('re.fullmatch(version_pattern, version_id)', PRODUCTION_PLAN)
@@ -476,9 +471,9 @@ def _check_production_planner() -> None:
     require('"ChecksumSHA256": os.environ["EXPECTED_S3_SHA256"]', PRODUCTION_PLAN)
     for forbidden in (
         'response["VersionId"]',
-        "response_version_id",
-        "header_version_id",
-        "conflicting S3 version IDs",
+        "ResponseMetadata",
+        "HTTPHeaders",
+        "x-amz-version-id",
         'response.get("ServerSideEncryption"',
         'response.get("SSEKMSKeyId"',
         'response.get("ChecksumSHA256"',
@@ -611,33 +606,30 @@ def _check_production_upload_stub() -> None:
                 if expected is None:
                     assert not response_path.exists()
 
-            header_mapping = UserDict({"x-amz-version-id": "version-301"})
-            assert not isinstance(header_mapping, dict)
+            run(
+                {"VersionId": "version-301"},
+                "modeled",
+                expected_metadata,
+            )
             run(
                 {
-                    "VersionId": "misleading-model-version",
+                    "VersionId": "version-301",
                     "ServerSideEncryption": "AES256",
                     "SSEKMSKeyId": "misleading-model-kms",
                     "ChecksumSHA256": "misleading-model-checksum",
-                    "ResponseMetadata": {"HTTPHeaders": header_mapping},
+                    "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "misleading-header-version"}},
                 },
-                "header",
+                "misleading-echoes",
                 expected_metadata,
             )
             for name, invalid_response in (
-                ("missing", {"ResponseMetadata": {"HTTPHeaders": {}}}),
-                ("metadata-missing", {"VersionId": "version-301"}),
-                ("headers-missing", {"VersionId": "version-301", "ResponseMetadata": {}}),
+                ("missing", {}),
                 ("response-non-mapping", []),
-                ("header-null", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": None}}}),
-                ("header-non-string", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": 301}}}),
-                ("metadata-malformed", {"ResponseMetadata": None}),
-                ("metadata-non-mapping", {"VersionId": "version-301", "ResponseMetadata": []}),
-                ("headers-malformed", {"ResponseMetadata": {"HTTPHeaders": None}}),
-                ("headers-non-mapping", {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": []}}),
-                ("invalid-character", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version 301"}}}),
-                ("empty", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": ""}}}),
-                ("overlong", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "v" * 257}}}),
+                ("modeled-null", {"VersionId": None}),
+                ("modeled-non-string", {"VersionId": 301}),
+                ("invalid-character", {"VersionId": "version 301"}),
+                ("empty", {"VersionId": ""}),
+                ("overlong", {"VersionId": "v" * 257}),
             ):
                 run(invalid_response, name, None)
     finally:
