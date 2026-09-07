@@ -33,3 +33,4 @@ jobs:
         working-directory: v2/infra
       - run: terraform validate
         working-directory: v2/infra
+      - run: python3 infra/test_delivery_identities.py

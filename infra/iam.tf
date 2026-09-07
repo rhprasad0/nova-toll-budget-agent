@@ -790,3 +790,483 @@ resource "aws_iam_role_policy" "production_foundation_dns" {
   role   = aws_iam_role.production_foundation_dns[0].id
   policy = data.aws_iam_policy_document.production_foundation_dns[0].json
 }
+
+# --- GitHub Actions production planner/deploy identities ------------------
+# Keep the reviewed application action categories in one source document and
+# translate its account-local names for production. Backend and plan access
+# are separate statements below so the two roles cannot be interchanged.
+locals {
+  production_delivery_account_id = "920534282028"
+  production_delivery_region     = "us-east-1"
+  production_delivery_state_arns = [
+    "${aws_s3_bucket.tfstate.arn}/nova-toll/terraform.tfstate",
+    "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/terraform.tfstate",
+  ]
+  production_delivery_lock_arn = "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/terraform.tfstate.tflock"
+  production_delivery_plan_arn = "${aws_s3_bucket.tfstate.arn}/plans/*/*/release.tfplan"
+
+  production_delivery_agentcore_runtime_arn = "arn:aws:bedrock-agentcore:us-east-1:920534282028:runtime/nova_toll_v2-W6989LEw44"
+  production_delivery_agentcore_preview_arn = "${local.production_delivery_agentcore_runtime_arn}/runtime-endpoint/preview"
+  production_delivery_agentcore_default_arn = "${local.production_delivery_agentcore_runtime_arn}/runtime-endpoint/DEFAULT"
+  production_delivery_guardrail_arn         = "arn:aws:bedrock:us-east-1:920534282028:guardrail/k0n0rkm24p9p"
+  production_delivery_api_id                = "mxey1r2rhc"
+  production_delivery_api_arn               = "arn:aws:apigateway:us-east-1::/restapis/mxey1r2rhc"
+  production_delivery_waf_arn               = "arn:aws:wafv2:us-east-1:920534282028:global/webacl/tollchat-v2-public-chat/4f3f1888-76ef-4b89-9170-de501ed515d8"
+  production_delivery_distribution_arn      = "arn:aws:cloudfront::920534282028:distribution/E16XVTXNFUS8T4"
+  production_delivery_certificate_arn       = "arn:aws:acm:us-east-1:920534282028:certificate/a1d9cd35-9317-4f69-8146-3dbdf4d75e06"
+  production_delivery_measurement_key_arn   = "arn:aws:kms:us-east-1:920534282028:key/b1d6d4b1-2370-403e-b735-f29b958703aa"
+  production_delivery_site_key_arn          = "arn:aws:kms:us-east-1:920534282028:key/e6413a73-bf0f-438e-88be-74070724d5a1"
+  production_delivery_cloudflare_param_arn  = "arn:aws:ssm:us-east-1:920534282028:parameter/nova-toll/cloudflare-read-api-token"
+  production_delivery_cloudflare_key_arn    = "arn:aws:kms:us-east-1:920534282028:key/49d9dfb4-f9a7-465a-a3a1-e7bb394dd0de"
+
+  # This is the existing reviewed development policy with only account-local
+  # production identifiers changed. The first six state statements are
+  # discarded; each identity gets its own narrower backend contract below.
+  production_delivery_application_policy_base_json = replace(
+    replace(
+      replace(
+        replace(
+          replace(
+            replace(
+              replace(
+                replace(
+                  replace(
+                    replace(
+                      replace(
+                        replace(
+                          replace(
+                            replace(
+                              data.aws_iam_policy_document.development_delivery.json,
+                              local.development_delivery_account_id,
+                              local.production_delivery_account_id,
+                            ),
+                            "nova-toll/development/",
+                            "nova-toll/",
+                          ),
+                          "nova-toll/v2/development/",
+                          "nova-toll/v2/",
+                        ),
+                        "tollchat_agent_reports_development",
+                        "tollchat_agent_reports",
+                      ),
+                      "\"development\"",
+                      "\"production\"",
+                    ),
+                    "ReadDevelopmentCertificate",
+                    "ReadProductionCertificate",
+                  ),
+                  "nova_toll_v2_development-Y69XBf88Bl",
+                  "nova_toll_v2-W6989LEw44",
+                ),
+                split("/", local.development_delivery_guardrail_arn)[1],
+                split("/", local.production_delivery_guardrail_arn)[1],
+              ),
+              "076e8341-894b-405c-96e9-2b037f96e2a6",
+              "b1d6d4b1-2370-403e-b735-f29b958703aa",
+            ),
+            "3bc78b60-9cbe-4abd-9744-8772c78d8379",
+            "e6413a73-bf0f-438e-88be-74070724d5a1",
+          ),
+          split("/", local.development_delivery_distribution_arn)[1],
+          split("/", local.production_delivery_distribution_arn)[1],
+        ),
+        "arn:aws:wafv2:us-east-1:920534282028:global/webacl/tollchat-v2-public-chat/*",
+        "arn:aws:wafv2:us-east-1:920534282028:global/webacl/tollchat-v2-public-chat/4f3f1888-76ef-4b89-9170-de501ed515d8",
+      ),
+      "-dev",
+      "",
+    ),
+    "\"development\"",
+    "\"production\"",
+  )
+  production_delivery_application_policy_api_json = replace(
+    local.production_delivery_application_policy_base_json,
+    "arn:aws:apigateway:${local.production_delivery_region}::/restapis/${local.development_delivery_api_id}",
+    local.production_delivery_api_arn,
+  )
+  production_delivery_application_policy_json = replace(
+    local.production_delivery_application_policy_api_json,
+    "arn:aws:acm:us-east-1:920534282028:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20",
+    local.production_delivery_certificate_arn,
+  )
+  production_delivery_application_policy_statements = [
+    for statement in slice(
+      jsondecode(local.production_delivery_application_policy_json).Statement,
+      6,
+      length(jsondecode(local.production_delivery_application_policy_json).Statement),
+    ) : statement
+    if statement.Sid != "PassExistingAgentCoreRuntimeRole"
+  ]
+
+  production_delivery_read_prefixes = ["Get", "List", "Describe", "GET"]
+  production_delivery_discovery_statements = [
+    for statement in local.production_delivery_application_policy_statements : merge(statement, {
+      Action = [
+        for action in try(tolist(statement.Action), [statement.Action]) : action
+        if anytrue([
+          for prefix in local.production_delivery_read_prefixes : startswith(action, "${split(":", action)[0]}:${prefix}")
+        ])
+      ]
+    })
+    if length([
+      for action in try(tolist(statement.Action), [statement.Action]) : action
+      if anytrue([
+        for prefix in local.production_delivery_read_prefixes : startswith(action, "${split(":", action)[0]}:${prefix}")
+      ])
+    ]) > 0
+  ]
+
+  production_delivery_agentcore_default_statement = {
+    Sid      = "ReadProductionAgentCoreDefaultEndpoint"
+    Effect   = "Allow"
+    Action   = ["bedrock-agentcore:GetAgentRuntimeEndpoint"]
+    Resource = [local.production_delivery_agentcore_default_arn]
+  }
+
+  production_delivery_agentcore_pass_role_statement = {
+    Sid      = "PassProductionAgentCoreRuntimeRole"
+    Effect   = "Allow"
+    Action   = ["iam:PassRole"]
+    Resource = ["arn:aws:iam::920534282028:role/nova-toll-v2-agentcore-runtime"]
+    Condition = {
+      StringEquals = {
+        "iam:PassedToService" = "bedrock-agentcore.amazonaws.com"
+      }
+    }
+  }
+
+  production_delivery_planner_state_statements = [
+    {
+      Sid      = "ListProductionPlannerState"
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket"]
+      Resource = [aws_s3_bucket.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "s3:prefix" = [
+            "nova-toll/terraform.tfstate",
+            "nova-toll/v2/terraform.tfstate",
+            "nova-toll/v2/terraform.tfstate.tflock",
+          ]
+        }
+      }
+    },
+    {
+      Sid      = "ReadProductionFoundationAndApplicationState"
+      Effect   = "Allow"
+      Action   = ["s3:GetObject"]
+      Resource = local.production_delivery_state_arns
+    },
+    {
+      Sid      = "ManageProductionApplicationLock"
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      Resource = [local.production_delivery_lock_arn]
+    },
+    {
+      Sid      = "DecryptProductionStateAndLock"
+      Effect   = "Allow"
+      Action   = ["kms:Decrypt"]
+      Resource = [aws_kms_key.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService"                   = "s3.us-east-1.amazonaws.com"
+          "kms:EncryptionContext:aws:s3:arn" = concat(local.production_delivery_state_arns, [local.production_delivery_lock_arn])
+        }
+      }
+    },
+    {
+      Sid      = "GenerateProductionLockDataKey"
+      Effect   = "Allow"
+      Action   = ["kms:GenerateDataKey"]
+      Resource = [aws_kms_key.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService"                   = "s3.us-east-1.amazonaws.com"
+          "kms:EncryptionContext:aws:s3:arn" = [local.production_delivery_lock_arn]
+        }
+      }
+    },
+    {
+      Sid      = "PutProductionReleasePlan"
+      Effect   = "Allow"
+      Action   = ["s3:PutObject"]
+      Resource = [local.production_delivery_plan_arn]
+    },
+    {
+      Sid      = "GenerateProductionPlanDataKey"
+      Effect   = "Allow"
+      Action   = ["kms:GenerateDataKey"]
+      Resource = [aws_kms_key.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService" = "s3.us-east-1.amazonaws.com"
+        }
+        StringLike = {
+          "kms:EncryptionContext:aws:s3:arn" = [local.production_delivery_plan_arn]
+        }
+      }
+    },
+    {
+      Sid      = "ReadCloudflareProviderToken"
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameter"]
+      Resource = [local.production_delivery_cloudflare_param_arn]
+    },
+    {
+      Sid      = "DecryptCloudflareProviderToken"
+      Effect   = "Allow"
+      Action   = ["kms:Decrypt"]
+      Resource = [local.production_delivery_cloudflare_key_arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService"                      = "ssm.us-east-1.amazonaws.com"
+          "kms:EncryptionContext:PARAMETER_ARN" = local.production_delivery_cloudflare_param_arn
+        }
+      }
+    },
+  ]
+
+  production_delivery_deploy_state_statements = [
+    {
+      Sid      = "ListProductionApplicationState"
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket"]
+      Resource = [aws_s3_bucket.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "s3:prefix" = [
+            "nova-toll/v2/terraform.tfstate",
+            "nova-toll/v2/terraform.tfstate.tflock",
+          ]
+        }
+      }
+    },
+    {
+      Sid      = "ManageProductionApplicationState"
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Resource = [local.production_delivery_state_arns[1]]
+    },
+    {
+      Sid      = "ManageProductionApplicationLock"
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      Resource = [local.production_delivery_lock_arn]
+    },
+    {
+      Sid      = "DecryptProductionApplicationStateAndLock"
+      Effect   = "Allow"
+      Action   = ["kms:Decrypt"]
+      Resource = [aws_kms_key.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService"                   = "s3.us-east-1.amazonaws.com"
+          "kms:EncryptionContext:aws:s3:arn" = [local.production_delivery_state_arns[1], local.production_delivery_lock_arn]
+        }
+      }
+    },
+    {
+      Sid      = "GenerateProductionApplicationStateDataKeys"
+      Effect   = "Allow"
+      Action   = ["kms:GenerateDataKey"]
+      Resource = [aws_kms_key.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService"                   = "s3.us-east-1.amazonaws.com"
+          "kms:EncryptionContext:aws:s3:arn" = [local.production_delivery_state_arns[1], local.production_delivery_lock_arn]
+        }
+      }
+    },
+    {
+      Sid      = "ReadVersionedReleasePlan"
+      Effect   = "Allow"
+      Action   = ["s3:GetObjectVersion"]
+      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/*"]
+    },
+    {
+      Sid      = "DecryptVersionedReleasePlan"
+      Effect   = "Allow"
+      Action   = ["kms:Decrypt"]
+      Resource = [aws_kms_key.tfstate.arn]
+      Condition = {
+        StringEquals = {
+          "kms:ViaService" = "s3.us-east-1.amazonaws.com"
+        }
+        StringLike = {
+          "kms:EncryptionContext:aws:s3:arn" = ["${aws_s3_bucket.tfstate.arn}/plans/*"]
+        }
+      }
+    },
+  ]
+
+  production_delivery_deploy_policy_documents = {
+    state = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_state_statements })
+    compute = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 0, 6)
+    })
+    observability = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 6, 12)
+    })
+    storage = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 12, 17)
+    })
+    data = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 17, 24)
+    })
+    runtime = jsonencode({
+      Version   = "2012-10-17"
+      Statement = concat(slice(local.production_delivery_application_policy_statements, 24, 28), [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+    })
+    edge = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_application_policy_statements, 28, length(local.production_delivery_application_policy_statements))
+    })
+  }
+
+  # Keep the planner's read-only discovery allowlist intact while staying
+  # below IAM's 6,144-character customer-managed policy limit.
+  production_delivery_planner_policy_documents = {
+    state = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_planner_state_statements, 0, 5)
+    })
+    plan = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_planner_state_statements, 5, length(local.production_delivery_planner_state_statements))
+    })
+    compute = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_discovery_statements, 0, 6)
+    })
+    observability = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_discovery_statements, 6, 12)
+    })
+    storage = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_discovery_statements, 12, 17)
+    })
+    data = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_discovery_statements, 17, 24)
+    })
+    runtime = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_discovery_statements, 24, 28)
+    })
+    edge = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.production_delivery_discovery_statements, 28, length(local.production_delivery_discovery_statements))
+    })
+    endpoint = jsonencode({
+      Version   = "2012-10-17"
+      Statement = [local.production_delivery_agentcore_default_statement]
+    })
+  }
+}
+
+data "aws_iam_policy_document" "production_planner_assume" {
+  count = var.environment == "production" ? 1 : 0
+
+  statement {
+    sid     = "GitHubProductionPlannerMain"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:ref:refs/heads/main"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "production_deploy_assume" {
+  count = var.environment == "production" ? 1 : 0
+
+  statement {
+    sid     = "GitHubProductionDeployEnvironment"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:production"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "production_deploy" {
+  count = var.environment == "production" ? 1 : 0
+
+  source_policy_documents = [jsonencode({
+    Version   = "2012-10-17"
+    Statement = concat(local.production_delivery_deploy_state_statements, local.production_delivery_application_policy_statements, [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+  })]
+}
+
+resource "aws_iam_role" "production_planner" {
+  count                = var.environment == "production" ? 1 : 0
+  name                 = "nova-toll-production-planner"
+  assume_role_policy   = data.aws_iam_policy_document.production_planner_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role" "production_deploy" {
+  count                = var.environment == "production" ? 1 : 0
+  name                 = "nova-toll-production-deploy"
+  assume_role_policy   = data.aws_iam_policy_document.production_deploy_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_policy" "production_planner" {
+  for_each = var.environment == "production" ? local.production_delivery_planner_policy_documents : {}
+  name     = "nova-toll-production-planner-${each.key}"
+  path     = "/nova-toll/production/"
+  policy   = each.value
+}
+
+resource "aws_iam_role_policy_attachment" "production_planner" {
+  for_each   = var.environment == "production" ? local.production_delivery_planner_policy_documents : {}
+  role       = aws_iam_role.production_planner[0].name
+  policy_arn = aws_iam_policy.production_planner[each.key].arn
+}
+
+resource "aws_iam_policy" "production_deploy" {
+  for_each = var.environment == "production" ? local.production_delivery_deploy_policy_documents : {}
+  name     = "nova-toll-production-deploy-${each.key}"
+  path     = "/nova-toll/production/"
+  policy   = each.value
+}
+
+resource "aws_iam_role_policy_attachment" "production_deploy" {
+  for_each   = var.environment == "production" ? local.production_delivery_deploy_policy_documents : {}
+  role       = aws_iam_role.production_deploy[0].name
+  policy_arn = aws_iam_policy.production_deploy[each.key].arn
+}
