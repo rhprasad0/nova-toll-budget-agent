@@ -3882,10 +3882,20 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    assert set(jobs) == {"build", "oidc-proof", "deploy"}
+    assert set(jobs) == {"admission", "build", "oidc-proof", "deploy"}
+
+    admission = jobs["admission"]
+    assert admission["permissions"] == {"contents": "read", "actions": "read"}
+    admission_source = _workflow_run_source(admission)
+    assert "check_development_admission.py" in admission_source
+    assert "GITHUB_EVENT_PATH" in admission_source
+    assert "aws-actions/configure-aws-credentials@" not in admission_source
+    assert "timeout-seconds 900" in admission_source
+    assert "GITHUB_SHA" not in admission_source or "CANDIDATE_SHA" in admission_source
 
     build = jobs["build"]
-    assert build["permissions"] == {"contents": "read"}
+    assert build["needs"] == "admission"
+    assert build["permissions"] == {"contents": "read", "actions": "read"}
     assert "id-token" not in cast(dict[str, str], build["permissions"])
     build_steps = cast(list[dict[str, object]], build["steps"])
     _assert_development_build_setup_uv(build)
@@ -3932,7 +3942,11 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "GITHUB_STEP_SUMMARY" in build_source
 
     proof = jobs["oidc-proof"]
-    assert proof["if"] == "github.ref == 'refs/heads/main'"
+    assert proof["needs"] == "admission"
+    assert (
+        proof["if"]
+        == "github.ref == 'refs/heads/main' && needs.admission.result == 'success'"
+    )
     assert proof["environment"] == "development"
     assert proof["permissions"] == {"contents": "read", "id-token": "write"}
     assert proof["outputs"] == {
@@ -4012,7 +4026,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "full claims" not in proof_source.lower()
 
     deploy = jobs["deploy"]
-    assert deploy["needs"] == ["build", "oidc-proof"]
+    assert deploy["needs"] == ["admission", "build", "oidc-proof"]
     assert deploy["if"] == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'"
     assert (
         "Repository variable: environment variables are unavailable to this pre-job gate."
@@ -4024,8 +4038,14 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "actions": "read",
         "id-token": "write",
     }
+    assert deploy["concurrency"] == {"group": "v2-development-apply", "queue": "max"}
     deploy_steps = cast(list[dict[str, object]], deploy["steps"])
     deploy_source = _workflow_run_source(deploy)
+    assert "check_development_admission.py" in deploy_source
+    assert "--recheck" in deploy_source
+    assert "Recheck admission before credentials" in "\n".join(
+        cast(str, step.get("name", "")) for step in deploy_steps
+    )
     downloads = [
         step
         for step in deploy_steps
@@ -4142,8 +4162,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert 'PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"' in deploy_source
     assert (
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
-        in deploy_source
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"' in deploy_source
     )
     assert (
         'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
@@ -4176,6 +4195,22 @@ def _assert_development_delivery_workflow(source: str) -> None:
         'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
     )
     apply_index = deploy_source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+    )
+    for stage in (
+        "foundation-init",
+        "foundation-output",
+        "release-init",
+        "plan",
+        "show",
+        "apply",
+    ):
+        assert f'"$TF_LOG_DIR/{stage}.log"' in deploy_source
+    assert 'rm -rf -- "$TF_LOG_DIR"' in deploy_source
+    assert "terraform stage failed:" in deploy_source
+    assert deploy_source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
+    ) < deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
     )
     validator_index = deploy_source.index(
