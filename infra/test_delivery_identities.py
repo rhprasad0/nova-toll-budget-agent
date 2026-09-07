@@ -1,6 +1,7 @@
 """Contract checks for production delivery identities and planning."""
 
 import base64
+from collections import UserDict
 import hashlib
 import json
 import os
@@ -458,10 +459,13 @@ def _check_production_planner() -> None:
     require('PLAN_KEY="$PLAN_KEY"', PRODUCTION_PLAN)
     require('EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256"', PRODUCTION_PLAN)
     assert "ChecksumAlgorithm" not in planner
+    require("from collections.abc import Mapping", PRODUCTION_PLAN)
     require("import re", PRODUCTION_PLAN)
-    require('if not isinstance(response, dict):', PRODUCTION_PLAN)
-    require('response["ResponseMetadata"] if "ResponseMetadata" in response else {}', PRODUCTION_PLAN)
-    require('response_metadata["HTTPHeaders"] if "HTTPHeaders" in response_metadata else {}', PRODUCTION_PLAN)
+    require('if not isinstance(response, Mapping):', PRODUCTION_PLAN)
+    require('response.get("ResponseMetadata")', PRODUCTION_PLAN)
+    require('if not isinstance(response_metadata, Mapping):', PRODUCTION_PLAN)
+    require('response_metadata.get("HTTPHeaders")', PRODUCTION_PLAN)
+    require('if not isinstance(response_headers, Mapping):', PRODUCTION_PLAN)
     require('response_headers["x-amz-version-id"]', PRODUCTION_PLAN)
     require('version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"', PRODUCTION_PLAN)
     require('re.fullmatch(version_pattern, candidate)', PRODUCTION_PLAN)
@@ -597,9 +601,15 @@ def _check_production_upload_stub() -> None:
                 if expected is None:
                     assert not response_path.exists()
 
-            run({"VersionId": "version-301"}, "modeled", expected_metadata)
             run(
-                {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-301"}}},
+                {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": {}}},
+                "modeled",
+                expected_metadata,
+            )
+            header_mapping = UserDict({"x-amz-version-id": "version-301"})
+            assert not isinstance(header_mapping, dict)
+            run(
+                {"ResponseMetadata": {"HTTPHeaders": header_mapping}},
                 "header",
                 expected_metadata,
             )
@@ -612,17 +622,22 @@ def _check_production_upload_stub() -> None:
                 expected_metadata,
             )
             for name, invalid_response in (
-                ("missing", {}),
+                ("missing", {"ResponseMetadata": {"HTTPHeaders": {}}}),
+                ("metadata-missing", {"VersionId": "version-301"}),
+                ("headers-missing", {"VersionId": "version-301", "ResponseMetadata": {}}),
+                ("response-non-mapping", []),
                 ("conflicting", {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-302"}}}),
-                ("modeled-null", {"VersionId": None}),
+                ("modeled-null", {"VersionId": None, "ResponseMetadata": {"HTTPHeaders": {}}}),
                 ("header-null", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": None}}}),
-                ("modeled-non-string", {"VersionId": 301}),
+                ("modeled-non-string", {"VersionId": 301, "ResponseMetadata": {"HTTPHeaders": {}}}),
                 ("header-non-string", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": 301}}}),
                 ("metadata-malformed", {"ResponseMetadata": None}),
+                ("metadata-non-mapping", {"VersionId": "version-301", "ResponseMetadata": []}),
                 ("headers-malformed", {"ResponseMetadata": {"HTTPHeaders": None}}),
-                ("invalid-character", {"VersionId": "version 301"}),
-                ("empty", {"VersionId": ""}),
-                ("overlong", {"VersionId": "v" * 257}),
+                ("headers-non-mapping", {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": []}}),
+                ("invalid-character", {"VersionId": "version 301", "ResponseMetadata": {"HTTPHeaders": {}}}),
+                ("empty", {"VersionId": "", "ResponseMetadata": {"HTTPHeaders": {}}}),
+                ("overlong", {"VersionId": "v" * 257, "ResponseMetadata": {"HTTPHeaders": {}}}),
             ):
                 run(invalid_response, name, None)
     finally:

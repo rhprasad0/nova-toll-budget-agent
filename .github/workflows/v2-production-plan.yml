@@ -453,6 +453,7 @@ jobs:
           import os
           import re
           import sys
+          from collections.abc import Mapping
 
           import boto3
 
@@ -469,20 +470,20 @@ jobs:
                   ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"],
               )
 
-          if not isinstance(response, dict):
+          if not isinstance(response, Mapping):
               raise ValueError("invalid S3 response")
+          response_metadata = response.get("ResponseMetadata")
+          if not isinstance(response_metadata, Mapping):
+              raise ValueError("invalid S3 response metadata")
+          response_headers = response_metadata.get("HTTPHeaders")
+          if not isinstance(response_headers, Mapping):
+              raise ValueError("invalid S3 response headers")
           if "VersionId" in response:
               response_version_id = response["VersionId"]
               if not isinstance(response_version_id, str):
                   raise ValueError("invalid modeled S3 version ID")
           else:
               response_version_id = None
-          response_metadata = response["ResponseMetadata"] if "ResponseMetadata" in response else {}
-          if not isinstance(response_metadata, dict):
-              raise ValueError("invalid S3 response metadata")
-          response_headers = response_metadata["HTTPHeaders"] if "HTTPHeaders" in response_metadata else {}
-          if not isinstance(response_headers, dict):
-              raise ValueError("invalid S3 response headers")
           if "x-amz-version-id" in response_headers:
               header_version_id = response_headers["x-amz-version-id"]
               if not isinstance(header_version_id, str):
