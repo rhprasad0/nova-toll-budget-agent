@@ -4394,6 +4394,30 @@ of protected `origin/main` and follows this exact order:
    only after migration succeeds. The job uses the native
    `v2-development-apply` queue shared with the manual migration workflow.
 
+5. While still holding that queue, verify the three application Lambda hashes
+   and the proxy's published `live` alias, CloudFront readiness, and the exact
+   AgentCore `preview` live/target version from private post-apply state. The
+   bounded helper then checks manifest-backed HTTPS static bytes, generated
+   development robots policy, API configuration, invalid-origin rejection, and
+   a small agent exchange in two isolated sessions. Reset/replay verifies
+   revocation without matching model prose; both sessions are cleaned up.
+
+The explicit GitHub `development-release` record starts after exact CI admission
+and before build. Its final status covers build through readiness/smoke; native
+`development` environment records used for OIDC are not end-to-end proof. Failed,
+cancelled, skipped, disabled, or stale attempts cannot produce release success.
+A failed-deploy rerun reuses the same run/SHA's verified immutable build and
+record, with the current attempt identified in its status link. Status-publication
+failure is a failed workflow, not successful evidence. The summary contains only
+commit/run/attempt, artifact ID/digest, schema versions, job outcomes and the
+fixed public URL. State, plans, AWS responses, credentials, cookies and chat
+content are never published. The helper has a 15-minute deadline; failure does
+not roll back an applied release or expand migration authority.
+
+PR validation uses fake AWS/HTTP responses only. A visible post-merge live
+demonstration still requires separate human authorization; do not dispatch the
+workflow or invoke the live smoke merely to validate this implementation.
+
 The fixed manual recovery workflow remains available for an explicitly approved
 post-merge bootstrap or migration rehearsal after the reviewed foundation plan
 and fresh development bootstrap gates. Approve the protected `development`

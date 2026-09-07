@@ -3885,7 +3885,41 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    assert set(jobs) == {"admission", "build", "oidc-proof", "deploy"}
+    assert set(jobs) == {
+        "admission",
+        "release-record",
+        "build",
+        "oidc-proof",
+        "deploy",
+        "release-result",
+    }
+    record = jobs["release-record"]
+    assert record["needs"] == "admission"
+    assert record["permissions"] == {"contents": "read", "deployments": "write"}
+    assert "development_deployment_status.py create" in _workflow_run_source(record)
+    result = jobs["release-result"]
+    assert result["needs"] == [
+        "admission",
+        "release-record",
+        "build",
+        "oidc-proof",
+        "deploy",
+    ]
+    assert result["if"] == "always() && needs.admission.result == 'success'"
+    assert result["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "deployments": "write",
+    }
+    assert "development_deployment_status.py finish" in _workflow_run_source(result)
+    deploy_source = _workflow_run_source(jobs["deploy"])
+    assert deploy_source.index('apply -input=false "$PLAN"') < deploy_source.index(
+        "check_development_release.py"
+    )
+    assert jobs["deploy"]["outputs"] == {
+        "verified": "${{ steps.verify-release.outputs.verified }}"
+    }
+    assert "development-readiness-state.json" in deploy_source
 
     admission = jobs["admission"]
     assert admission["permissions"] == {"contents": "read", "actions": "read"}
@@ -3897,7 +3931,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "GITHUB_SHA" not in admission_source or "CANDIDATE_SHA" in admission_source
 
     build = jobs["build"]
-    assert build["needs"] == "admission"
+    assert build["needs"] == ["admission", "release-record"]
     assert build["permissions"] == {"contents": "read", "actions": "read"}
     assert "id-token" not in cast(dict[str, str], build["permissions"])
     build_steps = cast(list[dict[str, object]], build["steps"])
@@ -3939,6 +3973,8 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert jobs["build"]["outputs"] == {
         "artifact_id": "${{ steps.release-identity.outputs.artifact_id }}",
         "artifact_digest": "${{ steps.release-identity.outputs.artifact_digest }}",
+        "pricing_schema": "${{ steps.release-identity.outputs.pricing_schema }}",
+        "oracle_schema": "${{ steps.release-identity.outputs.oracle_schema }}",
     }
     assert "RELEASE_ARTIFACT_ID" in build_source
     assert "RELEASE_ARTIFACT_DIGEST" in build_source
