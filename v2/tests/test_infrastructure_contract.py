@@ -27,6 +27,9 @@ ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
 DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+PRODUCTION_PLAN_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
+).read_text()
 TIMED_CHECKS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-timed-checks.yml"
 ).read_text()
@@ -3426,6 +3429,69 @@ def _workflow_run_source(job: dict[str, object]) -> str:
         cast(str, step.get("run", ""))
         for step in cast(list[dict[str, object]], job["steps"])
     )
+
+
+def test_production_deploy_session_policy_payload_stays_within_sts_limit():
+    workflow = cast(dict[str, object], yaml.safe_load(PRODUCTION_PLAN_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+    credentials = next(
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith(
+            "aws-actions/configure-aws-credentials@"
+        )
+    )
+    with_values = cast(dict[str, object], credentials["with"])
+    inline_template = cast(str, with_values["inline-session-policy"])
+    managed_session_policies = [
+        arn
+        for arn in cast(str, with_values["managed-session-policies"]).splitlines()
+        if arn
+    ]
+    assert managed_session_policies == [
+        "arn:aws:iam::920534282028:policy/nova-toll/production/"
+        "nova-toll-production-deploy-observability"
+    ]
+    six_managed_session_policies = [
+        "arn:aws:iam::920534282028:policy/nova-toll/production/"
+        f"nova-toll-production-deploy-{policy}"
+        for policy in ("compute", "observability", "storage", "data", "runtime", "edge")
+    ]
+
+    def payload_size(metadata: Mapping[str, str], managed: list[str]) -> int:
+        inline = inline_template
+        for field in ("bucket", "key", "version_id", "kms_key_arn"):
+            inline = inline.replace(
+                f"${{{{ steps.bind.outputs.{field} }}}}", metadata[field]
+            )
+        return len(inline.encode("utf-8")) + sum(
+            len(arn.encode("utf-8")) for arn in managed
+        )
+
+    representative = {
+        "bucket": "nova-toll-tfstate-920534282028",
+        "release_id": "release-301",
+        "run_id": "12345",
+        "version_id": "version-301",
+        "kms_key_arn": "arn:aws:kms:us-east-1:920534282028:key/"
+        "8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
+    }
+    representative["key"] = (
+        f"plans/{representative['release_id']}/{representative['run_id']}/release.tfplan"
+    )
+    maximum = dict(
+        representative,
+        release_id="r" * 64,
+        run_id="9" * 20,
+        version_id="v" * 256,
+    )
+    maximum["key"] = f"plans/{maximum['release_id']}/{maximum['run_id']}/release.tfplan"
+
+    assert payload_size(representative, managed_session_policies) <= 2048
+    assert payload_size(maximum, managed_session_policies) <= 2048
+    assert payload_size(representative, six_managed_session_policies) > 2048
+    assert payload_size(maximum, six_managed_session_policies) > 2048
 
 
 def _development_plan_gate_script(source: str) -> str:

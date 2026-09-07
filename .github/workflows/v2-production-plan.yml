@@ -543,3 +543,176 @@ jobs:
             printf '## Production plan evidence\n\n'
             jq -r '"- bucket: `" + .bucket + "`\n- key: `" + .key + "`\n- version_id: `" + .version_id + "`\n- local_sha256: `" + .local_sha256 + "`\n- s3_sha256: `" + .s3_sha256 + "`\n- kms_key_arn: `" + .kms_key_arn + "`\n- release_id: `" + .release_id + "`\n- run_id: `" + .run_id + "`\n- repository: `" + .repository + "`\n- commit_sha: `" + .commit_sha + "`\n- account: `" + .account + "`\n- region: `" + .region + "`\n- resource: `" + .resource + "`\n- action: `" + .action + "`\n- tag: `" + .tag_key + "=" + .tag_value + "`\n"' "$MANIFEST"
           } >>"$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Apply reviewed production v2 plan
+    needs: planner
+    if: needs.planner.result == 'success' && github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Bind the exact planner handoff
+        id: bind
+        env:
+          PLANNER_BUCKET: ${{ needs.planner.outputs.bucket }}
+          PLANNER_KEY: ${{ needs.planner.outputs.key }}
+          PLANNER_VERSION_ID: ${{ needs.planner.outputs.version_id }}
+          PLANNER_LOCAL_SHA256: ${{ needs.planner.outputs.local_sha256 }}
+          PLANNER_S3_SHA256: ${{ needs.planner.outputs.s3_sha256 }}
+          PLANNER_KMS_KEY_ARN: ${{ needs.planner.outputs.kms_key_arn }}
+          PLANNER_RELEASE_ID: ${{ needs.planner.outputs.release_id }}
+          PLANNER_RUN_ID: ${{ needs.planner.outputs.run_id }}
+          PLANNER_REPOSITORY: ${{ needs.planner.outputs.repository }}
+          PLANNER_COMMIT_SHA: ${{ needs.planner.outputs.commit_sha }}
+          PLANNER_ACCOUNT: ${{ needs.planner.outputs.account }}
+          PLANNER_REGION: ${{ needs.planner.outputs.region }}
+          PLANNER_RESOURCE: ${{ needs.planner.outputs.resource }}
+          PLANNER_ACTION: ${{ needs.planner.outputs.action }}
+          PLANNER_TAG_KEY: ${{ needs.planner.outputs.tag_key }}
+          PLANNER_TAG_VALUE: ${{ needs.planner.outputs.tag_value }}
+        run: |
+          set -euo pipefail
+          umask 077
+          set +x
+
+          [[ "$PLANNER_REPOSITORY" == "rhprasad0/nova-toll-budget-agent" ]]
+          [[ "$PLANNER_ACCOUNT" == "$EXPECTED_ACCOUNT" ]]
+          [[ "$PLANNER_REGION" == "$AWS_REGION" ]]
+          [[ "$PLANNER_BUCKET" == "$PLAN_BUCKET" ]]
+          [[ "$PLANNER_KMS_KEY_ARN" == "$TFSTATE_KMS_KEY_ARN" ]]
+          [[ "$PLANNER_COMMIT_SHA" == "$GITHUB_SHA" ]]
+          [[ "$PLANNER_RESOURCE" == "aws_cloudwatch_log_group.tollchat_proxy" ]]
+          [[ "$PLANNER_ACTION" == update ]]
+          [[ "$PLANNER_TAG_KEY" == delivery_proof ]]
+          [[ "$PLANNER_TAG_VALUE" == issue-301 ]]
+          [[ "$PLANNER_RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]
+          [[ "$PLANNER_LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$PLANNER_S3_SHA256" =~ ^[A-Za-z0-9+/]{43}=$ ]]
+          [[ "$PLANNER_VERSION_ID" =~ ^[A-Za-z0-9._+/=-]{1,256}$ ]]
+          [[ "$PLANNER_RUN_ID" =~ ^[0-9]{1,20}$ ]]
+          [[ "$PLANNER_RUN_ID" == "$GITHUB_RUN_ID" ]]
+          EXPECTED_KEY="plans/${PLANNER_RELEASE_ID}/${PLANNER_RUN_ID}/release.tfplan"
+          [[ "$PLANNER_KEY" == "$EXPECTED_KEY" ]]
+
+          {
+            printf 'bucket=%s\n' "$PLANNER_BUCKET"
+            printf 'key=%s\n' "$PLANNER_KEY"
+            printf 'version_id=%s\n' "$PLANNER_VERSION_ID"
+            printf 'local_sha256=%s\n' "$PLANNER_LOCAL_SHA256"
+            printf 's3_sha256=%s\n' "$PLANNER_S3_SHA256"
+            printf 'kms_key_arn=%s\n' "$PLANNER_KMS_KEY_ARN"
+            printf 'release_id=%s\n' "$PLANNER_RELEASE_ID"
+            printf 'run_id=%s\n' "$PLANNER_RUN_ID"
+            printf 'repository=%s\n' "$PLANNER_REPOSITORY"
+            printf 'commit_sha=%s\n' "$PLANNER_COMMIT_SHA"
+            printf 'account=%s\n' "$PLANNER_ACCOUNT"
+            printf 'region=%s\n' "$PLANNER_REGION"
+            printf 'resource=%s\n' "$PLANNER_RESOURCE"
+            printf 'action=%s\n' "$PLANNER_ACTION"
+            printf 'tag_key=%s\n' "$PLANNER_TAG_KEY"
+            printf 'tag_value=%s\n' "$PLANNER_TAG_VALUE"
+          } >>"$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.bind.outputs.commit_sha }}
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+          terraform_version: "1.15.8"
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy
+          aws-region: us-east-1
+          managed-session-policies: |
+            arn:aws:iam::920534282028:policy/nova-toll/production/nova-toll-production-deploy-observability
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+            {"Effect":"Allow","Action":"s3:ListBucket","Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}","Condition":{"StringEquals":{"s3:prefix":["nova-toll/v2/terraform.tfstate","nova-toll/v2/terraform.tfstate.tflock"]}}},
+            {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],"Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate"},
+            {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject"],"Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate.tflock"},
+            {"Effect":"Allow","Action":["kms:Decrypt","kms:GenerateDataKey"],"Resource":"${{ steps.bind.outputs.kms_key_arn }}","Condition":{"StringEquals":{"kms:ViaService":"s3.us-east-1.amazonaws.com","kms:EncryptionContext:aws:s3:arn":["arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate","arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate.tflock"]}}},
+            {"Effect":"Allow","Action":"s3:GetObjectVersion","Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/${{ steps.bind.outputs.key }}","Condition":{"StringEquals":{"s3:VersionId":"${{ steps.bind.outputs.version_id }}"}}},
+            {"Effect":"Allow","Action":"kms:Decrypt","Resource":"${{ steps.bind.outputs.kms_key_arn }}","Condition":{"StringEquals":{"kms:ViaService":"s3.us-east-1.amazonaws.com","kms:EncryptionContext:aws:s3:arn":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/${{ steps.bind.outputs.key }}"}}}
+            ]}
+
+      - name: Download and apply the exact saved plan
+        env:
+          BUCKET: ${{ steps.bind.outputs.bucket }}
+          KEY: ${{ steps.bind.outputs.key }}
+          VERSION_ID: ${{ steps.bind.outputs.version_id }}
+          EXPECTED_LOCAL_SHA256: ${{ steps.bind.outputs.local_sha256 }}
+          EXPECTED_S3_SHA256: ${{ steps.bind.outputs.s3_sha256 }}
+          EXPECTED_KMS_KEY_ARN: ${{ steps.bind.outputs.kms_key_arn }}
+          RELEASE_ID: ${{ steps.bind.outputs.release_id }}
+          PLAN_RUN_ID: ${{ steps.bind.outputs.run_id }}
+          PLAN_COMMIT_SHA: ${{ steps.bind.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          set +x
+          PLAN="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.tfplan"
+          WRONG_OWNER_RESPONSE="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.wrong-owner.json"
+          WRONG_OWNER_ERROR="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.wrong-owner.err"
+          UNVERSIONED_RESPONSE="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.unversioned.json"
+          UNVERSIONED_ERROR="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.unversioned.err"
+          GET_RESPONSE="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.get.json"
+          GET_ERROR="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.get.err"
+          INIT_LOG="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.init.log"
+          APPLY_LOG="$RUNNER_TEMP/production-deploy-${GITHUB_RUN_ID}.apply.log"
+          cleanup() {
+            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_PROFILE CLOUDFLARE_API_TOKEN
+            rm -f -- "$PLAN" "$WRONG_OWNER_RESPONSE" "$WRONG_OWNER_ERROR" "$UNVERSIONED_RESPONSE" "$UNVERSIONED_ERROR" "$GET_RESPONSE" "$GET_ERROR" "$INIT_LOG" "$APPLY_LOG"
+          }
+          trap cleanup EXIT
+          unset CLOUDFLARE_API_TOKEN
+
+          set +e
+          aws s3api get-object --region "$AWS_REGION" --bucket "$BUCKET" --key "$KEY" \
+            --version-id "$VERSION_ID" --expected-bucket-owner 903859731897 \
+            "$PLAN" >"$WRONG_OWNER_RESPONSE" 2>"$WRONG_OWNER_ERROR"
+          WRONG_OWNER_STATUS=$?
+          set -e
+          [[ "$WRONG_OWNER_STATUS" -ne 0 ]]
+
+          set +e
+          aws s3api get-object --region "$AWS_REGION" --bucket "$BUCKET" --key "$KEY" \
+            --expected-bucket-owner "$EXPECTED_ACCOUNT" \
+            "$PLAN" >"$UNVERSIONED_RESPONSE" 2>"$UNVERSIONED_ERROR"
+          UNVERSIONED_STATUS=$?
+          set -e
+          [[ "$UNVERSIONED_STATUS" -ne 0 ]]
+          printf 'wrong_owner_denied=true\nunversioned_denied=true\n' >>"$GITHUB_OUTPUT"
+
+          aws s3api get-object --region "$AWS_REGION" --bucket "$BUCKET" --key "$KEY" \
+            --version-id "$VERSION_ID" --expected-bucket-owner "$EXPECTED_ACCOUNT" \
+            --checksum-mode ENABLED "$PLAN" >"$GET_RESPONSE" 2>"$GET_ERROR"
+          chmod 600 -- "$PLAN" "$GET_RESPONSE" "$GET_ERROR"
+          RESPONSE_VERSION_ID="$(jq -er '.VersionId | strings' "$GET_RESPONSE" 2>>"$GET_ERROR")"
+          RESPONSE_SSE="$(jq -er '.ServerSideEncryption | strings' "$GET_RESPONSE" 2>>"$GET_ERROR")"
+          RESPONSE_KMS_KEY_ARN="$(jq -er '.SSEKMSKeyId | strings' "$GET_RESPONSE" 2>>"$GET_ERROR")"
+          RESPONSE_S3_SHA256="$(jq -er '.ChecksumSHA256 | strings' "$GET_RESPONSE" 2>>"$GET_ERROR")"
+          [[ "$RESPONSE_VERSION_ID" == "$VERSION_ID" ]]
+          [[ "$RESPONSE_SSE" == aws:kms ]]
+          [[ "$RESPONSE_KMS_KEY_ARN" == "$EXPECTED_KMS_KEY_ARN" ]]
+          [[ "$RESPONSE_S3_SHA256" == "$EXPECTED_S3_SHA256" ]]
+          LOCAL_SHA256="$(sha256sum "$PLAN" | awk '{print $1}')"
+          [[ "$LOCAL_SHA256" == "$EXPECTED_LOCAL_SHA256" ]]
+          LOCAL_S3_SHA256="$(printf '%s' "$LOCAL_SHA256" | xxd -r -p | base64 -w0)"
+          [[ "$LOCAL_S3_SHA256" == "$EXPECTED_S3_SHA256" ]]
+
+          terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl \
+            >"$INIT_LOG" 2>&1
+          terraform -chdir=v2/infra apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1
+          printf 'apply_succeeded=true\n' >>"$GITHUB_OUTPUT"
+          {
+            printf '## Protected production apply evidence\n\n'
+            printf '%s\n' '- wrong_owner_denied: `true`' '- unversioned_denied: `true`' '- exact_version_downloaded: `true`' '- checksum_verified: `true`' '- apply_succeeded: `true`'
+            printf '%s\n' "- bucket: \`$BUCKET\`" "- key: \`$KEY\`" "- version_id: \`$VERSION_ID\`" "- local_sha256: \`$EXPECTED_LOCAL_SHA256\`" "- s3_sha256: \`$EXPECTED_S3_SHA256\`" "- kms_key_arn: \`$EXPECTED_KMS_KEY_ARN\`" "- release_id: \`$RELEASE_ID\`" "- run_id: \`$PLAN_RUN_ID\`" "- commit_sha: \`$PLAN_COMMIT_SHA\`"
+          } >>"$GITHUB_STEP_SUMMARY"
