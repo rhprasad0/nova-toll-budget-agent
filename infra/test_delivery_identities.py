@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -351,6 +352,7 @@ def _check_production_planner() -> None:
         "actions/upload-artifact",
         "actions/download-artifact",
         "terraform apply",
+        "aws s3api put-object",
         "aws s3api get-object",
         "aws s3api head-object",
         "aws s3api delete-object",
@@ -436,17 +438,31 @@ def _check_production_planner() -> None:
     require('"deposed" in item or "previous_address" in item', PRODUCTION_PLAN)
     require('print("production plan gate: approved exact delivery_proof update")', PRODUCTION_PLAN)
 
-    require("--expected-bucket-owner 920534282028", PRODUCTION_PLAN)
-    require("--if-none-match '*'", PRODUCTION_PLAN)
-    require("--server-side-encryption aws:kms", PRODUCTION_PLAN)
-    require("--sse-kms-key-id \"$TFSTATE_KMS_KEY_ARN\"", PRODUCTION_PLAN)
-    require("--checksum-algorithm SHA256", PRODUCTION_PLAN)
-    assert PRODUCTION_PLAN.count("aws s3api put-object") == 1
+    upload_marker = 'uv run --project v2 python - "$PLAN" "$PUT_RESPONSE"'
+    require(upload_marker, PRODUCTION_PLAN)
+    require("import boto3", PRODUCTION_PLAN)
+    assert PRODUCTION_PLAN.count("aws s3api put-object") == 0
+    assert PRODUCTION_PLAN.count(".put_object(") == 1
+    assert planner.index('print("production plan gate: approved exact delivery_proof update")') < planner.index(upload_marker)
+    for argument in (
+        'Bucket=os.environ["PLAN_BUCKET"]',
+        'Key=os.environ["PLAN_KEY"]',
+        "Body=plan",
+        'ExpectedBucketOwner="920534282028"',
+        'IfNoneMatch="*"',
+        'ServerSideEncryption="aws:kms"',
+        'SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"]',
+        'ChecksumAlgorithm="SHA256"',
+    ):
+        require(argument, PRODUCTION_PLAN)
+    require('PLAN_KEY="$PLAN_KEY"', PRODUCTION_PLAN)
+    require('>/dev/null 2>"$PUT_ERROR"', PRODUCTION_PLAN)
+    require("os.fchmod(response_fd, 0o600)", PRODUCTION_PLAN)
     for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
         require(field, PRODUCTION_PLAN)
     require('[[ "$S3_SHA256" == "$EXPECTED_S3_SHA256" ]]', PRODUCTION_PLAN)
     require("trap cleanup EXIT", PRODUCTION_PLAN)
-    for path in ("$FOUNDATION_VARS", "$PLAN", "$PLAN_JSON", "$SSM_ERROR", "$PUT_RESPONSE", "$MANIFEST"):
+    for path in ("$FOUNDATION_VARS", "$PLAN", "$PLAN_JSON", "$SSM_ERROR", "$PUT_RESPONSE", "$PUT_ERROR", "$MANIFEST"):
         require(path, PRODUCTION_PLAN)
 
     for output in (
@@ -474,6 +490,89 @@ def _check_production_planner() -> None:
     require("v2-production-plan.yml", WORKFLOW)
     require("PR CI never runs `terraform plan` or `apply`", (ROOT / "v2" / "README.md").read_text())
     require("manual production planner stores only a gated", (ROOT / "v2" / "RUNBOOK.md").read_text())
+
+
+def _check_production_upload_stub() -> None:
+    marker = 'uv run --project v2 python - "$PLAN" "$PUT_RESPONSE"'
+    source = PRODUCTION_PLAN[PRODUCTION_PLAN.index(marker) :]
+    source = source.split("<<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
+    source = textwrap.dedent(source)
+    body = b"immutable reviewed plan"
+    response = {
+        "VersionId": "version-301",
+        "ServerSideEncryption": "aws:kms",
+        "SSEKMSKeyId": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
+        "ChecksumSHA256": base64.b64encode(hashlib.sha256(body).digest()).decode(),
+    }
+
+    class MockS3:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def put_object(self, **kwargs: object) -> dict[str, str]:
+            self.calls.append(kwargs)
+            assert set(kwargs) == {
+                "Bucket",
+                "Key",
+                "Body",
+                "ExpectedBucketOwner",
+                "IfNoneMatch",
+                "ServerSideEncryption",
+                "SSEKMSKeyId",
+                "ChecksumAlgorithm",
+            }
+            assert kwargs["Bucket"] == "nova-toll-tfstate-920534282028"
+            assert kwargs["Key"] == "plans/release-301/12345/release.tfplan"
+            assert kwargs["ExpectedBucketOwner"] == "920534282028"
+            assert kwargs["IfNoneMatch"] == "*"
+            assert kwargs["ServerSideEncryption"] == "aws:kms"
+            assert kwargs["SSEKMSKeyId"] == response["SSEKMSKeyId"]
+            assert kwargs["ChecksumAlgorithm"] == "SHA256"
+            plan = kwargs["Body"]
+            assert getattr(plan, "mode", None) == "rb"
+            assert hasattr(plan, "read")
+            assert plan.read() == body
+            return response
+
+    s3 = MockS3()
+
+    class MockBoto3:
+        def client(self, service_name: str, *, region_name: str) -> MockS3:
+            assert service_name == "s3"
+            assert region_name == "us-east-1"
+            return s3
+
+    previous_boto3 = sys.modules.get("boto3")
+    had_boto3 = "boto3" in sys.modules
+    previous_environment = os.environ.copy()
+    previous_argv = sys.argv
+    sys.modules["boto3"] = MockBoto3()
+    try:
+        os.environ.update(
+            {
+                "AWS_REGION": "us-east-1",
+                "PLAN_BUCKET": "nova-toll-tfstate-920534282028",
+                "PLAN_KEY": "plans/release-301/12345/release.tfplan",
+                "TFSTATE_KMS_KEY_ARN": response["SSEKMSKeyId"],
+            }
+        )
+        with tempfile.TemporaryDirectory(prefix="nova-toll-upload-") as directory:
+            plan_path = Path(directory) / "release.tfplan"
+            response_path = Path(directory) / "put.json"
+            plan_path.write_bytes(body)
+            sys.argv = ["workflow-upload.py", str(plan_path), str(response_path)]
+            exec(compile(source, "<workflow upload>", "exec"), {"__name__": "__main__"})
+            assert len(s3.calls) == 1
+            assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
+            assert json.loads(response_path.read_text(encoding="utf-8")) == response
+    finally:
+        sys.argv = previous_argv
+        os.environ.clear()
+        os.environ.update(previous_environment)
+        if had_boto3:
+            sys.modules["boto3"] = previous_boto3
+        else:
+            sys.modules.pop("boto3", None)
 
 
 def _valid_deploy_metadata() -> dict[str, str]:
@@ -852,6 +951,7 @@ def main() -> None:
     assert "terraform apply" not in WORKFLOW
 
     _check_production_planner()
+    _check_production_upload_stub()
     _check_production_deploy()
     _assert_gate_fixtures()
 
