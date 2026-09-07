@@ -145,12 +145,10 @@ operations details.
 ## Shared foundation changes
 
 Build and review the real fetcher package for every root `infra/` plan. The
-development foundation handoff for #330 is the retained, exact-plan procedure
-in [`v2/RUNBOOK.md`](v2/RUNBOOK.md): it verifies the private root, coupled
-plan/artifact/manifest digests, local bootstrap, encrypted state migration,
-sanitized evidence, and production isolation probes. Do not use a generic
-plan display or unbounded apply command; application release remains a
-separately approved follow-on operation.
+current development foundation handoff is the authorized #327/#333 replacement
+in [`v2/RUNBOOK.md`](v2/RUNBOOK.md#development-foundation-replacement-handoff-327333-source-prerequisites).
+Do not use a generic plan display or unbounded apply command; application
+release remains a separately approved follow-on operation.
 
 ```sh
 v2/scripts/build_fetcher_zip.sh

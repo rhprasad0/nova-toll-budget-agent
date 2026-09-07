@@ -303,15 +303,16 @@ read-only production foundation plan, extracts only its reviewed non-secret
 production v2 plan with its reviewed package arguments. It asserts the
 production account, reviews only the approved object shape, and removes its
 distinct temporary file through an EXIT trap; no credentials or SSM values are
-included. Do not use that generic planned-output or tfvars flow for
-development. Development #330 uses the retained private exact-plan root,
-binary plan, coupled manifest, local bootstrap, and encrypted backend migration
-documented below; its state is not discovered through a foundation output.
+included. Do not use that generic planned-output or tfvars flow for development.
+The current development foundation path is the authorized #327/#333
+replacement handoff documented below; the historical #330 exact-plan procedure
+remains below for audit context only. Development state is not discovered
+through a foundation output.
 
-The development foundation bootstrap is #330 and its application/database
-bootstrap is #331. Cloudflare DNS reads and writes (zone lookup, ACM
-certificate-validation records, and apex/www records) are production-only in
-`v2/infra/site.tf`; development DNS/certificate validation belongs to #332.
+Application/database bootstrap remains #331. Cloudflare DNS reads and writes
+(zone lookup, ACM certificate-validation records, and apex/www records) are
+production-only in `v2/infra/site.tf`; development DNS/certificate validation
+belongs to #332.
 `enable_public_dns = false` remains the production apex switch, while the
 development path has no Cloudflare data or resource instances. Legacy
 production-account development cleanup belongs to #333.
@@ -374,9 +375,12 @@ approved deployment automation exists, except for the expressly authorized
 validates the already present development schema and isolation. Public report publication remains
 non-operative: the separate report publisher is deployed unchanged, but no
 publication is manually invoked and no report data is copied. Historical public
-usage publication is retired; its snapshot and logs remain retained. The #330 foundation
-handoff remains the documented sequence of local-backend plan generation and review,
-later exact-plan apply, and separately authorized state migration or recovery.
+usage publication is retired; its snapshot and logs remain retained. The
+current development foundation path is the bounded #327/#333 replacement
+handoff below. The historical #330 foundation procedure retains the
+local-backend plan generation and review, later exact-plan apply, and
+separately authorized state migration or recovery only as audit context; it is
+not an activation path.
 Cloudflare/DNS/CI cutover is owned by #332, and legacy cleanup remains owned by
 #333. An AWS-only identity cannot write Cloudflare DNS.
 
