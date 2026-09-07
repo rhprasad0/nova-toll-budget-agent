@@ -1848,7 +1848,7 @@ lambda-version|lambda:PublishVersion|arn:aws:lambda:${REGION}:${EXPECTED_ACCOUNT
 lambda-alias|lambda:UpdateAlias|$QUALIFIED_FUNCTION_ARN|allowed
 lambda-retire|lambda:DeleteFunction|$QUALIFIED_FUNCTION_ARN|allowed
 site-upload|s3:PutObject|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|allowed
-site-delete|s3:DeleteObject|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|allowed
+site-delete|s3:DeleteObject|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev/index.html|denied
 artifact-upload|s3:PutObject|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
 artifact-delete|s3:DeleteObject|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
 cloudfront-update|cloudfront:UpdateFunction|arn:aws:cloudfront::${EXPECTED_ACCOUNT}:function/tollchat-v2-public-chat-routes-dev|allowed
@@ -1858,7 +1858,7 @@ api-deployment-create|apigateway:POST|arn:aws:apigateway:${REGION}::/restapis/oc
 api-deployment-delete|apigateway:DELETE|arn:aws:apigateway:${REGION}::/restapis/ocw8sg0wlb/deployments/reviewed|allowed
 agentcore-runtime-update|bedrock-agentcore:UpdateAgentRuntime|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl|allowed
 agentcore-endpoint-update|bedrock-agentcore:UpdateAgentRuntimeEndpoint|arn:aws:bedrock-agentcore:${REGION}:${EXPECTED_ACCOUNT}:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview|allowed
-events-targets|events:PutTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+events-targets|events:PutTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev|allowed
 logs-retention|logs:PutRetentionPolicy|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
 alarm-tags|cloudwatch:TagResource|arn:aws:cloudwatch:${REGION}:${EXPECTED_ACCOUNT}:alarm/tollchat-v2-chat-proxy-errors-dev|allowed
 queue-read|sqs:GetQueueAttributes|arn:aws:sqs:${REGION}:${EXPECTED_ACCOUNT}:toll-v2-pricing-loader-invoke-failure-dev|allowed
@@ -1870,19 +1870,19 @@ schedule-update|scheduler:UpdateSchedule|arn:aws:scheduler:${REGION}:${EXPECTED_
 kms-use|kms:Encrypt|arn:aws:kms:${REGION}:${EXPECTED_ACCOUNT}:key/076e8341-894b-405c-96e9-2b037f96e2a6|allowed
 site-ownership|s3:PutBucketOwnershipControls|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
 site-tags|s3:PutBucketTagging|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
-site-versioning|s3:PutBucketVersioning|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-versioning|s3:PutBucketVersioning|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|denied
 site-encryption|s3:PutEncryptionConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
-site-lifecycle|s3:PutLifecycleConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|allowed
+site-lifecycle|s3:PutLifecycleConfiguration|arn:aws:s3:::tollchat-site-${EXPECTED_ACCOUNT}-dev|denied
 registry-upload|s3:PutObject|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev/registry/agent_registry.ndjson|allowed
 registry-delete|s3:DeleteObject|arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${EXPECTED_ACCOUNT}-dev/registry/agent_registry.ndjson|allowed
 artifact-abort|s3:AbortMultipartUpload|arn:aws:s3:::nova-toll-agentcore-${EXPECTED_ACCOUNT}/runtime/v2/release.zip|allowed
 lambda-tag|lambda:TagResource|$QUALIFIED_FUNCTION_ARN|allowed
 lambda-untag|lambda:UntagResource|$QUALIFIED_FUNCTION_ARN|allowed
-events-disable|events:DisableRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
-events-enable|events:EnableRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
-events-remove-targets|events:RemoveTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
-events-tag|events:TagResource|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
-events-untag|events:UntagResource|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/tollchat-v2-agent-usage-rollup-dev|allowed
+events-disable|events:DisableRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev|allowed
+events-enable|events:EnableRule|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev|allowed
+events-remove-targets|events:RemoveTargets|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev|denied
+events-tag|events:TagResource|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev|allowed
+events-untag|events:UntagResource|arn:aws:events:${REGION}:${EXPECTED_ACCOUNT}:rule/toll-v2-pricing-raw-objects-dev|allowed
 logs-tag|logs:TagResource|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
 logs-untag|logs:UntagResource|arn:aws:logs:${REGION}:${EXPECTED_ACCOUNT}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev|allowed
 alarm-untag|cloudwatch:UntagResource|arn:aws:cloudwatch:${REGION}:${EXPECTED_ACCOUNT}:alarm/tollchat-v2-chat-proxy-errors-dev|allowed
@@ -2024,13 +2024,6 @@ PY
     -var "agentcore_package_path=$REVIEWED_V2_PACKAGE_DIR/agentcore.zip" \
     -var "chat_proxy_package_path=$REVIEWED_V2_PACKAGE_DIR/chat-proxy.zip"
   terraform -chdir="$ROOT/v2/infra" show -json "$REPRESENTATIVE_PLAN" >"$REPRESENTATIVE_PLAN_JSON"
-  PLAN_GATE_SOURCE="$ROOT/.github/workflows/v2-development-delivery.yml"
-  require_reviewed_file "$PLAN_GATE_SOURCE"
-  PLAN_GATE="$WORK_DIR/development-plan-gate.py"
-  sed -n '/python3 - "\$PLAN_JSON" <<'"'"'PY'"'"'/,/^          PY$/p' "$PLAN_GATE_SOURCE" |
-    sed '1d;$d;s/^          //' >"$PLAN_GATE"
-  test -s "$PLAN_GATE" || die "saved-plan gate source is missing"
-  python3 "$PLAN_GATE" "$REPRESENTATIVE_PLAN_JSON"
   REPRESENTATIVE_PLAN_BODY="$WORK_DIR/representative-plan-body.tsv"
   python3 - "$REPRESENTATIVE_PLAN_JSON" "$REPRESENTATIVE_PLAN_BODY" <<'PY'
 import json
@@ -2130,19 +2123,19 @@ Gateway deployment, published/retired versions of the five named development
 Lambda functions, the two named development CloudFront functions, and the
 named development Bedrock guardrail version (publication only; its Terraform
 resource uses `skip_destroy`). It cannot create, replace, or administer the
-bootstrap addresses above. The workflow's rendered-plan gate
-must pass before the exact saved plan is applied. A missing import, unknown
-address/action, or failed gate stops for an administrator. The foundation
-Terraform root owns the route-control role, fixed SSM document, and their
-trust/policy resources; they are intentionally absent from v2 application
-Terraform and the recurring delivery plan.
+bootstrap addresses above. The protected OIDC role's scoped development IAM
+policy is the authorization boundary; the workflow applies only the exact
+binary plan it just created. The foundation Terraform root owns the
+route-control role, fixed SSM document, and their trust/policy resources; they
+are intentionally absent from v2 application Terraform and the recurring
+delivery plan.
 
 The protected `main` branch plus the protected GitHub `development` environment
 is the reviewed release source for this identity. Publishing arbitrary code to
 the named development Lambda/site objects and the two named development
 CloudFront functions is therefore an intentional delivery capability; the
-AWS policy bounds those calls to exact development resources, while the saved
-Terraform-plan gate bounds only Terraform changes. The identity still cannot
+AWS policy bounds those calls and Terraform operations to exact development
+resources. The identity still cannot
 switch roles, access production or foundation-write paths, create bootstrap
 resources, change public URL permissions, or alter measurement exposure
 controls.
@@ -2544,9 +2537,10 @@ uses the CloudFront default certificate and `TLSv1`, and has no development ACM
 resource. Production keeps its existing certificate, aliases, validation records,
 resource addresses, and Cloudflare provider path. Certificate creation and
 CloudFront alias/certificate changes remain administrator-owned. The recurring
-role can only describe and read tags of the exact staged development certificate;
-the plan gate accepts its no-op refresh, not creation, updates, or deletion.
-It cannot request ACM certificates or update CloudFront aliases/certificates.
+role can only describe and read tags of the exact staged development
+certificate; its scoped development IAM policy does not permit certificate
+creation, updates, deletion, or CloudFront alias/certificate changes. It
+cannot request ACM certificates or update CloudFront aliases/certificates.
 
 ##### Protected environment and preflight
 

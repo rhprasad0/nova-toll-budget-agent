@@ -148,9 +148,10 @@ locals {
   ])
   # Retained for state refresh only; the retired rollup is not a delivery target.
   development_delivery_legacy_rollup_lambda_resources = [
-    "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev",
-    "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev:*",
+    local.development_delivery_legacy_rollup_lambda_arn,
+    "${local.development_delivery_legacy_rollup_lambda_arn}:*",
   ]
+  development_delivery_legacy_rollup_lambda_arn = "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev"
   development_delivery_queue_arns = [
     for queue_name in [
       "toll-v2-pricing-loader-invoke-failure-dev",
@@ -165,6 +166,7 @@ locals {
     ] : "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/${rule_name}"
   ]
   development_delivery_legacy_rollup_event_rule_arn = "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/tollchat-v2-agent-usage-rollup-dev"
+  development_delivery_legacy_rollup_role_arn       = "arn:aws:iam::${local.development_delivery_account_id}:role/tollchat-v2-agent-usage-rollup-dev"
   development_delivery_log_group_arns = [
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-pricing-loader-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-report-publisher-dev",
@@ -205,6 +207,7 @@ locals {
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-errors-dev",
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
+  development_delivery_athena_workgroup_arn   = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
   development_delivery_api_id                 = "ocw8sg0wlb"
   development_delivery_distribution_arn       = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
   development_delivery_guardrail_arn          = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
@@ -427,7 +430,7 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ManageApplicationEventRules"
-    actions   = ["events:DescribeRule", "events:DisableRule", "events:EnableRule", "events:ListTagsForResource", "events:ListTargetsByRule", "events:PutTargets", "events:RemoveTargets", "events:TagResource", "events:UntagResource"]
+    actions   = ["events:DescribeRule", "events:DisableRule", "events:EnableRule", "events:ListTagsForResource", "events:ListTargetsByRule", "events:PutTargets", "events:TagResource", "events:UntagResource"]
     resources = local.development_delivery_event_rule_arns
   }
 
@@ -496,7 +499,7 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ManageApplicationSiteBuckets"
-    actions   = ["s3:DeleteObject", "s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions", "s3:PutBucketOwnershipControls", "s3:PutBucketTagging", "s3:PutBucketVersioning", "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration", "s3:PutObject", "s3:PutObjectTagging"]
+    actions   = ["s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions", "s3:PutBucketOwnershipControls", "s3:PutBucketTagging", "s3:PutEncryptionConfiguration", "s3:PutObject", "s3:PutObjectTagging"]
     resources = [local.development_delivery_site_bucket_arn, "${local.development_delivery_site_bucket_arn}/*"]
   }
 
@@ -591,15 +594,13 @@ data "aws_iam_policy_document" "development_delivery" {
     sid = "ReadRetainedApplicationAthenaNamedQueries"
     # Retained named-query reads authorize against their workgroup, not a query ARN.
     actions   = ["athena:GetNamedQuery", "athena:ListTagsForResource"]
-    resources = ["arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"]
+    resources = [local.development_delivery_athena_workgroup_arn]
   }
 
   statement {
-    sid     = "ReadRetainedApplicationAthenaWorkGroup"
-    actions = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:ListTagsForResource"]
-    resources = [
-      "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev",
-    ]
+    sid       = "ReadRetainedApplicationAthenaWorkGroup"
+    actions   = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:ListTagsForResource"]
+    resources = [local.development_delivery_athena_workgroup_arn]
   }
 
   statement {
@@ -649,30 +650,6 @@ data "aws_iam_policy_document" "development_delivery" {
   statement {
     sid       = "ReadRetiredUsagePublisherAlarms"
     actions   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
-    resources = local.development_delivery_usage_publisher_alarm_arns
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherIam"
-    actions   = ["iam:DeleteRole", "iam:DeleteRolePolicy"]
-    resources = [local.development_delivery_usage_publisher_role_arn]
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherLambda"
-    actions   = ["lambda:DeleteFunction", "lambda:RemovePermission"]
-    resources = [local.development_delivery_usage_publisher_lambda_arn]
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherEvents"
-    actions   = ["events:DeleteRule", "events:RemoveTargets"]
-    resources = [local.development_delivery_usage_publisher_rule_arn]
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherAlarms"
-    actions   = ["cloudwatch:DeleteAlarms"]
     resources = local.development_delivery_usage_publisher_alarm_arns
   }
 
@@ -814,11 +791,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 48)
+      Statement = slice(local.development_delivery_policy_statements, 35, 44)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 48, 56)
+      Statement = slice(local.development_delivery_policy_statements, 44, 52)
     })
   }
 }
@@ -998,10 +975,6 @@ locals {
     ) : statement
     if !contains([
       "PassExistingAgentCoreRuntimeRole",
-      "RetireUsagePublisherIam",
-      "RetireUsagePublisherLambda",
-      "RetireUsagePublisherEvents",
-      "RetireUsagePublisherAlarms",
     ], statement.Sid)
   ]
 
