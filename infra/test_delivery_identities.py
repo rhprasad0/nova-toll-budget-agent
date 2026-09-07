@@ -485,6 +485,44 @@ def _check_production_planner() -> None:
         require(field, PRODUCTION_PLAN)
     require('[[ "$S3_SHA256" == "$EXPECTED_S3_SHA256" ]]', PRODUCTION_PLAN)
     require("trap cleanup EXIT", PRODUCTION_PLAN)
+    for code in ("71", "72", "73"):
+        require(f"failure_status = {code}", planner)
+    require("except Exception:", planner)
+    require("raise SystemExit(failure_status)", planner)
+    assert "BaseException" not in planner
+    require('case "$upload_status" in', planner)
+    require('upload_status=$?', planner)
+    require("set +e", planner)
+    require("set -e", planner)
+    for phase in ("jq_response_check", "manifest_check", "outputs_summary"):
+        require(f"PHASE={phase}", planner)
+    for message in (
+        "production planner failed during upload request",
+        "production planner failed during response validation",
+        "production planner failed during response file write",
+        "production planner failed during jq response check",
+        "production planner failed during manifest check",
+        "production planner failed during outputs or summary",
+        "production planner failed during unknown post-gate stage",
+    ):
+        require(message, planner)
+    require("planner_failure() {", planner)
+    require("trap planner_failure ERR", planner)
+    require("status=$?", planner)
+    require('exit "$status"', planner)
+    for forbidden in (
+        "checkpoint:",
+        "grep",
+        "shlex",
+        'cat "$PUT_ERROR"',
+        'printf "$PUT_ERROR"',
+        'echo "$PUT_ERROR"',
+    ):
+        assert forbidden not in planner, forbidden
+    assert not any(
+        "$PUT_ERROR" in line and any(command in line for command in ("cat", "echo", "printf"))
+        for line in planner.splitlines()
+    )
     for path in ("$FOUNDATION_VARS", "$PLAN", "$PLAN_JSON", "$SSM_ERROR", "$PUT_RESPONSE", "$PUT_ERROR", "$MANIFEST"):
         require(path, PRODUCTION_PLAN)
 
@@ -531,9 +569,10 @@ def _check_production_upload_stub() -> None:
     }
 
     class MockS3:
-        def __init__(self, response: object) -> None:
+        def __init__(self, response: object, fail_upload: bool = False) -> None:
             self.calls: list[dict[str, object]] = []
             self.response = response
+            self.fail_upload = fail_upload
 
         def put_object(self, **kwargs: object) -> object:
             self.calls.append(kwargs)
@@ -558,6 +597,8 @@ def _check_production_upload_stub() -> None:
             assert getattr(plan, "mode", None) == "rb"
             assert hasattr(plan, "read")
             assert plan.read() == body
+            if self.fail_upload:
+                raise RuntimeError("simulated upload failure")
             return self.response
 
     class MockBoto3:
@@ -587,21 +628,38 @@ def _check_production_upload_stub() -> None:
             plan_path = Path(directory) / "release.tfplan"
             plan_path.write_bytes(body)
 
-            def run(response: object, name: str, expected: dict[str, str] | None) -> None:
-                client = MockS3(response)
+            def run(
+                response: object,
+                name: str,
+                expected: dict[str, str] | None,
+                expected_status: int | None = None,
+                fail_upload: bool = False,
+                fail_write: bool = False,
+            ) -> None:
+                client = MockS3(response, fail_upload=fail_upload)
                 sys.modules["boto3"] = MockBoto3(client)
                 response_path = Path(directory) / f"{name}.json"
                 sys.argv = ["workflow-upload.py", str(plan_path), str(response_path)]
+                previous_open = os.open
+                if fail_write:
+                    def fail_open(*args: object, **kwargs: object) -> int:
+                        raise OSError("simulated response write failure")
+
+                    os.open = fail_open  # type: ignore[assignment]
                 try:
-                    exec(compile(source, f"<workflow upload {name}>", "exec"), {"__name__": "__main__"})
-                except ValueError:
-                    if expected is not None:
-                        raise
-                else:
-                    if expected is None:
-                        raise AssertionError(f"{name} response must fail closed")
-                    assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
-                    assert json.loads(response_path.read_text(encoding="utf-8")) == expected
+                    try:
+                        exec(compile(source, f"<workflow upload {name}>", "exec"), {"__name__": "__main__"})
+                    except SystemExit as error:
+                        if expected is not None or expected_status is None:
+                            raise
+                        assert error.code == expected_status
+                    else:
+                        if expected is None:
+                            raise AssertionError(f"{name} response must fail closed")
+                        assert stat.S_IMODE(response_path.stat().st_mode) == 0o600
+                        assert json.loads(response_path.read_text(encoding="utf-8")) == expected
+                finally:
+                    os.open = previous_open  # type: ignore[assignment]
                 assert len(client.calls) == 1
                 if expected is None:
                     assert not response_path.exists()
@@ -622,6 +680,20 @@ def _check_production_upload_stub() -> None:
                 "misleading-echoes",
                 expected_metadata,
             )
+            run(
+                {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-301"}}},
+                "upload-failure",
+                None,
+                expected_status=71,
+                fail_upload=True,
+            )
+            run(
+                {"VersionId": "version-301"},
+                "write-failure",
+                None,
+                expected_status=73,
+                fail_write=True,
+            )
             for name, invalid_response in (
                 ("missing", {}),
                 ("response-non-mapping", []),
@@ -631,7 +703,7 @@ def _check_production_upload_stub() -> None:
                 ("empty", {"VersionId": ""}),
                 ("overlong", {"VersionId": "v" * 257}),
             ):
-                run(invalid_response, name, None)
+                run(invalid_response, name, None, expected_status=72)
     finally:
         sys.argv = previous_argv
         os.environ.clear()
