@@ -79,6 +79,9 @@ DEVELOPMENT_CONNECTIVITY_WORKFLOW = (
 DEVELOPMENT_MIGRATIONS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-migrations.yml"
 ).read_text()
+DEVELOPMENT_MIGRATION_HELPER = (
+    V2_ROOT / "scripts" / "run_development_migrations_workflow.sh"
+).read_text()
 DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR = (
     V2_ROOT / "scripts" / "validate_development_foundation_plan.py"
 )
@@ -4104,6 +4107,27 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "Authorization: Bearer $GH_TOKEN" in deploy_source
     assert '--location "$download_url"' in deploy_source
     assert "verify_release_bundle.py verify" in deploy_source
+    assert "--verify-checkout" in deploy_source
+    assert "git rev-parse HEAD" in deploy_source
+    assert "release-manifest.json" in deploy_source
+    assert "EXPECTED_PRICING_VERSION" in deploy_source
+    assert "EXPECTED_ORACLE_VERSION" in deploy_source
+    deploy_step_names = "\n".join(
+        cast(str, step.get("name", "")) for step in deploy_steps
+    )
+    plan_index = deploy_step_names.index(
+        "Create and gate the saved development plan before migrations"
+    )
+    migration_index = deploy_step_names.index(
+        "Run reviewed backward-compatible development migrations"
+    )
+    re_assume_index = deploy_step_names.index(
+        "Confirm delivery role before applying saved plan"
+    )
+    apply_index = deploy_step_names.index("Apply the same saved development plan")
+    assert plan_index < migration_index < re_assume_index < apply_index
+    assert deploy_source.count('terraform -chdir="$RELEASE_ROOT/v2/infra" plan') == 1
+    assert deploy_source.count('terraform -chdir="$RELEASE_ROOT/v2/infra" apply') == 1
     assert '--expected-digest "$RELEASE_ARTIFACT_DIGEST"' in deploy_source
     assert "path: ${{ runner.temp }}/v2-development-checksums" in source
     assert "aws-actions/configure-aws-credentials@" in "\n".join(
@@ -4162,7 +4186,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "terraform -chdir=infra output -json foundation" in deploy_source
     assert (
         "foundation.tfvars.json" in deploy_source
-        and "trap cleanup EXIT" in deploy_source
+        and "if: always()" in DEVELOPMENT_DELIVERY_WORKFLOW
     )
     assert (
         'terraform -chdir="$RELEASE_ROOT/v2/infra" init -input=false -lockfile=readonly'
@@ -10175,6 +10199,10 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
     assert job["if"] == "github.ref == 'refs/heads/main'"
     assert job["environment"] == "development"
     assert job["permissions"] == {"contents": "read", "id-token": "write"}
+    assert job["concurrency"] == {
+        "group": "v2-development-apply",
+        "queue": "max",
+    }
     defaults = cast(dict[str, object], job["defaults"])
     run_defaults = cast(dict[str, object], defaults["run"])
     assert run_defaults["working-directory"] == "v2"
@@ -10184,34 +10212,25 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
     assert "tag:ci-development" in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    assert "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112" in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    assert 'PGHOST="$DB_HOST"' in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    assert 'PGHOSTADDR="$TRANSPORT_IPV6"' in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    assert "PGSSLMODE=verify-full" in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    assert (
-        "RDS_CA_BUNDLE: $GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"
-        in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    )
-    assert (
-        'export RDS_CA_BUNDLE="$GITHUB_WORKSPACE/v2/infra/build/ca/rds-ca-bundle.pem"'
-        in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    )
-    assert "RDS_CA_BUNDLE: infra/build/ca/rds-ca-bundle.pem" not in (
-        DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert "fd7a:115c:a1e0:b1a:0:1:ac1f:0/112" in DEVELOPMENT_MIGRATION_HELPER
+    assert 'PGHOST="$DB_HOST"' in DEVELOPMENT_MIGRATION_HELPER
+    assert 'PGHOSTADDR="$TRANSPORT_IPV6"' in DEVELOPMENT_MIGRATION_HELPER
+    assert "PGSSLMODE=verify-full" in DEVELOPMENT_MIGRATION_HELPER
+    assert 'RDS_CA_BUNDLE="$ROOT/v2/infra/build/ca/rds-ca-bundle.pem"' in (
+        DEVELOPMENT_MIGRATION_HELPER
     )
     fetched = tmp_path / "v2/infra/build/ca/rds-ca-bundle.pem"
     fetched.parent.mkdir(parents=True)
     fetched.write_text("disposable CA fixture", encoding="utf-8")
     assert fetched == tmp_path / "v2/infra/build/ca/rds-ca-bundle.pem"
     assert fetched != tmp_path / "infra/build/ca/rds-ca-bundle.pem"
-    assert "generate-db-auth-token" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert "generate-db-auth-token" in DEVELOPMENT_MIGRATION_HELPER
     assert (
-        "python3 scripts/run_development_migrations.py"
-        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+        "python3 scripts/run_development_migrations.py" in DEVELOPMENT_MIGRATION_HELPER
     )
     assert (
         'test("^v2/db/migrations/[0-9]{3}_upgrade_(pricing|oracle)_.*\\\\.sql$")'
-        in DEVELOPMENT_MIGRATIONS_WORKFLOW
+        in DEVELOPMENT_MIGRATION_HELPER
     )
     assert (
         "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -10233,8 +10252,8 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
         in DEVELOPMENT_MIGRATIONS_WORKFLOW
     )
-    assert "jq -cn" in DEVELOPMENT_MIGRATIONS_WORKFLOW
-    assert "RUNNER_TEMP" in DEVELOPMENT_MIGRATIONS_WORKFLOW
+    assert "jq -cn" in DEVELOPMENT_MIGRATION_HELPER
+    assert "RUNNER_TEMP" in DEVELOPMENT_MIGRATION_HELPER
     for forbidden in (
         "secretsmanager",
         "ssm:",

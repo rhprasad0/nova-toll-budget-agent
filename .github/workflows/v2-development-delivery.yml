@@ -380,9 +380,21 @@ jobs:
           test "sha256:$(sha256sum "$archive" | awk '{print $1}')" = "$RELEASE_ARTIFACT_DIGEST"
 
           overlay="$RUNNER_TEMP/release-overlay"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           python3 v2/scripts/verify_release_bundle.py verify \
             --archive "$archive" --output "$overlay" --root "$GITHUB_WORKSPACE" \
-            --expected-digest "$RELEASE_ARTIFACT_DIGEST" --commit "$GITHUB_SHA"
+            --expected-digest "$RELEASE_ARTIFACT_DIGEST" --commit "$GITHUB_SHA" \
+            --verify-checkout
+          jq -e --arg expected_commit "$GITHUB_SHA" '
+            type == "object" and .commit_sha == $expected_commit and
+            (.schema_versions | type == "object" and
+             (.pricing | type == "string" and test("^[0-9]+[.][0-9]+[.][0-9]+$")) and
+             (.oracle | type == "string" and test("^[0-9]+[.][0-9]+[.][0-9]+$")))
+          ' "$overlay/release-manifest.json" >/dev/null
+          {
+            printf 'EXPECTED_PRICING_VERSION=%s\n' "$(jq -er '.schema_versions.pricing' "$overlay/release-manifest.json")"
+            printf 'EXPECTED_ORACLE_VERSION=%s\n' "$(jq -er '.schema_versions.oracle' "$overlay/release-manifest.json")"
+          } >>"$GITHUB_ENV"
 
           mkdir -p "$overlay/v2/infra/lambda-stub" "$overlay/infra"
           for reviewed_source in \
@@ -444,9 +456,15 @@ jobs:
           aws-region: us-east-1
 
       - name: Confirm development account
-        run: test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
+          case "$(aws sts get-caller-identity --query Arn --output text)" in
+            arn:aws:sts::903859731897:assumed-role/nova-toll-v2-development-delivery/*) ;;
+            *) exit 1 ;;
+          esac
 
-      - name: Plan and apply the reviewed development release
+      - name: Create and gate the saved development plan before migrations
         run: |
           set -euo pipefail
           test -s "$RUNNER_TEMP/protected-main-oidc.json"
@@ -466,22 +484,10 @@ jobs:
           PLAN_LOG="$TF_LOG_DIR/plan.log"
           PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"
           SHOW_LOG="$TF_LOG_DIR/show.log"
-          APPLY_LOG="$TF_LOG_DIR/apply.log"
           FOUNDATION_VALIDATE_LOG="$TF_LOG_DIR/foundation-validate.log"
           IDENTITY="$RUNNER_TEMP/development-plan-identity.json"
           MANIFEST="$EVIDENCE_DIR/development-release-manifest.json"
           VALIDATION="$RUNNER_TEMP/development-plan-validation.json"
-
-          cleanup() {
-            rm -rf -- "$PACKAGE_DIR" "$FOUNDATION_OUTPUT" "$FOUNDATION_VARS" "$FOUNDATION_INIT_LOG" \
-              "$FOUNDATION_OUTPUT_LOG" "$APPLICATION_INIT_LOG" "$PLAN" "$PLAN_LOG" "$PLAN_JSON" \
-              "$SHOW_LOG" "$APPLY_LOG" "$FOUNDATION_VALIDATE_LOG" "$IDENTITY" "$VALIDATION" \
-              "$RUNNER_TEMP/development-release-verification.json" \
-              "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform"
-            rm -f -- "$PROOF"
-            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
-          }
-          trap cleanup EXIT
 
           test -s "$PROOF"
           terraform -chdir=infra init -input=false -lockfile=readonly \
@@ -524,8 +530,64 @@ jobs:
           test "$MANIFEST_VALID" = true
           test "$IDENTITY_VALID" = true
           test "$VALIDATOR_STATUS" -eq 0
+          chmod 600 -- "$PLAN" "$PLAN_JSON" "$FOUNDATION_VARS"
 
-          terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1
+      - name: Fetch pinned RDS CA bundle for automatic migrations
+        run: |
+          set -euo pipefail
+          set +x
+          mkdir -p v2/infra/build/ca
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+            -o v2/infra/build/ca/rds-ca-bundle.pem
+          echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  v2/infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
+          chmod 600 v2/infra/build/ca/rds-ca-bundle.pem
+
+      - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_DEVELOPMENT_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}
+          tags: tag:ci-development
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-migrations-dev
+          aws-region: us-east-1
+          unset-current-credentials: true
+
+      - name: Run reviewed backward-compatible development migrations
+        run: bash v2/scripts/run_development_migrations_workflow.sh
+
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery
+          aws-region: us-east-1
+          unset-current-credentials: true
+
+      - name: Confirm delivery role before applying saved plan
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
+          case "$(aws sts get-caller-identity --query Arn --output text)" in
+            arn:aws:sts::903859731897:assumed-role/nova-toll-v2-development-delivery/*) ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Apply the same saved development plan
+        run: |
+          set -euo pipefail
+          RELEASE_ROOT="$RUNNER_TEMP/release-overlay"
+          PLAN="$RUNNER_TEMP/development.tfplan"
+          TF_LOG_DIR="$RUNNER_TEMP/development-terraform-logs"
+          APPLY_LOG="$TF_LOG_DIR/apply.log"
+          test -s "$PLAN"
+          if ! terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" \
+            >"$APPLY_LOG" 2>&1; then
+            echo "terraform stage failed: apply" >&2
+            exit 1
+          fi
+          rm -f -- "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/foundation-output.json" "$PLAN" "$RUNNER_TEMP/development.tfplan.json"
+          rm -rf -- "$TF_LOG_DIR"
 
       - name: Cleanup private delivery files
         if: always()
@@ -541,7 +603,8 @@ jobs:
             "$RUNNER_TEMP/development.tfshow.log" "$RUNNER_TEMP/development-apply.log" \
             "$RUNNER_TEMP/development-foundation-validate.log" "$RUNNER_TEMP/development-plan-identity.json" \
             "$RUNNER_TEMP/development-release-manifest.json" "$RUNNER_TEMP/development-plan-validation.json" \
-            "$RUNNER_TEMP/development-release-verification.json" \
-            "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform"
+            "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
+            "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform" \
+            "$GITHUB_WORKSPACE/v2/infra/build/ca"
           rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN

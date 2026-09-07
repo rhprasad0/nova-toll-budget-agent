@@ -4362,34 +4362,42 @@ holds that same identifier.
 
 ##### Protected development migration workflow (#305 slice 3)
 
-This workflow is a post-merge, protected development operation. The builder and
+This workflow is a post-merge, protected development operation. Only migration
+files whose backward-compatible status was reviewed by a human at merge may run
+automatically, and only against the fixed development database. The builder and
 CI checks do not assume the migration role, fetch an IAM token, connect to RDS,
 apply Terraform, bootstrap PostgreSQL, or dispatch a workflow. No live action is
 authorized from this graph run.
 
-After human review and merge, use a clean checkout of protected `origin/main`
-and follow this exact order:
+After human review and merge, the protected delivery job uses a clean checkout
+of protected `origin/main` and follows this exact order:
 
-1. Review the saved development foundation plan and apply only that exact plan
-   in account `903859731897` and region `us-east-1`, for example
-   `terraform -chdir=infra apply /private/reviewed/development-foundation.tfplan`.
-   Do not use a broad selector, `-target`, a new plan, or an apply from a dirty
-   worktree. Confirm the plan includes exactly one
-   `nova-toll-v2-development-migrations-dev` role with the trust and two RDS
-   permissions documented here.
-2. After the RDS instance is available and the protected private route/
-   transport proof passes, run the existing fresh development bootstrap in its
-   own protected step (`python3 v2/scripts/bootstrap_development_database.py
-   --fresh-development`). Keep the reviewed administrator URL, password, and
-   any IAM token in process memory only; never write them to a file, argument,
-   state, plan, log, summary, or artifact.
+1. Verify the release artifact, checkout `HEAD`, `GITHUB_SHA`, manifest commit,
+   migration inventory, registry, baseline, and canonical SQL bytes are exactly
+   equal before any delivery or migration credentials are available.
+2. Create one private saved Terraform plan and run the existing JSON
+   address/action gate. Do not apply or re-plan before migration; retain the
+   exact plan across the credential switch.
+3. After the RDS instance is available and the protected private route/
+   transport proof passes, assume only
+   `nova-toll-v2-development-migrations-dev` and run the fixed runner. Expected
+   `after` versions come from the verified release manifest. Keep the reviewed
+   administrator URL, password, and any IAM token in process memory only; never
+   write them to a file, argument, state, plan, log, summary, or artifact.
 
    When a canonical schema version advances, add its contiguous migration
    chain and append the matching immutable record to
    `v2/db/migration-baselines.json`. Existing manifest records must never be
    rewritten or deleted; this metadata change does not authorize a live action.
 
-3. Approve the protected `development` environment and dispatch
+4. Re-assume `nova-toll-v2-development-delivery` and apply the same saved plan
+   only after migration succeeds. The job uses the native
+   `v2-development-apply` queue shared with the manual migration workflow.
+
+The fixed manual recovery workflow remains available for an explicitly approved
+post-merge bootstrap or migration rehearsal after the reviewed foundation plan
+and fresh development bootstrap gates. Approve the protected `development`
+environment and dispatch
    `.github/workflows/v2-development-migrations.yml` from `refs/heads/main`:
 
    ```sh
@@ -4402,12 +4410,12 @@ and follow this exact order:
    address in `PGHOSTADDR`, and authenticates only as
    `schema_migrator_development`. It accepts no database, user, host, port,
    migration-path, role, or production target input. Keep
-   `DEVELOPMENT_DELIVERY_ENABLED` absent or `false` throughout this sequence.
+   `DEVELOPMENT_DELIVERY_ENABLED` absent or `false` during manual recovery.
 
 When the fresh bootstrap is current, the successful migration result must have
-canonical `after` versions `pricing=1.3.0` and `oracle=1.14.0` with
+canonical `after` versions equal to the verified release manifest with
 `applied=[]` (a non-current before state may contain only registered migration
-paths and must finish at those same canonical versions). Runner history evidence
+paths and must finish at those same manifest-bound versions). Runner history evidence
 uses exactly `commit=<40 lowercase hex>;run=<UUID>`; the workflow summary and
 artifact add only the commit, GitHub run identifiers, account, fixed role,
 database/user, before/after versions, applied paths, route/transport booleans,

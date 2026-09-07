@@ -323,7 +323,8 @@ def test_generated_history_evidence_is_fixed_and_nonsecret() -> None:
         "12345678-1234-4234-8234-123456789abc",
     )
     assert "commit=" + "c" * 40 + ";run=12345678-1234-4234-8234-123456789abc" in sql
-    assert "ON CONFLICT (schema_name, migration_id) DO NOTHING" in sql
+    assert "ON CONFLICT" not in sql
+    assert sql.index("source_sha256, evidence, is_baseline") < sql.index("COMMIT;")
     assert "UPDATE tollchat_migration.schema_history" not in sql
     assert "PGPASSWORD" not in sql
 
@@ -476,7 +477,7 @@ def test_run_renders_captured_committed_bytes(
     def fake_render(source_path: Path, destination: Path) -> None:
         rendered_sources.append(source_path)
         captured_source_bytes.append(source_path.read_bytes())
-        destination.write_bytes(source_path.read_bytes().replace(b"HEAD", b"DEV"))
+        destination.write_bytes(b"BEGIN;\nSELECT 'DEV';\nCOMMIT;\n")
 
     monkeypatch.setattr(runner.bootstrap, "render", fake_render)
 
@@ -547,7 +548,7 @@ def test_run_rejects_worktree_swap_after_capture(
     monkeypatch.setattr(runner, "_committed_bytes", fake_committed)
 
     def fake_render(source_path: Path, destination: Path) -> None:
-        destination.write_bytes(source_path.read_bytes())
+        destination.write_bytes(b"BEGIN;\nSELECT 1;\nCOMMIT;\n")
         source.write_bytes(b"swapped\n")
 
     monkeypatch.setattr(runner.bootstrap, "render", fake_render)
@@ -558,6 +559,79 @@ def test_run_rejects_worktree_swap_after_capture(
     monkeypatch.setattr(runner.subprocess, "run", fail_psql)
     with pytest.raises(runner.MigrationError, match="worktree migration differs"):
         runner.run()
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "BEGIN;\nSELECT 1;\nCOMMIT;\n",
+        "begin;\nSELECT 1;\ncommit;\n",
+        "-- preamble\n\\set ON_ERROR_STOP on\n\nBEGIN;\nSELECT 1;\nCOMMIT;\n",
+        "BEGIN;\nSELECT CASE WHEN true THEN 1 END AS result;\nCOMMIT;\n",
+        "BEGIN;\nSELECT CASE WHEN true THEN 1 END, 2;\nCOMMIT;\n",
+        "BEGIN;\nSELECT CASE WHEN true THEN 1 END;\nCOMMIT;\n",
+        "BEGIN;\nSELECT true\n\\gset\n\\if :result\nSELECT 1;\n\\endif\nCOMMIT;\n",
+    ],
+)
+def test_private_render_removes_only_supported_terminal_commit(
+    tmp_path: Path, sql: str
+) -> None:
+    path = tmp_path / "migration.sql"
+    path.write_text(sql, encoding="utf-8")
+    runner._remove_terminal_commit(path)
+    assert path.read_text(encoding="utf-8") == sql.replace("COMMIT;", "").replace(
+        "commit;", ""
+    )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1;\n",
+        "SELECT 1;\nBEGIN;\nSELECT 2;\nCOMMIT;\n",
+        "BEGIN;\nCOMMIT;\nCOMMIT;\n",
+        "BEGIN;\nROLLBACK;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1;\nEND;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1;\nABORT;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1;\nPREPARE TRANSACTION 'x';\nCOMMIT;\n",
+        "BEGIN ISOLATION LEVEL SERIALIZABLE;\nSELECT 1;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; COMMIT;\nBEGIN; SELECT 2;\nCOMMIT;\n",
+        "begin;\nselect 1; commit;\nbegin; select 2;\ncommit;\n",
+        "BEGIN;\nSELECT 1; END TRANSACTION;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END\nTRANSACTION;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END\nWORK;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END AND CHAIN;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END WORK AND NO CHAIN;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END\f;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END\v;\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; END\\g\nCOMMIT;\n",
+        "BEGIN;\nSELECT true\n\\gset\nEND;\nCOMMIT;\n",
+        "BEGIN;\n\\include other.sql\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1 AS foo$tag$;\nCOMMIT;\nSELECT 1 AS bar$tag$;\nCOMMIT;\n",
+        "BEGIN;\nSELECT E'foo\\''; COMMIT; SELECT E'bar\\''; COMMIT;\n",
+        "BEGIN;\n/* outer /* inner */ SELECT 1; */\nCOMMIT;\n",
+        "BEGIN;\nSELECT 1; rollback to savepoint migration_savepoint;\nCOMMIT;\n",
+        "BEGIN;\nCOMMIT WORK;\n",
+        "BEGIN;\nCOMMIT;\nSELECT 1;\n",
+    ],
+)
+def test_private_render_rejects_unsupported_transaction_shape(
+    tmp_path: Path, sql: str
+) -> None:
+    path = tmp_path / "migration.sql"
+    path.write_text(sql, encoding="utf-8")
+    with pytest.raises(runner.MigrationError, match="transaction shape"):
+        runner._remove_terminal_commit(path)
+
+
+def test_private_render_accepts_every_registered_migration(tmp_path: Path) -> None:
+    schemas, _ = runner._registry()
+    migrations = runner._migration_candidates(schemas)
+    assert migrations
+    for migration in migrations:
+        destination = tmp_path / Path(migration.path).name
+        runner.bootstrap.render(runner.ROOT / migration.path, destination)
+        runner._remove_terminal_commit(destination)
 
 
 def test_result_parser_returns_only_marked_values() -> None:

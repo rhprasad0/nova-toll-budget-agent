@@ -73,11 +73,14 @@ unchanged unless the user explicitly requests an application-agent change.
 - PRs use disposable migration validation only: the checks are credential-free,
   never mutate deployed databases or schemas, and never expose production
   deployment credentials.
-- After merge, the protected `development` migration workflow may be manually
-  dispatched only from `refs/heads/main`; it uses the fixed development
-  database, role, and registered migration set, and emits sanitized evidence.
-  It is separate from disposable PR checks and accepts no arbitrary target or
-  migration inputs.
+- After merge, only human-reviewed backward-compatible development migrations
+  may run through the protected exact-release delivery sequence: verify the
+  artifact and checkout, create and gate one saved private plan, migrate under
+  the fixed development role, re-assume the delivery role, and apply that exact
+  plan. This is the protected `development` migration workflow. The fixed
+  manual workflow remains main-only from `refs/heads/main` for approved recovery; both paths use the
+  fixed development database, role, registered migration set, and sanitized
+  evidence. Neither accepts arbitrary target or migration inputs.
 - For production, only the reviewed, explicitly authorized Oracle migration
   `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` may be applied to
   a deployed database, and only by following its bounded procedure in

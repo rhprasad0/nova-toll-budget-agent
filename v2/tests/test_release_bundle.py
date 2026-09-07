@@ -90,6 +90,147 @@ def _bundle(fixture_root: Path, tmp_path: Path) -> tuple[Path, Path]:
     return archive, release
 
 
+def _patch_checkout_sources(
+    fixture_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, bytes]:
+    migration = "v2/db/migrations/001_create_pricing_schema.sql"
+    committed = {
+        relative: (fixture_root / relative).read_bytes()
+        for relative in (*bundle.SOURCE_FIXED_PATHS, migration)
+    }
+
+    def checkout_commit(_root: Path) -> str:
+        return COMMIT
+
+    def committed_bytes(_root: Path, relative: str) -> bytes:
+        return committed[relative]
+
+    monkeypatch.setattr(bundle, "_checkout_commit", checkout_commit)
+    monkeypatch.setattr(bundle, "_committed_bytes", committed_bytes)
+    return committed
+
+
+def _verify_with_checkout(
+    archive: Path,
+    fixture_root: Path,
+    output: Path,
+    *,
+    expected_commit: str = COMMIT,
+) -> None:
+    bundle.verify_bundle(
+        archive,
+        output,
+        fixture_root,
+        _digest(archive),
+        expected_commit,
+        {"pricing": "1.3.0", "oracle": "1.14.0"},
+        verify_checkout=True,
+    )
+
+
+def test_verify_checkout_accepts_exact_head_sources(
+    fixture_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive, _ = _bundle(fixture_root, tmp_path)
+    _patch_checkout_sources(fixture_root, monkeypatch)
+
+    _verify_with_checkout(archive, fixture_root, tmp_path / "overlay")
+
+
+def test_verify_checkout_rejects_head_candidate_mismatch(
+    fixture_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive, _ = _bundle(fixture_root, tmp_path)
+    _patch_checkout_sources(fixture_root, monkeypatch)
+
+    def wrong_checkout_commit(_root: Path) -> str:
+        return "b" * 40
+
+    monkeypatch.setattr(bundle, "_checkout_commit", wrong_checkout_commit)
+    output = tmp_path / "overlay"
+
+    with pytest.raises(bundle.BundleError, match="checked-out commit"):
+        _verify_with_checkout(archive, fixture_root, output)
+    assert not output.exists()
+
+
+def test_verify_checkout_rejects_candidate_argument_mismatch(
+    fixture_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive, _ = _bundle(fixture_root, tmp_path)
+    _patch_checkout_sources(fixture_root, monkeypatch)
+    output = tmp_path / "overlay"
+
+    with pytest.raises(bundle.BundleError, match="checked-out commit"):
+        _verify_with_checkout(archive, fixture_root, output, expected_commit="b" * 40)
+    assert not output.exists()
+
+
+def test_verify_checkout_rejects_archive_source_mismatch(
+    fixture_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive, release = _bundle(fixture_root, tmp_path)
+    committed = _patch_checkout_sources(fixture_root, monkeypatch)
+    migration = "v2/db/migrations/001_create_pricing_schema.sql"
+
+    def mutate(entries: list[Entry]) -> list[Entry]:
+        changed = b"archive source changed"
+        manifest = json.loads(
+            next(data for name, data, _mode in entries if name == bundle.MANIFEST_NAME)
+        )
+        for record in manifest["files"]:
+            if record["path"] == migration:
+                record["sha256"] = hashlib.sha256(changed).hexdigest()
+        manifest_bytes = (
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        )
+        return [
+            (
+                name,
+                manifest_bytes
+                if name == bundle.MANIFEST_NAME
+                else changed
+                if name == migration
+                else data,
+                mode,
+            )
+            for name, data, mode in entries
+        ]
+
+    _archive(release, archive, mutate=mutate)
+    output = tmp_path / "overlay"
+    with pytest.raises(bundle.BundleError, match="bundle source differs from HEAD"):
+        _verify_with_checkout(archive, fixture_root, output)
+    assert committed[migration] == (fixture_root / migration).read_bytes()
+    assert not output.exists()
+
+
+def test_verify_checkout_rejects_worktree_source_mismatch(
+    fixture_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive, _ = _bundle(fixture_root, tmp_path)
+    _patch_checkout_sources(fixture_root, monkeypatch)
+    (fixture_root / "v2/db/schema.sql").write_bytes(b"malformed source")
+    output = tmp_path / "overlay"
+
+    with pytest.raises(bundle.BundleError, match="checkout source differs"):
+        _verify_with_checkout(archive, fixture_root, output)
+    assert not output.exists()
+
+
+def test_verify_checkout_rejects_extra_migration_inventory(
+    fixture_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive, _ = _bundle(fixture_root, tmp_path)
+    _patch_checkout_sources(fixture_root, monkeypatch)
+    (fixture_root / "v2/db/migrations/999_untracked.sql").write_bytes(b"extra")
+    output = tmp_path / "overlay"
+
+    with pytest.raises(bundle.BundleError, match="migration inventory"):
+        _verify_with_checkout(archive, fixture_root, output)
+    assert not output.exists()
+
+
 def test_valid_bundle_is_verified_and_extracted(
     fixture_root: Path, tmp_path: Path
 ) -> None:
