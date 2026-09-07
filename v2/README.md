@@ -62,6 +62,10 @@ the [manual Oracle migration 030 procedure](RUNBOOK.md#manual-oracle-migration-0
 
 ## Verify the build
 
+The unapplied [analytics retirement plan](plans/ANALYTICS-RETIREMENT-PLAN.md)
+documents the source-retired usage and agent-route analytics scopes without
+granting execution authority.
+
 From `v2/`, run the core application checks and deterministic release builds:
 
 ```sh
