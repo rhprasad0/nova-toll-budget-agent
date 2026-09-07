@@ -11,7 +11,6 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
@@ -557,22 +556,6 @@ def _without_runtime_fields(value: Any) -> Any:  # noqa: ANN401
     return value
 
 
-def _result_fingerprint(
-    documents: list[dict[str, Any]], point_slugs: dict[str, str]
-) -> str:
-    canonical = json.dumps(
-        {
-            "publication_format_version": PUBLICATION_FORMAT_VERSION,
-            "point_slugs": point_slugs,
-            "reports": _without_runtime_fields(documents),
-        },
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    return hashlib.sha256(canonical.encode()).hexdigest()
-
-
 def _display_time(value: str | None) -> str:
     if value is None:
         return "Unavailable"
@@ -879,136 +862,6 @@ def _read_manifest(s3_client: _S3Client, bucket: str) -> dict[str, Any] | None:
     return cast(dict[str, Any], manifest)
 
 
-def _put_phase(
-    s3_client: _S3Client,
-    bucket: str,
-    objects: list[tuple[str, str, str, str]],
-) -> None:
-    def put(value: tuple[str, str, str, str]) -> None:
-        key, body, content_type, cache_control = value
-        s3_client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=body.encode(),
-            ContentType=content_type,
-            CacheControl=cache_control,
-        )
-
-    with ThreadPoolExecutor(max_workers=min(8, len(objects))) as executor:
-        list(executor.map(put, objects))
-
-
-def _publish_generation(  # pyright: ignore[reportUnusedFunction]
-    generation: Generation,
-    s3_client: _S3Client,
-    bucket: str,
-    published_at: datetime,
-) -> dict[str, Any]:
-    raise RuntimeError(
-        "legacy in-memory publication was removed; use _publish_streamed"
-    )
-
-    previous = _read_manifest(s3_client, bucket)
-    endpoints = [
-        endpoint
-        for route in generation.routes
-        for endpoint in (route.origin, route.destination)
-    ]
-    existing_slugs = (
-        cast(dict[str, str], previous["point_slugs"]) if previous is not None else None
-    )
-    point_slugs = _build_slug_map(endpoints, existing_slugs)
-    documents: list[dict[str, Any]] = []
-    result_sha256 = _result_fingerprint(documents, point_slugs)
-    if previous is not None:
-        previous_watermark = previous.get("source_watermark")
-        if (
-            isinstance(previous_watermark, str)
-            and generation.source_watermark is not None
-            and generation.source_watermark
-            < _aware_timestamp(previous_watermark, label="manifest source watermark")
-        ):
-            return {"status": "superseded", "result_sha256": result_sha256}
-        if previous["result_sha256"] == result_sha256:
-            return {"status": "unchanged", "result_sha256": result_sha256}
-
-    json_objects = [
-        (
-            f"{_route_key(document, point_slugs)}/report.json",
-            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            "application/json; charset=utf-8",
-            PUBLIC_CACHE_CONTROL,
-        )
-        for document in documents
-    ]
-    html_objects = [
-        (
-            f"{_route_key(document, point_slugs)}/index.html",
-            _render_report_html(
-                document,
-                f"{PUBLIC_BASE_URL}/{_route_key(document, point_slugs)}/",
-            ),
-            "text/html; charset=utf-8",
-            PUBLIC_CACHE_CONTROL,
-        )
-        for document in documents
-    ]
-    route_index = _render_index_html(documents, point_slugs)
-    sitemap = _render_sitemap(documents, point_slugs, published_at)
-    manifest = {
-        "schema_version": "2.0.0",
-        "publication_format_version": PUBLICATION_FORMAT_VERSION,
-        "facility": generation.facility,
-        "generation_id": _utc_text(generation.generation_id),
-        "published_at": _utc_text(published_at),
-        "source_watermark": _utc_text(generation.source_watermark),
-        "result_sha256": result_sha256,
-        "route_count": len(documents),
-        "point_slugs": point_slugs,
-    }
-
-    _put_phase(s3_client, bucket, json_objects)
-    _put_phase(s3_client, bucket, html_objects)
-    _put_phase(
-        s3_client,
-        bucket,
-        [
-            (
-                f"{PUBLIC_PREFIX}/index.html",
-                route_index,
-                "text/html; charset=utf-8",
-                PUBLIC_CACHE_CONTROL,
-            )
-        ],
-    )
-    _put_phase(
-        s3_client,
-        bucket,
-        [
-            (
-                "sitemap.xml",
-                sitemap,
-                "application/xml; charset=utf-8",
-                PUBLIC_CACHE_CONTROL,
-            )
-        ],
-    )
-    _put_phase(
-        s3_client,
-        bucket,
-        [
-            (
-                MANIFEST_KEY,
-                json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
-                + "\n",
-                "application/json; charset=utf-8",
-                MANIFEST_CACHE_CONTROL,
-            )
-        ],
-    )
-    return {"status": "published", "result_sha256": result_sha256}
-
-
 def _connect(*, reader: bool = False) -> object:
     import psycopg  # type: ignore[import-not-found]
     from psycopg.rows import dict_row  # type: ignore[import-not-found]
@@ -1248,7 +1101,7 @@ def _put_object(
 
 
 def _incremental_prefix(point_slugs: dict[str, str]) -> bytes:
-    # This is the exact sorted outer object prefix used by _result_fingerprint.
+    # This is the exact sorted outer object prefix used by the streamed digest.
     return (
         json.dumps(
             {

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_tools import current_price_domain as pricing_domain
 from agent_tools import get_annual_toll_ballpark as ballpark_tool
 from agent_tools import get_current_toll_price as pricing_tool
 from scripts import check_tool_contract_versions as version_check
@@ -34,24 +35,24 @@ def _digest(value):
 def test_runtime_spec_and_generated_contract_match_models():
     assert pricing_tool.get_current_toll_price.tool_spec == pricing_tool.TOOL_SPEC
     assert pricing_tool.TOOL_SPEC["inputSchema"] == {
-        "json": pricing_tool._PricingRequest.model_json_schema(mode="validation")
+        "json": pricing_domain._PricingRequest.model_json_schema(mode="validation")
     }
     assert pricing_tool.TOOL_SPEC.get("outputSchema") == {
-        "json": pricing_tool._OUTPUT_ADAPTER.json_schema(mode="serialization")
+        "json": pricing_domain._OUTPUT_ADAPTER.json_schema(mode="serialization")
     }
     assert {
         "toolSpec": pricing_tool.TOOL_SPEC,
-        "progressEventSchema": pricing_tool._ProgressEvent.model_json_schema(
+        "progressEventSchema": pricing_domain._ProgressEvent.model_json_schema(
             mode="serialization"
         ),
         "progressMessages": {
             f"{stage}.{status}": message
-            for (stage, status), message in pricing_tool._PROGRESS_MESSAGES.items()
+            for (stage, status), message in pricing_domain._PROGRESS_MESSAGES.items()
         },
-        "operationErrorSchema": pricing_tool._OperationError.model_json_schema(
+        "operationErrorSchema": pricing_domain._OperationError.model_json_schema(
             mode="serialization"
         ),
-        "operationErrorTemplate": pricing_tool._SAFE_ERROR,
+        "operationErrorTemplate": pricing_domain._SAFE_ERROR,
     } == pricing_tool.TOOL_CONTRACT
 
 

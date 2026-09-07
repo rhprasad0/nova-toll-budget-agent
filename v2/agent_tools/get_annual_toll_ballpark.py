@@ -21,7 +21,7 @@ from pydantic import (
 from strands import tool  # pyright: ignore[reportUnknownVariableType]
 from strands.types.tools import ToolContext, ToolResult, ToolSpec
 
-from agent_tools import get_current_toll_price as current_pricing
+from agent_tools import current_price_domain as current_pricing
 from agent_tools import validate_toll_route as route_validation
 
 logger = logging.getLogger(__name__)

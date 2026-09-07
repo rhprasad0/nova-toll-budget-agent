@@ -88,9 +88,9 @@ archive/delete-approved, not an implicit consequence of deleting bucket data.
 
 The active publisher is not a retirement target: `handler` calls
 `_publish_streamed` and writes public route report objects, index, sitemap, and
-manifest ([publisher](../lambdas/publisher/handler.py#L1266-L1448),
-[entrypoint](../lambdas/publisher/handler.py#L1488-L1550)). Preserve report
-publication, freshness, and output contracts. Preserve independent WAF
+manifest ([handler.py](../lambdas/publisher/handler.py); symbols
+`_publish_streamed` and `handler`). Preserve report publication, freshness, and
+output contracts. Preserve independent WAF
 enforcement and security logging; if live logging still targets a listed
 location, map that dependency before any deletion and do not disable it as an
 analytics stop.

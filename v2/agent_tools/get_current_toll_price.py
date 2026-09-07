@@ -28,8 +28,3 @@ async def get_current_toll_price(
 
 
 get_current_toll_price.tool_spec = TOOL_SPEC  # pyright: ignore[reportAttributeAccessIssue]
-
-
-def __getattr__(name: str) -> Any:  # noqa: ANN401
-    """Keep characterized helpers reachable during the module split."""
-    return getattr(_domain, name)

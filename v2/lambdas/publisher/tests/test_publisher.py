@@ -585,29 +585,6 @@ def test_schema_two_document_and_accessible_html_expose_only_evidence():
     assert '<link rel="alternate" type="application/json" href="report.json">' in page
 
 
-def test_result_fingerprint_ignores_generation_times(monkeypatch):
-    document = {
-        "generation": {
-            "generation_id": "a",
-            "published_at": "b",
-            "source_watermark": "c",
-        },
-        "route": {},
-    }
-    later = {
-        "generation": {
-            "generation_id": "d",
-            "published_at": "e",
-            "source_watermark": "f",
-        },
-        "route": {},
-    }
-    fingerprint = publisher._result_fingerprint([document], {})
-    assert fingerprint == publisher._result_fingerprint([later], {})
-    monkeypatch.setattr(publisher, "PUBLICATION_FORMAT_VERSION", "2")
-    assert publisher._result_fingerprint([document], {}) != fingerprint
-
-
 class _MissingObject(Exception):
     def __init__(self):
         super().__init__("missing object")
@@ -1537,9 +1514,8 @@ def test_enabled_supersession_logging_preserves_its_reason(
     assert report.closed and reader.closed
 
 
-def test_publication_uses_phase_barriers_manifest_last_and_then_noops(monkeypatch):
+def test_streamed_publication_is_manifest_last(monkeypatch):
     monkeypatch.setattr(publisher, "EXPECTED_ROUTE_COUNT", 685)
-    generation = publisher.build_generation(_report_rows())
     s3 = _FakeS3()
     result, _, _ = publisher._publish_streamed(
         _StreamingCursor(
@@ -1577,121 +1553,6 @@ def test_publication_uses_phase_barriers_manifest_last_and_then_noops(monkeypatc
     )
     assert s3.puts[-1]["Key"] == publisher.MANIFEST_KEY
     assert s3.puts[-1]["CacheControl"] == publisher.MANIFEST_CACHE_CONTROL
-    return
-
-    result = publisher._publish_generation(
-        generation, s3, "site-bucket", EVALUATED_AT.replace(minute=7)
-    )
-
-    assert result["status"] == "published"
-    assert s3.lists == [
-        {
-            "Bucket": "site-bucket",
-            "Prefix": publisher.MANIFEST_KEY,
-            "MaxKeys": 1,
-        }
-    ]
-    keys = [put["Key"] for put in s3.puts]
-    assert len(keys) == 1373
-    assert all(key.endswith("report.json") for key in keys[:685])
-    assert all(key.endswith("index.html") for key in keys[685:1370])
-    assert keys[-3:] == [
-        "tolls/i95-i495/index.html",
-        "sitemap.xml",
-        "tolls/i95-i495/manifest.json",
-    ]
-    manifest = json.loads(s3.objects[keys[-1]])
-    assert (
-        manifest["publication_format_version"] == publisher.PUBLICATION_FORMAT_VERSION
-    )
-    assert manifest["route_count"] == 685
-    assert len(manifest["point_slugs"]) == 1370
-    assert s3.objects["sitemap.xml"].count(b"<url>") == 685
-    assert s3.objects["tolls/i95-i495/index.html"].count(b"<li>") == 685
-    assert (
-        b'<link rel="canonical" href="https://tollchat.ai/tolls/i95-i495/">'
-        in s3.objects["tolls/i95-i495/index.html"]
-    )
-    report_key = next(key for key in keys if key.endswith("/index.html"))
-    assert (
-        f'<link rel="canonical" href="https://tollchat.ai/{report_key.removesuffix("index.html")}">'.encode()
-        in s3.objects[report_key]
-    )
-    assert s3.puts[0]["CacheControl"] == "public, max-age=300"
-    assert s3.puts[-1]["CacheControl"] == "no-cache"
-
-    put_count = len(s3.puts)
-    no_op = publisher._publish_generation(
-        generation, s3, "site-bucket", EVALUATED_AT.replace(minute=8)
-    )
-    assert no_op["status"] == "unchanged"
-    assert len(s3.puts) == put_count
-
-    manifest["source_watermark"] = "2026-08-25T16:10:00Z"
-    s3.objects[publisher.MANIFEST_KEY] = json.dumps(manifest).encode()
-    superseded = publisher._publish_generation(
-        generation, s3, "site-bucket", EVALUATED_AT.replace(minute=9)
-    )
-    assert superseded["status"] == "superseded"
-    assert len(s3.puts) == put_count
-
-
-@pytest.mark.parametrize(
-    "failed_suffix",
-    [
-        "report.json",
-        "index.html",
-        "tolls/i95-i495/index.html",
-        "sitemap.xml",
-        "tolls/i95-i495/manifest.json",
-    ],
-)
-def test_failed_publication_does_not_advance_manifest(failed_suffix):
-    generation = publisher.build_generation(_report_rows())
-    s3 = _FakeS3(fail_suffix=failed_suffix)
-    with pytest.raises(RuntimeError, match="legacy"):
-        publisher._publish_generation(generation, s3, "site-bucket", EVALUATED_AT)
-    return
-
-    with pytest.raises(RuntimeError, match="injected"):
-        publisher._publish_generation(
-            generation, s3, "site-bucket", EVALUATED_AT.replace(minute=7)
-        )
-
-    assert "tolls/i95-i495/manifest.json" not in s3.objects
-
-
-def test_retry_repairs_an_interrupted_publication():
-    original = publisher.build_generation(_report_rows())
-    with pytest.raises(RuntimeError, match="legacy"):
-        publisher._publish_generation(original, _FakeS3(), "site-bucket", EVALUATED_AT)
-    return
-    changed = original.model_copy(deep=True)
-    changed.routes[0].current_price["components"][0]["price_usd"] = "2.34"
-    changed.routes[0].current_price["total_usd"] = "2.34"
-    first_published_at = EVALUATED_AT.replace(minute=7)
-    changed_published_at = EVALUATED_AT.replace(minute=8)
-    s3 = _FakeS3()
-    publisher._publish_generation(original, s3, "site-bucket", first_published_at)
-
-    expected = _FakeS3()
-    expected.objects = copy.deepcopy(s3.objects)
-    publisher._publish_generation(
-        changed, expected, "site-bucket", changed_published_at
-    )
-
-    s3.fail_suffix = "index.html"
-    with pytest.raises(RuntimeError, match="injected"):
-        publisher._publish_generation(changed, s3, "site-bucket", changed_published_at)
-    s3.fail_suffix = None
-
-    result = publisher._publish_generation(
-        changed, s3, "site-bucket", changed_published_at
-    )
-
-    assert result["status"] == "published"
-    assert len(s3.objects) == 1373
-    assert s3.objects == expected.objects
 
 
 def test_disabled_handler_never_opens_s3(monkeypatch):
