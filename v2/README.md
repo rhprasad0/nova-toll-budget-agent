@@ -97,8 +97,9 @@ until docker exec "$container_id" pg_isready --username "$PGUSER" --dbname postg
 v2/scripts/run_db_tests.sh "$(git rev-parse HEAD^)"
 ```
 
-Production deployment is manual; CI never runs `terraform plan` or `apply`.
-Follow the [deployment runbook](RUNBOOK.md) for the reviewed saved-plan,
+Production deployment is manual; PR CI never runs `terraform plan` or `apply`.
+The manual production planner stores only a reviewed, gated saved plan. Follow
+the [deployment runbook](RUNBOOK.md) for the reviewed saved-plan,
 smoke-test, rollout, and rollback procedures.
 
 The public interface at `tollchat.ai` uses a private S3 origin for the v2 site

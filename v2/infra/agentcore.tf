@@ -453,6 +453,7 @@ resource "aws_iam_role_policy" "tollchat_proxy" {
 resource "aws_cloudwatch_log_group" "tollchat_proxy" {
   name              = "/aws/lambda/tollchat-v2-chat-proxy${local.suffix}"
   retention_in_days = local.log_retention_days
+  tags              = local.is_production ? { delivery_proof = "issue-301" } : {}
 }
 
 resource "aws_lambda_function" "tollchat_proxy" {

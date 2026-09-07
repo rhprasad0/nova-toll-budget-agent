@@ -1,7 +1,8 @@
 # AgentCore deployment
 
-Deployments are manual. CI builds and tests the application but never runs a
-Terraform plan or apply.
+Deployments are manual. PR CI builds and tests the application but never runs a
+Terraform plan or apply; the manual production planner stores only a gated
+saved plan.
 
 ## Delivery contract and production baseline
 

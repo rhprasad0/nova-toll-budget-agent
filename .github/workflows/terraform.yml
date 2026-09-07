@@ -5,9 +5,9 @@ permissions:
 on:
   push:
     branches: ["main"]
-    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
+    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml"]
   pull_request:
-    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml"]
+    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
