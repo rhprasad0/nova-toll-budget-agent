@@ -3469,19 +3469,6 @@ def test_production_deploy_session_policy_payload_stays_within_sts_limit():
     assert (2048 - split_sizes[0], 2048 - split_sizes[1]) == (1291, 910)
 
 
-def _development_plan_gate_script(source: str) -> str:
-    workflow = cast(dict[str, object], yaml.safe_load(source))
-    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    deploy_source = _workflow_run_source(jobs["deploy"])
-    match = re.search(
-        r"python3 - \"\$PLAN_JSON\" <<'PY'\n(.*?)\nPY",
-        deploy_source,
-        flags=re.DOTALL,
-    )
-    assert match, "the workflow must embed the plan gate"
-    return dedent(match.group(1))
-
-
 def _development_foundation_validator(source: str) -> str:
     workflow = cast(dict[str, object], yaml.safe_load(source))
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
@@ -3618,33 +3605,6 @@ def test_development_foundation_output_validators_fail_closed_and_match():
         runbook_result = _jq_validator_accepts(runbook_predicate, payload)
         assert workflow_result == runbook_result, label
         assert workflow_result is expected, label
-
-
-def _run_development_plan_gate(payload: object, *, raw: bool = False) -> bool:
-    script = _development_plan_gate_script(DEVELOPMENT_DELIVERY_WORKFLOW)
-    with tempfile.TemporaryDirectory() as directory:
-        plan = Path(directory) / "plan.json"
-        if raw:
-            plan.write_text(cast(str, payload), encoding="utf-8")
-        else:
-            plan.write_text(json.dumps(payload), encoding="utf-8")
-        result = subprocess.run(
-            [sys.executable, "-", str(plan)],
-            input=script,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    return result.returncode == 0
-
-
-def _synthetic_change(
-    mode: str, address: str, actions: list[str], **after: object
-) -> dict[str, object]:
-    change: dict[str, object] = {"actions": actions}
-    if after:
-        change["after"] = after
-    return {"address": address, "mode": mode, "change": change}
 
 
 def _assert_development_delivery_workflow(source: str) -> None:
@@ -3870,28 +3830,30 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert "-var-file=development.tfvars" in deploy_source
     assert 'terraform -chdir=v2/infra plan -input=false -out="$PLAN"' in deploy_source
-    assert 'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"' in deploy_source
-    assert "python3 - \"$PLAN_JSON\" <<'PY'" in deploy_source
     assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in deploy_source
+    assert (
+        deploy_source.count('terraform -chdir=v2/infra plan -input=false -out="$PLAN"')
+        == 1
+    )
+    assert (
+        deploy_source.count('terraform -chdir=v2/infra apply -input=false "$PLAN"') == 1
+    )
     assert deploy_source.index(
-        'terraform -chdir=v2/infra show -json "$PLAN"'
+        'terraform -chdir=v2/infra plan -input=false -out="$PLAN"'
     ) < deploy_source.index('terraform -chdir=v2/infra apply -input=false "$PLAN"')
-    assert "known_managed" in deploy_source and "known_data" in deploy_source
-    assert "immutable" in deploy_source and "read_only" in deploy_source
-    assert "moved/deposed change" in deploy_source
-    for manual_address in (
-        "aws_api_gateway_rest_api.tollchat",
-        "aws_api_gateway_method.tollchat_root",
-        "aws_athena_named_query.top_routes",
-        "aws_security_group.tollchat_runtime",
-        "aws_vpc_security_group_ingress_rule.rds_from_runtime",
-        "aws_sqs_queue.delivery_failure",
-        "aws_sqs_queue.invoke_failure",
-        "aws_sqs_queue.publisher_delivery_failure",
-        "aws_sqs_queue.publisher_invoke_failure",
-        "aws_sqs_queue_policy.delivery_failure",
+    for removed in (
+        "PLAN_JSON",
+        'terraform -chdir=v2/infra show -json "$PLAN"',
+        "python3 - \"$PLAN_JSON\" <<'PY'",
+        "known_managed",
+        "known_data",
+        "read_only",
+        "immutable",
+        "teardown_deletions",
+        "moved/deposed change",
+        "development plan gate failed closed",
     ):
-        assert manual_address in deploy_source
+        assert removed not in deploy_source
     for package in (
         "build/loader.zip",
         "build/publisher.zip",
@@ -5668,11 +5630,10 @@ def _assert_development_bootstrap_contract(script: str) -> None:
     assert (
         'terraform -chdir="$ROOT/v2/infra" show -json "$REPRESENTATIVE_PLAN"' in script
     )
-    assert (
-        'PLAN_GATE_SOURCE="$ROOT/.github/workflows/v2-development-delivery.yml"'
-        in script
-    )
-    assert 'python3 "$PLAN_GATE" "$REPRESENTATIVE_PLAN_JSON"' in script
+    assert "PLAN_GATE_SOURCE" not in script
+    assert "PLAN_GATE" not in script
+    assert "development-plan-gate.py" not in script
+    assert 'python3 "$PLAN_GATE" "$REPRESENTATIVE_PLAN_JSON"' not in script
     assert "PROTECTED_MAIN_OIDC_EVIDENCE" in script
     assert "protected-main-oidc" in script
     assert 'jq -e --arg commit "$REVIEWED_COMMIT"' in script
@@ -7559,404 +7520,6 @@ def test_development_foundation_runbook_shell_blocks_initialize_handoffs():
     assert step5.index('RDS_ENDPOINT="$(aws') < step5.index(
         'getent ahostsv4 "$RDS_ENDPOINT"'
     )
-
-
-def test_development_delivery_plan_gate_accepts_only_reviewed_addresses_and_actions():
-    assert _run_development_plan_gate({"resource_changes": []})
-    assert _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change("managed", "aws_lambda_function.loader", ["update"])
-            ]
-        }
-    )
-    assert _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change(
-                    "managed", "aws_lambda_function_url.public_chat", ["no-op"]
-                )
-            ]
-        }
-    )
-    assert _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change(
-                    "managed", "aws_cloudfront_function.public_chat_routes", ["update"]
-                )
-            ]
-        }
-    )
-    for actions in (["create"], ["delete"], ["create", "delete"], ["delete", "create"]):
-        assert _run_development_plan_gate(
-            {
-                "resource_changes": [
-                    _synthetic_change(
-                        "managed", "aws_api_gateway_deployment.tollchat", list(actions)
-                    )
-                ]
-            }
-        )
-    assert _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change(
-                    "managed", "aws_bedrock_guardrail_version.tollchat", ["create"]
-                )
-            ]
-        }
-    )
-    for actions in (["update"], ["delete"], ["create", "delete"], ["delete", "create"]):
-        assert not _run_development_plan_gate(
-            {
-                "resource_changes": [
-                    _synthetic_change(
-                        "managed",
-                        "aws_bedrock_guardrail_version.tollchat",
-                        list(actions),
-                    )
-                ]
-            }
-        )
-    assert _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change("data", "data.aws_region.current", ["read"])
-            ]
-        }
-    )
-
-    for mode, address, actions in (
-        ("data", "data.aws_iam_policy_document.route_control_assume[0]", ["read"]),
-        ("data", "data.aws_iam_policy_document.route_control[0]", ["read"]),
-        ("managed", "aws_ssm_document.route_control[0]", ["create"]),
-        ("managed", "aws_iam_role.route_control[0]", ["create"]),
-        ("managed", "aws_iam_role_policy.route_control[0]", ["create"]),
-    ):
-        assert not _run_development_plan_gate(
-            {"resource_changes": [_synthetic_change(mode, address, actions)]}
-        )
-    for mode, address, actions in (
-        ("managed", "aws_ssm_document.route_control[0]", ["update"]),
-        ("managed", "aws_iam_role.route_control[0]", ["update"]),
-        ("managed", "aws_iam_role_policy.route_control[0]", ["update"]),
-        ("managed", "aws_ssm_document.route_control[0]", ["no-op"]),
-        ("managed", "aws_iam_role.route_control[0]", ["no-op"]),
-        ("managed", "aws_iam_role_policy.route_control[0]", ["no-op"]),
-        ("managed", "aws_iam_role.route_control_extra", ["create"]),
-        ("managed", "aws_ssm_document.other", ["create"]),
-        (
-            "data",
-            "data.aws_iam_policy_document.route_control_extra",
-            ["read"],
-        ),
-    ):
-        assert not _run_development_plan_gate(
-            {"resource_changes": [_synthetic_change(mode, address, actions)]}
-        )
-
-    assert not _run_development_plan_gate({}, raw=False)
-    assert not _run_development_plan_gate("not-json", raw=True)
-    assert not _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change("managed", "aws_unknown_resource.x", ["update"])
-            ]
-        }
-    )
-    for actions in (
-        ["read"],
-        ["replace"],
-        ["update", "delete"],
-        ["delete", "update"],
-        ["create", "update"],
-    ):
-        assert not _run_development_plan_gate(
-            {
-                "resource_changes": [
-                    _synthetic_change(
-                        "managed", "aws_lambda_function.loader", list(actions)
-                    )
-                ]
-            }
-        )
-
-    retired_usage_resources = (
-        "aws_iam_role.usage_publisher",
-        "aws_iam_role_policy.usage_publisher",
-        "aws_lambda_function.usage_publisher",
-        "aws_cloudwatch_event_rule.usage_publisher",
-        "aws_cloudwatch_event_target.usage_publisher",
-        "aws_lambda_permission.usage_publisher",
-        "aws_cloudwatch_metric_alarm.usage_publisher_errors",
-        "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
-    )
-    assert _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change("managed", address, ["delete"])
-                for address in retired_usage_resources
-            ]
-        }
-    )
-    for address in retired_usage_resources:
-        assert _run_development_plan_gate(
-            {"resource_changes": [_synthetic_change("managed", address, ["delete"])]}
-        )
-        assert not _run_development_plan_gate(
-            {
-                "resource_changes": [
-                    _synthetic_change("managed", f"{address}[0]", ["delete"])
-                ]
-            }
-        )
-        for actions in (
-            ["create", "delete"],
-            ["delete", "create"],
-            ["update"],
-            ["create"],
-        ):
-            assert not _run_development_plan_gate(
-                {
-                    "resource_changes": [
-                        _synthetic_change("managed", address, list(actions))
-                    ]
-                }
-            )
-    for address in (
-        "aws_cloudwatch_log_group.usage_publisher",
-        "aws_s3_object.usage",
-        "aws_dynamodb_table.tollchat_sessions",
-        "aws_cloudwatch_metric_alarm.tollchat_sessions",
-    ):
-        assert not _run_development_plan_gate(
-            {"resource_changes": [_synthetic_change("managed", address, ["delete"])]}
-        )
-
-    manual_mutations = (
-        "aws_iam_role.loader",
-        "aws_iam_role.publisher",
-        "aws_iam_role.publisher_scheduler",
-        "aws_iam_role.timed_checks",
-        "aws_iam_role.tollchat_proxy",
-        "aws_iam_role.tollchat_runtime",
-        "aws_iam_role.agent_usage_rollup",
-        "aws_iam_role_policy.loader",
-        "aws_iam_role_policy.publisher",
-        "aws_iam_role_policy.publisher_scheduler",
-        "aws_iam_role_policy.timed_checks",
-        "aws_iam_role_policy.tollchat_proxy",
-        "aws_iam_role_policy.tollchat_runtime",
-        "aws_iam_role_policy.agent_usage_rollup",
-        "aws_iam_role_policy_attachment.loader_vpc",
-        "aws_iam_role_policy_attachment.publisher_vpc",
-        "aws_iam_role_policy_attachment.tollchat_proxy_vpc",
-        "aws_api_gateway_rest_api.tollchat",
-        "aws_api_gateway_rest_api_policy.tollchat",
-        "aws_api_gateway_resource.tollchat_proxy",
-        "aws_api_gateway_method.tollchat_root",
-        "aws_api_gateway_method.tollchat_proxy",
-        "aws_api_gateway_integration.tollchat_root",
-        "aws_api_gateway_integration.tollchat_proxy",
-        "aws_api_gateway_stage.tollchat",
-        "aws_api_gateway_method_settings.tollchat",
-        "aws_athena_named_query.recent_routes",
-        "aws_athena_named_query.top_routes",
-        "aws_athena_workgroup.agent_reports",
-        'aws_bedrockagentcore_resource_policy.tollchat["runtime"]',
-        "aws_s3_bucket.agent_measurement",
-        "aws_s3_bucket_public_access_block.agent_measurement",
-        "aws_s3_bucket_public_access_block.site",
-        "aws_s3_bucket_policy.agent_measurement",
-        "aws_kms_key.agent_measurement",
-        "aws_kms_key.site",
-        "aws_kms_alias.agent_measurement",
-        "aws_kms_alias.site",
-        "aws_s3_bucket_lifecycle_configuration.agent_measurement",
-        "aws_s3_bucket_server_side_encryption_configuration.agent_measurement",
-        "aws_s3_bucket_policy.site",
-        "aws_lambda_function_url.public_chat",
-        "aws_lambda_permission.public_chat_url",
-        "aws_lambda_permission.public_chat_invoke",
-        "aws_sqs_queue.delivery_failure",
-        "aws_sqs_queue.invoke_failure",
-        "aws_sqs_queue.publisher_delivery_failure",
-        "aws_sqs_queue.publisher_invoke_failure",
-        "aws_sqs_queue_policy.delivery_failure",
-        "aws_lambda_permission.agent_usage_rollup",
-        "aws_lambda_permission.eventbridge_invoke",
-        "aws_lambda_permission.tollchat_api",
-        "aws_cloudfront_distribution.site",
-        "aws_cloudfront_origin_access_control.site",
-        "aws_cloudfront_origin_access_control.public_chat",
-        "aws_cloudfront_response_headers_policy.development_noindex",
-        "aws_bedrock_guardrail.tollchat",
-        "aws_cloudwatch_event_rule.agent_usage_rollup",
-        "aws_cloudwatch_event_rule.raw_objects",
-        "aws_cloudwatch_log_metric_filter.load_success",
-        "aws_cloudwatch_log_metric_filter.proxy_failure",
-        "aws_cloudwatch_metric_alarm.agent_usage_log_coverage",
-        "aws_cloudwatch_metric_alarm.agent_usage_rollup_errors",
-        "aws_cloudwatch_metric_alarm.agent_usage_rollup_missing",
-        "aws_cloudwatch_metric_alarm.failure_queues",
-        "aws_cloudwatch_metric_alarm.freshness",
-        "aws_cloudwatch_metric_alarm.loader_errors",
-        "aws_cloudwatch_metric_alarm.publisher_errors",
-        "aws_cloudwatch_metric_alarm.publisher_failure_queues",
-        "aws_cloudwatch_metric_alarm.report_generation_freshness",
-        "aws_cloudwatch_metric_alarm.tollchat_proxy_errors",
-        "aws_cloudwatch_metric_alarm.tollchat_proxy_failures",
-        "aws_cloudwatch_metric_alarm.tollchat_proxy_latency",
-        "aws_cloudwatch_metric_alarm.tollchat_sessions",
-        "aws_cloudwatch_log_group.agentcore_runtime",
-        "aws_wafv2_web_acl.public_chat",
-        "aws_wafv2_web_acl_logging_configuration.agent_reports",
-        "aws_security_group.loader",
-        "aws_security_group.publisher",
-        "aws_security_group.tollchat_proxy",
-        "aws_security_group.tollchat_runtime",
-        "aws_vpc_security_group_egress_rule.loader_to_eventbridge",
-        "aws_vpc_security_group_egress_rule.loader_to_rds",
-        "aws_vpc_security_group_egress_rule.loader_to_s3",
-        "aws_vpc_security_group_egress_rule.proxy_https",
-        "aws_vpc_security_group_egress_rule.proxy_to_dynamodb",
-        "aws_vpc_security_group_egress_rule.publisher_to_rds",
-        "aws_vpc_security_group_egress_rule.publisher_to_s3",
-        "aws_vpc_security_group_egress_rule.runtime_https",
-        "aws_vpc_security_group_egress_rule.runtime_to_rds",
-        "aws_vpc_security_group_ingress_rule.agentcore_from_proxy",
-        "aws_vpc_security_group_ingress_rule.rds_from_loader",
-        "aws_vpc_security_group_ingress_rule.rds_from_publisher",
-        "aws_vpc_security_group_ingress_rule.rds_from_runtime",
-    )
-    for address in manual_mutations:
-        for actions in (
-            ["create"],
-            ["delete"],
-            ["update"],
-            ["create", "delete"],
-            ["delete", "create"],
-        ):
-            assert not _run_development_plan_gate(
-                {
-                    "resource_changes": [
-                        _synthetic_change("managed", address, list(actions))
-                    ]
-                }
-            ), (address, actions)
-    assert not _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change("data", "data.aws_unknown.current", ["read"])
-            ]
-        }
-    )
-    for address in (
-        "aws_bedrockagentcore_agent_runtime.tollchat",
-        "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
-    ):
-        assert _run_development_plan_gate(
-            {"resource_changes": [_synthetic_change("managed", address, ["update"])]}
-        )
-        for actions in (
-            ["create"],
-            ["delete"],
-            ["create", "delete"],
-            ["delete", "create"],
-        ):
-            assert not _run_development_plan_gate(
-                {
-                    "resource_changes": [
-                        _synthetic_change("managed", address, list(actions))
-                    ]
-                }
-            )
-    assert not _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change(
-                    "managed",
-                    "aws_lambda_function.loader",
-                    ["update"],
-                    account="920534282028",
-                )
-            ]
-        }
-    )
-    assert not _run_development_plan_gate(
-        {
-            "resource_changes": [
-                _synthetic_change(
-                    "managed",
-                    "aws_lambda_function.loader",
-                    ["update"],
-                    environment="production",
-                )
-            ]
-        }
-    )
-    assert not _run_development_plan_gate(
-        {
-            "resource_changes": [
-                {
-                    **_synthetic_change(
-                        "managed", "aws_lambda_function.loader", ["no-op"]
-                    ),
-                    "deposed": "old",
-                }
-            ]
-        }
-    )
-
-
-def test_development_delivery_preserves_read_only_custom_domain_resources():
-    certificate = "aws_acm_certificate.site[0]"
-    distribution = "aws_cloudfront_distribution.site"
-    for address in (certificate, distribution):
-        for actions in (
-            ["no-op"],
-            ["create"],
-            ["update"],
-            ["delete"],
-            ["create", "delete"],
-            ["delete", "create"],
-        ):
-            assert _run_development_plan_gate(
-                {
-                    "resource_changes": [
-                        _synthetic_change(
-                            "managed", address, actions, domain_name="dev.tollchat.ai"
-                        )
-                    ]
-                }
-            ) is (actions == ["no-op"])
-    for value in (
-        "920534282028",
-        "production",
-        "backend.production.hcl",
-        "terraform.tfstate",
-        "route53",
-    ):
-        assert not _run_development_plan_gate(
-            {
-                "resource_changes": [
-                    _synthetic_change(
-                        "managed", certificate, ["no-op"], domain_name=value
-                    )
-                ]
-            }
-        )
-    for address in ("cloudflare_dns_record.apex[0]", "aws_route53_record.site"):
-        assert not _run_development_plan_gate(
-            {
-                "resource_changes": [
-                    _synthetic_change(
-                        "managed", address, ["no-op"], name="dev.tollchat.ai"
-                    )
-                ]
-            }
-        )
 
 
 SLICE_2A_POLICY = (REPO_ROOT / "infra" / "policy.hujson").read_text()

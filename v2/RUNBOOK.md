@@ -2024,13 +2024,6 @@ PY
     -var "agentcore_package_path=$REVIEWED_V2_PACKAGE_DIR/agentcore.zip" \
     -var "chat_proxy_package_path=$REVIEWED_V2_PACKAGE_DIR/chat-proxy.zip"
   terraform -chdir="$ROOT/v2/infra" show -json "$REPRESENTATIVE_PLAN" >"$REPRESENTATIVE_PLAN_JSON"
-  PLAN_GATE_SOURCE="$ROOT/.github/workflows/v2-development-delivery.yml"
-  require_reviewed_file "$PLAN_GATE_SOURCE"
-  PLAN_GATE="$WORK_DIR/development-plan-gate.py"
-  sed -n '/python3 - "\$PLAN_JSON" <<'"'"'PY'"'"'/,/^          PY$/p' "$PLAN_GATE_SOURCE" |
-    sed '1d;$d;s/^          //' >"$PLAN_GATE"
-  test -s "$PLAN_GATE" || die "saved-plan gate source is missing"
-  python3 "$PLAN_GATE" "$REPRESENTATIVE_PLAN_JSON"
   REPRESENTATIVE_PLAN_BODY="$WORK_DIR/representative-plan-body.tsv"
   python3 - "$REPRESENTATIVE_PLAN_JSON" "$REPRESENTATIVE_PLAN_BODY" <<'PY'
 import json
@@ -2130,19 +2123,19 @@ Gateway deployment, published/retired versions of the five named development
 Lambda functions, the two named development CloudFront functions, and the
 named development Bedrock guardrail version (publication only; its Terraform
 resource uses `skip_destroy`). It cannot create, replace, or administer the
-bootstrap addresses above. The workflow's rendered-plan gate
-must pass before the exact saved plan is applied. A missing import, unknown
-address/action, or failed gate stops for an administrator. The foundation
-Terraform root owns the route-control role, fixed SSM document, and their
-trust/policy resources; they are intentionally absent from v2 application
-Terraform and the recurring delivery plan.
+bootstrap addresses above. The protected OIDC role's scoped development IAM
+policy is the authorization boundary; the workflow applies only the exact
+binary plan it just created. The foundation Terraform root owns the
+route-control role, fixed SSM document, and their trust/policy resources; they
+are intentionally absent from v2 application Terraform and the recurring
+delivery plan.
 
 The protected `main` branch plus the protected GitHub `development` environment
 is the reviewed release source for this identity. Publishing arbitrary code to
 the named development Lambda/site objects and the two named development
 CloudFront functions is therefore an intentional delivery capability; the
-AWS policy bounds those calls to exact development resources, while the saved
-Terraform-plan gate bounds only Terraform changes. The identity still cannot
+AWS policy bounds those calls and Terraform operations to exact development
+resources. The identity still cannot
 switch roles, access production or foundation-write paths, create bootstrap
 resources, change public URL permissions, or alter measurement exposure
 controls.
@@ -2544,9 +2537,10 @@ uses the CloudFront default certificate and `TLSv1`, and has no development ACM
 resource. Production keeps its existing certificate, aliases, validation records,
 resource addresses, and Cloudflare provider path. Certificate creation and
 CloudFront alias/certificate changes remain administrator-owned. The recurring
-role can only describe and read tags of the exact staged development certificate;
-the plan gate accepts its no-op refresh, not creation, updates, or deletion.
-It cannot request ACM certificates or update CloudFront aliases/certificates.
+role can only describe and read tags of the exact staged development
+certificate; its scoped development IAM policy does not permit certificate
+creation, updates, deletion, or CloudFront alias/certificate changes. It
+cannot request ACM certificates or update CloudFront aliases/certificates.
 
 ##### Protected environment and preflight
 
