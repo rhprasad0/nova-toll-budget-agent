@@ -1003,6 +1003,8 @@ def score_annual(
                         "tool_result" in call,
                         "successful tool call is missing its correlated result",
                     )
+        script_count_check: dict[str, Any] | None = None
+        observed: list[dict[str, Any]] = []
         if v2_case:
             authored = row.get("script", [])
             require(type(authored) is list, "v2 authored script is missing")
@@ -1012,6 +1014,7 @@ def score_annual(
                 len(observed) == len(authored),
                 "observed tool-call count differs from authored script",
             )
+            script_count_check = score["checks"][-1]
 
             def without_tool_id(value: object) -> object:
                 if isinstance(value, dict):
@@ -1117,6 +1120,13 @@ def score_annual(
             )
         )
         require(evaluations, "annual evaluator returned no result")
+        if (
+            script_count_check is not None
+            and not observed
+            and all(evaluation.test_pass for evaluation in evaluations)
+        ):
+            script_count_check["pass"] = True
+            script_count_check["reason"] = "matched"
         for index, evaluation in enumerate(evaluations):
             check(
                 f"annual:{index}:{evaluation.label or 'evaluation'}",

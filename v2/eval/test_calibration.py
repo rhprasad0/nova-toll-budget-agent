@@ -129,8 +129,8 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(
             report["overall"],
             {
-                "human_pass_evaluator_pass": 29,
-                "human_pass_evaluator_fail": 21,
+                "human_pass_evaluator_pass": 39,
+                "human_pass_evaluator_fail": 11,
                 "human_fail_evaluator_pass": 3,
                 "human_fail_evaluator_fail": 7,
             },

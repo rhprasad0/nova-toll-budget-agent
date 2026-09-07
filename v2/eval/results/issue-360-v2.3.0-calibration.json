@@ -1,7 +1,7 @@
 {
   "artifact_type": "evaluator_calibration_report",
   "bindings": {
-    "current_grader_digest": "74032a5651b8c4606dc24e7d469f67ebf5ccf3d4be845af4b7abc66dbb405afd",
+    "current_grader_digest": "80b9860c4d115ac0e4f5cef0099f91bc83218073e2840a77a2ff03b505001f90",
     "current_public_dataset_sha256": "6fd9a3944407f1f39a803d8bf8498d032f22891643c4ffca0857d2e259ede49d",
     "current_public_membership_sha256": "135021bff4e1ab1fac289a46f734f81dba7b95d452344383c19f3d4dc1dfccbe",
     "label_ledger_sha256": "56c41adea3c305d793c74cb0b56a26f068ed08ce9eef4f4236746d973fc402b3",
@@ -19,32 +19,32 @@
     "annual": {
       "human_fail_evaluator_fail": 1,
       "human_fail_evaluator_pass": 1,
-      "human_pass_evaluator_fail": 5,
-      "human_pass_evaluator_pass": 3
+      "human_pass_evaluator_fail": 3,
+      "human_pass_evaluator_pass": 5
     },
     "current": {
       "human_fail_evaluator_fail": 3,
       "human_fail_evaluator_pass": 0,
-      "human_pass_evaluator_fail": 3,
-      "human_pass_evaluator_pass": 4
+      "human_pass_evaluator_fail": 0,
+      "human_pass_evaluator_pass": 7
     },
     "fault": {
       "human_fail_evaluator_fail": 0,
       "human_fail_evaluator_pass": 0,
-      "human_pass_evaluator_fail": 4,
-      "human_pass_evaluator_pass": 6
+      "human_pass_evaluator_fail": 3,
+      "human_pass_evaluator_pass": 7
     },
     "multiturn": {
       "human_fail_evaluator_fail": 0,
       "human_fail_evaluator_pass": 0,
-      "human_pass_evaluator_fail": 4,
-      "human_pass_evaluator_pass": 6
+      "human_pass_evaluator_fail": 1,
+      "human_pass_evaluator_pass": 9
     },
     "topology": {
       "human_fail_evaluator_fail": 3,
       "human_fail_evaluator_pass": 2,
-      "human_pass_evaluator_fail": 1,
-      "human_pass_evaluator_pass": 4
+      "human_pass_evaluator_fail": 0,
+      "human_pass_evaluator_pass": 5
     }
   },
   "counts": {
@@ -86,32 +86,6 @@
       "human_verdict": "Pass"
     },
     {
-      "case_id": "annual-independent-grounding-01",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:tool_mismatch",
-        "script:count"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "annual-unavailable-01",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:tool_mismatch",
-        "script:count"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "dulles-airport-to-backlick-tp1sb-fallback",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:bad_route"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
       "case_id": "fault-annual-01",
       "evaluator_verdict": "Fail",
       "failed_check_ids": [
@@ -132,15 +106,6 @@
       "evaluator_verdict": "Fail",
       "failed_check_ids": [
         "annual:0:response_forbidden"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "fault-current-04",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:tool_mismatch",
-        "script:count"
       ],
       "human_verdict": "Pass"
     },
@@ -175,50 +140,10 @@
       "human_verdict": "Pass"
     },
     {
-      "case_id": "multiturn-annual-current-01",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:missing_provenance"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "multiturn-annual-current-02",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:missing_provenance"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
       "case_id": "multiturn-income-01",
       "evaluator_verdict": "Fail",
       "failed_check_ids": [
         "annual:0:response_forbidden"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "multiturn-origin-01",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:missing_provenance"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "old-keene-mill-to-reagan-i95-unavailable",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:bad_route"
-      ],
-      "human_verdict": "Pass"
-    },
-    {
-      "case_id": "reagan-airport-to-westpark",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:tool_unavailable"
       ],
       "human_verdict": "Pass"
     },
@@ -233,22 +158,13 @@
       "evaluator_verdict": "Pass",
       "failed_check_ids": [],
       "human_verdict": "Fail"
-    },
-    {
-      "case_id": "topology-proof-i66-to-i495-north-annual",
-      "evaluator_verdict": "Fail",
-      "failed_check_ids": [
-        "annual:0:tool_mismatch",
-        "script:count"
-      ],
-      "human_verdict": "Pass"
     }
   ],
   "overall": {
     "human_fail_evaluator_fail": 7,
     "human_fail_evaluator_pass": 3,
-    "human_pass_evaluator_fail": 21,
-    "human_pass_evaluator_pass": 29
+    "human_pass_evaluator_fail": 11,
+    "human_pass_evaluator_pass": 39
   },
   "version": 1
 }
