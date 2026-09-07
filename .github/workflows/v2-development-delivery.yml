@@ -421,6 +421,9 @@ jobs:
           known_data.add("data.archive_file." + "place" + "holder")
           # These are the only stateless usage-publisher resources that this
           # general development gate may retire after the writer is removed.
+          # Agent-rollup, WAF logging, and retained-data retirement stay
+          # fail-closed for separately authorized maintenance under
+          # v2/plans/ANALYTICS-RETIREMENT-PLAN.md.
           teardown_deletions = {
               "aws_iam_role.usage_publisher",
               "aws_iam_role_policy.usage_publisher",

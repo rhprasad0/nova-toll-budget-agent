@@ -998,10 +998,6 @@ locals {
     ) : statement
     if !contains([
       "PassExistingAgentCoreRuntimeRole",
-      "ReadRetiredUsagePublisherIam",
-      "ReadRetiredUsagePublisherLambda",
-      "ReadRetiredUsagePublisherEvents",
-      "ReadRetiredUsagePublisherAlarms",
       "RetireUsagePublisherIam",
       "RetireUsagePublisherLambda",
       "RetireUsagePublisherEvents",
