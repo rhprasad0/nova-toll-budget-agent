@@ -4128,9 +4128,28 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "iam:ListRoleTags",
         ],
         "PassExistingAgentCoreRuntimeRole": ["iam:PassRole"],
-        "RetireUsagePublisherIam": ["iam:DeleteRole", "iam:DeleteRolePolicy"],
-        "RetireAgentUsageRollupIam": ["iam:DeleteRole", "iam:DeleteRolePolicy"],
     }
+    temporary_sids = {
+        "RetireUsagePublisherIam",
+        "RetireUsagePublisherLambda",
+        "RetireUsagePublisherEvents",
+        "RetireUsagePublisherAlarms",
+        "RetireAgentUsageRollupIam",
+        "RetireAgentUsageRollupLambda",
+        "RetireAgentUsageRollupEvents",
+        "RetireAgentUsageRollupAlarms",
+        "RetireAgentReportsWafLogging",
+    }
+    assert not temporary_sids & by_sid.keys()
+    assert not {
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "lambda:RemovePermission",
+        "events:DeleteRule",
+        "events:RemoveTargets",
+        "cloudwatch:DeleteAlarms",
+        "wafv2:DeleteLoggingConfiguration",
+    } & set(all_actions)
     assert by_sid["ReadRetiredUsagePublisherLambda"]["actions"] == [
         "lambda:GetAlias",
         "lambda:GetFunction",
@@ -4165,46 +4184,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     ]
     assert by_sid["ReadRetiredUsagePublisherAlarms"]["resources"] == [
         "local.development_delivery_usage_publisher_alarm_arns"
-    ]
-    assert by_sid["RetireUsagePublisherLambda"]["actions"] == [
-        "lambda:DeleteFunction",
-        "lambda:RemovePermission",
-    ]
-    assert by_sid["RetireUsagePublisherEvents"]["actions"] == [
-        "events:DeleteRule",
-        "events:RemoveTargets",
-    ]
-    assert by_sid["RetireUsagePublisherAlarms"]["actions"] == [
-        "cloudwatch:DeleteAlarms"
-    ]
-    assert by_sid["RetireAgentUsageRollupIam"]["resources"] == [
-        "local.development_delivery_legacy_rollup_role_arn"
-    ]
-    assert by_sid["RetireAgentUsageRollupLambda"]["actions"] == [
-        "lambda:DeleteFunction",
-        "lambda:RemovePermission",
-    ]
-    assert by_sid["RetireAgentUsageRollupLambda"]["resources"] == [
-        "local.development_delivery_legacy_rollup_lambda_arn"
-    ]
-    assert by_sid["RetireAgentUsageRollupEvents"]["actions"] == [
-        "events:DeleteRule",
-        "events:RemoveTargets",
-    ]
-    assert by_sid["RetireAgentUsageRollupEvents"]["resources"] == [
-        "local.development_delivery_legacy_rollup_event_rule_arn"
-    ]
-    assert by_sid["RetireAgentUsageRollupAlarms"]["actions"] == [
-        "cloudwatch:DeleteAlarms"
-    ]
-    assert by_sid["RetireAgentUsageRollupAlarms"]["resources"] == [
-        "local.development_delivery_legacy_rollup_alarm_arns"
-    ]
-    assert by_sid["RetireAgentReportsWafLogging"]["actions"] == [
-        "wafv2:DeleteLoggingConfiguration"
-    ]
-    assert by_sid["RetireAgentReportsWafLogging"]["resources"] == [
-        "local.development_delivery_waf_acl_arn"
     ]
     assert by_sid["ReadPreprovisionedApplicationRoles"]["actions"] == [
         "iam:GetRole",
@@ -4296,6 +4275,9 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         )
 
     assert "events:ListTagsForResource" in cast(
+        list[str], by_sid["ManageApplicationEventRules"]["actions"]
+    )
+    assert "events:RemoveTargets" not in cast(
         list[str], by_sid["ManageApplicationEventRules"]["actions"]
     )
     assert _hcl_strings(
@@ -4410,6 +4392,11 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     }
     for sid in ("ManageApplicationSiteBuckets", "ManageApplicationMeasurementBucket"):
         assert bucket_reads <= set(cast(list[str], by_sid[sid]["actions"]))
+    assert not {
+        "s3:DeleteObject",
+        "s3:PutBucketVersioning",
+        "s3:PutLifecycleConfiguration",
+    } & set(cast(list[str], by_sid["ManageApplicationSiteBuckets"]["actions"]))
     object_scopes = {
         "ManageApplicationSiteBuckets": [
             "local.development_delivery_site_bucket_arn",
@@ -4504,9 +4491,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "wafv2:GetWebACL",
         "wafv2:ListTagsForResource",
     ]
-    assert by_sid["RetireAgentReportsWafLogging"]["resources"] == [
-        "local.development_delivery_waf_acl_arn"
-    ]
     assert "ManageApplicationNetworking" not in by_sid
     assert "CreateNamedQuery" not in all_actions
     assert "athena:DeleteNamedQuery" not in all_actions
@@ -4516,10 +4500,10 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert re.search(r"runtime/nova_toll_v2_development-Y69XBf88Bl", source)
     assert "local.development_delivery_application_key_arns" in source
     assert "development_delivery_athena_workgroup_arn" in source
-    assert "development_delivery_waf_acl_arn" in source
+    assert "development_delivery_waf_acl_arn" not in source
     assert (
         "global/webacl/tollchat-v2-public-chat-dev/250c4d9a-abcd-4bdf-861c-b2b10549a770"
-        in source
+        not in source
     )
     assert "security-group/*" not in source
     assert "security-group-rule/*" not in source
@@ -4855,65 +4839,30 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
         }
         & all_actions
     )
-    retirement_cases = (
-        (
-            "RetireUsagePublisherIam",
+    temporary_sids = {
+        "RetireUsagePublisherIam",
+        "RetireUsagePublisherLambda",
+        "RetireUsagePublisherEvents",
+        "RetireUsagePublisherAlarms",
+        "RetireAgentUsageRollupIam",
+        "RetireAgentUsageRollupLambda",
+        "RetireAgentUsageRollupEvents",
+        "RetireAgentUsageRollupAlarms",
+        "RetireAgentReportsWafLogging",
+    }
+    assert not temporary_sids & by_sid.keys()
+    assert (
+        not {
             "iam:DeleteRole",
-            "local.development_delivery_usage_publisher_role_arn",
-            "arn:aws:iam::${local.development_delivery_account_id}:role/unrelated-dev",
-        ),
-        (
-            "RetireUsagePublisherLambda",
-            "lambda:DeleteFunction",
-            "local.development_delivery_usage_publisher_lambda_arn",
-            "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function/unrelated-dev",
-        ),
-        (
-            "RetireUsagePublisherEvents",
-            "events:DeleteRule",
-            "local.development_delivery_usage_publisher_rule_arn",
-            "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/unrelated-dev",
-        ),
-        (
-            "RetireUsagePublisherAlarms",
-            "cloudwatch:DeleteAlarms",
-            "local.development_delivery_usage_publisher_alarm_arns",
-            "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm/unrelated-dev",
-        ),
-        (
-            "RetireAgentUsageRollupIam",
             "iam:DeleteRolePolicy",
-            "local.development_delivery_legacy_rollup_role_arn",
-            "arn:aws:iam::${local.development_delivery_account_id}:role/unrelated-dev",
-        ),
-        (
-            "RetireAgentUsageRollupLambda",
             "lambda:RemovePermission",
-            "local.development_delivery_legacy_rollup_lambda_arn",
-            "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function/unrelated-dev",
-        ),
-        (
-            "RetireAgentUsageRollupEvents",
+            "events:DeleteRule",
             "events:RemoveTargets",
-            "local.development_delivery_legacy_rollup_event_rule_arn",
-            "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/unrelated-dev",
-        ),
-        (
-            "RetireAgentUsageRollupAlarms",
             "cloudwatch:DeleteAlarms",
-            "local.development_delivery_legacy_rollup_alarm_arns",
-            "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm/unrelated-dev",
-        ),
-        (
-            "RetireAgentReportsWafLogging",
             "wafv2:DeleteLoggingConfiguration",
-            "local.development_delivery_waf_acl_arn",
-            "arn:aws:wafv2:${local.development_delivery_region}:${local.development_delivery_account_id}:global/webacl/unrelated-dev/unrelated-id",
-        ),
+        }
+        & all_actions
     )
-    for sid, action, exact_resource, unrelated_resource in retirement_cases:
-        assert _statement_allows(by_sid[sid], action, exact_resource)
-        assert not _statement_allows(by_sid[sid], action, unrelated_resource)
     assert (
         not {
             "sqs:SetQueueAttributes",
@@ -4967,6 +4916,16 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
         "s3:PutObject",
         "${local.development_delivery_site_bucket_arn}/*",
     )
+    for action in (
+        "s3:DeleteObject",
+        "s3:PutBucketVersioning",
+        "s3:PutLifecycleConfiguration",
+    ):
+        assert not _statement_allows(
+            by_sid["ManageApplicationSiteBuckets"],
+            action,
+            "${local.development_delivery_site_bucket_arn}/*",
+        )
     assert not _statement_allows(
         by_sid["ManageApplicationSiteBuckets"],
         "s3:PutObject",
@@ -4981,7 +4940,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 61
+    assert len(statements) == 52
     expected_groups = {
         "state": (
             0,
@@ -5050,37 +5009,22 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "runtime": (
             35,
-            48,
+            44,
             [
                 "ManageApplicationSchedules",
                 "ReadRetiredUsagePublisherIam",
                 "ReadRetiredUsagePublisherLambda",
                 "ReadRetiredUsagePublisherEvents",
                 "ReadRetiredUsagePublisherAlarms",
-                "RetireUsagePublisherIam",
-                "RetireUsagePublisherLambda",
-                "RetireUsagePublisherEvents",
-                "RetireUsagePublisherAlarms",
                 "ManageApplicationGuardrail",
                 "PublishApplicationGuardrailVersions",
                 "ManageApplicationAgentCore",
                 "PassExistingAgentCoreRuntimeRole",
             ],
         ),
-        "retirement": (
-            48,
-            53,
-            [
-                "RetireAgentUsageRollupIam",
-                "RetireAgentUsageRollupLambda",
-                "RetireAgentUsageRollupEvents",
-                "RetireAgentUsageRollupAlarms",
-                "RetireAgentReportsWafLogging",
-            ],
-        ),
         "edge": (
-            53,
-            61,
+            44,
+            52,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -5098,7 +5042,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 61
+    assert len(rendered_aggregate) == len(statements) == 52
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}
@@ -5106,55 +5050,40 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     assert rendered_by_sid["PassExistingAgentCoreRuntimeRole"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": "bedrock-agentcore.amazonaws.com"}
     }
-    expected_retirement = {
-        "RetireAgentUsageRollupIam": (
-            {"iam:DeleteRole", "iam:DeleteRolePolicy"},
-            {"arn:aws:iam::903859731897:role/tollchat-v2-agent-usage-rollup-dev"},
-        ),
-        "RetireAgentUsageRollupLambda": (
-            {"lambda:DeleteFunction", "lambda:RemovePermission"},
-            {
-                "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-agent-usage-rollup-dev"
-            },
-        ),
-        "RetireAgentUsageRollupEvents": (
-            {"events:DeleteRule", "events:RemoveTargets"},
-            {
-                "arn:aws:events:us-east-1:903859731897:rule/tollchat-v2-agent-usage-rollup-dev"
-            },
-        ),
-        "RetireAgentUsageRollupAlarms": (
-            {"cloudwatch:DeleteAlarms"},
-            {
-                "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-agent-usage-log-coverage-dev",
-                "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-agent-usage-rollup-errors-dev",
-                "arn:aws:cloudwatch:us-east-1:903859731897:alarm:tollchat-v2-agent-usage-rollup-missing-dev",
-            },
-        ),
-        "RetireAgentReportsWafLogging": (
-            {"wafv2:DeleteLoggingConfiguration"},
-            {
-                "arn:aws:wafv2:us-east-1:903859731897:global/webacl/tollchat-v2-public-chat-dev/250c4d9a-abcd-4bdf-861c-b2b10549a770"
-            },
-        ),
+    temporary_sids = {
+        "RetireUsagePublisherIam",
+        "RetireUsagePublisherLambda",
+        "RetireUsagePublisherEvents",
+        "RetireUsagePublisherAlarms",
+        "RetireAgentUsageRollupIam",
+        "RetireAgentUsageRollupLambda",
+        "RetireAgentUsageRollupEvents",
+        "RetireAgentUsageRollupAlarms",
+        "RetireAgentReportsWafLogging",
     }
-    for sid, (actions, resources) in expected_retirement.items():
-        statement = rendered_by_sid[sid]
-        assert set(statement) == {"Action", "Effect", "Resource", "Sid"}
-        rendered_actions = statement["Action"]
-        rendered_resources = statement["Resource"]
-        rendered_actions = (
-            cast(list[str], rendered_actions)
-            if isinstance(rendered_actions, list)
-            else [cast(str, rendered_actions)]
+    assert not temporary_sids & rendered_by_sid.keys()
+    rendered_actions = {
+        action
+        for statement in rendered_aggregate
+        for action in cast(
+            list[str],
+            statement["Action"]
+            if isinstance(statement["Action"], list)
+            else [cast(str, statement["Action"])],
         )
-        rendered_resources = (
-            cast(list[str], rendered_resources)
-            if isinstance(rendered_resources, list)
-            else [cast(str, rendered_resources)]
-        )
-        assert set(rendered_actions) == actions
-        assert set(rendered_resources) == resources
+    }
+    assert (
+        not {
+            "iam:DeleteRole",
+            "iam:DeleteRolePolicy",
+            "lambda:RemovePermission",
+            "events:DeleteRule",
+            "events:RemoveTargets",
+            "cloudwatch:DeleteAlarms",
+            "wafv2:DeleteLoggingConfiguration",
+        }
+        & rendered_actions
+    )
     rendered_statements: list[dict[str, object]] = []
     for key, (start, end, expected_sids) in expected_groups.items():
         policy = rendered_documents[key]

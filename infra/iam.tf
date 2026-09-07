@@ -208,7 +208,6 @@ locals {
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
   development_delivery_athena_workgroup_arn   = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
-  development_delivery_waf_acl_arn            = "arn:aws:wafv2:${local.development_delivery_region}:${local.development_delivery_account_id}:global/webacl/tollchat-v2-public-chat-dev/250c4d9a-abcd-4bdf-861c-b2b10549a770"
   development_delivery_api_id                 = "ocw8sg0wlb"
   development_delivery_distribution_arn       = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
   development_delivery_guardrail_arn          = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
@@ -431,7 +430,7 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ManageApplicationEventRules"
-    actions   = ["events:DescribeRule", "events:DisableRule", "events:EnableRule", "events:ListTagsForResource", "events:ListTargetsByRule", "events:PutTargets", "events:RemoveTargets", "events:TagResource", "events:UntagResource"]
+    actions   = ["events:DescribeRule", "events:DisableRule", "events:EnableRule", "events:ListTagsForResource", "events:ListTargetsByRule", "events:PutTargets", "events:TagResource", "events:UntagResource"]
     resources = local.development_delivery_event_rule_arns
   }
 
@@ -500,7 +499,7 @@ data "aws_iam_policy_document" "development_delivery" {
 
   statement {
     sid       = "ManageApplicationSiteBuckets"
-    actions   = ["s3:DeleteObject", "s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions", "s3:PutBucketOwnershipControls", "s3:PutBucketTagging", "s3:PutBucketVersioning", "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration", "s3:PutObject", "s3:PutObjectTagging"]
+    actions   = ["s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions", "s3:PutBucketOwnershipControls", "s3:PutBucketTagging", "s3:PutEncryptionConfiguration", "s3:PutObject", "s3:PutObjectTagging"]
     resources = [local.development_delivery_site_bucket_arn, "${local.development_delivery_site_bucket_arn}/*"]
   }
 
@@ -655,30 +654,6 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid       = "RetireUsagePublisherIam"
-    actions   = ["iam:DeleteRole", "iam:DeleteRolePolicy"]
-    resources = [local.development_delivery_usage_publisher_role_arn]
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherLambda"
-    actions   = ["lambda:DeleteFunction", "lambda:RemovePermission"]
-    resources = [local.development_delivery_usage_publisher_lambda_arn]
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherEvents"
-    actions   = ["events:DeleteRule", "events:RemoveTargets"]
-    resources = [local.development_delivery_usage_publisher_rule_arn]
-  }
-
-  statement {
-    sid       = "RetireUsagePublisherAlarms"
-    actions   = ["cloudwatch:DeleteAlarms"]
-    resources = local.development_delivery_usage_publisher_alarm_arns
-  }
-
-  statement {
     sid       = "ManageApplicationGuardrail"
     actions   = ["bedrock:GetGuardrail", "bedrock:ListTagsForResource"]
     resources = [local.development_delivery_guardrail_arn]
@@ -709,36 +684,6 @@ data "aws_iam_policy_document" "development_delivery" {
       variable = "iam:PassedToService"
       values   = ["bedrock-agentcore.amazonaws.com"]
     }
-  }
-
-  statement {
-    sid       = "RetireAgentUsageRollupIam"
-    actions   = ["iam:DeleteRole", "iam:DeleteRolePolicy"]
-    resources = [local.development_delivery_legacy_rollup_role_arn]
-  }
-
-  statement {
-    sid       = "RetireAgentUsageRollupLambda"
-    actions   = ["lambda:DeleteFunction", "lambda:RemovePermission"]
-    resources = [local.development_delivery_legacy_rollup_lambda_arn]
-  }
-
-  statement {
-    sid       = "RetireAgentUsageRollupEvents"
-    actions   = ["events:DeleteRule", "events:RemoveTargets"]
-    resources = [local.development_delivery_legacy_rollup_event_rule_arn]
-  }
-
-  statement {
-    sid       = "RetireAgentUsageRollupAlarms"
-    actions   = ["cloudwatch:DeleteAlarms"]
-    resources = local.development_delivery_legacy_rollup_alarm_arns
-  }
-
-  statement {
-    sid       = "RetireAgentReportsWafLogging"
-    actions   = ["wafv2:DeleteLoggingConfiguration"]
-    resources = [local.development_delivery_waf_acl_arn]
   }
 
   statement {
@@ -846,15 +791,11 @@ locals {
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 35, 48)
-    })
-    retirement = jsonencode({
-      Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 48, 53)
+      Statement = slice(local.development_delivery_policy_statements, 35, 44)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 53, 61)
+      Statement = slice(local.development_delivery_policy_statements, 44, 52)
     })
   }
 }
@@ -1034,15 +975,6 @@ locals {
     ) : statement
     if !contains([
       "PassExistingAgentCoreRuntimeRole",
-      "RetireUsagePublisherIam",
-      "RetireUsagePublisherLambda",
-      "RetireUsagePublisherEvents",
-      "RetireUsagePublisherAlarms",
-      "RetireAgentUsageRollupIam",
-      "RetireAgentUsageRollupLambda",
-      "RetireAgentUsageRollupEvents",
-      "RetireAgentUsageRollupAlarms",
-      "RetireAgentReportsWafLogging",
     ], statement.Sid)
   ]
 
