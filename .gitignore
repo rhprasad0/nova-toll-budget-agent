@@ -15,6 +15,7 @@ __pycache__/
 !/.agents/skills/
 /.agents/skills/*
 !/.agents/skills/project-graph/
+!/.agents/skills/query-dev-postgres/
 node_modules/
 test-results/
 /.worktrees/
