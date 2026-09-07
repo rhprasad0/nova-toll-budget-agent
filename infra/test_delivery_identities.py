@@ -1248,11 +1248,19 @@ def main() -> None:
     effective_policy_json += production_deploy_json
     assert "903859731897" not in effective_policy_json
     assert "tollchat-v2-usage-publisher-dev" not in effective_policy_json
+    assert "tollchat-v2-agent-usage-rollup-dev" not in effective_policy_json
+    assert "tollchat-agent-reports-dev" not in effective_policy_json
+    assert "250c4d9a-abcd-4bdf-861c-b2b10549a770" not in effective_policy_json
     for sid in (
         "RetireUsagePublisherIam",
         "RetireUsagePublisherLambda",
         "RetireUsagePublisherEvents",
         "RetireUsagePublisherAlarms",
+        "RetireAgentUsageRollupIam",
+        "RetireAgentUsageRollupLambda",
+        "RetireAgentUsageRollupEvents",
+        "RetireAgentUsageRollupAlarms",
+        "RetireAgentReportsWafLogging",
     ):
         assert sid not in planner_json
         assert sid not in production_deploy_json
@@ -1264,14 +1272,31 @@ def main() -> None:
         "events:DeleteRule",
         "events:RemoveTargets",
         "cloudwatch:DeleteAlarms",
+        "wafv2:DeleteLoggingConfiguration",
     }
     for statements in (rendered_planner_discovery, application_statements):
         for statement in statements:
             if "tollchat-v2-usage-publisher" in json.dumps(statement):
                 assert not retired_actions.intersection(statement.get("Action", []))
+            if any(
+                identifier in json.dumps(statement)
+                for identifier in (
+                    "tollchat-v2-agent-usage-rollup",
+                    "250c4d9a-abcd-4bdf-861c-b2b10549a770",
+                )
+            ):
+                assert not retired_actions.intersection(statement.get("Action", []))
     for policy in deploy_documents.values():
         for statement in policy["Statement"]:
             if "tollchat-v2-usage-publisher" in json.dumps(statement):
+                assert not retired_actions.intersection(statement.get("Action", []))
+            if any(
+                identifier in json.dumps(statement)
+                for identifier in (
+                    "tollchat-v2-agent-usage-rollup",
+                    "250c4d9a-abcd-4bdf-861c-b2b10549a770",
+                )
+            ):
                 assert not retired_actions.intersection(statement.get("Action", []))
     state_statements = deploy_documents["state"]["Statement"]
     release_statements = deploy_documents["release"]["Statement"]

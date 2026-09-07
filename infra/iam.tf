@@ -148,9 +148,10 @@ locals {
   ])
   # Retained for state refresh only; the retired rollup is not a delivery target.
   development_delivery_legacy_rollup_lambda_resources = [
-    "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev",
-    "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev:*",
+    local.development_delivery_legacy_rollup_lambda_arn,
+    "${local.development_delivery_legacy_rollup_lambda_arn}:*",
   ]
+  development_delivery_legacy_rollup_lambda_arn = "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev"
   development_delivery_queue_arns = [
     for queue_name in [
       "toll-v2-pricing-loader-invoke-failure-dev",
@@ -165,6 +166,7 @@ locals {
     ] : "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/${rule_name}"
   ]
   development_delivery_legacy_rollup_event_rule_arn = "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/tollchat-v2-agent-usage-rollup-dev"
+  development_delivery_legacy_rollup_role_arn       = "arn:aws:iam::${local.development_delivery_account_id}:role/tollchat-v2-agent-usage-rollup-dev"
   development_delivery_log_group_arns = [
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-pricing-loader-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-report-publisher-dev",
@@ -205,6 +207,8 @@ locals {
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-errors-dev",
     "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-usage-publisher-failed-invocations-dev",
   ]
+  development_delivery_athena_workgroup_arn   = "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
+  development_delivery_waf_acl_arn            = "arn:aws:wafv2:${local.development_delivery_region}:${local.development_delivery_account_id}:global/webacl/tollchat-v2-public-chat-dev/250c4d9a-abcd-4bdf-861c-b2b10549a770"
   development_delivery_api_id                 = "ocw8sg0wlb"
   development_delivery_distribution_arn       = "arn:aws:cloudfront::${local.development_delivery_account_id}:distribution/E33DVF3KT7BTAC"
   development_delivery_guardrail_arn          = "arn:aws:bedrock:${local.development_delivery_region}:${local.development_delivery_account_id}:guardrail/vdyqrh31xgca"
@@ -591,15 +595,13 @@ data "aws_iam_policy_document" "development_delivery" {
     sid = "ReadRetainedApplicationAthenaNamedQueries"
     # Retained named-query reads authorize against their workgroup, not a query ARN.
     actions   = ["athena:GetNamedQuery", "athena:ListTagsForResource"]
-    resources = ["arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"]
+    resources = [local.development_delivery_athena_workgroup_arn]
   }
 
   statement {
-    sid     = "ReadRetainedApplicationAthenaWorkGroup"
-    actions = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:ListTagsForResource"]
-    resources = [
-      "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev",
-    ]
+    sid       = "ReadRetainedApplicationAthenaWorkGroup"
+    actions   = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:ListTagsForResource"]
+    resources = [local.development_delivery_athena_workgroup_arn]
   }
 
   statement {
@@ -710,6 +712,36 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid       = "RetireAgentUsageRollupIam"
+    actions   = ["iam:DeleteRole", "iam:DeleteRolePolicy"]
+    resources = [local.development_delivery_legacy_rollup_role_arn]
+  }
+
+  statement {
+    sid       = "RetireAgentUsageRollupLambda"
+    actions   = ["lambda:DeleteFunction", "lambda:RemovePermission"]
+    resources = [local.development_delivery_legacy_rollup_lambda_arn]
+  }
+
+  statement {
+    sid       = "RetireAgentUsageRollupEvents"
+    actions   = ["events:DeleteRule", "events:RemoveTargets"]
+    resources = [local.development_delivery_legacy_rollup_event_rule_arn]
+  }
+
+  statement {
+    sid       = "RetireAgentUsageRollupAlarms"
+    actions   = ["cloudwatch:DeleteAlarms"]
+    resources = local.development_delivery_legacy_rollup_alarm_arns
+  }
+
+  statement {
+    sid       = "RetireAgentReportsWafLogging"
+    actions   = ["wafv2:DeleteLoggingConfiguration"]
+    resources = [local.development_delivery_waf_acl_arn]
+  }
+
+  statement {
     sid     = "ReadApplicationApiGateway"
     actions = ["apigateway:GET"]
     resources = [
@@ -816,9 +848,13 @@ locals {
       Version   = "2012-10-17"
       Statement = slice(local.development_delivery_policy_statements, 35, 48)
     })
+    retirement = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_delivery_policy_statements, 48, 53)
+    })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 48, 56)
+      Statement = slice(local.development_delivery_policy_statements, 53, 61)
     })
   }
 }
@@ -1002,6 +1038,11 @@ locals {
       "RetireUsagePublisherLambda",
       "RetireUsagePublisherEvents",
       "RetireUsagePublisherAlarms",
+      "RetireAgentUsageRollupIam",
+      "RetireAgentUsageRollupLambda",
+      "RetireAgentUsageRollupEvents",
+      "RetireAgentUsageRollupAlarms",
+      "RetireAgentReportsWafLogging",
     ], statement.Sid)
   ]
 
