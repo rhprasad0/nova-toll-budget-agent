@@ -447,7 +447,8 @@ jobs:
           LOCAL_SHA256="$(sha256sum "$PLAN" | awk '{print $1}')"
           [[ "$LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           EXPECTED_S3_SHA256="$(printf '%s' "$LOCAL_SHA256" | xxd -r -p | base64 -w0)"
-          PLAN_KEY="$PLAN_KEY" EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256" uv run --project v2 python - "$PLAN" "$PUT_RESPONSE" \
+          set +e
+          if PLAN_KEY="$PLAN_KEY" EXPECTED_S3_SHA256="$EXPECTED_S3_SHA256" uv run --project v2 python - "$PLAN" "$PUT_RESPONSE" \
             >/dev/null 2>"$PUT_ERROR" <<'PY'
           import json
           import os
@@ -458,40 +459,92 @@ jobs:
           import boto3
 
           plan_path, response_path = sys.argv[1:]
-          with open(plan_path, "rb") as plan:
-              response = boto3.client("s3", region_name=os.environ["AWS_REGION"]).put_object(
-                  Bucket=os.environ["PLAN_BUCKET"],
-                  Key=os.environ["PLAN_KEY"],
-                  Body=plan,
-                  ExpectedBucketOwner="920534282028",
-                  IfNoneMatch="*",
-                  ServerSideEncryption="aws:kms",
-                  SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"],
-                  ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"],
-              )
-
-          if not isinstance(response, Mapping):
-              raise ValueError("invalid S3 response")
-          version_id = response.get("VersionId")
-          if not isinstance(version_id, str):
-              raise ValueError("missing or invalid S3 version ID")
-          version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"
-          if not re.fullmatch(version_pattern, version_id):
-              raise ValueError("missing or invalid S3 version ID")
-
-          metadata = {
-              "VersionId": version_id,
-              "ServerSideEncryption": "aws:kms",
-              "SSEKMSKeyId": os.environ["TFSTATE_KMS_KEY_ARN"],
-              "ChecksumSHA256": os.environ["EXPECTED_S3_SHA256"],
-          }
-          response_fd = os.open(response_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-          os.fchmod(response_fd, 0o600)
-          with os.fdopen(response_fd, "w", encoding="utf-8") as output:
-              json.dump(metadata, output)
-              output.write("\n")
+          failure_status = 71
+          try:
+              with open(plan_path, "rb") as plan:
+                  response = boto3.client("s3", region_name=os.environ["AWS_REGION"]).put_object(
+                      Bucket=os.environ["PLAN_BUCKET"],
+                      Key=os.environ["PLAN_KEY"],
+                      Body=plan,
+                      ExpectedBucketOwner="920534282028",
+                      IfNoneMatch="*",
+                      ServerSideEncryption="aws:kms",
+                      SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"],
+                      ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"],
+                  )
+              failure_status = 72
+              if not isinstance(response, Mapping):
+                  raise ValueError("invalid S3 response")
+              version_id = response.get("VersionId")
+              if not isinstance(version_id, str):
+                  raise ValueError("missing or invalid S3 version ID")
+              version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"
+              if not re.fullmatch(version_pattern, version_id):
+                  raise ValueError("missing or invalid S3 version ID")
+              metadata = {
+                  "VersionId": version_id,
+                  "ServerSideEncryption": "aws:kms",
+                  "SSEKMSKeyId": os.environ["TFSTATE_KMS_KEY_ARN"],
+                  "ChecksumSHA256": os.environ["EXPECTED_S3_SHA256"],
+              }
+              failure_status = 73
+              response_fd = os.open(response_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+              os.fchmod(response_fd, 0o600)
+              with os.fdopen(response_fd, "w", encoding="utf-8") as output:
+                  json.dump(metadata, output)
+                  output.write("\n")
+          except Exception:
+              raise SystemExit(failure_status)
           PY
+          then
+            upload_status=0
+          else
+            upload_status=$?
+          fi
+          set -e
 
+          case "$upload_status" in
+            0) ;;
+            71)
+              printf '%s\n' "production planner failed during upload request" >&2
+              exit "$upload_status"
+              ;;
+            72)
+              printf '%s\n' "production planner failed during response validation" >&2
+              exit "$upload_status"
+              ;;
+            73)
+              printf '%s\n' "production planner failed during response file write" >&2
+              exit "$upload_status"
+              ;;
+            *)
+              printf '%s\n' "production planner failed during unknown post-gate stage" >&2
+              exit "$upload_status"
+              ;;
+          esac
+
+          planner_failure() {
+            status=$?
+            set +e
+            case "${PHASE:-}" in
+              jq_response_check)
+                printf '%s\n' "production planner failed during jq response check" >&2
+                ;;
+              manifest_check)
+                printf '%s\n' "production planner failed during manifest check" >&2
+                ;;
+              outputs_summary)
+                printf '%s\n' "production planner failed during outputs or summary" >&2
+                ;;
+              *)
+                printf '%s\n' "production planner failed during unknown post-gate stage" >&2
+                ;;
+            esac
+            exit "$status"
+          }
+          trap planner_failure ERR
+
+          PHASE=jq_response_check
           VERSION_ID="$(jq -er '.VersionId | strings' "$PUT_RESPONSE")"
           SERVER_SIDE_ENCRYPTION="$(jq -er '.ServerSideEncryption | strings' "$PUT_RESPONSE")"
           RESPONSE_KMS_KEY_ARN="$(jq -er '.SSEKMSKeyId | strings' "$PUT_RESPONSE")"
@@ -501,6 +554,7 @@ jobs:
           [[ "$RESPONSE_KMS_KEY_ARN" == "$TFSTATE_KMS_KEY_ARN" ]]
           [[ "$S3_SHA256" == "$EXPECTED_S3_SHA256" ]]
 
+          PHASE=manifest_check
           jq -n \
             --arg bucket "$PLAN_BUCKET" \
             --arg key "$PLAN_KEY" \
@@ -533,6 +587,7 @@ jobs:
             .tag_key == "delivery_proof" and .tag_value == "issue-301"
           ' "$MANIFEST" >/dev/null
 
+          PHASE=outputs_summary
           {
             jq -r '"bucket=" + .bucket, "key=" + .key, "version_id=" + .version_id, "local_sha256=" + .local_sha256, "s3_sha256=" + .s3_sha256, "kms_key_arn=" + .kms_key_arn, "release_id=" + .release_id, "run_id=" + .run_id, "repository=" + .repository, "commit_sha=" + .commit_sha, "account=" + .account, "region=" + .region, "resource=" + .resource, "action=" + .action, "tag_key=" + .tag_key, "tag_value=" + .tag_value' "$MANIFEST"
           } >>"$GITHUB_OUTPUT"
