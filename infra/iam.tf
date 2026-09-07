@@ -1078,6 +1078,9 @@ locals {
         }
       }
     },
+  ]
+
+  production_delivery_deploy_release_statements = [
     {
       Sid      = "ReadVersionedReleasePlan"
       Effect   = "Allow"
@@ -1101,7 +1104,8 @@ locals {
   ]
 
   production_delivery_deploy_policy_documents = {
-    state = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_state_statements })
+    state   = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_state_statements })
+    release = jsonencode({ Version = "2012-10-17", Statement = local.production_delivery_deploy_release_statements })
     compute = jsonencode({
       Version   = "2012-10-17"
       Statement = slice(local.production_delivery_application_policy_statements, 0, 6)
@@ -1227,7 +1231,7 @@ data "aws_iam_policy_document" "production_deploy" {
 
   source_policy_documents = [jsonencode({
     Version   = "2012-10-17"
-    Statement = concat(local.production_delivery_deploy_state_statements, local.production_delivery_application_policy_statements, [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
+    Statement = concat(local.production_delivery_deploy_state_statements, local.production_delivery_deploy_release_statements, local.production_delivery_application_policy_statements, [local.production_delivery_agentcore_default_statement, local.production_delivery_agentcore_pass_role_statement])
   })]
 }
 

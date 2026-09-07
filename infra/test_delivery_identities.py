@@ -56,8 +56,10 @@ def terraform_block(source: str, header: str, occurrence: int = 0) -> str:
     raise AssertionError(f"unclosed Terraform block {header!r}")
 
 
-def rendered_planner_policies() -> tuple[dict[str, dict[str, object]], list[dict[str, object]]]:
-    """Render the exact planner local in an isolated, backend-free Terraform root."""
+def rendered_production_policies() -> tuple[
+    dict[str, dict[str, object]], list[dict[str, object]], dict[str, dict[str, object]]
+]:
+    """Render the production policy locals in an isolated, backend-free root."""
     first_locals = terraform_block(IAM, "locals", 0)
     production_locals = terraform_block(IAM, "locals", 3)
     policy_data = terraform_block(IAM, 'data "aws_iam_policy_document" "development_delivery"')
@@ -104,6 +106,10 @@ def rendered_planner_policies() -> tuple[dict[str, dict[str, object]], list[dict
 
         output "production_delivery_planner_statements" {{
           value = concat(local.production_delivery_planner_state_statements, local.production_delivery_discovery_statements, [local.production_delivery_agentcore_default_statement])
+        }}
+
+        output "production_delivery_deploy_policy_documents" {{
+          value = local.production_delivery_deploy_policy_documents
         }}
         """
     )
@@ -162,7 +168,12 @@ def rendered_planner_policies() -> tuple[dict[str, dict[str, object]], list[dict
         outputs = json.loads(rendered.stdout)["planned_values"]["outputs"]
         documents = outputs["production_delivery_planner_policy_documents"]["value"]
         statements = outputs["production_delivery_planner_statements"]["value"]
-        return {key: json.loads(value) for key, value in documents.items()}, statements
+        deploy_documents = outputs["production_delivery_deploy_policy_documents"]["value"]
+        return (
+            {key: json.loads(value) for key, value in documents.items()},
+            statements,
+            {key: json.loads(value) for key, value in deploy_documents.items()},
+        )
 
 
 def _gate_source() -> str:
@@ -802,7 +813,7 @@ def _check_production_deploy() -> None:
         "nova-toll-production-deploy-observability"
     )
     assert deploy.count(observability_arn) == 1
-    for policy in ("compute", "storage", "data", "runtime", "edge", "state"):
+    for policy in ("compute", "storage", "data", "runtime", "edge", "state", "release"):
         assert f"nova-toll-production-deploy-{policy}" not in deploy
 
     for output in (
@@ -1017,7 +1028,7 @@ def main() -> None:
     require("DecryptCloudflareProviderToken", planner)
 
     require("production_delivery_planner_policy_documents", production)
-    planner_documents, planner_statements = rendered_planner_policies()
+    planner_documents, planner_statements, deploy_documents = rendered_production_policies()
     assert len(planner_documents) == 9
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
@@ -1058,9 +1069,26 @@ def main() -> None:
     for statement in split_statements:
         if "s3:GetObjectVersion" in statement.get("Action", []):
             assert all("/plans/" not in resource for resource in statement["Resource"])
+    assert set(deploy_documents) == {"state", "release", "compute", "observability", "storage", "data", "runtime", "edge"}
+    state_statements = deploy_documents["state"]["Statement"]
+    release_statements = deploy_documents["release"]["Statement"]
+    assert [statement["Sid"] for statement in state_statements] == ["ListProductionApplicationState", "ManageProductionApplicationState", "ManageProductionApplicationLock", "DecryptProductionApplicationStateAndLock", "GenerateProductionApplicationStateDataKeys"]
+    assert [statement["Sid"] for statement in release_statements] == ["ReadVersionedReleasePlan", "DecryptVersionedReleasePlan"]
+    assert all("GetObjectVersion" not in json.dumps(statement) and "/plans/" not in json.dumps(statement) for statement in state_statements)
+    assert [statement["Action"] for statement in release_statements] == [["s3:GetObjectVersion"], ["kms:Decrypt"]]
+    assert all("plans/*" in json.dumps(statement) for statement in release_statements)
+
     deploy_document = production[production.index('data "aws_iam_policy_document" "production_deploy"') :]
     require("PassProductionAgentCoreRuntimeRole", production)
     require("ReadVersionedReleasePlan", production)
+    require(
+        "Statement = concat(local.production_delivery_deploy_state_statements, local.production_delivery_deploy_release_statements,",
+        deploy_document,
+    )
+    deploy_resource = terraform_block(IAM, 'resource "aws_iam_policy" "production_deploy"')
+    deploy_attachment = terraform_block(IAM, 'resource "aws_iam_role_policy_attachment" "production_deploy"')
+    require("local.production_delivery_deploy_policy_documents", deploy_resource)
+    require("local.production_delivery_deploy_policy_documents", deploy_attachment)
     assert 'Action   = ["s3:GetObject"]\n      Resource = ["${aws_s3_bucket.tfstate.arn}/plans/' not in deploy_document
     planner_resource = terraform_block(
         IAM, 'resource "aws_iam_policy" "production_planner"'
