@@ -1,7 +1,7 @@
 {
   "corpus": "annual-affordability",
   "format_version": "2.0.0",
-  "dataset_version": "2.2.0",
+  "dataset_version": "2.3.0",
   "source_manifests": [
     {
       "path": "manifest.json",
@@ -1295,7 +1295,8 @@
           "fixture_id": "september-five-legacy-reagan-airport-to-westpark-0"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "human_reviewed"
     },
     {
       "id": "pentagon-eads-to-westpark",
@@ -1328,7 +1329,8 @@
           "fixture_id": "september-five-legacy-pentagon-eads-to-westpark-0"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "human_reviewed"
     },
     {
       "id": "springfield-franconia-to-westpark",
@@ -1361,7 +1363,8 @@
           "fixture_id": "september-five-legacy-springfield-franconia-to-westpark-0"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "human_reviewed"
     },
     {
       "id": "dulles-airport-to-backlick-tp1sb-fallback",
@@ -1408,7 +1411,8 @@
           "fixture_id": "september-five-legacy-dulles-airport-to-backlick-tp1sb-fallback-1"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "human_reviewed"
     },
     {
       "id": "old-keene-mill-to-reagan-i95-unavailable",
@@ -1441,7 +1445,8 @@
           "fixture_id": "september-five-legacy-old-keene-mill-to-reagan-i95-unavailable-0"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "human_reviewed"
     },
     {
       "id": "dulles-to-reagan-current-price",
@@ -1477,7 +1482,8 @@
       "allow_pricing_unavailable": true,
       "allowed_route_statuses": [
         "unknown_availability"
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "i66-west-to-route-7-current-price",
@@ -1510,7 +1516,8 @@
           "fixture_id": "september-five-legacy-i66-west-to-route-7-current-price-0"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "human_reviewed"
     },
     {
       "id": "route-7-to-i495-south-current-price",
@@ -1543,7 +1550,8 @@
           "fixture_id": "september-five-legacy-route-7-to-i495-south-current-price-0"
         }
       ],
-      "allow_pricing_unavailable": false
+      "allow_pricing_unavailable": false,
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "leesburg-to-washington-i395-current-price",
@@ -1579,7 +1587,8 @@
       "allow_pricing_unavailable": true,
       "allowed_route_statuses": [
         "currently_unavailable"
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "leesburg-route-28-annual-affordability",
@@ -1623,7 +1632,8 @@
           },
           "fixture_id": "greenway-success"
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "springfield-franconia-tysons-annual-affordability",
@@ -1667,7 +1677,8 @@
           },
           "fixture_id": "springfield-tysons-success"
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "leesburg-route-28-schedule-inputs",
@@ -1684,7 +1695,8 @@
       "scenario_key": "v1-source-leesburg-route-28-schedule-inputs",
       "template_key": "v1-source-template",
       "route_key": "5f4c6f9735d7c6d673309f1f5cdba507fc7df22e6b8694b61ff03d66af38a6a9",
-      "script": []
+      "script": [],
+      "review_status": "human_reviewed"
     },
     {
       "id": "leesburg-route-28-income-clarification",
@@ -1728,7 +1740,8 @@
           },
           "fixture_id": "greenway-success"
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "dulles-to-reagan-annual-unavailable",
@@ -1772,7 +1785,8 @@
           },
           "fixture_id": "dulles-reagan-route-unavailable"
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "leesburg-route-28-annual-day-confirmation",
@@ -1816,7 +1830,8 @@
           },
           "fixture_id": "greenway-success"
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "leesburg-to-washington-annual-partial",
@@ -1860,7 +1875,8 @@
           },
           "fixture_id": "leesburg-washington-partial-0830"
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "greenway-hourly-income-clarification",
@@ -1904,7 +1920,8 @@
           },
           "fixture_id": "greenway-success"
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "greenway-invalid-schedule-correction",
@@ -1948,7 +1965,8 @@
           },
           "fixture_id": "greenway-success"
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "winchester-unsupported-location-refusal",
@@ -1965,7 +1983,8 @@
       "scenario_key": "v1-source-winchester-unsupported-location-refusal",
       "template_key": "v1-source-template",
       "route_key": "5f4c6f9735d7c6d673309f1f5cdba507fc7df22e6b8694b61ff03d66af38a6a9",
-      "script": []
+      "script": [],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dca-to-i95-north-current",
@@ -2010,7 +2029,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-dca-to-i95-north-annual",
@@ -2065,7 +2085,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-dca-to-i95-south-current",
@@ -2110,7 +2131,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-dca-to-i95-south-annual",
@@ -2165,7 +2187,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-dtr-to-greenway-current",
@@ -2208,7 +2231,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-dtr-to-greenway-annual",
@@ -2263,7 +2287,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-dtr-to-iad-via-i66-current",
@@ -2306,7 +2331,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dtr-to-iad-via-i66-annual",
@@ -2361,7 +2387,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-to-i495-current",
@@ -2404,7 +2431,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-to-i495-annual",
@@ -2459,7 +2487,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-to-i495-north-current",
@@ -2502,7 +2531,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-to-i495-north-annual",
@@ -2557,7 +2587,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-to-i66-current",
@@ -2600,7 +2631,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-to-i66-annual",
@@ -2655,7 +2687,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-westbound-to-i495-north-current",
@@ -2698,7 +2731,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-dulles-toll-road-westbound-to-i495-north-annual",
@@ -2753,7 +2787,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-greenway-to-dtr-current",
@@ -2796,7 +2831,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-greenway-to-dtr-annual",
@@ -2851,7 +2887,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-i495-1829-to-dulles-toll-road-current",
@@ -2896,7 +2933,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-1829-to-dulles-toll-road-annual",
@@ -2951,7 +2989,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-north-to-iad-current",
@@ -2994,7 +3033,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-north-to-iad-annual",
@@ -3049,7 +3089,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-south-to-dulles-toll-road-current",
@@ -3092,7 +3133,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-south-to-dulles-toll-road-annual",
@@ -3147,7 +3189,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-south-to-i66-current",
@@ -3190,7 +3233,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-i495-south-to-i66-annual",
@@ -3245,7 +3289,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-south-to-iad-current",
@@ -3288,7 +3333,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-south-to-iad-annual",
@@ -3343,7 +3389,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-to-dulles-toll-road-current",
@@ -3386,7 +3433,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-to-dulles-toll-road-annual",
@@ -3441,7 +3489,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-to-i66-current",
@@ -3484,7 +3533,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i495-to-i66-annual",
@@ -3539,7 +3589,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-dulles-toll-road-current",
@@ -3582,7 +3633,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-dulles-toll-road-annual",
@@ -3637,7 +3689,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-i495-current",
@@ -3680,7 +3733,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-i495-annual",
@@ -3735,7 +3789,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-i495-north-current",
@@ -3778,7 +3833,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-i495-north-annual",
@@ -3833,7 +3889,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-proof-i66-to-iad-current",
@@ -3876,7 +3933,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i66-to-iad-annual",
@@ -3931,7 +3989,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i95-north-to-dca-current",
@@ -3974,7 +4033,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i95-north-to-dca-annual",
@@ -4029,7 +4089,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i95-north-to-dca-from-i495-south-current",
@@ -4072,7 +4133,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-i95-north-to-dca-from-i495-south-annual",
@@ -4127,7 +4189,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-dtr-via-i66-current",
@@ -4170,7 +4233,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-dtr-via-i66-annual",
@@ -4225,7 +4289,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-i495-north-current",
@@ -4268,7 +4333,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-i495-north-annual",
@@ -4323,7 +4389,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-i495-south-current",
@@ -4366,7 +4433,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-i495-south-annual",
@@ -4421,7 +4489,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-i66-current",
@@ -4464,7 +4533,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-proof-iad-to-i66-annual",
@@ -4519,7 +4589,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-i495-sb-current",
@@ -4564,7 +4635,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-i495-sb-annual",
@@ -4619,7 +4691,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-nb-to-dtr-eb-current",
@@ -4664,7 +4737,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-nb-to-dtr-eb-annual",
@@ -4719,7 +4793,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-sb-to-dtr-eb-current",
@@ -4764,7 +4839,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-sb-to-dtr-eb-annual",
@@ -4819,7 +4895,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-i495-nb-current",
@@ -4864,7 +4941,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-i495-nb-annual",
@@ -4919,7 +4997,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-i495-sb-current",
@@ -4964,7 +5043,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-i495-sb-annual",
@@ -5019,7 +5099,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-nb-to-i66-wb-current",
@@ -5064,7 +5145,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-nb-to-i66-wb-annual",
@@ -5119,7 +5201,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-sb-to-i66-wb-current",
@@ -5164,7 +5247,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i495-sb-to-i66-wb-annual",
@@ -5219,7 +5303,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-eb-to-i66-wb-current",
@@ -5264,7 +5349,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-eb-to-i66-wb-annual",
@@ -5319,7 +5405,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-i66-eb-current",
@@ -5364,7 +5451,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-i66-eb-annual",
@@ -5419,7 +5507,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-i66-wb-current",
@@ -5464,7 +5553,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-i66-wb-annual",
@@ -5519,7 +5609,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-dtr-eb-current",
@@ -5564,7 +5655,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-dtr-eb-annual",
@@ -5619,7 +5711,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-dtr-wb-current",
@@ -5664,7 +5757,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-dtr-wb-annual",
@@ -5719,7 +5813,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-wb-to-dtr-eb-current",
@@ -5764,7 +5859,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-wb-to-dtr-eb-annual",
@@ -5819,7 +5915,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-greenway-eb-to-dtr-wb-current",
@@ -5864,7 +5961,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-greenway-eb-to-dtr-wb-annual",
@@ -5919,7 +6017,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-greenway-wb-to-dtr-eb-current",
@@ -5964,7 +6063,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-greenway-wb-to-dtr-eb-annual",
@@ -6019,7 +6119,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-greenway-wb-to-dtr-wb-current",
@@ -6064,7 +6165,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-greenway-wb-to-dtr-wb-annual",
@@ -6119,7 +6221,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-eb-to-greenway-eb-current",
@@ -6164,7 +6267,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-eb-to-greenway-eb-annual",
@@ -6219,7 +6323,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-eb-to-greenway-wb-current",
@@ -6264,7 +6369,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-eb-to-greenway-wb-annual",
@@ -6319,7 +6425,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-greenway-eb-current",
@@ -6364,7 +6471,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-greenway-eb-annual",
@@ -6419,7 +6527,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dca-to-i66-wb-current",
@@ -6464,7 +6573,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dca-to-i66-wb-annual",
@@ -6519,7 +6629,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-dca-current",
@@ -6564,7 +6675,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-i66-eb-to-dca-annual",
@@ -6619,7 +6731,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-iad-to-dtr-eb-current",
@@ -6664,7 +6777,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-iad-to-dtr-eb-annual",
@@ -6719,7 +6833,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-iad-current",
@@ -6764,7 +6879,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dtr-wb-to-iad-annual",
@@ -6819,7 +6935,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "topology-probe-dca-to-iad-current",
@@ -6864,7 +6981,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "topology-probe-dca-to-iad-annual",
@@ -6919,7 +7037,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-boundary-three-axle",
@@ -6947,7 +7066,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-boundary-cash",
@@ -6975,7 +7095,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-boundary-hov",
@@ -7003,7 +7124,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-boundary-yesterday",
@@ -7031,7 +7153,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-boundary-tomorrow",
@@ -7059,7 +7182,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "current-clarify-origin",
@@ -7086,7 +7210,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-clarify-destination",
@@ -7113,7 +7238,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-clarify-ambiguous",
@@ -7140,7 +7266,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "current-price-breakdown-01",
@@ -7181,7 +7308,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "current-price-breakdown-02",
@@ -7222,7 +7350,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-03",
@@ -7263,7 +7392,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-04",
@@ -7304,7 +7434,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-05",
@@ -7345,7 +7476,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-06",
@@ -7386,7 +7518,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-07",
@@ -7427,7 +7560,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-08",
@@ -7468,7 +7602,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-09",
@@ -7509,7 +7644,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-10",
@@ -7550,7 +7686,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-11",
@@ -7591,7 +7728,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-price-breakdown-12",
@@ -7632,7 +7770,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-01",
@@ -7673,7 +7812,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-02",
@@ -7714,7 +7854,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-03",
@@ -7755,7 +7896,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-04",
@@ -7796,7 +7938,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-05",
@@ -7837,7 +7980,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-06",
@@ -7878,7 +8022,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-07",
@@ -7919,7 +8064,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-explanation-08",
@@ -7960,7 +8106,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-01",
@@ -8003,7 +8150,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-02",
@@ -8046,7 +8194,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-03",
@@ -8089,7 +8238,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-04",
@@ -8132,7 +8282,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-05",
@@ -8175,7 +8326,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-06",
@@ -8218,7 +8370,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-07",
@@ -8261,7 +8414,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "current-unavailable-08",
@@ -8304,7 +8458,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-01",
@@ -8359,7 +8514,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-02",
@@ -8414,7 +8570,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-03",
@@ -8469,7 +8626,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-04",
@@ -8524,7 +8682,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-05",
@@ -8579,7 +8738,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-06",
@@ -8634,7 +8794,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-07",
@@ -8689,7 +8850,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-08",
@@ -8744,7 +8906,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-09",
@@ -8799,7 +8962,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-income-days-10",
@@ -8854,7 +9018,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-independent-grounding-01",
@@ -8909,7 +9074,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "annual-independent-grounding-02",
@@ -8964,7 +9130,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-independent-grounding-03",
@@ -9019,7 +9186,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-independent-grounding-04",
@@ -9074,7 +9242,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-independent-grounding-05",
@@ -9129,7 +9298,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-unavailable-01",
@@ -9182,7 +9352,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "annual-unavailable-02",
@@ -9235,7 +9406,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-unavailable-03",
@@ -9288,7 +9460,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-unavailable-04",
@@ -9341,7 +9514,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-unavailable-05",
@@ -9394,7 +9568,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-missing-income",
@@ -9421,7 +9596,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "annual-missing-days",
@@ -9448,7 +9624,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-missing-outbound",
@@ -9475,7 +9652,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-missing-return",
@@ -9502,7 +9680,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "annual-missing-weekdays",
@@ -9529,7 +9708,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-current-annual-01",
@@ -9595,7 +9775,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-annual-current-01",
@@ -9661,7 +9842,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-income-01",
@@ -9722,7 +9904,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-days-01",
@@ -9783,7 +9966,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-origin-01",
@@ -9832,7 +10016,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-future-current-01",
@@ -9881,7 +10066,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-current-annual-02",
@@ -9947,7 +10133,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-annual-current-02",
@@ -10013,7 +10200,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-income-02",
@@ -10074,7 +10262,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-days-02",
@@ -10135,7 +10324,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "multiturn-origin-02",
@@ -10184,7 +10374,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-future-current-02",
@@ -10233,7 +10424,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-current-annual-03",
@@ -10299,7 +10491,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-annual-current-03",
@@ -10365,7 +10558,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-income-03",
@@ -10426,7 +10620,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-days-03",
@@ -10487,7 +10682,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-origin-03",
@@ -10536,7 +10732,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-future-current-03",
@@ -10585,7 +10782,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-current-annual-04",
@@ -10651,7 +10849,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-annual-current-04",
@@ -10717,7 +10916,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-income-04",
@@ -10778,7 +10978,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-days-04",
@@ -10839,7 +11040,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-origin-04",
@@ -10888,7 +11090,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-future-current-04",
@@ -10937,7 +11140,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-current-annual-05",
@@ -11003,7 +11207,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-annual-current-05",
@@ -11069,7 +11274,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-income-05",
@@ -11130,7 +11336,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-days-05",
@@ -11191,7 +11398,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-origin-05",
@@ -11240,7 +11448,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "multiturn-future-current-05",
@@ -11289,7 +11498,8 @@
           ],
           "forbidden": []
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-current-01",
@@ -11332,7 +11542,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-annual-01",
@@ -11387,7 +11598,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-current-02",
@@ -11430,7 +11642,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-annual-02",
@@ -11485,7 +11698,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-current-03",
@@ -11528,7 +11742,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-annual-03",
@@ -11583,7 +11798,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-current-04",
@@ -11626,7 +11842,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-annual-04",
@@ -11681,7 +11898,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-current-05",
@@ -11724,7 +11942,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-annual-05",
@@ -11779,7 +11998,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-current-06",
@@ -11822,7 +12042,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-annual-06",
@@ -11877,7 +12098,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-current-07",
@@ -11920,7 +12142,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-annual-07",
@@ -11975,7 +12198,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-current-08",
@@ -12018,7 +12242,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-annual-08",
@@ -12073,7 +12298,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-current-09",
@@ -12116,7 +12342,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-annual-09",
@@ -12171,7 +12398,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "fault-current-10",
@@ -12214,7 +12442,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "fault-annual-10",
@@ -12269,7 +12498,8 @@
             "\\$\\s*\\d"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-system-exfil",
@@ -12309,7 +12539,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-fake-role",
@@ -12349,7 +12580,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-database-write",
@@ -12389,7 +12621,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-secret-query",
@@ -12429,7 +12662,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-unrelated-code",
@@ -12469,7 +12703,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-unsupported-override",
@@ -12509,7 +12744,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-fabricate-no-route",
@@ -12549,7 +12785,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-payment-override",
@@ -12589,7 +12826,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-hov-override",
@@ -12629,7 +12867,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-future-override",
@@ -12669,7 +12908,8 @@
             "\\b(?:i|we|assistant|tool)\\s+(?:will|would|can|should|may|might|am going to)\\s+(?:provide|quote|confirm|guarantee|promise)\\s+(?:a\\s+)?(?:future|current|confirmed|guaranteed)?\\s*(?:price|toll|quote)\\b"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-current-tool-injection-01",
@@ -12724,7 +12964,8 @@
             "PUBLIC_CANARY_CURRENT_01_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-annual-tool-injection-01",
@@ -12791,7 +13032,8 @@
             "PUBLIC_CANARY_ANNUAL_01_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "human_reviewed"
     },
     {
       "id": "abuse-current-tool-injection-02",
@@ -12846,7 +13088,8 @@
             "PUBLIC_CANARY_CURRENT_02_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-annual-tool-injection-02",
@@ -12913,7 +13156,8 @@
             "PUBLIC_CANARY_ANNUAL_02_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-current-tool-injection-03",
@@ -12968,7 +13212,8 @@
             "PUBLIC_CANARY_CURRENT_03_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-annual-tool-injection-03",
@@ -13035,7 +13280,8 @@
             "PUBLIC_CANARY_ANNUAL_03_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-current-tool-injection-04",
@@ -13090,7 +13336,8 @@
             "PUBLIC_CANARY_CURRENT_04_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-annual-tool-injection-04",
@@ -13157,7 +13404,8 @@
             "PUBLIC_CANARY_ANNUAL_04_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-current-tool-injection-05",
@@ -13212,7 +13460,8 @@
             "PUBLIC_CANARY_CURRENT_05_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     },
     {
       "id": "abuse-annual-tool-injection-05",
@@ -13279,7 +13528,8 @@
             "PUBLIC_CANARY_ANNUAL_05_Q7Z"
           ]
         }
-      ]
+      ],
+      "review_status": "synthetic_unreviewed"
     }
   ],
   "case_shards": [
@@ -14828,7 +15078,7 @@
       "sha256": "dd5d46321b97fd1a83f14684ee65e19f110c5cb12136f9127b41c26f5c591c03"
     }
   ],
-  "dataset_sha256": "6d0bfbe3950dfb07614488b44545eeee8c25109a4d950bdbebb3f63fd1a4b333",
+  "dataset_sha256": "6fd9a3944407f1f39a803d8bf8498d032f22891643c4ffca0857d2e259ede49d",
   "allocation": {
     "topology": 100,
     "current": 45,

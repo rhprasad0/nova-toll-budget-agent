@@ -23,6 +23,57 @@ from eval.golden_corpus import Corpus
 
 _TRIALS = ["1", "2", "3"]
 _LABELS = {"Pass", "Fail", "Unsure"}
+_V2_DATASET_VERSION = "2.2.0"
+_V2_RENDER_DATE = "2026-09-05"
+_V2_PUBLIC_DATASET_SHA256 = (
+    "6d0bfbe3950dfb07614488b44545eeee8c25109a4d950bdbebb3f63fd1a4b333"
+)
+_V2_2_PUBLIC_MANIFEST_SHA256 = (
+    "c08cdce610b4b42ca8acbec63db2074e8d72cefc631ccfb95924e4a53b9cb02a"
+)
+_V2_2_GRADER_DIGEST = "a68f2a8b7f2676530ba0bd54cce9f2cf90a40855e5fb7fd3dbdc8e54035f0812"
+_V2_CATEGORIES = ("topology", "current", "annual", "multiturn", "fault", "abuse")
+_V2_FOLLOW_UP_CASES = (
+    "multiturn-current-annual-01",
+    "multiturn-annual-current-01",
+    "multiturn-origin-01",
+)
+_V2_BALANCED_CASES = (
+    "topology-proof-dca-to-i95-north-current",
+    "topology-proof-dca-to-i95-north-annual",
+    "topology-proof-dca-to-i95-south-current",
+    "topology-proof-dca-to-i95-south-annual",
+    "topology-proof-dtr-to-greenway-annual",
+    "pentagon-eads-to-westpark",
+    "springfield-franconia-to-westpark",
+    "old-keene-mill-to-reagan-i95-unavailable",
+    "dulles-to-reagan-current-price",
+    "i66-west-to-route-7-current-price",
+    "springfield-franconia-tysons-annual-affordability",
+    "leesburg-route-28-schedule-inputs",
+    "leesburg-route-28-income-clarification",
+    "dulles-to-reagan-annual-unavailable",
+    "leesburg-route-28-annual-day-confirmation",
+    "multiturn-days-01",
+    "multiturn-current-annual-02",
+    "multiturn-annual-current-02",
+    "multiturn-income-02",
+    "multiturn-days-02",
+    "fault-current-02",
+    "fault-annual-02",
+    "fault-current-03",
+    "fault-annual-03",
+    "fault-current-04",
+    "abuse-fake-role",
+    "abuse-unrelated-code",
+    "abuse-unsupported-override",
+    "abuse-fabricate-no-route",
+    "abuse-payment-override",
+)
+_V2_SELECTIONS = {
+    "follow-up": _V2_FOLLOW_UP_CASES,
+    "balanced": _V2_BALANCED_CASES,
+}
 _FACILITIES = {
     "dulles_toll_road": "Dulles Toll Road",
     "dulles_greenway": "Dulles Greenway",
@@ -163,11 +214,27 @@ def _validate_current_environment(
     )
     source_digest = graph_checks.source_digest()
     rate_card = plan["rate_card"]
+    current_grader_digest = graph_checks.grader_digest()
+    legacy_2_2_grader = False
+    if identity["grader_digest"] != current_grader_digest:
+        try:
+            manifest_sha256 = _sha(manifest_path.read_bytes())
+        except OSError:
+            manifest_sha256 = None
+        legacy_2_2_grader = (
+            not private
+            and corpus.manifest.get("dataset_version") == _V2_DATASET_VERSION
+            and corpus.manifest.get("dataset_sha256") == _V2_PUBLIC_DATASET_SHA256
+            and manifest_sha256 == _V2_2_PUBLIC_MANIFEST_SHA256
+            and identity["grader_digest"] == _V2_2_GRADER_DIGEST
+        )
     if (
         identity["dataset_hash"] != expected_dataset
         or identity["source_digest"] != source_digest
         or identity["artifact_digest"] != source_digest
-        or identity["grader_digest"] != graph_checks.grader_digest()
+        or (
+            identity["grader_digest"] != current_grader_digest and not legacy_2_2_grader
+        )
         or rate_card != trusted_rate_card
         or identity["rate_card_source"] != rate_card["source"]
         or identity["rate_card_version"] != rate_card["version"]
@@ -541,6 +608,278 @@ def validate_labels(
     return dict(value)
 
 
+def _v2_selection(kind: str, corpus: Corpus) -> dict[str, Any]:
+    """Return the one reviewed v2 selection declared for ``kind``."""
+    if kind not in _V2_SELECTIONS:
+        raise ValueError("unknown v2 selection kind")
+    manifest = corpus.manifest
+    if "public_dataset_sha256" in manifest:
+        raise ValueError("v2 review requires public evidence")
+    if (
+        manifest.get("dataset_version") != _V2_DATASET_VERSION
+        or manifest.get("render_date") != _V2_RENDER_DATE
+        or manifest.get("dataset_sha256") != _V2_PUBLIC_DATASET_SHA256
+    ):
+        raise ValueError("v2 selection requires the approved public 2.2.0 dataset")
+    rows = {row["id"]: row for row in corpus.rows}
+    cases = _V2_SELECTIONS[kind]
+    if any(case_id not in rows for case_id in cases):
+        raise ValueError("v2 selection contains an unknown public case")
+    if len(set(cases)) != len(cases):
+        raise ValueError("v2 selection contains duplicate cases")
+    if kind == "balanced":
+        counts = {category: 0 for category in _V2_CATEGORIES}
+        for case_id in cases:
+            category = rows[case_id].get("primary_category")
+            if category not in counts:
+                raise ValueError("balanced selection contains an unknown category")
+            counts[category] += 1
+        if counts != dict.fromkeys(_V2_CATEGORIES, 5):
+            raise ValueError("balanced selection requires five cases per category")
+        if set(cases) & set(baseline._PILOT_CASES):
+            raise ValueError("balanced selection overlaps the v1 pilot")
+    return {
+        "kind": kind,
+        "dataset_version": _V2_DATASET_VERSION,
+        "dataset_sha256": manifest["dataset_sha256"],
+        "render_date": _V2_RENDER_DATE,
+        "cases": list(cases),
+    }
+
+
+def validate_v2_selection(
+    selection: Mapping[str, Any], corpus: Corpus
+) -> dict[str, Any]:
+    """Validate an explicit v2 selection against the public corpus."""
+    if not isinstance(selection, Mapping):
+        raise ValueError("v2 selection is malformed")
+    kind = selection.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError("v2 selection kind is required")
+    expected = _v2_selection(kind, corpus)
+    if dict(selection) != expected:
+        raise ValueError("v2 selection disagrees with its declaration")
+    return expected
+
+
+def v2_selection(kind: str, manifest_path: Path) -> dict[str, Any]:
+    """Build a declared v2 selection from one validated public manifest."""
+    corpus = _validated_manifest(_regular(manifest_path))
+    return _v2_selection(kind, corpus)
+
+
+def _trajectory_projection(output: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Project every retained turn while keeping tool evidence turn-local."""
+    trajectory = output.get("trajectory")
+    if type(trajectory) is not list or not trajectory:
+        raise ValueError("retained trajectory is missing")
+    projected: list[dict[str, Any]] = []
+    for turn in trajectory:
+        if (
+            not isinstance(turn, Mapping)
+            or not isinstance(turn.get("prompt"), str)
+            or not isinstance(turn.get("response"), str)
+            or type(turn.get("calls")) is not list
+        ):
+            raise ValueError("retained trajectory turn is malformed")
+        calls = turn["calls"]
+        if any(not isinstance(call, Mapping) for call in calls):
+            raise ValueError("retained trajectory tool call is malformed")
+        projected.append(
+            {
+                "prompt": turn["prompt"],
+                "response": turn["response"],
+                "tools": [_tool_projection(call) for call in calls],
+            }
+        )
+    return projected
+
+
+def _v2_review_cards(
+    manifest_path: Path,
+    root: Path,
+    rate_card_path: Path,
+    kind: str,
+    selection: Mapping[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Validate the complete split, then project only selected trial-1 output."""
+    split = _validated_split(manifest_path, root, _trusted_rate_card(rate_card_path))
+    if split["report"].get("private") is not False:
+        raise ValueError("v2 review requires public evidence")
+    declared = _v2_selection(kind, split["corpus"])
+    selected = (
+        declared
+        if selection is None
+        else validate_v2_selection(selection, split["corpus"])
+    )
+    selection_sha256 = graph_checks.annual_json_digest(selected)
+    rows = {row["id"]: row for row in split["corpus"].rows}
+    cards: list[dict[str, Any]] = []
+    for number, case_id in enumerate(selected["cases"], 1):
+        row = rows[case_id]
+        artifact = split["root"] / case_id / "1"
+        output = baseline._read(artifact / "output.json")
+        receipt = baseline._read(artifact / "receipt.json")
+        trajectory = _trajectory_projection(output)
+        answer = output.get("output")
+        expected = row.get("expected_assertion")
+        if not isinstance(answer, str) or not isinstance(expected, str):
+            raise ValueError("retained review text is malformed")
+        display = {
+            "trajectory": trajectory,
+            "answer": answer,
+            "expected": expected,
+        }
+        binding = _sha(
+            {
+                "selection": selection_sha256,
+                "manifest": split["manifest_sha256"],
+                "evidence": _sha({"receipt": receipt, "output": output}),
+                "receipt": receipt,
+                "trial_1_output": output,
+                "case_digest": _sha(row),
+                "display": display,
+            }
+        )
+        cards.append(
+            {
+                "ref": f"v2-{kind}-{number:02d}-{binding[:12]}",
+                "binding": binding,
+                "display_sha256": _sha(display),
+                **display,
+            }
+        )
+    packet = {
+        "version": 2,
+        "selection": {
+            key: selected[key]
+            for key in ("kind", "dataset_version", "dataset_sha256", "render_date")
+        },
+        "selection_sha256": selection_sha256,
+        "public_manifest_sha256": split["manifest_sha256"],
+        "evidence_sha256": split["evidence_sha256"],
+        "cards": [
+            {
+                "ref": card["ref"],
+                "binding": card["binding"],
+                "display_sha256": card["display_sha256"],
+            }
+            for card in cards
+        ],
+    }
+    return cards, packet
+
+
+def v2_review_cards(
+    manifest_path: Path,
+    root: Path,
+    rate_card_path: Path,
+    kind: str,
+    selection: Mapping[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Public wrapper for deterministic, offline v2 card generation."""
+    return _v2_review_cards(manifest_path, root, rate_card_path, kind, selection)
+
+
+def render_v2_review(
+    manifest_path: Path,
+    root: Path,
+    rate_card_path: Path,
+    output_path: Path,
+    kind: str,
+    selection: Mapping[str, Any] | None = None,
+) -> Path:
+    cards, packet = _v2_review_cards(
+        manifest_path, root, rate_card_path, kind, selection
+    )
+
+    def esc(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
+    rendered = []
+    for number, card in enumerate(cards, 1):
+        turns = []
+        for turn_number, turn in enumerate(card["trajectory"], 1):
+            tools = (
+                "".join(
+                    f"<details><summary>{esc(tool['lookup'])}</summary>"
+                    f"<h5>Request</h5><pre>{esc(json.dumps(tool['request'], indent=2, ensure_ascii=False))}</pre>"
+                    f"<h5>Recorded result</h5><pre>{esc(json.dumps(tool['result'], indent=2, ensure_ascii=False))}</pre></details>"
+                    for tool in turn["tools"]
+                )
+                or "<p>No pricing tool was used.</p>"
+            )
+            turns.append(
+                f"<section><h3>Turn {turn_number}</h3>"
+                f"<h4>Prompt</h4><div class=prompt>{esc(turn['prompt'])}</div>"
+                f"<h4>Response</h4><div class=response>{esc(turn['response'])}</div>"
+                f"<h4>Recorded tool evidence</h4>{tools}</section>"
+            )
+        choices = "".join(
+            f'<label><input required type="radio" name="label-{number}" value="{choice}"> {choice}</label>'
+            for choice in ("Pass", "Fail", "Unsure")
+        )
+        rendered.append(
+            f'<article class="card" data-ref="{esc(card["ref"])}" data-binding="{esc(card["binding"])}">'
+            f"<h2>Case {number}</h2>{''.join(turns)}"
+            f"<h3>Retained final answer</h3><div class=answer>{esc(card['answer'])}</div>"
+            f"<h3>Expected behavior</h3><p>{esc(card['expected'])}</p>"
+            f"<fieldset><legend>Your decision</legend>{choices}</fieldset>"
+            f'<label for="notes-{number}">Notes (optional)</label><textarea id="notes-{number}"></textarea></article>'
+        )
+    packet_json = json.dumps(packet, ensure_ascii=False, sort_keys=True).replace(
+        "<", "\\u003c"
+    )
+    count = len(cards)
+    document = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TollChat v2 calibration review</title><style>
+body{{margin:0;background:#eef3f8;color:#17212b;font:16px/1.5 system-ui,sans-serif}}main{{max-width:960px;margin:auto;padding:2rem}}.card{{background:#fff;border:1px solid #c8d4df;border-radius:12px;box-shadow:0 3px 14px #23384d14;margin:1.25rem 0;padding:1.4rem}}.prompt,.response,.answer{{white-space:pre-wrap;background:#f7f9fb;border-left:4px solid #3973ac;padding:1rem}}.response{{border-left-color:#4a8b5d}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#17212b;color:#eef6ff;padding:1rem;border-radius:6px}}fieldset{{display:flex;gap:1.2rem;margin:1rem 0}}textarea{{box-sizing:border-box;width:100%;min-height:5rem}}button{{background:#145b91;color:white;border:0;border-radius:6px;padding:.75rem 1rem;font-weight:700}}button:focus,input:focus,textarea:focus{{outline:3px solid #f4a024;outline-offset:2px}}#status{{font-weight:700}}
+</style></head><body><main><h1>TollChat v2 calibration review</h1><p>Review {count} retained public answers. Machine scores are intentionally hidden. Label every case, then download the bound JSON file.</p><p id="status" role="status">0 of {count} labeled</p>{"".join(rendered)}<button id="download" type="button">Download labels</button></main>
+<script>const base={packet_json},cards=[...document.querySelectorAll('.card')],status=document.querySelector('#status');function update(){{status.textContent=`${{cards.filter((c,i)=>document.querySelector(`input[name=label-${{i+1}}]:checked`)).length}} of ${{cards.length}} labeled`}}document.addEventListener('change',update);document.querySelector('#download').addEventListener('click',()=>{{const labels=cards.map((card,i)=>{{const chosen=document.querySelector(`input[name=label-${{i+1}}]:checked`);return chosen?{{ref:card.dataset.ref,binding:card.dataset.binding,label:chosen.value,notes:document.querySelector(`#notes-${{i+1}}`).value}}:null}});if(labels.some(x=>!x)){{status.textContent='Label every case before downloading.';return}}const packet={{...base,labels}},blob=new Blob([JSON.stringify(packet,null,2)+'\\n'],{{type:'application/json'}}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tollchat-v2-calibration-labels.json';a.click();URL.revokeObjectURL(a.href)}});</script></body></html>"""
+    if output_path.exists() or output_path.is_symlink():
+        raise ValueError("calibration output already exists")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("x", encoding="utf-8") as handle:
+        handle.write(document)
+    return output_path
+
+
+def validate_v2_labels(
+    value: Mapping[str, Any],
+    manifest_path: Path,
+    root: Path,
+    rate_card_path: Path,
+    kind: str,
+    selection: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    _, expected = _v2_review_cards(manifest_path, root, rate_card_path, kind, selection)
+    if (
+        not isinstance(value, Mapping)
+        or set(value) != set(expected) | {"labels"}
+        or any(value.get(key) != expected[key] for key in expected)
+    ):
+        raise ValueError("v2 label packet evidence binding mismatch")
+    labels = value.get("labels")
+    expected_cards = {card["ref"]: card["binding"] for card in expected["cards"]}
+    if (
+        not isinstance(labels, list)
+        or len(labels) != len(expected_cards)
+        or {item.get("ref") for item in labels if isinstance(item, dict)}
+        != set(expected_cards)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"ref", "binding", "label", "notes"}
+            or item.get("binding") != expected_cards.get(item.get("ref"))
+            or item.get("label") not in _LABELS
+            or not isinstance(item.get("notes"), str)
+            for item in labels
+        )
+    ):
+        raise ValueError("v2 label packet decisions are invalid")
+    return dict(value)
+
+
 def _write(path: Path, value: object) -> None:
     if path.exists() or path.is_symlink():
         raise ValueError("calibration output already exists")
@@ -558,6 +897,12 @@ def main() -> None:
     review.add_argument("--public-root", type=Path, required=True)
     review.add_argument("--rate-card", type=Path, required=True)
     review.add_argument("--output", type=Path, required=True)
+    review_v2 = commands.add_parser("review-v2")
+    review_v2.add_argument("--public-manifest", type=Path, required=True)
+    review_v2.add_argument("--public-root", type=Path, required=True)
+    review_v2.add_argument("--rate-card", type=Path, required=True)
+    review_v2.add_argument("--output", type=Path, required=True)
+    review_v2.add_argument("--kind", choices=tuple(_V2_SELECTIONS), required=True)
     combine = commands.add_parser("combine")
     for name in ("public-manifest", "public-root", "private-manifest", "private-root"):
         combine.add_argument(f"--{name}", type=Path, required=True)
@@ -568,10 +913,24 @@ def main() -> None:
     labels.add_argument("--public-root", type=Path, required=True)
     labels.add_argument("--rate-card", type=Path, required=True)
     labels.add_argument("--labels", type=Path, required=True)
+    labels_v2 = commands.add_parser("validate-v2-labels")
+    labels_v2.add_argument("--public-manifest", type=Path, required=True)
+    labels_v2.add_argument("--public-root", type=Path, required=True)
+    labels_v2.add_argument("--rate-card", type=Path, required=True)
+    labels_v2.add_argument("--labels", type=Path, required=True)
+    labels_v2.add_argument("--kind", choices=tuple(_V2_SELECTIONS), required=True)
     args = parser.parse_args()
     if args.command == "review":
         render_review(
             args.public_manifest, args.public_root, args.rate_card, args.output
+        )
+    elif args.command == "review-v2":
+        render_v2_review(
+            args.public_manifest,
+            args.public_root,
+            args.rate_card,
+            args.output,
+            args.kind,
         )
     elif args.command == "combine":
         _write(
@@ -584,12 +943,20 @@ def main() -> None:
                 args.rate_card,
             ),
         )
-    else:
+    elif args.command == "validate-labels":
         validate_labels(
             graph_checks.read_json(_regular(args.labels)),
             args.public_manifest,
             args.public_root,
             args.rate_card,
+        )
+    else:
+        validate_v2_labels(
+            graph_checks.read_json(_regular(args.labels)),
+            args.public_manifest,
+            args.public_root,
+            args.rate_card,
+            args.kind,
         )
 
 

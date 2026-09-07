@@ -1,10 +1,12 @@
 # TollChat v2 evaluation
 
 The default golden dataset is **250 public cases**, format `2.0.0`, dataset
-`2.2.0`: 100 topology, 45 current-price, 35 annual-affordability, 30 multiturn,
+`2.3.0`: 100 topology, 45 current-price, 35 annual-affordability, 30 multiturn,
 20 fault, and 20 abuse cases. It materializes the 19 legacy v1 cases in the
 public v2 shard alongside 231 additional rows, with explicit membership and
-exact ordered tool scripts. The original v1 corpus and four-row v2 sample remain
+exact ordered tool scripts. Every case metadata entry declares
+`review_status` as `human_reviewed` or `synthetic_unreviewed`. The original v1
+corpus and four-row v2 sample remain
 reproducible through explicit manifests, and the pinned v1 source files and
 fixture bytes remain unchanged.
 
@@ -53,6 +55,40 @@ The page uses public trial `1`, hides machine verdicts and internal IDs, and
 downloads a SHA-256-bound Pass/Fail/Unsure label packet. A trusted parent can
 use `combine` with explicit public/private manifests and roots to create a
 mechanical report; the private projection contains aggregates and digests only.
+
+The repaired v2 review is a separate packet path. It accepts only the declared
+three-case `follow-up` or deterministic 30-case `balanced` selection, validates
+all retained trials, and displays every trial-1 trajectory turn without model,
+runner, or network calls:
+
+Returned v2 packets are bound to the immutable 2.2.0 snapshot, not the promoted
+2.3.0 default manifest. Use the explicit snapshot path for rendering or packet
+validation:
+
+```bash
+uv run python -m eval.calibration review-v2 \
+  --public-manifest /home/ryan/Documents/nova-toll-budget-agent/.worktrees/issue-360-live-report/v2/eval/golden/manifest-v2.json \
+  --public-root /path/to/public-run \
+  --rate-card /path/to/trusted-rate-card.json \
+  --kind follow-up \
+  --output ../.graph/calibration-v2-follow-up.html
+```
+
+Run the same command with `--kind balanced` for the second 30-case review.
+The v1 labels remain historical evidence; v2 labels are not merged into
+scorecards or release gates. The DCA-to-IAD/I-95 oracle observation remains a
+deferred human finding: a missing direct edge does not prove every whole journey
+is prohibited. The returned packets remain bound to the immutable 2.2.0
+manifest that produced them; they are not reruns against the promoted 2.3.0
+metadata release.
+
+### Dataset 2.3.0 review metadata
+
+The promoted public manifest records exactly 60 `human_reviewed` cases and 190
+`synthetic_unreviewed` cases. The parent-controlled private manifest records 50
+`synthetic_unreviewed` cases. This metadata is review coverage, not a model
+score, metric, or release gate. The public findings and packet bindings are
+recorded in [the 2.3.0 review evidence](results/issue-360-v2.3.0-review.md).
 
 ## What is measured
 

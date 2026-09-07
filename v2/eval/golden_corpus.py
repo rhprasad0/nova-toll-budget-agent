@@ -169,6 +169,7 @@ _V2_METADATA_OPTIONAL_KEYS = {
     "allowed_route_statuses",
     "response_checks",
 }
+_V2_REVIEW_STATUSES = {"human_reviewed", "synthetic_unreviewed"}
 _V2_CATEGORIES = ("topology", "current", "annual", "multiturn", "fault", "abuse")
 _V2_RELEASE_ALLOCATION = {
     "topology": 100,
@@ -1291,8 +1292,16 @@ def _validate_v1_manifest(
     )
 
 
-def _v2_metadata(item: Any, label: str, *, release: bool = False) -> dict[str, Any]:
+def _v2_metadata(
+    item: Any,
+    label: str,
+    *,
+    release: bool = False,
+    require_review_status: bool = False,
+) -> dict[str, Any]:
     required_keys = _V2_RELEASE_METADATA_KEYS if release else _V2_METADATA_KEYS
+    if require_review_status:
+        required_keys = required_keys | {"review_status"}
     if (
         not isinstance(item, dict)
         or not set(item) >= required_keys
@@ -1312,6 +1321,8 @@ def _v2_metadata(item: Any, label: str, *, release: bool = False) -> dict[str, A
         "abuse",
     }:
         raise CorpusError(f"{label} metadata category is invalid")
+    if require_review_status and item.get("review_status") not in _V2_REVIEW_STATUSES:
+        raise CorpusError(f"{label} metadata review_status is invalid")
     if release:
         if item.get("split") not in {"public", "private"}:
             raise CorpusError(f"{label} metadata split is invalid")
@@ -1937,7 +1948,12 @@ def _v2_validate_manifest(
         raise CorpusError("v2 case_metadata must be a list")
     metadata: dict[str, dict[str, Any]] = {}
     for item in metadata_items:
-        value = _v2_metadata(item, "v2", release=release)
+        value = _v2_metadata(
+            item,
+            "v2",
+            release=release,
+            require_review_status=dataset_version >= (2, 3, 0),
+        )
         if value["id"] in metadata:
             raise CorpusError("v2 metadata IDs are not unique")
         metadata[value["id"]] = value

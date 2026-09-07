@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import eval.baseline as baseline
+import eval.calibration as calibration
 import eval.golden_corpus as golden_corpus
 from agent_tools import current_price_domain as pricing_domain
 from eval.golden_corpus import (
@@ -1117,6 +1118,79 @@ def test_final_v2_manifest_has_250_cases_and_approved_allocation() -> None:
             assert row.get(effective_field) == expected, (case_id, effective_field)
 
 
+def test_final_v2_review_statuses_and_integrity_are_exact() -> None:
+    corpus = validate(V2_FINAL_MANIFEST)
+    metadata = corpus.manifest["case_metadata"]
+    reviewed = set(baseline._PILOT_CASES) | set(calibration._V2_BALANCED_CASES)
+    assert corpus.manifest["dataset_version"] == "2.3.0"
+    assert len(baseline._PILOT_CASES) == len(calibration._V2_BALANCED_CASES) == 30
+    assert not set(baseline._PILOT_CASES) & set(calibration._V2_BALANCED_CASES)
+    assert Counter(item["review_status"] for item in metadata) == Counter(
+        {"human_reviewed": 60, "synthetic_unreviewed": 190}
+    )
+    assert {
+        item["id"] for item in metadata if item["review_status"] == "human_reviewed"
+    } == reviewed
+    assert corpus.manifest["membership_sha256"] == (
+        "135021bff4e1ab1fac289a46f734f81dba7b95d452344383c19f3d4dc1dfccbe"
+    )
+    for payload in corpus.manifest["payloads"]:
+        assert (
+            hashlib.sha256(
+                (V2_FINAL_MANIFEST.parent / payload["path"]).read_bytes()
+            ).hexdigest()
+            == payload["sha256"]
+        )
+    without_hash = {
+        key: value for key, value in corpus.manifest.items() if key != "dataset_sha256"
+    }
+    assert (
+        corpus.manifest["dataset_sha256"]
+        == hashlib.sha256(
+            json.dumps(
+                without_hash, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest()
+    )
+
+
+def test_v2_review_status_is_compatible_with_statusless_2_2(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _ = _copy_final_v2_corpus(tmp_path / "statusless-2-2")
+    manifest = json.loads(manifest_path.read_text())
+    manifest["dataset_version"] = "2.2.0"
+    for item in manifest["case_metadata"]:
+        del item["review_status"]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(manifest_path)
+    assert validate(manifest_path).manifest["dataset_version"] == "2.2.0"
+
+    manifest = json.loads(manifest_path.read_text())
+    manifest["case_metadata"][0]["review_status"] = "human_reviewed"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError):
+        validate(manifest_path)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unknown", "nonstring"])
+def test_v2_2_3_review_status_fails_closed(tmp_path: Path, mutation: str) -> None:
+    manifest_path, _ = _copy_final_v2_corpus(tmp_path / mutation)
+    manifest = json.loads(manifest_path.read_text())
+    target = manifest["case_metadata"][0]
+    if mutation == "missing":
+        del target["review_status"]
+    elif mutation == "unknown":
+        target["review_status"] = "reviewed_by_someone"
+    else:
+        target["review_status"] = 1
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(manifest_path)
+    with pytest.raises(CorpusError):
+        validate(manifest_path)
+
+
 def test_final_v2_allocation_mutation_is_rejected(tmp_path: Path) -> None:
     manifest_path, _ = _copy_final_v2_corpus(tmp_path / "allocation")
     manifest = json.loads(manifest_path.read_text())
@@ -1401,23 +1475,23 @@ def test_v2_release_base_ref_rejects_version_only_bump(
         "Initial release",
     )
     manifest = json.loads(manifest_path.read_text())
-    manifest["dataset_version"] = "2.3.0"
+    manifest["dataset_version"] = "2.4.0"
     manifest_path.write_text(json.dumps(manifest))
     _refresh_v2(manifest_path)
     with pytest.raises(CorpusError, match="unchanged v2 corpus"):
         validate(manifest_path, "HEAD")
 
     manifest = json.loads(manifest_path.read_text())
-    manifest["dataset_version"] = "2.2.0"
+    manifest["dataset_version"] = "2.3.0"
     manifest["direction_coverage"]["gaps"].append("Additional reviewed coverage limit.")
     manifest_path.write_text(json.dumps(manifest))
     _refresh_v2(manifest_path)
     with pytest.raises(CorpusError, match="advanced dataset_version"):
         validate(manifest_path, "HEAD")
-    manifest["dataset_version"] = "2.3.0"
+    manifest["dataset_version"] = "2.4.0"
     manifest_path.write_text(json.dumps(manifest))
     _refresh_v2(manifest_path)
-    assert validate(manifest_path, "HEAD").manifest["dataset_version"] == "2.3.0"
+    assert validate(manifest_path, "HEAD").manifest["dataset_version"] == "2.4.0"
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "nonfinite", "path", "membership"])
@@ -1684,7 +1758,11 @@ def test_v2_fixture_evidence_is_timestamped_and_sanitized(
 
 
 def _write_synthetic_private_manifest(
-    root: Path, public: golden_corpus.Corpus, case_id: str
+    root: Path,
+    public: golden_corpus.Corpus,
+    case_id: str,
+    *,
+    dataset_version: str = "2.0.0",
 ) -> Path:
     cases = root / "cases"
     cases.mkdir(parents=True)
@@ -1707,10 +1785,19 @@ def _write_synthetic_private_manifest(
             ).hexdigest(),
         }
     ]
+    metadata = {
+        "id": case_id,
+        "suite": "current",
+        "primary_category": "topology",
+        "tags": ["synthetic", "private"],
+        "grouping": "synthetic-private",
+        "provenance": "synthetic-private-test",
+        "expected_assertion": "Required: request supported endpoints. Prohibited: infer a route or make a tool call.",
+    }
     manifest = {
         "corpus": "annual-affordability",
         "format_version": "2.0.0",
-        "dataset_version": "2.0.0",
+        "dataset_version": dataset_version,
         "source_manifests": [],
         "membership": membership,
         "membership_sha256": hashlib.sha256(
@@ -1718,17 +1805,7 @@ def _write_synthetic_private_manifest(
                 membership, sort_keys=True, separators=(",", ":"), ensure_ascii=False
             ).encode()
         ).hexdigest(),
-        "case_metadata": [
-            {
-                "id": case_id,
-                "suite": "current",
-                "primary_category": "current",
-                "tags": ["synthetic", "private"],
-                "grouping": "synthetic-private",
-                "provenance": "synthetic-private-test",
-                "expected_assertion": "Required: request supported endpoints. Prohibited: infer a route or make a tool call.",
-            }
-        ],
+        "case_metadata": [metadata],
         "case_shards": [{"path": "cases/private.jsonl", "count": 1}],
         "fixtures": [],
         "payloads": [
@@ -1741,6 +1818,36 @@ def _write_synthetic_private_manifest(
         "public_membership_sha256": public.manifest["membership_sha256"],
         "dataset_sha256": "",
     }
+    if dataset_version >= "2.1.0":
+        metadata.update(
+            {
+                "split": "private",
+                "scenario_key": "synthetic-private",
+                "template_key": "synthetic-private",
+                "route_key": golden_corpus._v2_route_key(row, metadata),
+            }
+        )
+        manifest.update(
+            {
+                "allocation": {
+                    "topology": 1,
+                    "current": 0,
+                    "annual": 0,
+                    "multiturn": 0,
+                    "fault": 0,
+                    "abuse": 0,
+                    "total": 1,
+                },
+                "render_date": "2026-09-05",
+                "direction_coverage": {
+                    "inventory_rows": 1,
+                    "sampled_rows": 1,
+                    "gaps": ["synthetic private test"],
+                },
+            }
+        )
+    if dataset_version >= "2.3.0":
+        metadata["review_status"] = "synthetic_unreviewed"
     manifest["dataset_sha256"] = hashlib.sha256(
         json.dumps(
             {key: value for key, value in manifest.items() if key != "dataset_sha256"},
@@ -1752,6 +1859,38 @@ def _write_synthetic_private_manifest(
     path = root / "private-manifest.json"
     path.write_text(json.dumps(manifest, indent=2) + "\n")
     return path
+
+
+def test_private_v2_3_accepts_synthetic_unreviewed_status(tmp_path: Path) -> None:
+    public = validate(V2_FINAL_MANIFEST)
+    private_path = _write_synthetic_private_manifest(
+        tmp_path / "valid", public, "private-synthetic-case", dataset_version="2.3.0"
+    )
+    private = validate_private_manifest(private_path, public)
+    assert private.manifest["dataset_version"] == "2.3.0"
+    assert [item["review_status"] for item in private.manifest["case_metadata"]] == [
+        "synthetic_unreviewed"
+    ]
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unknown", "nonstring"])
+def test_private_v2_3_review_status_fails_closed(tmp_path: Path, mutation: str) -> None:
+    public = validate(V2_FINAL_MANIFEST)
+    private_path = _write_synthetic_private_manifest(
+        tmp_path / mutation, public, "private-synthetic-case", dataset_version="2.3.0"
+    )
+    manifest = json.loads(private_path.read_text())
+    metadata = manifest["case_metadata"][0]
+    if mutation == "missing":
+        del metadata["review_status"]
+    elif mutation == "unknown":
+        metadata["review_status"] = "reviewed_by_someone"
+    else:
+        metadata["review_status"] = False
+    private_path.write_text(json.dumps(manifest, ensure_ascii=False) + "\n")
+    _refresh_v2(private_path)
+    with pytest.raises(CorpusError):
+        validate_private_manifest(private_path, public)
 
 
 def test_private_v2_validator_uses_supplied_public_identity_and_rejects_overlap(
