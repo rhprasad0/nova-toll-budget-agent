@@ -41,9 +41,10 @@ of a `SELECT`. Do not use:
   `STABLE` or `IMMUTABLE` and appropriate for the question.
 
 Name columns instead of using `SELECT *`. Add `LIMIT 100` to row-returning
-diagnostics unless the query already returns one aggregate row. Add a stable
-`ORDER BY` when row order affects the answer. Do not fetch unrelated columns or
-rows.
+diagnostics. Fixed-size scalar aggregates such as `count`, `min`, and `max` do
+not need a limit; bound the input to collecting aggregates such as `json_agg`,
+`array_agg`, and `string_agg` to 100 rows in a subquery. Add a stable `ORDER BY`
+when row order affects the answer. Do not fetch unrelated columns or rows.
 
 ## Connect
 
