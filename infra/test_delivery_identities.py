@@ -547,6 +547,13 @@ def _check_production_planner() -> None:
         require(f"{output}: ${{{{ steps.store.outputs.{output} }}}}", PRODUCTION_PLAN)
         require(f'"{output}="', PRODUCTION_PLAN)
     require("GITHUB_STEP_SUMMARY", PRODUCTION_PLAN)
+    manifest_object = re.search(r"'\{schema_version: 1, ([^']+)\}'", planner)
+    manifest_predicate = re.search(r"\(keys_unsorted \| sort\) == \[([^]]+)\]", planner)
+    if manifest_object is None or manifest_predicate is None:
+        raise AssertionError("manifest schema/predicate missing")
+    generated_manifest_keys = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*:", manifest_object.group(0))
+    predicate_manifest_keys = re.findall(r'"([^"]+)"', manifest_predicate.group(1))
+    assert predicate_manifest_keys == sorted(generated_manifest_keys)
     require('tags              = local.is_production ? { delivery_proof = "issue-301" } : {}', (ROOT / "v2" / "infra" / "agentcore.tf").read_text())
     require("v2-production-plan.yml", WORKFLOW)
     require("PR CI never runs `terraform plan` or `apply`", (ROOT / "v2" / "README.md").read_text())

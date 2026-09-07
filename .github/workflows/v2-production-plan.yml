@@ -576,7 +576,7 @@ jobs:
             >"$MANIFEST"
           jq -e --arg commit_sha "$GITHUB_SHA" --arg key "$PLAN_KEY" --arg run_id "$GITHUB_RUN_ID" '
             type == "object" and
-            (keys_unsorted | sort) == ["account", "action", "bucket", "commit_sha", "kms_key_arn", "key", "local_sha256", "region", "release_id", "repository", "resource", "run_id", "s3_sha256", "schema_version", "tag_key", "tag_value", "version_id"] and
+            (keys_unsorted | sort) == ["account", "action", "bucket", "commit_sha", "key", "kms_key_arn", "local_sha256", "region", "release_id", "repository", "resource", "run_id", "s3_sha256", "schema_version", "tag_key", "tag_value", "version_id"] and
             .schema_version == 1 and .bucket == "nova-toll-tfstate-920534282028" and .key == $key and
             (.version_id | test("^[A-Za-z0-9._+/=-]+$")) and (.local_sha256 | test("^[0-9a-f]{64}$")) and
             (.s3_sha256 | test("^[A-Za-z0-9+/]+={0,2}$")) and .kms_key_arn == "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7" and
