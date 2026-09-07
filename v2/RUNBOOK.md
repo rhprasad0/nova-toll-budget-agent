@@ -6,12 +6,19 @@ saved plan.
 
 ## Delivery contract and production baseline
 
-PRs use disposable PostGIS migration validation only; they never access or
-mutate deployed databases or schemas. `main` continues to run validation only.
-Published releases are manual, reviewed deployments from `main`. The sole
-schema-change exception is the separately authorized, reviewed migration 030
-procedure below; no other schema-changing release is authorized here, and
-future exceptions require approved deployment automation. Application release
+PRs use disposable PostGIS migration validation only; the checks are
+credential-free and never access or mutate deployed databases or schemas. The
+CI workflow on pushes to `main` also validates only. After merge, the
+protected development migration workflow may be manually dispatched from
+`refs/heads/main` for the fixed development target; it is separate from PR CI
+and accepts no arbitrary target or migration-path inputs. See the [protected
+development migration workflow](#protected-development-migration-workflow-305-slice-3)
+below for its foundation, bootstrap, identity, and evidence gates. Published
+releases are manual, reviewed deployments from `main`.
+Production schema changes remain limited to the separately authorized, reviewed
+migration 030 procedure below; no other production schema-changing release is
+authorized here, and future exceptions require approved deployment automation.
+Application release
 artifacts do not apply schema changes; this procedure is separate.
 
 The current production baseline is AWS account `920534282028` in `us-east-1`:
@@ -44,10 +51,14 @@ changes. Stop on any unexplained action or any replacement.
 ## Manual Oracle migration 030
 
 Migration `v2/db/migrations/030_upgrade_oracle_1_13_1_to_1_14_0.sql` is the
-only currently approved manual schema change. Applying it requires separate,
-explicit operator authorization and a reviewed checkout containing that exact
-file. This procedure is not a PR or CI step: PRs remain offline and use only
-disposable PostgreSQL migration validation.
+only currently approved manual production schema change. Applying it requires
+separate, explicit operator authorization and a reviewed checkout containing
+that exact file. This procedure is not a PR or CI step: PRs remain offline and
+use only disposable PostgreSQL migration validation. Current development-account
+migrations follow the protected, fixed-target workflow documented below. The
+legacy `nova_toll_development` rehearsal step in this bounded, separately
+authorized migration-030 procedure remains a production-account rehearsal, not
+that workflow.
 
 Before starting, confirm all of the following in the operator's environment;
 these are runtime preconditions, not repository-verified facts:

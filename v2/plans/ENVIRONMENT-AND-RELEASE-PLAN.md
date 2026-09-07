@@ -16,10 +16,9 @@ Target region: AWS `us-east-1`
 ## 1. Objective
 
 First create a persistent development environment at `dev.tollchat.ai` while
-retaining production at `tollchat.ai`. Complete and verify that environment
-split before adding deployed-database migration automation or persistent agent
-tracing. Those follow-on capabilities should be proven in development before
-production rollout.
+retaining production at `tollchat.ai`. The environment split is the boundary
+for the protected development-only migration workflow and persistent agent
+tracing; each capability must be proven in development before production use.
 
 After the split is stable, a merge to `main` should deploy to development and a
 published release should promote the exact development-proven revision to
@@ -59,9 +58,9 @@ expensive shared foundations or adding tools that TollChat does not need.
 | Terraform state | Explicit S3 state key per environment | More visible and harder to select accidentally than CLI workspaces. |
 | Production compatibility | Preserve current state key and physical names | The environment refactor must not replace production resources. |
 | Environment identity | Application objects are `development` or `production`; each account-local foundation uses `shared` internally | Tags identify supported AWS resources; names, descriptions, PostgreSQL comments, and deployment manifests cover objects that cannot carry AWS tags. |
-| Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; add migrator roles later | Isolates ordinary application mistakes while keeping migration automation out of the initial split. It is not an instance-level security boundary. |
+| Database isolation | Separate PostgreSQL databases and runtime roles on the existing RDS instance; keep the migrator role development-only | Isolates ordinary application mistakes while keeping migration authority out of production. It is not an instance-level security boundary. |
 | Deployable artifact | Build once per commit and address by SHA-256 | Development and production should execute identical bytes. |
-| Migration execution | Retain disposable PR checks; defer deployed migration automation until after the environment split | CI validation is already useful, while environment migrator roles and deployment sequencing can be proven later in development. |
+| Migration execution | Retain disposable PR checks; run registered migrations only through the protected main-only development workflow | CI validation stays credential-free, while the fixed development identity and target provide the only automated deployed-migration path; production remains separately authorized. |
 | Agent tracing | Defer persistent traces, PII sanitization, storage, and privacy-notice changes until after the environment split | Establish the boundary first, then validate the complete telemetry path in development before production. |
 | Timed deterministic probes | EventBridge Scheduler invokes separate development and production Lambda functions built from one artifact | AWS owns the clock while environment-specific functions, roles, databases, result prefixes, and failure handling preserve least privilege. |
 | Timed agent evaluations | Run selectively in development; use only a small post-release production canary | Full Strands evaluations are CI/release work, not a continuously duplicated Lambda workload. |
@@ -204,9 +203,10 @@ The AWS provider does not manage PostgreSQL databases or roles. Create the
 development database and its initial roles through a separately approved,
 one-time SQL bootstrap using a database administrator identity. Do not add a
 PostgreSQL Terraform provider or `null_resource` merely to hide that operation
-inside an application plan. Treat this as a one-time bootstrap, not a general
-migration runner. Deployed schema changes remain out of scope until the
-post-split migration phase.
+inside an application plan. Treat this as a one-time bootstrap; subsequent
+development migrations use only the protected fixed-target workflow, not a
+general migration runner. Production schema changes remain separately
+authorized.
 
 ### 5.2 Environment labeling and tagging
 
@@ -321,16 +321,19 @@ resource or provide an unreviewed development application release procedure.
 The handoff remains non-operative until #330, #331, and #332 complete their
 separately approved boundaries.
 
-Until the follow-on migration phase is complete, do not deploy changes that
-require a deployed schema change. Production keeps its existing database and
-deployment procedure unchanged.
+Do not use an application deployment to apply a schema change. Development
+schema changes use the protected workflow after bootstrap; production keeps its
+existing database and deployment procedure, with migration 030 as the only
+currently authorized manual production schema change.
 
 ### 6.3 Post-split migration work
 
-Design deployed migration automation only after the environment split is
-verified. That follow-on plan must start in development and cover identities,
-ordering, failure behavior, production approval, and recovery. The detailed
-runner design is intentionally outside this plan.
+The protected development migration workflow is the post-split implementation
+of the migration boundary. It starts only after foundation and fresh-bootstrap
+gates, uses a fixed development identity and target, and covers ordering,
+failure behavior, and sanitized evidence. Production approval and recovery
+remain governed by the separate migration-030 procedure; broader production
+automation is intentionally outside this plan.
 
 ### 6.4 Shared-instance database boundary
 
@@ -351,8 +354,9 @@ runner design is intentionally outside this plan.
 ## 7. Delivery workflows
 
 The initial environment split stops after development is bootstrapped and
-isolation is verified. The workflow below initially supports only changes that
-do not require deployed schema changes. Persistent tracing is also outside this
+isolation is verified. The workflow below deploys application artifacts without
+applying schema changes; the protected development migration workflow is a
+separate post-merge operation. Persistent tracing is also outside this
 milestone.
 
 ```mermaid
@@ -384,7 +388,8 @@ flowchart LR
 - Wait for required CI checks.
 - Build each deployable package once.
 - Store packages in encrypted, versioned S3 keys addressed by commit and digest.
-- Reject candidates that require deployed schema changes.
+- Reject candidates whose schema change has not passed the protected development
+  migration workflow; application artifacts never apply schema changes.
 - Plan and apply development using those package versions.
 - Wait for CloudFront and runtime readiness.
 - Run endpoint smoke checks and a small live agent evaluation.
@@ -404,7 +409,9 @@ queued deployment.
   different commit or production deployment.
 - Resolve packages by the development-proven commit and verify every digest.
 - Run the release evaluation gate against that exact candidate.
-- Reject releases that require deployed schema changes.
+- Reject releases that rely on application artifacts to apply schema changes;
+  production schema changes remain bounded by the separately authorized
+  migration-030 procedure.
 - Generate the saved Terraform plan and present non-secret plan, artifact, and
   eval summaries for review.
 - Require the protected production environment approval.
@@ -836,12 +843,12 @@ attempts to apply or read deployment secrets fail.
 **Objective:** Deploy every accepted `main` commit to development safely.
 
 **Guidance:** Build once, publish digest-addressed packages, apply Terraform,
-wait for readiness, and run endpoint plus agent smoke checks. Reject candidates
-that require a deployed schema change until the separate migration plan is
-implemented.
+wait for readiness, and run endpoint plus agent smoke checks. Keep schema
+changes out of application artifacts; candidates requiring a development schema
+change must pass the protected migration workflow first.
 
-**Tests:** Exercise schema-change rejection, failed build, failed apply, and
-failed smoke paths. Confirm active applies are never canceled.
+**Tests:** Exercise schema-change gating, failed build, failed apply, and failed
+smoke paths. Confirm active applies are never canceled.
 
 **Integration:** Converts successful CI output into the first complete CD path.
 
@@ -943,7 +950,8 @@ safe.
   PostgreSQL databases.
 - Pull requests cannot mutate AWS resources or deployed databases.
 - The development database is bootstrapped once from the current canonical
-  schemas without introducing a general deployment migration runner.
+  schemas without turning bootstrap into a general deployment migration runner;
+  subsequent development migrations use the protected fixed-target workflow.
 - Development runtime identities cannot connect to the production database or
   assume production roles in automated negative tests.
 - The `environment` cost-allocation key is active, the resource inventory has no
@@ -959,9 +967,10 @@ safe.
 - Existing disposable migration tests remain in pull-request CI.
 - Only the existing network-free evaluator check and a basic development smoke
   and isolation check are required for the split.
-- AWS-native timed probes, deployed migration automation, persistent trace
-  collection, and the expanded release-evaluation ceremony are not required to
-  declare the environment split complete.
+- AWS-native timed probes, general production migration automation, persistent
+  trace collection, and the expanded release-evaluation ceremony are not
+  required to declare the environment split complete. The protected,
+  fixed-target development migration workflow is documented separately.
 
 ### 14.2 Follow-on delivery completion
 
@@ -1007,8 +1016,9 @@ safe.
 
 ## 15. Planned follow-on work after the environment split
 
-- [Run environment-scoped database migrations through approved CI/CD jobs](https://github.com/rhprasad0/nova-toll-budget-agent/issues/305),
-  validate them in development, then authorize production use.
+- Keep development schema migrations on the protected, fixed-target workflow;
+  production schema changes remain limited to the separately authorized
+  migration-030 procedure unless approved deployment automation replaces it.
 - [Enable AgentCore observability with PII-safe telemetry](https://github.com/rhprasad0/nova-toll-budget-agent/issues/307),
   restricted storage, retention, and the matching privacy notice in
   development, then decide on production enablement.

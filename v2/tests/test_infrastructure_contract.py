@@ -1428,15 +1428,20 @@ def test_delivery_contract_keeps_pr_checks_disposable_and_production_fixed():
         assert forbidden not in workflow
     for text in (
         "PRs use disposable migration validation only",
+        "checks are credential-free",
         "never mutate deployed databases or schemas",
-        "Only the reviewed, explicitly authorized Oracle migration",
-        "Generic or future manual migrations are not authorized",
+        "protected `development` migration workflow",
+        "refs/heads/main",
+        "For production, only the reviewed, explicitly authorized Oracle migration",
+        "Generic or future manual migrations are not authorized for",
     ):
         assert text in AGENTS
     for text in (
         "PRs use disposable PostGIS migration validation only",
-        "sole\nschema-change exception is the separately authorized, reviewed migration 030",
+        "checks are\ncredential-free",
+        "Production schema changes remain limited to the separately authorized, reviewed",
         "Application release\nartifacts do not apply schema changes; this procedure is separate",
+        "protected development migration workflow",
         "nova-toll-tfstate-920534282028",
         "nova-toll/terraform.tfstate",
         "nova-toll/v2/terraform.tfstate",

@@ -117,19 +117,27 @@ money, and response grounding.
 
 **Verify it:** [run the local agent](v2/README.md#local-agent-console) ·
 [build and test](v2/README.md#verify-the-build) ·
-[run offline eval checks](v2/eval/README.md#offline-check) ·
+[run offline eval checks](v2/eval/README.md#offline-validation-and-review) ·
 [run live evals](v2/eval/README.md#live-run)
 
 ## Repository map
 
 | Area | Purpose |
 | --- | --- |
-| [`v2/agent/`](v2/agent/) | Strands agent, prompt contract, AgentCore entrypoint, and browser experience |
-| [`v2/agent_tools/`](v2/agent_tools/) | The two agent tools and shared deterministic pricing/route logic |
-| [`v2/db/`](v2/db/) and [`v2/oracle/`](v2/oracle/) | Versioned pricing schema, directed route graph, migrations, and source evidence |
-| [`v2/eval/`](v2/eval/) | Offline checks, timed live evaluations, and curated reports |
+| [`v2/agent/`](v2/agent/) | Strands agent, prompt contract, AgentCore entrypoint, and browser frontend |
+| [`v2/agent/assets/`](v2/agent/assets/) | Checked-in frontend assets and supported-route map data |
+| [`v2/agent_tools/`](v2/agent_tools/) | The two deterministic agent tools and shared pricing/route logic |
+| [`v2/db/`](v2/db/) | Versioned schemas, roles, migrations, registry, immutable baselines, and analysis |
+| [`v2/scripts/`](v2/scripts/) | Disposable database checks, schema checks, bootstrap, and development migration runner |
+| [`v2/oracle/`](v2/oracle/) | Oracle source evidence, mappings, builder, and checked-in generated inputs |
+| [`v2/lambdas/`](v2/lambdas/) | Loader, publisher, and chat-proxy functions |
+| [`v2/tests/`](v2/tests/) and [`v2/eval/`](v2/eval/) | Contract/unit tests, offline checks, timed live evaluations, and curated reports |
 | [`v2/infra/`](v2/infra/) | Application runtime, edge, observability, and least-privilege infrastructure |
 | [`infra/`](infra/) | Shared polling, raw storage, RDS, networking, security, and Terraform state |
+| [`.github/workflows/`](.github/workflows/) | Credential-free PR checks and protected deployment/migration workflows |
+| [`.agents/skills/project-graph/SKILL.md`](.agents/skills/project-graph/SKILL.md) | Project-graph role instructions and artifact contract |
+| [`.codex/agents/`](.codex/agents/) | Project-graph role configurations |
+| `.worktrees/<name>/.graph/` | Ignored per-run project-graph artifacts, not a tracked repository directory |
 
 Start with the [v2 technical guide](v2/README.md) for implementation and
 operations details.

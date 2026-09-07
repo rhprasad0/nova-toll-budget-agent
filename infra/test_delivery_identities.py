@@ -568,8 +568,12 @@ def _check_production_planner() -> None:
     assert predicate_manifest_keys == sorted(generated_manifest_keys)
     require('tags              = local.is_production ? { delivery_proof = "issue-301" } : {}', (ROOT / "v2" / "infra" / "agentcore.tf").read_text())
     require("v2-production-plan.yml", WORKFLOW)
-    require("PR CI never runs `terraform plan` or `apply`", (ROOT / "v2" / "README.md").read_text())
-    require("manual production planner stores only a gated", (ROOT / "v2" / "RUNBOOK.md").read_text())
+    v2_readme = (ROOT / "v2" / "README.md").read_text()
+    runbook = (ROOT / "v2" / "RUNBOOK.md").read_text()
+    require("credential-free PR CI never runs `terraform", v2_readme)
+    require("protected, manually\ndispatched [development migration workflow]", v2_readme)
+    require("manual production planner stores only a gated", runbook)
+    require("Production schema changes remain limited to the separately authorized", runbook)
 
 
 def _check_production_upload_stub() -> None:
