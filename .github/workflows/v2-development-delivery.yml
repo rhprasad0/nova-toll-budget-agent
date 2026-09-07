@@ -220,9 +220,10 @@ jobs:
           test -s "$RUNNER_TEMP/protected-main-oidc.json"
           FOUNDATION_VARS="$RUNNER_TEMP/foundation.tfvars.json"
           PLAN="$RUNNER_TEMP/development.tfplan"
+          PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"
 
           cleanup() {
-            rm -f -- "$FOUNDATION_VARS" "$PLAN"
+            rm -f -- "$FOUNDATION_VARS" "$PLAN" "$PLAN_JSON"
           }
           trap cleanup EXIT
 
@@ -248,5 +249,53 @@ jobs:
             -var agentcore_package_path=build/agentcore.zip \
             -var chat_proxy_package_path=build/chat-proxy.zip
 
+          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"
+          if ! jq -e '
+            def approved_delete($address):
+              [
+                "aws_iam_role.usage_publisher",
+                "aws_iam_role_policy.usage_publisher",
+                "aws_lambda_function.usage_publisher",
+                "aws_cloudwatch_event_rule.usage_publisher",
+                "aws_cloudwatch_event_target.usage_publisher",
+                "aws_lambda_permission.usage_publisher",
+                "aws_cloudwatch_metric_alarm.usage_publisher_errors",
+                "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
+                "aws_iam_role.agent_usage_rollup",
+                "aws_iam_role_policy.agent_usage_rollup",
+                "aws_lambda_function.agent_usage_rollup",
+                "aws_cloudwatch_event_rule.agent_usage_rollup",
+                "aws_cloudwatch_event_target.agent_usage_rollup",
+                "aws_lambda_permission.agent_usage_rollup",
+                "aws_cloudwatch_metric_alarm.agent_usage_log_coverage",
+                "aws_cloudwatch_metric_alarm.agent_usage_rollup_errors",
+                "aws_cloudwatch_metric_alarm.agent_usage_rollup_missing",
+                "aws_wafv2_web_acl_logging_configuration.agent_reports"
+              ] | index($address) != null;
+            def known_action:
+              . == "no-op" or . == "read" or . == "create" or . == "update" or . == "delete";
+            def valid_change:
+              try (
+                type == "object"
+                and (.address | type) == "string"
+                and (.mode | type) == "string"
+                and (.mode == "managed" or .mode == "data")
+                and (has("deposed") | not)
+                and (has("previous_address") | not)
+                and (.change | type) == "object"
+                and (.change.actions | type) == "array"
+                and (.change.actions | length > 0)
+                and all(.change.actions[]; type == "string" and known_action)
+                and (
+                  (any(.change.actions[]; . == "delete") | not)
+                  or (.change.actions == ["delete"] and approved_delete(.address))
+                )
+              ) catch false;
+            (.resource_changes | type == "array")
+            and all(.resource_changes[]; valid_change)
+          ' "$PLAN_JSON" >/dev/null; then
+            echo "application plan contains an unauthorized or malformed destructive change" >&2
+            exit 1
+          fi
 
           terraform -chdir=v2/infra apply -input=false "$PLAN"

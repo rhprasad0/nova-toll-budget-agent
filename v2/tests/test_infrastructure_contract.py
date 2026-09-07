@@ -66,6 +66,26 @@ FOUNDATION_FIELDS = (
     "db_instance",
     "alerts_topic_arn",
 )
+DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES = (
+    "aws_iam_role.usage_publisher",
+    "aws_iam_role_policy.usage_publisher",
+    "aws_lambda_function.usage_publisher",
+    "aws_cloudwatch_event_rule.usage_publisher",
+    "aws_cloudwatch_event_target.usage_publisher",
+    "aws_lambda_permission.usage_publisher",
+    "aws_cloudwatch_metric_alarm.usage_publisher_errors",
+    "aws_cloudwatch_metric_alarm.usage_publisher_failed_invocations",
+    "aws_iam_role.agent_usage_rollup",
+    "aws_iam_role_policy.agent_usage_rollup",
+    "aws_lambda_function.agent_usage_rollup",
+    "aws_cloudwatch_event_rule.agent_usage_rollup",
+    "aws_cloudwatch_event_target.agent_usage_rollup",
+    "aws_lambda_permission.agent_usage_rollup",
+    "aws_cloudwatch_metric_alarm.agent_usage_log_coverage",
+    "aws_cloudwatch_metric_alarm.agent_usage_rollup_errors",
+    "aws_cloudwatch_metric_alarm.agent_usage_rollup_missing",
+    "aws_wafv2_web_acl_logging_configuration.agent_reports",
+)
 DEVELOPMENT_DELIVERY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-development-delivery.yml"
 ).read_text()
@@ -3830,6 +3850,8 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert "-var-file=development.tfvars" in deploy_source
     assert 'terraform -chdir=v2/infra plan -input=false -out="$PLAN"' in deploy_source
+    assert 'PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"' in deploy_source
+    assert 'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"' in deploy_source
     assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in deploy_source
     assert (
         deploy_source.count('terraform -chdir=v2/infra plan -input=false -out="$PLAN"')
@@ -3838,22 +3860,33 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert (
         deploy_source.count('terraform -chdir=v2/infra apply -input=false "$PLAN"') == 1
     )
-    assert deploy_source.index(
+    assert (
+        deploy_source.count(
+            'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"'
+        )
+        == 1
+    )
+    assert 'rm -f -- "$FOUNDATION_VARS" "$PLAN" "$PLAN_JSON"' in deploy_source
+    plan_index = deploy_source.index(
         'terraform -chdir=v2/infra plan -input=false -out="$PLAN"'
-    ) < deploy_source.index('terraform -chdir=v2/infra apply -input=false "$PLAN"')
-    for removed in (
-        "PLAN_JSON",
-        'terraform -chdir=v2/infra show -json "$PLAN"',
-        "python3 - \"$PLAN_JSON\" <<'PY'",
+    )
+    show_index = deploy_source.index(
+        'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"'
+    )
+    apply_index = deploy_source.index(
+        'terraform -chdir=v2/infra apply -input=false "$PLAN"'
+    )
+    preflight_index = deploy_source.index("if ! jq -e '\n", show_index)
+    assert plan_index < show_index < preflight_index < apply_index
+    for forbidden in (
         "known_managed",
         "known_data",
         "read_only",
         "immutable",
         "teardown_deletions",
         "moved/deposed change",
-        "development plan gate failed closed",
     ):
-        assert removed not in deploy_source
+        assert forbidden not in deploy_source
     for package in (
         "build/loader.zip",
         "build/publisher.zip",
@@ -3875,6 +3908,167 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "920534282028",
     ):
         assert forbidden not in source
+
+
+def _development_delivery_plan_predicate(source: str) -> str:
+    workflow = cast(dict[str, object], yaml.safe_load(source))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    deploy_source = _workflow_run_source(jobs["deploy"])
+    match = re.search(
+        r"""if ! jq -e '\n(.*?)\n' "\$PLAN_JSON" >/dev/null; then""",
+        deploy_source,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    return match.group(1)
+
+
+def test_development_delivery_plan_preflight_fails_closed_for_unapproved_deletes():
+    predicate = _development_delivery_plan_predicate(DEVELOPMENT_DELIVERY_WORKFLOW)
+
+    def change(address: object, actions: object) -> dict[str, object]:
+        return {
+            "address": address,
+            "mode": "managed",
+            "change": {"actions": actions},
+        }
+
+    def accepts(plan: object) -> bool:
+        result = subprocess.run(
+            ["jq", "-e", predicate],
+            input=json.dumps(plan),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
+
+    def accepts_raw(plan: str) -> bool:
+        result = subprocess.run(
+            ["jq", "-e", predicate],
+            input=plan,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
+
+    assert len(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES) == 18
+    for address in DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES:
+        assert accepts({"resource_changes": [change(address, ["delete"])]}), address
+        assert not accepts(
+            {"resource_changes": [change(f"{address}[0]", ["delete"])]}
+        ), address
+
+    assert accepts(
+        {
+            "resource_changes": [
+                change(address, ["delete"])
+                for address in DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES
+            ]
+        }
+    )
+    assert accepts(
+        {
+            "resource_changes": [
+                change('aws_s3_object.site_assets["asset"]', ["update"]),
+                change("aws_lambda_function.active", ["create"]),
+            ]
+        }
+    )
+    for action in ("no-op", "read", "create", "update"):
+        assert accepts(
+            {"resource_changes": [change("aws_lambda_function.active", [action])]}
+        )
+    data_read = change("data.aws_region.current", ["read"])
+    data_read["mode"] = "data"
+    assert accepts({"resource_changes": [data_read]})
+
+    for actions in (["delete", "create"], ["create", "delete"], ["delete", "update"]):
+        assert not accepts(
+            {
+                "resource_changes": [
+                    change(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES[0], actions)
+                ]
+            }
+        )
+
+    for actions in (["import"], ["refresh"], ["unknown"], ["create", "unknown"]):
+        assert not accepts(
+            {"resource_changes": [change("aws_lambda_function.active", actions)]}
+        )
+
+    for mode in (None, "", "unknown", 1, cast(object, [])):
+        invalid_mode = change("aws_lambda_function.active", ["update"])
+        invalid_mode["mode"] = mode
+        assert not accepts({"resource_changes": [invalid_mode]}), mode
+    missing_mode = change("aws_lambda_function.active", ["update"])
+    del missing_mode["mode"]
+    assert not accepts({"resource_changes": [missing_mode]})
+
+    for address in (
+        "aws_iam_role.usage_publisher_extra",
+        "aws_iam_role.usage_publisher[*]",
+        'aws_s3_object.site_assets["asset"]',
+        "aws_s3_object.usage",
+        "aws_cloudwatch_log_group.usage_publisher",
+        "aws_cloudwatch_log_group.agent_usage_rollup",
+        "aws_lambda_function.active",
+        "aws_athena_named_query.usage",
+        "aws_athena_named_query.agent_usage_rollup",
+    ):
+        assert not accepts({"resource_changes": [change(address, ["delete"])]}), address
+
+    assert not accepts(
+        {
+            "resource_changes": [
+                change('aws_s3_object.site_assets["asset"]', ["delete"]),
+                change("aws_lambda_function.active", ["update"]),
+            ]
+        }
+    )
+    deposed_delete = dict(
+        change(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES[0], ["delete"]),
+        deposed="old",
+    )
+    previous_address_delete = dict(
+        change(DEVELOPMENT_ANALYTICS_DELETE_ADDRESSES[0], ["delete"]),
+        previous_address="aws_iam_role.usage_publisher_old",
+    )
+    assert not accepts({"resource_changes": [deposed_delete]})
+    assert not accepts({"resource_changes": [previous_address_delete]})
+    assert not accepts(
+        {
+            "resource_changes": [
+                deposed_delete,
+                change("aws_lambda_function.active", ["create"]),
+            ]
+        }
+    )
+
+    malformed: tuple[object, ...] = (
+        cast(object, {}),
+        {"resource_changes": None},
+        {"resource_changes": cast(object, {})},
+        {"resource_changes": "not-an-array"},
+        {"resource_changes": [None]},
+        {"resource_changes": [cast(object, {})]},
+        {"resource_changes": [change(None, ["delete"])]},
+        {"resource_changes": [change("aws_lambda_function.active", None)]},
+        {"resource_changes": [change("aws_lambda_function.active", {})]},
+        {"resource_changes": [change("aws_lambda_function.active", "update")]},
+        {"resource_changes": [change("aws_lambda_function.active", [])]},
+        {"resource_changes": [change("aws_lambda_function.active", [None])]},
+        {"resource_changes": [change("aws_lambda_function.active", ["delete", 1])]},
+        {
+            "resource_changes": [
+                {"address": "aws_lambda_function.active", "change": None}
+            ]
+        },
+    )
+    for malformed_plan in malformed:
+        assert not accepts(malformed_plan), malformed_plan
+    assert not accepts_raw("{")
 
 
 def test_development_oidc_validator_rejects_malformed_and_wrong_claim_fixtures():
