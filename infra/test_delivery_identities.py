@@ -466,14 +466,24 @@ def _check_production_planner() -> None:
     require('if not isinstance(response_metadata, Mapping):', PRODUCTION_PLAN)
     require('response_metadata.get("HTTPHeaders")', PRODUCTION_PLAN)
     require('if not isinstance(response_headers, Mapping):', PRODUCTION_PLAN)
-    require('response_headers["x-amz-version-id"]', PRODUCTION_PLAN)
+    require('response_headers.get("x-amz-version-id")', PRODUCTION_PLAN)
     require('version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"', PRODUCTION_PLAN)
-    require('re.fullmatch(version_pattern, candidate)', PRODUCTION_PLAN)
-    require('response_version_id != header_version_id', PRODUCTION_PLAN)
+    require('if not isinstance(version_id, str):', PRODUCTION_PLAN)
+    require('re.fullmatch(version_pattern, version_id)', PRODUCTION_PLAN)
     require('"VersionId": version_id', PRODUCTION_PLAN)
-    require('"ServerSideEncryption": response.get("ServerSideEncryption", "aws:kms")', PRODUCTION_PLAN)
-    require('"SSEKMSKeyId": response.get("SSEKMSKeyId", os.environ["TFSTATE_KMS_KEY_ARN"])', PRODUCTION_PLAN)
-    require('"ChecksumSHA256": response.get("ChecksumSHA256", os.environ["EXPECTED_S3_SHA256"])', PRODUCTION_PLAN)
+    require('"ServerSideEncryption": "aws:kms"', PRODUCTION_PLAN)
+    require('"SSEKMSKeyId": os.environ["TFSTATE_KMS_KEY_ARN"]', PRODUCTION_PLAN)
+    require('"ChecksumSHA256": os.environ["EXPECTED_S3_SHA256"]', PRODUCTION_PLAN)
+    for forbidden in (
+        'response["VersionId"]',
+        "response_version_id",
+        "header_version_id",
+        "conflicting S3 version IDs",
+        'response.get("ServerSideEncryption"',
+        'response.get("SSEKMSKeyId"',
+        'response.get("ChecksumSHA256"',
+    ):
+        assert forbidden not in planner, forbidden
     require('>/dev/null 2>"$PUT_ERROR"', PRODUCTION_PLAN)
     require("os.fchmod(response_fd, 0o600)", PRODUCTION_PLAN)
     for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
@@ -601,24 +611,17 @@ def _check_production_upload_stub() -> None:
                 if expected is None:
                     assert not response_path.exists()
 
-            run(
-                {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": {}}},
-                "modeled",
-                expected_metadata,
-            )
             header_mapping = UserDict({"x-amz-version-id": "version-301"})
             assert not isinstance(header_mapping, dict)
             run(
-                {"ResponseMetadata": {"HTTPHeaders": header_mapping}},
-                "header",
-                expected_metadata,
-            )
-            run(
                 {
-                    "VersionId": "version-301",
-                    "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-301"}},
+                    "VersionId": "misleading-model-version",
+                    "ServerSideEncryption": "AES256",
+                    "SSEKMSKeyId": "misleading-model-kms",
+                    "ChecksumSHA256": "misleading-model-checksum",
+                    "ResponseMetadata": {"HTTPHeaders": header_mapping},
                 },
-                "equal",
+                "header",
                 expected_metadata,
             )
             for name, invalid_response in (
@@ -626,18 +629,15 @@ def _check_production_upload_stub() -> None:
                 ("metadata-missing", {"VersionId": "version-301"}),
                 ("headers-missing", {"VersionId": "version-301", "ResponseMetadata": {}}),
                 ("response-non-mapping", []),
-                ("conflicting", {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version-302"}}}),
-                ("modeled-null", {"VersionId": None, "ResponseMetadata": {"HTTPHeaders": {}}}),
                 ("header-null", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": None}}}),
-                ("modeled-non-string", {"VersionId": 301, "ResponseMetadata": {"HTTPHeaders": {}}}),
                 ("header-non-string", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": 301}}}),
                 ("metadata-malformed", {"ResponseMetadata": None}),
                 ("metadata-non-mapping", {"VersionId": "version-301", "ResponseMetadata": []}),
                 ("headers-malformed", {"ResponseMetadata": {"HTTPHeaders": None}}),
                 ("headers-non-mapping", {"VersionId": "version-301", "ResponseMetadata": {"HTTPHeaders": []}}),
-                ("invalid-character", {"VersionId": "version 301", "ResponseMetadata": {"HTTPHeaders": {}}}),
-                ("empty", {"VersionId": "", "ResponseMetadata": {"HTTPHeaders": {}}}),
-                ("overlong", {"VersionId": "v" * 257, "ResponseMetadata": {"HTTPHeaders": {}}}),
+                ("invalid-character", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "version 301"}}}),
+                ("empty", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": ""}}}),
+                ("overlong", {"ResponseMetadata": {"HTTPHeaders": {"x-amz-version-id": "v" * 257}}}),
             ):
                 run(invalid_response, name, None)
     finally:
