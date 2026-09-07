@@ -447,17 +447,37 @@ jobs:
           LOCAL_SHA256="$(sha256sum "$PLAN" | awk '{print $1}')"
           [[ "$LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           EXPECTED_S3_SHA256="$(printf '%s' "$LOCAL_SHA256" | xxd -r -p | base64 -w0)"
-          aws s3api put-object \
-            --region "$AWS_REGION" \
-            --bucket "$PLAN_BUCKET" \
-            --key "$PLAN_KEY" \
-            --body "$PLAN" \
-            --expected-bucket-owner 920534282028 \
-            --if-none-match '*' \
-            --server-side-encryption aws:kms \
-            --sse-kms-key-id "$TFSTATE_KMS_KEY_ARN" \
-            --checksum-algorithm SHA256 \
-            >"$PUT_RESPONSE" 2>"$PUT_ERROR"
+          PLAN_KEY="$PLAN_KEY" uv run --project v2 python - "$PLAN" "$PUT_RESPONSE" \
+            >/dev/null 2>"$PUT_ERROR" <<'PY'
+          import json
+          import os
+          import sys
+
+          import boto3
+
+          plan_path, response_path = sys.argv[1:]
+          with open(plan_path, "rb") as plan:
+              response = boto3.client("s3", region_name=os.environ["AWS_REGION"]).put_object(
+                  Bucket=os.environ["PLAN_BUCKET"],
+                  Key=os.environ["PLAN_KEY"],
+                  Body=plan,
+                  ExpectedBucketOwner="920534282028",
+                  IfNoneMatch="*",
+                  ServerSideEncryption="aws:kms",
+                  SSEKMSKeyId=os.environ["TFSTATE_KMS_KEY_ARN"],
+                  ChecksumAlgorithm="SHA256",
+              )
+
+          metadata = {
+              field: response[field]
+              for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256")
+          }
+          response_fd = os.open(response_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+          os.fchmod(response_fd, 0o600)
+          with os.fdopen(response_fd, "w", encoding="utf-8") as output:
+              json.dump(metadata, output)
+              output.write("\n")
+          PY
 
           VERSION_ID="$(jq -er '.VersionId | strings' "$PUT_RESPONSE")"
           SERVER_SIDE_ENCRYPTION="$(jq -er '.ServerSideEncryption | strings' "$PUT_RESPONSE")"
