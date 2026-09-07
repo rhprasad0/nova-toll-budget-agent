@@ -1690,25 +1690,15 @@ def test_v2_has_an_independent_state_and_identity():
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
     assert 'name = "tollchat-agent-reports${local.suffix}"' in measurement
     assert (
-        "webacl:tollchat-v2-public-chat${local.suffix}:agent-route-report"
-        in measurement
-    )
-    assert (
-        'WAF_WEB_ACL_METRIC    = "tollchat-v2-public-chat${local.suffix}"'
-        in measurement
-    )
-    assert (
-        'WAF_ROUTE_RULE_METRIC = "tollchat-v2-agent-route-report${local.suffix}"'
-        in measurement
-    )
-    assert (
         'agent_measurement_acl      = "tollchat-v2-public-chat${local.suffix}"'
         in measurement
     )
-    assert "TOLLCHAT_ENVIRONMENT = var.environment" in measurement
     assert (
-        "local.is_production ? null : { Environment = var.environment }" in measurement
+        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
+        not in measurement
     )
+    assert 'resource "aws_s3_object" "agent_registry"' in measurement
+    assert "ignore_changes = [source, source_hash]" in measurement
     assert "WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert (
         'resource "aws_cloudfront_response_headers_policy" "development_noindex"'
@@ -1799,7 +1789,7 @@ def test_v2_public_edge_reuses_the_runtime_and_keeps_one_proxy_warm():
     assert "PUBLIC_ORIGINS = local.public_site_url" in proxy
     assert 'PUBLIC_ORIGINS = "https://${local.domains[0]}"' not in proxy
     loader = main.split('resource "aws_lambda_function" "loader"', maxsplit=1)[1].split(
-        'resource "aws_lambda_function" "agent_usage_rollup"', maxsplit=1
+        'resource "aws_lambda_function" "publisher"', maxsplit=1
     )[0]
     publisher = main.split('resource "aws_lambda_function" "publisher"', maxsplit=1)[
         1
@@ -2120,7 +2110,7 @@ def test_public_report_surface_is_canonical_crawlable_and_isolated():
 
 def test_public_report_launch_is_selected_environment_and_correlated():
     launch = DEPLOYMENT.split("## Public report launch", 1)[1].split(
-        "## Agent-route measurement launch", 1
+        "## Smoke test", 1
     )[0]
     assert "production only" in launch.lower()
     assert re.search(
@@ -2304,21 +2294,15 @@ def test_public_report_launch_is_selected_environment_and_correlated():
     assert not manifest_passes({**manifest, "result_sha256": "A" * 64})
 
 
-def test_agent_measurement_is_count_only_private_and_bounded():
+def test_agent_measurement_retains_historical_metadata_without_active_sink():
     measurement_path = V2_ROOT / "infra" / "agent_measurement.tf"
     assert measurement_path.exists()
     measurement = measurement_path.read_text()
     site = (V2_ROOT / "infra" / "site.tf").read_text()
 
-    bot = site.split('name     = "agent-report-bot-control"', maxsplit=1)[1].split(
-        'name     = "allow-static-site"', maxsplit=1
-    )[0]
-    assert 'version     = "Version_6.1"' in bot
-    assert 'inspection_level        = "COMMON"' in bot
-    assert "override_action" in bot and "count {}" in bot
-    assert 'search_string         = "/tolls/"' in bot
-    assert "sampled_requests_enabled   = true" in bot
-    assert "priority = 0" in bot
+    assert 'name     = "agent-report-bot-control"' not in site
+    assert 'name     = "agent-route-report"' not in site
+    assert 'name     = "allow-static-site"' in site
     assert (
         "priority = 7"
         in site.split('name     = "allow-static-site"', maxsplit=1)[1].split(
@@ -2343,30 +2327,20 @@ def test_agent_measurement_is_count_only_private_and_bounded():
     assert 'sse_algorithm     = "aws:kms"' in measurement
     assert "kms_master_key_id = aws_kms_key.agent_measurement.arn" in measurement
     assert "bucket_key_enabled = true" in measurement
-    assert 'identifiers = ["delivery.logs.amazonaws.com"]' in measurement
-    assert 'actions   = ["kms:GenerateDataKey*"]' in measurement
     assert 'encryption_option = "SSE_KMS"' in measurement
     assert (
         'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
-        in measurement
+        not in measurement
     )
-    assert 'default_behavior = "DROP"' in measurement
-    assert 'behavior    = "KEEP"' in measurement
-    assert "agent-route-report" in measurement
     assert measurement.count("days = 7") >= 2
     assert "enforce_workgroup_configuration    = true" in measurement
     assert "bytes_scanned_cutoff_per_query     = 1073741824" in measurement
     assert "/WAFLogs/cloudfront/${local.agent_measurement_acl}/" in measurement
     assert "/WAFLogs/us-east-1/tollchat-v2-public-chat/" not in measurement
-    assert '"glue:GetPartition"' in measurement
-    assert 'schedule_expression = "cron(15 3 * * ? *)"' in measurement
-    assert "evaluation_periods  = 2" in measurement
-    assert "threshold           = 95" in measurement
-    coverage_alarm = measurement.split(
-        'resource "aws_cloudwatch_metric_alarm" "agent_usage_log_coverage"',
-        maxsplit=1,
-    )[1]
-    assert 'treat_missing_data  = "notBreaching"' in coverage_alarm
+    assert 'resource "aws_cloudwatch_log_group" "agent_usage_rollup"' in measurement
+    assert "Historical rollup execution logs remain managed" in measurement
+    assert 'resource "aws_s3_object" "agent_registry"' in measurement
+    assert "ignore_changes = [source, source_hash]" in measurement
     assert "usage.json" not in measurement
 
 
@@ -2640,21 +2614,23 @@ def test_agent_measurement_privacy_notice_precedes_logging():
     for text in (
         "seven days",
         "IP address",
+        "full user-agent",
         "AWS WAF",
-        "published generation",
-        "five minutes",
-        "does not disable access or security logging",
+        "cookie values",
+        "authorization headers",
+        "New route-analytics collection and aggregate publication have stopped",
+        "security controls remain separate",
     ):
         assert text in privacy
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
-    logging = measurement.split(
-        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"',
-        maxsplit=1,
-    )[1]
-    assert "aws_s3_object.privacy" in logging
+    assert (
+        'resource "aws_wafv2_web_acl_logging_configuration" "agent_reports"'
+        not in measurement
+    )
+    assert "aws_s3_bucket_lifecycle_configuration" in measurement
 
 
-def test_agent_registry_and_rollup_outputs_are_privacy_safe():
+def test_agent_registry_and_rollup_outputs_are_retained_inert_metadata():
     registry = [
         json.loads(line)
         for line in (V2_ROOT / "analytics" / "agent_registry.ndjson")
@@ -2670,30 +2646,17 @@ def test_agent_registry_and_rollup_outputs_are_privacy_safe():
     }
     assert all(entry["documentation_url"].startswith("https://") for entry in registry)
 
-    rollup = (V2_ROOT / "lambdas" / "agent_usage_rollup" / "rollup.sql").read_text()
-    completion = (
-        V2_ROOT / "lambdas" / "agent_usage_rollup" / "complete.sql"
-    ).read_text()
-    latest = (
-        V2_ROOT / "lambdas" / "agent_usage_rollup" / "latest_view.sql"
-    ).read_text()
-    assert "PARTITION BY httprequest.requestid" in rollup
-    assert "httprequest.httpmethod = 'GET'" in rollup
-    assert "report[.]json" in rollup
-    assert "identity_confidence" in rollup
-    assert "web_bot_auth:verified" in rollup
-    assert "assistant-referrer-([^,]+)" in rollup
-    assert "aws_vendor_family = declared_vendor_family" in rollup
-    assert re.search(r"contains\(\s*marker[.]route_keys", rollup)
-    assert "JOIN agent_report_generations marker" in rollup
-    assert "LEFT JOIN agent_report_generations marker" not in rollup
-    for forbidden in ("clientip", "args", "referer"):
-        assert forbidden not in rollup.lower()
     measurement = (V2_ROOT / "infra" / "agent_measurement.tf").read_text()
     assert 'route_keys     = "array<string>"' in measurement
-    assert "INSERT INTO agent_report_rollup_completions" in completion
-    assert "JOIN latest" in latest
-    assert "agent_report_rollups usage" in latest
+    assert "ignore_changes = [source, source_hash]" in measurement
+    for name in (
+        "handler.py",
+        "coverage.sql",
+        "complete.sql",
+        "latest_view.sql",
+        "rollup.sql",
+    ):
+        assert not (V2_ROOT / "lambdas" / "agent_usage_rollup" / name).exists()
 
 
 def test_public_site_publishes_the_v2_ui_and_legal_assets():
@@ -2728,14 +2691,9 @@ def test_public_site_publishes_the_v2_ui_and_legal_assets():
 
 def test_agent_referrer_rules_match_only_exact_url_authorities():
     site = (V2_ROOT / "infra" / "site.tf").read_text()
-    referrer_rules = site.split('dynamic "rule" {', maxsplit=1)[1].split(
-        'rule {\n    name     = "agent-route-report"', maxsplit=1
-    )[0]
-
-    assert "regex_match_statement" in referrer_rules
-    assert 'positional_constraint = "CONTAINS"' not in referrer_rules
-    assert "^https?://([a-z0-9-]+[.])*" in site
-    assert "(:[0-9]+)?([/?#]|$)" in site
+    assert "assistant_referrers" not in site
+    assert 'dynamic "rule" {' not in site
+    assert 'name     = "agent-route-report"' not in site
 
 
 def test_retained_usage_snapshot_and_log_have_no_current_writer():
@@ -4358,7 +4316,6 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "/aws/lambda/toll-v2-report-publisher-dev",
             "/aws/lambda/tollchat-v2-chat-proxy-dev",
             "/aws/lambda/tollchat-v2-usage-publisher-dev",
-            "/aws/lambda/tollchat-v2-agent-usage-rollup-dev",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
             "/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
         )
@@ -4384,21 +4341,19 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         "s3:ListBucketMultipartUploads",
         "s3:ListBucketVersions",
     ]
-    assert by_sid["ManageApplicationAthenaNamedQueries"]["actions"] == [
+    assert by_sid["ReadRetainedApplicationAthenaNamedQueries"]["actions"] == [
         "athena:GetNamedQuery",
         "athena:ListTagsForResource",
     ]
-    assert by_sid["ManageApplicationAthenaNamedQueries"]["resources"] == [
+    assert by_sid["ReadRetainedApplicationAthenaNamedQueries"]["resources"] == [
         "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
     ]
-    assert by_sid["ManageApplicationAthenaWorkGroup"]["actions"] == [
+    assert by_sid["ReadRetainedApplicationAthenaWorkGroup"]["actions"] == [
         "athena:GetWorkGroup",
         "athena:ListNamedQueries",
-        "athena:TagResource",
-        "athena:UntagResource",
-        "athena:UpdateWorkGroup",
+        "athena:ListTagsForResource",
     ]
-    assert by_sid["ManageApplicationAthenaWorkGroup"]["resources"] == [
+    assert by_sid["ReadRetainedApplicationAthenaWorkGroup"]["resources"] == [
         "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"
     ]
 
@@ -4426,6 +4381,25 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
     assert "ManageNewApplicationKmsKeys" not in by_sid
     assert by_sid["ReadApplicationKmsAliases"]["actions"] == ["kms:ListAliases"]
     assert by_sid["ReadApplicationKmsAliases"]["resources"] == ["*"]
+    assert by_sid["ReadRetainedMeasurementKey"]["actions"] == [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
+    ]
+    assert by_sid["ReadRetainedMeasurementKey"]["resources"] == [
+        "local.development_delivery_measurement_key_arn"
+    ]
+    assert {
+        (condition["variable"], tuple(cast(list[str], condition["values"])))
+        for condition in cast(
+            list[dict[str, object]], by_sid["ReadRetainedMeasurementKey"]["conditions"]
+        )
+    } == {
+        ("aws:ResourceTag/environment", ("development",)),
+        ("aws:ResourceTag/version", ("v2",)),
+    }
     assert re.search(
         r'sid\s*=\s*"ReadApplicationKmsAliases".*?test\s*=\s*"StringEquals"'
         r'.*?variable\s*=\s*"aws:RequestedRegion"'
@@ -4449,7 +4423,7 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
             "local.development_delivery_site_bucket_arn",
             "${local.development_delivery_site_bucket_arn}/*",
         ],
-        "ManageApplicationMeasurementRegistry": [
+        "ReadRetainedApplicationMeasurementRegistry": [
             "${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson",
         ],
         "PublishApplicationArtifacts": [
@@ -4458,9 +4432,17 @@ def _assert_development_delivery_state_and_application_policy(source: str) -> No
         ],
     }
     for sid, resources in object_scopes.items():
-        assert {"s3:GetObjectTagging", "s3:PutObjectTagging"} <= set(
-            cast(list[str], by_sid[sid]["actions"])
-        )
+        if sid == "ReadRetainedApplicationMeasurementRegistry":
+            assert set(cast(list[str], by_sid[sid]["actions"])) == {
+                "s3:GetObject",
+                "s3:GetObjectAttributes",
+                "s3:GetObjectTagging",
+                "s3:GetObjectVersion",
+            }
+        else:
+            assert {"s3:GetObjectTagging", "s3:PutObjectTagging"} <= set(
+                cast(list[str], by_sid[sid]["actions"])
+            )
         assert by_sid[sid]["resources"] == resources
     assert "lambda:GetFunctionCodeSigningConfig" in cast(
         list[str], by_sid["ReadApplicationLambdaFunctions"]["actions"]
@@ -4589,7 +4571,7 @@ def _assert_application_roles_are_bootstrap_owned() -> None:
         "main.tf": ("loader", "timed_checks", "publisher", "publisher_scheduler"),
         "agentcore.tf": ("tollchat_runtime", "tollchat_proxy"),
         "site.tf": (),
-        "agent_measurement.tf": ("agent_usage_rollup",),
+        "agent_measurement.tf": (),
     }
     for filename, names in role_names.items():
         for name in names:
@@ -4810,7 +4792,7 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
             "wafv2:PutLoggingConfiguration",
         ),
         (
-            'sid = "ManageApplicationAthenaNamedQueries"',
+            'sid = "ReadRetainedApplicationAthenaNamedQueries"',
             "workgroup/tollchat-agent-reports-dev",
             "workgroup/*",
         ),
@@ -4940,7 +4922,7 @@ def test_development_delivery_direct_api_denials_are_resource_scoped():
 
 def test_development_delivery_policy_set_is_deterministic_and_bounded():
     statements = _parsed_policy_document(FOUNDATION_IAM, "development_delivery")
-    assert len(statements) == 52
+    assert len(statements) == 56
     expected_groups = {
         "state": (
             0,
@@ -4969,43 +4951,47 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
         ),
         "observability": (
             13,
-            19,
+            22,
             [
                 "ManageApplicationEventRules",
+                "ReadRetainedRollupEventRule",
                 "ManageApplicationLogs",
+                "ReadRetainedRollupLogGroup",
                 "DescribeApplicationLogPolicies",
                 "DescribeApplicationLogGroups",
                 "ManageApplicationAlarms",
+                "ReadRetainedRollupAlarms",
                 "DescribeApplicationNetworking",
             ],
         ),
         "storage": (
-            19,
-            24,
+            22,
+            27,
             [
                 "ManageApplicationSiteBuckets",
                 "ManageApplicationMeasurementBucket",
-                "ManageApplicationMeasurementRegistry",
+                "ReadRetainedApplicationMeasurementRegistry",
                 "PublishApplicationArtifacts",
                 "ReadApplicationArtifactBucket",
             ],
         ),
         "data": (
-            24,
-            31,
+            27,
+            35,
             [
                 "UseApplicationKmsKeys",
+                "ReadRetainedMeasurementKey",
                 "ReadApplicationKmsAliases",
                 "ManageApplicationSessions",
-                "ManageApplicationCatalog",
-                "ManageApplicationAthenaNamedQueries",
-                "ManageApplicationAthenaWorkGroup",
+                "ReadRetainedApplicationCatalog",
+                "ReadRetainedApplicationAthenaNamedQueries",
+                "ReadRetainedApplicationAthenaWorkGroup",
                 "ListApplicationAthenaWorkGroups",
             ],
         ),
         "runtime": (
-            31,
-            44,
+            35,
+            48,
             [
                 "ManageApplicationSchedules",
                 "ReadRetiredUsagePublisherIam",
@@ -5023,8 +5009,8 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
             ],
         ),
         "edge": (
-            44,
-            52,
+            48,
+            56,
             [
                 "ReadApplicationApiGateway",
                 "PublishApplicationApiGatewayDeployments",
@@ -5042,7 +5028,7 @@ def test_development_delivery_policy_set_is_deterministic_and_bounded():
     )
     assert len(rendered_documents) <= 10
     assert set(rendered_documents) == set(expected_groups)
-    assert len(rendered_aggregate) == len(statements) == 52
+    assert len(rendered_aggregate) == len(statements) == 56
     rendered_by_sid = {statement["Sid"]: statement for statement in rendered_aggregate}
     assert rendered_by_sid["ReadApplicationKmsAliases"]["Condition"] == {
         "StringEquals": {"aws:RequestedRegion": "us-east-1"}

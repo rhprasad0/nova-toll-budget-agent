@@ -898,37 +898,11 @@ def _put_phase(
         list(executor.map(put, objects))
 
 
-def _put_generation_marker(
-    s3_client: _S3Client,
-    analytics_bucket: str,
-    manifest: dict[str, Any],
-    route_keys: list[str],
-) -> None:
-    published_at = cast(str, manifest["published_at"])
-    marker = {
-        "schema_version": 1,
-        "facility": manifest["facility"],
-        "generation_id": manifest["generation_id"],
-        "published_at": published_at,
-        "result_sha256": manifest["result_sha256"],
-        "route_keys": route_keys,
-    }
-    marker_name = f"{published_at.replace(':', '')}-{manifest['result_sha256']}.json"
-    s3_client.put_object(
-        Bucket=analytics_bucket,
-        Key=f"generations/date={published_at[:10]}/{marker_name}",
-        Body=(json.dumps(marker, separators=(",", ":")) + "\n").encode(),
-        ContentType="application/json",
-        CacheControl="no-store",
-    )
-
-
 def _publish_generation(  # pyright: ignore[reportUnusedFunction]
     generation: Generation,
     s3_client: _S3Client,
     bucket: str,
     published_at: datetime,
-    analytics_bucket: str | None = None,
 ) -> dict[str, Any]:
     raise RuntimeError(
         "legacy in-memory publication was removed; use _publish_streamed"
@@ -946,7 +920,6 @@ def _publish_generation(  # pyright: ignore[reportUnusedFunction]
     point_slugs = _build_slug_map(endpoints, existing_slugs)
     documents: list[dict[str, Any]] = []
     result_sha256 = _result_fingerprint(documents, point_slugs)
-    route_keys = [_route_key(document, point_slugs) for document in documents]
     if previous is not None:
         previous_watermark = previous.get("source_watermark")
         if (
@@ -957,10 +930,6 @@ def _publish_generation(  # pyright: ignore[reportUnusedFunction]
         ):
             return {"status": "superseded", "result_sha256": result_sha256}
         if previous["result_sha256"] == result_sha256:
-            if analytics_bucket is not None:
-                _put_generation_marker(
-                    s3_client, analytics_bucket, previous, route_keys
-                )
             return {"status": "unchanged", "result_sha256": result_sha256}
 
     json_objects = [
@@ -1037,8 +1006,6 @@ def _publish_generation(  # pyright: ignore[reportUnusedFunction]
             )
         ],
     )
-    if analytics_bucket is not None:
-        _put_generation_marker(s3_client, analytics_bucket, manifest, route_keys)
     return {"status": "published", "result_sha256": result_sha256}
 
 
@@ -1302,7 +1269,6 @@ def _publish_streamed(
     s3_client: _S3Client,
     bucket: str,
     published_at: datetime,
-    analytics_bucket: str,
     expected: datetime | None = None,
 ) -> tuple[dict[str, Any], datetime, datetime | None]:
     previous = _read_manifest(s3_client, bucket)
@@ -1423,7 +1389,6 @@ def _publish_streamed(
         and previous["schema_version"] == "2.0.0"
         and previous["result_sha256"] == result_sha256
     ):
-        _put_generation_marker(s3_client, analytics_bucket, previous, route_keys)
         return (
             {"status": "unchanged", "result_sha256": result_sha256},
             evaluated_at,
@@ -1476,7 +1441,6 @@ def _publish_streamed(
         "application/json; charset=utf-8",
         MANIFEST_CACHE_CONTROL,
     )
-    _put_generation_marker(s3_client, analytics_bucket, manifest, route_keys)
     return (
         {"status": "published", "result_sha256": result_sha256},
         evaluated_at,
@@ -1554,7 +1518,6 @@ def handler(event: dict[str, Any], _context: object) -> dict[str, Any]:
                             cast(_S3Client, boto3.client("s3")),  # pyright: ignore[reportUnknownMemberType]
                             os.environ["SITE_BUCKET_NAME"],
                             invoked_at,
-                            os.environ["AGENT_MEASUREMENT_BUCKET"],
                             expected,
                         )
             finally:

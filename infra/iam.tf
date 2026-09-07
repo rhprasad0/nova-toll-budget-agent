@@ -141,12 +141,16 @@ locals {
       "toll-v2-pricing-loader-dev",
       "toll-v2-report-publisher-dev",
       "tollchat-v2-chat-proxy-dev",
-      "tollchat-v2-agent-usage-rollup-dev",
     ] : "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:${function_name}"
   ]
   development_delivery_lambda_resources = flatten([
     for arn in local.development_delivery_lambda_arns : [arn, "${arn}:*"]
   ])
+  # Retained for state refresh only; the retired rollup is not a delivery target.
+  development_delivery_legacy_rollup_lambda_resources = [
+    "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev",
+    "arn:aws:lambda:${local.development_delivery_region}:${local.development_delivery_account_id}:function:tollchat-v2-agent-usage-rollup-dev:*",
+  ]
   development_delivery_queue_arns = [
     for queue_name in [
       "toll-v2-pricing-loader-invoke-failure-dev",
@@ -158,18 +162,18 @@ locals {
   development_delivery_event_rule_arns = [
     for rule_name in [
       "toll-v2-pricing-raw-objects-dev",
-      "tollchat-v2-agent-usage-rollup-dev",
     ] : "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/${rule_name}"
   ]
+  development_delivery_legacy_rollup_event_rule_arn = "arn:aws:events:${local.development_delivery_region}:${local.development_delivery_account_id}:rule/tollchat-v2-agent-usage-rollup-dev"
   development_delivery_log_group_arns = [
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-pricing-loader-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/toll-v2-report-publisher-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-chat-proxy-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-usage-publisher-dev",
-    "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-agent-usage-rollup-dev",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-DEFAULT",
     "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/bedrock-agentcore/runtimes/nova_toll_v2_development-Y69XBf88Bl-preview",
   ]
+  development_delivery_legacy_rollup_log_group_arn = "arn:aws:logs:${local.development_delivery_region}:${local.development_delivery_account_id}:log-group:/aws/lambda/tollchat-v2-agent-usage-rollup-dev"
   development_delivery_alarm_arns = [
     for alarm_name in [
       "toll-v2-pricing-freshness-i66-dev",
@@ -181,14 +185,16 @@ locals {
       "toll-v2-report-publisher-delivery-failure-queue-dev",
       "toll-v2-report-publisher-errors-dev",
       "toll-v2-report-publisher-invoke-failure-queue-dev",
-      "tollchat-v2-agent-usage-log-coverage-dev",
-      "tollchat-v2-agent-usage-rollup-errors-dev",
-      "tollchat-v2-agent-usage-rollup-missing-dev",
       "tollchat-v2-agentcore-active-sessions-dev",
       "tollchat-v2-chat-proxy-errors-dev",
       "tollchat-v2-chat-proxy-failures-dev",
       "tollchat-v2-chat-proxy-latency-dev",
     ] : "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:${alarm_name}"
+  ]
+  development_delivery_legacy_rollup_alarm_arns = [
+    "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-agent-usage-log-coverage-dev",
+    "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-agent-usage-rollup-errors-dev",
+    "arn:aws:cloudwatch:${local.development_delivery_region}:${local.development_delivery_account_id}:alarm:tollchat-v2-agent-usage-rollup-missing-dev",
   ]
   # Exact, one-time teardown targets for the retired stateless usage writer.
   # Historical usage data and its log group are deliberately not in this set.
@@ -209,9 +215,9 @@ locals {
     "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/deployments/*",
   ]
   development_delivery_application_key_arns = [
-    "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:key/076e8341-894b-405c-96e9-2b037f96e2a6",
     "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:key/3bc78b60-9cbe-4abd-9744-8772c78d8379",
   ]
+  development_delivery_measurement_key_arn    = "arn:aws:kms:${local.development_delivery_region}:${local.development_delivery_account_id}:key/076e8341-894b-405c-96e9-2b037f96e2a6"
   development_delivery_site_bucket_arn        = "arn:aws:s3:::tollchat-site-${local.development_delivery_account_id}-dev"
   development_delivery_measurement_bucket_arn = "arn:aws:s3:::aws-waf-logs-tollchat-agent-reports-${local.development_delivery_account_id}-dev"
   development_delivery_artifact_bucket_arn    = "arn:aws:s3:::nova-toll-agentcore-${local.development_delivery_account_id}"
@@ -378,7 +384,10 @@ data "aws_iam_policy_document" "development_delivery" {
       "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:GetProvisionedConcurrencyConfig", "lambda:ListAliases",
       "lambda:ListProvisionedConcurrencyConfigs", "lambda:ListTags", "lambda:ListVersionsByFunction",
     ]
-    resources = local.development_delivery_lambda_resources
+    resources = concat(
+      local.development_delivery_lambda_resources,
+      local.development_delivery_legacy_rollup_lambda_resources,
+    )
   }
 
   statement {
@@ -423,9 +432,21 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid       = "ReadRetainedRollupEventRule"
+    actions   = ["events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule"]
+    resources = [local.development_delivery_legacy_rollup_event_rule_arn]
+  }
+
+  statement {
     sid       = "ManageApplicationLogs"
     actions   = ["logs:DescribeMetricFilters", "logs:ListTagsForResource", "logs:PutRetentionPolicy", "logs:TagResource", "logs:UntagResource"]
     resources = local.development_delivery_log_group_arns
+  }
+
+  statement {
+    sid       = "ReadRetainedRollupLogGroup"
+    actions   = ["logs:DescribeMetricFilters", "logs:ListTagsForResource"]
+    resources = [local.development_delivery_legacy_rollup_log_group_arn]
   }
 
   statement {
@@ -457,6 +478,12 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid       = "ReadRetainedRollupAlarms"
+    actions   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+    resources = local.development_delivery_legacy_rollup_alarm_arns
+  }
+
+  statement {
     sid       = "DescribeApplicationNetworking"
     actions   = ["ec2:DescribePrefixLists", "ec2:DescribeSecurityGroupRules", "ec2:DescribeSecurityGroups", "ec2:DescribeSubnets", "ec2:DescribeVpcs"]
     resources = ["*"]
@@ -480,8 +507,8 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid       = "ManageApplicationMeasurementRegistry"
-    actions   = ["s3:DeleteObject", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:PutObject", "s3:PutObjectTagging"]
+    sid       = "ReadRetainedApplicationMeasurementRegistry"
+    actions   = ["s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion"]
     resources = ["${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson"]
   }
 
@@ -517,6 +544,22 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
+    sid       = "ReadRetainedMeasurementKey"
+    actions   = ["kms:Decrypt", "kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"]
+    resources = [local.development_delivery_measurement_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/environment"
+      values   = ["development"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/version"
+      values   = ["v2"]
+    }
+  }
+
+  statement {
     sid = "ReadApplicationKmsAliases"
     # The provider resolves aliases by listing regional account metadata.
     actions   = ["kms:ListAliases"]
@@ -535,8 +578,8 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid     = "ManageApplicationCatalog"
-    actions = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetTags", "glue:TagResource", "glue:UntagResource", "glue:UpdateDatabase", "glue:UpdateTable"]
+    sid     = "ReadRetainedApplicationCatalog"
+    actions = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetTags"]
     resources = [
       "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:catalog",
       "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:database/tollchat_agent_reports_development",
@@ -545,15 +588,15 @@ data "aws_iam_policy_document" "development_delivery" {
   }
 
   statement {
-    sid = "ManageApplicationAthenaNamedQueries"
-    # Named-query reads authorize against their workgroup, not a query ARN.
+    sid = "ReadRetainedApplicationAthenaNamedQueries"
+    # Retained named-query reads authorize against their workgroup, not a query ARN.
     actions   = ["athena:GetNamedQuery", "athena:ListTagsForResource"]
     resources = ["arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev"]
   }
 
   statement {
-    sid     = "ManageApplicationAthenaWorkGroup"
-    actions = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:TagResource", "athena:UntagResource", "athena:UpdateWorkGroup"]
+    sid     = "ReadRetainedApplicationAthenaWorkGroup"
+    actions = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:ListTagsForResource"]
     resources = [
       "arn:aws:athena:${local.development_delivery_region}:${local.development_delivery_account_id}:workgroup/tollchat-agent-reports-dev",
     ]
@@ -759,23 +802,23 @@ locals {
     })
     observability = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 13, 19)
+      Statement = slice(local.development_delivery_policy_statements, 13, 22)
     })
     storage = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 19, 24)
+      Statement = slice(local.development_delivery_policy_statements, 22, 27)
     })
     data = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 24, 31)
+      Statement = slice(local.development_delivery_policy_statements, 27, 35)
     })
     runtime = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 31, 44)
+      Statement = slice(local.development_delivery_policy_statements, 35, 48)
     })
     edge = jsonencode({
       Version   = "2012-10-17"
-      Statement = slice(local.development_delivery_policy_statements, 44, 52)
+      Statement = slice(local.development_delivery_policy_statements, 48, 56)
     })
   }
 }
