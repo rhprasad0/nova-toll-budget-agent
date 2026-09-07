@@ -1,5 +1,7 @@
 """Contract checks for production delivery identities and planning."""
 
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -390,6 +392,7 @@ def _assert_gate_fixtures() -> None:
 
 
 def _check_production_planner() -> None:
+    planner = PRODUCTION_PLAN[: PRODUCTION_PLAN.index("\n  deploy:")]
     require("workflow_dispatch:", PRODUCTION_PLAN)
     assert PRODUCTION_PLAN.count("workflow_dispatch:") == 1
     assert PRODUCTION_PLAN.count("jobs:") == 1
@@ -398,7 +401,6 @@ def _check_production_planner() -> None:
         "pull_request:",
         "schedule:",
         "workflow_call:",
-        "environment:",
         "actions/upload-artifact",
         "actions/download-artifact",
         "terraform apply",
@@ -407,7 +409,7 @@ def _check_production_planner() -> None:
         "aws s3api delete-object",
         "aws cloudformation",
     ):
-        assert forbidden not in PRODUCTION_PLAN, forbidden
+        assert forbidden not in planner, forbidden
     require("release_id:", PRODUCTION_PLAN)
     require("required: true", PRODUCTION_PLAN)
     require("type: string", PRODUCTION_PLAN)
@@ -425,7 +427,7 @@ def _check_production_planner() -> None:
         "hashicorp/setup-terraform",
         "aws-actions/configure-aws-credentials",
     }
-    assert len(actions) == 4
+    assert len(actions) == 7
     require("persist-credentials: false", PRODUCTION_PLAN)
     require('python-version: "3.13"', PRODUCTION_PLAN)
     require("terraform_wrapper: false", PRODUCTION_PLAN)
@@ -523,6 +525,230 @@ def _check_production_planner() -> None:
     require("v2-production-plan.yml", WORKFLOW)
     require("PR CI never runs `terraform plan` or `apply`", (ROOT / "v2" / "README.md").read_text())
     require("manual production planner stores only a gated", (ROOT / "v2" / "RUNBOOK.md").read_text())
+
+
+def _valid_deploy_metadata() -> dict[str, str]:
+    local_sha256 = "0123456789abcdef" * 4
+    return {
+        "bucket": "nova-toll-tfstate-920534282028",
+        "key": "plans/release-301/12345/release.tfplan",
+        "version_id": "version-301",
+        "local_sha256": local_sha256,
+        "s3_sha256": base64.b64encode(bytes.fromhex(local_sha256)).decode(),
+        "kms_key_arn": "arn:aws:kms:us-east-1:920534282028:key/8fc1450b-0b5c-4afe-8c0a-cb150aab5da7",
+        "release_id": "release-301",
+        "run_id": "12345",
+        "repository": "rhprasad0/nova-toll-budget-agent",
+        "commit_sha": "a" * 40,
+        "account": "920534282028",
+        "region": "us-east-1",
+        "resource": "aws_cloudwatch_log_group.tollchat_proxy",
+        "action": "update",
+        "tag_key": "delivery_proof",
+        "tag_value": "issue-301",
+    }
+
+
+def _synthetic_session_policy(metadata: dict[str, str]) -> dict[str, object]:
+    bucket_arn = f"arn:aws:s3:::{metadata['bucket']}"
+    state_arn = f"{bucket_arn}/nova-toll/v2/terraform.tfstate"
+    lock_arn = f"{bucket_arn}/nova-toll/v2/terraform.tfstate.tflock"
+    plan_arn = f"{bucket_arn}/{metadata['key']}"
+    kms_key_arn = metadata["kms_key_arn"]
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "s3:ListBucket",
+                "Resource": bucket_arn,
+                "Condition": {"StringEquals": {"s3:prefix": ["nova-toll/v2/terraform.tfstate", "nova-toll/v2/terraform.tfstate.tflock"]}},
+            },
+            {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": state_arn},
+            {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": lock_arn},
+            {
+                "Effect": "Allow",
+                "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+                "Resource": kms_key_arn,
+                "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": [state_arn, lock_arn]}},
+            },
+            {
+                "Effect": "Allow",
+                "Action": "s3:GetObjectVersion",
+                "Resource": plan_arn,
+                "Condition": {"StringEquals": {"s3:VersionId": metadata["version_id"]}},
+            },
+            {
+                "Effect": "Allow",
+                "Action": "kms:Decrypt",
+                "Resource": kms_key_arn,
+                "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": plan_arn}},
+            },
+        ],
+    }
+
+
+def _check_production_deploy() -> None:
+    deploy = PRODUCTION_PLAN[PRODUCTION_PLAN.index("\n  deploy:") :]
+    require("needs: planner", deploy)
+    require("if: needs.planner.result == 'success' && github.repository == 'rhprasad0/nova-toll-budget-agent' && github.ref == 'refs/heads/main'", deploy)
+    require("environment: production", deploy)
+    require("contents: read\n      id-token: write", deploy)
+    require("ref: ${{ steps.bind.outputs.commit_sha }}", deploy)
+    require("persist-credentials: false", deploy)
+    require("role-to-assume: arn:aws:iam::920534282028:role/nova-toll-production-deploy", deploy)
+    require("inline-session-policy: >-", deploy)
+    assert "steps.bind.outputs.session_policy" not in deploy
+    policy_template = deploy[deploy.index("inline-session-policy: >-") : deploy.index("\n\n      - name: Download")]
+    assert "needs.planner.outputs" not in policy_template
+    for field in ("bucket", "key", "version_id", "kms_key_arn"):
+        require(f"steps.bind.outputs.{field}", policy_template)
+    observability_arn = (
+        "arn:aws:iam::920534282028:policy/nova-toll/production/"
+        "nova-toll-production-deploy-observability"
+    )
+    assert deploy.count(observability_arn) == 1
+    for policy in ("compute", "storage", "data", "runtime", "edge", "state"):
+        assert f"nova-toll-production-deploy-{policy}" not in deploy
+
+    for output in (
+        "bucket", "key", "version_id", "local_sha256", "s3_sha256", "kms_key_arn",
+        "release_id", "run_id", "repository", "commit_sha", "account", "region",
+        "resource", "action", "tag_key", "tag_value",
+    ):
+        require(f"PLANNER_{output.upper()}: ${{{{ needs.planner.outputs.{output} }}}}", deploy)
+    for output in ("bucket", "key", "version_id", "local_sha256", "s3_sha256", "kms_key_arn", "release_id", "run_id", "commit_sha"):
+        require(f"steps.bind.outputs.{output}", deploy)
+    for check in (
+        '[[ "$PLANNER_REPOSITORY" == "rhprasad0/nova-toll-budget-agent" ]]',
+        '[[ "$PLANNER_ACCOUNT" == "$EXPECTED_ACCOUNT" ]]',
+        '[[ "$PLANNER_REGION" == "$AWS_REGION" ]]',
+        '[[ "$PLANNER_BUCKET" == "$PLAN_BUCKET" ]]',
+        '[[ "$PLANNER_KMS_KEY_ARN" == "$TFSTATE_KMS_KEY_ARN" ]]',
+        '[[ "$PLANNER_COMMIT_SHA" == "$GITHUB_SHA" ]]',
+        '[[ "$PLANNER_RESOURCE" == "aws_cloudwatch_log_group.tollchat_proxy" ]]',
+        '[[ "$PLANNER_ACTION" == update ]]',
+        '[[ "$PLANNER_TAG_KEY" == delivery_proof ]]',
+        '[[ "$PLANNER_TAG_VALUE" == issue-301 ]]',
+        '[[ "$PLANNER_RUN_ID" =~ ^[0-9]{1,20}$ ]]',
+        '[[ "$PLANNER_RUN_ID" == "$GITHUB_RUN_ID" ]]',
+        '[[ "$PLANNER_LOCAL_SHA256" =~ ^[0-9a-f]{64}$ ]]',
+        '[[ "$PLANNER_S3_SHA256" =~ ^[A-Za-z0-9+/]{43}=$ ]]',
+        '[[ "$PLANNER_KEY" == "$EXPECTED_KEY" ]]',
+    ):
+        require(check, deploy)
+    run_id_pattern = re.compile(r"^[0-9]{1,20}$")
+    for valid in ("1", "9" * 20):
+        assert run_id_pattern.fullmatch(valid)
+    for invalid in ("", "a", "1-2", "9" * 21, "١"):
+        assert not run_id_pattern.fullmatch(invalid)
+    require('"s3:VersionId":"${{ steps.bind.outputs.version_id }}"', policy_template)
+    require('"Action":"s3:GetObjectVersion"', deploy)
+    require('"Action":"kms:Decrypt"', deploy)
+    require('"kms:EncryptionContext:aws:s3:arn"', deploy)
+    require('"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/${{ steps.bind.outputs.key }}"', policy_template)
+    assert "plans/*" not in deploy
+    assert '"s3:GetObject"], Resource: [$plan_arn]' not in deploy
+
+    assert deploy.count("aws s3api get-object") == 3
+    require("--expected-bucket-owner 903859731897", deploy)
+    require("--expected-bucket-owner \"$EXPECTED_ACCOUNT\"", deploy)
+    require("--checksum-mode ENABLED", deploy)
+    require('[[ "$WRONG_OWNER_STATUS" -ne 0 ]]', deploy)
+    require('[[ "$UNVERSIONED_STATUS" -ne 0 ]]', deploy)
+    assert deploy.count("--checksum-mode ENABLED") == 1
+    for field in ("VersionId", "ServerSideEncryption", "SSEKMSKeyId", "ChecksumSHA256"):
+        require(field, deploy)
+    for check in (
+        '[[ "$RESPONSE_VERSION_ID" == "$VERSION_ID" ]]',
+        '[[ "$RESPONSE_SSE" == aws:kms ]]',
+        '[[ "$RESPONSE_KMS_KEY_ARN" == "$EXPECTED_KMS_KEY_ARN" ]]',
+        '[[ "$RESPONSE_S3_SHA256" == "$EXPECTED_S3_SHA256" ]]',
+        '[[ "$LOCAL_SHA256" == "$EXPECTED_LOCAL_SHA256" ]]',
+        '[[ "$LOCAL_S3_SHA256" == "$EXPECTED_S3_SHA256" ]]',
+    ):
+        require(check, deploy)
+    require("terraform -chdir=v2/infra init -input=false -backend-config=backend.production.hcl", deploy)
+    require('terraform -chdir=v2/infra apply -input=false "$PLAN"', deploy)
+    assert "terraform plan" not in deploy
+    assert "terraform refresh" not in deploy
+    for forbidden in (
+        "actions/upload-artifact",
+        "actions/download-artifact",
+        "terraform output",
+        "aws s3api head-object",
+        "aws s3api list-objects",
+        "aws s3api delete-object",
+        "aws s3api put-object",
+        "aws ssm",
+        "get-parameter",
+    ):
+        assert forbidden not in deploy, forbidden
+    require("trap cleanup EXIT", deploy)
+    for path in (
+        "$PLAN", "$WRONG_OWNER_RESPONSE", "$WRONG_OWNER_ERROR", "$UNVERSIONED_RESPONSE",
+        "$UNVERSIONED_ERROR", "$GET_RESPONSE", "$GET_ERROR", "$INIT_LOG", "$APPLY_LOG",
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+    ):
+        require(path, deploy)
+    require("GITHUB_STEP_SUMMARY", deploy)
+    require("wrong_owner_denied=true", deploy)
+    require("unversioned_denied=true", deploy)
+    require("apply_succeeded=true", deploy)
+
+    metadata = _valid_deploy_metadata()
+    body = b"immutable reviewed plan"
+    metadata["local_sha256"] = hashlib.sha256(body).hexdigest()
+    metadata["s3_sha256"] = base64.b64encode(hashlib.sha256(body).digest()).decode()
+    policy = _synthetic_session_policy(metadata)
+    statements = policy["Statement"]
+    assert isinstance(statements, list)
+    plan_statement = next(item for item in statements if item["Action"] == "s3:GetObjectVersion")
+    assert plan_statement["Resource"] == f"arn:aws:s3:::{metadata['bucket']}/{metadata['key']}"
+    assert plan_statement["Condition"] == {"StringEquals": {"s3:VersionId": metadata["version_id"]}}
+    assert all("plans/*" not in json.dumps(item) for item in statements)
+    max_metadata = dict(metadata, release_id="r" * 64, run_id="9" * 20, version_id="v" * 256)
+    max_metadata["key"] = f"plans/{max_metadata['release_id']}/{max_metadata['run_id']}/release.tfplan"
+    assert len(json.dumps(_synthetic_session_policy(max_metadata), separators=(",", ":"))) <= 2048
+
+    class MockS3:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        def get_object(self, owner: str, version_id: str | None) -> tuple[dict[str, str], bytes]:
+            self.calls.append((owner, version_id))
+            if owner != metadata["account"] or version_id != metadata["version_id"]:
+                raise PermissionError("denied")
+            return {
+                "VersionId": metadata["version_id"],
+                "ServerSideEncryption": "aws:kms",
+                "SSEKMSKeyId": metadata["kms_key_arn"],
+                "ChecksumSHA256": base64.b64encode(hashlib.sha256(body).digest()).decode(),
+            }, body
+
+    s3 = MockS3()
+    try:
+        s3.get_object("903859731897", metadata["version_id"])
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("wrong-owner read must fail")
+    try:
+        s3.get_object(metadata["account"], None)
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("unversioned read must fail")
+    response, body = s3.get_object(metadata["account"], metadata["version_id"])
+    assert len(s3.calls) == 3
+    assert response["VersionId"] == metadata["version_id"]
+    assert response["ServerSideEncryption"] == "aws:kms"
+    assert response["SSEKMSKeyId"] == metadata["kms_key_arn"]
+    assert response["ChecksumSHA256"] == base64.b64encode(hashlib.sha256(body).digest()).decode()
+    assert response["ChecksumSHA256"] == metadata["s3_sha256"]
+    assert hashlib.sha256(body).hexdigest() == metadata["local_sha256"]
+    mismatched = dict(response, VersionId="wrong-version")
+    assert mismatched["VersionId"] != metadata["version_id"]
 
 
 def main() -> None:
@@ -677,6 +903,7 @@ def main() -> None:
     assert "terraform apply" not in WORKFLOW
 
     _check_production_planner()
+    _check_production_deploy()
     _assert_gate_fixtures()
 
     print("delivery identity contract: ok")
