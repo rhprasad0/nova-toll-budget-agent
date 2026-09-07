@@ -451,6 +451,7 @@ jobs:
             >/dev/null 2>"$PUT_ERROR" <<'PY'
           import json
           import os
+          import re
           import sys
 
           import boto3
@@ -468,8 +469,38 @@ jobs:
                   ChecksumSHA256=os.environ["EXPECTED_S3_SHA256"],
               )
 
+          if not isinstance(response, dict):
+              raise ValueError("invalid S3 response")
+          if "VersionId" in response:
+              response_version_id = response["VersionId"]
+              if not isinstance(response_version_id, str):
+                  raise ValueError("invalid modeled S3 version ID")
+          else:
+              response_version_id = None
+          response_metadata = response["ResponseMetadata"] if "ResponseMetadata" in response else {}
+          if not isinstance(response_metadata, dict):
+              raise ValueError("invalid S3 response metadata")
+          response_headers = response_metadata["HTTPHeaders"] if "HTTPHeaders" in response_metadata else {}
+          if not isinstance(response_headers, dict):
+              raise ValueError("invalid S3 response headers")
+          if "x-amz-version-id" in response_headers:
+              header_version_id = response_headers["x-amz-version-id"]
+              if not isinstance(header_version_id, str):
+                  raise ValueError("invalid S3 version header")
+          else:
+              header_version_id = None
+          version_pattern = r"[A-Za-z0-9._+/=-]{1,256}"
+          for candidate in (response_version_id, header_version_id):
+              if candidate is not None and not re.fullmatch(version_pattern, candidate):
+                  raise ValueError("invalid S3 version ID")
+          if response_version_id is not None and header_version_id is not None and response_version_id != header_version_id:
+              raise ValueError("conflicting S3 version IDs")
+          version_id = response_version_id if response_version_id is not None else header_version_id
+          if version_id is None:
+              raise ValueError("missing S3 version ID")
+
           metadata = {
-              "VersionId": response["VersionId"],
+              "VersionId": version_id,
               "ServerSideEncryption": response.get("ServerSideEncryption", "aws:kms"),
               "SSEKMSKeyId": response.get("SSEKMSKeyId", os.environ["TFSTATE_KMS_KEY_ARN"]),
               "ChecksumSHA256": response.get("ChecksumSHA256", os.environ["EXPECTED_S3_SHA256"]),
