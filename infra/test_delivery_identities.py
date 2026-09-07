@@ -1,6 +1,7 @@
 """Contract checks for production delivery identities and planning."""
 
 import base64
+from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
@@ -793,6 +794,32 @@ def _synthetic_session_policy(metadata: dict[str, str]) -> dict[str, object]:
     }
 
 
+def _allows(
+    statements: list[dict[str, object]], action: str, resource: str, context: dict[str, str]
+) -> bool:
+    for statement in statements:
+        actions = statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
+        resources = statement["Resource"] if isinstance(statement["Resource"], list) else [statement["Resource"]]
+        if action not in actions or not any(fnmatchcase(resource, pattern) for pattern in resources):
+            continue
+        for operator, entries in statement.get("Condition", {}).items():
+            for key, expected in entries.items():
+                actual = context.get(key)
+                values = expected if isinstance(expected, list) else [expected]
+                matched = actual is not None and (
+                    operator == "StringEquals" and actual in values
+                    or operator == "StringLike" and any(fnmatchcase(actual, value) for value in values)
+                )
+                if not matched:
+                    break
+            else:
+                continue
+            break
+        else:
+            return True
+    return False
+
+
 def _check_production_deploy() -> None:
     deploy = PRODUCTION_PLAN[PRODUCTION_PLAN.index("\n  deploy:") :]
     require("needs: planner", deploy)
@@ -812,9 +839,16 @@ def _check_production_deploy() -> None:
         "arn:aws:iam::920534282028:policy/nova-toll/production/"
         "nova-toll-production-deploy-observability"
     )
+    state_arn = (
+        "arn:aws:iam::920534282028:policy/nova-toll/production/"
+        "nova-toll-production-deploy-state"
+    )
     assert deploy.count(observability_arn) == 1
-    for policy in ("compute", "storage", "data", "runtime", "edge", "state", "release"):
+    assert deploy.count(state_arn) == 1
+    for policy in ("compute", "storage", "data", "runtime", "edge", "release"):
         assert f"nova-toll-production-deploy-{policy}" not in deploy
+    for action in ("s3:ListBucket", "s3:PutObject", "s3:DeleteObject", "kms:GenerateDataKey"):
+        assert f'"{action}"' not in policy_template
 
     for output in (
         "bucket", "key", "version_id", "local_sha256", "s3_sha256", "kms_key_arn",
@@ -1077,6 +1111,45 @@ def main() -> None:
     assert all("GetObjectVersion" not in json.dumps(statement) and "/plans/" not in json.dumps(statement) for statement in state_statements)
     assert [statement["Action"] for statement in release_statements] == [["s3:GetObjectVersion"], ["kms:Decrypt"]]
     assert all("plans/*" in json.dumps(statement) for statement in release_statements)
+
+    metadata = _valid_deploy_metadata()
+    inline_plan = _synthetic_session_policy(metadata)["Statement"][4:]
+    release_kms = dict(release_statements[1], Resource=[metadata["kms_key_arn"]])
+    role_union = state_statements + [release_statements[0], release_kms]
+    session_union = state_statements + inline_plan
+    bucket = f"arn:aws:s3:::{metadata['bucket']}"
+    state = f"{bucket}/nova-toll/v2/terraform.tfstate"
+    lock = f"{state}.tflock"
+    plan = f"{bucket}/{metadata['key']}"
+    plan_kms = {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": plan}
+
+    def effective(action: str, resource: str, context: dict[str, str]) -> bool:
+        return _allows(role_union, action, resource, context) and _allows(session_union, action, resource, context)
+
+    assert _allows(release_statements, "s3:GetObjectVersion", f"{bucket}/plans/other", {})
+    assert not _allows(session_union, "s3:GetObjectVersion", f"{bucket}/plans/other", {})
+    cases = [
+        ("s3:ListBucket", bucket, {"s3:prefix": "nova-toll/v2/terraform.tfstate"}, True),
+        ("s3:GetObject", state, {}, True),
+        ("s3:PutObject", state, {}, True),
+        ("s3:GetObject", lock, {}, True),
+        ("s3:PutObject", lock, {}, True),
+        ("s3:DeleteObject", lock, {}, True),
+        ("kms:Decrypt", state_statements[3]["Resource"][0], {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": state}, True),
+        ("kms:GenerateDataKey", state_statements[3]["Resource"][0], {"kms:ViaService": "s3.us-east-1.amazonaws.com", "kms:EncryptionContext:aws:s3:arn": lock}, True),
+        ("s3:GetObjectVersion", plan, {"s3:VersionId": metadata["version_id"]}, True),
+        ("s3:GetObjectVersion", f"{bucket}/plans/other", {"s3:VersionId": metadata["version_id"]}, False),
+        ("s3:GetObjectVersion", plan, {"s3:VersionId": "wrong-version"}, False),
+        ("s3:GetObjectVersion", plan, {}, False),
+        ("kms:Decrypt", metadata["kms_key_arn"], plan_kms, True),
+        ("kms:Decrypt", f"{metadata['kms_key_arn']}-alternate", plan_kms, False),
+        ("kms:Decrypt", metadata["kms_key_arn"], {**plan_kms, "kms:ViaService": "ec2.us-east-1.amazonaws.com"}, False),
+        ("kms:Decrypt", metadata["kms_key_arn"], {"kms:EncryptionContext:aws:s3:arn": plan}, False),
+        ("kms:Decrypt", metadata["kms_key_arn"], {"kms:ViaService": "s3.us-east-1.amazonaws.com"}, False),
+        ("kms:Decrypt", metadata["kms_key_arn"], {**plan_kms, "kms:EncryptionContext:aws:s3:arn": f"{bucket}/plans/other"}, False),
+    ]
+    for action, resource, context, expected in cases:
+        assert effective(action, resource, context) is expected
 
     deploy_document = production[production.index('data "aws_iam_policy_document" "production_deploy"') :]
     require("PassProductionAgentCoreRuntimeRole", production)

@@ -684,12 +684,9 @@ jobs:
           aws-region: us-east-1
           managed-session-policies: |
             arn:aws:iam::920534282028:policy/nova-toll/production/nova-toll-production-deploy-observability
+            arn:aws:iam::920534282028:policy/nova-toll/production/nova-toll-production-deploy-state
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
-            {"Effect":"Allow","Action":"s3:ListBucket","Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}","Condition":{"StringEquals":{"s3:prefix":["nova-toll/v2/terraform.tfstate","nova-toll/v2/terraform.tfstate.tflock"]}}},
-            {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],"Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate"},
-            {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject"],"Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate.tflock"},
-            {"Effect":"Allow","Action":["kms:Decrypt","kms:GenerateDataKey"],"Resource":"${{ steps.bind.outputs.kms_key_arn }}","Condition":{"StringEquals":{"kms:ViaService":"s3.us-east-1.amazonaws.com","kms:EncryptionContext:aws:s3:arn":["arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate","arn:aws:s3:::${{ steps.bind.outputs.bucket }}/nova-toll/v2/terraform.tfstate.tflock"]}}},
             {"Effect":"Allow","Action":"s3:GetObjectVersion","Resource":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/${{ steps.bind.outputs.key }}","Condition":{"StringEquals":{"s3:VersionId":"${{ steps.bind.outputs.version_id }}"}}},
             {"Effect":"Allow","Action":"kms:Decrypt","Resource":"${{ steps.bind.outputs.kms_key_arn }}","Condition":{"StringEquals":{"kms:ViaService":"s3.us-east-1.amazonaws.com","kms:EncryptionContext:aws:s3:arn":"arn:aws:s3:::${{ steps.bind.outputs.bucket }}/${{ steps.bind.outputs.key }}"}}}
             ]}

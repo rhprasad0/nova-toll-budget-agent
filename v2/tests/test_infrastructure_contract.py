@@ -3444,6 +3444,23 @@ def test_production_deploy_session_policy_payload_stays_within_sts_limit():
     )
     with_values = cast(dict[str, object], credentials["with"])
     inline_template = cast(str, with_values["inline-session-policy"])
+    inline_policy = cast(dict[str, object], json.loads(inline_template))
+    inline_statements = cast(list[dict[str, object]], inline_policy["Statement"])
+    assert inline_policy["Version"] == "2012-10-17"
+    assert len(inline_statements) == 2
+    assert [statement["Action"] for statement in inline_statements] == [
+        "s3:GetObjectVersion",
+        "kms:Decrypt",
+    ]
+    assert all(
+        action not in json.dumps(inline_policy)
+        for action in (
+            "s3:ListBucket",
+            "s3:PutObject",
+            "s3:DeleteObject",
+            "kms:GenerateDataKey",
+        )
+    )
     managed_session_policies = [
         arn
         for arn in cast(str, with_values["managed-session-policies"]).splitlines()
@@ -3451,12 +3468,9 @@ def test_production_deploy_session_policy_payload_stays_within_sts_limit():
     ]
     assert managed_session_policies == [
         "arn:aws:iam::920534282028:policy/nova-toll/production/"
-        "nova-toll-production-deploy-observability"
-    ]
-    six_managed_session_policies = [
+        "nova-toll-production-deploy-observability",
         "arn:aws:iam::920534282028:policy/nova-toll/production/"
-        f"nova-toll-production-deploy-{policy}"
-        for policy in ("compute", "observability", "storage", "data", "runtime", "edge")
+        "nova-toll-production-deploy-state",
     ]
 
     def payload_size(metadata: Mapping[str, str], managed: list[str]) -> int:
@@ -3488,10 +3502,12 @@ def test_production_deploy_session_policy_payload_stays_within_sts_limit():
     )
     maximum["key"] = f"plans/{maximum['release_id']}/{maximum['run_id']}/release.tfplan"
 
-    assert payload_size(representative, managed_session_policies) <= 2048
-    assert payload_size(maximum, managed_session_policies) <= 2048
-    assert payload_size(representative, six_managed_session_policies) > 2048
-    assert payload_size(maximum, six_managed_session_policies) > 2048
+    split_sizes = (
+        payload_size(representative, managed_session_policies),
+        payload_size(maximum, managed_session_policies),
+    )
+    assert split_sizes == (757, 1138)
+    assert (2048 - split_sizes[0], 2048 - split_sizes[1]) == (1291, 910)
 
 
 def _development_plan_gate_script(source: str) -> str:
