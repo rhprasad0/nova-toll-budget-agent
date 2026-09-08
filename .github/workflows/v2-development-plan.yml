@@ -58,7 +58,7 @@ jobs:
           printf 'candidate_sha=%s\n' "$EVENT_SHA" >>"$GITHUB_OUTPUT"
 
       - name: Checkout candidate package source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.resolve.outputs.candidate_sha }}
           persist-credentials: false
@@ -95,7 +95,7 @@ jobs:
           cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS "$EVIDENCE_DIR/"
 
       - name: Checkout trusted manifest verifier after candidate build
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -196,7 +196,7 @@ jobs:
           printf 'candidate_sha=%s\n' "$EVENT_SHA" >>"$GITHUB_OUTPUT"
 
       - name: Checkout trusted orchestration
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
