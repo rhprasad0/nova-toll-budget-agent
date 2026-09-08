@@ -68,9 +68,13 @@ PASS → human review
 5. Update `STATE.md`, then spawn `pre_checker` with `fork_turns: "none"`,
    `explore.md`, `research.md`, and the worktree. Repeat the UUID report, CLI
    registration, and acknowledgement before the child’s first tool call. Builder
-   starts only after a non-blocking `checklist.md`; return blocking checklist
-   gaps to the original explorer, rerun the original researcher on the repaired
-   `explore.md`, and only then rerun a fresh pre-checker.
+   starts only after a non-blocking `checklist.md`. Allow one pre-check repair
+   cycle per graph run: on the first blocking checklist, record `pre-check repair
+   1/1` in `STATE.md`, return the gaps to the original explorer, rerun the
+   original researcher on the repaired `explore.md`, and then run one fresh
+   pre-checker. If that fresh pre-checker reports any blocking gap, update
+   `STATE.md` `Blocked by` with the remaining gap and stop for user direction;
+   never spawn a third pre-checker.
 6. Update `STATE.md`, then spawn one `builder` with `fork_turns: "none"`, the
    worktree, `explore.md`, `research.md`, and `checklist.md`. Register and
    acknowledge its hook UUID before tools; retain the original assignment for
@@ -85,22 +89,31 @@ PASS → human review
    result to the parent without writing a graph artifact. The Sol parent is
    also outside the guard.
 8. Review 1 keeps the full existing gate: PASS requires checker PASS and no
-   actionable security findings. If either lane fails, update `STATE.md` and
-   return evidence from every failing lane, and no evidence from passing lanes,
-   to the original builder. Do not restart exploration or pre-checking. After
-   repair, run review 2 with fresh checker and security reviewer lanes as in
+   actionable security findings. If either lane fails, update `STATE.md`. A
+   checker-found conflict between research and the authoritative intent,
+   `explore.md`, or `checklist.md` is a planning failure: pause the builder,
+   return that conflict to the original explorer, rerun the original researcher,
+   and run a fresh pre-checker subject to the one-cycle limit in step 5. After a
+   non-blocking checklist, return any other failing-lane evidence to the original
+   builder; otherwise return every failing-lane finding directly to that builder.
+   Never include evidence from a passing lane. Do not restart exploration or
+   pre-checking for implementation or security findings. After repair, rerun
+   review at the same stage with fresh checker and security reviewer lanes as in
    step 7.
-9. Review 2 fails only for a critical issue: an exploitable security
-   vulnerability, potential data or secret loss or exposure, inability to
-   perform the requested core function, or missing failure-boundary
-   instrumentation evidence as specified below. Record every other finding as
-   a non-blocking note for human review and pass the graph.
-10. Return critical review-2 findings to the original builder. After repair,
-   run a critical recheck with a fresh checker and security reviewer over the
-   complete repaired diff. The review-2 critical-only failure threshold still
-   applies. Return any critical finding to the original builder and repeat the
-   recheck; never restart the graph or escalate because of a retry count. Stop
-   only if repair needs user input or authority.
+9. Review 2 fails only for a critical issue—an exploitable security
+   vulnerability, potential data or secret loss or exposure, or inability to
+   perform the requested core function—or for either graph-integrity exception:
+   missing failure-boundary instrumentation evidence as specified below, or a
+   conflict between research and the authoritative intent, `explore.md`, or
+   `checklist.md`. Record every other finding as a non-blocking note for human
+   review and pass the graph.
+10. Return critical or instrumentation findings to the original builder. Return
+    a research/authority conflict through the planning-repair edge in step 8.
+    After implementation repair, run a critical recheck with a fresh checker and
+    security reviewer over the complete repaired diff. The review-2 critical-only
+    failure threshold still applies. Return any critical finding to the original
+    builder and repeat the recheck; never restart the graph or escalate because
+    of a retry count. Stop only if repair needs user input or authority.
 11. On PASS, update `STATE.md`, then summarize files, checks, remaining risk,
     and non-blocking notes for human review.
 
