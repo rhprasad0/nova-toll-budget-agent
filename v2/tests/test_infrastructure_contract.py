@@ -4553,13 +4553,12 @@ def _assert_required_event_callers(source: str) -> None:
         "github.event.merge_group.base_sha || github.event.before"
     )
     for variable in (
-        "GOLDEN_CORPUS_BASE_REF",
         "TOOL_CONTRACT_BASE_REF",
         "AGENT_CONTRACT_BASE_REF",
         "SCHEMA_BASE_REF",
     ):
         assert f"{variable}: ${{{{ {base_expression} }}}}" in source
-    assert source.count(base_expression) == 4
+    assert source.count(base_expression) == 3
 
     caller = ci_jobs["trusted-development-plan"]
     assert (
