@@ -441,7 +441,9 @@ jobs:
           set -euo pipefail
           umask 077
           EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
-          PACKAGE_DIR="$RUNNER_TEMP/release-overlay/v2/infra/build"
+          RELEASE_ROOT="$RUNNER_TEMP/release-overlay"
+          PACKAGE_DIR="$RELEASE_ROOT/v2/infra/build"
+          STAGED_PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"
           python3 infra/release_manifest.py \
             --manifest "$EVIDENCE_DIR/development-release-manifest.json" \
             --package-dir "$PACKAGE_DIR" \
@@ -453,6 +455,35 @@ jobs:
             >"$RUNNER_TEMP/development-release-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
             "$RUNNER_TEMP/development-release-verification.json" >/dev/null
+
+          rm -rf -- "$STAGED_PACKAGE_DIR"
+          mkdir -m 700 -- "$STAGED_PACKAGE_DIR"
+          for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip; do
+            source="$PACKAGE_DIR/$package"
+            test -f "$source" && test ! -L "$source" && test -s "$source"
+            cp -P -- "$source" "$STAGED_PACKAGE_DIR/$package"
+          done
+          test "$(find "$STAGED_PACKAGE_DIR" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = \
+            "agentcore.zip chat-proxy.zip loader.zip publisher.zip "
+          for package in loader.zip publisher.zip agentcore.zip chat-proxy.zip; do
+            test -f "$STAGED_PACKAGE_DIR/$package" && test ! -L "$STAGED_PACKAGE_DIR/$package" \
+              && test -s "$STAGED_PACKAGE_DIR/$package"
+          done
+          (
+            cd "$STAGED_PACKAGE_DIR"
+            sha256sum --check "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS" >/dev/null
+          )
+          python3 infra/release_manifest.py \
+            --manifest "$EVIDENCE_DIR/development-release-manifest.json" \
+            --package-dir "$STAGED_PACKAGE_DIR" \
+            --checksums "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS" \
+            --candidate-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --bundle-root "$RELEASE_ROOT" \
+            --evidence "$EVIDENCE_DIR/development-release-evidence.json" \
+            >"$RUNNER_TEMP/development-release-staging-verification.json"
+          jq -e '.status == "accepted" and .reason_code == "ok"' \
+            "$RUNNER_TEMP/development-release-staging-verification.json" >/dev/null
 
       - name: Download protected-main OIDC proof
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -491,10 +522,25 @@ jobs:
       - name: Create and gate the saved development plan before migrations
         run: |
           set -euo pipefail
+          run_private_stage() {
+            local stage="$1"
+            local stdout_log="$2"
+            local stderr_log="$3"
+            shift 3
+            local status
+            set +e
+            "$@" >"$stdout_log" 2>"$stderr_log"
+            status=$?
+            set -e
+            if test "$status" -ne 0; then
+              printf 'terraform stage failed: %s (exit %s)\n' "$stage" "$status" >&2
+              exit "$status"
+            fi
+          }
           test -s "$RUNNER_TEMP/protected-main-oidc.json"
           RELEASE_ROOT="$RUNNER_TEMP/release-overlay"
           EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
-          PACKAGE_DIR="$RELEASE_ROOT/v2/infra/build"
+          PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"
           PROOF="$RUNNER_TEMP/protected-main-oidc.json"
           FOUNDATION_OUTPUT="$RUNNER_TEMP/development-foundation-output.json"
           FOUNDATION_VARS="$RUNNER_TEMP/foundation.tfvars.json"
@@ -509,51 +555,108 @@ jobs:
           PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"
           SHOW_LOG="$TF_LOG_DIR/show.log"
           FOUNDATION_VALIDATE_LOG="$TF_LOG_DIR/foundation-validate.log"
+          FOUNDATION_VARS_LOG="$TF_LOG_DIR/foundation-vars.log"
+          VALIDATOR_LOG="$TF_LOG_DIR/validator.log"
+          VALIDATOR_PARSE_LOG="$TF_LOG_DIR/validator-parse.log"
           IDENTITY="$RUNNER_TEMP/development-plan-identity.json"
           MANIFEST="$EVIDENCE_DIR/development-release-manifest.json"
           VALIDATION="$RUNNER_TEMP/development-plan-validation.json"
+          VALIDATION_SUMMARY="$RUNNER_TEMP/development-plan-validation-summary.json"
 
           test -s "$PROOF"
-          terraform -chdir=infra init -input=false -lockfile=readonly \
-            -backend-config=backend.development.hcl >"$FOUNDATION_INIT_LOG" 2>&1
-          terraform -chdir=infra output -json foundation >"$FOUNDATION_OUTPUT" 2>"$FOUNDATION_OUTPUT_LOG"
-          jq -e '
+          run_private_stage "foundation-init" "$FOUNDATION_INIT_LOG" "$FOUNDATION_INIT_LOG" \
+            terraform -chdir=infra init -input=false -lockfile=readonly \
+            -backend-config=backend.development.hcl
+          run_private_stage "foundation-output" "$FOUNDATION_OUTPUT" "$FOUNDATION_OUTPUT_LOG" \
+            terraform -chdir=infra output -json foundation
+          run_private_stage "foundation-output-validation" "$FOUNDATION_VALIDATE_LOG" "$FOUNDATION_VALIDATE_LOG" \
+            jq -e '
             def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
             . as $foundation |
             exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"])
             and all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string" and length > 0)
             and ($foundation.private_subnet_ids | exact_keys(["a", "c"]) and all(.[]; type == "string" and length > 0))
             and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string" and length > 0) and (.port | type == "number"))
-          ' "$FOUNDATION_OUTPUT" > /dev/null 2>"$FOUNDATION_VALIDATE_LOG"
-          jq -n --slurpfile foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation[0]}' >"$FOUNDATION_VARS"
+          ' "$FOUNDATION_OUTPUT"
+          run_private_stage "foundation-vars" "$FOUNDATION_VARS" "$FOUNDATION_VARS_LOG" \
+            jq -n --slurpfile foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation[0]}'
           chmod 600 -- "$FOUNDATION_VARS"
           printf '%s\n' '{"provider":"hashicorp/aws","provider_version":"6.60.0","terraform_version":"1.15.8","lockfile":"v2/infra/.terraform.lock.hcl","lock_identity":"V2-AWS60"}' >"$IDENTITY"
           chmod 600 -- "$IDENTITY"
 
-          terraform -chdir="$RELEASE_ROOT/v2/infra" init -input=false -lockfile=readonly \
-            -backend-config=backend.development.hcl >"$APPLICATION_INIT_LOG" 2>&1
-          terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN" \
+          run_private_stage "release-init" "$APPLICATION_INIT_LOG" "$APPLICATION_INIT_LOG" \
+            terraform -chdir="$RELEASE_ROOT/v2/infra" init -input=false -lockfile=readonly \
+            -backend-config=backend.development.hcl
+          run_private_stage "plan" "$PLAN_LOG" "$PLAN_LOG" \
+            terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN" \
             -var-file=development.tfvars \
             -var-file="$FOUNDATION_VARS" \
             -var loader_package_path="$PACKAGE_DIR/loader.zip" \
             -var publisher_package_path="$PACKAGE_DIR/publisher.zip" \
             -var agentcore_package_path="$PACKAGE_DIR/agentcore.zip" \
-            -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip" \
-            >"$PLAN_LOG" 2>&1
+            -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip"
 
-          terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"
+          run_private_stage "show" "$PLAN_JSON" "$SHOW_LOG" \
+            terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"
           MANIFEST_VALID=true
           IDENTITY_VALID=true
           test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false
           test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false
           set +e
-          python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"
+          python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" \
+            >"$VALIDATION" 2>"$VALIDATOR_LOG"
           VALIDATOR_STATUS=$?
+          jq -e '
+            def valid_reason:
+              .reason_code as $reason |
+              ["data_mode_misuse", "delete_not_permitted", "deposed_resource", "duplicate_address", "duplicate_manifest_mutation", "duplicate_permission", "import_or_refresh", "invalid_permission", "invalid_resource_identity", "malformed_input", "manifest_coverage_mismatch", "manifest_mutation_mismatch", "missing_permission", "moved_resource", "production_target", "provider_identity_mismatch", "provider_identity_missing", "replacement", "sensitive_authorization_value", "unknown_authorization_value", "unknown_manifest_declaration", "unsupported_action", "unsupported_address", "unsupported_field_delta"]
+              | index($reason) != null;
+            def valid_result:
+            type == "object" and
+            ((.status == "accepted" and .reason_code == "ok" and
+              (keys_unsorted | sort) == ["actions", "addresses", "fingerprint", "operation_classes", "reason_code", "status"] and
+              (.addresses | type == "array" and all(.[]; type == "string" and length <= 128)) and
+              (.actions | type == "array" and all(.[]; type == "string" and length <= 32)) and
+              (.operation_classes | type == "array" and all(.[]; type == "string" and length <= 64)) and
+              (.fingerprint | type == "string" and test("^[0-9a-f]{64}$"))) or
+             (.status == "rejected" and valid_reason and
+              (keys_unsorted | all(.[]; . as $key | ["action", "address", "operation_class", "reason_code", "status"] | index($key) != null)) and
+              (.address? == null or (.address | type == "string" and length <= 128)) and
+              (.action? == null or (.action | type == "string" and length <= 32)) and
+              (.operation_class? == null or (.operation_class | type == "string" and length <= 64))));
+            select(valid_result) | {status, reason_code}
+          ' "$VALIDATION" >"$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG"
+          VALIDATOR_PARSE_STATUS=$?
           set -e
-          jq -e 'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")' "$VALIDATION" >/dev/null
-          test "$MANIFEST_VALID" = true
-          test "$IDENTITY_VALID" = true
-          test "$VALIDATOR_STATUS" -eq 0
+          if test "$VALIDATOR_PARSE_STATUS" -ne 0; then
+            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_PARSE_STATUS" >&2
+            exit "$VALIDATOR_PARSE_STATUS"
+          fi
+          tee -a "$GITHUB_STEP_SUMMARY" <"$VALIDATION_SUMMARY" >/dev/null
+          set +e
+          VALIDATOR_RESULT_STATUS="$(jq -er '.status' "$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG")"
+          VALIDATOR_RESULT_STATUS_CODE=$?
+          set -e
+          if test "$VALIDATOR_RESULT_STATUS_CODE" -ne 0; then
+            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_RESULT_STATUS_CODE" >&2
+            exit "$VALIDATOR_RESULT_STATUS_CODE"
+          fi
+          if test "$MANIFEST_VALID" != true || test "$IDENTITY_VALID" != true; then
+            printf 'terraform stage failed: validator (exit 1)\n' >&2
+            exit 1
+          fi
+          if test "$VALIDATOR_RESULT_STATUS" != accepted; then
+            if test "$VALIDATOR_STATUS" -eq 0; then
+              printf 'terraform stage failed: validator (exit 1)\n' >&2
+              exit 1
+            fi
+            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_STATUS" >&2
+            exit "$VALIDATOR_STATUS"
+          fi
+          if test "$VALIDATOR_STATUS" -ne 0; then
+            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_STATUS" >&2
+            exit "$VALIDATOR_STATUS"
+          fi
           chmod 600 -- "$PLAN" "$PLAN_JSON" "$FOUNDATION_VARS"
 
       - name: Fetch pinned RDS CA bundle for automatic migrations
@@ -643,6 +746,7 @@ jobs:
             "$RUNNER_TEMP/development.tfshow.log" "$RUNNER_TEMP/development-apply.log" \
             "$RUNNER_TEMP/development-foundation-validate.log" "$RUNNER_TEMP/development-plan-identity.json" \
             "$RUNNER_TEMP/development-release-manifest.json" "$RUNNER_TEMP/development-plan-validation.json" \
+            "$RUNNER_TEMP/development-release-staging-verification.json" "$RUNNER_TEMP/development-plan-validation-summary.json" \
             "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
             "$RUNNER_TEMP/development-readiness-state.json" "$RUNNER_TEMP/development-readiness-state.log" \
             "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform" \
