@@ -139,6 +139,142 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             result = validate_plan(plan, manifest)
             self.assertEqual(result["status"], "accepted", address)
 
+    def test_committed_development_manifest_covers_full_package_graph(self):
+        manifest = json.loads(
+            (Path(__file__).resolve().parent / "development-release-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        expected_mutations = {
+            "aws_lambda_function.loader": ("lambda-code", ("filename", "source_code_hash")),
+            "aws_lambda_function.publisher": ("lambda-code", ("filename", "source_code_hash")),
+            "aws_s3_object.agentcore": ("artifact-upload", ("source", "source_hash")),
+            "aws_s3_object.tollchat_proxy": ("artifact-upload", ("source", "source_hash")),
+            "aws_lambda_function.tollchat_proxy": ("lambda-code", ("s3_object_version", "source_code_hash")),
+            "aws_lambda_alias.tollchat_live": ("lambda-alias", ("function_version",)),
+            "aws_bedrockagentcore_agent_runtime.tollchat": (
+                "agentcore-code",
+                ("agent_runtime_artifact.code_configuration.code.s3.version_id",),
+            ),
+            "aws_bedrockagentcore_agent_runtime_endpoint.tollchat": (
+                "agentcore-endpoint",
+                ("agent_runtime_version",),
+            ),
+        }
+        actual_mutations = {
+            record["address"]: (record["operation_class"], tuple(record["changed_fields"]))
+            for record in manifest["mutations"]
+        }
+        self.assertEqual(len(manifest["mutations"]), len(expected_mutations))
+        self.assertEqual(actual_mutations, expected_mutations)
+        expected_permissions = {
+            (
+                "aws_lambda_function.loader",
+                "lambda:UpdateFunctionCode",
+                "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
+                (),
+            ),
+            (
+                "aws_lambda_function.publisher",
+                "lambda:UpdateFunctionCode",
+                "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-report-publisher-dev",
+                (),
+            ),
+            (
+                "aws_s3_object.agentcore",
+                "s3:PutObject",
+                "arn:aws:s3:::nova-toll-agentcore-903859731897/runtime/v2/*",
+                (),
+            ),
+            (
+                "aws_s3_object.tollchat_proxy",
+                "s3:PutObject",
+                "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/*",
+                (),
+            ),
+            (
+                "aws_lambda_function.tollchat_proxy",
+                "lambda:UpdateFunctionCode",
+                "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+                (),
+            ),
+            (
+                "aws_lambda_alias.tollchat_live",
+                "lambda:UpdateAlias",
+                "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+                (),
+            ),
+            (
+                "aws_bedrockagentcore_agent_runtime.tollchat",
+                "bedrock-agentcore:UpdateAgentRuntime",
+                "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl",
+                (),
+            ),
+            (
+                "aws_bedrockagentcore_agent_runtime.tollchat",
+                "iam:PassRole",
+                "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
+                (("iam:PassedToService", "bedrock-agentcore.amazonaws.com"),),
+            ),
+            (
+                "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+                "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+                "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
+                (),
+            ),
+        }
+        actual_permissions = {
+            (
+                record["address"],
+                record["action"],
+                record["resource"],
+                tuple(sorted(record["conditions"].items())),
+            )
+            for record in manifest["permissions"]
+        }
+        self.assertEqual(len(manifest["permissions"]), len(expected_permissions))
+        self.assertEqual(actual_permissions, expected_permissions)
+
+        def update(address):
+            fields = expected_mutations[address][1]
+            spec = CONTRACT[address]
+            before, after = {}, {}
+            for field in fields:
+                _set_path(before, field, f"{address}:old")
+                _set_path(after, field, f"{address}:new")
+            for field, value in spec.create_identity:
+                before[field] = after[field] = value
+            return _resource_change(address, "update", before, after)
+
+        plan = {
+            "terraform_version": "1.15.8",
+            "resource_changes": [update(address) for address in expected_mutations],
+        }
+        accepted = validate_plan(plan, manifest)
+        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(accepted["reason_code"], "ok")
+        self.assertEqual(accepted["addresses"], list(expected_mutations))
+
+        missing_permission = copy.deepcopy(manifest)
+        missing_permission["permissions"] = [
+            record
+            for record in missing_permission["permissions"]
+            if record["address"] != "aws_lambda_function.loader"
+        ]
+        rejected = validate_plan(plan, missing_permission)
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["reason_code"], "missing_permission")
+
+        widened_permission = copy.deepcopy(manifest)
+        next(
+            record
+            for record in widened_permission["permissions"]
+            if record["address"] == "aws_s3_object.agentcore"
+        )["resource"] = "*"
+        rejected = validate_plan(plan, widened_permission)
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["reason_code"], "invalid_permission")
+
     def test_rejects_lambda_configuration_disguised_as_code(self):
         plan = lambda_plan(runtime="python3.13")
         self.assert_reason("unsupported_field_delta", plan=plan)

@@ -103,6 +103,133 @@
     "loader.zip": "056df195eeb2319114e83937e9570a57cf5310d5886d6a701e304818ad667f26",
     "publisher.zip": "0d7e95193f2d6deb9816b132b7bb6774e932f643d237aac0d7a8e1aab8245064"
   },
-  "mutations": [],
-  "permissions": []
+  "mutations": [
+    {
+      "address": "aws_lambda_function.loader",
+      "action": "update",
+      "operation_class": "lambda-code",
+      "changed_fields": [
+        "filename",
+        "source_code_hash"
+      ]
+    },
+    {
+      "address": "aws_lambda_function.publisher",
+      "action": "update",
+      "operation_class": "lambda-code",
+      "changed_fields": [
+        "filename",
+        "source_code_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.agentcore",
+      "action": "update",
+      "operation_class": "artifact-upload",
+      "changed_fields": [
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_s3_object.tollchat_proxy",
+      "action": "update",
+      "operation_class": "artifact-upload",
+      "changed_fields": [
+        "source",
+        "source_hash"
+      ]
+    },
+    {
+      "address": "aws_lambda_function.tollchat_proxy",
+      "action": "update",
+      "operation_class": "lambda-code",
+      "changed_fields": [
+        "s3_object_version",
+        "source_code_hash"
+      ]
+    },
+    {
+      "address": "aws_lambda_alias.tollchat_live",
+      "action": "update",
+      "operation_class": "lambda-alias",
+      "changed_fields": [
+        "function_version"
+      ]
+    },
+    {
+      "address": "aws_bedrockagentcore_agent_runtime.tollchat",
+      "action": "update",
+      "operation_class": "agentcore-code",
+      "changed_fields": [
+        "agent_runtime_artifact.code_configuration.code.s3.version_id"
+      ]
+    },
+    {
+      "address": "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+      "action": "update",
+      "operation_class": "agentcore-endpoint",
+      "changed_fields": [
+        "agent_runtime_version"
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "address": "aws_lambda_function.loader",
+      "action": "lambda:UpdateFunctionCode",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-pricing-loader-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_function.publisher",
+      "action": "lambda:UpdateFunctionCode",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:toll-v2-report-publisher-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.agentcore",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::nova-toll-agentcore-903859731897/runtime/v2/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_s3_object.tollchat_proxy",
+      "action": "s3:PutObject",
+      "resource": "arn:aws:s3:::nova-toll-agentcore-903859731897/lambda/v2/*",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_function.tollchat_proxy",
+      "action": "lambda:UpdateFunctionCode",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_lambda_alias.tollchat_live",
+      "action": "lambda:UpdateAlias",
+      "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+      "conditions": {}
+    },
+    {
+      "address": "aws_bedrockagentcore_agent_runtime.tollchat",
+      "action": "bedrock-agentcore:UpdateAgentRuntime",
+      "resource": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl",
+      "conditions": {}
+    },
+    {
+      "address": "aws_bedrockagentcore_agent_runtime.tollchat",
+      "action": "iam:PassRole",
+      "resource": "arn:aws:iam::903859731897:role/nova-toll-v2-agentcore-runtime-dev",
+      "conditions": {
+        "iam:PassedToService": "bedrock-agentcore.amazonaws.com"
+      }
+    },
+    {
+      "address": "aws_bedrockagentcore_agent_runtime_endpoint.tollchat",
+      "action": "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+      "resource": "arn:aws:bedrock-agentcore:us-east-1:903859731897:runtime/nova_toll_v2_development-Y69XBf88Bl/runtime-endpoint/preview",
+      "conditions": {}
+    }
+  ]
 }
