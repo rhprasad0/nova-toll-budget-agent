@@ -114,6 +114,90 @@ class GraphWriteGuardTests(unittest.TestCase):
             self.assertIn("outside", self.denied_reason(
                 self.invoke("pre-tool-use", payload=payload)[1]))
 
+    def test_researcher_uses_existing_identity_and_worktree_guard(self) -> None:
+        role = "researcher"
+        agent_id = "native-researcher"
+        _, started, _ = self.invoke(
+            "subagent-start", payload={"agent_type": role, "agent_id": agent_id}
+        )
+        self.assertIn(agent_id, started["hookSpecificOutput"]["additionalContext"])
+        payload = self.payload(role=role, agent_id=agent_id,
+                               command=f"cd {self.target} && git rev-parse --show-toplevel")
+        self.assertIn("register", self.denied_reason(
+            self.invoke("pre-tool-use", payload=payload)[1]))
+        self.assertEqual(self.register(agent_id=agent_id, role=role)[0], 0)
+        self.assertIsNone(self.invoke("pre-tool-use", payload=payload)[1])
+        payload["tool_input"]["command"] = f"cd {self.sibling} && git rev-parse --show-toplevel"
+        self.assertIn("outside", self.denied_reason(
+            self.invoke("pre-tool-use", payload=payload)[1]))
+
+    def test_researcher_is_limited_to_fixed_reads_and_research_artifact(self) -> None:
+        role = "researcher"
+        agent_id = "native-researcher-boundary"
+        self.assertEqual(self.register(agent_id=agent_id, role=role)[0], 0)
+        for command in (
+            f"cd {self.target} && git rev-parse --show-toplevel",
+            f"cd {self.target} && sed -n '1,260p' AGENTS.md",
+            f"cd {self.target} && sed -n '1,320p' .graph/explore.md",
+        ):
+            payload = self.payload(role=role, agent_id=agent_id, command=command)
+            self.assertIsNone(self.invoke("pre-tool-use", payload=payload)[1])
+        for command in (
+            f"cd {self.target} && cat .graph/research.md",
+            f"cd {self.target} && sed -n '1,240p' .codex/config.toml",
+            f"cd {self.target} && touch .graph/research.md",
+        ):
+            payload = self.payload(role=role, agent_id=agent_id, command=command)
+            self.assertIn("limited", self.denied_reason(
+                self.invoke("pre-tool-use", payload=payload)[1]))
+        sibling = self.payload(
+            role=role,
+            agent_id=agent_id,
+            command=f"cd {self.sibling} && sed -n '1,260p' AGENTS.md",
+        )
+        self.assertIn("outside", self.denied_reason(
+            self.invoke("pre-tool-use", payload=sibling)[1]))
+        allowed = self.payload(
+            role=role,
+            agent_id=agent_id,
+            tool="apply_patch",
+            command=f"*** Add File: {self.target}/.graph/research.md",
+        )
+        self.assertIsNone(self.invoke("pre-tool-use", payload=allowed)[1])
+        relative = self.payload(
+            role=role,
+            agent_id=agent_id,
+            tool="apply_patch",
+            command="*** Update File: .graph/research.md",
+            payload_cwd=self.target,
+        )
+        self.assertIsNone(self.invoke("pre-tool-use", payload=relative)[1])
+        for command in (
+            f"*** Add File: {self.target}/other.md",
+            f"*** Delete File: {self.target}/.graph/research.md",
+            (
+                f"*** Add File: {self.target}/.graph/research.md\n"
+                f"*** Add File: {self.target}/other.md"
+            ),
+        ):
+            payload = self.payload(role=role, agent_id=agent_id,
+                                   tool="apply_patch", command=command)
+            self.assertIn("research.md", self.denied_reason(
+                self.invoke("pre-tool-use", payload=payload)[1]))
+        redirected = self.target / ".graph"
+        redirected_target = self.sibling / "research-target"
+        redirected_target.mkdir()
+        redirected.symlink_to(redirected_target, target_is_directory=True)
+        escaped = self.payload(
+            role=role,
+            agent_id=agent_id,
+            tool="apply_patch",
+            command="*** Update File: .graph/research.md",
+            payload_cwd=self.target,
+        )
+        self.assertIn("outside", self.denied_reason(
+            self.invoke("pre-tool-use", payload=escaped)[1]))
+
     def test_registration_rejects_invalid_role_main_outside_and_registry(self) -> None:
         self.assertNotEqual(self.register(role="security_reviewer")[0], 0)
         self.assertNotEqual(self.register(agent_id="main", target=self.repo)[0], 0)

@@ -41,7 +41,7 @@ app if it would actually help.
 # Project graph hook
 
 The project graph uses a synchronous, fail-closed Codex hook for the guarded
-`explorer`, `pre_checker`, `builder`, and `checker` roles. A child must report
+`explorer`, `researcher`, `pre_checker`, `builder`, and `checker` roles. A child must report
 the native `SubagentStart` UUID to the parent, wait for the parent to register
 that UUID to its assigned worktree, and wait for the registration acknowledgement
 before using tools. The parent and `security_reviewer` are outside this guard.
