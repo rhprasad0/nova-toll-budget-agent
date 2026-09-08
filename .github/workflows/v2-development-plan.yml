@@ -1,0 +1,258 @@
+name: v2-development-plan
+
+on:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Event-derived lowercase candidate commit SHA.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build candidate packages without credentials
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      candidate_sha: ${{ steps.resolve.outputs.candidate_sha }}
+    steps:
+      - name: Resolve and validate candidate
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_REPOSITORY: ${{ github.repository }}
+          INPUT_SHA: ${{ inputs.candidate_sha }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+          case "$EVENT_NAME" in
+            pull_request)
+              [[ "$EVENT_REF" =~ ^refs/pull/[0-9]+/merge$ ]]
+              EVENT_SHA="$PR_SHA"
+              ;;
+            merge_group)
+              [[ "$EVENT_REF" =~ ^refs/heads/gh-readonly-queue/.+$ ]]
+              EVENT_SHA="$MERGE_GROUP_SHA"
+              ;;
+            push)
+              test "$EVENT_REF" = "refs/heads/main"
+              EVENT_SHA="$PUSH_SHA"
+              ;;
+            *) exit 1 ;;
+          esac
+          [[ "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$INPUT_SHA" = "$EVENT_SHA"
+          printf 'candidate_sha=%s\n' "$EVENT_SHA" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout candidate package source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.resolve.outputs.candidate_sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.12.5"
+
+      - name: Build reviewed deployment packages
+        working-directory: v2
+        run: |
+          set -euo pipefail
+          ./scripts/build_loader_zip.sh
+          ./scripts/build_publisher_zip.sh
+          ./scripts/build_agentcore_zips.sh
+          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
+            test -s "$package"
+          done
+          (cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
+
+      - name: Upload candidate packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v2-development-packages-${{ github.run_id }}-${{ steps.resolve.outputs.candidate_sha }}
+          path: |
+            v2/infra/build/loader.zip
+            v2/infra/build/publisher.zip
+            v2/infra/build/agentcore.zip
+            v2/infra/build/chat-proxy.zip
+          if-no-files-found: error
+
+      - name: Upload candidate checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v2-development-checksums-${{ github.run_id }}-${{ steps.resolve.outputs.candidate_sha }}
+          path: v2/infra/build/DEPLOYMENT_SHA256SUMS
+          if-no-files-found: error
+
+  plan:
+    name: Read-only development application plan
+    needs: build
+    runs-on: ubuntu-latest
+    environment: development-plan
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Validate trusted workflow and candidate binding
+        id: binding
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_REPOSITORY: ${{ github.repository }}
+          INPUT_SHA: ${{ inputs.candidate_sha }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+          PUSH_SHA: ${{ github.sha }}
+          BUILD_SHA: ${{ needs.build.outputs.candidate_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_PATH: ${{ job.workflow_file_path }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+          test "$WORKFLOW_REPOSITORY" = "rhprasad0/nova-toll-budget-agent"
+          test "$WORKFLOW_REF" = "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-plan.yml@refs/heads/main"
+          test "$WORKFLOW_PATH" = ".github/workflows/v2-development-plan.yml"
+          case "$EVENT_NAME" in
+            pull_request)
+              [[ "$EVENT_REF" =~ ^refs/pull/[0-9]+/merge$ ]]
+              EVENT_SHA="$PR_SHA"
+              ;;
+            merge_group)
+              [[ "$EVENT_REF" =~ ^refs/heads/gh-readonly-queue/.+$ ]]
+              EVENT_SHA="$MERGE_GROUP_SHA"
+              ;;
+            push)
+              test "$EVENT_REF" = "refs/heads/main"
+              EVENT_SHA="$PUSH_SHA"
+              ;;
+            *) exit 1 ;;
+          esac
+          [[ "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$INPUT_SHA" = "$EVENT_SHA"
+          test "$BUILD_SHA" = "$EVENT_SHA"
+          printf 'candidate_sha=%s\n' "$EVENT_SHA" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout trusted orchestration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: trusted
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+          terraform_version: "1.15.8"
+
+      - name: Download candidate packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: v2-development-packages-${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}
+          path: ${{ runner.temp }}/v2-development-packages
+
+      - name: Download candidate checksums
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: v2-development-checksums-${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}
+          path: ${{ runner.temp }}/v2-development-packages
+
+      - name: Assume read-only development-plan identity
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-plan
+          aws-region: us-east-1
+
+      - name: Run read-only development application plan
+        env:
+          CANDIDATE_SHA: ${{ steps.binding.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          STAGING="$RUNNER_TEMP/v2-development-packages"
+          FOUNDATION_OUTPUT="$RUNNER_TEMP/development-foundation-output.json"
+          FOUNDATION_VARS="$RUNNER_TEMP/foundation.tfvars.json"
+          FOUNDATION_INIT_LOG="$RUNNER_TEMP/development-foundation-init.log"
+          FOUNDATION_OUTPUT_LOG="$RUNNER_TEMP/development-foundation-output.log"
+          APPLICATION_INIT_LOG="$RUNNER_TEMP/development-application-init.log"
+          PLAN="$RUNNER_TEMP/development.tfplan"
+          PLAN_LOG="$RUNNER_TEMP/development.tfplan.log"
+          PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"
+          SHOW_LOG="$RUNNER_TEMP/development.tfshow.log"
+          FOUNDATION_VALIDATE_LOG="$RUNNER_TEMP/development-foundation-validate.log"
+          IDENTITY="$RUNNER_TEMP/development-plan-identity.json"
+          MANIFEST="$RUNNER_TEMP/development-release-manifest.json"
+          VALIDATION="$RUNNER_TEMP/development-plan-validation.json"
+          cleanup() {
+            rm -rf -- "$STAGING" "$FOUNDATION_OUTPUT" "$FOUNDATION_VARS" "$FOUNDATION_INIT_LOG" \
+              "$FOUNDATION_OUTPUT_LOG" "$APPLICATION_INIT_LOG" "$PLAN" "$PLAN_LOG" "$PLAN_JSON" \
+              "$SHOW_LOG" "$FOUNDATION_VALIDATE_LOG" "$IDENTITY" "$MANIFEST" "$VALIDATION" \
+              "$GITHUB_WORKSPACE/trusted/infra/.terraform" "$GITHUB_WORKSPACE/trusted/v2/infra/.terraform"
+            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+          }
+          trap cleanup EXIT
+
+          test "$CANDIDATE_SHA" = "${{ needs.build.outputs.candidate_sha }}"
+          test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
+          test "$(find "$STAGING" -maxdepth 1 -type f -name '*.zip' | wc -l)" -eq 4
+          test "$(wc -l <"$STAGING/DEPLOYMENT_SHA256SUMS")" -eq 4
+          test "$(cd "$STAGING" && awk '{print $2}' DEPLOYMENT_SHA256SUMS | LC_ALL=C sort | tr '\n' ' ')" = "agentcore.zip chat-proxy.zip loader.zip publisher.zip "
+          (cd "$STAGING" && sha256sum --check DEPLOYMENT_SHA256SUMS >/dev/null)
+
+          terraform -chdir="$GITHUB_WORKSPACE/trusted/infra" init -input=false -lockfile=readonly \
+            -backend-config=backend.development.hcl >"$FOUNDATION_INIT_LOG" 2>&1
+          terraform -chdir="$GITHUB_WORKSPACE/trusted/infra" output -json foundation \
+            >"$FOUNDATION_OUTPUT" 2>"$FOUNDATION_OUTPUT_LOG"
+          jq -e '
+            def exact_keys($keys): type == "object" and ((keys_unsorted | sort) == ($keys | sort));
+            . as $foundation |
+            exact_keys(["vpc_id", "vpc_cidr_block", "private_subnet_ids", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "db_instance", "alerts_topic_arn"])
+            and all(["vpc_id", "vpc_cidr_block", "rds_security_group_id", "agentcore_endpoint_security_group_id", "eventbridge_endpoint_security_group_id", "agentcore_vpc_endpoint_id", "agentcore_vpc_endpoint_dns_name", "tollchat_api_vpc_endpoint_id", "raw_bucket_name", "raw_kms_key_arn", "agentcore_artifacts_bucket_name", "alerts_topic_arn"][]; $foundation[.] | type == "string" and length > 0)
+            and ($foundation.private_subnet_ids | exact_keys(["a", "c"]) and all(.[]; type == "string" and length > 0))
+            and ($foundation.db_instance | exact_keys(["identifier", "resource_id", "address", "port"]) and all(["identifier", "resource_id", "address"][]; $foundation.db_instance[.] | type == "string" and length > 0) and (.port | type == "number"))
+          ' "$FOUNDATION_OUTPUT" >/dev/null 2>"$FOUNDATION_VALIDATE_LOG"
+          jq -n --slurpfile foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation[0]}' >"$FOUNDATION_VARS"
+          chmod 600 -- "$FOUNDATION_VARS"
+          printf '%s\n' '{"provider":"hashicorp/aws","provider_version":"6.60.0","terraform_version":"1.15.8","lockfile":"v2/infra/.terraform.lock.hcl","lock_identity":"V2-AWS60"}' >"$IDENTITY"
+          chmod 600 -- "$IDENTITY"
+
+          terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" init -input=false -lockfile=readonly \
+            -backend-config=backend.development.hcl >"$APPLICATION_INIT_LOG" 2>&1
+          terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" plan -input=false -lock=false -out="$PLAN" \
+            -var-file=development.tfvars \
+            -var-file="$FOUNDATION_VARS" \
+            -var loader_package_path="$STAGING/loader.zip" \
+            -var publisher_package_path="$STAGING/publisher.zip" \
+            -var agentcore_package_path="$STAGING/agentcore.zip" \
+            -var chat_proxy_package_path="$STAGING/chat-proxy.zip" \
+            >"$PLAN_LOG" 2>&1
+          terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" show -json "$PLAN" \
+            >"$PLAN_JSON" 2>"$SHOW_LOG"
+
+          set +e
+          MANIFEST_VALID=true
+          IDENTITY_VALID=true
+          test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false
+          test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false
+          python3 "$GITHUB_WORKSPACE/trusted/infra/delivery_plan_validator.py" \
+            "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"
+          VALIDATOR_STATUS=$?
+          set -e
+          jq -e 'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")' \
+            "$VALIDATION" >/dev/null
+          jq -c '{status, reason_code} + (if has("address") then {address} else {} end) + (if has("action") then {action} else {} end) + (if has("operation_class") then {operation_class} else {} end) + (if has("fingerprint") then {fingerprint} else {} end)' \
+            "$VALIDATION" >>"$GITHUB_STEP_SUMMARY"
+          test "$MANIFEST_VALID" = true
+          test "$IDENTITY_VALID" = true
+          test "$VALIDATOR_STATUS" -eq 0

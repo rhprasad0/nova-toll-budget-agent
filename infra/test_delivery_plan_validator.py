@@ -348,6 +348,40 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0)
             self.assertEqual(json.loads(result.stdout)["status"], "accepted")
 
+            for missing in (manifest_path, identity_path):
+                missing.unlink()
+                rejected = subprocess.run(
+                    ["python3", "infra/delivery_plan_validator.py", str(plan_path), str(manifest_path), "--identity", str(identity_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual(json.loads(rejected.stdout), {"reason_code": "malformed_input", "status": "rejected"})
+                self.assertEqual(rejected.stderr, "")
+                if missing is manifest_path:
+                    manifest_path.write_text(json.dumps(lambda_manifest()), encoding="utf-8")
+                else:
+                    identity_path.write_text(json.dumps(dict(EXPECTED_IDENTITY)), encoding="utf-8")
+
+            for unreadable in (manifest_path, identity_path):
+                unreadable.unlink()
+                unreadable.mkdir()
+                rejected = subprocess.run(
+                    ["python3", "infra/delivery_plan_validator.py", str(plan_path), str(manifest_path), "--identity", str(identity_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual(json.loads(rejected.stdout), {"reason_code": "malformed_input", "status": "rejected"})
+                self.assertEqual(rejected.stderr, "")
+                unreadable.rmdir()
+                if unreadable is manifest_path:
+                    manifest_path.write_text(json.dumps(lambda_manifest()), encoding="utf-8")
+                else:
+                    identity_path.write_text(json.dumps(dict(EXPECTED_IDENTITY)), encoding="utf-8")
+
 
 if __name__ == "__main__":
     unittest.main()

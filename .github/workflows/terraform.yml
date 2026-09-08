@@ -5,9 +5,9 @@ permissions:
 on:
   push:
     branches: ["main"]
-    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml"]
+    paths: ["infra/**", "infra/delivery_plan_validator.py", "infra/test_delivery_plan_validator.py", "v2/infra/**", "v2/tests/test_infrastructure_contract.py", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml", ".github/workflows/v2-development-plan.yml", ".github/workflows/v2-development-delivery.yml"]
   pull_request:
-    paths: ["infra/**", "v2/infra/**", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml"]
+    paths: ["infra/**", "infra/delivery_plan_validator.py", "infra/test_delivery_plan_validator.py", "v2/infra/**", "v2/tests/test_infrastructure_contract.py", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml", ".github/workflows/v2-development-plan.yml", ".github/workflows/v2-development-delivery.yml"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -33,4 +33,5 @@ jobs:
         working-directory: v2/infra
       - run: terraform validate
         working-directory: v2/infra
+      - run: python3 -m unittest infra.test_delivery_plan_validator
       - run: python3 infra/test_delivery_identities.py
