@@ -4296,10 +4296,10 @@ def _assert_development_delivery_workflow(source: str) -> None:
         )
         == 1
     )
-    assert 'rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"' in deploy_source
+    assert '"$RUNNER_TEMP/protected-main-oidc.json"; do' in deploy_source
     assert deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
-    ) < deploy_source.rindex('rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"')
+    ) < deploy_source.rindex('cleanup_path "$cleanup_log"')
     assert 'PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"' in deploy_source
     assert 'PACKAGE_DIR="$RELEASE_ROOT/v2/infra/build"' in deploy_source
     plan_index = deploy_source.index(
@@ -4657,14 +4657,19 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         'if test "$MANIFEST_VALID" != true || test "$IDENTITY_VALID" != true; then'
         in source
     )
-    assert "terraform stage failed: validator (exit 1)" in source
+    assert 'run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG"' in source
+    assert (
+        'run_private_stage "validator" "$VALIDATION_SUMMARY" "$VALIDATOR_PARSE_LOG"'
+        in source
+    )
+    assert 'cat "$VALIDATION_SUMMARY" >>"$VALIDATOR_PARSE_LOG"' in source
     assert (
         'VALIDATOR_RESULT_STATUS="$(jq -er \'.status\' "$VALIDATION_SUMMARY"' in source
     )
     assert 'if test "$VALIDATOR_RESULT_STATUS" != accepted; then' in source
     assert 'if test "$VALIDATOR_STATUS" -ne 0;' in source
     assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in source
-    assert 'rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"' in source
+    assert '"$RUNNER_TEMP/protected-main-oidc.json"; do' in source
     assert "if: always()" in workflow_source
     assert source.index('PROOF="$RUNNER_TEMP/protected-main-oidc.json"') < source.index(
         'test -s "$PROOF"'
@@ -4698,7 +4703,9 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         )
         == 1
     )
-    assert 'echo "terraform stage failed: apply" >&2' in source
+    assert 'run_private_stage "apply" "$APPLY_LOG" "$APPLY_LOG"' in source
+    assert 'run_private_stage "cleanup" "$cleanup_log" "$cleanup_log"' in source
+    assert "PRIVATE_STAGE_FALLBACK_STAGE=readiness-check" in source
 
 
 def test_development_delivery_staging_snippet_accepts_only_verified_package_bytes():
@@ -4804,11 +4811,7 @@ def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
             == "Create and gate the saved development plan before migrations"
         ),
     )
-    helper = (
-        "run_private_stage() {"
-        + plan_source.split("run_private_stage() {", 1)[1].split("\n}", 1)[0]
-        + "\n}"
-    )
+    assert "source v2/scripts/run_private_stage.sh" in plan_source
     for stage in (
         "foundation-init",
         "foundation-output",
@@ -4819,13 +4822,14 @@ def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
     ):
         script = (
             "set -euo pipefail\n"
-            + helper
+            + "source v2/scripts/run_private_stage.sh\n"
             + '\nmkdir -m 700 -- "$RUNNER_TEMP/logs"\n'
-            + f'run_private_stage "{stage}" "$RUNNER_TEMP/logs/stdout" "$RUNNER_TEMP/logs/stderr" bash -c \'printf raw-diagnostic; exit 17\'\n'
+            + f'run_private_stage "{stage}" "$RUNNER_TEMP/logs/stdout" "$RUNNER_TEMP/logs/stderr" bash -c \'printf raw-diagnostic >&2; exit 17\'\n'
         )
         with tempfile.TemporaryDirectory() as directory_name:
             result = subprocess.run(
                 ["bash", "-c", script],
+                cwd=REPO_ROOT,
                 env={**os.environ, "RUNNER_TEMP": directory_name},
                 capture_output=True,
                 text=True,
@@ -4833,7 +4837,156 @@ def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
             )
         assert result.returncode == 17
         assert result.stdout == ""
-        assert result.stderr == f"terraform stage failed: {stage} (exit 17)\n"
+        assert result.stderr.splitlines()[0].startswith(
+            f"stage={stage} status=start elapsed="
+        )
+        assert result.stderr.splitlines()[-1].startswith(
+            f"stage={stage} status=fail elapsed="
+        )
+        assert "exit=17 reason=unclassified" in result.stderr
+        assert "raw-diagnostic" not in result.stdout + result.stderr
+
+    with tempfile.TemporaryDirectory() as directory_name:
+        missing_log = Path(directory_name) / "missing" / "stage.log"
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                "set -euo pipefail; source v2/scripts/run_private_stage.sh; "
+                "set +e; run_private_stage apply $1 $1 bash -c 'printf secret >&2; exit 17'; "
+                "status=$?; set -e; printf '%s\\n' \"$status\"",
+                "bash",
+                str(missing_log),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0
+        assert result.stdout == "1\n"
+        assert "status=fail" in result.stderr
+        assert "reason=diagnostic_unavailable" in result.stderr
+        assert "secret" not in result.stdout + result.stderr
+
+        invalid = subprocess.run(
+            [
+                "bash",
+                "-c",
+                "set -euo pipefail; source v2/scripts/run_private_stage.sh; "
+                "set +e; run_private_stage secret-stage /tmp/out /tmp/err true; "
+                "status=$?; set -e; printf '%s\\n' \"$status\"",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert invalid.returncode == 0
+        assert invalid.stdout == "64\n"
+        assert "secret-stage" not in invalid.stdout + invalid.stderr
+
+    with tempfile.TemporaryDirectory() as directory_name:
+        root = Path(directory_name)
+        (root / "logs").mkdir()
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                "set -euo pipefail; source v2/scripts/run_private_stage.sh; "
+                'run_private_stage plan "$RUNNER_TEMP/logs/out" "$RUNNER_TEMP/logs/err" true',
+            ],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "RUNNER_TEMP": str(root),
+                "GITHUB_STEP_SUMMARY": str(root / "missing" / "summary"),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 125
+        assert "stage=plan status=fail" in result.stderr
+        assert "exit=125 reason=unclassified" in result.stderr
+        assert str(root) not in result.stdout + result.stderr
+
+
+def test_development_delivery_classifier_is_bounded_and_allowlisted():
+    classifier = REPO_ROOT / "v2" / "scripts" / "classify_deployment_error.py"
+    cases = {
+        "access_denied": "AccessDeniedException: forbidden",
+        "expired_credentials": "The security token included in the request is expired",
+        "network": "connection reset by peer",
+        "dns": "could not resolve host",
+        "tls": "x509: certificate verify failed",
+        "backend_config": "Error configuring the backend",
+        "state_lock": "Error acquiring the state lock",
+        "provider_installation": "Failed to install provider",
+        "checksum": "doesn't match any of the checksums",
+        "malformed_input": "malformed JSON input",
+        "unclassified": "a bounded arbitrary failure",
+    }
+    with tempfile.TemporaryDirectory() as directory_name:
+        path = Path(directory_name) / "diagnostic.log"
+        for expected, diagnostic in cases.items():
+            path.write_text(diagnostic, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(classifier), str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0
+            assert result.stdout == f"{expected}\n"
+            assert result.stderr == ""
+
+        path.write_text("access deniedish", encoding="utf-8")
+        near_match = subprocess.run(
+            [sys.executable, str(classifier), str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert near_match.stdout == "unclassified\n"
+
+        path.write_bytes(b"x" * (64 * 1024) + b" AccessDeniedException")
+        bounded = subprocess.run(
+            [sys.executable, str(classifier), str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert bounded.stdout == "unclassified\n"
+
+        missing = subprocess.run(
+            [sys.executable, str(classifier), str(path) + ".missing"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert missing.stdout == "diagnostic_unavailable\n"
+
+        path.write_bytes(b"\xff\xfe")
+        unreadable = subprocess.run(
+            [sys.executable, str(classifier), str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert unreadable.stdout == "diagnostic_unavailable\n"
+
+        path.write_text(
+            "secret-token=do-not-print AccessDeniedException", encoding="utf-8"
+        )
+        secret = subprocess.run(
+            [sys.executable, str(classifier), str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert secret.stdout == "access_denied\n"
+        assert "secret-token" not in secret.stdout + secret.stderr
 
 
 def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup():
@@ -5027,7 +5180,11 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup()
         success, marker, summary = run_plan()
         assert success.returncode == 0, success.stderr
         assert marker.read_text(encoding="utf-8") == "migration-and-apply\n"
-        assert json.loads(summary.read_text(encoding="utf-8")) == {
+        summary_text = summary.read_text(encoding="utf-8")
+        summary_value = json.loads(
+            summary_text[summary_text.index("{") : summary_text.rindex("}") + 1]
+        )
+        assert summary_value == {
             "status": "accepted",
             "reason_code": "ok",
         }
@@ -5042,37 +5199,175 @@ def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup()
             result, marker, _ = run_plan(fail_stage=stage)
             assert result.returncode == 17
             assert result.stdout == ""
-            assert result.stderr == f"terraform stage failed: {stage} (exit 17)\n"
+            assert f"stage={stage} status=start" in result.stderr
+            assert f"stage={stage} status=fail" in result.stderr
+            assert "exit=17 reason=unclassified" in result.stderr
+            assert "raw-" not in result.stderr
             assert not marker.exists()
 
         result, marker, _ = run_plan(fail_stage="foundation-output-validation")
         assert result.returncode == 1
-        assert (
-            result.stderr
-            == "terraform stage failed: foundation-output-validation (exit 1)\n"
-        )
+        assert "stage=foundation-output-validation status=fail" in result.stderr
         assert not marker.exists()
 
         result, marker, summary = run_plan(validator_json=rejected, validator_exit=1)
         assert result.returncode == 1
-        assert result.stderr == "terraform stage failed: validator (exit 1)\n"
+        assert "stage=validator status=fail" in result.stderr
         assert not marker.exists()
-        assert json.loads(summary.read_text(encoding="utf-8")) == {
+        summary_text = summary.read_text(encoding="utf-8")
+        summary_value = json.loads(
+            summary_text[summary_text.index("{") : summary_text.rindex("}") + 1]
+        )
+        assert summary_value == {
             "status": "rejected",
             "reason_code": "unsupported_field_delta",
         }
 
         result, marker, _ = run_plan(validator_json=rejected, validator_exit=0)
         assert result.returncode == 1
-        assert result.stderr == "terraform stage failed: validator (exit 1)\n"
+        assert "stage=validator status=fail" in result.stderr
         assert not marker.exists()
+
+
+def test_development_delivery_apply_readiness_and_cleanup_failures_are_bounded():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+
+    def source_for(name: str) -> str:
+        return cast(
+            str,
+            next(step["run"] for step in steps if step.get("name") == name),
+        )
+
+    apply_source = source_for("Apply the same saved development plan")
+    readiness_source = source_for("Verify readiness and public release path")
+    cleanup_source = source_for("Cleanup private delivery files")
+
+    with tempfile.TemporaryDirectory() as directory_name:
+        root = Path(directory_name)
+        mock_bin = root / "bin"
+        mock_bin.mkdir()
+        (root / "release-overlay/v2/infra").mkdir(parents=True)
+        (root / "release-overlay/release-manifest.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        (root / "development.tfplan").write_text("plan", encoding="utf-8")
+        (root / "development-terraform-logs").mkdir(mode=0o700)
+        summary = root / "summary"
+        summary.touch()
+        terraform = mock_bin / "terraform"
+        terraform.write_text(
+            "#!/usr/bin/env bash\nprintf 'raw-apply\n' >&2\nexit 17\n",
+            encoding="utf-8",
+        )
+        terraform.chmod(0o700)
+        result = subprocess.run(
+            ["bash", "-c", apply_source],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root),
+                "GITHUB_STEP_SUMMARY": str(summary),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 17
+        assert "stage=apply status=fail" in result.stderr
+        assert "exit=17" in result.stderr
+        assert "raw-apply" not in result.stdout + result.stderr
+
+        terraform.write_text(
+            "#!/usr/bin/env bash\nprintf 'raw-readiness\n' >&2\nexit 23\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["bash", "-c", readiness_source],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root),
+                "GITHUB_STEP_SUMMARY": str(summary),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 23
+        assert "stage=readiness-state status=fail" in result.stderr
+        assert "exit=23" in result.stderr
+        assert "raw-readiness" not in result.stdout + result.stderr
+        assert not (root / "development-readiness-state.json").exists()
+        assert not (root / "development-readiness-state.log").exists()
+
+        terraform.write_text(
+            "#!/usr/bin/env bash\nprintf '{}\\n'\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["bash", "-c", readiness_source],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root),
+                "GITHUB_STEP_SUMMARY": str(summary),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "stage=readiness-check status=fail" in result.stderr
+
+        calls = root / "rm-calls"
+        failing_path = root / "development.tfplan"
+        rm = mock_bin / "rm"
+        rm.write_text(
+            "#!/usr/bin/env bash\n"
+            'printf \'%s\\n\' "$@" >>"$RM_CALLS"\n'
+            'for arg in "$@"; do\n'
+            '  if test "$arg" = "$RM_FAIL"; then printf \'raw-cleanup\\n\' >&2; exit 29; fi\n'
+            "done\n"
+            '/bin/rm "$@"\n',
+            encoding="utf-8",
+        )
+        rm.chmod(0o700)
+        result = subprocess.run(
+            ["bash", "-c", cleanup_source],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root),
+                "GITHUB_WORKSPACE": str(root),
+                "GITHUB_STEP_SUMMARY": str(summary),
+                "RM_CALLS": str(calls),
+                "RM_FAIL": str(failing_path),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 29
+        assert "stage=cleanup status=fail" in result.stderr
+        assert "raw-cleanup" not in result.stdout + result.stderr
+        call_text = calls.read_text(encoding="utf-8")
+        assert str(failing_path) in call_text
+        assert call_text.index(str(failing_path)) < call_text.index(
+            str(root / "development.tfplan.json")
+        )
 
 
 def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan():
     _assert_development_delivery_validator_contract(DEVELOPMENT_DELIVERY_WORKFLOW)
     validator_invocation = (
-        'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" '
-        '\\\n            >"$VALIDATION" 2>"$VALIDATOR_LOG"'
+        'run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG" '
+        '\\\n            python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY"'
     )
     show_invocation = (
         'run_private_stage "show" "$PLAN_JSON" "$SHOW_LOG" '

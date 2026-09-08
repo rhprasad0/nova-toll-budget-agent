@@ -522,21 +522,19 @@ jobs:
       - name: Create and gate the saved development plan before migrations
         run: |
           set -euo pipefail
-          run_private_stage() {
-            local stage="$1"
-            local stdout_log="$2"
-            local stderr_log="$3"
-            shift 3
-            local status
-            set +e
-            "$@" >"$stdout_log" 2>"$stderr_log"
-            status=$?
-            set -e
-            if test "$status" -ne 0; then
-              printf 'terraform stage failed: %s (exit %s)\n' "$stage" "$status" >&2
-              exit "$status"
+          umask 077
+          source v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=plan
+          private_stage_fallback() {
+            local status=$?
+            if test "$status" -ne 0 && test "$PRIVATE_STAGE_REPORTED" -eq 0; then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
             fi
+            trap - EXIT
+            exit "$status"
           }
+          trap private_stage_fallback EXIT
           test -s "$RUNNER_TEMP/protected-main-oidc.json"
           RELEASE_ROOT="$RUNNER_TEMP/release-overlay"
           EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
@@ -602,11 +600,14 @@ jobs:
           IDENTITY_VALID=true
           test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false
           test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false
-          set +e
-          python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" \
-            >"$VALIDATION" 2>"$VALIDATOR_LOG"
-          VALIDATOR_STATUS=$?
-          jq -e '
+          PRIVATE_STAGE_FALLBACK_STAGE=validator
+          if run_private_stage "validator" "$VALIDATION" "$VALIDATOR_LOG" \
+            python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY"; then
+            VALIDATOR_STATUS=0
+          else
+            VALIDATOR_STATUS=$?
+          fi
+          if run_private_stage "validator" "$VALIDATION_SUMMARY" "$VALIDATOR_PARSE_LOG" jq -e '
             def valid_reason:
               .reason_code as $reason |
               ["data_mode_misuse", "delete_not_permitted", "deposed_resource", "duplicate_address", "duplicate_manifest_mutation", "duplicate_permission", "import_or_refresh", "invalid_permission", "invalid_resource_identity", "malformed_input", "manifest_coverage_mismatch", "manifest_mutation_mismatch", "missing_permission", "moved_resource", "production_target", "provider_identity_mismatch", "provider_identity_missing", "replacement", "sensitive_authorization_value", "unknown_authorization_value", "unknown_manifest_declaration", "unsupported_action", "unsupported_address", "unsupported_field_delta"]
@@ -625,36 +626,49 @@ jobs:
               (.action? == null or (.action | type == "string" and length <= 32)) and
               (.operation_class? == null or (.operation_class | type == "string" and length <= 64))));
             select(valid_result) | {status, reason_code}
-          ' "$VALIDATION" >"$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG"
-          VALIDATOR_PARSE_STATUS=$?
-          set -e
+          ' "$VALIDATION"; then
+            VALIDATOR_PARSE_STATUS=0
+          else
+            VALIDATOR_PARSE_STATUS=$?
+          fi
           if test "$VALIDATOR_PARSE_STATUS" -ne 0; then
-            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_PARSE_STATUS" >&2
             exit "$VALIDATOR_PARSE_STATUS"
           fi
-          tee -a "$GITHUB_STEP_SUMMARY" <"$VALIDATION_SUMMARY" >/dev/null
+          if ! (cat "$VALIDATION_SUMMARY" >>"$VALIDATOR_PARSE_LOG") 2>/dev/null; then
+            _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=125 reason=unclassified'
+            PRIVATE_STAGE_REPORTED=1
+            exit 125
+          fi
+          if test -z "${GITHUB_STEP_SUMMARY:-}" || ! (cat "$VALIDATION_SUMMARY" >>"$GITHUB_STEP_SUMMARY") 2>/dev/null; then
+            _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=125 reason=unclassified'
+            PRIVATE_STAGE_REPORTED=1
+            exit 125
+          fi
           set +e
           VALIDATOR_RESULT_STATUS="$(jq -er '.status' "$VALIDATION_SUMMARY" 2>"$VALIDATOR_PARSE_LOG")"
           VALIDATOR_RESULT_STATUS_CODE=$?
           set -e
           if test "$VALIDATOR_RESULT_STATUS_CODE" -ne 0; then
-            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_RESULT_STATUS_CODE" >&2
+            _run_private_stage_emit "stage=validator status=fail elapsed=0 exit=$VALIDATOR_RESULT_STATUS_CODE reason=malformed_input"
+            PRIVATE_STAGE_REPORTED=1
             exit "$VALIDATOR_RESULT_STATUS_CODE"
           fi
           if test "$MANIFEST_VALID" != true || test "$IDENTITY_VALID" != true; then
-            printf 'terraform stage failed: validator (exit 1)\n' >&2
+            _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=1 reason=malformed_input'
+            PRIVATE_STAGE_REPORTED=1
             exit 1
           fi
           if test "$VALIDATOR_RESULT_STATUS" != accepted; then
             if test "$VALIDATOR_STATUS" -eq 0; then
-              printf 'terraform stage failed: validator (exit 1)\n' >&2
+              _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=1 reason=unclassified'
+              PRIVATE_STAGE_REPORTED=1
               exit 1
             fi
-            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_STATUS" >&2
+            PRIVATE_STAGE_REPORTED=1
             exit "$VALIDATOR_STATUS"
           fi
           if test "$VALIDATOR_STATUS" -ne 0; then
-            printf 'terraform stage failed: validator (exit %s)\n' "$VALIDATOR_STATUS" >&2
+            PRIVATE_STAGE_REPORTED=1
             exit "$VALIDATOR_STATUS"
           fi
           chmod 600 -- "$PLAN" "$PLAN_JSON" "$FOUNDATION_VARS"
@@ -703,15 +717,26 @@ jobs:
       - name: Apply the same saved development plan
         run: |
           set -euo pipefail
+          umask 077
+          source v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=apply
+          private_stage_fallback() {
+            local status=$?
+            if test "$status" -ne 0 && test "$PRIVATE_STAGE_REPORTED" -eq 0; then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            trap - EXIT
+            exit "$status"
+          }
+          trap private_stage_fallback EXIT
           RELEASE_ROOT="$RUNNER_TEMP/release-overlay"
           PLAN="$RUNNER_TEMP/development.tfplan"
           TF_LOG_DIR="$RUNNER_TEMP/development-terraform-logs"
           APPLY_LOG="$TF_LOG_DIR/apply.log"
           test -s "$PLAN"
-          if ! terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1; then
-            echo "terraform stage failed: apply" >&2
-            exit 1
-          fi
+          run_private_stage "apply" "$APPLY_LOG" "$APPLY_LOG" \
+            terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"
           rm -f -- "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/foundation-output.json" "$PLAN" "$RUNNER_TEMP/development.tfplan.json"
           rm -rf -- "$TF_LOG_DIR"
 
@@ -721,13 +746,35 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          source v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_FALLBACK_STAGE=readiness-state
           state="$RUNNER_TEMP/development-readiness-state.json"
           error_log="$RUNNER_TEMP/development-readiness-state.log"
-          trap 'rm -f -- "$state" "$error_log"' EXIT
-          if ! terraform -chdir="$RUNNER_TEMP/release-overlay/v2/infra" show -json >"$state" 2>"$error_log"; then
-            echo "development readiness state unavailable" >&2
-            exit 1
-          fi
+          cleanup_log="$RUNNER_TEMP/development-readiness-cleanup.log"
+          readiness_cleanup() {
+            local status=$?
+            local cleanup_status=0
+            local primary_reported="$PRIVATE_STAGE_REPORTED"
+            if run_private_stage "cleanup" "$cleanup_log" "$cleanup_log" \
+              rm -f -- "$state" "$error_log"; then
+              :
+            else
+              cleanup_status=$?
+            fi
+            if test "$status" -eq 0 && test "$cleanup_status" -ne 0; then
+              status="$cleanup_status"
+            fi
+            if test "$status" -ne 0 && test "$primary_reported" -eq 0; then
+              _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
+            fi
+            trap - EXIT
+            exit "$status"
+          }
+          trap readiness_cleanup EXIT
+          run_private_stage "readiness-state" "$state" "$error_log" \
+            terraform -chdir="$RUNNER_TEMP/release-overlay/v2/infra" show -json
+          PRIVATE_STAGE_FALLBACK_STAGE=readiness-check
           python3 v2/scripts/check_development_release.py \
             "$state" "$RUNNER_TEMP/release-overlay/release-manifest.json"
           echo 'verified=success' >>"$GITHUB_OUTPUT"
@@ -736,7 +783,18 @@ jobs:
         if: always()
         run: |
           set +e
-          rm -rf -- "$RUNNER_TEMP/v2-development-packages" \
+          source v2/scripts/run_private_stage.sh
+          cleanup_log="$RUNNER_TEMP/development-cleanup.log"
+          cleanup_status=0
+          cleanup_path() {
+            run_private_stage "cleanup" "$cleanup_log" "$cleanup_log" rm -rf -- "$1"
+            status=$?
+            if test "$status" -ne 0 && test "$cleanup_status" -eq 0; then
+              cleanup_status="$status"
+            fi
+          }
+          for private_path in \
+            "$RUNNER_TEMP/v2-development-packages" \
             "$RUNNER_TEMP/v2-development-checksums" "$RUNNER_TEMP/release-overlay" \
             "$RUNNER_TEMP/development-terraform-logs" \
             "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/development-foundation-output.json" \
@@ -749,10 +807,15 @@ jobs:
             "$RUNNER_TEMP/development-release-staging-verification.json" "$RUNNER_TEMP/development-plan-validation-summary.json" \
             "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
             "$RUNNER_TEMP/development-readiness-state.json" "$RUNNER_TEMP/development-readiness-state.log" \
+            "$RUNNER_TEMP/development-readiness-cleanup.log" \
             "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform" \
-            "$GITHUB_WORKSPACE/v2/infra/build/ca"
-          rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"
+            "$GITHUB_WORKSPACE/v2/infra/build/ca" \
+            "$RUNNER_TEMP/protected-main-oidc.json"; do
+            cleanup_path "$private_path"
+          done
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+          cleanup_path "$cleanup_log"
+          exit "$cleanup_status"
 
   release-result:
     name: Record end-to-end development result
