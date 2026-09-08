@@ -44,3 +44,15 @@ regexes = [
   '''^\s*"route_key"\s*:\s*"[0-9a-f]{64}"\s*,?\s*$''',
 ]
 targetRules = ["generic-api-key"]
+
+[[allowlists]]
+description = "Reviewed development release fingerprints are SHA-256 digests"
+condition = "AND"
+paths = [
+  '''^infra/development-release-manifest\.json$''',
+]
+regexTarget = "line"
+regexes = [
+  '''^\s*"v2/agent/public-api-gate\.js"\s*:\s*"[0-9a-f]{64}"\s*,?\s*$''',
+]
+targetRules = ["generic-api-key"]

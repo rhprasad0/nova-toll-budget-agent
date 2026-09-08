@@ -9,10 +9,20 @@ from infra.delivery_plan_validator import CONTRACT, EXPECTED_IDENTITY, EXPECTED_
 
 
 LAMBDA_ADDRESS = "aws_lambda_function.loader"
+HASH = "0" * 64
 
 
 def validate_plan(plan, manifest, identity=None):
     return _validate_plan(plan, manifest, dict(EXPECTED_IDENTITY) if identity is None else identity)
+
+
+def manifest_header():
+    return {
+        "schema_version": 1,
+        "provider_identity": dict(EXPECTED_IDENTITY),
+        "deployment_inputs": {"v2/infra/main.tf": HASH},
+        "packages": {name: HASH for name in ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip")},
+    }
 
 
 def _resource_change(address, action, before, after, *, after_unknown=None, before_sensitive=None, after_sensitive=None):
@@ -39,16 +49,15 @@ def _resource_change(address, action, before, after, *, after_unknown=None, befo
 
 
 def lambda_plan(**changes):
-    before = {"filename": "old.zip", "source_code_hash": "old"}
-    after = {"filename": "new.zip", "source_code_hash": "new"}
+    before = {"filename": "old.zip", "source_code_hash": "old", "s3_bucket": None, "s3_key": None, "s3_object_version": None}
+    after = {"filename": "new.zip", "source_code_hash": "new", "s3_bucket": None, "s3_key": None, "s3_object_version": None}
     after.update(changes)
     return {"terraform_version": "1.15.8", "resource_changes": [_resource_change(LAMBDA_ADDRESS, "update", before, after)]}
 
 
 def lambda_manifest(changed_fields=("filename", "source_code_hash")):
     return {
-        "schema_version": 1,
-        "provider_identity": dict(EXPECTED_IDENTITY),
+        **manifest_header(),
         "mutations": [{
             "address": LAMBDA_ADDRESS,
             "action": "update",
@@ -94,7 +103,9 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
     def test_accepts_one_fixture_for_every_contract_entry(self):
         for address, spec in CONTRACT.items():
             action = spec.actions[0]
-            if spec.operation_class == "lambda-code":
+            if address == "aws_lambda_function.tollchat_proxy":
+                fields = ("s3_object_version", "source_code_hash")
+            elif spec.operation_class == "lambda-code":
                 fields = ("filename", "source_code_hash")
             else:
                 fields = (spec.fields[0],)
@@ -111,8 +122,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
                 after[field] = value
             plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, action, before, after)]}
             manifest = {
-                "schema_version": 1,
-                "provider_identity": dict(EXPECTED_IDENTITY),
+                **manifest_header(),
                 "mutations": [{
                     "address": address,
                     "action": action,
@@ -140,6 +150,14 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         identity["terraform_version"] = "1.14.0"
         self.assert_reason("provider_identity_mismatch", identity=identity)
 
+        manifest = lambda_manifest()
+        del manifest["packages"]
+        self.assert_reason("unknown_manifest_declaration", manifest=manifest)
+
+        manifest = lambda_manifest()
+        manifest["deployment_inputs"] = {"v2/infra/main.tf": "bad"}
+        self.assert_reason("malformed_input", manifest=manifest)
+
     def test_rejects_unlisted_duplicate_and_unknown_values(self):
         plan = lambda_plan()
         plan["resource_changes"][0]["address"] = "aws_lambda_function.not_declared"
@@ -163,12 +181,44 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         self.assert_reason("sensitive_authorization_value", plan=plan)
 
     def test_accepts_s3_object_version_only_lambda_update(self):
-        before = {"s3_bucket": "bucket", "s3_key": "lambda.zip", "s3_object_version": "old", "source_code_hash": "old"}
+        address = "aws_lambda_function.tollchat_proxy"
+        before = {
+            "filename": None,
+            "s3_bucket": "nova-toll-agentcore-903859731897",
+            "s3_key": "lambda/v2/chat-proxy-dev.zip",
+            "s3_object_version": "old",
+            "source_code_hash": "old",
+        }
         after = dict(before, s3_object_version="new", source_code_hash="new")
-        plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(LAMBDA_ADDRESS, "update", before, after)]}
+        plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", before, after)]}
         manifest = lambda_manifest(("s3_object_version", "source_code_hash"))
+        manifest["mutations"][0]["address"] = address
+        manifest["permissions"][0].update({
+            "address": address,
+            "resource": "arn:aws:lambda:us-east-1:903859731897:function:tollchat-v2-chat-proxy-dev",
+        })
         result = validate_plan(plan, manifest)
         self.assertEqual(result["status"], "accepted")
+
+        plan["resource_changes"][0]["change"]["after"]["s3_key"] = "lambda/v2/redirect.zip"
+        manifest["mutations"][0]["changed_fields"].append("s3_key")
+        self.assert_reason("invalid_resource_identity", plan=plan, manifest=manifest)
+
+        mixed = copy.deepcopy(plan)
+        mixed["resource_changes"][0]["change"]["after"]["s3_key"] = "lambda/v2/chat-proxy-dev.zip"
+        mixed["resource_changes"][0]["change"]["after"]["filename"] = "chat-proxy.zip"
+        mixed_manifest = copy.deepcopy(manifest)
+        mixed_manifest["mutations"][0]["changed_fields"] = ["filename", "s3_object_version", "source_code_hash"]
+        self.assert_reason("invalid_resource_identity", plan=mixed, manifest=mixed_manifest)
+
+    def test_rejects_filename_lambda_s3_delivery_shape(self):
+        plan = lambda_plan(s3_bucket="redirect", s3_key="lambda.zip")
+        manifest = lambda_manifest(("filename", "s3_bucket", "s3_key", "source_code_hash"))
+        self.assert_reason("invalid_resource_identity", plan=plan, manifest=manifest)
+
+        missing = lambda_plan()
+        del missing["resource_changes"][0]["change"]["after"]["s3_key"]
+        self.assert_reason("invalid_resource_identity", plan=missing)
 
     def test_rejects_production_moved_deposed_import_replacement_and_delete(self):
         plan = lambda_plan()
@@ -205,8 +255,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         spec = CONTRACT[address]
         plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "update", {"tags": {"old": "1"}}, {"tags": {"new": "1"}})]}
         manifest = {
-            "schema_version": 1,
-            "provider_identity": dict(EXPECTED_IDENTITY),
+            **manifest_header(),
             "mutations": [{"address": address, "action": "update", "operation_class": spec.operation_class, "changed_fields": ["tags"]}],
             "permissions": [
                 {"address": address, "action": spec.permissions[0].action, "resource": spec.permissions[0].resources[0], "conditions": {}},
@@ -254,8 +303,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
             spec = CONTRACT[address]
             plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, after, after_unknown={"id": True})]}
             manifest = {
-                "schema_version": 1,
-                "provider_identity": dict(EXPECTED_IDENTITY),
+                **manifest_header(),
                 "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": list(fields)}],
                 "permissions": [{"address": address, "action": p.action, "resource": p.resources[0], "conditions": dict(p.conditions)} for p in spec.permissions],
             }
@@ -263,14 +311,13 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
 
     def test_s3_create_identity_is_exact_for_every_object_entry(self):
         for address, spec in CONTRACT.items():
-            if not spec.create_identity:
+            if not spec.create_identity or "create" not in spec.actions:
                 continue
             fields = spec.fields[:2]
             after = {fields[0]: "source", fields[1]: "hash", **dict(spec.create_identity)}
             plan = {"terraform_version": "1.15.8", "resource_changes": [_resource_change(address, "create", None, after)]}
             manifest = {
-                "schema_version": 1,
-                "provider_identity": dict(EXPECTED_IDENTITY),
+                **manifest_header(),
                 "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": list(fields)}],
                 "permissions": [{"address": address, "action": p.action, "resource": p.resources[0], "conditions": dict(p.conditions)} for p in spec.permissions],
             }
@@ -295,8 +342,7 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         spec = CONTRACT[address]
         after = {"source": "asset", "source_hash": "hash", **dict(spec.create_identity)}
         manifest = {
-            "schema_version": 1,
-            "provider_identity": dict(EXPECTED_IDENTITY),
+            **manifest_header(),
             "mutations": [{"address": address, "action": "create", "operation_class": spec.operation_class, "changed_fields": ["source", "source_hash"]}],
             "permissions": [{"address": address, "action": p.action, "resource": p.resources[0], "conditions": dict(p.conditions)} for p in spec.permissions],
         }

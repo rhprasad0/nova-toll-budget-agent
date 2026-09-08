@@ -4005,7 +4005,17 @@ def _assert_development_delivery_workflow(source: str) -> None:
         "merge-multiple": True,
     }
     assert "name" not in proof_download_with
-    assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in deploy_source
+    assert "infra/release_manifest.py" in deploy_source
+    assert "development-release-evidence.json" in deploy_source
+    assert 'git show "${GITHUB_SHA}:infra/development-release-manifest.json"' in source
+    assert (
+        source.index("Build reviewed deployment packages")
+        < source.index("Checkout trusted manifest verifier after package build")
+        < source.index("Verify reviewed manifest and write runtime evidence")
+    )
+    assert source.index(
+        "Verify immutable development release without credentials"
+    ) < source.index("aws-actions/configure-aws-credentials@")
     assert "path: ${{ runner.temp }}/v2-development-packages" in source
     assert "aws-actions/configure-aws-credentials@" in "\n".join(
         cast(str, step.get("uses", "")) for step in deploy_steps
@@ -4016,6 +4026,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "aws-region: us-east-1" in source
     assert 'version: "0.12.5"' in source
     assert 'terraform_version: "1.15.8"' in source
+    assert deploy_source.count("-lockfile=readonly") == 2
 
     for job in jobs.values():
         for step in cast(list[dict[str, object]], job["steps"]):
@@ -4056,16 +4067,16 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert proof_validation_index < configure_index
     assert (
-        "terraform -chdir=infra init -input=false -backend-config=backend.development.hcl"
-        in deploy_source
+        "terraform -chdir=infra init -input=false -lockfile=readonly" in deploy_source
     )
+    assert "-backend-config=backend.development.hcl" in deploy_source
     assert "terraform -chdir=infra output -json foundation" in deploy_source
     assert (
         "foundation.tfvars.json" in deploy_source
         and "trap cleanup EXIT" in deploy_source
     )
     assert (
-        "terraform -chdir=v2/infra init -input=false -backend-config=backend.development.hcl"
+        "terraform -chdir=v2/infra init -input=false -lockfile=readonly"
         in deploy_source
     )
     assert "-var-file=development.tfvars" in deploy_source
@@ -4169,6 +4180,22 @@ def _assert_development_plan_workflow(source: str) -> None:
         "sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip"
         in build_source
     )
+    assert "trusted-build/infra/release_manifest.py" in build_source
+    assert '--repo-root "$GITHUB_WORKSPACE"' in build_source
+    assert "--write-evidence" in build_source
+    assert "development-release-manifest.json" in build_source
+    assert "development-release-evidence.json" in build_source
+    assert "path: trusted-build" in source
+    assert (
+        'git show "${CANDIDATE_SHA}:infra/development-release-manifest.json"'
+        in build_source
+    )
+    assert "cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS" in build_source
+    assert (
+        source.index("Build reviewed deployment packages")
+        < source.index("Checkout trusted manifest verifier after candidate build")
+        < source.index("Verify reviewed manifest and write runtime evidence")
+    )
     uploads = [
         step
         for step in cast(list[dict[str, object]], build["steps"])
@@ -4191,8 +4218,8 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert "job.workflow_ref" in source
     assert "job.workflow_file_path" in source
     assert "path: trusted" in source
-    assert "repository: ${{ job.workflow_repository }}" in source
-    assert "ref: ${{ job.workflow_sha }}" in source
+    assert source.count("repository: ${{ job.workflow_repository }}") == 2
+    assert source.count("ref: ${{ job.workflow_sha }}") == 2
     assert (
         "v2-development-packages-${{ github.run_id }}-${{ needs.build.outputs.candidate_sha }}"
         in source
@@ -4203,7 +4230,12 @@ def _assert_development_plan_workflow(source: str) -> None:
     )
     assert "artifact-ids:" not in plan_source
     assert "download-artifact" in source
-    assert "sha256sum --check DEPLOYMENT_SHA256SUMS" in plan_source
+    assert "trusted/infra/release_manifest.py" in plan_source
+    assert "--evidence" in plan_source
+    assert "--repo-root" not in plan_source
+    assert source.index(
+        "Verify candidate release binding without credentials"
+    ) < source.index("aws-actions/configure-aws-credentials@")
     assert 'terraform_version: "1.15.8"' in source
     assert plan_source.count("-lockfile=readonly") == 2
     assert "-lock=false" in plan_source
@@ -4295,7 +4327,7 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     assert "known_action" not in source
     assert "if ! jq -e" not in source
     assert "infra/delivery_plan_validator.py" in source
-    assert 'MANIFEST="$RUNNER_TEMP/development-release-manifest.json"' in source
+    assert 'MANIFEST="$PACKAGE_DIR/development-release-manifest.json"' in source
     assert 'IDENTITY="$RUNNER_TEMP/development-plan-identity.json"' in source
     assert (
         'test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false'
