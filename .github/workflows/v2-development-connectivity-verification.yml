@@ -60,7 +60,7 @@ jobs:
           oauth-secret: ${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}
           tags: tag:ci-development
 
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-route-control-dev
           aws-region: us-east-1
@@ -89,7 +89,7 @@ jobs:
           ROUTE_SUMMARY="$(python3 scripts/approve_development_tailscale_route.py --read-only)"
           printf '## Development Tailscale route diagnostic\n\n```json\n%s\n```\n' "$ROUTE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         if: inputs.phase == 'pre-bootstrap' || inputs.phase == 'full' || inputs.phase == ''
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-timed-checks-dev

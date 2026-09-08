@@ -660,7 +660,7 @@ jobs:
           run_private_stage "oidc-claims" "$RUNNER_TEMP/development-oidc-validation.log" "$RUNNER_TEMP/development-oidc-validation.log" \
             validate_oidc_proof
 
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery
           aws-region: us-east-1
@@ -862,7 +862,7 @@ jobs:
           oauth-secret: ${{ secrets.TS_DEVELOPMENT_OAUTH_SECRET }}
           tags: tag:ci-development
 
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-migrations-dev
           aws-region: us-east-1
@@ -871,7 +871,7 @@ jobs:
       - name: Run reviewed backward-compatible development migrations
         run: bash v2/scripts/run_development_migrations_workflow.sh
 
-      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: arn:aws:iam::903859731897:role/nova-toll-v2-development-delivery
           aws-region: us-east-1
