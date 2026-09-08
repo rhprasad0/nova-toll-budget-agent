@@ -581,8 +581,7 @@ jobs:
           TF_LOG_DIR="$RUNNER_TEMP/development-terraform-logs"
           APPLY_LOG="$TF_LOG_DIR/apply.log"
           test -s "$PLAN"
-          if ! terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" \
-            >"$APPLY_LOG" 2>&1; then
+          if ! terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1; then
             echo "terraform stage failed: apply" >&2
             exit 1
           fi

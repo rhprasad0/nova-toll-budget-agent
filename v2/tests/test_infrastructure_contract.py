@@ -4223,7 +4223,10 @@ def _assert_development_delivery_workflow(source: str) -> None:
         )
         == 1
     )
-    assert "trap cleanup EXIT" in deploy_source
+    assert 'rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"' in deploy_source
+    assert deploy_source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+    ) < deploy_source.rindex('rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"')
     assert '"$PACKAGE_DIR"' in deploy_source
     plan_index = deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
@@ -4584,7 +4587,7 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     assert 'test "$IDENTITY_VALID" = true' in source
     assert 'test "$VALIDATOR_STATUS" -eq 0' in source
     assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in source
-    assert 'rm -f -- "$PROOF"' in source
+    assert 'rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"' in source
     assert "if: always()" in workflow_source
     assert source.index('PROOF="$RUNNER_TEMP/protected-main-oidc.json"') < source.index(
         'test -s "$PROOF"'
