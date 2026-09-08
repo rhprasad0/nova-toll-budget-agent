@@ -3853,6 +3853,19 @@ def test_development_foundation_output_validators_fail_closed_and_match():
         assert workflow_result is expected, label
 
 
+def _assert_development_build_setup_uv(build: dict[str, object]) -> None:
+    setup_uv_steps = [
+        step
+        for step in cast(list[dict[str, object]], build["steps"])
+        if cast(str, step.get("uses", "")).startswith("astral-sh/setup-uv@")
+    ]
+    assert len(setup_uv_steps) == 1
+    assert cast(dict[str, str], setup_uv_steps[0]["with"]) == {
+        "version": "0.12.5",
+        "python-version": "3.13",
+    }
+
+
 def _assert_development_delivery_workflow(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
     assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
@@ -3864,6 +3877,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert build["permissions"] == {"contents": "read"}
     assert "id-token" not in cast(dict[str, str], build["permissions"])
     build_steps = cast(list[dict[str, object]], build["steps"])
+    _assert_development_build_setup_uv(build)
     build_source = _workflow_run_source(build)
     assert all(
         not cast(str, step.get("uses", "")).startswith(
@@ -4173,6 +4187,7 @@ def _assert_development_plan_workflow(source: str) -> None:
     plan = jobs["plan"]
     assert build["permissions"] == {"contents": "read"}
     assert "environment" not in build
+    _assert_development_build_setup_uv(build)
     build_source = _workflow_run_source(build)
     assert "aws-actions/configure-aws-credentials@" not in build_source
     assert "id-token: write" not in build_source
@@ -4324,6 +4339,8 @@ def test_development_plan_workflow_is_reusable_and_fail_closed():
         ("-lockfile=readonly", "-lockfile=update"),
         ("-lock=false", "-lock=true"),
         ("trap cleanup EXIT", "trap cleanup RETURN"),
+        ('python-version: "3.13"', ""),
+        ('python-version: "3.13"', 'python-version: "3.12"'),
     ):
         _must_reject(
             _assert_development_plan_workflow,
@@ -5278,6 +5295,8 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
             "${{ needs.oidc-proof.outputs.artifact_id }}",
             "protected-main-oidc-proof",
         ),
+        ('python-version: "3.13"', ""),
+        ('python-version: "3.13"', 'python-version: "3.12"'),
     ):
         _must_reject(
             _assert_development_delivery_workflow,
