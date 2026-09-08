@@ -171,6 +171,103 @@ def _hcl_attribute(source: str, name: str) -> str:
     return source[start:].splitlines()[0].strip()
 
 
+def _hcl_expression(source: str, name: str) -> str:
+    """Return an HCL attribute expression, including nested delimiters."""
+    match = re.search(rf"(?m)^\s*{re.escape(name)}\s*=\s*", source)
+    if not match:
+        return ""
+    start = match.end()
+    while start < len(source) and source[start].isspace():
+        start += 1
+    opening = source[start] if start < len(source) else ""
+    if opening not in "[({" and re.match(r"[A-Za-z_][\w.]*\(", source[start:]):
+        function_opening = source.find("(", start)
+        opening = "("
+        expression_start = start
+        start = function_opening
+    else:
+        expression_start = start
+    if opening not in "[({":
+        return source[start:].splitlines()[0].strip()
+    closing = {"[": "]", "(": ")", "{": "}"}[opening]
+    depth = 0
+    quoted = False
+    escaped = False
+    for index in range(start, len(source)):
+        character = source[index]
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+            continue
+        if character == '"':
+            quoted = True
+        elif character == opening:
+            depth += 1
+        elif character == closing:
+            depth -= 1
+            if depth == 0:
+                return source[expression_start : index + 1].strip()
+    raise AssertionError(f"unclosed HCL expression {name!r}")
+
+
+def _hcl_expression_tokens(expression: str) -> list[str]:
+    expression = expression.strip()
+    if expression.startswith("concat("):
+        expression = re.sub(r"\s+", " ", expression)
+        expression = expression.replace("( ", "(").replace(" )", ")")
+        return [re.sub(r",\s*\)$", ")", expression)]
+    tokens: list[str] = []
+    for match in re.finditer(r'"(?:\\.|[^"\\])*"|[A-Za-z_][\w.:-]*|\*', expression):
+        token = match.group(0)
+        tokens.append(json.loads(token) if token.startswith('"') else token)
+    return tokens
+
+
+def _parsed_policy_tuple_map(
+    source: str, name: str
+) -> dict[
+    str,
+    tuple[
+        tuple[str, ...], tuple[str, ...], tuple[tuple[str, str, tuple[str, ...]], ...]
+    ],
+]:
+    document = terraform_block(source, f'data "aws_iam_policy_document" "{name}"')
+    result: dict[
+        str,
+        tuple[
+            tuple[str, ...],
+            tuple[str, ...],
+            tuple[tuple[str, str, tuple[str, ...]], ...],
+        ],
+    ] = {}
+    for statement in _hcl_named_blocks(document, "statement"):
+        conditions: list[tuple[str, str, tuple[str, ...]]] = []
+        for condition in _hcl_named_blocks(statement, "condition"):
+            values = tuple(_hcl_expression_tokens(_hcl_expression(condition, "values")))
+            values = tuple(
+                "us-east-1" if value == "local.development_delivery_region" else value
+                for value in values
+            )
+            conditions.append(
+                (
+                    _hcl_scalar(condition, "test"),
+                    _hcl_scalar(condition, "variable"),
+                    values,
+                )
+            )
+        sid = _hcl_scalar(statement, "sid")
+        result[sid] = (
+            tuple(_hcl_strings(_hcl_attribute(statement, "actions"))),
+            tuple(_hcl_expression_tokens(_hcl_expression(statement, "resources"))),
+            tuple(conditions),
+        )
+    return result
+
+
 def _hcl_strings(expression: str) -> list[str]:
     return [json.loads(value) for value in re.findall(r'"(?:\\.|[^"\\])*"', expression)]
 
@@ -371,6 +468,143 @@ def _terraform_rendered_development_delivery_policies() -> tuple[
         aggregate = values["development_delivery_aggregate"]["value"]
         assert isinstance(documents, dict)
         assert isinstance(aggregate, str)
+        return (
+            {
+                key: json.loads(value)
+                for key, value in cast(dict[str, str], documents).items()
+            },
+            cast(list[dict[str, object]], json.loads(aggregate)["Statement"]),
+        )
+
+
+def _terraform_rendered_development_plan_policies() -> tuple[
+    dict[str, dict[str, object]], list[dict[str, object]]
+]:
+    """Render the development plan policies in a backend-free Terraform root."""
+    first_locals = _top_level_terraform_block(FOUNDATION_IAM, "locals", 0)
+    policy_data = _top_level_terraform_block(
+        FOUNDATION_IAM,
+        'data "aws_iam_policy_document" "development_plan"',
+    )
+    plan_locals = next(
+        _top_level_terraform_block(FOUNDATION_IAM, "locals", occurrence)
+        for occurrence in range(5)
+        if "development_plan_policy_documents"
+        in _top_level_terraform_block(FOUNDATION_IAM, "locals", occurrence)
+    )
+    policy_data = policy_data.replace(
+        "aws_s3_bucket.tfstate.arn", "local.test_tfstate_bucket_arn"
+    ).replace("aws_kms_key.tfstate.arn", "local.test_tfstate_kms_key_arn")
+    configuration = dedent(
+        f"""
+        terraform {{
+          required_providers {{
+            aws = {{
+              source  = "hashicorp/aws"
+              version = "~> 6.47"
+            }}
+          }}
+        }}
+
+        variable "environment" {{
+          type    = string
+          default = "development"
+        }}
+
+        provider "aws" {{
+          region                       = "us-east-1"
+          access_key                   = "test"
+          secret_key                   = "test"
+          skip_credentials_validation = true
+          skip_requesting_account_id  = true
+          skip_metadata_api_check     = true
+        }}
+
+        locals {{
+          test_tfstate_bucket_arn = "arn:aws:s3:::nova-toll-tfstate-903859731897"
+          test_tfstate_kms_key_arn = "arn:aws:kms:us-east-1:903859731897:key/00000000-0000-0000-0000-000000000000"
+        }}
+
+        {first_locals}
+        {policy_data}
+        {plan_locals}
+
+        output "development_plan_policy_documents" {{
+          value = local.development_plan_policy_documents
+        }}
+
+        output "development_plan_aggregate" {{
+          value = data.aws_iam_policy_document.development_plan.json
+        }}
+        """
+    )
+    with tempfile.TemporaryDirectory(prefix="nova-toll-iam-plan-render-") as directory:
+        root = Path(directory)
+        (root / "main.tf").write_text(configuration, encoding="utf-8")
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("AWS_")
+        }
+        environment["HOME"] = str(root)
+        environment["TF_DATA_DIR"] = str(root / ".terraform-data")
+        provider_mirror = FOUNDATION_ROOT / ".terraform" / "providers"
+        if provider_mirror.is_dir():
+            cli_config = root / "terraform.tfrc"
+            cli_config.write_text(
+                dedent(
+                    f"""
+                    provider_installation {{
+                      filesystem_mirror {{
+                        path = {json.dumps(str(provider_mirror))}
+                      }}
+                      direct {{
+                        exclude = ["hashicorp/aws"]
+                      }}
+                    }}
+                    """
+                ),
+                encoding="utf-8",
+            )
+            environment["TF_CLI_CONFIG_FILE"] = str(cli_config)
+        init = subprocess.run(
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert init.returncode == 0, init.stdout + init.stderr
+        plan_path = root / "development-plan.tfplan"
+        plan = subprocess.run(
+            [
+                "terraform",
+                "plan",
+                "-refresh=false",
+                "-input=false",
+                "-no-color",
+                f"-out={plan_path}",
+            ],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert plan.returncode == 0, plan.stdout + plan.stderr
+        rendered = subprocess.run(
+            ["terraform", "show", "-json", str(plan_path)],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+        outputs = json.loads(rendered.stdout)["planned_values"]["outputs"]
+        documents = outputs["development_plan_policy_documents"]["value"]
+        aggregate = outputs["development_plan_aggregate"]["value"]
         return (
             {
                 key: json.loads(value)
@@ -4982,6 +5216,699 @@ def test_development_delivery_iam_is_parsed_and_adversarial_mutations_fail():
             original,
             replacement,
         )
+
+
+DEVELOPMENT_PLAN_SIDS = [
+    "ListDevelopmentState",
+    "ReadDevelopmentState",
+    "DecryptDevelopmentState",
+    "ReadPreprovisionedApplicationRoles",
+    "ReadApplicationLambdaFunctions",
+    "ReadApplicationQueues",
+    "ReadApplicationQueueUrls",
+    "ReadApplicationEventRules",
+    "ReadRetainedRollupEventRule",
+    "ReadApplicationLogs",
+    "ReadRetainedRollupLogGroup",
+    "DescribeApplicationLogPolicies",
+    "DescribeApplicationLogGroups",
+    "ReadApplicationAlarms",
+    "ReadRetainedRollupAlarms",
+    "DescribeApplicationNetworking",
+    "ReadApplicationSiteBucket",
+    "ReadApplicationMeasurementBucket",
+    "ReadRetainedApplicationMeasurementRegistry",
+    "ReadApplicationArtifacts",
+    "ReadApplicationArtifactBucket",
+    "ReadApplicationKmsKeys",
+    "ReadRetainedMeasurementKey",
+    "ReadApplicationKmsAliases",
+    "ReadApplicationSessions",
+    "ReadRetainedApplicationCatalog",
+    "ReadRetainedApplicationAthenaNamedQueries",
+    "ReadRetainedApplicationAthenaWorkGroup",
+    "ListApplicationAthenaWorkGroups",
+    "ReadApplicationSchedules",
+    "ReadRetiredUsagePublisherIam",
+    "ReadRetiredUsagePublisherLambda",
+    "ReadRetiredUsagePublisherEvents",
+    "ReadRetiredUsagePublisherAlarms",
+    "ReadApplicationGuardrail",
+    "ReadApplicationAgentCore",
+    "ReadApplicationApiGateway",
+    "ReadApplicationCloudFrontFunctions",
+    "ReadApplicationCloudFront",
+    "ReadManagedCloudFrontPolicies",
+    "ReadManagedCloudFrontPolicy",
+    "ReadApplicationWaf",
+    "ReadDevelopmentCertificate",
+]
+
+_NO_PLAN_CONDITIONS = ()
+_REGIONAL_PLAN_CONDITIONS = (("StringEquals", "aws:RequestedRegion", ("us-east-1",)),)
+_KMS_PLAN_CONDITIONS = (
+    ("StringEquals", "aws:ResourceTag/environment", ("development",)),
+    ("StringEquals", "aws:ResourceTag/version", ("v2",)),
+)
+_LAMBDA_READ_ACTIONS = (
+    "lambda:GetAlias",
+    "lambda:GetFunction",
+    "lambda:GetFunctionCodeSigningConfig",
+    "lambda:GetFunctionConfiguration",
+    "lambda:GetFunctionEventInvokeConfig",
+    "lambda:GetFunctionUrlConfig",
+    "lambda:GetPolicy",
+    "lambda:GetProvisionedConcurrencyConfig",
+    "lambda:ListAliases",
+    "lambda:ListProvisionedConcurrencyConfigs",
+    "lambda:ListTags",
+    "lambda:ListVersionsByFunction",
+)
+_EVENT_READ_ACTIONS = (
+    "events:DescribeRule",
+    "events:ListTagsForResource",
+    "events:ListTargetsByRule",
+)
+_ALARM_READ_ACTIONS = ("cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource")
+_IAM_READ_ACTIONS = (
+    "iam:GetRole",
+    "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListInstanceProfilesForRole",
+    "iam:ListRolePolicies",
+    "iam:ListRoleTags",
+)
+
+DEVELOPMENT_PLAN_REFRESH_TUPLES = {
+    "ReadPreprovisionedApplicationRoles": (
+        _IAM_READ_ACTIONS,
+        ("local.development_delivery_role_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationLambdaFunctions": (
+        _LAMBDA_READ_ACTIONS,
+        (
+            "concat(local.development_delivery_lambda_resources, local.development_delivery_legacy_rollup_lambda_resources)",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationQueues": (
+        ("sqs:GetQueueAttributes", "sqs:ListQueueTags"),
+        ("local.development_delivery_queue_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationQueueUrls": (
+        ("sqs:GetQueueUrl",),
+        ("local.development_delivery_queue_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationEventRules": (
+        _EVENT_READ_ACTIONS,
+        ("local.development_delivery_event_rule_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedRollupEventRule": (
+        _EVENT_READ_ACTIONS,
+        ("local.development_delivery_legacy_rollup_event_rule_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationLogs": (
+        ("logs:DescribeMetricFilters", "logs:ListTagsForResource"),
+        ("local.development_delivery_log_group_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedRollupLogGroup": (
+        ("logs:DescribeMetricFilters", "logs:ListTagsForResource"),
+        ("local.development_delivery_legacy_rollup_log_group_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "DescribeApplicationLogPolicies": (
+        ("logs:DescribeResourcePolicies",),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "DescribeApplicationLogGroups": (
+        ("logs:DescribeLogGroups",),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationAlarms": (
+        _ALARM_READ_ACTIONS,
+        ("local.development_delivery_alarm_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedRollupAlarms": (
+        _ALARM_READ_ACTIONS,
+        ("local.development_delivery_legacy_rollup_alarm_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "DescribeApplicationNetworking": (
+        (
+            "ec2:DescribePrefixLists",
+            "ec2:DescribeSecurityGroupRules",
+            "ec2:DescribeSecurityGroups",
+            "ec2:DescribeSubnets",
+            "ec2:DescribeVpcs",
+        ),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationSiteBucket": (
+        (
+            "s3:GetAccelerateConfiguration",
+            "s3:GetBucketAcl",
+            "s3:GetBucketCORS",
+            "s3:GetBucketLocation",
+            "s3:GetBucketLogging",
+            "s3:GetBucketObjectLockConfiguration",
+            "s3:GetBucketOwnershipControls",
+            "s3:GetBucketPolicy",
+            "s3:GetBucketPublicAccessBlock",
+            "s3:GetBucketRequestPayment",
+            "s3:GetBucketTagging",
+            "s3:GetBucketVersioning",
+            "s3:GetBucketWebsite",
+            "s3:GetEncryptionConfiguration",
+            "s3:GetLifecycleConfiguration",
+            "s3:GetObject",
+            "s3:GetObjectAttributes",
+            "s3:GetObjectTagging",
+            "s3:GetObjectVersion",
+            "s3:GetReplicationConfiguration",
+            "s3:ListBucket",
+            "s3:ListBucketMultipartUploads",
+            "s3:ListBucketVersions",
+        ),
+        (
+            "local.development_delivery_site_bucket_arn",
+            "${local.development_delivery_site_bucket_arn}/*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationMeasurementBucket": (
+        (
+            "s3:GetAccelerateConfiguration",
+            "s3:GetBucketAcl",
+            "s3:GetBucketCORS",
+            "s3:GetBucketLocation",
+            "s3:GetBucketLogging",
+            "s3:GetBucketObjectLockConfiguration",
+            "s3:GetBucketOwnershipControls",
+            "s3:GetBucketPolicy",
+            "s3:GetBucketPublicAccessBlock",
+            "s3:GetBucketRequestPayment",
+            "s3:GetBucketTagging",
+            "s3:GetBucketVersioning",
+            "s3:GetBucketWebsite",
+            "s3:GetEncryptionConfiguration",
+            "s3:GetLifecycleConfiguration",
+            "s3:GetReplicationConfiguration",
+            "s3:ListBucket",
+            "s3:ListBucketMultipartUploads",
+            "s3:ListBucketVersions",
+        ),
+        ("local.development_delivery_measurement_bucket_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedApplicationMeasurementRegistry": (
+        (
+            "s3:GetObject",
+            "s3:GetObjectAttributes",
+            "s3:GetObjectTagging",
+            "s3:GetObjectVersion",
+        ),
+        (
+            "${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationArtifacts": (
+        (
+            "s3:GetObject",
+            "s3:GetObjectAttributes",
+            "s3:GetObjectTagging",
+            "s3:GetObjectVersion",
+            "s3:ListBucketMultipartUploads",
+            "s3:ListMultipartUploadParts",
+        ),
+        (
+            "${local.development_delivery_artifact_bucket_arn}/runtime/v2/*",
+            "${local.development_delivery_artifact_bucket_arn}/lambda/v2/*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationArtifactBucket": (
+        ("s3:GetBucketLocation",),
+        ("local.development_delivery_artifact_bucket_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationKmsKeys": (
+        (
+            "kms:DescribeKey",
+            "kms:GetKeyPolicy",
+            "kms:GetKeyRotationStatus",
+            "kms:ListResourceTags",
+        ),
+        ("local.development_delivery_application_key_arns",),
+        _KMS_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedMeasurementKey": (
+        (
+            "kms:DescribeKey",
+            "kms:GetKeyPolicy",
+            "kms:GetKeyRotationStatus",
+            "kms:ListResourceTags",
+        ),
+        ("local.development_delivery_measurement_key_arn",),
+        _KMS_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationKmsAliases": (
+        ("kms:ListAliases",),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationSessions": (
+        (
+            "dynamodb:DescribeContinuousBackups",
+            "dynamodb:DescribeTable",
+            "dynamodb:DescribeTimeToLive",
+            "dynamodb:ListTagsOfResource",
+        ),
+        (
+            "arn:aws:dynamodb:${local.development_delivery_region}:${local.development_delivery_account_id}:table/tollchat-v2-anonymous-sessions-dev",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedApplicationCatalog": (
+        (
+            "glue:GetDatabase",
+            "glue:GetDatabases",
+            "glue:GetTable",
+            "glue:GetTables",
+            "glue:GetTags",
+        ),
+        (
+            "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:catalog",
+            "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:database/tollchat_agent_reports_development",
+            "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:table/tollchat_agent_reports_development/*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedApplicationAthenaNamedQueries": (
+        ("athena:GetNamedQuery", "athena:ListTagsForResource"),
+        ("local.development_delivery_athena_workgroup_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetainedApplicationAthenaWorkGroup": (
+        (
+            "athena:GetWorkGroup",
+            "athena:ListNamedQueries",
+            "athena:ListTagsForResource",
+        ),
+        ("local.development_delivery_athena_workgroup_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ListApplicationAthenaWorkGroups": (
+        ("athena:ListWorkGroups",),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationSchedules": (
+        ("scheduler:GetSchedule", "scheduler:ListTagsForResource"),
+        (
+            "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
+            "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetiredUsagePublisherIam": (
+        _IAM_READ_ACTIONS,
+        ("local.development_delivery_usage_publisher_role_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetiredUsagePublisherLambda": (
+        _LAMBDA_READ_ACTIONS,
+        ("local.development_delivery_usage_publisher_lambda_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetiredUsagePublisherEvents": (
+        _EVENT_READ_ACTIONS,
+        ("local.development_delivery_usage_publisher_rule_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadRetiredUsagePublisherAlarms": (
+        _ALARM_READ_ACTIONS,
+        ("local.development_delivery_usage_publisher_alarm_arns",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationGuardrail": (
+        ("bedrock:GetGuardrail", "bedrock:ListTagsForResource"),
+        ("local.development_delivery_guardrail_arn",),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationAgentCore": (
+        (
+            "bedrock-agentcore:GetAgentRuntime",
+            "bedrock-agentcore:GetAgentRuntimeEndpoint",
+            "bedrock-agentcore:GetResourcePolicy",
+            "bedrock-agentcore:ListTagsForResource",
+        ),
+        (
+            "local.development_delivery_agentcore_runtime_arn",
+            "local.development_delivery_agentcore_endpoint_arn",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationApiGateway": (
+        ("apigateway:GET",),
+        (
+            "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}",
+            "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationCloudFrontFunctions": (
+        (
+            "cloudfront:DescribeFunction",
+            "cloudfront:GetFunction",
+            "cloudfront:ListTagsForResource",
+        ),
+        (
+            "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-chat-routes-dev",
+            "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-report-routes-dev",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationCloudFront": (
+        (
+            "cloudfront:GetDistribution",
+            "cloudfront:GetDistributionConfig",
+            "cloudfront:GetOriginAccessControl",
+            "cloudfront:GetResponseHeadersPolicy",
+            "cloudfront:ListTagsForResource",
+        ),
+        (
+            "local.development_delivery_distribution_arn",
+            "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-access-control/*",
+            "arn:aws:cloudfront::${local.development_delivery_account_id}:response-headers-policy/*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadManagedCloudFrontPolicies": (
+        ("cloudfront:ListCachePolicies", "cloudfront:ListOriginRequestPolicies"),
+        ("*",),
+        _REGIONAL_PLAN_CONDITIONS,
+    ),
+    "ReadManagedCloudFrontPolicy": (
+        ("cloudfront:GetCachePolicy", "cloudfront:GetOriginRequestPolicy"),
+        (
+            "arn:aws:cloudfront::${local.development_delivery_account_id}:cache-policy/4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+            "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-request-policy/b689b0a8-53d0-40ab-baf2-68738e2966ac",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadApplicationWaf": (
+        (
+            "wafv2:GetLoggingConfiguration",
+            "wafv2:GetWebACL",
+            "wafv2:ListTagsForResource",
+        ),
+        (
+            "arn:aws:wafv2:${local.development_delivery_region}:${local.development_delivery_account_id}:global/webacl/tollchat-v2-public-chat-dev/*",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+    "ReadDevelopmentCertificate": (
+        ("acm:DescribeCertificate", "acm:ListTagsForCertificate"),
+        (
+            "arn:aws:acm:${local.development_delivery_region}:${local.development_delivery_account_id}:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20",
+        ),
+        _NO_PLAN_CONDITIONS,
+    ),
+}
+
+
+def _assert_development_plan_trust(source: str) -> None:
+    statements = _parsed_policy_document(source, "development_plan_assume")
+    assert len(statements) == 1
+    assert statements[0] == {
+        "sid": "GitHubDevelopmentPlanWorkflow",
+        "actions": ["sts:AssumeRoleWithWebIdentity"],
+        "resources": [],
+        "conditions": [
+            {
+                "test": "StringEquals",
+                "variable": "token.actions.githubusercontent.com:aud",
+                "values": ["sts.amazonaws.com"],
+            },
+            {
+                "test": "StringEquals",
+                "variable": "token.actions.githubusercontent.com:sub",
+                "values": [
+                    "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development-plan"
+                ],
+            },
+            {
+                "test": "StringEquals",
+                "variable": "token.actions.githubusercontent.com:repository",
+                "values": ["rhprasad0/nova-toll-budget-agent"],
+            },
+            {
+                "test": "StringEquals",
+                "variable": "token.actions.githubusercontent.com:job_workflow_ref",
+                "values": [
+                    "rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-plan.yml@refs/heads/main"
+                ],
+            },
+        ],
+    }
+    principal = _hcl_named_blocks(
+        terraform_block(
+            source, 'data "aws_iam_policy_document" "development_plan_assume"'
+        ),
+        "principals",
+    )
+    assert len(principal) == 1
+    assert _hcl_scalar(principal[0], "type") == "Federated"
+    assert _hcl_attribute(principal[0], "identifiers") == (
+        "aws_iam_openid_connect_provider.github.arn"
+    )
+    assert "StringLike" not in terraform_block(
+        source, 'data "aws_iam_policy_document" "development_plan_assume"'
+    )
+
+
+def _assert_development_plan_policy(source: str) -> None:
+    policy_block = terraform_block(
+        source, 'data "aws_iam_policy_document" "development_plan"'
+    )
+    statements = _parsed_policy_document(source, "development_plan")
+    assert [statement["sid"] for statement in statements] == DEVELOPMENT_PLAN_SIDS
+    assert len(statements) == 43
+    by_sid = _policy_by_sid(statements)
+    parsed_tuples = _parsed_policy_tuple_map(source, "development_plan")
+    assert set(parsed_tuples) == set(DEVELOPMENT_PLAN_SIDS)
+    for sid in DEVELOPMENT_PLAN_SIDS[3:]:
+        assert parsed_tuples[sid] == DEVELOPMENT_PLAN_REFRESH_TUPLES[sid]
+
+    assert by_sid["ListDevelopmentState"] == {
+        "sid": "ListDevelopmentState",
+        "actions": ["s3:ListBucket"],
+        "resources": ["aws_s3_bucket.tfstate.arn"],
+        "conditions": [
+            {
+                "test": "StringEquals",
+                "variable": "s3:prefix",
+                "values": [
+                    "nova-toll/development/terraform.tfstate",
+                    "nova-toll/v2/development/terraform.tfstate",
+                ],
+            }
+        ],
+    }
+    assert by_sid["ReadDevelopmentState"]["actions"] == ["s3:GetObject"]
+    assert by_sid["ReadDevelopmentState"]["resources"] == [
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/development/terraform.tfstate",
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate",
+    ]
+    assert by_sid["DecryptDevelopmentState"]["actions"] == ["kms:Decrypt"]
+    assert by_sid["DecryptDevelopmentState"]["resources"] == ["aws_kms_key.tfstate.arn"]
+    assert by_sid["DecryptDevelopmentState"]["conditions"] == [
+        {
+            "test": "StringEquals",
+            "variable": "kms:ViaService",
+            "values": ["s3.us-east-1.amazonaws.com"],
+        },
+        {
+            "test": "StringEquals",
+            "variable": "kms:EncryptionContext:aws:s3:arn",
+            "values": [
+                "${aws_s3_bucket.tfstate.arn}/nova-toll/development/terraform.tfstate",
+                "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate",
+            ],
+        },
+    ]
+    assert set(
+        cast(list[str], by_sid["ReadPreprovisionedApplicationRoles"]["actions"])
+    ) == {
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole",
+        "iam:ListRolePolicies",
+        "iam:ListRoleTags",
+    }
+    assert "iam:ListInstanceProfilesForRole" in cast(
+        list[str], by_sid["ReadRetiredUsagePublisherIam"]["actions"]
+    )
+    assert by_sid["ReadPreprovisionedApplicationRoles"]["resources"] == [
+        "local.development_delivery_role_arns"
+    ]
+    assert by_sid["ReadRetiredUsagePublisherIam"]["resources"] == [
+        "local.development_delivery_usage_publisher_role_arn"
+    ]
+
+    wildcard_sids = {
+        cast(str, statement["sid"])
+        for statement in statements
+        if cast(list[str], statement["resources"]) == ["*"]
+    }
+    assert wildcard_sids == {
+        "DescribeApplicationLogPolicies",
+        "DescribeApplicationLogGroups",
+        "DescribeApplicationNetworking",
+        "ReadApplicationKmsAliases",
+        "ListApplicationAthenaWorkGroups",
+        "ReadManagedCloudFrontPolicies",
+    }
+    for sid in wildcard_sids:
+        assert by_sid[sid]["conditions"] == [
+            {
+                "test": "StringEquals",
+                "variable": "aws:RequestedRegion",
+                "values": [],
+            }
+        ]
+
+    all_actions = {
+        action
+        for statement in statements
+        for action in cast(list[str], statement["actions"])
+    }
+    assert not any(action.endswith(":*") or action == "*" for action in all_actions)
+    assert (
+        not {
+            "s3:PutObject",
+            "s3:DeleteObject",
+            "kms:GenerateDataKey",
+            "iam:PassRole",
+            "iam:SimulatePrincipalPolicy",
+        }
+        & all_actions
+    )
+    assert not any(
+        action.startswith(("ssm:", "secretsmanager:")) for action in all_actions
+    )
+    assert ".tflock" not in policy_block
+    assert "920534282028" not in policy_block
+    assert "production" not in policy_block.lower()
+
+    role = terraform_block(source, 'resource "aws_iam_role" "development_plan"')
+    assert re.search(
+        r'(?m)^\s*count\s*=\s*var.environment == "development" \? 1 : 0\s*$', role
+    )
+    assert re.search(r"(?m)^\s*max_session_duration\s*=\s*3600\s*$", role)
+    for resource_type in (
+        'resource "aws_iam_policy" "development_plan"',
+        'resource "aws_iam_role_policy_attachment" "development_plan"',
+    ):
+        resource = terraform_block(source, resource_type)
+        assert 'var.environment == "development" ?' in resource
+        assert "local.development_plan_policy_documents" in resource
+
+
+def test_development_plan_iam_is_exact_and_adversarial_mutations_fail():
+    _assert_development_plan_trust(FOUNDATION_IAM)
+    _assert_development_plan_policy(FOUNDATION_IAM)
+    for original, replacement in (
+        (
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development-plan",
+            "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
+        ),
+        ("rhprasad0/nova-toll-budget-agent", "evil/fork"),
+        (
+            "v2-development-plan.yml@refs/heads/main",
+            "v2-development-plan.yml@refs/heads/release",
+        ),
+        ("s3.us-east-1.amazonaws.com", "s3.us-west-2.amazonaws.com"),
+        ("s3:ListBucket", "s3:PutObject"),
+        ("kms:Decrypt", "kms:GenerateDataKey"),
+        ("iam:ListInstanceProfilesForRole", "iam:ListRoles"),
+    ):
+        assertion = (
+            _assert_development_plan_trust
+            if original
+            in {
+                "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development-plan",
+                "rhprasad0/nova-toll-budget-agent",
+                "v2-development-plan.yml@refs/heads/main",
+            }
+            else _assert_development_plan_policy
+        )
+        marker = (
+            'data "aws_iam_policy_document" "development_plan_assume"'
+            if assertion is _assert_development_plan_trust
+            else 'data "aws_iam_policy_document" "development_plan"'
+        )
+        _must_reject_after_marker(
+            assertion, FOUNDATION_IAM, marker, original, replacement
+        )
+    for original, replacement in (
+        ("apigateway:GET", "apigateway:POST"),
+        (
+            "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}",
+            "arn:aws:apigateway:${local.development_delivery_region}::/restapis/*",
+        ),
+    ):
+        _must_reject_after_marker(
+            _assert_development_plan_policy,
+            FOUNDATION_IAM,
+            'data "aws_iam_policy_document" "development_plan"',
+            original,
+            replacement,
+        )
+
+
+def test_development_plan_policy_set_is_deterministic_and_bounded():
+    documents, aggregate = _terraform_rendered_development_plan_policies()
+    assert set(documents) == {
+        "state",
+        "compute",
+        "observability",
+        "storage",
+        "data",
+        "runtime",
+        "edge",
+    }
+    assert len(aggregate) == 43
+    rendered_statements: list[dict[str, object]] = []
+    for key in (
+        "state",
+        "compute",
+        "observability",
+        "storage",
+        "data",
+        "runtime",
+        "edge",
+    ):
+        policy = documents[key]
+        statements = policy.get("Statement")
+        assert isinstance(statements, list)
+        rendered_statements.extend(cast(list[dict[str, object]], statements))
+        assert len(json.dumps(policy, separators=(",", ":")).encode("utf-8")) <= 6_144
+    assert rendered_statements == aggregate
+    assert [statement["Sid"] for statement in aggregate] == DEVELOPMENT_PLAN_SIDS
+    assert len({statement["Sid"] for statement in aggregate}) == len(aggregate)
 
 
 def _statement_allows(statement: dict[str, object], action: str, resource: str) -> bool:
