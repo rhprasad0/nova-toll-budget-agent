@@ -25,8 +25,8 @@ The authorized replacement may initialize only the Terraform-created
 `nova_toll_development` database after the protected route and saved-plan steps
 complete. If that exact database is absent, non-empty, ambiguous, or already
 bootstrapped, stop; do not run the fresh mode and do not use a versioned
-migration. The bounded procedure is documented in the development foundation
-replacement handoff below.
+migration. The bounded procedure is documented in the
+[development foundation replacement handoff](development-foundation-replacement.md#fresh-development-database-bootstrap).
 
 Keep the terminal non-traced. The development RDS-managed Secrets Manager JSON and
 its extracted username/password exist only in process memory and are never

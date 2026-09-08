@@ -1,8 +1,8 @@
 ### Development foundation replacement handoff (#327/#333; source prerequisites)
 
-The historical #330 foundation bootstrap text above is retained only for audit
-context; use this authorized #327/#333 replacement handoff. Do not run the
-historical procedure.
+The [historical #330 foundation bootstrap](development-foundation-330-archive.md)
+is retained only for audit context; use this authorized #327/#333 replacement
+handoff. Do not run the historical procedure.
 
 This is the source-only handoff for the authorized development RDS replacement.
 It does not mutate AWS, Terraform state, Tailscale, GitHub, DNS, or PostgreSQL.
