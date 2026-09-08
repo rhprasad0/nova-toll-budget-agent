@@ -4294,6 +4294,7 @@ def _assert_development_plan_workflow(source: str) -> None:
     assert "development-release-manifest.json" in plan_source
     assert "delivery_plan_validator.py" in plan_source
     assert "GITHUB_STEP_SUMMARY" in plan_source
+    assert '"$VALIDATION" | tee -a "$GITHUB_STEP_SUMMARY"' in plan_source
     assert (
         'FOUNDATION_VALIDATE_LOG="$RUNNER_TEMP/development-foundation-validate.log"'
         in plan_source

@@ -323,7 +323,7 @@ jobs:
           jq -e 'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")' \
             "$VALIDATION" >/dev/null
           jq -c '{status, reason_code} + (if has("address") then {address} else {} end) + (if has("action") then {action} else {} end) + (if has("operation_class") then {operation_class} else {} end) + (if has("fingerprint") then {fingerprint} else {} end)' \
-            "$VALIDATION" >>"$GITHUB_STEP_SUMMARY"
+            "$VALIDATION" | tee -a "$GITHUB_STEP_SUMMARY"
           test "$MANIFEST_VALID" = true
           test "$IDENTITY_VALID" = true
           test "$VALIDATOR_STATUS" -eq 0
