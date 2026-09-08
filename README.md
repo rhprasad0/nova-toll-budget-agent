@@ -146,7 +146,7 @@ operations details.
 
 Build and review the real fetcher package for every root `infra/` plan. The
 current development foundation handoff is the authorized #327/#333 replacement
-in [`v2/RUNBOOK.md`](v2/RUNBOOK.md#development-foundation-replacement-handoff-327333-source-prerequisites).
+in the [development foundation replacement runbook](v2/runbooks/development-foundation-replacement.md).
 Do not use a generic plan display or unbounded apply command; application
 release remains a separately approved follow-on operation.
 

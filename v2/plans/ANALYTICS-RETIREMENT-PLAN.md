@@ -23,7 +23,7 @@ or archive CMK blocks execution; it does not block this documentation.
 
 The production-account `legacy-development` deployment is a third, #333-owned
 scope. Its state, old `-dev` physical names, frozen inventories, migration
-recovery, and [runbook procedure](../RUNBOOK.md) are excluded from both records.
+recovery, and [runbook procedure](../runbooks/legacy-development-retirement.md) are excluded from both records.
 There is no development-to-production AWS read path ([account contract](../../infra/account-contract.json)).
 
 The default retention choice is **preserve**. A human must record either

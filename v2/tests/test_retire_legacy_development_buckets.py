@@ -929,7 +929,9 @@ def test_freeze_evidence_requires_elapsed_drain(
 
 
 def test_runbook_contract_mentions_bounded_phase_guards() -> None:
-    runbook = (V2_ROOT / "RUNBOOK.md").read_text(encoding="utf-8")
+    runbook = (V2_ROOT / "runbooks" / "legacy-development-retirement.md").read_text(
+        encoding="utf-8"
+    )
     for required in (
         "retire_legacy_development_buckets.py",
         "tollchat-site-920534282028-dev",

@@ -14,7 +14,7 @@ import pytest
 V2_ROOT = Path(__file__).resolve().parents[1]
 PLAN_VALIDATOR = V2_ROOT / "scripts" / "validate_legacy_retirement_plan.py"
 DATABASE_RETIRER = V2_ROOT / "scripts" / "retire_legacy_development_database.py"
-RUNBOOK = V2_ROOT / "RUNBOOK.md"
+RUNBOOK = V2_ROOT / "runbooks" / "legacy-development-retirement.md"
 DNS_WORKFLOW = (
     V2_ROOT.parent / ".github" / "workflows" / "v2-production-foundation-dns.yml"
 )
