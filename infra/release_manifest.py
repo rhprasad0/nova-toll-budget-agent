@@ -312,6 +312,38 @@ def _verify_packages(
             _reject("package_digest_mismatch")
 
 
+def _verify_bundle_payload(
+    bundle_root: Path,
+    inputs: dict[str, str],
+    packages: dict[str, str],
+) -> None:
+    try:
+        if bundle_root.is_symlink() or not bundle_root.is_dir():
+            _reject("bundle_payload_invalid")
+        package_paths = {
+            f"v2/infra/build/{name}": digest for name, digest in packages.items()
+        }
+        for path in bundle_root.rglob("*"):
+            relative = path.relative_to(bundle_root).as_posix()
+            if path.is_dir():
+                if path.is_symlink():
+                    _reject("bundle_payload_invalid")
+                continue
+            if path.is_symlink() or not path.is_file():
+                _reject("bundle_payload_invalid")
+            if relative == "release-manifest.json":
+                continue
+            expected = package_paths.get(relative, inputs.get(relative))
+            if expected is None:
+                _reject("bundle_payload_unreviewed")
+            if _digest_file(path, "bundle_payload_unreadable") != expected:
+                _reject("bundle_payload_digest_mismatch")
+    except Invalid:
+        raise
+    except OSError:
+        _reject("bundle_payload_invalid")
+
+
 def _evidence(
     manifest: Any,
     inputs: dict[str, str],
@@ -335,6 +367,8 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     manifest = _load(args.manifest, "manifest_unreadable")
     inputs, packages = _validate_manifest(manifest)
     _verify_packages(args.package_dir, args.checksums, packages)
+    if args.bundle_root is not None:
+        _verify_bundle_payload(args.bundle_root, inputs, packages)
     expected_evidence = _evidence(
         manifest, inputs, packages, args.candidate_sha, args.run_id
     )
@@ -378,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate-sha", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--repo-root", type=Path)
+    parser.add_argument("--bundle-root", type=Path)
     parser.add_argument("--write-evidence", type=Path)
     parser.add_argument("--evidence", type=Path)
     args = parser.parse_args(argv)

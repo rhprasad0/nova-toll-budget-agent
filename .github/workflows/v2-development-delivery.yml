@@ -9,14 +9,80 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build v2 deployment packages
+  admission:
+    name: Admit exact main delivery
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check exact CI evidence and predecessor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          PREDECESSOR_SHA: ${{ github.event.before }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          changed_paths="$RUNNER_TEMP/development-changed-paths"
+          if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
+          else
+            git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
+          fi
+          python3 v2/scripts/check_development_admission.py \
+            --repository "$REPOSITORY" \
+            --sha "$CANDIDATE_SHA" \
+            --before "$PREDECESSOR_SHA" \
+            --event-file "$GITHUB_EVENT_PATH" \
+            --paths-file "$changed_paths" \
+            --run-id "$GITHUB_RUN_ID" \
+            --timeout-seconds 900 \
+            --poll-seconds 10 \
+            >"$RUNNER_TEMP/development-admission.result"
+          cat "$RUNNER_TEMP/development-admission.result" >>"$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build v2 deployment packages
+    needs: admission
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      artifact_id: ${{ steps.release-identity.outputs.artifact_id }}
+      artifact_digest: ${{ steps.release-identity.outputs.artifact_digest }}
+    steps:
+      - name: Reject retained exact release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          metadata="$RUNNER_TEMP/release-artifacts.json"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?name=v2-development-release-$GITHUB_SHA&per_page=100" \
+            >"$metadata"
+          if ! jq -e 'type == "object" and (.artifacts | type == "array")' "$metadata" >/dev/null; then
+            echo "release artifact metadata malformed" >&2
+            exit 1
+          fi
+          if jq -e --arg name "v2-development-release-$GITHUB_SHA" \
+            '.artifacts | any(.[]; .name == $name and .expired == false)' \
+            "$metadata" >/dev/null; then
+            echo "exact release artifact is already retained; rerun failed deploy jobs" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
@@ -28,13 +94,7 @@ jobs:
         working-directory: v2
         run: |
           set -euo pipefail
-          ./scripts/build_loader_zip.sh
-          ./scripts/build_publisher_zip.sh
-          ./scripts/build_agentcore_zips.sh
-          for package in infra/build/loader.zip infra/build/publisher.zip infra/build/agentcore.zip infra/build/chat-proxy.zip; do
-            test -s "$package"
-          done
-          (cd infra/build && sha256sum loader.zip publisher.zip agentcore.zip chat-proxy.zip > DEPLOYMENT_SHA256SUMS)
+          ./scripts/build_release_bundle.sh
 
       - name: Prepare immutable release evidence inputs
         run: |
@@ -67,6 +127,7 @@ jobs:
             --candidate-sha "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --repo-root "$GITHUB_WORKSPACE" \
+            --bundle-root v2/infra/build/release \
             --write-evidence "$EVIDENCE_DIR/development-release-evidence.json" \
             >"$RUNNER_TEMP/development-release-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
@@ -83,12 +144,46 @@ jobs:
             v2/infra/build/chat-proxy.zip
           if-no-files-found: error
 
+      - name: Upload immutable release bundle
+        id: upload-release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v2-development-release-${{ github.sha }}
+          path: v2/infra/build/release
+          if-no-files-found: error
+          retention-days: 90
+          overwrite: false
+
       - name: Upload deployment checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: v2-development-checksums-${{ github.run_id }}-${{ github.sha }}
           path: ${{ runner.temp }}/v2-development-checksums
           if-no-files-found: error
+
+      - name: Record release identity
+        id: release-identity
+        env:
+          RELEASE_ARTIFACT_ID: ${{ steps.upload-release.outputs.artifact-id }}
+          RAW_RELEASE_ARTIFACT_DIGEST: ${{ steps.upload-release.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_ARTIFACT_ID" -gt 0
+          if [[ "$RAW_RELEASE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            RELEASE_ARTIFACT_DIGEST="$RAW_RELEASE_ARTIFACT_DIGEST"
+          elif [[ "$RAW_RELEASE_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            RELEASE_ARTIFACT_DIGEST="sha256:$RAW_RELEASE_ARTIFACT_DIGEST"
+          else
+            echo "upload-artifact returned an invalid digest" >&2
+            exit 1
+          fi
+          printf 'artifact_id=%s\nartifact_digest=%s\n' \
+            "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" >>"$GITHUB_OUTPUT"
+          SCHEMA_PRICING="$(jq -er '.schema_versions.pricing' v2/infra/build/release/release-manifest.json)"
+          SCHEMA_ORACLE="$(jq -er '.schema_versions.oracle' v2/infra/build/release/release-manifest.json)"
+          printf 'release_artifact_id=%s\nrelease_artifact_digest=%s\ncommit_sha=%s\npricing_schema=%s\noracle_schema=%s\n' \
+            "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" "$GITHUB_SHA" \
+            "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup release evidence
         if: always()
@@ -98,7 +193,8 @@ jobs:
 
   oidc-proof:
     name: Prove protected main OIDC claims
-    if: github.ref == 'refs/heads/main'
+    needs: admission
+    if: github.ref == 'refs/heads/main' && needs.admission.result == 'success'
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -192,51 +288,132 @@ jobs:
 
   deploy:
     name: Deploy v2 to development
-    needs: [build, oidc-proof]
+    needs: [admission, build, oidc-proof]
     # Repository variable: environment variables are unavailable to this pre-job gate.
     if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: development
     permissions:
       contents: read
+      actions: read
       id-token: write
     concurrency:
-      group: v2-development-delivery
-      cancel-in-progress: false
+      group: v2-development-apply
+      queue: max
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Recheck admission before credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          PREDECESSOR_SHA: ${{ github.event.before }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          changed_paths="$RUNNER_TEMP/development-changed-paths"
+          if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
+          else
+            git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
+          fi
+          python3 v2/scripts/check_development_admission.py \
+            --repository "$REPOSITORY" \
+            --sha "$CANDIDATE_SHA" \
+            --before "$PREDECESSOR_SHA" \
+            --event-file "$GITHUB_EVENT_PATH" \
+            --paths-file "$changed_paths" \
+            --run-id "$GITHUB_RUN_ID" \
+            --recheck \
+            --timeout-seconds 60 \
+            --poll-seconds 5 \
+            >"$RUNNER_TEMP/development-admission-recheck.result"
 
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_wrapper: false
           terraform_version: "1.15.8"
 
-      - name: Download immutable deployment packages
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: v2-development-packages-${{ github.run_id }}-${{ github.sha }}
-          path: ${{ runner.temp }}/v2-development-packages
-
       - name: Download deployment checksums
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: v2-development-checksums-${{ github.run_id }}-${{ github.sha }}
-          path: ${{ runner.temp }}/v2-development-packages
+          path: ${{ runner.temp }}/v2-development-checksums
+
+      - name: Download and verify immutable release bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_ARTIFACT_ID" -gt 0
+          [[ "$RELEASE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          API_ROOT="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$RELEASE_ARTIFACT_ID"
+          metadata="$RUNNER_TEMP/release-artifact.json"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "$API_ROOT" >"$metadata"
+          jq -e --arg id "$RELEASE_ARTIFACT_ID" --arg name "v2-development-release-$GITHUB_SHA" --arg commit "$GITHUB_SHA" '
+            type == "object" and (.id | tostring) == $id and .expired == false and
+            .name == $name and .workflow_run.head_sha == $commit
+          ' "$metadata" >/dev/null
+
+          headers="$RUNNER_TEMP/release-artifact.headers"
+          archive="$RUNNER_TEMP/release-artifact.zip"
+          set +e
+          redirect_status="$(curl --silent --show-error --dump-header "$headers" --output /dev/null \
+            --write-out '%{http_code}' --max-redirs 0 \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' "$API_ROOT/zip")"
+          set -e
+          test "$redirect_status" = 302
+          download_url="$(awk 'tolower($1) == "location:" {sub(/^[[:space:]]+/, "", $2); print $2}' "$headers" | tr -d '\r' | tail -n 1)"
+          test -n "$download_url"
+          case "$download_url" in https://*) ;; *) echo "artifact redirect is not HTTPS" >&2; exit 1 ;; esac
+          unset GH_TOKEN
+          curl --fail --silent --show-error --location "$download_url" -o "$archive"
+          test "sha256:$(sha256sum "$archive" | awk '{print $1}')" = "$RELEASE_ARTIFACT_DIGEST"
+
+          overlay="$RUNNER_TEMP/release-overlay"
+          python3 v2/scripts/verify_release_bundle.py verify \
+            --archive "$archive" --output "$overlay" --root "$GITHUB_WORKSPACE" \
+            --expected-digest "$RELEASE_ARTIFACT_DIGEST" --commit "$GITHUB_SHA"
+
+          mkdir -p "$overlay/v2/infra/lambda-stub" "$overlay/infra"
+          for reviewed_source in \
+            "$GITHUB_WORKSPACE/v2/infra/"*.tf \
+            "$GITHUB_WORKSPACE/v2/infra/.terraform.lock.hcl" \
+            "$GITHUB_WORKSPACE/v2/infra/backend.development.hcl" \
+            "$GITHUB_WORKSPACE/v2/infra/development.tfvars"; do
+            cp -- "$reviewed_source" "$overlay/v2/infra/"
+          done
+          cp -- "$GITHUB_WORKSPACE/v2/infra/lambda-stub/handler.py" "$overlay/v2/infra/lambda-stub/"
+          cp -- "$GITHUB_WORKSPACE/infra/account-contract.json" "$overlay/infra/"
+
+          test -s "$overlay/v2/infra/build/loader.zip"
+          test -s "$overlay/v2/infra/build/publisher.zip"
+          test -s "$overlay/v2/infra/build/agentcore.zip"
+          test -s "$overlay/v2/infra/build/chat-proxy.zip"
 
       - name: Verify immutable development release without credentials
         run: |
           set -euo pipefail
           umask 077
-          PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"
+          EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
+          PACKAGE_DIR="$RUNNER_TEMP/release-overlay/v2/infra/build"
           python3 infra/release_manifest.py \
-            --manifest "$PACKAGE_DIR/development-release-manifest.json" \
+            --manifest "$EVIDENCE_DIR/development-release-manifest.json" \
             --package-dir "$PACKAGE_DIR" \
-            --checksums "$PACKAGE_DIR/DEPLOYMENT_SHA256SUMS" \
+            --checksums "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS" \
             --candidate-sha "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" \
-            --evidence "$PACKAGE_DIR/development-release-evidence.json" \
+            --bundle-root "$RUNNER_TEMP/release-overlay" \
+            --evidence "$EVIDENCE_DIR/development-release-evidence.json" \
             >"$RUNNER_TEMP/development-release-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
             "$RUNNER_TEMP/development-release-verification.json" >/dev/null
@@ -272,21 +449,27 @@ jobs:
       - name: Plan and apply the reviewed development release
         run: |
           set -euo pipefail
-          PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"
+          test -s "$RUNNER_TEMP/protected-main-oidc.json"
+          RELEASE_ROOT="$RUNNER_TEMP/release-overlay"
+          EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
+          PACKAGE_DIR="$RELEASE_ROOT/v2/infra/build"
           PROOF="$RUNNER_TEMP/protected-main-oidc.json"
           FOUNDATION_OUTPUT="$RUNNER_TEMP/development-foundation-output.json"
           FOUNDATION_VARS="$RUNNER_TEMP/foundation.tfvars.json"
-          FOUNDATION_INIT_LOG="$RUNNER_TEMP/development-foundation-init.log"
-          FOUNDATION_OUTPUT_LOG="$RUNNER_TEMP/development-foundation-output.log"
-          APPLICATION_INIT_LOG="$RUNNER_TEMP/development-application-init.log"
+          FOUNDATION_OUTPUT_FILE="$FOUNDATION_OUTPUT"
+          TF_LOG_DIR="$RUNNER_TEMP/development-terraform-logs"
+          mkdir -m 700 -- "$TF_LOG_DIR"
+          FOUNDATION_INIT_LOG="$TF_LOG_DIR/foundation-init.log"
+          FOUNDATION_OUTPUT_LOG="$TF_LOG_DIR/foundation-output.log"
+          APPLICATION_INIT_LOG="$TF_LOG_DIR/release-init.log"
           PLAN="$RUNNER_TEMP/development.tfplan"
-          PLAN_LOG="$RUNNER_TEMP/development.tfplan.log"
+          PLAN_LOG="$TF_LOG_DIR/plan.log"
           PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"
-          SHOW_LOG="$RUNNER_TEMP/development.tfshow.log"
-          APPLY_LOG="$RUNNER_TEMP/development-apply.log"
-          FOUNDATION_VALIDATE_LOG="$RUNNER_TEMP/development-foundation-validate.log"
+          SHOW_LOG="$TF_LOG_DIR/show.log"
+          APPLY_LOG="$TF_LOG_DIR/apply.log"
+          FOUNDATION_VALIDATE_LOG="$TF_LOG_DIR/foundation-validate.log"
           IDENTITY="$RUNNER_TEMP/development-plan-identity.json"
-          MANIFEST="$PACKAGE_DIR/development-release-manifest.json"
+          MANIFEST="$EVIDENCE_DIR/development-release-manifest.json"
           VALIDATION="$RUNNER_TEMP/development-plan-validation.json"
 
           cleanup() {
@@ -317,9 +500,9 @@ jobs:
           printf '%s\n' '{"provider":"hashicorp/aws","provider_version":"6.60.0","terraform_version":"1.15.8","lockfile":"v2/infra/.terraform.lock.hcl","lock_identity":"V2-AWS60"}' >"$IDENTITY"
           chmod 600 -- "$IDENTITY"
 
-          terraform -chdir=v2/infra init -input=false -lockfile=readonly \
+          terraform -chdir="$RELEASE_ROOT/v2/infra" init -input=false -lockfile=readonly \
             -backend-config=backend.development.hcl >"$APPLICATION_INIT_LOG" 2>&1
-          terraform -chdir=v2/infra plan -input=false -out="$PLAN" \
+          terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN" \
             -var-file=development.tfvars \
             -var-file="$FOUNDATION_VARS" \
             -var loader_package_path="$PACKAGE_DIR/loader.zip" \
@@ -328,7 +511,7 @@ jobs:
             -var chat_proxy_package_path="$PACKAGE_DIR/chat-proxy.zip" \
             >"$PLAN_LOG" 2>&1
 
-          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"
+          terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"
           MANIFEST_VALID=true
           IDENTITY_VALID=true
           test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false
@@ -342,13 +525,15 @@ jobs:
           test "$IDENTITY_VALID" = true
           test "$VALIDATOR_STATUS" -eq 0
 
-          terraform -chdir=v2/infra apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1
+          terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1
 
       - name: Cleanup private delivery files
         if: always()
         run: |
           set +e
           rm -rf -- "$RUNNER_TEMP/v2-development-packages" \
+            "$RUNNER_TEMP/v2-development-checksums" "$RUNNER_TEMP/release-overlay" \
+            "$RUNNER_TEMP/development-terraform-logs" \
             "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/development-foundation-output.json" \
             "$RUNNER_TEMP/development-foundation-init.log" "$RUNNER_TEMP/development-foundation-output.log" \
             "$RUNNER_TEMP/development-application-init.log" "$RUNNER_TEMP/development.tfplan" \

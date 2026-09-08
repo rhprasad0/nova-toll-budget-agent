@@ -3882,10 +3882,20 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert _workflow_trigger(workflow) == {"push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
-    assert set(jobs) == {"build", "oidc-proof", "deploy"}
+    assert set(jobs) == {"admission", "build", "oidc-proof", "deploy"}
+
+    admission = jobs["admission"]
+    assert admission["permissions"] == {"contents": "read", "actions": "read"}
+    admission_source = _workflow_run_source(admission)
+    assert "check_development_admission.py" in admission_source
+    assert "GITHUB_EVENT_PATH" in admission_source
+    assert "aws-actions/configure-aws-credentials@" not in admission_source
+    assert "timeout-seconds 900" in admission_source
+    assert "GITHUB_SHA" not in admission_source or "CANDIDATE_SHA" in admission_source
 
     build = jobs["build"]
-    assert build["permissions"] == {"contents": "read"}
+    assert build["needs"] == "admission"
+    assert build["permissions"] == {"contents": "read", "actions": "read"}
     assert "id-token" not in cast(dict[str, str], build["permissions"])
     build_steps = cast(list[dict[str, object]], build["steps"])
     _assert_development_build_setup_uv(build)
@@ -3896,20 +3906,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
         )
         for step in build_steps
     )
-    for script in (
-        "./scripts/build_loader_zip.sh",
-        "./scripts/build_publisher_zip.sh",
-        "./scripts/build_agentcore_zips.sh",
-    ):
-        assert script in build_source
-    for package in (
-        "infra/build/loader.zip",
-        "infra/build/publisher.zip",
-        "infra/build/agentcore.zip",
-        "infra/build/chat-proxy.zip",
-    ):
-        assert package in build_source
-    assert "DEPLOYMENT_SHA256SUMS" in build_source
+    assert "./scripts/build_release_bundle.sh" in build_source
     uploads = [
         step
         for step in build_steps
@@ -3919,10 +3916,37 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert upload_names == {
         "v2-development-packages-${{ github.run_id }}-${{ github.sha }}",
         "v2-development-checksums-${{ github.run_id }}-${{ github.sha }}",
+        "v2-development-release-${{ github.sha }}",
     }
+    release_upload = next(
+        step
+        for step in uploads
+        if cast(dict[str, object], step["with"])["name"]
+        == "v2-development-release-${{ github.sha }}"
+    )
+    upload = release_upload
+    assert upload["id"] == "upload-release"
+    assert cast(dict[str, object], upload["with"]) == {
+        "name": "v2-development-release-${{ github.sha }}",
+        "path": "v2/infra/build/release",
+        "if-no-files-found": "error",
+        "retention-days": 90,
+        "overwrite": False,
+    }
+    assert jobs["build"]["outputs"] == {
+        "artifact_id": "${{ steps.release-identity.outputs.artifact_id }}",
+        "artifact_digest": "${{ steps.release-identity.outputs.artifact_digest }}",
+    }
+    assert "RELEASE_ARTIFACT_ID" in build_source
+    assert "RELEASE_ARTIFACT_DIGEST" in build_source
+    assert "GITHUB_STEP_SUMMARY" in build_source
 
     proof = jobs["oidc-proof"]
-    assert proof["if"] == "github.ref == 'refs/heads/main'"
+    assert proof["needs"] == "admission"
+    assert (
+        proof["if"]
+        == "github.ref == 'refs/heads/main' && needs.admission.result == 'success'"
+    )
     assert proof["environment"] == "development"
     assert proof["permissions"] == {"contents": "read", "id-token": "write"}
     assert proof["outputs"] == {
@@ -4002,16 +4026,26 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "full claims" not in proof_source.lower()
 
     deploy = jobs["deploy"]
-    assert deploy["needs"] == ["build", "oidc-proof"]
+    assert deploy["needs"] == ["admission", "build", "oidc-proof"]
     assert deploy["if"] == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'"
     assert (
         "Repository variable: environment variables are unavailable to this pre-job gate."
         in source
     )
     assert deploy["environment"] == "development"
-    assert deploy["permissions"] == {"contents": "read", "id-token": "write"}
+    assert deploy["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "id-token": "write",
+    }
+    assert deploy["concurrency"] == {"group": "v2-development-apply", "queue": "max"}
     deploy_steps = cast(list[dict[str, object]], deploy["steps"])
     deploy_source = _workflow_run_source(deploy)
+    assert "check_development_admission.py" in deploy_source
+    assert "--recheck" in deploy_source
+    assert "Recheck admission before credentials" in "\n".join(
+        cast(str, step.get("name", "")) for step in deploy_steps
+    )
     downloads = [
         step
         for step in deploy_steps
@@ -4023,7 +4057,6 @@ def _assert_development_delivery_workflow(source: str) -> None:
         if "name" in cast(dict[str, str], step["with"])
     }
     assert download_names == {
-        "v2-development-packages-${{ github.run_id }}-${{ github.sha }}",
         "v2-development-checksums-${{ github.run_id }}-${{ github.sha }}",
     }
     proof_downloads = [
@@ -4041,6 +4074,19 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "name" not in proof_download_with
     assert "infra/release_manifest.py" in deploy_source
     assert "development-release-evidence.json" in deploy_source
+    assert "--bundle-root v2/infra/build/release" in build_source
+    assert '--bundle-root "$RUNNER_TEMP/release-overlay"' in deploy_source
+    assert 'find "$GITHUB_WORKSPACE/v2/infra"' not in deploy_source
+    assert '"$GITHUB_WORKSPACE/v2/infra/"*.tf' in deploy_source
+    for reviewed_scaffold in (
+        '"$GITHUB_WORKSPACE/v2/infra/.terraform.lock.hcl"',
+        '"$GITHUB_WORKSPACE/v2/infra/backend.development.hcl"',
+        '"$GITHUB_WORKSPACE/v2/infra/development.tfvars"',
+    ):
+        assert reviewed_scaffold in deploy_source
+    assert "backend.production.hcl" not in deploy_source
+    assert "known_managed" not in deploy_source
+    assert "known_data" not in deploy_source
     assert 'git show "${GITHUB_SHA}:infra/development-release-manifest.json"' in source
     assert (
         source.index("Build reviewed deployment packages")
@@ -4050,7 +4096,16 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert source.index(
         "Verify immutable development release without credentials"
     ) < source.index("aws-actions/configure-aws-credentials@")
-    assert "path: ${{ runner.temp }}/v2-development-packages" in source
+    assert (
+        "api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$RELEASE_ARTIFACT_ID"
+        in deploy_source
+    )
+    assert "--max-redirs 0" in deploy_source
+    assert "Authorization: Bearer $GH_TOKEN" in deploy_source
+    assert '--location "$download_url"' in deploy_source
+    assert "verify_release_bundle.py verify" in deploy_source
+    assert '--expected-digest "$RELEASE_ARTIFACT_DIGEST"' in deploy_source
+    assert "path: ${{ runner.temp }}/v2-development-checksums" in source
     assert "aws-actions/configure-aws-credentials@" in "\n".join(
         cast(str, step.get("uses", "")) for step in deploy_steps
     )
@@ -4110,48 +4165,70 @@ def _assert_development_delivery_workflow(source: str) -> None:
         and "trap cleanup EXIT" in deploy_source
     )
     assert (
-        "terraform -chdir=v2/infra init -input=false -lockfile=readonly"
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" init -input=false -lockfile=readonly'
         in deploy_source
     )
     assert "-var-file=development.tfvars" in deploy_source
-    assert 'terraform -chdir=v2/infra plan -input=false -out="$PLAN"' in deploy_source
-    assert 'PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"' in deploy_source
-    assert 'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"' in deploy_source
-    assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in deploy_source
     assert (
-        deploy_source.count('terraform -chdir=v2/infra plan -input=false -out="$PLAN"')
-        == 1
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
+        in deploy_source
+    )
+    assert 'PLAN_JSON="$RUNNER_TEMP/development.tfplan.json"' in deploy_source
+    assert (
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"' in deploy_source
     )
     assert (
-        deploy_source.count('terraform -chdir=v2/infra apply -input=false "$PLAN"') == 1
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+        in deploy_source
     )
     assert (
         deploy_source.count(
-            'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"'
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
+        )
+        == 1
+    )
+    assert (
+        deploy_source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+        )
+        == 1
+    )
+    assert (
+        deploy_source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
         )
         == 1
     )
     assert "trap cleanup EXIT" in deploy_source
     assert '"$PACKAGE_DIR"' in deploy_source
     plan_index = deploy_source.index(
-        'terraform -chdir=v2/infra plan -input=false -out="$PLAN"'
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
     )
     show_index = deploy_source.index(
-        'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"'
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
     )
     apply_index = deploy_source.index(
-        'terraform -chdir=v2/infra apply -input=false "$PLAN"'
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+    )
+    for stage in (
+        "foundation-init",
+        "foundation-output",
+        "release-init",
+        "plan",
+        "show",
+        "apply",
+    ):
+        assert f'"$TF_LOG_DIR/{stage}.log"' in deploy_source
+    assert '"$RUNNER_TEMP/development-terraform-logs"' in source
+    assert deploy_source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
+    ) < deploy_source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
     )
     validator_index = deploy_source.index(
         "python3 infra/delivery_plan_validator.py", show_index
     )
     assert plan_index < show_index < validator_index < apply_index
-    for forbidden in (
-        "approved_delete",
-        "known_action",
-        "teardown_deletions",
-    ):
-        assert forbidden not in deploy_source
     for package in (
         "$PACKAGE_DIR/loader.zip",
         "$PACKAGE_DIR/publisher.zip",
@@ -4465,7 +4542,7 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     assert "known_action" not in source
     assert "if ! jq -e" not in source
     assert "infra/delivery_plan_validator.py" in source
-    assert 'MANIFEST="$PACKAGE_DIR/development-release-manifest.json"' in source
+    assert 'MANIFEST="$EVIDENCE_DIR/development-release-manifest.json"' in source
     assert 'IDENTITY="$RUNNER_TEMP/development-plan-identity.json"' in source
     assert (
         'test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false'
@@ -4488,18 +4565,39 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     assert source.index('PROOF="$RUNNER_TEMP/protected-main-oidc.json"') < source.index(
         'test -s "$PROOF"'
     )
-    plan = source.index('terraform -chdir=v2/infra plan -input=false -out="$PLAN"')
-    show = source.index('terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"')
+    plan = source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
+    )
+    show = source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
+    )
     manifest_check = source.index('test -f "$MANIFEST"', show)
     validator = source.index("python3 infra/delivery_plan_validator.py", manifest_check)
-    assert 'terraform -chdir=v2/infra apply -input=false "$PLAN"' in source
-    apply = source.index('terraform -chdir=v2/infra apply -input=false "$PLAN"')
-    assert plan < show < manifest_check < validator < apply
-    assert source.count('terraform -chdir=v2/infra plan -input=false -out="$PLAN"') == 1
     assert (
-        source.count('terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON"') == 1
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"' in source
     )
-    assert source.count('terraform -chdir=v2/infra apply -input=false "$PLAN"') == 1
+    apply = source.index(
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+    )
+    assert plan < show < manifest_check < validator < apply
+    assert (
+        source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
+        )
+        == 1
+    )
+    assert (
+        source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
+        )
+        == 1
+    )
+    assert (
+        source.count(
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
+        )
+        == 1
+    )
     assert '"$PLAN" >"$APPLY_LOG" 2>&1' in source
 
 
@@ -4516,8 +4614,8 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
         ),
         ('test "$VALIDATOR_STATUS" -eq 0', 'test "$VALIDATOR_STATUS" -ne 0'),
         (
-            'terraform -chdir=v2/infra apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1',
-            'terraform -chdir=v2/infra apply -input=false "$OTHER_PLAN" >"$APPLY_LOG" 2>&1',
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1',
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$OTHER_PLAN" >"$APPLY_LOG" 2>&1',
         ),
         (
             'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"',
@@ -4533,8 +4631,8 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
     _must_reject(
         _assert_development_delivery_validator_contract,
         DEVELOPMENT_DELIVERY_WORKFLOW,
-        'terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
-        'terraform -chdir=v2/infra apply -input=false "$PLAN"\n          terraform -chdir=v2/infra show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"\n          terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
     )
 
 

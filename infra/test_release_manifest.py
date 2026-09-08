@@ -92,6 +92,7 @@ class ReleaseManifestTests(unittest.TestCase):
             "repo_root": self.root,
             "write_evidence": self.root / "evidence.json",
             "evidence": None,
+            "bundle_root": None,
         }
         values.update(changes)
         return argparse.Namespace(**values)
@@ -116,6 +117,57 @@ class ReleaseManifestTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["status"], "accepted")
         self.assertNotIn(SHA, json.dumps(first))
+
+    def test_rejects_internally_consistent_unreviewed_bundle_payload(self):
+        first = self.verify()
+        evidence = self.root / "evidence.json"
+        bundle = self.root / "bundle"
+        bundle.mkdir()
+        (bundle / "input.txt").write_text("tampered\n", encoding="utf-8")
+        package_root = bundle / "v2/infra/build"
+        package_root.mkdir(parents=True)
+        for name in release_manifest.PACKAGES:
+            (package_root / name).write_bytes((self.packages / name).read_bytes())
+        (bundle / "release-manifest.json").write_text(
+            json.dumps({"files": {"input.txt": digest(bundle / "input.txt")}}),
+            encoding="utf-8",
+        )
+        self.assertEqual(first["status"], "accepted")
+        self.assert_rejected(
+            "bundle_payload_digest_mismatch",
+            repo_root=None,
+            write_evidence=None,
+            evidence=evidence,
+            bundle_root=bundle,
+        )
+
+    def test_accepts_reviewed_development_overlay_scaffold(self):
+        reviewed = {
+            "infra/account-contract.json": b"{}\n",
+            "v2/infra/main.tf": b'terraform {}\n',
+            "v2/infra/.terraform.lock.hcl": b"lock\n",
+            "v2/infra/backend.development.hcl": b"backend\n",
+            "v2/infra/development.tfvars": b"environment = \"development\"\n",
+            "v2/infra/lambda-stub/handler.py": b"def handler(event, context): pass\n",
+        }
+        bundle = self.root / "development-overlay"
+        for relative, content in reviewed.items():
+            path = bundle / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        package_root = bundle / "v2/infra/build"
+        package_root.mkdir(parents=True)
+        for name in release_manifest.PACKAGES:
+            (package_root / name).write_bytes((self.packages / name).read_bytes())
+
+        release_manifest._verify_bundle_payload(
+            bundle,
+            {
+                relative: hashlib.sha256(content).hexdigest()
+                for relative, content in reviewed.items()
+            },
+            {name: digest(self.packages / name) for name in release_manifest.PACKAGES},
+        )
 
     def test_rejects_stale_input_and_package_boundaries(self):
         self.input.write_text("changed\n", encoding="utf-8")
