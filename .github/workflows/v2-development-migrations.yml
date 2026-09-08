@@ -9,7 +9,7 @@ permissions:
 jobs:
   migrate:
     name: Run development migrations
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.actor_id == '91573985' && github.triggering_actor == github.actor
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: development

@@ -4066,7 +4066,10 @@ def _assert_development_delivery_workflow(source: str) -> None:
 
     deploy = jobs["deploy"]
     assert deploy["needs"] == ["admission", "build", "oidc-proof"]
-    assert deploy["if"] == "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'"
+    assert deploy["if"] == (
+        "vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' "
+        "&& github.triggering_actor == github.actor"
+    )
     assert (
         "Repository variable: environment variables are unavailable to this pre-job gate."
         in source
@@ -5830,6 +5833,26 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc():
         (
             "if: github.ref == 'refs/heads/main'",
             "if: github.ref == 'refs/heads/release'",
+        ),
+        (
+            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor",
+            "if: github.triggering_actor == github.actor",
+        ),
+        (
+            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor",
+            "if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'",
+        ),
+        (
+            "&& github.triggering_actor == github.actor",
+            "|| github.triggering_actor == github.actor",
+        ),
+        (
+            "github.triggering_actor == github.actor",
+            "github.triggering_actor == 'owner'",
+        ),
+        (
+            "github.triggering_actor == github.actor",
+            "github.triggering_actor == github.actor && github.actor_id == '91573985'",
         ),
         (
             "repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development",
@@ -9558,7 +9581,10 @@ def _assert_slice_2b_connectivity_workflow(source: str) -> None:
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     assert set(jobs) == {"verify"}
     job = jobs["verify"]
-    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["if"] == (
+        "github.ref == 'refs/heads/main' && github.actor_id == '91573985' "
+        "&& github.triggering_actor == github.actor"
+    )
     assert job["environment"] == "development"
     assert job["permissions"] == {"contents": "read", "id-token": "write"}
     steps = cast(list[dict[str, object]], job["steps"])
@@ -9693,6 +9719,23 @@ def test_slice_2b_connectivity_workflow_is_manual_main_only_and_dev_scoped():
     for original, replacement in (
         ("workflow_dispatch:", "push:"),
         ("github.ref == 'refs/heads/main'", "github.ref == 'refs/heads/release'"),
+        (" && github.actor_id == '91573985'", ""),
+        ("github.actor_id == '91573985'", "github.actor_id == '123456'"),
+        ("&& github.actor_id == '91573985'", "|| github.actor_id == '91573985'"),
+        ("github.actor_id == '91573985'", "github.actor == 'owner'"),
+        (" && github.triggering_actor == github.actor", ""),
+        (
+            "github.triggering_actor == github.actor",
+            "github.triggering_actor == 'owner'",
+        ),
+        (
+            "&& github.triggering_actor == github.actor",
+            "|| github.triggering_actor == github.actor",
+        ),
+        (
+            "github.triggering_actor == github.actor",
+            "github.triggering_actor == github.actor && github.actor_id == '123456'",
+        ),
         ("environment: development", "environment: production"),
         ("TS_DEVELOPMENT_OAUTH_CLIENT_ID", "TS_OAUTH_CLIENT_ID"),
         ("tag:ci-development", "tag:ci"),
@@ -10614,7 +10657,10 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
     assert _workflow_trigger(workflow) == {"workflow_dispatch": None}
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
     job = jobs["migrate"]
-    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["if"] == (
+        "github.ref == 'refs/heads/main' && github.actor_id == '91573985' "
+        "&& github.triggering_actor == github.actor"
+    )
     assert job["environment"] == "development"
     assert job["permissions"] == {"contents": "read", "id-token": "write"}
     assert job["concurrency"] == {
@@ -10681,6 +10727,43 @@ def test_development_migrations_workflow_is_main_only_private_and_sanitized(
         "raw psql",
     ):
         assert forbidden not in DEVELOPMENT_MIGRATIONS_WORKFLOW
+
+
+def test_development_migrations_workflow_is_main_only_private_and_sanitized_owner_gate():
+    def assert_owner_gate(source: str) -> None:
+        workflow = cast(dict[str, object], yaml.safe_load(source))
+        jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+        assert jobs["migrate"]["if"] == (
+            "github.ref == 'refs/heads/main' && github.actor_id == '91573985' "
+            "&& github.triggering_actor == github.actor"
+        )
+
+    assert_owner_gate(DEVELOPMENT_MIGRATIONS_WORKFLOW)
+    for original, replacement in (
+        (" && github.actor_id == '91573985'", ""),
+        ("github.actor_id == '91573985'", "github.actor_id == '123456'"),
+        ("&& github.actor_id == '91573985'", "|| github.actor_id == '91573985'"),
+        ("github.actor_id == '91573985'", "github.actor == 'owner'"),
+        (" && github.triggering_actor == github.actor", ""),
+        (
+            "github.triggering_actor == github.actor",
+            "github.triggering_actor == 'owner'",
+        ),
+        (
+            "&& github.triggering_actor == github.actor",
+            "|| github.triggering_actor == github.actor",
+        ),
+        (
+            "github.triggering_actor == github.actor",
+            "github.triggering_actor == github.actor && github.actor_id == '123456'",
+        ),
+    ):
+        _must_reject(
+            assert_owner_gate,
+            DEVELOPMENT_MIGRATIONS_WORKFLOW,
+            original,
+            replacement,
+        )
 
 
 def test_development_migrations_runbook_requires_post_merge_order_and_allowlist():

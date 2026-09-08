@@ -312,7 +312,7 @@ jobs:
     name: Deploy v2 to development
     needs: [admission, build, oidc-proof]
     # Repository variable: environment variables are unavailable to this pre-job gate.
-    if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'
+    if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor
     runs-on: ubuntu-latest
     environment: development
     outputs:
