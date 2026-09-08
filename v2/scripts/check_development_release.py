@@ -349,7 +349,10 @@ def request(
     origin: str = SITE,
     cookie: str | None = None,
 ) -> tuple[int, str, bytes]:
-    require(path.startswith("/") and not path.startswith("//"))
+    require(
+        path.startswith("/") and not path.startswith("//"),
+        "request_path",
+    )
     headers = {
         "Origin": origin,
         "Sec-Fetch-Site": "same-origin",
@@ -360,6 +363,7 @@ def request(
     data = None if body is None else json.dumps(body).encode()
     if data is not None:
         headers["Content-Type"] = "application/json"
+        headers["x-amz-content-sha256"] = hashlib.sha256(data).hexdigest()
     opener = urllib.request.build_opener(
         NoRedirect(), urllib.request.HTTPCookieProcessor(jar)
     )
@@ -374,7 +378,7 @@ def request(
         _fail("http")
     with response:
         content = response.read(MAX_BODY + 1)
-        require(len(content) <= MAX_BODY)
+        require(len(content) <= MAX_BODY, "response_size")
         code, kind = response.status, response.headers.get_content_type()
         if (
             not isinstance(code, int)
@@ -387,40 +391,47 @@ def request(
 
 def answer(response: tuple[int, str, bytes]) -> None:
     code, content_type, body = response
-    require(code == 200 and content_type == "application/x-ndjson")
+    require(code == 200, "answer_status")
+    require(content_type == "application/x-ndjson", "answer_content_type")
     lines = body.decode().splitlines()
-    require(0 < len(lines) <= 1000)
+    require(0 < len(lines) <= 1000, "answer_lines")
     terminal = False
     for line in lines:
         value = json.loads(line)
-        require(isinstance(value, dict))
+        require(isinstance(value, dict), "answer_event")
         item = cast(dict[str, Any], value)
-        require(isinstance(item.get("type"), str) and not terminal)
-        require(item["type"] != "error")
+        require(isinstance(item.get("type"), str) and not terminal, "answer_event")
+        require(item["type"] != "error", "answer_event")
         if item["type"] == "answer":
             require(
                 isinstance(item.get("text"), str)
                 and bool(item["text"].strip())
-                and item.get("blocked") is False
+                and item.get("blocked") is False,
+                "answer_content",
             )
             terminal = True
-    require(terminal)
+    require(terminal, "answer_terminal")
 
 
 def token(jar: http.cookiejar.CookieJar) -> str:
     cookies = [item for item in jar if item.name == COOKIE]
-    require(len(cookies) == 1)
+    require(len(cookies) == 1, "session_cookie_count")
     item = cookies[0]
     require(
         item.secure
         and item.path == "/"
         and item.domain == "dev.tollchat.ai"
-        and not item.domain_specified
+        and not item.domain_specified,
+        "session_cookie_attributes",
     )
-    require(item.has_nonstandard_attr("HttpOnly") and bool(item.value))
-    if not isinstance(item.value, str):
-        raise ValueError("invalid session cookie")
-    return item.value
+    require(
+        item.has_nonstandard_attr("HttpOnly") and bool(item.value),
+        "session_cookie_value",
+    )
+    value = item.value
+    if not isinstance(value, str):
+        _fail("session_cookie_value")
+    return value
 
 
 def smoke(values: dict[str, Any]) -> None:
@@ -493,7 +504,7 @@ def smoke(values: dict[str, Any]) -> None:
         _diagnostic("pass", "created")
         select("session_second")
         answer(request(second, "/api/chat", {"message": PROMPT}))
-        require(token(second) != first_token)
+        require(token(second) != first_token, "session_distinct")
         _diagnostic("pass", "created")
         select("session_reuse")
         reset(first)
@@ -505,7 +516,7 @@ def smoke(values: dict[str, Any]) -> None:
         )
         require(
             code == 401 and json.loads(body)["error"]["code"] == "session_expired",
-            "http",
+            "session_revocation",
         )
         _diagnostic("pass", "revoked")
         select("session_second")
@@ -513,6 +524,7 @@ def smoke(values: dict[str, Any]) -> None:
         _diagnostic("pass", "reused")
     finally:
         # Attempt cleanup of both jars even when a prior request or reset failed.
+        had_failure = sys.exc_info()[0] is not None
         original_context = (
             _current_stage,
             _current_subcheck,
@@ -527,11 +539,12 @@ def smoke(values: dict[str, Any]) -> None:
                     reset(session)
                     _diagnostic("pass", "cleared")
                 except (ValueError, KeyError, OSError):
-                    _diagnostic("fail", "reset_failed")
+                    if had_failure:
+                        _diagnostic("fail", "reset_failed")
                     errors.append(True)
-        if not errors:
-            _select(*original_context)
-        require(not errors, "reset_failed")
+        _select(*original_context)
+        if errors and not had_failure:
+            _fail("reset_failed")
 
 
 def reset(jar: http.cookiejar.CookieJar) -> None:
@@ -542,8 +555,8 @@ def reset(jar: http.cookiejar.CookieJar) -> None:
         _fail("malformed_response")
     require(isinstance(response, dict), "malformed_response")
     response = cast(dict[str, Any], response)
-    require(code == 200 and response.get("ok") is True, "http")
-    require(not any(item.name == COOKIE for item in jar))
+    require(code == 200 and response.get("ok") is True, "reset_response")
+    require(not any(item.name == COOKIE for item in jar), "reset_cookie")
 
 
 def main() -> int:
