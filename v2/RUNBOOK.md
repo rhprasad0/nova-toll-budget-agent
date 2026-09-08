@@ -1,20 +1,41 @@
 # AgentCore deployment
 
-Deployments are manual. PR CI builds and tests the application but never runs a
-Terraform plan or apply; the manual production planner stores only a gated
-saved plan.
+Trusted development planning runs automatically in PR and merge-queue CI. Its
+reusable plan validates the event-derived candidate and runs a read-only
+Terraform plan in the reviewer-free `development-plan` environment; it never
+applies Terraform. The existing post-merge development application delivery
+also runs automatically from `main`, using exact CI admission, one saved plan,
+fixed development migrations, application apply, and readiness gates.
+
+The `development-plan` environment remains reviewer-free with its custom
+`refs/pull/*/merge`, `gh-readonly-queue/main/*`, and `main` branch policies.
+The `development` environment remains reviewer-free with its `main` branch
+policy. Production and `production-foundation-dns` remain reviewer-protected.
+
+The secret-bearing manual
+`.github/workflows/v2-development-connectivity-verification.yml` and
+`.github/workflows/v2-development-migrations.yml` workflows remain
+`workflow_dispatch`-only and require this exact job-level predicate:
+`github.ref == 'refs/heads/main' && github.actor_id == '91573985' && github.triggering_actor == github.actor`.
+Only reruns initiated by that original actor may reach the
+development environment credentials. This owner-ID gate is separate from the
+reviewer-free `development` environment and does not change the automatic
+post-merge delivery path. Its credentialed deploy job requires
+this exact predicate:
+`vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor`,
+without restricting initial `main` pushes by owner ID.
 
 ## Delivery contract and production baseline
 
 PRs use disposable PostGIS migration validation only; the checks are
 credential-free and never access or mutate deployed databases or schemas. The
-CI workflow on pushes to `main` also validates only. After merge, the
-protected development migration workflow may be manually dispatched from
-`refs/heads/main` for the fixed development target; it is separate from PR CI
-and accepts no arbitrary target or migration-path inputs. See the [protected
-development migration workflow](#protected-development-migration-workflow-305-slice-3)
-below for its foundation, bootstrap, identity, and evidence gates. Published
-releases are manual, reviewed deployments from `main`.
+post-merge delivery path is separate from the explicit manual development
+migration workflow, which may be dispatched from `refs/heads/main` for the
+fixed development target and accepts no arbitrary target or migration-path
+inputs. See the [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)
+below for its foundation, bootstrap, identity, and evidence gates. Production
+releases remain manual, reviewed deployments from `main`.
+The manual production planner stores only a gated saved plan.
 Production schema changes remain limited to the separately authorized, reviewed
 migration 030 procedure below; no other production schema-changing release is
 authorized here, and future exceptions require approved deployment automation.
@@ -2205,8 +2226,10 @@ The helper requests exactly the space-delimited scope string
 response with missing, duplicated, insufficient, or additional scope tokens.
 
 The protected `workflow_dispatch` run is the sole route-control boundary. It
-must run from `refs/heads/main`, retain the `development` environment reviewer,
-and keep `DEVELOPMENT_DELIVERY_ENABLED` absent or false. The foundation
+must run from `refs/heads/main` and keep `DEVELOPMENT_DELIVERY_ENABLED` absent
+or false. The reviewer-free `development` environment does not authorize this
+operation; its safety comes from the explicit dispatch, main-ref, and owner-ID
+checks. The foundation
 Terraform root creates and maintains the separate
 `nova-toll-v2-route-control-dev` role; the workflow assumes that
 administrator-controlled role first. It sends exactly one fixed, no-parameter
@@ -2266,10 +2289,11 @@ gh workflow run v2-development-connectivity-verification.yml \
   --ref main --field phase=route-diagnostic
 ```
 
-Approve the `development` environment as usual. This phase skips the
-Tailscale auth-key action, timed-checks role, route approval, transport, and
-SQL steps; it assumes only the fixed route-control role and records only the
-sanitized JSON summary. Keep the reviewer and delivery gate unchanged. A
+Run this `development`-environment phase only through the protected workflow
+dispatch. This phase skips the Tailscale auth-key action, timed-checks role,
+route approval, transport, and SQL steps; it assumes only the fixed
+route-control role and records only the sanitized JSON summary. Keep the
+delivery gate unchanged. A
 non-success stage, missing/foreign route state, or any indication that the
 earlier run reached a POST remains a hard stop for human review.
 
@@ -2477,9 +2501,9 @@ GitHub-main OIDC proof before enabling delivery.
 
 ##### Protected activation and rollback
 
-In **GitHub repository Settings → Environments → development**, retain the
-branch-policy protection rule and add a required owner/admin reviewer before
-adding any environment secret. In **Tailscale Admin Console → Settings → OAuth
+In **GitHub repository Settings → Environments → development**, retain its
+`main` branch policy and keep the environment reviewer-free before adding any
+environment secret. In **Tailscale Admin Console → Settings → OAuth
 clients → Generate OAuth client**, retain the existing client described as
 `nova-toll development CI` with scope `auth_keys` only and tag only
 `tag:ci-development`. Copy it once into the protected environment as exactly
@@ -2500,8 +2524,10 @@ absent (or literal `false`) through policy, key, router, route, role, OAuth, and
 manual-verification setup. After every evidence item passes and the manual
 workflow succeeds on `main`, an authorized operator may set it in **Settings →
 Secrets and variables → Actions → Variables → New repository variable** with
-name `DEVELOPMENT_DELIVERY_ENABLED` and value `true`, save it, and obtain the
-required `development` environment reviewer approval when the deploy job starts.
+name `DEVELOPMENT_DELIVERY_ENABLED` and value `true`, then save it. This
+variable only enables the existing post-merge application delivery job; it does
+not bypass the explicit `workflow_dispatch`/`refs/heads/main` boundaries for
+route control, connectivity verification, or migrations.
 The equivalent operator-only CLI activation is:
 
 ```sh
@@ -4407,7 +4433,9 @@ and before build. Its final status covers build through readiness/smoke; native
 `development` environment records used for OIDC are not end-to-end proof. Failed,
 cancelled, skipped, disabled, or stale attempts cannot produce release success.
 A failed-deploy rerun reuses the same run/SHA's verified immutable build and
-record, with the current attempt identified in its status link. Status-publication
+record, with the current attempt identified in its status link. The credentialed
+deploy job admits that rerun only when `github.triggering_actor == github.actor`;
+a different writer's rerun skips before development credentials. Status-publication
 failure is a failed workflow, not successful evidence. The summary contains only
 commit/run/attempt, artifact ID/digest, schema versions, job outcomes and the
 fixed public URL. State, plans, AWS responses, credentials, cookies and chat
@@ -4420,9 +4448,10 @@ workflow or invoke the live smoke merely to validate this implementation.
 
 The fixed manual recovery workflow remains available for an explicitly approved
 post-merge bootstrap or migration rehearsal after the reviewed foundation plan
-and fresh development bootstrap gates. Approve the protected `development`
-environment and dispatch
-   `.github/workflows/v2-development-migrations.yml` from `refs/heads/main`:
+and fresh development bootstrap gates. Dispatch
+   `.github/workflows/v2-development-migrations.yml` only from `refs/heads/main`;
+the job also requires GitHub actor ID `91573985` and
+`github.triggering_actor == github.actor`:
 
    ```sh
    gh workflow run v2-development-migrations.yml \
