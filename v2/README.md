@@ -109,6 +109,12 @@ plan` or `apply`. The manual production planner stores only a reviewed, gated
 saved plan. Follow the [deployment runbook](RUNBOOK.md) for the reviewed
 saved-plan, smoke-test, rollout, and rollback procedures.
 
+Development delivery reports an explicit `development-release` GitHub result
+only after exact-version readiness and bounded static/API/two-session agent
+smokes pass. The result includes immutable artifact/commit/schema identity;
+native OIDC environment records alone are not release proof. PR checks use
+fakes, and a live demonstration remains separately authorized.
+
 After merge, only human-reviewed backward-compatible development migrations use
 the protected exact-release delivery sequence: artifact/checkout verification,
 one saved private Terraform plan and gate, fixed-role migration, delivery-role

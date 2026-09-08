@@ -47,9 +47,28 @@ jobs:
             >"$RUNNER_TEMP/development-admission.result"
           cat "$RUNNER_TEMP/development-admission.result" >>"$GITHUB_STEP_SUMMARY"
 
+  release-record:
+    name: Record exact development release
+    needs: admission
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    outputs:
+      deployment_id: ${{ steps.record.outputs.deployment_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Create end-to-end release record
+        id: record
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 v2/scripts/development_deployment_status.py create
+
   build:
     name: Build v2 deployment packages
-    needs: admission
+    needs: [admission, release-record]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,6 +76,8 @@ jobs:
     outputs:
       artifact_id: ${{ steps.release-identity.outputs.artifact_id }}
       artifact_digest: ${{ steps.release-identity.outputs.artifact_digest }}
+      pricing_schema: ${{ steps.release-identity.outputs.pricing_schema }}
+      oracle_schema: ${{ steps.release-identity.outputs.oracle_schema }}
     steps:
       - name: Reject retained exact release artifact
         env:
@@ -181,6 +202,7 @@ jobs:
             "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" >>"$GITHUB_OUTPUT"
           SCHEMA_PRICING="$(jq -er '.schema_versions.pricing' v2/infra/build/release/release-manifest.json)"
           SCHEMA_ORACLE="$(jq -er '.schema_versions.oracle' v2/infra/build/release/release-manifest.json)"
+          printf 'pricing_schema=%s\noracle_schema=%s\n' "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_OUTPUT"
           printf 'release_artifact_id=%s\nrelease_artifact_digest=%s\ncommit_sha=%s\npricing_schema=%s\noracle_schema=%s\n' \
             "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" "$GITHUB_SHA" \
             "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_STEP_SUMMARY"
@@ -293,6 +315,8 @@ jobs:
     if: vars.DEVELOPMENT_DELIVERY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: development
+    outputs:
+      verified: ${{ steps.verify-release.outputs.verified }}
     permissions:
       contents: read
       actions: read
@@ -588,6 +612,23 @@ jobs:
           rm -f -- "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/foundation-output.json" "$PLAN" "$RUNNER_TEMP/development.tfplan.json"
           rm -rf -- "$TF_LOG_DIR"
 
+      - name: Verify readiness and public release path
+        id: verify-release
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          state="$RUNNER_TEMP/development-readiness-state.json"
+          error_log="$RUNNER_TEMP/development-readiness-state.log"
+          trap 'rm -f -- "$state" "$error_log"' EXIT
+          if ! terraform -chdir="$RUNNER_TEMP/release-overlay/v2/infra" show -json >"$state" 2>"$error_log"; then
+            echo "development readiness state unavailable" >&2
+            exit 1
+          fi
+          python3 v2/scripts/check_development_release.py \
+            "$state" "$RUNNER_TEMP/release-overlay/release-manifest.json"
+          echo 'verified=success' >>"$GITHUB_OUTPUT"
+
       - name: Cleanup private delivery files
         if: always()
         run: |
@@ -603,7 +644,27 @@ jobs:
             "$RUNNER_TEMP/development-foundation-validate.log" "$RUNNER_TEMP/development-plan-identity.json" \
             "$RUNNER_TEMP/development-release-manifest.json" "$RUNNER_TEMP/development-plan-validation.json" \
             "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
+            "$RUNNER_TEMP/development-readiness-state.json" "$RUNNER_TEMP/development-readiness-state.log" \
             "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform" \
             "$GITHUB_WORKSPACE/v2/infra/build/ca"
           rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+
+  release-result:
+    name: Record end-to-end development result
+    needs: [admission, release-record, build, oidc-proof, deploy]
+    if: always() && needs.admission.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Publish sanitized release outcome
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 v2/scripts/development_deployment_status.py finish
