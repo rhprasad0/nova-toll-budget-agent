@@ -129,6 +129,11 @@ def test_wrong_expected_identity_rejected(
     "wrong",
     [
         None,
+        "missing_target",
+        "matching_target",
+        "conflicting_target",
+        "missing_live",
+        "transitional_missing_versions",
         "account",
         "hash",
         "lambda",
@@ -137,6 +142,7 @@ def test_wrong_expected_identity_rejected(
         "distribution",
         "old_runtime",
         "failed_runtime",
+        "unknown_runtime",
         "malformed",
     ],
 )
@@ -184,24 +190,83 @@ def test_readiness_exact_versions_and_deadline(
                     "Status": "InProgress" if wrong == "distribution" else "Deployed",
                 }
             }
-        return {
+        endpoint = {
             "agentRuntimeArn": check.RUNTIME_ARN,
             "name": "preview",
-            "status": "UPDATE_FAILED" if wrong == "failed_runtime" else "READY",
-            "liveVersion": "7" if wrong == "old_runtime" else "8",
-            "targetVersion": "8",
+            "status": (
+                "UPDATE_FAILED"
+                if wrong == "failed_runtime"
+                else "BROKEN"
+                if wrong == "unknown_runtime"
+                else "UPDATING"
+                if wrong == "transitional_missing_versions"
+                else "READY"
+            ),
         }
+        if wrong != "missing_live" and wrong != "transitional_missing_versions":
+            endpoint["liveVersion"] = "7" if wrong == "old_runtime" else "8"
+        if wrong not in {"missing_target", "transitional_missing_versions"}:
+            endpoint["targetVersion"] = "7" if wrong == "conflicting_target" else "8"
+        return endpoint
 
     monkeypatch.setattr(check, "aws", aws)
     monkeypatch.setattr(check.time, "sleep", no_sleep)
     clock = iter([0, 601])
     monkeypatch.setattr(check.time, "monotonic", lambda: next(clock))
-    if wrong:
-        with pytest.raises((ValueError, KeyError)):
+    if wrong not in {None, "missing_target", "matching_target"}:
+        with pytest.raises(check.CheckFailure):
             check.readiness(values)
     else:
         check.readiness(values)
     assert len(calls) <= 8
+
+
+def test_readiness_failure_output_is_local_and_bounded(
+    release: tuple[dict[str, Any], ...],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    state, manifest, _ = release
+    values = check.expected(state, manifest)
+    sentinel = "raw-response-body-with-secret"
+
+    def aws(*args: str) -> dict[str, Any]:
+        if args[0] == "sts":
+            return {"Account": check.ACCOUNT}
+        if args[1] == "get-function-configuration":
+            name = args[3]
+            digest = base64.b64encode(
+                bytes.fromhex(next(iter(values["hashes"].values())))
+            ).decode()
+            return {
+                "FunctionName": name,
+                "FunctionArn": f"arn:aws:lambda:us-east-1:{check.ACCOUNT}:function:{name}",
+                "State": "Active",
+                "LastUpdateStatus": "Successful",
+                "CodeSha256": digest,
+            }
+        if args[1] == "get-alias":
+            return {
+                "Name": "live",
+                "FunctionVersion": "12",
+                "RoutingConfig": {},
+            }
+        if args[0] == "cloudfront":
+            return {"Distribution": {"Id": check.DISTRIBUTION, "Status": "Deployed"}}
+        return {
+            "agentRuntimeArn": check.RUNTIME_ARN,
+            "name": "preview",
+            "status": sentinel,
+        }
+
+    monkeypatch.setattr(check, "aws", aws)
+    with pytest.raises(ValueError):
+        check.readiness(values)
+    output = capsys.readouterr().err
+    assert "stage=readiness" in output
+    assert "status=fail" in output
+    assert "reason=invalid_state" in output
+    assert sentinel not in output
 
 
 @pytest.mark.parametrize(
