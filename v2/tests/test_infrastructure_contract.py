@@ -4148,6 +4148,10 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert "release-manifest.json" in deploy_source
     assert "EXPECTED_PRICING_VERSION" in deploy_source
     assert "EXPECTED_ORACLE_VERSION" in deploy_source
+    assert 'STAGED_PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"' in deploy_source
+    assert 'cp -P -- "$source" "$STAGED_PACKAGE_DIR/$package"' in deploy_source
+    assert 'sha256sum --check "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS"' in deploy_source
+    assert "development-release-staging-verification.json" in deploy_source
     deploy_step_names = "\n".join(
         cast(str, step.get("name", "")) for step in deploy_steps
     )
@@ -4255,7 +4259,7 @@ def _assert_development_delivery_workflow(source: str) -> None:
     )
     assert (
         deploy_source.count(
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
         )
         == 1
     )
@@ -4263,12 +4267,13 @@ def _assert_development_delivery_workflow(source: str) -> None:
     assert deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
     ) < deploy_source.rindex('rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"')
-    assert '"$PACKAGE_DIR"' in deploy_source
+    assert 'PACKAGE_DIR="$RUNNER_TEMP/v2-development-packages"' in deploy_source
+    assert 'PACKAGE_DIR="$RELEASE_ROOT/v2/infra/build"' in deploy_source
     plan_index = deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
     )
     show_index = deploy_source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
     )
     apply_index = deploy_source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"'
@@ -4615,13 +4620,17 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         'test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false'
         in source
     )
+    assert "select(valid_result) | {status, reason_code}" in source
     assert (
-        'jq -e \'type == "object" and (.status == "accepted" or .status == "rejected") and (.reason_code | type == "string")\''
+        'if test "$MANIFEST_VALID" != true || test "$IDENTITY_VALID" != true; then'
         in source
     )
-    assert 'test "$MANIFEST_VALID" = true' in source
-    assert 'test "$IDENTITY_VALID" = true' in source
-    assert 'test "$VALIDATOR_STATUS" -eq 0' in source
+    assert "terraform stage failed: validator (exit 1)" in source
+    assert (
+        'VALIDATOR_RESULT_STATUS="$(jq -er \'.status\' "$VALIDATION_SUMMARY"' in source
+    )
+    assert 'if test "$VALIDATOR_RESULT_STATUS" != accepted; then' in source
+    assert 'if test "$VALIDATOR_STATUS" -ne 0;' in source
     assert 'PROOF="$RUNNER_TEMP/protected-main-oidc.json"' in source
     assert 'rm -f -- "$RUNNER_TEMP/protected-main-oidc.json"' in source
     assert "if: always()" in workflow_source
@@ -4631,9 +4640,7 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
     plan = source.index(
         'terraform -chdir="$RELEASE_ROOT/v2/infra" plan -input=false -out="$PLAN"'
     )
-    show = source.index(
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
-    )
+    show = source.index('terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"')
     manifest_check = source.index('test -f "$MANIFEST"', show)
     validator = source.index("python3 infra/delivery_plan_validator.py", manifest_check)
     assert (
@@ -4650,9 +4657,7 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         == 1
     )
     assert (
-        source.count(
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON"'
-        )
+        source.count('terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"')
         == 1
     )
     assert (
@@ -4661,11 +4666,386 @@ def _assert_development_delivery_validator_contract(source: str) -> None:
         )
         == 1
     )
-    assert '"$PLAN" >"$APPLY_LOG" 2>&1' in source
+    assert 'echo "terraform stage failed: apply" >&2' in source
+
+
+def test_development_delivery_staging_snippet_accepts_only_verified_package_bytes():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+    verify_source = cast(
+        str,
+        next(
+            step["run"]
+            for step in steps
+            if step.get("name")
+            == "Verify immutable development release without credentials"
+        ),
+    )
+    staging_start = verify_source.index('rm -rf -- "$STAGED_PACKAGE_DIR"')
+    staging_end = verify_source.index(
+        "python3 infra/release_manifest.py", staging_start
+    )
+    staging = verify_source[staging_start:staging_end]
+
+    with tempfile.TemporaryDirectory() as directory_name:
+        root = Path(directory_name)
+        package_dir = root / "overlay" / "v2" / "infra" / "build"
+        package_dir.mkdir(parents=True)
+        checksums_dir = root / "checksums"
+        checksums_dir.mkdir()
+        checksums = checksums_dir / "DEPLOYMENT_SHA256SUMS"
+        packages = ("loader.zip", "publisher.zip", "agentcore.zip", "chat-proxy.zip")
+        for package in packages:
+            (package_dir / package).write_bytes(package.encode())
+        checksums.write_text(
+            "".join(
+                f"{hashlib.sha256((package_dir / package).read_bytes()).hexdigest()}  {package}\n"
+                for package in packages
+            ),
+            encoding="ascii",
+        )
+
+        mock_bin = root / "bin"
+        mock_bin.mkdir()
+        mock_cp = mock_bin / "cp"
+        mock_cp.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            '/bin/cp "$@"\n'
+            'dest="${@: -1}"\n'
+            'case "${MODE:-success}" in\n'
+            '  tamper) printf tampered >>"$dest" ;;\n'
+            '  truncate) : >"$dest" ;;\n'
+            '  missing) rm -f -- "$dest" ;;\n'
+            '  extra) : >"${STAGED_PACKAGE_DIR}/extra.zip" ;;\n'
+            '  staged-symlink) rm -f -- "$dest"; ln -s -- "${PACKAGE_DIR}/loader.zip" "$dest" ;;\n'
+            "esac\n",
+            encoding="utf-8",
+        )
+        mock_cp.chmod(0o700)
+
+        def run_staging(mode: str = "success") -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["bash", "-c", "set -euo pipefail\n" + staging],
+                env={
+                    **os.environ,
+                    "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                    "PACKAGE_DIR": str(package_dir),
+                    "STAGED_PACKAGE_DIR": str(root / "staged"),
+                    "EVIDENCE_DIR": str(checksums_dir),
+                    "MODE": mode,
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        success = run_staging()
+        assert success.returncode == 0, success.stderr
+        assert sorted(path.name for path in (root / "staged").iterdir()) == sorted(
+            packages
+        )
+        for package in packages:
+            assert (root / "staged" / package).read_bytes() == (
+                package_dir / package
+            ).read_bytes()
+
+        for mode in ("tamper", "truncate", "missing", "extra", "staged-symlink"):
+            assert run_staging(mode).returncode != 0, mode
+        source = package_dir / "loader.zip"
+        source.unlink()
+        source.symlink_to(package_dir / "publisher.zip")
+        assert run_staging().returncode != 0
+
+
+def test_development_delivery_private_stage_helper_sanitizes_mock_failures():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+    plan_source = cast(
+        str,
+        next(
+            step["run"]
+            for step in steps
+            if step.get("name")
+            == "Create and gate the saved development plan before migrations"
+        ),
+    )
+    helper = (
+        "run_private_stage() {"
+        + plan_source.split("run_private_stage() {", 1)[1].split("\n}", 1)[0]
+        + "\n}"
+    )
+    for stage in (
+        "foundation-init",
+        "foundation-output",
+        "release-init",
+        "plan",
+        "show",
+        "validator",
+    ):
+        script = (
+            "set -euo pipefail\n"
+            + helper
+            + '\nmkdir -m 700 -- "$RUNNER_TEMP/logs"\n'
+            + f'run_private_stage "{stage}" "$RUNNER_TEMP/logs/stdout" "$RUNNER_TEMP/logs/stderr" bash -c \'printf raw-diagnostic; exit 17\'\n'
+        )
+        with tempfile.TemporaryDirectory() as directory_name:
+            result = subprocess.run(
+                ["bash", "-c", script],
+                env={**os.environ, "RUNNER_TEMP": directory_name},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        assert result.returncode == 17
+        assert result.stdout == ""
+        assert result.stderr == f"terraform stage failed: {stage} (exit 17)\n"
+
+
+def test_development_delivery_mocked_plan_failures_skip_downstream_and_cleanup():
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    steps = cast(list[dict[str, object]], jobs["deploy"]["steps"])
+    plan_source = cast(
+        str,
+        next(
+            step["run"]
+            for step in steps
+            if step.get("name")
+            == "Create and gate the saved development plan before migrations"
+        ),
+    )
+    cleanup_source = cast(
+        str,
+        next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Cleanup private delivery files"
+        ),
+    )
+    foundation: dict[str, object] = {
+        key: "value"
+        for key in (
+            "vpc_id",
+            "vpc_cidr_block",
+            "rds_security_group_id",
+            "agentcore_endpoint_security_group_id",
+            "eventbridge_endpoint_security_group_id",
+            "agentcore_vpc_endpoint_id",
+            "agentcore_vpc_endpoint_dns_name",
+            "tollchat_api_vpc_endpoint_id",
+            "raw_bucket_name",
+            "raw_kms_key_arn",
+            "agentcore_artifacts_bucket_name",
+            "alerts_topic_arn",
+        )
+    }
+    foundation.update(
+        private_subnet_ids={"a": "subnet-a", "c": "subnet-c"},
+        db_instance={
+            "identifier": "db",
+            "resource_id": "resource",
+            "address": "db.example",
+            "port": 5432,
+        },
+    )
+
+    with tempfile.TemporaryDirectory() as directory_name:
+        root = Path(directory_name)
+        mock_bin = root / "bin"
+        mock_bin.mkdir()
+        foundation_path = root / "foundation.json"
+        foundation_path.write_text(json.dumps(foundation), encoding="utf-8")
+        terraform = mock_bin / "terraform"
+        terraform.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'args=" $* "\n'
+            "stage=unknown\n"
+            'case "$args" in\n'
+            "  *chdir=infra*' init '*) stage=foundation-init ;;\n"
+            "  *' output '*) stage=foundation-output ;;\n"
+            "  *' init '*) stage=release-init ;;\n"
+            "  *' plan '*) stage=plan ;;\n"
+            "  *' show '*) stage=show ;;\n"
+            "esac\n"
+            'if test "${FAIL_STAGE:-}" = "$stage"; then printf \'raw-%s\\n\' "$stage" >&2; exit 17; fi\n'
+            'case "$stage" in\n'
+            '  foundation-output) if test "${FAIL_STAGE:-}" = foundation-output-validation; then printf \'{}\\n\'; else cat "$FOUNDATION_FIXTURE"; fi ;;\n'
+            '  plan) for arg in "$@"; do case "$arg" in -out=*) : >"${arg#-out=}" ;; esac; done ;;\n'
+            "  show) printf '{}\\n' ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        terraform.chmod(0o700)
+        real_python = mock_bin / "python3.real"
+        real_python.symlink_to(Path(os.environ.get("PYTHON", "/usr/bin/python3")))
+        python = mock_bin / "python3"
+        python.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'if test "${1:-}" = infra/delivery_plan_validator.py; then\n'
+            "  printf '%s\\n' \"$VALIDATOR_JSON\"\n"
+            '  exit "${VALIDATOR_EXIT:-0}"\n'
+            "fi\n"
+            'exec "${REAL_PYTHON}" "$@"\n',
+            encoding="utf-8",
+        )
+        python.chmod(0o700)
+
+        accepted = json.dumps(
+            {
+                "status": "accepted",
+                "reason_code": "ok",
+                "addresses": [],
+                "actions": [],
+                "operation_classes": [],
+                "fingerprint": "a" * 64,
+            }
+        )
+        rejected = json.dumps(
+            {
+                "status": "rejected",
+                "reason_code": "unsupported_field_delta",
+                "address": "secret-resource",
+                "action": "update",
+                "operation_class": "lambda-code",
+            }
+        )
+
+        def run_plan(
+            *,
+            fail_stage: str = "",
+            validator_json: str = accepted,
+            validator_exit: int = 0,
+        ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+            run_root = (
+                root
+                / f"run-{len(list(root.glob('run-*')))}-{fail_stage or 'success'}-{validator_exit}"
+            )
+            run_root.mkdir()
+            (run_root / "protected-main-oidc.json").write_text(
+                "proof", encoding="utf-8"
+            )
+            (run_root / "v2-development-checksums").mkdir()
+            (
+                run_root / "v2-development-checksums/development-release-manifest.json"
+            ).write_text("{}", encoding="utf-8")
+            (run_root / "v2-development-packages").mkdir()
+            for package in (
+                "loader.zip",
+                "publisher.zip",
+                "agentcore.zip",
+                "chat-proxy.zip",
+            ):
+                (run_root / "v2-development-packages" / package).write_bytes(b"package")
+            overlay = run_root / "release-overlay/v2/infra"
+            overlay.mkdir(parents=True)
+            summary = run_root / "summary"
+            summary.touch()
+            marker = run_root / "downstream.marker"
+            script = plan_source + f"\nprintf 'migration-and-apply\\n' >\"{marker}\"\n"
+            result = subprocess.run(
+                ["bash", "-c", script],
+                cwd=REPO_ROOT,
+                env={
+                    **os.environ,
+                    "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                    "PYTHON": str(real_python),
+                    "REAL_PYTHON": str(real_python),
+                    "RUNNER_TEMP": str(run_root),
+                    "GITHUB_STEP_SUMMARY": str(summary),
+                    "FAIL_STAGE": fail_stage,
+                    "FOUNDATION_FIXTURE": str(foundation_path),
+                    "VALIDATOR_JSON": validator_json,
+                    "VALIDATOR_EXIT": str(validator_exit),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            cleanup = subprocess.run(
+                ["bash", "-c", cleanup_source],
+                cwd=REPO_ROOT,
+                env={
+                    **os.environ,
+                    "RUNNER_TEMP": str(run_root),
+                    "GITHUB_WORKSPACE": str(run_root),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert cleanup.returncode == 0
+            for private_path in (
+                "v2-development-packages",
+                "v2-development-checksums",
+                "release-overlay",
+                "development-terraform-logs",
+                "development.tfplan",
+                "development.tfplan.json",
+                "development-plan-validation-summary.json",
+                "protected-main-oidc.json",
+            ):
+                assert not (run_root / private_path).exists(), private_path
+            return result, marker, summary
+
+        success, marker, summary = run_plan()
+        assert success.returncode == 0, success.stderr
+        assert marker.read_text(encoding="utf-8") == "migration-and-apply\n"
+        assert json.loads(summary.read_text(encoding="utf-8")) == {
+            "status": "accepted",
+            "reason_code": "ok",
+        }
+
+        for stage in (
+            "foundation-init",
+            "foundation-output",
+            "release-init",
+            "plan",
+            "show",
+        ):
+            result, marker, _ = run_plan(fail_stage=stage)
+            assert result.returncode == 17
+            assert result.stdout == ""
+            assert result.stderr == f"terraform stage failed: {stage} (exit 17)\n"
+            assert not marker.exists()
+
+        result, marker, _ = run_plan(fail_stage="foundation-output-validation")
+        assert result.returncode == 1
+        assert (
+            result.stderr
+            == "terraform stage failed: foundation-output-validation (exit 1)\n"
+        )
+        assert not marker.exists()
+
+        result, marker, summary = run_plan(validator_json=rejected, validator_exit=1)
+        assert result.returncode == 1
+        assert result.stderr == "terraform stage failed: validator (exit 1)\n"
+        assert not marker.exists()
+        assert json.loads(summary.read_text(encoding="utf-8")) == {
+            "status": "rejected",
+            "reason_code": "unsupported_field_delta",
+        }
+
+        result, marker, _ = run_plan(validator_json=rejected, validator_exit=0)
+        assert result.returncode == 1
+        assert result.stderr == "terraform stage failed: validator (exit 1)\n"
+        assert not marker.exists()
 
 
 def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan():
     _assert_development_delivery_validator_contract(DEVELOPMENT_DELIVERY_WORKFLOW)
+    validator_invocation = (
+        'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" '
+        '\\\n            >"$VALIDATION" 2>"$VALIDATOR_LOG"'
+    )
+    show_invocation = (
+        'run_private_stage "show" "$PLAN_JSON" "$SHOW_LOG" '
+        '\\\n            terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN"'
+    )
     for original, replacement in (
         (
             'test -f "$MANIFEST" && test ! -L "$MANIFEST" && test -r "$MANIFEST" || MANIFEST_VALID=false',
@@ -4675,15 +5055,12 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
             'test -f "$IDENTITY" && test ! -L "$IDENTITY" && test -r "$IDENTITY" || IDENTITY_VALID=false',
             "IDENTITY_VALID=true",
         ),
-        ('test "$VALIDATOR_STATUS" -eq 0', 'test "$VALIDATOR_STATUS" -ne 0'),
+        ('if test "$VALIDATOR_STATUS" -ne 0;', 'if test "$VALIDATOR_STATUS" -eq 0;'),
         (
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN" >"$APPLY_LOG" 2>&1',
-            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$OTHER_PLAN" >"$APPLY_LOG" 2>&1',
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"',
+            'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$OTHER_PLAN"',
         ),
-        (
-            'python3 infra/delivery_plan_validator.py "$PLAN_JSON" "$MANIFEST" --identity "$IDENTITY" >"$VALIDATION"',
-            "true",
-        ),
+        (validator_invocation, "true"),
     ):
         _must_reject(
             _assert_development_delivery_validator_contract,
@@ -4694,8 +5071,10 @@ def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_pla
     _must_reject(
         _assert_development_delivery_validator_contract,
         DEVELOPMENT_DELIVERY_WORKFLOW,
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
-        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"\n          terraform -chdir="$RELEASE_ROOT/v2/infra" show -json "$PLAN" >"$PLAN_JSON" 2>"$SHOW_LOG"\n          MANIFEST_VALID=true',
+        show_invocation + "\n          MANIFEST_VALID=true",
+        'terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"\n          '
+        + show_invocation
+        + "\n          MANIFEST_VALID=true",
     )
 
 
