@@ -5,9 +5,9 @@ permissions:
 on:
   push:
     branches: ["main"]
-    paths: ["infra/**", "infra/delivery_plan_validator.py", "infra/test_delivery_plan_validator.py", "v2/infra/**", "v2/tests/test_infrastructure_contract.py", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml", ".github/workflows/v2-development-plan.yml", ".github/workflows/v2-development-delivery.yml"]
   pull_request:
-    paths: ["infra/**", "infra/delivery_plan_validator.py", "infra/test_delivery_plan_validator.py", "v2/infra/**", "v2/tests/test_infrastructure_contract.py", ".github/workflows/terraform.yml", ".github/workflows/v2-production-plan.yml", ".github/workflows/v2-development-plan.yml", ".github/workflows/v2-development-delivery.yml"]
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}

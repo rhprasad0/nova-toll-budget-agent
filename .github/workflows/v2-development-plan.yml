@@ -7,6 +7,10 @@ on:
         description: Event-derived lowercase candidate commit SHA.
         required: true
         type: string
+    outputs:
+      plan_result:
+        description: Result of the protected nested plan job.
+        value: ${{ jobs.plan.result }}
 
 permissions:
   contents: read

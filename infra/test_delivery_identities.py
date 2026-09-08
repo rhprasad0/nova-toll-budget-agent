@@ -645,7 +645,6 @@ def _check_production_planner() -> None:
     predicate_manifest_keys = re.findall(r'"([^"]+)"', manifest_predicate.group(1))
     assert predicate_manifest_keys == sorted(generated_manifest_keys)
     require('tags              = local.is_production ? { delivery_proof = "issue-301" } : {}', (ROOT / "v2" / "infra" / "agentcore.tf").read_text())
-    require("v2-production-plan.yml", WORKFLOW)
     v2_readme = (ROOT / "v2" / "README.md").read_text()
     runbook = (ROOT / "v2" / "RUNBOOK.md").read_text()
     require("credential-free PR CI never runs `terraform", v2_readme)

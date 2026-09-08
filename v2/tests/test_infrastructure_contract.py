@@ -27,6 +27,7 @@ ENVIRONMENT_TF = (V2_ROOT / "infra" / "environment.tf").read_text()
 SITE_TF = (V2_ROOT / "infra" / "site.tf").read_text()
 DEVELOPMENT_TFVARS = (V2_ROOT / "infra" / "development.tfvars").read_text()
 CI_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+TERRAFORM_WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "terraform.yml").read_text()
 PRODUCTION_PLAN_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-plan.yml"
 ).read_text()
@@ -1853,12 +1854,18 @@ def test_manual_oracle_migration_030_contract_is_offline_guarded_and_syntax_chec
 
 
 def test_pull_request_workflows_have_no_production_access():
-    def assert_safe_permissions(permissions: object) -> None:
+    trusted_planner = (
+        "rhprasad0/nova-toll-budget-agent/.github/workflows/"
+        "v2-development-plan.yml@main"
+    )
+
+    def assert_safe_permissions(permissions: object, *, allow_id_token: bool) -> None:
         if isinstance(permissions, str):
             assert permissions != "write-all"
         elif isinstance(permissions, dict):
             permissions = cast(dict[str, object], permissions)
-            assert permissions.get("id-token") != "write"
+            if not allow_id_token:
+                assert permissions.get("id-token") != "write"
 
     github_token = re.compile(
         r"secrets\s*(?:[.]\s*GITHUB_TOKEN\b|\[\s*['\"]GITHUB_TOKEN['\"]\s*\])"
@@ -1876,13 +1883,15 @@ def test_pull_request_workflows_have_no_production_access():
         assert "pull_request_target" not in triggers
         if "pull_request" not in triggers:
             continue
-        assert_safe_permissions(document.get("permissions"))
+        assert_safe_permissions(document.get("permissions"), allow_id_token=False)
         jobs = document.get("jobs")
         if isinstance(jobs, dict):
             for job in cast(dict[str, object], jobs).values():
                 if isinstance(job, dict):
+                    job = cast(dict[str, object], job)
                     assert_safe_permissions(
-                        cast(dict[str, object], job).get("permissions")
+                        job.get("permissions"),
+                        allow_id_token=job.get("uses") == trusted_planner,
                     )
         assert not re.search(r"\bsecrets\b", github_token.sub("", workflow))
         for forbidden in (
@@ -4149,7 +4158,13 @@ def _assert_development_plan_workflow(source: str) -> None:
                     "required": True,
                     "type": "string",
                 }
-            }
+            },
+            "outputs": {
+                "plan_result": {
+                    "description": "Result of the protected nested plan job.",
+                    "value": "${{ jobs.plan.result }}",
+                }
+            },
         }
     }
     jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
@@ -4316,6 +4331,100 @@ def test_development_plan_workflow_is_reusable_and_fail_closed():
             original,
             replacement,
         )
+
+
+def _assert_required_event_callers(source: str) -> None:
+    ci = cast(dict[str, object], yaml.safe_load(source))
+    ci_trigger = cast(dict[str, object], _workflow_trigger(ci))
+    assert ci_trigger["pull_request"] is None
+    assert ci_trigger["merge_group"] == {"types": ["checks_requested"]}
+    ci_jobs = cast(dict[str, dict[str, object]], ci["jobs"])
+    for job_name in ("v2-loader", "v2-database"):
+        assert "if" not in ci_jobs[job_name]
+    base_expression = (
+        "github.event.pull_request.base.sha || "
+        "github.event.merge_group.base_sha || github.event.before"
+    )
+    for variable in (
+        "GOLDEN_CORPUS_BASE_REF",
+        "TOOL_CONTRACT_BASE_REF",
+        "AGENT_CONTRACT_BASE_REF",
+        "SCHEMA_BASE_REF",
+    ):
+        assert f"{variable}: ${{{{ {base_expression} }}}}" in source
+    assert source.count(base_expression) == 4
+
+    caller = ci_jobs["trusted-development-plan"]
+    assert (
+        caller["uses"] == "rhprasad0/nova-toll-budget-agent/.github/workflows/"
+        "v2-development-plan.yml@main"
+    )
+    assert caller["with"] == {
+        "candidate_sha": "${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}"
+    }
+    assert caller["permissions"] == {"contents": "read", "id-token": "write"}
+    assert "pull_request" in str(caller["if"])
+    assert "merge_group" in str(caller["if"])
+
+    gate = ci_jobs["development-plan"]
+    assert gate["if"] == "always()"
+    assert gate["needs"] == "trusted-development-plan"
+    gate_source = _workflow_run_source(gate)
+    assert "CALL_RESULT: ${{ needs.trusted-development-plan.result }}" in source
+    assert (
+        "PLAN_RESULT: ${{ needs.trusted-development-plan.outputs.plan_result }}"
+        in source
+    )
+    assert 'test "$CALL_RESULT" = success' in gate_source
+    assert 'test "$PLAN_RESULT" = success' in gate_source
+    assert "continue-on-error" not in source
+
+    _assert_terraform_trigger(TERRAFORM_WORKFLOW)
+
+
+def _assert_terraform_trigger(source: str) -> None:
+    terraform = cast(dict[str, object], yaml.safe_load(source))
+    terraform_trigger = cast(dict[str, object], _workflow_trigger(terraform))
+    assert terraform_trigger["pull_request"] is None
+    assert terraform_trigger["merge_group"] == {"types": ["checks_requested"]}
+    assert "paths" not in cast(dict[str, object], terraform_trigger["merge_group"])
+    assert "paths-ignore" not in source
+
+
+def test_required_event_callers_are_unfiltered_and_fail_closed():
+    _assert_required_event_callers(CI_WORKFLOW)
+    for original, replacement in (
+        (
+            "pull_request:\n  merge_group:",
+            "pull_request:\n    types: [opened]\n  merge_group:",
+        ),
+        ("merge_group:\n    types: [checks_requested]", "merge_group:"),
+        (
+            "github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before",
+            "github.event.pull_request.base.sha || github.event.before",
+        ),
+        ("@main", "@feature"),
+        ("if: always()", "if: success()"),
+        ('test "$PLAN_RESULT" = success', 'test "$PLAN_RESULT" = skipped'),
+    ):
+        _must_reject(
+            _assert_required_event_callers,
+            CI_WORKFLOW,
+            original,
+            replacement,
+        )
+    _must_reject(
+        _assert_development_plan_workflow,
+        DEVELOPMENT_PLAN_WORKFLOW,
+        "value: ${{ jobs.plan.result }}",
+        "value: ${{ jobs.build.result }}",
+    )
+    _must_reject(
+        _assert_terraform_trigger,
+        TERRAFORM_WORKFLOW,
+        "pull_request:\n  merge_group:",
+        "pull_request:\n    types: [opened]\n  merge_group:",
+    )
 
 
 def _assert_development_delivery_validator_contract(source: str) -> None:
