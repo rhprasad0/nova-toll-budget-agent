@@ -129,6 +129,11 @@ def test_wrong_expected_identity_rejected(
     "wrong",
     [
         None,
+        "missing_target",
+        "matching_target",
+        "conflicting_target",
+        "missing_live",
+        "transitional_missing_versions",
         "account",
         "hash",
         "lambda",
@@ -137,6 +142,7 @@ def test_wrong_expected_identity_rejected(
         "distribution",
         "old_runtime",
         "failed_runtime",
+        "unknown_runtime",
         "malformed",
     ],
 )
@@ -184,24 +190,83 @@ def test_readiness_exact_versions_and_deadline(
                     "Status": "InProgress" if wrong == "distribution" else "Deployed",
                 }
             }
-        return {
+        endpoint = {
             "agentRuntimeArn": check.RUNTIME_ARN,
             "name": "preview",
-            "status": "UPDATE_FAILED" if wrong == "failed_runtime" else "READY",
-            "liveVersion": "7" if wrong == "old_runtime" else "8",
-            "targetVersion": "8",
+            "status": (
+                "UPDATE_FAILED"
+                if wrong == "failed_runtime"
+                else "BROKEN"
+                if wrong == "unknown_runtime"
+                else "UPDATING"
+                if wrong == "transitional_missing_versions"
+                else "READY"
+            ),
         }
+        if wrong != "missing_live" and wrong != "transitional_missing_versions":
+            endpoint["liveVersion"] = "7" if wrong == "old_runtime" else "8"
+        if wrong not in {"missing_target", "transitional_missing_versions"}:
+            endpoint["targetVersion"] = "7" if wrong == "conflicting_target" else "8"
+        return endpoint
 
     monkeypatch.setattr(check, "aws", aws)
     monkeypatch.setattr(check.time, "sleep", no_sleep)
     clock = iter([0, 601])
     monkeypatch.setattr(check.time, "monotonic", lambda: next(clock))
-    if wrong:
-        with pytest.raises((ValueError, KeyError)):
+    if wrong not in {None, "missing_target", "matching_target"}:
+        with pytest.raises(check.CheckFailure):
             check.readiness(values)
     else:
         check.readiness(values)
     assert len(calls) <= 8
+
+
+def test_readiness_failure_output_is_local_and_bounded(
+    release: tuple[dict[str, Any], ...],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    state, manifest, _ = release
+    values = check.expected(state, manifest)
+    sentinel = "raw-response-body-with-secret"
+
+    def aws(*args: str) -> dict[str, Any]:
+        if args[0] == "sts":
+            return {"Account": check.ACCOUNT}
+        if args[1] == "get-function-configuration":
+            name = args[3]
+            digest = base64.b64encode(
+                bytes.fromhex(next(iter(values["hashes"].values())))
+            ).decode()
+            return {
+                "FunctionName": name,
+                "FunctionArn": f"arn:aws:lambda:us-east-1:{check.ACCOUNT}:function:{name}",
+                "State": "Active",
+                "LastUpdateStatus": "Successful",
+                "CodeSha256": digest,
+            }
+        if args[1] == "get-alias":
+            return {
+                "Name": "live",
+                "FunctionVersion": "12",
+                "RoutingConfig": {},
+            }
+        if args[0] == "cloudfront":
+            return {"Distribution": {"Id": check.DISTRIBUTION, "Status": "Deployed"}}
+        return {
+            "agentRuntimeArn": check.RUNTIME_ARN,
+            "name": "preview",
+            "status": sentinel,
+        }
+
+    monkeypatch.setattr(check, "aws", aws)
+    with pytest.raises(ValueError):
+        check.readiness(values)
+    output = capsys.readouterr().err
+    assert "stage=readiness" in output
+    assert "status=fail" in output
+    assert "reason=invalid_state" in output
+    assert sentinel not in output
 
 
 @pytest.mark.parametrize(
@@ -342,6 +407,98 @@ def test_public_smoke_and_two_session_lifecycle(
     else:
         check.smoke(values)
         assert len(set(created)) == 2 and len(reset_calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("failure_stage", "failure_kind", "expected_subcheck", "expected_resets"),
+    [
+        ("session_first", "answer", "session_first", 1),
+        ("session_second", "answer", "session_second", 2),
+        ("session_reuse", "revoked", "session_reuse", 2),
+    ],
+)
+def test_main_preserves_original_smoke_diagnostic_after_cleanup(
+    release: tuple[dict[str, Any], ...],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    failure_stage: str,
+    failure_kind: str,
+    expected_subcheck: str,
+    expected_resets: int,
+) -> None:
+    state, manifest, _ = release
+    values = check.expected(state, manifest)
+    state_path, manifest_path = tmp_path / "state.json", tmp_path / "manifest.json"
+    state_path.write_text("{}")
+    manifest_path.write_text("{}")
+    reset_calls: list[int] = []
+    created = 0
+    sentinel = "raw-revoked-response-sentinel"
+
+    def request(
+        jar: http.cookiejar.CookieJar,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        origin: str = check.SITE,
+        cookie: str | None = None,
+    ) -> tuple[int, str, bytes]:
+        nonlocal created
+        if path == "/robots.txt":
+            return 200, "text/plain", b"User-agent: *\nDisallow: /\n"
+        if path == "/api/config":
+            return (
+                200,
+                "application/json",
+                b'{"chatEnabled": true, "maxTurns": 5, "maxMessageChars": 4000}',
+            )
+        if path == "/api/reset":
+            reset_calls.append(id(jar))
+            jar.clear()
+            return 200, "application/json", b'{"ok": true}'
+        if path == "/api/chat":
+            if origin != check.SITE:
+                return 403, "application/json", b"{}"
+            if cookie is not None:
+                if failure_kind == "revoked":
+                    raise json.JSONDecodeError(sentinel, sentinel, 0)
+                return 401, "application/json", b'{"error":{"code":"session_expired"}}'
+            if not list(jar):
+                created += 1
+                jar.set_cookie(globals()["cookie"](str(created)))
+            if failure_kind == "answer" and created == (
+                1 if failure_stage == "session_first" else 2
+            ):
+                return 200, "application/x-ndjson", b"\xff"
+            return (
+                200,
+                "application/x-ndjson",
+                b'{"type":"answer","text":"ok","blocked":false}',
+            )
+        return 200, "text/plain", b"static"
+
+    def expected_stub(
+        _state: dict[str, Any], _manifest: dict[str, Any]
+    ) -> dict[str, Any]:
+        return values
+
+    def readiness_stub(_values: dict[str, Any]) -> None:
+        return None
+
+    monkeypatch.setattr(check, "expected", expected_stub)
+    monkeypatch.setattr(check, "readiness", readiness_stub)
+    monkeypatch.setattr(check, "request", request)
+    monkeypatch.setattr(
+        check.sys, "argv", ["check", str(state_path), str(manifest_path)]
+    )
+
+    assert check.main() == 1
+    output = capsys.readouterr().err
+    assert f"subcheck={expected_subcheck}" in output
+    assert "status=fail" in output and "reason=malformed_response" in output
+    assert sentinel not in output
+    assert len(reset_calls) == expected_resets
 
 
 def test_redirect_and_oversized_response_fail_closed(
