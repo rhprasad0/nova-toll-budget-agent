@@ -23,4 +23,12 @@ fixture-only corpus.
 | [`20260822T200050Z.json`](20260822T200050Z.json) | Dulles Airport to Reagan Airport | Live code-graded current-price trajectory and response | 1.0000; 1/1 passed; the exact cross-direction call returned typed stale I-95 availability rather than an internal validation error, and the response safely withheld a price |
 | [`20260822T204150Z.json`](20260822T204150Z.json) | Annual affordability behavioral suite | Live code-graded annual trajectories and responses | 1.0000; 6/6 passed; covers fixed and modeled success, Tysons exit clarification, complete input acquisition, salary-range clarification, adjustable 52-week annual-day estimation, and Dulles-to-Reagan return-route unavailability |
 | [`i95-missing-od-pricing.md`](i95-missing-od-pricing.md) | Missing I-95/I-495 OD identity-proxy model | Retained five-day holdout evaluation | 1,200 comparisons; $0.106 MAE; 96.1% within $0.50; $8.05 maximum error. Preliminary evidence only: clustered observations and short coverage limit stronger accuracy claims. |
-| [`issue-360-v2.3.0-calibration.json`](issue-360-v2.3.0-calibration.json) | Fixed 60-case human-review truth set | Deterministic evaluator calibration comparison | Initial matrix: 29 human Pass/evaluator Pass, 21 human Pass/evaluator Fail, 7 human Fail/evaluator Fail, and 3 human Fail/evaluator Pass. Diagnostic calibration evidence, not a population estimate or release gate. |
+| [`issue-360-v2.2.0.json`](issue-360-v2.2.0.json) | 250 public + 50 private cases, three trials each | Previous full GPT-5.6 Luna baseline | 900/900 valid; 350/900 passed; 71/300 cases passed all three trials; $2.47457836 computed cost. Retained for historical comparison. |
+| [`issue-360-v2.3.0-calibration.json`](issue-360-v2.3.0-calibration.json) | Fixed 60-case human-review truth set | Deterministic evaluator calibration comparison | Final matrix: 50 human Pass/evaluator Pass, 0 human Pass/evaluator Fail, 7 human Fail/evaluator Fail, and 3 human Fail/evaluator Pass. The three known false accepts remain explicit diagnostic debt. |
+| [`issue-360-v2.3.0.json`](issue-360-v2.3.0.json) | 250 public + 50 private cases, three trials each | Current full GPT-5.6 Luna baseline | 900/900 valid; 531/900 passed (59.0%); 123/300 cases passed all three trials; $2.42463436 computed cost; no infrastructure, identity, over-reservation, or missing/interrupted failures. |
+
+The three known calibration false accepts are
+`leesburg-route-28-schedule-inputs`, `topology-probe-dca-to-iad-current`, and
+`topology-proof-dca-to-i95-north-current`. The 2.2.0 and 2.3.0 scores use
+different evaluator digests, so their numerical delta is descriptive rather
+than a causal model-quality comparison.

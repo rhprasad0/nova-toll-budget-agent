@@ -436,3 +436,18 @@ its 27 final decisions come from the maintainer-approved retained record.
 against those retained answers without changing their scorecards. The resulting
 matrix is useful for tuning evaluator rules, but the deliberately selected set
 is not a population estimate or release gate.
+
+The calibrated matrix is 50 human Pass/evaluator Pass, zero human
+Pass/evaluator Fail, seven human Fail/evaluator Fail, and three human
+Fail/evaluator Pass. The known false accepts are
+`leesburg-route-28-schedule-inputs`, `topology-probe-dca-to-iad-current`, and
+`topology-proof-dca-to-i95-north-current`; they remain visible rather than being
+hidden by case-specific rules.
+
+### Full 2.3.0 baseline
+
+The one-shot GPT-5.6 Luna baseline ran all 250 public and 50 private cases three
+times. All 900 attempts produced valid scored evidence with no infrastructure,
+identity, over-reservation, or missing/interrupted failures. The calibrated
+evaluator passed 531/900 attempts (59.0%) and 123/300 cases on all three trials;
+this is the baseline for future comparisons, not an all-pass release gate.

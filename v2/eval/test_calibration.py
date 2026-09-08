@@ -953,6 +953,88 @@ class CalibrationTests(unittest.TestCase):
                 plan, corpus, _LEGACY_PUBLIC_MANIFEST, rate_card
             )
 
+    def test_curated_2_3_baseline_is_complete_and_private_is_aggregate_only(
+        self,
+    ) -> None:
+        report_path = _V2 / "eval/results/issue-360-v2.3.0.json"
+        calibration_path = _V2 / "eval/results/issue-360-v2.3.0-calibration.json"
+        self.assertTrue(report_path.is_file())
+        self.assertTrue(calibration_path.is_file())
+        report = json.loads(report_path.read_text())
+        self.assertEqual(report["version"], "2.3.0")
+        self.assertEqual(
+            report["counts"]["cases"], {"public": 250, "private": 50, "total": 300}
+        )
+        self.assertEqual(
+            report["counts"]["tuples"],
+            {
+                metric: {
+                    "public": public,
+                    "private": private,
+                    "total": public + private,
+                }
+                for metric, public, private in (
+                    ("planned", 750, 150),
+                    ("retained", 750, 150),
+                    ("valid", 750, 150),
+                    ("passed", 453, 78),
+                )
+            },
+        )
+        self.assertEqual(
+            report["counts"]["case_pass3"],
+            {"public": 105, "private": 18, "total": 123},
+        )
+        self.assertEqual(len(report["cases"]), 250)
+        self.assertTrue(
+            all(set(case["trials"]) == {"1", "2", "3"} for case in report["cases"])
+        )
+        self.assertEqual(
+            report["private"],
+            {
+                "cases": 50,
+                "planned_tuples": 150,
+                "retained_tuples": 150,
+                "valid_tuples": 150,
+                "passed_tuples": 78,
+                "case_pass3": 18,
+                "failures": {
+                    "agent_quality": 72,
+                    "infrastructure": 0,
+                    "identity_mismatch_or_inconclusive": 0,
+                    "over_reservation": 0,
+                    "missing_or_interrupted": 0,
+                },
+            },
+        )
+        self.assertFalse(
+            any(
+                field in json.dumps(report["private"]).lower()
+                for field in (
+                    "case_id",
+                    "prompt",
+                    "fixture",
+                    "response",
+                    "trajectory",
+                    "trial",
+                    "result",
+                )
+            )
+        )
+        self.assertEqual(
+            report["calibration"]["matrix"],
+            {
+                "human_pass_evaluator_pass": 50,
+                "human_pass_evaluator_fail": 0,
+                "human_fail_evaluator_pass": 3,
+                "human_fail_evaluator_fail": 7,
+            },
+        )
+        self.assertEqual(
+            report["calibration"]["report_sha256"],
+            hashlib.sha256(calibration_path.read_bytes()).hexdigest(),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
