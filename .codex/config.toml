@@ -12,6 +12,9 @@ max_depth = 1
 [agents.explorer]
 config_file = "agents/explorer.toml"
 
+[agents.researcher]
+config_file = "agents/researcher.toml"
+
 [agents.pre_checker]
 config_file = "agents/pre_checker.toml"
 

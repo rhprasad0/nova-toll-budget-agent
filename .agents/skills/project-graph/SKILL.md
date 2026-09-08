@@ -1,6 +1,6 @@
 ---
 name: project-graph
-description: Run this repository's explorer, pre-checker, builder, and checker graph for a non-trivial change.
+description: Run this repository's explorer, researcher, pre-checker, builder, and checker graph for a non-trivial change.
 ---
 
 # Project Graph
@@ -24,8 +24,14 @@ inspect the repository, diagnose failures, run focused checks, and take over
 bounded exploration or implementation under the intervention rules below.
 Keep subagents on their existing models and reasoning efforts in `.codex/agents/`.
 
+Authority is explicit: the intent and `.graph/explore.md` define the approved
+scope, the numbered requirements in `.graph/checklist.md` define acceptance,
+and `.graph/research.md` is supporting evidence only. A research conflict with
+the intent, explore.md, or checklist blocks pre-checking and must return to the
+explorer; research may not widen or override the authoritative artifacts.
+
 ```text
-intent → explorer → pre-checker → builder → review 1
+intent → explorer → researcher → pre-checker → builder → review 1
 review 1 → PASS | FAIL → builder → review 2
 review 2 → PASS | CRITICAL → builder → critical recheck
 critical recheck → PASS | CRITICAL → builder
@@ -44,16 +50,36 @@ PASS → human review
 3. If exploration has a blocking gap, update `STATE.md` and try to resolve it
    from available evidence. Ask the user only when missing intent, information,
    or authority prevents progress.
-4. Update `STATE.md`, then spawn `pre_checker` with `fork_turns: "none"`,
-   `explore.md`, and the worktree. Repeat the UUID report, CLI registration,
-   and acknowledgement before the child’s first tool call. Builder starts only
-   after a non-blocking `checklist.md`. Return blocking checklist gaps to the
-   original explorer and rerun a new pre-checker after repair.
-5. Update `STATE.md`, then spawn one `builder` with `fork_turns: "none"`, the
-   worktree, `explore.md`, and `checklist.md`. Register and acknowledge its hook
-   UUID before tools; retain the original assignment for any follow-up or
-   repair. It implements and writes `change.md`.
-6. For review 1, update `STATE.md`, then spawn a fresh `checker` and a fresh
+4. Update `STATE.md`, then spawn `researcher` with `fork_turns: "none"`, the
+   intent, `explore.md`, and the worktree. Repeat the UUID report, CLI
+   registration, and acknowledgement before the child’s first tool call.
+   Researcher is sequential after explorer, writes only `.graph/research.md`,
+   and must complete that artifact successfully before pre-checking or building.
+   Researcher must test and use Context7, the AWS documentation MCP, and Exa for
+   bounded in-scope lookups. If a required server reports an auth blocker,
+   report only its name and a sanitized blocker, never include tokens or raw
+   error/query payloads in the parent handoff or research.md, update `STATE.md`
+   `Blocked by`, pause for user authentication, and resume the same registered
+   researcher via follow-up after confirmation; it must retry and write or
+   refresh research.md before pre-checking. Do not silently fall back or claim
+   completion. Treat non-auth tool outages as explicit research gaps under the
+   existing blocker rules. If research reports any other blocking gap, update
+   `STATE.md` and resolve it before proceeding.
+5. Update `STATE.md`, then spawn `pre_checker` with `fork_turns: "none"`,
+   `explore.md`, `research.md`, and the worktree. Repeat the UUID report, CLI
+   registration, and acknowledgement before the child’s first tool call. Builder
+   starts only after a non-blocking `checklist.md`. Allow one pre-check repair
+   cycle per graph run: on the first blocking checklist, record `pre-check repair
+   1/1` in `STATE.md`, return the gaps to the original explorer, rerun the
+   original researcher on the repaired `explore.md`, and then run one fresh
+   pre-checker. If that fresh pre-checker reports any blocking gap, update
+   `STATE.md` `Blocked by` with the remaining gap and stop for user direction;
+   never spawn a third pre-checker.
+6. Update `STATE.md`, then spawn one `builder` with `fork_turns: "none"`, the
+   worktree, `explore.md`, `research.md`, and `checklist.md`. Register and
+   acknowledge its hook UUID before tools; retain the original assignment for
+   any follow-up or repair. It implements and writes `change.md`.
+7. For review 1, update `STATE.md`, then spawn a fresh `checker` and a fresh
    `security_reviewer`, both with `fork_turns: "none"`, and identify the review
    stage in each task before waiting for either result. They review the same
    builder output concurrently. Register and acknowledge the checker UUID before
@@ -62,32 +88,50 @@ PASS → human review
    Security reviewer remains read-only, outside this guard, and reports its
    result to the parent without writing a graph artifact. The Sol parent is
    also outside the guard.
-7. Review 1 keeps the full existing gate: PASS requires checker PASS and no
-   actionable security findings. If either lane fails, update `STATE.md` and
-   return evidence from every failing lane, and no evidence from passing lanes,
-   to the original builder. Do not restart exploration or pre-checking. After
-   repair, run review 2 with fresh checker and security reviewer lanes as in
-   step 6.
-8. Review 2 fails only for a critical issue: an exploitable security
+8. Review 1 keeps the full existing gate: PASS requires checker PASS and no
+   actionable security findings. If either lane fails, update `STATE.md`. A
+   checker-found conflict between research and the authoritative intent,
+   `explore.md`, or `checklist.md` is a planning failure: pause the builder,
+   return that conflict to the original explorer, rerun the original researcher,
+   and run a fresh pre-checker subject to the one-cycle limit in step 5. After a
+   non-blocking checklist, return any other failing-lane evidence to the original
+   builder; otherwise return every failing-lane finding directly to that builder.
+   Never include evidence from a passing lane. Do not restart exploration or
+   pre-checking for implementation or security findings. After repair, rerun
+   review at the same stage with fresh checker and security reviewer lanes as in
+   step 7.
+9. Review 2 fails only for a critical issue—an exploitable security
    vulnerability, potential data or secret loss or exposure, or inability to
-   perform the requested core function. Record every other finding as a
-   non-blocking note for human review and pass the graph.
-9. Return critical review-2 findings to the original builder. After repair,
-   run a critical recheck with a fresh checker and security reviewer over the
-   complete repaired diff. The review-2 critical-only failure threshold still
-   applies. Return any critical finding to the original builder and repeat the
-   recheck; never restart the graph or escalate because of a retry count. Stop
-   only if repair needs user input or authority.
-10. On PASS, update `STATE.md`, then summarize files, checks, remaining risk,
+   perform the requested core function—or for either graph-integrity exception:
+   missing failure-boundary instrumentation evidence as specified below, or a
+   conflict between research and the authoritative intent, `explore.md`, or
+   `checklist.md`. Record every other finding as a non-blocking note for human
+   review and pass the graph.
+10. Return critical or instrumentation findings to the original builder. Return
+    a research/authority conflict through the planning-repair edge in step 8.
+    After implementation repair, run a critical recheck with a fresh checker and
+    security reviewer over the complete repaired diff. The review-2 critical-only
+    failure threshold still applies. Return any critical finding to the original
+    builder and repeat the recheck; never restart the graph or escalate because
+    of a retry count. Stop only if repair needs user input or authority.
+11. On PASS, update `STATE.md`, then summarize files, checks, remaining risk,
     and non-blocking notes for human review.
 
 Before every spawn or handoff, and on every blocker, FAIL, or PASS, rewrite
 `STATE.md` to match the current node and next legal edge. Keep its exactly five
 lines—Intent, Worktree, Current node, Next legal edge (including the review
 round or critical recheck), Blocked by. Never run parallel writers or
-allow subagents to spawn subagents; checker alone writes `verdict.md`, security
-reviewer writes no artifact, and checker plus security review are the only
-concurrent subagent work. The parent may inspect evidence while a subagent runs.
+allow subagents to spawn subagents; researcher alone writes `research.md`,
+checker alone writes `verdict.md`, security reviewer writes no artifact, and
+checker plus security review are the only concurrent subagent work. The parent
+may inspect evidence while a subagent runs.
+
+At every checker stage, derive changed executable paths from the final diff and
+require observable, record-once-and-propagated failure evidence at each relevant
+entrypoint, I/O, tool, or phase boundary. Missing instrumentation evidence or a
+failure-boundary violation is blocking in review 1, review 2, and every critical
+recheck; this is the explicit exception to the review-2 critical-only threshold,
+which remains unchanged for unrelated findings.
 
 ## Orchestrator intervention
 
@@ -147,14 +191,19 @@ All paths are relative to the assigned worktree:
   legal edge, Blocked by.
 - `.graph/explore.md`: question, owners/entrypoints, current behavior, files in
   scope, assumptions, falsifiers, out of scope, gaps.
+- `.graph/research.md`: question, evidence and sources, relevant contracts,
+  failure-boundary findings, recommendation, gaps.
 - `.graph/checklist.md`: preconditions, numbered acceptance requirements,
   required commands and pass conditions, risk-focused checks, ponytail findings,
   blocking gaps.
 - `.graph/change.md`: intent, files touched, assumptions accepted, commands
-  run, how to verify, what was not done.
+  run, instrumentation evidence/status for every changed executable path and
+  relevant boundary, how to verify, what was not done.
 - `.graph/verdict.md`: review round, PASS or FAIL, checks and evidence, broken
-  assumptions, ponytail findings, critical status, non-blocking human-review
-  notes, and the required fix on FAIL. “Looks good” is not a verdict.
+  assumptions, instrumentation evidence/status for every changed executable
+  path and relevant boundary, ponytail findings, critical status, non-blocking
+  human-review notes, and the required fix on FAIL. “Looks good” is not a
+  verdict.
 
 ## Current-run truth
 

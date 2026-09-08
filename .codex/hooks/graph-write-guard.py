@@ -13,7 +13,7 @@ from typing import Any
 
 
 GUARDED_ROLES = frozenset({
-    "explorer", "pre_checker", "builder", "checker",
+    "explorer", "researcher", "pre_checker", "builder", "checker",
     "case_miner", "eval_runner", "eval_reviewer", "eval_fixer",
 })
 GIT_TIMEOUT = 2
@@ -286,6 +286,45 @@ def _validate_patch(command: str, payload_cwd: str, assignment: Path) -> None:
             raise GuardError(f"apply_patch cannot replace the active guard source {candidate}")
 
 
+def _validate_researcher_patch(command: str, payload_cwd: str, assignment: Path) -> None:
+    paths = _patch_paths(command)
+    if len(paths) != 1:
+        raise GuardError("researcher apply_patch must target only .graph/research.md")
+    if any(
+        line.strip(NATIVE_PATCH_WHITESPACE).startswith(("*** Delete File: ", "*** Move to: "))
+        for line in command.split("\n")
+    ):
+        raise GuardError("researcher apply_patch may only add or update .graph/research.md")
+    cwd = Path(payload_cwd).resolve(strict=False)
+    candidate = (Path(paths[0]) if Path(paths[0]).is_absolute() else cwd / paths[0]).resolve(
+        strict=False
+    )
+    expected = (assignment / ".graph" / "research.md").resolve(strict=False)
+    if not _inside(candidate, assignment):
+        raise GuardError(
+            f"researcher apply_patch destination {candidate} is outside assigned worktree {assignment}"
+        )
+    if candidate != expected:
+        raise GuardError(
+            f"researcher apply_patch destination {candidate} must be the assigned {expected}"
+        )
+
+
+def _validate_researcher_bash(command: str, assignment: Path) -> None:
+    _validate_bash(command, assignment)
+    prefix = f"cd {assignment} && "
+    allowed = {
+        f"{prefix}git rev-parse --show-toplevel",
+        f"{prefix}sed -n '1,260p' AGENTS.md",
+        f"{prefix}sed -n '1,320p' .graph/explore.md",
+    }
+    if command not in allowed:
+        raise GuardError(
+            "researcher Bash is limited to worktree confirmation and fixed read-only "
+            "reads of AGENTS.md or .graph/explore.md"
+        )
+
+
 # ponytail: only leading cd is inspected; full shell write enforcement needs filesystem sandboxing.
 def _validate_bash(command: str, assignment: Path) -> None:
     if not command.startswith("cd "):
@@ -337,7 +376,11 @@ def _pre_tool_use(payload: Any) -> None:
     command = tool_input.get("command")
     if tool_name in {"Bash", "apply_patch"} and not isinstance(command, str):
         raise GuardError(f"guarded {tool_name} call requires tool_input.command")
-    if tool_name == "Bash":
+    if role == "researcher" and tool_name == "Bash":
+        _validate_researcher_bash(command, assignment)
+    elif role == "researcher" and tool_name == "apply_patch":
+        _validate_researcher_patch(command, payload_cwd, assignment)
+    elif tool_name == "Bash":
         _validate_bash(command, assignment)
     elif tool_name == "apply_patch":
         _validate_patch(command, payload_cwd, assignment)
