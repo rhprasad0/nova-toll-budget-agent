@@ -88,7 +88,41 @@ DEVELOPMENT_FOUNDATION_PLAN_VALIDATOR = (
 FOUNDATION_DNS_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "v2-production-foundation-dns.yml"
 ).read_text()
-DEPLOYMENT = (V2_ROOT / "RUNBOOK.md").read_text()
+RUNBOOK = (V2_ROOT / "RUNBOOK.md").read_text()
+RUNBOOKS = V2_ROOT / "runbooks"
+DEVELOPMENT_BOOTSTRAP = (RUNBOOKS / "development-bootstrap-import.md").read_text()
+DEVELOPMENT_RELEASE = (RUNBOOKS / "development-release.md").read_text()
+DEVELOPMENT_FOUNDATION_330 = (
+    RUNBOOKS / "development-foundation-330-archive.md"
+).read_text()
+DEVELOPMENT_FOUNDATION_REPLACEMENT = (
+    RUNBOOKS / "development-foundation-replacement.md"
+).read_text()
+LEGACY_DEVELOPMENT_RETIREMENT = (
+    RUNBOOKS / "legacy-development-retirement.md"
+).read_text()
+
+# Preserve the original logical ordering for whole-runbook contract assertions.
+_BEFORE_HANDOFF, _AFTER_HANDOFF = RUNBOOK.split(
+    "### Development handoff (non-operative)", maxsplit=1
+)
+_NON_OPERATIVE, _PRODUCTION = _AFTER_HANDOFF.split(
+    "### Guarded production release", maxsplit=1
+)
+DEPLOYMENT = "\n".join(
+    (
+        _BEFORE_HANDOFF,
+        DEVELOPMENT_BOOTSTRAP,
+        DEVELOPMENT_RELEASE,
+        "### Development handoff (non-operative)",
+        _NON_OPERATIVE,
+        DEVELOPMENT_FOUNDATION_330,
+        DEVELOPMENT_FOUNDATION_REPLACEMENT,
+        "### Guarded production release",
+        _PRODUCTION,
+        LEGACY_DEVELOPMENT_RETIREMENT,
+    )
+)
 AGENTS = (REPO_ROOT / "AGENTS.md").read_text()
 ACCOUNT_CONTRACT = json.loads(
     (REPO_ROOT / "infra" / "account-contract.json").read_text()
@@ -948,13 +982,9 @@ def test_handoff_and_follow_on_ownership_are_documented_without_persisted_ids():
         ):
             assert text in document
     assert "provide an operative development" in plan
-    assert (
-        "The bounded #331 application release and database validation below is the operative"
-        in runbook
-    )
-    assert "local-backend plan generation and review" in runbook
-    assert "later exact-plan apply" in runbook
-    assert "separately authorized state migration or recovery" in runbook
+    assert "is the operative development release path" in runbook
+    assert "runbooks/development-foundation-330-archive.md" in RUNBOOK
+    assert "historical audit and recovery context" in RUNBOOK
     assert "not the guarded production release's `production.tfvars`" in runbook
     for tfvars in (V2_ROOT / "infra").glob("*.tfvars"):
         assert "vpc-" not in tfvars.read_text()
@@ -2610,7 +2640,7 @@ def test_account_local_release_contract_and_foundation_gates_fail_closed():
         "backend.production.hcl",
         "production.tfvars",
         "production-release.tfplan",
-        "The bounded #331 application release and database validation below is the operative",
+        "is the operative development release path",
         "#330",
         "#331",
         "#332",

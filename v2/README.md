@@ -121,7 +121,7 @@ one saved private Terraform plan and gate, fixed-role migration, delivery-role
 re-assumption, and application of that same plan. The protected, manually
 dispatched [development migration workflow](../.github/workflows/v2-development-migrations.yml)
 remains a main-only recovery path after the foundation and fresh-bootstrap gates in
-the [protected development migration runbook](RUNBOOK.md#protected-development-migration-workflow-305-slice-3).
+the [protected development migration runbook](runbooks/development-foundation-replacement.md#protected-development-migration-workflow-305-slice-3).
 Both paths accept no arbitrary target, role, or migration-path input and emit
 sanitized evidence. This is separate from disposable local/PR checks and does
 not authorize production schema changes; production remains limited to the
