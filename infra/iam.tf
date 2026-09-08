@@ -813,6 +813,438 @@ resource "aws_iam_role_policy_attachment" "development_delivery" {
   policy_arn = aws_iam_policy.development_delivery[each.key].arn
 }
 
+# --- GitHub Actions development plan ---------------------------------------
+# This identity is intentionally separate from delivery: it reads only the
+# state objects and application resources needed by the v2 Terraform plan.
+data "aws_iam_policy_document" "development_plan_assume" {
+  count = var.environment == "development" ? 1 : 0
+
+  statement {
+    sid     = "GitHubDevelopmentPlanWorkflow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:development-plan"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository"
+      values   = ["rhprasad0/nova-toll-budget-agent"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["rhprasad0/nova-toll-budget-agent/.github/workflows/v2-development-plan.yml@refs/heads/main"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "development_plan" {
+  statement {
+    sid       = "ListDevelopmentState"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.tfstate.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "s3:prefix"
+      values = [
+        "nova-toll/development/terraform.tfstate",
+        "nova-toll/v2/development/terraform.tfstate",
+      ]
+    }
+  }
+
+  statement {
+    sid     = "ReadDevelopmentState"
+    actions = ["s3:GetObject"]
+    resources = [
+      "${aws_s3_bucket.tfstate.arn}/nova-toll/development/terraform.tfstate",
+      "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate",
+    ]
+  }
+
+  statement {
+    sid       = "DecryptDevelopmentState"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.tfstate.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.us-east-1.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:aws:s3:arn"
+      values = [
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/development/terraform.tfstate",
+        "${aws_s3_bucket.tfstate.arn}/nova-toll/v2/development/terraform.tfstate",
+      ]
+    }
+  }
+
+  statement {
+    sid = "ReadPreprovisionedApplicationRoles"
+    actions = [
+      "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole", "iam:ListRolePolicies", "iam:ListRoleTags",
+    ]
+    resources = local.development_delivery_role_arns
+  }
+
+  statement {
+    sid = "ReadApplicationLambdaFunctions"
+    actions = [
+      "lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:GetFunctionConfiguration", "lambda:GetFunctionEventInvokeConfig",
+      "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:GetProvisionedConcurrencyConfig", "lambda:ListAliases",
+      "lambda:ListProvisionedConcurrencyConfigs", "lambda:ListTags", "lambda:ListVersionsByFunction",
+    ]
+    resources = concat(
+      local.development_delivery_lambda_resources,
+      local.development_delivery_legacy_rollup_lambda_resources,
+    )
+  }
+
+  statement {
+    sid       = "ReadApplicationQueues"
+    actions   = ["sqs:GetQueueAttributes", "sqs:ListQueueTags"]
+    resources = local.development_delivery_queue_arns
+  }
+
+  statement {
+    sid       = "ReadApplicationQueueUrls"
+    actions   = ["sqs:GetQueueUrl"]
+    resources = local.development_delivery_queue_arns
+  }
+
+  statement {
+    sid       = "ReadApplicationEventRules"
+    actions   = ["events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule"]
+    resources = local.development_delivery_event_rule_arns
+  }
+
+  statement {
+    sid       = "ReadRetainedRollupEventRule"
+    actions   = ["events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule"]
+    resources = [local.development_delivery_legacy_rollup_event_rule_arn]
+  }
+
+  statement {
+    sid       = "ReadApplicationLogs"
+    actions   = ["logs:DescribeMetricFilters", "logs:ListTagsForResource"]
+    resources = local.development_delivery_log_group_arns
+  }
+
+  statement {
+    sid       = "ReadRetainedRollupLogGroup"
+    actions   = ["logs:DescribeMetricFilters", "logs:ListTagsForResource"]
+    resources = [local.development_delivery_legacy_rollup_log_group_arn]
+  }
+
+  statement {
+    sid       = "DescribeApplicationLogPolicies"
+    actions   = ["logs:DescribeResourcePolicies"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid       = "DescribeApplicationLogGroups"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadApplicationAlarms"
+    actions   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+    resources = local.development_delivery_alarm_arns
+  }
+
+  statement {
+    sid       = "ReadRetainedRollupAlarms"
+    actions   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+    resources = local.development_delivery_legacy_rollup_alarm_arns
+  }
+
+  statement {
+    sid       = "DescribeApplicationNetworking"
+    actions   = ["ec2:DescribePrefixLists", "ec2:DescribeSecurityGroupRules", "ec2:DescribeSecurityGroups", "ec2:DescribeSubnets", "ec2:DescribeVpcs"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadApplicationSiteBucket"
+    actions   = ["s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions"]
+    resources = [local.development_delivery_site_bucket_arn, "${local.development_delivery_site_bucket_arn}/*"]
+  }
+
+  statement {
+    sid       = "ReadApplicationMeasurementBucket"
+    actions   = ["s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketMultipartUploads", "s3:ListBucketVersions"]
+    resources = [local.development_delivery_measurement_bucket_arn]
+  }
+
+  statement {
+    sid       = "ReadRetainedApplicationMeasurementRegistry"
+    actions   = ["s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion"]
+    resources = ["${local.development_delivery_measurement_bucket_arn}/registry/agent_registry.ndjson"]
+  }
+
+  statement {
+    sid     = "ReadApplicationArtifacts"
+    actions = ["s3:GetObject", "s3:GetObjectAttributes", "s3:GetObjectTagging", "s3:GetObjectVersion", "s3:ListBucketMultipartUploads", "s3:ListMultipartUploadParts"]
+    resources = [
+      "${local.development_delivery_artifact_bucket_arn}/runtime/v2/*",
+      "${local.development_delivery_artifact_bucket_arn}/lambda/v2/*",
+    ]
+  }
+
+  statement {
+    sid       = "ReadApplicationArtifactBucket"
+    actions   = ["s3:GetBucketLocation"]
+    resources = [local.development_delivery_artifact_bucket_arn]
+  }
+
+  statement {
+    sid       = "ReadApplicationKmsKeys"
+    actions   = ["kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"]
+    resources = local.development_delivery_application_key_arns
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/environment"
+      values   = ["development"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/version"
+      values   = ["v2"]
+    }
+  }
+
+  statement {
+    sid       = "ReadRetainedMeasurementKey"
+    actions   = ["kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"]
+    resources = [local.development_delivery_measurement_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/environment"
+      values   = ["development"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/version"
+      values   = ["v2"]
+    }
+  }
+
+  statement {
+    sid       = "ReadApplicationKmsAliases"
+    actions   = ["kms:ListAliases"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadApplicationSessions"
+    actions   = ["dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTable", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource"]
+    resources = ["arn:aws:dynamodb:${local.development_delivery_region}:${local.development_delivery_account_id}:table/tollchat-v2-anonymous-sessions-dev"]
+  }
+
+  statement {
+    sid     = "ReadRetainedApplicationCatalog"
+    actions = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetTags"]
+    resources = [
+      "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:catalog",
+      "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:database/tollchat_agent_reports_development",
+      "arn:aws:glue:${local.development_delivery_region}:${local.development_delivery_account_id}:table/tollchat_agent_reports_development/*",
+    ]
+  }
+
+  statement {
+    sid       = "ReadRetainedApplicationAthenaNamedQueries"
+    actions   = ["athena:GetNamedQuery", "athena:ListTagsForResource"]
+    resources = [local.development_delivery_athena_workgroup_arn]
+  }
+
+  statement {
+    sid       = "ReadRetainedApplicationAthenaWorkGroup"
+    actions   = ["athena:GetWorkGroup", "athena:ListNamedQueries", "athena:ListTagsForResource"]
+    resources = [local.development_delivery_athena_workgroup_arn]
+  }
+
+  statement {
+    sid       = "ListApplicationAthenaWorkGroups"
+    actions   = ["athena:ListWorkGroups"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid     = "ReadApplicationSchedules"
+    actions = ["scheduler:GetSchedule", "scheduler:ListTagsForResource"]
+    resources = [
+      "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule/*/toll-v2-report-publisher-dev",
+      "arn:aws:scheduler:${local.development_delivery_region}:${local.development_delivery_account_id}:schedule-group/default",
+    ]
+  }
+
+  statement {
+    sid = "ReadRetiredUsagePublisherIam"
+    actions = [
+      "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole", "iam:ListRolePolicies", "iam:ListRoleTags",
+    ]
+    resources = [local.development_delivery_usage_publisher_role_arn]
+  }
+
+  statement {
+    sid = "ReadRetiredUsagePublisherLambda"
+    actions = [
+      "lambda:GetAlias", "lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:GetFunctionConfiguration", "lambda:GetFunctionEventInvokeConfig",
+      "lambda:GetFunctionUrlConfig", "lambda:GetPolicy", "lambda:GetProvisionedConcurrencyConfig", "lambda:ListAliases", "lambda:ListProvisionedConcurrencyConfigs", "lambda:ListTags", "lambda:ListVersionsByFunction",
+    ]
+    resources = [local.development_delivery_usage_publisher_lambda_arn]
+  }
+
+  statement {
+    sid       = "ReadRetiredUsagePublisherEvents"
+    actions   = ["events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule"]
+    resources = [local.development_delivery_usage_publisher_rule_arn]
+  }
+
+  statement {
+    sid       = "ReadRetiredUsagePublisherAlarms"
+    actions   = ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+    resources = local.development_delivery_usage_publisher_alarm_arns
+  }
+
+  statement {
+    sid       = "ReadApplicationGuardrail"
+    actions   = ["bedrock:GetGuardrail", "bedrock:ListTagsForResource"]
+    resources = [local.development_delivery_guardrail_arn]
+  }
+
+  statement {
+    sid       = "ReadApplicationAgentCore"
+    actions   = ["bedrock-agentcore:GetAgentRuntime", "bedrock-agentcore:GetAgentRuntimeEndpoint", "bedrock-agentcore:GetResourcePolicy", "bedrock-agentcore:ListTagsForResource"]
+    resources = [local.development_delivery_agentcore_runtime_arn, local.development_delivery_agentcore_endpoint_arn]
+  }
+
+  statement {
+    sid     = "ReadApplicationApiGateway"
+    actions = ["apigateway:GET"]
+    resources = [
+      "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}",
+      "arn:aws:apigateway:${local.development_delivery_region}::/restapis/${local.development_delivery_api_id}/*",
+    ]
+  }
+
+  statement {
+    sid     = "ReadApplicationCloudFrontFunctions"
+    actions = ["cloudfront:DescribeFunction", "cloudfront:GetFunction", "cloudfront:ListTagsForResource"]
+    resources = [
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-chat-routes-dev",
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:function/tollchat-v2-public-report-routes-dev",
+    ]
+  }
+
+  statement {
+    sid     = "ReadApplicationCloudFront"
+    actions = ["cloudfront:GetDistribution", "cloudfront:GetDistributionConfig", "cloudfront:GetOriginAccessControl", "cloudfront:GetResponseHeadersPolicy", "cloudfront:ListTagsForResource"]
+    resources = [
+      local.development_delivery_distribution_arn,
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-access-control/*",
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:response-headers-policy/*",
+    ]
+  }
+
+  statement {
+    sid       = "ReadManagedCloudFrontPolicies"
+    actions   = ["cloudfront:ListCachePolicies", "cloudfront:ListOriginRequestPolicies"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [local.development_delivery_region]
+    }
+  }
+
+  statement {
+    sid     = "ReadManagedCloudFrontPolicy"
+    actions = ["cloudfront:GetCachePolicy", "cloudfront:GetOriginRequestPolicy"]
+    resources = [
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:cache-policy/4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      "arn:aws:cloudfront::${local.development_delivery_account_id}:origin-request-policy/b689b0a8-53d0-40ab-baf2-68738e2966ac",
+    ]
+  }
+
+  statement {
+    sid       = "ReadApplicationWaf"
+    actions   = ["wafv2:GetLoggingConfiguration", "wafv2:GetWebACL", "wafv2:ListTagsForResource"]
+    resources = ["arn:aws:wafv2:${local.development_delivery_region}:${local.development_delivery_account_id}:global/webacl/tollchat-v2-public-chat-dev/*"]
+  }
+
+  statement {
+    sid       = "ReadDevelopmentCertificate"
+    actions   = ["acm:DescribeCertificate", "acm:ListTagsForCertificate"]
+    resources = ["arn:aws:acm:${local.development_delivery_region}:${local.development_delivery_account_id}:certificate/0c2c3578-fee5-41b3-9985-ea7465c16a20"]
+  }
+}
+
+resource "aws_iam_role" "development_plan" {
+  count                = var.environment == "development" ? 1 : 0
+  name                 = "nova-toll-v2-development-plan"
+  assume_role_policy   = data.aws_iam_policy_document.development_plan_assume[0].json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_policy" "development_plan" {
+  for_each = var.environment == "development" ? local.development_plan_policy_documents : {}
+  name     = "nova-toll-v2-development-plan-${each.key}"
+  path     = "/nova-toll/v2/development/"
+  policy   = each.value
+}
+
+resource "aws_iam_role_policy_attachment" "development_plan" {
+  for_each   = var.environment == "development" ? local.development_plan_policy_documents : {}
+  role       = aws_iam_role.development_plan[0].name
+  policy_arn = aws_iam_policy.development_plan[each.key].arn
+}
+
 # The DNS cutover is deliberately separate from both application delivery
 # roles. It is the only foundation identity that can read the handoff token.
 locals {
@@ -1252,6 +1684,40 @@ locals {
       Statement = [local.production_delivery_agentcore_default_statement]
     })
   }
+}
+
+locals {
+  development_plan_policy_statements = jsondecode(data.aws_iam_policy_document.development_plan.json).Statement
+  development_plan_policy_documents = var.environment == "development" ? {
+    state = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 0, 4)
+    })
+    compute = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 4, 7)
+    })
+    observability = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 7, 16)
+    })
+    storage = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 16, 21)
+    })
+    data = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 21, 29)
+    })
+    runtime = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 29, 36)
+    })
+    edge = jsonencode({
+      Version   = "2012-10-17"
+      Statement = slice(local.development_plan_policy_statements, 36, 43)
+    })
+  } : {}
 }
 
 data "aws_iam_policy_document" "production_planner_assume" {
