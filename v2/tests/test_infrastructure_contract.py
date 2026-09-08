@@ -5363,6 +5363,119 @@ def test_development_delivery_apply_readiness_and_cleanup_failures_are_bounded()
         )
 
 
+def test_slice2_delivery_diagnostics_keep_machine_outputs_and_fixed_labels():
+    delivery = DEVELOPMENT_DELIVERY_WORKFLOW
+    migration = (
+        REPO_ROOT / "v2/scripts/run_development_migrations_workflow.sh"
+    ).read_text(encoding="utf-8")
+    for label in (
+        "admission-recheck",
+        "artifact-download",
+        "release-verification",
+        "oidc-claims",
+        "account-identity",
+        "delivery-role",
+        "rds-ca",
+    ):
+        assert label in delivery
+    assert 'cat "$VALIDATION_SUMMARY" >&2' in delivery
+    assert (
+        'MIGRATION_STDOUT_LOG="${RUNNER_TEMP}/development-migration-stage.stdout"'
+        in migration
+    )
+    assert (
+        'MIGRATION_STDERR_LOG="${RUNNER_TEMP}/development-migration-stage.stderr"'
+        in migration
+    )
+    assert 'DB_TOKEN="$(<"$MIGRATION_STDOUT_LOG")"' not in migration
+    assert 'RUNNER_JSON="$(<"$MIGRATION_STDOUT_LOG")"' in migration
+    assert "migrations-workflow.yml" not in delivery
+
+
+def test_retained_artifact_bootstrap_handles_jq_outcomes_without_public_errors(
+    tmp_path: Path,
+) -> None:
+    workflow = cast(dict[str, object], yaml.safe_load(DEVELOPMENT_DELIVERY_WORKFLOW))
+    build = cast(dict[str, object], workflow["jobs"])["build"]
+    steps = cast(list[dict[str, object]], cast(dict[str, object], build)["steps"])
+    source = cast(
+        str,
+        next(
+            step["run"]
+            for step in steps
+            if step.get("name") == "Reject retained exact release artifact"
+        ),
+    )
+    sha = "a" * 40
+
+    def run_case(
+        case: str, *, evaluation_error: bool = False
+    ) -> subprocess.CompletedProcess[str]:
+        root = tmp_path / case
+        mock_bin = root / "bin"
+        mock_bin.mkdir(parents=True)
+        curl = mock_bin / "curl"
+        curl.write_text(
+            "#!/usr/bin/env bash\n"
+            "if test \"$ARTIFACT_CASE\" = malformed; then printf 'not-json\\n';\n"
+            'elif test "$ARTIFACT_CASE" = retained; then printf \'{"artifacts":[{"name":"v2-development-release-%s","expired":false}]}\\n\' "$GITHUB_SHA";\n'
+            "else printf '{\"artifacts\":[]}\\n'; fi\n",
+            encoding="utf-8",
+        )
+        curl.chmod(0o700)
+        if evaluation_error:
+            jq = mock_bin / "jq"
+            jq.write_text(
+                "#!/usr/bin/env bash\n"
+                'count_file="$RUNNER_TEMP/jq-count"\n'
+                'count=0; test -e "$count_file" && count="$(<"$count_file")"\n'
+                'count=$((count + 1)); printf "%s" "$count" >"$count_file"\n'
+                'if test "$count" -eq 2; then printf "private-evaluation-error\\n" >&2; exit 2; fi\n'
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            jq.chmod(0o700)
+        summary = root / "summary"
+        result = subprocess.run(
+            ["bash", "-c", source],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root),
+                "GITHUB_STEP_SUMMARY": str(summary),
+                "GITHUB_REPOSITORY": "rhprasad0/nova-toll-budget-agent",
+                "GITHUB_SHA": sha,
+                "GH_TOKEN": "test-token",
+                "ARTIFACT_CASE": case,
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert not (root / "release-artifacts.json").exists()
+        assert not (root / "release-artifacts.error").exists()
+        return result
+
+    no_match = run_case("no-match")
+    assert no_match.returncode == 0
+    assert "stage=retained-artifact status=pass" in no_match.stderr
+
+    retained = run_case("retained")
+    assert retained.returncode == 1
+    assert "reason=retained_artifact" in retained.stderr
+
+    malformed = run_case("malformed")
+    assert malformed.returncode != 0
+    assert "reason=malformed_evidence" in malformed.stderr
+    assert "jq: parse error" not in malformed.stdout + malformed.stderr
+
+    evaluation = run_case("evaluation", evaluation_error=True)
+    assert evaluation.returncode == 2
+    assert "reason=malformed_evidence" in evaluation.stderr
+    assert "private-evaluation-error" not in evaluation.stdout + evaluation.stderr
+
+
 def test_development_delivery_plan_preflight_uses_shared_validator_and_exact_plan():
     _assert_development_delivery_validator_contract(DEVELOPMENT_DELIVERY_WORKFLOW)
     validator_invocation = (

@@ -158,3 +158,39 @@ def test_status_api_failure_does_not_write_success(
     with pytest.raises(ValueError):
         status.finish()
     assert not (tmp_path / "summary").exists()
+
+
+def test_upstream_failure_reason_is_fixed_and_summary_progress_is_mirrored(
+    context: tuple[Any, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    needs, _, _, calls, tmp_path = context
+    needs["deploy"]["result"] = "failure"
+    monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
+    monkeypatch.setattr(
+        status.sys, "argv", ["development_deployment_status.py", "finish"]
+    )
+    assert status.main() == 1
+    captured = capsys.readouterr()
+    assert "reason=upstream_failed" in captured.err
+    assert "development release did not pass" not in captured.err
+    assert calls[-1][2]["state"] == "failure"
+    assert "reason=upstream_failed" in (tmp_path / "summary").read_text()
+
+
+def test_malformed_needs_reason_does_not_expose_nested_content(
+    context: tuple[Any, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    needs, _, _, _, _ = context
+    needs["build"] = "secret nested evidence"
+    monkeypatch.setenv("NEEDS_JSON", json.dumps(needs))
+    monkeypatch.setattr(
+        status.sys, "argv", ["development_deployment_status.py", "finish"]
+    )
+    assert status.main() == 1
+    captured = capsys.readouterr()
+    assert "reason=malformed_evidence" in captured.err
+    assert "secret nested evidence" not in captured.err

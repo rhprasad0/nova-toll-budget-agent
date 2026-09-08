@@ -17,7 +17,7 @@ run_private_stage() {
   shift 3 2>/dev/null || true
 
   case "$stage" in
-    foundation-init|foundation-output|foundation-output-validation|foundation-vars|release-init|plan|show|validator|apply|readiness-state|readiness-check|cleanup) ;;
+    foundation-init|foundation-output|foundation-output-validation|foundation-vars|release-init|plan|show|validator|apply|readiness-state|readiness-check|cleanup|artifact-build|artifact-metadata|artifact-download|release-verification|oidc-claims|account-identity|delivery-role|rds-ca|migration-identity|migration-database|migration-dns|migration-route|migration-socket|migration-token|migration-runner|migration-evidence|migration-summary|release-status|plan-artifact-cleanup) ;;
     *)
       _run_private_stage_emit 'stage=invalid status=fail elapsed=0 exit=64 reason=unclassified'
       return 64

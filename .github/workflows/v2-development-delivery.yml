@@ -29,23 +29,53 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          admission_fallback() {
+            local status=$?
+            if test "$status" -ne 0 && test "$PRIVATE_STAGE_REPORTED" -eq 0; then
+              _run_private_stage_emit "stage=admission status=fail elapsed=0 exit=$status reason=upstream_failed"
+            fi
+            trap - EXIT
+            exit "$status"
+          }
+          trap admission_fallback EXIT
+          _run_private_stage_emit 'stage=admission status=start elapsed=0 exit=0 reason=unclassified'
           changed_paths="$RUNNER_TEMP/development-changed-paths"
           if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
             git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
           else
             git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
           fi
-          python3 v2/scripts/check_development_admission.py \
-            --repository "$REPOSITORY" \
-            --sha "$CANDIDATE_SHA" \
-            --before "$PREDECESSOR_SHA" \
-            --event-file "$GITHUB_EVENT_PATH" \
-            --paths-file "$changed_paths" \
-            --run-id "$GITHUB_RUN_ID" \
-            --timeout-seconds 900 \
-            --poll-seconds 10 \
-            >"$RUNNER_TEMP/development-admission.result"
-          cat "$RUNNER_TEMP/development-admission.result" >>"$GITHUB_STEP_SUMMARY"
+          if python3 v2/scripts/check_development_admission.py \
+              --repository "$REPOSITORY" \
+              --sha "$CANDIDATE_SHA" \
+              --before "$PREDECESSOR_SHA" \
+              --event-file "$GITHUB_EVENT_PATH" \
+              --paths-file "$changed_paths" \
+              --run-id "$GITHUB_RUN_ID" \
+              --timeout-seconds 900 \
+              --poll-seconds 10 \
+              >"$RUNNER_TEMP/development-admission.result"; then
+            :
+          else
+            status=$?
+            PRIVATE_STAGE_REPORTED=1
+            exit "$status"
+          fi
+          _run_private_stage_emit 'stage=admission status=pass elapsed=0 exit=0 reason=unclassified'
+          if (( PRIVATE_STAGE_SUMMARY_FAILED )); then
+            PRIVATE_STAGE_REPORTED=1
+            _run_private_stage_emit 'stage=admission status=fail elapsed=0 exit=125 reason=diagnostic_unavailable'
+            exit 125
+          fi
+          if ! cat "$RUNNER_TEMP/development-admission.result" >>"$GITHUB_STEP_SUMMARY"; then
+            PRIVATE_STAGE_REPORTED=1
+            _run_private_stage_emit 'stage=admission status=fail elapsed=0 exit=125 reason=diagnostic_unavailable'
+            exit 125
+          fi
+          trap - EXIT
 
   release-record:
     name: Record exact development release
@@ -84,22 +114,58 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          umask 077
           metadata="$RUNNER_TEMP/release-artifacts.json"
+          metadata_error="$RUNNER_TEMP/release-artifacts.error"
+          retained_reason=publisher_failed
+          bootstrap_event() {
+            local event="$1"
+            printf '%s\n' "$event" >&2
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '%s\n' "$event" >>"$GITHUB_STEP_SUMMARY" 2>/dev/null ||
+                printf '%s\n' 'stage=retained-artifact status=fail elapsed=0 exit=125 reason=diagnostic_unavailable' >&2
+            fi
+          }
+          retained_artifact_fallback() {
+            local status=$?
+            if test "$status" -ne 0; then
+              bootstrap_event "stage=retained-artifact status=fail elapsed=0 exit=$status reason=$retained_reason"
+            fi
+            rm -f -- "$metadata" "$metadata_error"
+            trap - EXIT
+            exit "$status"
+          }
+          trap retained_artifact_fallback EXIT
+          bootstrap_event 'stage=retained-artifact status=start elapsed=0 exit=0 reason=unclassified'
           curl --fail --silent --show-error \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?name=v2-development-release-$GITHUB_SHA&per_page=100" \
-            >"$metadata"
-          if ! jq -e 'type == "object" and (.artifacts | type == "array")' "$metadata" >/dev/null; then
-            echo "release artifact metadata malformed" >&2
-            exit 1
-          fi
-          if jq -e --arg name "v2-development-release-$GITHUB_SHA" \
+            >"$metadata" 2>"$metadata_error"
+          set +e
+          jq -e 'type == "object" and (.artifacts | type == "array")' \
+            "$metadata" >/dev/null 2>>"$metadata_error"
+          metadata_status=$?
+          set -e
+          case "$metadata_status" in
+            0) ;;
+            1) retained_reason=malformed_evidence; exit 1 ;;
+            *) retained_reason=malformed_evidence; exit "$metadata_status" ;;
+          esac
+          set +e
+          jq -e --arg name "v2-development-release-$GITHUB_SHA" \
             '.artifacts | any(.[]; .name == $name and .expired == false)' \
-            "$metadata" >/dev/null; then
-            echo "exact release artifact is already retained; rerun failed deploy jobs" >&2
-            exit 1
-          fi
+            "$metadata" >/dev/null 2>>"$metadata_error"
+          retained_status=$?
+          set -e
+          case "$retained_status" in
+            0) retained_reason=retained_artifact; exit 1 ;;
+            1) ;;
+            *) retained_reason=malformed_evidence; exit "$retained_status" ;;
+          esac
+          bootstrap_event 'stage=retained-artifact status=pass elapsed=0 exit=0 reason=unclassified'
+          rm -f -- "$metadata" "$metadata_error"
+          trap - EXIT
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -115,19 +181,27 @@ jobs:
         working-directory: v2
         run: |
           set -euo pipefail
-          ./scripts/build_release_bundle.sh
+          source scripts/run_private_stage.sh
+          run_private_stage "artifact-build" "$RUNNER_TEMP/development-artifact-build.log" "$RUNNER_TEMP/development-artifact-build.log" \
+            ./scripts/build_release_bundle.sh
 
       - name: Prepare immutable release evidence inputs
         run: |
           set -euo pipefail
-          umask 077
-          test ! -e "$GITHUB_WORKSPACE/trusted-build"
-          test -f v2/infra/build/DEPLOYMENT_SHA256SUMS && test ! -L v2/infra/build/DEPLOYMENT_SHA256SUMS
-          EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
-          mkdir "$EVIDENCE_DIR"
-          git show "${GITHUB_SHA}:infra/development-release-manifest.json" \
-            >"$EVIDENCE_DIR/development-release-manifest.json"
-          cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS "$EVIDENCE_DIR/"
+          source v2/scripts/run_private_stage.sh
+          prepare_evidence() {
+            set -euo pipefail
+            umask 077
+            test ! -e "$GITHUB_WORKSPACE/trusted-build"
+            test -f v2/infra/build/DEPLOYMENT_SHA256SUMS && test ! -L v2/infra/build/DEPLOYMENT_SHA256SUMS
+            EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
+            mkdir "$EVIDENCE_DIR"
+            git show "${GITHUB_SHA}:infra/development-release-manifest.json" \
+              >"$EVIDENCE_DIR/development-release-manifest.json"
+            cp -P -- v2/infra/build/DEPLOYMENT_SHA256SUMS "$EVIDENCE_DIR/"
+          }
+          run_private_stage "artifact-metadata" "$RUNNER_TEMP/development-artifact-metadata.log" "$RUNNER_TEMP/development-artifact-metadata.log" \
+            prepare_evidence
 
       - name: Checkout trusted manifest verifier after package build
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -139,20 +213,26 @@ jobs:
       - name: Verify reviewed manifest and write runtime evidence
         run: |
           set -euo pipefail
-          umask 077
-          EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
-          python3 trusted-build/infra/release_manifest.py \
-            --manifest "$EVIDENCE_DIR/development-release-manifest.json" \
-            --package-dir v2/infra/build \
-            --checksums "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS" \
-            --candidate-sha "$GITHUB_SHA" \
-            --run-id "$GITHUB_RUN_ID" \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --bundle-root v2/infra/build/release \
-            --write-evidence "$EVIDENCE_DIR/development-release-evidence.json" \
-            >"$RUNNER_TEMP/development-release-verification.json"
-          jq -e '.status == "accepted" and .reason_code == "ok"' \
-            "$RUNNER_TEMP/development-release-verification.json" >/dev/null
+          source v2/scripts/run_private_stage.sh
+          verify_release() {
+            set -euo pipefail
+            umask 077
+            EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
+            python3 trusted-build/infra/release_manifest.py \
+              --manifest "$EVIDENCE_DIR/development-release-manifest.json" \
+              --package-dir v2/infra/build \
+              --checksums "$EVIDENCE_DIR/DEPLOYMENT_SHA256SUMS" \
+              --candidate-sha "$GITHUB_SHA" \
+              --run-id "$GITHUB_RUN_ID" \
+              --repo-root "$GITHUB_WORKSPACE" \
+              --bundle-root v2/infra/build/release \
+              --write-evidence "$EVIDENCE_DIR/development-release-evidence.json" \
+              >"$RUNNER_TEMP/development-release-verification.json"
+            jq -e '.status == "accepted" and .reason_code == "ok"' \
+              "$RUNNER_TEMP/development-release-verification.json" >/dev/null
+          }
+          run_private_stage "release-verification" "$RUNNER_TEMP/development-release-verification.log" "$RUNNER_TEMP/development-release-verification.log" \
+            verify_release
 
       - name: Upload immutable deployment packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -189,29 +269,37 @@ jobs:
           RAW_RELEASE_ARTIFACT_DIGEST: ${{ steps.upload-release.outputs.artifact-digest }}
         run: |
           set -euo pipefail
-          test "$RELEASE_ARTIFACT_ID" -gt 0
-          if [[ "$RAW_RELEASE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            RELEASE_ARTIFACT_DIGEST="$RAW_RELEASE_ARTIFACT_DIGEST"
-          elif [[ "$RAW_RELEASE_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
-            RELEASE_ARTIFACT_DIGEST="sha256:$RAW_RELEASE_ARTIFACT_DIGEST"
-          else
-            echo "upload-artifact returned an invalid digest" >&2
-            exit 1
-          fi
-          printf 'artifact_id=%s\nartifact_digest=%s\n' \
-            "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" >>"$GITHUB_OUTPUT"
-          SCHEMA_PRICING="$(jq -er '.schema_versions.pricing' v2/infra/build/release/release-manifest.json)"
-          SCHEMA_ORACLE="$(jq -er '.schema_versions.oracle' v2/infra/build/release/release-manifest.json)"
-          printf 'pricing_schema=%s\noracle_schema=%s\n' "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_OUTPUT"
-          printf 'release_artifact_id=%s\nrelease_artifact_digest=%s\ncommit_sha=%s\npricing_schema=%s\noracle_schema=%s\n' \
-            "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" "$GITHUB_SHA" \
-            "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_STEP_SUMMARY"
+          source v2/scripts/run_private_stage.sh
+          record_release_identity() {
+            set -euo pipefail
+            test "$RELEASE_ARTIFACT_ID" -gt 0
+            if [[ "$RAW_RELEASE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              RELEASE_ARTIFACT_DIGEST="$RAW_RELEASE_ARTIFACT_DIGEST"
+            elif [[ "$RAW_RELEASE_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+              RELEASE_ARTIFACT_DIGEST="sha256:$RAW_RELEASE_ARTIFACT_DIGEST"
+            else
+              exit 1
+            fi
+            printf 'artifact_id=%s\nartifact_digest=%s\n' \
+              "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" >>"$GITHUB_OUTPUT"
+            SCHEMA_PRICING="$(jq -er '.schema_versions.pricing' v2/infra/build/release/release-manifest.json)"
+            SCHEMA_ORACLE="$(jq -er '.schema_versions.oracle' v2/infra/build/release/release-manifest.json)"
+            printf 'pricing_schema=%s\noracle_schema=%s\n' "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_OUTPUT"
+            printf 'release_artifact_id=%s\nrelease_artifact_digest=%s\ncommit_sha=%s\npricing_schema=%s\noracle_schema=%s\n' \
+              "$RELEASE_ARTIFACT_ID" "$RELEASE_ARTIFACT_DIGEST" "$GITHUB_SHA" \
+              "$SCHEMA_PRICING" "$SCHEMA_ORACLE" >>"$GITHUB_STEP_SUMMARY"
+          }
+          run_private_stage "artifact-metadata" "$RUNNER_TEMP/development-release-identity.log" "$RUNNER_TEMP/development-release-identity.log" \
+            record_release_identity
 
       - name: Cleanup release evidence
         if: always()
         run: |
-          rm -rf -- "$RUNNER_TEMP/v2-development-checksums" \
-            "$RUNNER_TEMP/development-release-verification.json" "$GITHUB_WORKSPACE/trusted-build"
+          set +e
+          source v2/scripts/run_private_stage.sh
+          run_private_stage "cleanup" "$RUNNER_TEMP/development-build-cleanup.log" "$RUNNER_TEMP/development-build-cleanup.log" \
+            rm -rf -- "$RUNNER_TEMP/v2-development-checksums" \
+              "$RUNNER_TEMP/development-release-verification.json" "$GITHUB_WORKSPACE/trusted-build"
 
   oidc-proof:
     name: Prove protected main OIDC claims
@@ -229,6 +317,25 @@ jobs:
         run: |
           set +x
           set -euo pipefail
+          oidc_error="$RUNNER_TEMP/development-oidc-proof.error"
+          bootstrap_event() {
+            local event="$1"
+            printf '%s\n' "$event" >&2
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '%s\n' "$event" >>"$GITHUB_STEP_SUMMARY" 2>/dev/null ||
+                printf '%s\n' 'stage=oidc-claims status=fail elapsed=0 exit=125 reason=diagnostic_unavailable' >&2
+            fi
+          }
+          oidc_fallback() {
+            local status=$?
+            if test "$status" -ne 0; then
+              bootstrap_event "stage=oidc-claims status=fail elapsed=0 exit=$status reason=malformed_evidence"
+            fi
+            trap - EXIT
+            exit "$status"
+          }
+          trap oidc_fallback EXIT
+          bootstrap_event 'stage=oidc-claims status=start elapsed=0 exit=0 reason=unclassified'
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
           case "$ACTIONS_ID_TOKEN_REQUEST_URL" in
@@ -237,8 +344,9 @@ jobs:
           esac
           oidc_response="$(curl --fail --silent --show-error \
             --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$oidc_url")"
-          oidc_token="$(jq -er '.value | strings' <<<"$oidc_response")"
+            "$oidc_url" 2>"$oidc_error")"
+          oidc_token="$(jq -er '.value | strings' <<<"$oidc_response" 2>>"$oidc_error")"
+          {
           OIDC_TOKEN="$oidc_token" python3 - "$GITHUB_SHA" <<'PY'
           import base64
           import binascii
@@ -286,6 +394,7 @@ jobs:
           if any(claims.get(name) != value for name, value in expected.items()):
               raise ValueError("invalid OIDC claims")
           PY
+          } 2>>"$oidc_error"
           jq -n --arg commit "$GITHUB_SHA" \
             '{account:"903859731897",commit_sha:$commit,environment:"development",proof:"protected-main-oidc",ref:"refs/heads/main",repository:"rhprasad0/nova-toll-budget-agent"}' \
             >"$RUNNER_TEMP/protected-main-oidc.json"
@@ -295,7 +404,9 @@ jobs:
             .account == "903859731897" and .commit_sha == env.GITHUB_SHA and
             .environment == "development" and .proof == "protected-main-oidc" and
             .ref == "refs/heads/main" and .repository == "rhprasad0/nova-toll-budget-agent"
-          ' "$RUNNER_TEMP/protected-main-oidc.json" >/dev/null
+          ' "$RUNNER_TEMP/protected-main-oidc.json" >/dev/null 2>>"$oidc_error"
+          bootstrap_event 'stage=oidc-claims status=pass elapsed=0 exit=0 reason=unclassified'
+          trap - EXIT
 
       - name: Upload protected-main OIDC proof
         id: upload-proof
@@ -307,6 +418,13 @@ jobs:
           retention-days: 1
           overwrite: false
           include-hidden-files: false
+
+      - name: Cleanup OIDC proof diagnostics
+        if: always()
+        run: |
+          set +e
+          rm -f -- "$RUNNER_TEMP/protected-main-oidc.json" "$RUNNER_TEMP/development-oidc-proof.error"
+          exit 0
 
   deploy:
     name: Deploy v2 to development
@@ -338,23 +456,43 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          PRIVATE_STAGE_REPORTED=0
+          PRIVATE_STAGE_SUMMARY_FAILED=0
+          admission_recheck_fallback() {
+            local status=$?
+            if test "$status" -ne 0 && test "$PRIVATE_STAGE_REPORTED" -eq 0; then
+              _run_private_stage_emit "stage=admission-recheck status=fail elapsed=0 exit=$status reason=upstream_failed"
+            fi
+            trap - EXIT
+            exit "$status"
+          }
+          trap admission_recheck_fallback EXIT
+          _run_private_stage_emit 'stage=admission-recheck status=start elapsed=0 exit=0 reason=unclassified'
           changed_paths="$RUNNER_TEMP/development-changed-paths"
           if [[ "$PREDECESSOR_SHA" == "0000000000000000000000000000000000000000" ]]; then
             git ls-tree -r --name-only "$CANDIDATE_SHA" >"$changed_paths"
           else
             git diff --name-only "$PREDECESSOR_SHA" "$CANDIDATE_SHA" >"$changed_paths"
           fi
-          python3 v2/scripts/check_development_admission.py \
-            --repository "$REPOSITORY" \
-            --sha "$CANDIDATE_SHA" \
-            --before "$PREDECESSOR_SHA" \
-            --event-file "$GITHUB_EVENT_PATH" \
-            --paths-file "$changed_paths" \
-            --run-id "$GITHUB_RUN_ID" \
-            --recheck \
-            --timeout-seconds 60 \
-            --poll-seconds 5 \
-            >"$RUNNER_TEMP/development-admission-recheck.result"
+          if python3 v2/scripts/check_development_admission.py \
+              --repository "$REPOSITORY" \
+              --sha "$CANDIDATE_SHA" \
+              --before "$PREDECESSOR_SHA" \
+              --event-file "$GITHUB_EVENT_PATH" \
+              --paths-file "$changed_paths" \
+              --run-id "$GITHUB_RUN_ID" \
+              --recheck \
+              --timeout-seconds 60 \
+              --poll-seconds 5 \
+              >"$RUNNER_TEMP/development-admission-recheck.result"; then
+            _run_private_stage_emit 'stage=admission-recheck status=pass elapsed=0 exit=0 reason=unclassified'
+            trap - EXIT
+          else
+            status=$?
+            PRIVATE_STAGE_REPORTED=1
+            exit "$status"
+          fi
 
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
@@ -373,6 +511,9 @@ jobs:
           RELEASE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
           RELEASE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
         run: |
+          set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          download_release() {
           set -euo pipefail
           test "$RELEASE_ARTIFACT_ID" -gt 0
           [[ "$RELEASE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
@@ -398,7 +539,7 @@ jobs:
           test "$redirect_status" = 302
           download_url="$(awk 'tolower($1) == "location:" {sub(/^[[:space:]]+/, "", $2); print $2}' "$headers" | tr -d '\r' | tail -n 1)"
           test -n "$download_url"
-          case "$download_url" in https://*) ;; *) echo "artifact redirect is not HTTPS" >&2; exit 1 ;; esac
+          case "$download_url" in https://*) ;; *) exit 1 ;; esac
           unset GH_TOKEN
           curl --fail --silent --show-error --location "$download_url" -o "$archive"
           test "sha256:$(sha256sum "$archive" | awk '{print $1}')" = "$RELEASE_ARTIFACT_DIGEST"
@@ -435,9 +576,15 @@ jobs:
           test -s "$overlay/v2/infra/build/publisher.zip"
           test -s "$overlay/v2/infra/build/agentcore.zip"
           test -s "$overlay/v2/infra/build/chat-proxy.zip"
+          }
+          run_private_stage "artifact-download" "$RUNNER_TEMP/development-artifact-download.log" "$RUNNER_TEMP/development-artifact-download.log" \
+            download_release
 
       - name: Verify immutable development release without credentials
         run: |
+          set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          verify_staged_release() {
           set -euo pipefail
           umask 077
           EVIDENCE_DIR="$RUNNER_TEMP/v2-development-checksums"
@@ -484,6 +631,9 @@ jobs:
             >"$RUNNER_TEMP/development-release-staging-verification.json"
           jq -e '.status == "accepted" and .reason_code == "ok"' \
             "$RUNNER_TEMP/development-release-staging-verification.json" >/dev/null
+          }
+          run_private_stage "release-verification" "$RUNNER_TEMP/development-staging-verification.log" "$RUNNER_TEMP/development-staging-verification.log" \
+            verify_staged_release
 
       - name: Download protected-main OIDC proof
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -495,6 +645,9 @@ jobs:
       - name: Validate protected-main OIDC proof
         run: |
           set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          validate_oidc_proof() {
+          set -euo pipefail
           PROOF="$RUNNER_TEMP/protected-main-oidc.json"
           test -f "$PROOF" && test ! -L "$PROOF"
           jq -e --arg commit "$GITHUB_SHA" '
@@ -504,6 +657,9 @@ jobs:
             .proof == "protected-main-oidc" and .ref == "refs/heads/main" and
             .repository == "rhprasad0/nova-toll-budget-agent"
           ' "$PROOF" >/dev/null
+          }
+          run_private_stage "oidc-claims" "$RUNNER_TEMP/development-oidc-validation.log" "$RUNNER_TEMP/development-oidc-validation.log" \
+            validate_oidc_proof
 
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
@@ -513,11 +669,17 @@ jobs:
       - name: Confirm development account
         run: |
           set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          confirm_account() {
+          set -euo pipefail
           test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
           case "$(aws sts get-caller-identity --query Arn --output text)" in
             arn:aws:sts::903859731897:assumed-role/nova-toll-v2-development-delivery/*) ;;
             *) exit 1 ;;
           esac
+          }
+          run_private_stage "account-identity" "$RUNNER_TEMP/development-account-identity.log" "$RUNNER_TEMP/development-account-identity.log" \
+            confirm_account
 
       - name: Create and gate the saved development plan before migrations
         run: |
@@ -634,6 +796,11 @@ jobs:
           if test "$VALIDATOR_PARSE_STATUS" -ne 0; then
             exit "$VALIDATOR_PARSE_STATUS"
           fi
+          if ! cat "$VALIDATION_SUMMARY" >&2; then
+            _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=125 reason=diagnostic_unavailable'
+            PRIVATE_STAGE_REPORTED=1
+            exit 125
+          fi
           if ! (cat "$VALIDATION_SUMMARY" >>"$VALIDATOR_PARSE_LOG") 2>/dev/null; then
             _run_private_stage_emit 'stage=validator status=fail elapsed=0 exit=125 reason=unclassified'
             PRIVATE_STAGE_REPORTED=1
@@ -677,12 +844,18 @@ jobs:
         run: |
           set -euo pipefail
           set +x
+          source v2/scripts/run_private_stage.sh
+          fetch_rds_ca() {
+          set -euo pipefail
           mkdir -p v2/infra/build/ca
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
             -o v2/infra/build/ca/rds-ca-bundle.pem
           echo "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3  v2/infra/build/ca/rds-ca-bundle.pem" | sha256sum --check --status
           chmod 600 v2/infra/build/ca/rds-ca-bundle.pem
+          }
+          run_private_stage "rds-ca" "$RUNNER_TEMP/development-rds-ca.log" "$RUNNER_TEMP/development-rds-ca.log" \
+            fetch_rds_ca
 
       - uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
@@ -708,11 +881,17 @@ jobs:
       - name: Confirm delivery role before applying saved plan
         run: |
           set -euo pipefail
+          source v2/scripts/run_private_stage.sh
+          confirm_delivery_role() {
+          set -euo pipefail
           test "$(aws sts get-caller-identity --query Account --output text)" = "903859731897"
           case "$(aws sts get-caller-identity --query Arn --output text)" in
             arn:aws:sts::903859731897:assumed-role/nova-toll-v2-development-delivery/*) ;;
             *) exit 1 ;;
           esac
+          }
+          run_private_stage "delivery-role" "$RUNNER_TEMP/development-delivery-role.log" "$RUNNER_TEMP/development-delivery-role.log" \
+            confirm_delivery_role
 
       - name: Apply the same saved development plan
         run: |
@@ -734,11 +913,14 @@ jobs:
           PLAN="$RUNNER_TEMP/development.tfplan"
           TF_LOG_DIR="$RUNNER_TEMP/development-terraform-logs"
           APPLY_LOG="$TF_LOG_DIR/apply.log"
-          test -s "$PLAN"
+          run_private_stage "plan-artifact-cleanup" "$RUNNER_TEMP/development-plan-cleanup.log" "$RUNNER_TEMP/development-plan-cleanup.log" \
+            test -s "$PLAN"
           run_private_stage "apply" "$APPLY_LOG" "$APPLY_LOG" \
             terraform -chdir="$RELEASE_ROOT/v2/infra" apply -input=false "$PLAN"
-          rm -f -- "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/foundation-output.json" "$PLAN" "$RUNNER_TEMP/development.tfplan.json"
-          rm -rf -- "$TF_LOG_DIR"
+          run_private_stage "plan-artifact-cleanup" "$RUNNER_TEMP/development-plan-cleanup.log" "$RUNNER_TEMP/development-plan-cleanup.log" \
+            rm -f -- "$RUNNER_TEMP/foundation.tfvars.json" "$RUNNER_TEMP/foundation-output.json" "$PLAN" "$RUNNER_TEMP/development.tfplan.json"
+          run_private_stage "plan-artifact-cleanup" "$RUNNER_TEMP/development-plan-cleanup.log" "$RUNNER_TEMP/development-plan-cleanup.log" \
+            rm -rf -- "$TF_LOG_DIR"
 
       - name: Verify readiness and public release path
         id: verify-release
@@ -764,6 +946,7 @@ jobs:
             fi
             if test "$status" -eq 0 && test "$cleanup_status" -ne 0; then
               status="$cleanup_status"
+              primary_reported=1
             fi
             if test "$status" -ne 0 && test "$primary_reported" -eq 0; then
               _run_private_stage_emit "stage=$PRIVATE_STAGE_FALLBACK_STAGE status=fail elapsed=0 exit=$status reason=unclassified"
@@ -808,6 +991,14 @@ jobs:
             "$RUNNER_TEMP/development-release-verification.json" "$RUNNER_TEMP/v2-development-migrations-evidence.json" \
             "$RUNNER_TEMP/development-readiness-state.json" "$RUNNER_TEMP/development-readiness-state.log" \
             "$RUNNER_TEMP/development-readiness-cleanup.log" \
+            "$RUNNER_TEMP/development-plan-cleanup.log" "$RUNNER_TEMP/development-migration-stage.stdout" \
+            "$RUNNER_TEMP/development-migration-stage.stderr" "$RUNNER_TEMP/development-migration-control.stdout" \
+            "$RUNNER_TEMP/development-migration-summary.log" \
+            "$RUNNER_TEMP/development-artifact-build.log" "$RUNNER_TEMP/development-artifact-metadata.log" \
+            "$RUNNER_TEMP/development-build-cleanup.log" "$RUNNER_TEMP/development-release-identity.log" \
+            "$RUNNER_TEMP/development-artifact-download.log" "$RUNNER_TEMP/development-staging-verification.log" \
+            "$RUNNER_TEMP/development-oidc-validation.log" "$RUNNER_TEMP/development-account-identity.log" \
+            "$RUNNER_TEMP/development-rds-ca.log" "$RUNNER_TEMP/development-delivery-role.log" \
             "$GITHUB_WORKSPACE/infra/.terraform" "$GITHUB_WORKSPACE/v2/infra/.terraform" \
             "$GITHUB_WORKSPACE/v2/infra/build/ca" \
             "$RUNNER_TEMP/protected-main-oidc.json"; do
